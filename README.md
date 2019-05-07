@@ -14,7 +14,7 @@ Operating System developed by Ivan Gualandri, Finarfin and many others, which
 ----------------
 Main Developers:
 
- * [Enrico Fraccaioli](https://github.com/Galfurian)
+ * [Enrico Fraccaroli](https://github.com/Galfurian)
  * [Alessandro Danese](https://gitlab.com/ADanese)
  * [Luigi Capogrosso](https://github.com/luigicapogrosso)
  * [Mirco De Marchi](https://github.com/mircodemarchi)
