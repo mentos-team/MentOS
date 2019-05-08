@@ -1,0 +1,7 @@
+/Applications/CLion.app/Contents/bin/cmake/mac/bin/cmake -DCMAKE_BUILD_TYPE=Debug -G "CodeBlocks - Unix Makefiles" /Users/luigi/Lavoro/Tesi/mentos
+-- DEBUGGING = 'DEBUG_STDIO'
+-- Could NOT find Doxygen (missing: DOXYGEN_EXECUTABLE) 
+-- SCHEDULER_TYPE = 'SCHEDULER_RR'
+-- Configuring done
+-- Generating done
+-- Build files have been written to: /Users/luigi/Lavoro/Tesi/mentos/cmake-build-debug

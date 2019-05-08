@@ -1,0 +1,4 @@
+# Hashes of file build rules.
+95a36346fb5704345bd6e00b82bd31af CMakeFiles/initfs
+8c6e924cc92a25d48977d9c7f67a57c9 CMakeFiles/qemu
+bae12b4d01efd38768feee09b62164d0 CMakeFiles/qemu-gdb
