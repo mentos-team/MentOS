@@ -1,6 +1,17 @@
 MentOS
 ======
 
+[![PRs Welcome](https://img.shields.io/appveyor/ci/gruntjs/grunt.svg?style=flat-square)](http://makeapullrequest.com)
+[![PRs Welcome](https://img.shields.io/snyk/vulnerabilities/npm/mocha.svg?style=flat-square)](http://makeapullrequest.com)
+
+[![PRs Welcome](https://img.shields.io/bugzilla/996038.svg?style=flat-square)](http://makeapullrequest.com)
+[![PRs Welcome](https://img.shields.io/github/issues/detail/state/badges/shields/979.svg?style=flat-square)](http://makeapullrequest.com)
+[![PRs Welcome](https://img.shields.io/website/https/shields.io.svg?)](http://makeapullrequest.com)
+
+[![forthebadge](https://forthebadge.com/images/badges/built-with-love.svg)](https://forthebadge.com)
+[![forthebadge](https://forthebadge.com/images/badges/made-with-c.svg)](https://forthebadge.com)
+[![forthebadge](https://forthebadge.com/images/badges/for-you.svg)](https://forthebadge.com)
+
 What
 -----------------
 
