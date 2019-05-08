@@ -1,16 +1,31 @@
 MentOS
 ======
 
-1  What is MentOS
+What
 -----------------
 
-An educational 32-bit linux-like Operating System, which integrates the basic
- functionalities of an OS, ideal for an University-level course.
-MentOS, which stands for Mentoring OS, is the successor of DreamOS, an
-Operating System developed by Ivan Gualandri, Finarfin and many others, which
- can be found at https://github.com/inuyasha82/DreamOs.
+MentOS, which stands for Mentoring OS, is an open source educational 
+Operating System.
 
-2 Developers
+Goal
+-----------------
+
+The goal of MentOS is to provide a project environment that is realisticenough 
+to show how a real Operating System work, yet simple enoughthat students can 
+understand and modify it in significant ways.
+
+Why
+-----------------
+
+There are so many operating systems, why did we write MentOs? 
+It is true, there are a lot of education operating system, BUT how many of them 
+follow the the guide line defined by Linux? Linux shareswith MentOs the same data 
+structures, fields, algorithms, ... it has a sourcecode well documented not requiring 
+hours to be compiled on your laptop! 
+MentOS team aimed at this, you can download MentOS and you are readyto start in a few minutes, 
+search any its data structure with Google, and you will find it in Linux.
+
+Developers
 ----------------
 Main Developers:
 
@@ -19,7 +34,7 @@ Main Developers:
  * [Luigi Capogrosso](https://github.com/luigicapogrosso)
  * [Mirco De Marchi](https://github.com/mircodemarchi)
 
-3 Prerequisites
+Prerequisites
 -----------------
 For compiling the main system:
 
@@ -40,7 +55,7 @@ For debugging:
  * gdb or cgdb
  * xterm
 
-4 Compiling MentOS
+Compiling MentOS
 -----------------
 Compile and boot MentOS with qemu:
 
@@ -60,7 +75,7 @@ cd <clone_directory>
 cat files/passwd
 ```
 
-5 See Booting Statistics
+See Booting Statistics
 -----------------
 
 If you want to see more information about memory allocation, process and file system:
@@ -95,7 +110,7 @@ make initfs
 make qemu
 ```
 
-5 Use Debugger
+Use Debugger
 -----------------
 ```
 cd <clone_directory>
