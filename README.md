@@ -12,36 +12,32 @@ MentOS
 [![forthebadge](https://forthebadge.com/images/badges/made-with-c.svg)](https://forthebadge.com)
 [![forthebadge](https://forthebadge.com/images/badges/for-you.svg)](https://forthebadge.com)
 
-What
+What is MentOS
 -----------------
 
-MentOS, which stands for Mentoring OS, is an open source educational 
-Operating System.
+MentOS (Mentoring Operating system) is an open source educational operating
+system.
+The goal of MentOS is to provide a project environment that is realistic
+enough to show how a real Operating System work, yet simple enough that
+students can understand and modify it in significant ways.
 
-Goal
------------------
+There are so many operating systems, why did we write MentOS?
+It is true, there are a lot of education operating system, BUT
+how many of them follow the guideline defined by Linux?
 
-The goal of MentOS is to provide a project environment that is realisticenough 
-to show how a real Operating System work, yet simple enoughthat students can 
-understand and modify it in significant ways.
+MentOS aims to have the same Linux's data structures and algorithms. It
+has a well-documented source code, and you can compile it on your laptop
+in a few seconds!
+If you are a beginner in Operating-System developing, perhaps MentOS is the
+right operating system to start with.
 
-Why
------------------
-
-There are so many operating systems, why did we write MentOs? 
-It is true, there are a lot of education operating system, BUT how many of them 
-follow the the guide line defined by Linux? Linux shareswith MentOs the same data 
-structures, fields, algorithms, ... it has a sourcecode well documented not requiring 
-hours to be compiled on your laptop! 
-MentOS team aimed at this, you can download MentOS and you are readyto start in a few minutes, 
-search any its data structure with Google, and you will find it in Linux.
 
 Developers
 ----------------
 Main Developers:
 
  * [Enrico Fraccaroli](https://github.com/Galfurian)
- * [Alessandro Danese](https://gitlab.com/ADanese)
+ * [Alessandro Danese](https://github.com/alessandroDanese88)
  * [Luigi Capogrosso](https://github.com/luigicapogrosso)
  * [Mirco De Marchi](https://github.com/mircodemarchi)
 
@@ -75,98 +71,103 @@ cd <clone_directory>
 mkdir build
 cd build
 cmake ..
-make all
-make initfs
+make
 make qemu
 ```
 
-If you want to access to the shell, see username and password with:
-```
-cd <clone_directory>
-cat files/passwd
-```
+If you want to access to the shell, use one of the usernames listed in files/passwd.
 
-See Booting Statistics
+Change the scheduling algorithm
 -----------------
 
-If you want to see more information about memory allocation, process and file system:
+MentOS provides three different scheduling algorithms:
+
+* Round-Robin
+* Priority
+* Completely Fair Scheduling
+
+If you want to change the scheduling algorithm:
 ```
-cd <clone_directory>
-mkdir build
 cd build
 cmake ..
 ccmake ..
 ```
 
 Now you should see something like this:
+
 ```
+BUILD_DOCUMENTATION              ON
 CMAKE_BUILD_TYPE
 CMAKE_INSTALL_PREFIX             /usr/local
-ENABLE_QEMU_DEBUG                OFF
+DEBUGGING_TYPE                   DEBUG_STDIO
+ENABLE_BUDDY_SYSTEM              OFF
+SCHEDULER_TYPE                   SCHEDULER_RR
 ```
 
-You have to set ENABLE_QEMU_DEBUG flag on ON:
+Select SCHEDULER_TYPE, and type Enter to scroll the three available algorithms
+(SCHEDULER_RR, SCHEDULER_PRIORITY, SCHEDULER_CFS).
+Afterwards,
 ```
-select ENABLE_QEMU_DEBUG entry
-click enter
-click c
-click g
-```
-
-There are the instructions of this commands on the bottom of your shell.
-It is simple to use. Then, like before:
-```
-make all
-make initfs
+type c
+type g
+make
 make qemu
 ```
 
-Use Debugger
+Enable to Buddy System
 -----------------
-```
-cd <clone_directory>
-```
 
-Open file .gdb.debug:
-```
-nano .gdb.debug
-```
+MentOS provides a Buddy System to manage the allocation and deallocation of
+page frames in the physical memory.
 
-You should see something like this:
-```
-symbol-file ./src/mentos/kernel.bin
-exec-file   ./src/mentos/kernel.bin
-target remote localhost:1234
-continue
-```
-
-Delete the last line and if you do:
-```
-cat .gdb.debug
-```
-
-You should get:
-```
-symbol-file ./src/mentos/kernel.bin
-exec-file   ./src/mentos/kernel.bin
-target remote localhost:1234
-```
-
-Now:
+If you want to enable the MentOS's Buddy System:
 ```
 cd build
 cmake ..
 ccmake ..
 ```
 
-Set ON the ENABLE_QEMU_DEBUG: see Section 4. Then:
+Now you should see something like this:
+
 ```
-make all
-make initfs
+BUILD_DOCUMENTATION              ON
+CMAKE_BUILD_TYPE
+CMAKE_INSTALL_PREFIX             /usr/local
+DEBUGGING_TYPE                   DEBUG_STDIO
+ENABLE_BUDDY_SYSTEM              OFF
+SCHEDULER_TYPE                   SCHEDULER_RR
+```
+
+Select ENABLE_BUDDY_SYSTEM, and type Enter.
+You should see something like this:
+```
+BUILD_DOCUMENTATION              ON
+CMAKE_BUILD_TYPE
+CMAKE_INSTALL_PREFIX             /usr/local
+DEBUGGING_TYPE                   DEBUG_STDIO
+ENABLE_BUDDY_SYSTEM              ON
+SCHEDULER_TYPE                   SCHEDULER_RR
+```
+
+Afterwards,
+```
+type c
+type g
+make
+make qemu
+```
+
+Use Debugger
+-----------------
+If you want to use GDB to debug MentOS:
+```
+cd build
+cmake ..
+make
 make qemu-gdb
 ```
 
-If you did everything correctly, you should see 3 windows with:
+If you did everything correctly, you should have 3 windows with:
 ```
 1) - Kernel Booting on qemu
 2) - Shell with video printing of statistics previously discussed
