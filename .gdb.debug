@@ -1,0 +1,3 @@
+symbol-file ./mentos/kernel.bin
+exec-file ./mentos/kernel.bin
+target remote localhost:1234
