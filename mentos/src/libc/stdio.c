@@ -9,6 +9,7 @@
 #include "keyboard.h"
 #include "unistd.h"
 #include "debug.h"
+#include "assert.h"
 
 void putchar(int character)
 {
@@ -41,65 +42,50 @@ int getchar(void)
 
 char *gets(char *str)
 {
-	int count = 0;
-	char tmp[255];
-	memset(tmp, '\0', 255);
-
-	do {
-		int c = getchar();
-
-		// Return Key.
-		if (c == '\n') {
+	// Check the input string.
+	if (str == NULL)
+		return NULL;
+	// Buffer for reading input.
+	char buffer[GETS_BUFFERSIZE];
+	memset(buffer, '\0', GETS_BUFFERSIZE);
+	// Char pointer to the buffer.
+	char *cptr = buffer;
+	// Character storage and counter to prevent overflow.
+	int ch, counter = 0;
+	// Read until we find a newline or we exceed the buffer size.
+	while (((ch = getchar()) != '\n') && (counter++ < GETS_BUFFERSIZE)) {
+		// If we encounter EOF, stop.
+		if (ch == EOF) {
+			// EOF at start of line return NULL.
+			if (cptr == str)
+				return NULL;
 			break;
 		}
-		// Backspace key.
-
-		if (c == '\b') {
-			if (count > 0) {
-				count--;
-			}
-		} else {
-			tmp[count++] = (char)c;
-		}
-	} while (count < 255);
-
-	tmp[count] = '\0';
-	/* tmp cant simply be returned, it is allocated in this stack frame and
-     * it will be lost!
-     */
-	strcpy(str, tmp);
-
+		// The character is stored at address, and the pointer is incremented.
+		*cptr++ = ch;
+	}
+	// Add the null-terminating character.
+	*cptr = '\0';
+	// Copy the string we have read.
+	strcpy(str, buffer);
+	// Return a pointer to the original string.
 	return str;
 }
 
 int atoi(const char *str)
 {
-	// Initialize sign as positive.
-	int sign = 1;
-
+	assert(str && "Received NULL string.");
+	// Initialize sign.
+	int sign = (str[0] == '-') ? -1 : +1;
 	// Initialize the result.
 	int result = 0;
-
-	// Initialize the index.
-	int i = 0;
-
-	// If the number is negative, then update the sign.
-	if (str[0] == '-') {
-		sign = -1;
-	}
-
 	// Check that the rest of the numbers are digits.
-	for (i = (sign == -1) ? 1 : 0; str[i] != '\0'; ++i) {
-		if (!isdigit(str[i])) {
+	for (int i = (sign == -1) ? 1 : 0; str[i] != '\0'; ++i)
+		if (!isdigit(str[i]))
 			return -1;
-		}
-	}
-
 	// Iterate through all digits and update the result.
-	for (i = (sign == -1) ? 1 : 0; str[i] != '\0'; ++i) {
+	for (int i = (sign == -1) ? 1 : 0; str[i] != '\0'; ++i)
 		result = (result * 10) + str[i] - '0';
-	}
-
 	return sign * result;
 }
 
@@ -129,7 +115,7 @@ size_t scanf(const char *format, ...)
 	for (; *format; format++) {
 		if (*format == '%') {
 			// Declare an input string.
-			char input[255];
+			char input[GETS_BUFFERSIZE];
 			// Get the input string.
 			gets(input);
 			// Evaluate the length of the string.
