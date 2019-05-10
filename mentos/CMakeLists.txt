@@ -193,6 +193,8 @@ set(SOURCE_FILES
     src/fs/vfs.c
     src/fs/read_write.c
     src/fs/open.c
+    src/fs/stat.c
+    src/fs/readdir.c
 
     src/sys/module.c
     src/sys/unistd.c
@@ -239,6 +241,8 @@ set(SOURCE_FILES
     src/libc/unistd/chdir.c
     src/libc/unistd/getcwd.c
     src/libc/unistd/close.c
+    src/libc/unistd/stat.c
+    src/libc/unistd/mkdir.c
 
     src/mem/kheap.c
     src/mem/paging.c
@@ -248,9 +252,7 @@ set(SOURCE_FILES
     src/misc/clock.c
     src/misc/debug.c
     src/sys/dirent.c
-    src/sys/stat.c
     src/sys/utsname.c
-    #src/sys/shm.c
     src/elf/elf.c
 
     src/descriptor_tables/gdt.c

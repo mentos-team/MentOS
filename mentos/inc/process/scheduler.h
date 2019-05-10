@@ -62,21 +62,7 @@ void do_switch(task_struct *process, pt_regs *f);
 /// @param process The process that has to be executed
 void enter_user_jmp(uintptr_t location, uintptr_t stack);
 
-/// Returns the process ID (PID) of the calling process.
-pid_t sys_getpid();
-
-/// Returns the parent process ID (PPID) of the calling process.
-pid_t sys_getppid();
-
 /// @brief Sets the priority value of the given task.
 int set_user_nice(task_struct *p, long nice);
 
-/// @brief Adds the increment to the priority value of the task.
-int sys_nice(int increment);
 
-/// @brief Suspends execution of the calling thread until a child specified
-/// by pid argument has changed state.
-pid_t sys_waitpid(pid_t pid, int *status, int options);
-
-/// The exit() function causes normal process termination.
-void sys_exit(int exit_code);

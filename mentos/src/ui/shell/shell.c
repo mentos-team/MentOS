@@ -400,7 +400,7 @@ int shell(int argc, char **argv, char **envp)
 	dbg_print("I'm shell, I'll let my pawn, login, handle any intruder...\n");
 	shell_login();
 
-	sys_chdir("/");
+	chdir("/");
 	current_user.uid = 1;
 	current_user.gid = 0;
 

@@ -16,7 +16,7 @@
 |   | 14  | sys_mknod                  | fs/namei.c                  | const char *             | int                          | dev_t                   | -               | -                |
 |   | 15  | sys_chmod                  | fs/open.c                   | const char *             | mode_t                       | -                       | -               | -                |
 |   | 16  | sys_lchown                 | fs/open.c                   | const char *             | uid_t                        | gid_t                   | -               | -                |
-|   | 18  | sys_stat                   | fs/stat.c                   | char *                   | struct __old_kernel_stat *   | -                       | -               | -                |
+| 1 | 18  | sys_stat                   | fs/stat.c                   | char *                   | struct __old_kernel_stat *   | -                       | -               | -                |
 |   | 19  | sys_lseek                  | fs/read_write.c             | unsigned int             | off_t                        | unsigned int            | -               | -                |
 | 1 | 20  | sys_getpid                 | kernel/sched.c              | -                        | -                            | -                       | -               | -                |
 |   | 21  | sys_mount                  | fs/super.c                  | char *                   | char *                       | char *                  | -               | -                |
@@ -34,7 +34,7 @@
 |   | 36  | sys_sync                   | fs/buffer.c                 | -                        | -                            | -                       | -               | -                |
 |   | 37  | sys_kill                   | kernel/signal.c             | int                      | int                          | -                       | -               | -                |
 |   | 38  | sys_rename                 | fs/namei.c                  | const char *             | const char *                 | -                       | -               | -                |
-|   | 39  | sys_mkdir                  | fs/namei.c                  | const char *             | int                          | -                       | -               | -                |
+| 1 | 39  | sys_mkdir                  | fs/namei.c                  | const char *             | int                          | -                       | -               | -                |
 |   | 40  | sys_rmdir                  | fs/namei.c                  | const char *             | -                            | -                       | -               | -                |
 |   | 41  | sys_dup                    | fs/fcntl.c                  | unsigned int             | -                            | -                       | -               | -                |
 |   | 42  | sys_pipe                   | arch/i386/kernel/sys_i386.c | unsigned long *          | -                            | -                       | -               | -                |
@@ -55,7 +55,7 @@
 |   | 61  | sys_chroot                 | fs/open.c                   | const char *             | -                            | -                       | -               | -                |
 |   | 62  | sys_ustat                  | fs/super.c                  | dev_t                    | struct ustat *               | -                       | -               | -                |
 |   | 63  | sys_dup2                   | fs/fcntl.c                  | unsigned int             | unsigned int                 | -                       | -               | -                |
-|   | 64  | sys_getppid                | kernel/sched.c              | -                        | -                            | -                       | -               | -                |
+| 1 | 64  | sys_getppid                | kernel/sched.c              | -                        | -                            | -                       | -               | -                |
 |   | 65  | sys_getpgrp                | kernel/sys.c                | -                        | -                            | -                       | -               | -                |
 |   | 66  | sys_setsid                 | kernel/sys.c                | -                        | -                            | -                       | -               | -                |
 |   | 67  | sys_sigaction              | arch/i386/kernel/signal.c   | int                      | const struct old_sigaction * | struct old_sigaction *  | -               | -                |
@@ -79,7 +79,7 @@
 |   | 86  | sys_uselib                 | fs/exec.c                   | const char *             | -                            | -                       | -               | -                |
 |   | 87  | sys_swapon                 | mm/swapfile.c               | const char *             | int                          | -                       | -               | -                |
 | 1 | 88  | sys_reboot                 | kernel/sys.c                | int                      | int                          | int                     | void *          | -                |
-|   | 89  | old_readdir                | fs/readdir.c                | unsigned int             | void *                       | unsigned int            | -               | -                |
+| 1 | 89  | old_readdir                | fs/readdir.c                | unsigned int             | void *                       | unsigned int            | -               | -                |
 |   | 90  | old_mmap                   | arch/i386/kernel/sys_i386.c | struct mmap_arg_struct * | -                            | -                       | -               | -                |
 |   | 91  | sys_munmap                 | mm/mmap.c                   | unsigned long            | size_t                       | -                       | -               | -                |
 |   | 92  | sys_truncate               | fs/open.c                   | const char *             | unsigned long                | -                       | -               | -                |

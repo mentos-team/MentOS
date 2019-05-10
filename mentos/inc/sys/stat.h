@@ -38,5 +38,4 @@ typedef struct stat_t
 /// @return     Returns a negative value on failure.
 int stat(const char *path, stat_t *buf);
 
-// TODO: doxygen comment.
 int mkdir(const char *path, mode_t mode);

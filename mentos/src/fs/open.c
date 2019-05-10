@@ -4,8 +4,7 @@
 /// @copyright (c) 2019 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "open.h"
-
+#include "syscall.h"
 #include "string.h"
 #include "debug.h"
 #include "stdio.h"

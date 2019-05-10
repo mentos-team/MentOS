@@ -15,7 +15,6 @@
 #include "bitops.h"
 #include "initrd.h"
 #include "string.h"
-#include "open.h"
 
 char *module_start[MAX_MODULES];
 
@@ -85,7 +84,7 @@ DIR *initfs_opendir(const char *path)
 	}
 
 	DIR *pdir = kmalloc(sizeof(DIR));
-	pdir->handle = -1;
+	pdir->fd = -1;
 	pdir->cur_entry = 0;
 	strcpy(pdir->path, path);
 

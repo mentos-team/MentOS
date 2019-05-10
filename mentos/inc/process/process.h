@@ -195,20 +195,8 @@ typedef struct task_struct {
 
 } task_struct;
 
-/// @brief Create a child process.
-pid_t sys_vfork(pt_regs *r);
-
 // TODO: doxygen comment.
 char *get_current_dir_name();
-
-// TODO: doxygen comment.
-void sys_getcwd(char *path, size_t size);
-
-// TODO: doxygen comment.s
-void sys_chdir(char const *path);
-
-/// @brief Replaces the current process image with a new process image.
-int sys_execve(pt_regs *r);
 
 /// @brief Create and spawn the init process.
 struct task_struct *create_init_process();

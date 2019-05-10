@@ -26,14 +26,11 @@ typedef struct dirent_t {
 /// @brief Contains information concerning a directory.
 typedef struct DIR {
 	/// Filesystem directory handle.
-	int handle;
-
+	int fd;
 	/// The currently opened entry.
 	ino_t cur_entry;
-
 	/// Path to the directory.
 	char path[NAME_MAX + 1];
-
 	/// Next directory item.
 	dirent_t entry;
 } DIR;

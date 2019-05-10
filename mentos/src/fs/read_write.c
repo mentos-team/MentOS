@@ -5,14 +5,12 @@
 /// See LICENSE.md for details.
 
 #include <misc/debug.h>
-#include "read_write.h"
 #include "vfs.h"
 #include "stdio.h"
 #include "fcntl.h"
 #include "unistd.h"
 #include "keyboard.h"
 #include "video.h"
-#include "open.h"
 
 ssize_t sys_read(int fd, void *buf, size_t nbytes)
 {

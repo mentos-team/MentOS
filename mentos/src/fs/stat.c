@@ -10,7 +10,7 @@
 #include "string.h"
 #include "initrd.h"
 
-int stat(const char *path, stat_t *buf)
+int sys_stat(const char *path, stat_t *buf)
 {
     // Reset the structure.
     buf->st_dev = 0;
@@ -51,7 +51,7 @@ int stat(const char *path, stat_t *buf)
     return 0;
 }
 
-int mkdir(const char *path, mode_t mode)
+int sys_mkdir(const char *path, mode_t mode)
 {
     char absolute_path[MAX_PATH_LENGTH];
     strcpy(absolute_path, path);
