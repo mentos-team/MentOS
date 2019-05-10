@@ -204,6 +204,7 @@ set(SOURCE_FILES
 
     src/kernel/sys.c
 
+    src/libc/assert.c
     src/libc/ctype.c
     src/libc/stdio.c
     src/libc/string.c
