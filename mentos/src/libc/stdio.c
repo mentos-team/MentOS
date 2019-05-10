@@ -22,7 +22,6 @@ void puts(char *str)
 
 int getchar(void)
 {
-#if 1
 	char c;
 	while (true) {
 		read(STDIN_FILENO, &c, 1);
@@ -30,13 +29,6 @@ int getchar(void)
 			break;
 	}
 	return c;
-#else
-	int tmpchar;
-	while ((tmpchar = keyboard_getc()) == -1)
-		;
-
-	return tmpchar;
-#endif
 }
 
 char *gets(char *str)
