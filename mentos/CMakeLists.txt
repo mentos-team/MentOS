@@ -192,6 +192,7 @@ set(SOURCE_FILES
     src/fs/initrd.c
     src/fs/vfs.c
     src/fs/read_write.c
+    src/fs/open.c
 
     src/sys/module.c
     src/sys/unistd.c
@@ -237,6 +238,7 @@ set(SOURCE_FILES
     src/libc/unistd/waitpid.c
     src/libc/unistd/chdir.c
     src/libc/unistd/getcwd.c
+    src/libc/unistd/close.c
 
     src/mem/kheap.c
     src/mem/paging.c

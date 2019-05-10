@@ -18,6 +18,7 @@
 #include "irqflags.h"
 #include "scheduler.h"
 #include "read_write.h"
+#include "open.h"
 
 /// @brief The signature of a function call.
 typedef int (*SystemCall)();
@@ -48,6 +49,7 @@ void syscall_init()
 	sys_call_table[__NR_read] = (SystemCall)sys_read;
 	sys_call_table[__NR_write] = (SystemCall)sys_write;
 	sys_call_table[__NR_open] = (SystemCall)sys_open;
+	sys_call_table[__NR_close] = (SystemCall)sys_close;
 	sys_call_table[__NR_getpid] = (SystemCall)sys_getpid;
 	sys_call_table[__NR_getppid] = (SystemCall)sys_getppid;
 	sys_call_table[__NR_vfork] = (SystemCall)sys_vfork;
@@ -57,7 +59,6 @@ void syscall_init()
 	sys_call_table[__NR_waitpid] = (SystemCall)sys_waitpid;
 	sys_call_table[__NR_chdir] = (SystemCall)sys_chdir;
 	sys_call_table[__NR_getcwd] = (SystemCall)sys_getcwd;
-	sys_call_table[__NR_waitpid] = (SystemCall)sys_waitpid;
 	sys_call_table[__NR_brk] = (SystemCall)umalloc; // TODO: sys_brk
 	sys_call_table[__NR_free] = (SystemCall)ufree; // TODO: sys_brk
 

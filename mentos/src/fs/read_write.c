@@ -12,6 +12,7 @@
 #include "unistd.h"
 #include "keyboard.h"
 #include "video.h"
+#include "open.h"
 
 ssize_t sys_read(int fd, void *buf, size_t nbytes)
 {

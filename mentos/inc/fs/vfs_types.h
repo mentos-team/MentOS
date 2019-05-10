@@ -12,22 +12,16 @@
 
 /// Identifies a file.
 #define FS_FILE 0x01
-
 /// Identifies a directory.
 #define FS_DIRECTORY 0x02
-
 /// Identifies a character devies.
 #define FS_CHARDEVICE 0x04
-
 /// Identifies a block devies.
 #define FS_BLOCKDEVICE 0x08
-
 /// Identifies a pipe.
 #define FS_PIPE 0x10
-
 /// Identifies a symbolic link.
 #define FS_SYMLINK 0x20
-
 /// Identifies a mount-point.
 #define FS_MOUNTPOINT 0x40
 

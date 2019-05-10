@@ -47,10 +47,10 @@ ssize_t write(int fd, void *buf, size_t nbytes);
 ///                 use in subsequent system calls.
 int open(const char *pathname, int flags, mode_t mode);
 
-/// @brief        Close a file descriptor.
-/// @param fildes The file descriptor.
-/// @return       The result of the operation.
-int close(int fildes);
+/// @brief Close a file descriptor.
+/// @param fd The file descriptor.
+/// @return The result of the operation.
+int close(int fd);
 
 /// @brief      Removes the given directory.
 /// @param path The path to the directory to remove.
