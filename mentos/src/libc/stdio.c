@@ -9,7 +9,6 @@
 #include "keyboard.h"
 #include "unistd.h"
 #include "debug.h"
-#include "assert.h"
 
 void putchar(int character)
 {
@@ -74,7 +73,9 @@ char *gets(char *str)
 
 int atoi(const char *str)
 {
-	assert(str && "Received NULL string.");
+	// Check the input string.
+	if (str == NULL)
+		return 0;
 	// Initialize sign.
 	int sign = (str[0] == '-') ? -1 : +1;
 	// Initialize the result.
