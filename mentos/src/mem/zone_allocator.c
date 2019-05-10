@@ -190,40 +190,40 @@ static bool_t pmm_check()
 /// @param zone A memory zone.
 static void buddy_system_init(zone_t *zone)
 {
-    // Initialize the free_lists of each area of the zone.
-    for (unsigned int order = 0; order < MAX_ORDER; order++) {
-        free_area_t *area = zone->free_area + order;
-        area->nr_free = 0;
-        list_head_init(&area->free_list);
-    }
+	// Initialize the free_lists of each area of the zone.
+	for (unsigned int order = 0; order < MAX_ORDER; order++) {
+		free_area_t *area = zone->free_area + order;
+		area->nr_free = 0;
+		list_head_init(&area->free_list);
+	}
 
-    // Current base page descriptor of the zone.
-    page_t *page = zone->zone_mem_map;
-    // Address of the last page descriptor of the zone.
-    page_t *last_page = page + zone->size;
+	// Current base page descriptor of the zone.
+	page_t *page = zone->zone_mem_map;
+	// Address of the last page descriptor of the zone.
+	page_t *last_page = page + zone->size;
 
-    // Get the free area collecting the larges block of page frames.
-    const unsigned int order = MAX_ORDER - 1;
-    free_area_t *area = zone->free_area + order;
+	// Get the free area collecting the larges block of page frames.
+	const unsigned int order = MAX_ORDER - 1;
+	free_area_t *area = zone->free_area + order;
 
-    // Add all zone's pages to the largest free area block.
-    uint32_t block_size = 1UL << order;
-    while ((page + block_size) <= last_page) {
-        /* page has already the _count field set to -1,
+	// Add all zone's pages to the largest free area block.
+	uint32_t block_size = 1UL << order;
+	while ((page + block_size) <= last_page) {
+		/* page has already the _count field set to -1,
          * therefore only save the order of the page.
          */
-        page->private = order;
+		page->private = order;
 
-        // Insert page as first element in the list.
-        list_head_add_tail(&page->lru, &area->free_list);
-        // Increase the number of free block of the free_area_t.
-        area->nr_free++;
+		// Insert page as first element in the list.
+		list_head_add_tail(&page->lru, &area->free_list);
+		// Increase the number of free block of the free_area_t.
+		area->nr_free++;
 
-        page += block_size;
-    }
+		page += block_size;
+	}
 
-    assert(page == last_page &&
-           "Memory size is not aligned to MAX_ORDER size!");
+	assert(page == last_page &&
+		   "Memory size is not aligned to MAX_ORDER size!");
 }
 
 /// @brief Initializes the memory attributes.

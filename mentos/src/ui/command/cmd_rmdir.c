@@ -12,29 +12,26 @@
 
 void cmd_rmdir(int argc, char **argv)
 {
-    // Check the number of arguments.
-    if (argc != 2)
-    {
-        printf("Bad usage.\n");
-        printf("Try 'rmdir --help' for more information.\n");
+	// Check the number of arguments.
+	if (argc != 2) {
+		printf("Bad usage.\n");
+		printf("Try 'rmdir --help' for more information.\n");
 
-        return;
-    }
+		return;
+	}
 
-    if (strcmp(argv[1], "--help") == 0)
-    {
-        printf("Removes a directory.\n");
-        printf("Usage:\n");
-        printf("    rmdir <directory>\n");
+	if (strcmp(argv[1], "--help") == 0) {
+		printf("Removes a directory.\n");
+		printf("Usage:\n");
+		printf("    rmdir <directory>\n");
 
-        return;
-    }
+		return;
+	}
 
-    if (rmdir(argv[1]) != 0)
-    {
-        printf("%s: failed to remove '%s': %s\n\n",
-               argv[0], argv[1], "unknown"/*strerror(errno)*/);
+	if (rmdir(argv[1]) != 0) {
+		printf("%s: failed to remove '%s': %s\n\n", argv[0], argv[1],
+			   "unknown" /*strerror(errno)*/);
 
-        return;
-    }
+		return;
+	}
 }

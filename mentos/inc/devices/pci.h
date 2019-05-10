@@ -155,7 +155,7 @@
 // TODO: doxygen comment.
 /// @brief
 typedef void (*pci_func_t)(uint32_t device, uint16_t vendor_id,
-			   uint16_t device_id, void *extra);
+						   uint16_t device_id, void *extra);
 
 // TODO: doxygen comment.
 /// @brief
@@ -183,8 +183,8 @@ static inline int pci_extract_func(uint32_t device)
 static inline uint32_t pci_get_addr(uint32_t device, int field)
 {
 	return 0x80000000 | (pci_extract_bus(device) << 16) |
-	       (pci_extract_slot(device) << 11) |
-	       (pci_extract_func(device) << 8) | ((field)&0xFC);
+		   (pci_extract_slot(device) << 11) | (pci_extract_func(device) << 8) |
+		   ((field)&0xFC);
 }
 
 // TODO: doxygen comment.
@@ -212,7 +212,7 @@ const char *pci_vendor_lookup(unsigned short vendor_id);
 // TODO: doxygen comment.
 /// @brief
 const char *pci_device_lookup(unsigned short vendor_id,
-			      unsigned short device_id);
+							  unsigned short device_id);
 // TODO: doxygen comment.
 /// @brief
 void pci_scan_hit(pci_func_t f, uint32_t dev, void *extra);
@@ -220,7 +220,7 @@ void pci_scan_hit(pci_func_t f, uint32_t dev, void *extra);
 // TODO: doxygen comment.
 /// @brief
 void pci_scan_func(pci_func_t f, int type, int bus, int slot, int func,
-		   void *extra);
+				   void *extra);
 
 // TODO: doxygen comment.
 /// @brief

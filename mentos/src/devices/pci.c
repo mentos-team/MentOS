@@ -44,17 +44,17 @@ uint32_t pci_read_field(uint32_t device, int field, int size)
 uint32_t pci_find_type(uint32_t device)
 {
 	return pci_read_field(device, PCI_CLASS, 1) << 16 |
-	       pci_read_field(device, PCI_SUBCLASS, 1) << 8 |
-	       pci_read_field(device, PCI_PROG_IF, 1);
+		   pci_read_field(device, PCI_SUBCLASS, 1) << 8 |
+		   pci_read_field(device, PCI_PROG_IF, 1);
 }
 
 struct {
 	uint16_t id;
 	const char *name;
 } _pci_vendors[] = {
-	{ 0x1022, "AMD" },	{ 0x106b, "Apple, Inc." },
+	{ 0x1022, "AMD" },		  { 0x106b, "Apple, Inc." },
 	{ 0x1234, "Bochs/QEMU" }, { 0x1274, "Ensoniq" },
-	{ 0x15ad, "VMWare" },     { 0x8086, "Intel Corporation" },
+	{ 0x15ad, "VMWare" },	 { 0x8086, "Intel Corporation" },
 	{ 0x80EE, "VirtualBox" },
 };
 
@@ -97,18 +97,16 @@ struct {
 	{ 0x010100, "ISA Compatibility mode-only controller" },
 	{ 0x010105, "PCI native mode-only controller" },
 	{ 0x01010a, "ISA Compatibility mode controller, supports both channels "
-		    "switched to PCI native mode" },
-	{ 0x01010f,
-	  "PCI native mode controller, supports both channels switched "
-	  "to ISA compatibility mode" },
+				"switched to PCI native mode" },
+	{ 0x01010f, "PCI native mode controller, supports both channels switched "
+				"to ISA compatibility mode" },
 	{ 0x010180,
 	  "ISA Compatibility mode-only controller, supports bus mastering" },
 	{ 0x010185, "PCI native mode-only controller, supports bus mastering" },
 	{ 0x01018a, "ISA Compatibility mode controller, supports both channels "
-		    "switched to PCI native mode, supports bus mastering" },
-	{ 0x01018f,
-	  "PCI native mode controller, supports both channels switched "
-	  "\to ISA compatibility mode, supports bus mastering" },
+				"switched to PCI native mode, supports bus mastering" },
+	{ 0x01018f, "PCI native mode controller, supports both channels switched "
+				"\to ISA compatibility mode, supports bus mastering" },
 
 	{ 0x010200, "Floppy disk controller" },
 	{ 0x010300, "IPI bus controller" },
@@ -154,10 +152,8 @@ struct {
 	{ 0x060600, "NuBus bridge" },
 	{ 0x060700, "CardBus bridge" },
 	// { 0x0608xx , "RACEway bridge" },
-	{ 0x060940,
-	  "PCI-to-PCI bridge, Semi-transparent, primary facing Host" },
-	{ 0x060980,
-	  "PCI-to-PCI bridge, Semi-transparent, secondary facing Host" },
+	{ 0x060940, "PCI-to-PCI bridge, Semi-transparent, primary facing Host" },
+	{ 0x060980, "PCI-to-PCI bridge, Semi-transparent, secondary facing Host" },
 	{ 0x060A00, "InfiniBand-to-PCI host bridge" },
 	{ 0x068000, "Bridge device" },
 
@@ -273,8 +269,7 @@ struct {
 
 const char *pci_vendor_lookup(unsigned short vendor_id)
 {
-	for (int i = 0; i < sizeof(_pci_vendors) / sizeof(_pci_vendors[0]);
-	     ++i) {
+	for (int i = 0; i < sizeof(_pci_vendors) / sizeof(_pci_vendors[0]); ++i) {
 		if (_pci_vendors[i].id == vendor_id) {
 			return _pci_vendors[i].name;
 		}
@@ -284,12 +279,11 @@ const char *pci_vendor_lookup(unsigned short vendor_id)
 }
 
 const char *pci_device_lookup(unsigned short vendor_id,
-			      unsigned short device_id)
+							  unsigned short device_id)
 {
-	for (int i = 0; i < sizeof(_pci_devices) / sizeof(_pci_devices[0]);
-	     ++i) {
+	for (int i = 0; i < sizeof(_pci_devices) / sizeof(_pci_devices[0]); ++i) {
 		if (_pci_devices[i].ven_id == vendor_id &&
-		    _pci_devices[i].dev_id == device_id) {
+			_pci_devices[i].dev_id == device_id) {
 			return _pci_devices[i].name;
 		}
 	}
@@ -299,8 +293,7 @@ const char *pci_device_lookup(unsigned short vendor_id,
 
 const char *pci_class_lookup(uint32_t class_code)
 {
-	for (int i = 0; i < sizeof(_pci_classes) / sizeof(_pci_classes[0]);
-	     ++i) {
+	for (int i = 0; i < sizeof(_pci_classes) / sizeof(_pci_classes[0]); ++i) {
 		if (_pci_classes[i].id == class_code) {
 			return _pci_classes[i].name;
 		}
@@ -317,7 +310,7 @@ void pci_scan_hit(pci_func_t f, uint32_t dev, void *extra)
 }
 
 void pci_scan_func(pci_func_t f, int type, int bus, int slot, int func,
-		   void *extra)
+				   void *extra)
 {
 	uint32_t dev = pci_box_device(bus, slot, func);
 
@@ -325,8 +318,7 @@ void pci_scan_func(pci_func_t f, int type, int bus, int slot, int func,
 		pci_scan_hit(f, dev, extra);
 	}
 	if (pci_find_type(dev) == PCI_TYPE_BRIDGE) {
-		pci_scan_bus(f, type, pci_read_field(dev, PCI_SECONDARY_BUS, 1),
-			     extra);
+		pci_scan_bus(f, type, pci_read_field(dev, PCI_SECONDARY_BUS, 1), extra);
 	}
 }
 
@@ -378,7 +370,7 @@ void pci_scan(pci_func_t f, int type, void *extra)
 }
 
 static void find_isa_bridge(uint32_t device, uint16_t vendorid,
-			    uint16_t deviceid, void *extra)
+							uint16_t deviceid, void *extra)
 {
 	if (vendorid == 0x8086 && (deviceid == 0x7000 || deviceid == 0x7110)) {
 		*((uint32_t *)extra) = device;
@@ -423,11 +415,10 @@ int pci_get_interrupt(uint32_t device)
 
 	uint32_t int_line = pci_read_field(device, PCI_INTERRUPT_LINE, 1);
 
-	dbg_print(
-		"Slot is %d, irq pin is %d, so pirq is %d and that maps to %d?"
-		"int_line=%d\n",
-		pci_extract_slot(device), irq_pin, pirq, pci_remaps[pirq],
-		int_line);
+	dbg_print("Slot is %d, irq pin is %d, so pirq is %d and that maps to %d?"
+			  "int_line=%d\n",
+			  pci_extract_slot(device), irq_pin, pirq, pci_remaps[pirq],
+			  int_line);
 
 	if (pci_remaps[pirq] == 0x80) {
 		dbg_print("Not mapped, remapping?\n");
@@ -442,7 +433,7 @@ int pci_get_interrupt(uint32_t device)
 }
 
 static void scan_count(uint32_t device, uint16_t vendorid, uint16_t deviceid,
-		       void *extra)
+					   void *extra)
 {
 	(void)device;
 	(void)vendorid;
@@ -452,61 +443,56 @@ static void scan_count(uint32_t device, uint16_t vendorid, uint16_t deviceid,
 }
 
 static void scan_hit_list(uint32_t device, uint16_t vendorid, uint16_t deviceid,
-			  void *extra)
+						  void *extra)
 {
 	(void)extra;
-	dbg_print("%2x:%2x.%d\n", pci_extract_bus(device),
-		  pci_extract_slot(device), pci_extract_func(device), deviceid);
+	dbg_print("%2x:%2x.%d\n", pci_extract_bus(device), pci_extract_slot(device),
+			  pci_extract_func(device), deviceid);
 	dbg_print(" Vendor          : [0x%06x] %s\n", vendorid,
-		  pci_vendor_lookup(vendorid));
+			  pci_vendor_lookup(vendorid));
 	dbg_print(" Device          : [0x%06x] %s\n", deviceid,
-		  pci_device_lookup(vendorid, deviceid));
+			  pci_device_lookup(vendorid, deviceid));
 	dbg_print(" Type            : [0x%06x] %s\n", pci_find_type(device),
-		  pci_class_lookup(pci_find_type(device)));
+			  pci_class_lookup(pci_find_type(device)));
 	dbg_print(" Status          : 0x%4x\n",
-		  pci_read_field(device, PCI_STATUS, 2));
+			  pci_read_field(device, PCI_STATUS, 2));
 	dbg_print(" Command         : 0x%4x\n",
-		  pci_read_field(device, PCI_COMMAND, 2));
+			  pci_read_field(device, PCI_COMMAND, 2));
 	dbg_print(" Revision        : %2d\n",
-		  pci_read_field(device, PCI_REVISION_ID, 1));
+			  pci_read_field(device, PCI_REVISION_ID, 1));
 	dbg_print(" Cache Line Size : %2d\n",
-		  pci_read_field(device, PCI_CACHE_LINE_SIZE, 1));
+			  pci_read_field(device, PCI_CACHE_LINE_SIZE, 1));
 	dbg_print(" Latency Timer   : %2d\n",
-		  pci_read_field(device, PCI_LATENCY_TIMER, 1));
+			  pci_read_field(device, PCI_LATENCY_TIMER, 1));
 	dbg_print(" Header Type     : %2d\n",
-		  pci_read_field(device, PCI_HEADER_TYPE, 1));
-	dbg_print(" BIST            : %2d\n",
-		  pci_read_field(device, PCI_BIST, 1));
-	dbg_print(" BAR0 : 0x%08x",
-		  pci_read_field(device, PCI_BASE_ADDRESS_0, 4));
-	dbg_print(" BAR1 : 0x%08x",
-		  pci_read_field(device, PCI_BASE_ADDRESS_1, 4));
+			  pci_read_field(device, PCI_HEADER_TYPE, 1));
+	dbg_print(" BIST            : %2d\n", pci_read_field(device, PCI_BIST, 1));
+	dbg_print(" BAR0 : 0x%08x", pci_read_field(device, PCI_BASE_ADDRESS_0, 4));
+	dbg_print(" BAR1 : 0x%08x", pci_read_field(device, PCI_BASE_ADDRESS_1, 4));
 	dbg_print(" BAR2 : 0x%08x\n",
-		  pci_read_field(device, PCI_BASE_ADDRESS_2, 4));
-	dbg_print(" BAR3 : 0x%08x",
-		  pci_read_field(device, PCI_BASE_ADDRESS_3, 4));
-	dbg_print(" BAR4 : 0x%08x",
-		  pci_read_field(device, PCI_BASE_ADDRESS_4, 4));
+			  pci_read_field(device, PCI_BASE_ADDRESS_2, 4));
+	dbg_print(" BAR3 : 0x%08x", pci_read_field(device, PCI_BASE_ADDRESS_3, 4));
+	dbg_print(" BAR4 : 0x%08x", pci_read_field(device, PCI_BASE_ADDRESS_4, 4));
 	dbg_print(" BAR6 : 0x%08x\n",
-		  pci_read_field(device, PCI_BASE_ADDRESS_5, 4));
+			  pci_read_field(device, PCI_BASE_ADDRESS_5, 4));
 	dbg_print(" Cardbus CIS     : 0x%08x\n",
-		  pci_read_field(device, PCI_CARDBUS_CIS, 4));
+			  pci_read_field(device, PCI_CARDBUS_CIS, 4));
 	dbg_print(" Subsystem V. ID : 0x%08x\n",
-		  pci_read_field(device, PCI_SUBSYSTEM_VENDOR_ID, 2));
+			  pci_read_field(device, PCI_SUBSYSTEM_VENDOR_ID, 2));
 	dbg_print(" Subsystem ID    : 0x%08x\n",
-		  pci_read_field(device, PCI_SUBSYSTEM_ID, 2));
+			  pci_read_field(device, PCI_SUBSYSTEM_ID, 2));
 	dbg_print(" ROM Base Address: 0x%08x\n",
-		  pci_read_field(device, PCI_ROM_ADDRESS, 4));
+			  pci_read_field(device, PCI_ROM_ADDRESS, 4));
 	dbg_print(" PCI Cp. LinkList: 0x%08x\n",
-		  pci_read_field(device, PCI_CAPABILITY_LIST, 1));
+			  pci_read_field(device, PCI_CAPABILITY_LIST, 1));
 	dbg_print(" Max Latency     : 0x%08x\n",
-		  pci_read_field(device, PCI_MAX_LAT, 1));
+			  pci_read_field(device, PCI_MAX_LAT, 1));
 	dbg_print(" Min Grant       : 0x%08x\n",
-		  pci_read_field(device, PCI_MIN_GNT, 1));
+			  pci_read_field(device, PCI_MIN_GNT, 1));
 	dbg_print(" Interrupt Pin   : %2d\n",
-		  pci_read_field(device, PCI_INTERRUPT_PIN, 1));
+			  pci_read_field(device, PCI_INTERRUPT_PIN, 1));
 	dbg_print(" Interrupt Line  : %2d\n",
-		  pci_read_field(device, PCI_INTERRUPT_LINE, 1));
+			  pci_read_field(device, PCI_INTERRUPT_LINE, 1));
 	dbg_print(" Interrupt Number: %2d\n", pci_get_interrupt(device));
 	dbg_print("\n");
 }

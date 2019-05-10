@@ -10,11 +10,11 @@
 
 int uname(utsname_t *os_infos)
 {
-    // Uname code goes here.
-    strcpy(os_infos->sysname, OS_NAME);
-    strcpy(os_infos->version, OS_VERSION);
-    strcpy(os_infos->nodename, "testbed");
-    strcpy(os_infos->machine, "i686");
+	// Uname code goes here.
+	strcpy(os_infos->sysname, OS_NAME);
+	strcpy(os_infos->version, OS_VERSION);
+	strcpy(os_infos->nodename, "testbed");
+	strcpy(os_infos->machine, "i686");
 
-    return 0;
+	return 0;
 }

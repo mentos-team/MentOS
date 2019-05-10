@@ -9,43 +9,38 @@
 #include "string.h"
 
 /// Used to align the memory.
-#define ALIGN(x) \
-    (((x) + (sizeof(size_t) - 1)) & ~(sizeof(size_t) - 1))
-
+#define ALIGN(x) (((x) + (sizeof(size_t) - 1)) & ~(sizeof(size_t) - 1))
 
 void *malloc(unsigned int size)
 {
-    void *_res;
-    DEFN_SYSCALL1(_res, __NR_brk, size);
+	void *_res;
+	DEFN_SYSCALL1(_res, __NR_brk, size);
 
-    return _res;
+	return _res;
 }
 
 void free(void *p)
 {
-    int _res;
-    DEFN_SYSCALL1(_res, __NR_free, p);
+	int _res;
+	DEFN_SYSCALL1(_res, __NR_free, p);
 }
-
 
 void *calloc(size_t element_number, size_t element_size)
 {
-    void *ptr = malloc(element_number * element_size);
-    if (ptr)
-    {
-        memset(ptr, 0, element_number * element_size);
-    }
+	void *ptr = malloc(element_number * element_size);
+	if (ptr) {
+		memset(ptr, 0, element_number * element_size);
+	}
 
-    return ptr;
+	return ptr;
 }
-
 
 /// Seed used to generate random numbers.
 int rseed = 0;
 
 inline void srand(int x)
 {
-    rseed = x;
+	rseed = x;
 }
 
 #ifndef MS_RAND
@@ -57,7 +52,7 @@ inline void srand(int x)
 ///        between 0 and RAND_MAX.
 inline int rand()
 {
-    return rseed = (rseed * 1103515245 + 12345) & RAND_MAX;
+	return rseed = (rseed * 1103515245 + 12345) & RAND_MAX;
 }
 
 // MS rand.

@@ -12,32 +12,30 @@
 #define NAME_MAX 30
 
 /// @brief Contains the entries of a directory.
-typedef struct dirent_t
-{
-    /// The inode of the entry.
-    ino_t d_ino;
+typedef struct dirent_t {
+	/// The inode of the entry.
+	ino_t d_ino;
 
-    /// The type of the entry.
-    int d_type;
+	/// The type of the entry.
+	int d_type;
 
-    /// The nam of the entry.
-    char d_name[NAME_MAX + 1];
+	/// The nam of the entry.
+	char d_name[NAME_MAX + 1];
 } dirent_t;
 
 /// @brief Contains information concerning a directory.
-typedef struct DIR
-{
-    /// Filesystem directory handle.
-    int handle;
+typedef struct DIR {
+	/// Filesystem directory handle.
+	int handle;
 
-    /// The currently opened entry.
-    ino_t cur_entry;
+	/// The currently opened entry.
+	ino_t cur_entry;
 
-    /// Path to the directory.
-    char path[NAME_MAX + 1];
+	/// Path to the directory.
+	char path[NAME_MAX + 1];
 
-    /// Next directory item.
-    dirent_t entry;
+	/// Next directory item.
+	dirent_t entry;
 } DIR;
 
 /// @brief      Opens a directory and returns a handler to it.

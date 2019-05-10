@@ -42,10 +42,10 @@ void cmd_uname(int argc, char **argv)
 		printf("Micro: %d\n", OS_MICRO_VERSION);
 
 		// CPU Info.
-        printf("\nCPU:");
+		printf("\nCPU:");
 		video_set_color(BRIGHT_RED);
 		video_move_cursor(61, video_get_line());
-        printf(sinfo.cpu_vendor);
+		printf(sinfo.cpu_vendor);
 		video_set_color(WHITE);
 		printf("\n");
 

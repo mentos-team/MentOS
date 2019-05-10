@@ -10,15 +10,13 @@
 
 int open(const char *pathname, int flags, mode_t mode)
 {
-    ssize_t retval;
+	ssize_t retval;
 
-    DEFN_SYSCALL3(retval, __NR_open, pathname, flags, mode);
+	DEFN_SYSCALL3(retval, __NR_open, pathname, flags, mode);
 
-    if (retval < 0)
-    {
-        errno = -retval;
-        retval = -1;
-
-    }
-    return retval;
+	if (retval < 0) {
+		errno = -retval;
+		retval = -1;
+	}
+	return retval;
 }

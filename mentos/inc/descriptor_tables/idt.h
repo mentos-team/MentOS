@@ -14,19 +14,19 @@
 #define IDT_SIZE 256
 
 /// When an exception occurs whose entry is a Task Gate, a task switch results.
-#define TASK_GATE     0x5
+#define TASK_GATE 0x5
 
 /// Used to specify an interrupt service routine (16-bit).
-#define INT16_GATE    0x6
+#define INT16_GATE 0x6
 
 /// @brief Similar to an Interrupt gate (16-bit).
-#define TRAP16_GATE   0x7
+#define TRAP16_GATE 0x7
 
 /// Used to specify an interrupt service routine (32-bit).
-#define INT32_GATE    0xE
+#define INT32_GATE 0xE
 
 /// @brief Similar to an Interrupt gate (32-bit).
-#define TRAP32_GATE   0xF
+#define TRAP32_GATE 0xF
 
 /*
  * Trap and Interrupt gates are similar, and their descriptors are
@@ -36,25 +36,23 @@
  */
 
 /// @brief This structure describes one interrupt gate.
-typedef struct idt_descriptor_t
-{
-    unsigned short offset_low;
-    unsigned short seg_selector;
-    // This will ALWAYS be set to 0.
-    unsigned char null_par;
-    // |P|DPL|01110|.
-    // P present, DPL required Ring (2bits).
-    unsigned char options;
-    unsigned short offset_high;
+typedef struct idt_descriptor_t {
+	unsigned short offset_low;
+	unsigned short seg_selector;
+	// This will ALWAYS be set to 0.
+	unsigned char null_par;
+	// |P|DPL|01110|.
+	// P present, DPL required Ring (2bits).
+	unsigned char options;
+	unsigned short offset_high;
 } __attribute__((packed)) idt_descriptor_t;
 
 /// @brief A pointer structure used for informing the CPU about our IDT.
-typedef struct idt_pointer_t
-{
-    /// The size of the IDT (entry number).
-    unsigned short int limit;
-    /// The start address of the IDT.
-    unsigned int base;
+typedef struct idt_pointer_t {
+	/// The size of the IDT (entry number).
+	unsigned short int limit;
+	/// The start address of the IDT.
+	unsigned int base;
 } __attribute__((packed)) idt_pointer_t;
 
 /// @brief Initialise the interrupt descriptor table.
@@ -65,10 +63,8 @@ void init_idt();
 /// @param handler  Puntatore alla funzione che gestira' l'interrupt/Eccezione
 /// @param options  Le opzioni del descrittore (PRESENT,NOTPRESENT,KERNEL,USER)
 /// @param seg_sel  Il selettore del segmento della GDT.
-void idt_set_gate(uint8_t index,
-                  interrupt_handler_t handler,
-                  uint16_t options,
-                  uint8_t seg_sel);
+void idt_set_gate(uint8_t index, interrupt_handler_t handler, uint16_t options,
+				  uint8_t seg_sel);
 
 //==== List of exceptions generated internally by the CPU ======================
 extern void INT_0();

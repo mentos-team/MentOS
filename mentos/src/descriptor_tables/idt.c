@@ -114,7 +114,7 @@ void init_idt()
 }
 
 void idt_set_gate(uint8_t index, interrupt_handler_t handler, uint16_t options,
-		  uint8_t seg_sel)
+				  uint8_t seg_sel)
 {
 	uint32_t base_prt = (uint32_t)handler;
 

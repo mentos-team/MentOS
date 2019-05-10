@@ -11,9 +11,9 @@
 
 pid_t getpid()
 {
-    pid_t ret;
+	pid_t ret;
 
-    DEFN_SYSCALL0(ret, __NR_getpid);
+	DEFN_SYSCALL0(ret, __NR_getpid);
 
-    return ret;
+	return ret;
 }

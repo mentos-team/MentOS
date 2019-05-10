@@ -10,15 +10,14 @@
 
 ssize_t read(int fd, void *buf, size_t nbytes)
 {
-    ssize_t retval;
+	ssize_t retval;
 
-    DEFN_SYSCALL3(retval, __NR_read, fd, buf, nbytes);
+	DEFN_SYSCALL3(retval, __NR_read, fd, buf, nbytes);
 
-    if (retval < 0)
-    {
-        errno = -retval;
-        retval = -1;
-    }
+	if (retval < 0) {
+		errno = -retval;
+		retval = -1;
+	}
 
-    return retval;
+	return retval;
 }

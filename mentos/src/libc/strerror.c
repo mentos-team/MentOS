@@ -328,7 +328,7 @@ char *strerror(int errnum)
 #ifdef ELIBMAX
 	case ELIBMAX:
 		strcpy(error,
-		       "Attempting to link in more shared libraries than system limit");
+			   "Attempting to link in more shared libraries than system limit");
 		break;
 #endif
 #ifdef ELIBEXEC
@@ -368,8 +368,7 @@ char *strerror(int errnum)
 #endif
 #ifdef EAFNOSUPPORT
 	case EAFNOSUPPORT:
-		strcpy(error,
-		       "Address family not supported by protocol family");
+		strcpy(error, "Address family not supported by protocol family");
 		break;
 #endif
 #ifdef EPROTOTYPE

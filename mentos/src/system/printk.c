@@ -9,15 +9,15 @@
 #include "stdio.h"
 #include "video.h"
 
-void printk(const char * format, ...)
+void printk(const char *format, ...)
 {
-    char buffer[4096];
-    va_list ap;
-    // Start variabile argument's list.
-    va_start (ap, format);
-    int len = vsprintf(buffer, format, ap);
-    va_end (ap);
+	char buffer[4096];
+	va_list ap;
+	// Start variabile argument's list.
+	va_start(ap, format);
+	int len = vsprintf(buffer, format, ap);
+	va_end(ap);
 
-    for (size_t i = 0; (i < len); ++i)
-        video_putc(buffer[i]);
+	for (size_t i = 0; (i < len); ++i)
+		video_putc(buffer[i]);
 }

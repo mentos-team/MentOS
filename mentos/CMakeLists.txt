@@ -307,8 +307,8 @@ set(SOURCE_FILES
 
 if (ENABLE_BUDDY_SYSTEM MATCHES "ON")
     set(SOURCE_FILES
-            ${SOURCE_FILES}
-            src/mem/buddysystem.c)
+        ${SOURCE_FILES}
+        src/mem/buddysystem.c)
 endif (ENABLE_BUDDY_SYSTEM MATCHES "ON")
 
 # ------------------------------------------------------------------------------

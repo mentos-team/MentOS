@@ -284,19 +284,19 @@ int sys_execve(pt_regs *r)
 	PUSH_ON_STACK(current->thread.useresp, int, argc);
 	PUSH_ON_STACK(current->thread.useresp, uintptr_t, (uintptr_t)exit_handler);
 
-//	dbg_print("_ARGV:0x%09x {\n", _argv);
-//	for (int i = 0; _argv[i] != NULL; ++i) {
-//		dbg_print("\t[%d][0x%09x]%s\n", i, _argv[i], _argv[i]);
-//	}
-//	dbg_print("}\n");
-//
-//	if (_envp != NULL) {
-//		dbg_print("_ENVP:0x%09x {\n", _envp);
-//		for (int i = 0; _envp[i] != NULL; ++i) {
-//			dbg_print("\t[%d][0x%09x]%s\n", i, _envp[i], _envp[i]);
-//		}
-//		dbg_print("}\n");
-//	}
+	//	dbg_print("_ARGV:0x%09x {\n", _argv);
+	//	for (int i = 0; _argv[i] != NULL; ++i) {
+	//		dbg_print("\t[%d][0x%09x]%s\n", i, _argv[i], _argv[i]);
+	//	}
+	//	dbg_print("}\n");
+	//
+	//	if (_envp != NULL) {
+	//		dbg_print("_ENVP:0x%09x {\n", _envp);
+	//		for (int i = 0; _envp[i] != NULL; ++i) {
+	//			dbg_print("\t[%d][0x%09x]%s\n", i, _envp[i], _envp[i]);
+	//		}
+	//		dbg_print("}\n");
+	//	}
 
 	// Perform the switch to the new process.
 	do_switch(current, r);

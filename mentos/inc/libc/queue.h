@@ -10,24 +10,22 @@
 #include "stdbool.h"
 
 /// @brief A node of the queue.
-typedef struct queue_node_t
-{
-    /// The wrapped data.
-    void *data;
-    /// The next node of the queue.
-    struct queue_node_t *next;
+typedef struct queue_node_t {
+	/// The wrapped data.
+	void *data;
+	/// The next node of the queue.
+	struct queue_node_t *next;
 } queue_node_t;
 
 /// @brief The queue.
-typedef struct queue_t
-{
-    /// The front of the queue.
-    queue_node_t *front;
-    /// The back of the queue.
-    queue_node_t *back;
-    /// The size of the data contained inside the queue.
-    size_t data_size;
-} *queue_t;
+typedef struct queue_t {
+	/// The front of the queue.
+	queue_node_t *front;
+	/// The back of the queue.
+	queue_node_t *back;
+	/// The size of the data contained inside the queue.
+	size_t data_size;
+} * queue_t;
 
 /// @brief           Creates a queue.
 /// @param data_size The size of the stored elements.
