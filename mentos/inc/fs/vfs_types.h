@@ -10,20 +10,25 @@
 #include "kernel.h"
 #include "dirent.h"
 
+#define PATH_SEPARATOR '/'
+#define PATH_SEPARATOR_STRING "/"
+#define PATH_UP ".."
+#define PATH_DOT "."
+
 /// Identifies a file.
-#define FS_FILE 0x01
+#define FS_FILE 0x01U
 /// Identifies a directory.
-#define FS_DIRECTORY 0x02
+#define FS_DIRECTORY 0x02U
 /// Identifies a character devies.
-#define FS_CHARDEVICE 0x04
+#define FS_CHARDEVICE 0x04U
 /// Identifies a block devies.
-#define FS_BLOCKDEVICE 0x08
+#define FS_BLOCKDEVICE 0x08U
 /// Identifies a pipe.
-#define FS_PIPE 0x10
+#define FS_PIPE 0x10U
 /// Identifies a symbolic link.
-#define FS_SYMLINK 0x20
+#define FS_SYMLINK 0x20U
 /// Identifies a mount-point.
-#define FS_MOUNTPOINT 0x40
+#define FS_MOUNTPOINT 0x40U
 
 /// Function used to open a directory.
 typedef DIR *(*opendir_callback)(const char *);
