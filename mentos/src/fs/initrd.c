@@ -217,7 +217,7 @@ int initrd_rmdir(const char *path)
 	}
 	// Remove the directory.
 	direntry->magic = 0;
-	memset(direntry->fileName, 0, MAX_FILENAME_LENGTH);
+	memset(direntry->fileName, 0, NAME_MAX);
 	direntry->file_type = 0;
 	direntry->uid = 0;
 	direntry->offset = 0;
@@ -320,7 +320,7 @@ int initfs_remove(const char *path)
 
 	// Remove the directory.
 	file->magic = 0;
-	memset(file->fileName, 0, MAX_FILENAME_LENGTH);
+	memset(file->fileName, 0, NAME_MAX);
 	file->file_type = 0;
 	file->uid = 0;
 	file->offset = 0;

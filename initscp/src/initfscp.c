@@ -4,16 +4,60 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <initfscp.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <libgen.h>
 #include <dirent.h>
 #include <assert.h>
 
+#define INITFSCP_VER "0.3.0"
+#define INITFSCP_NAME_MAX  255
+#define INITFSCP_MAX_FILES 32
+
+#define RESET "\033[00m"
+#define BLACK "\033[30m"
+#define RED "\033[31m"
+#define GREEN "\033[32m"
+#define YELLOW "\033[33m"
+#define BLUE "\033[34m"
+#define MAGENTA "\033[35m"
+#define CYAN "\033[36m"
+#define WHITE "\033[37m"
+
+/// Identifies a file.
+#define FS_FILE 0x01
+/// Identifies a directory.
+#define FS_DIRECTORY 0x02
+/// Identifies a character devies.
+#define FS_CHARDEVICE 0x04
+/// Identifies a block devies.
+#define FS_BLOCKDEVICE 0x08
+/// Identifies a pipe.
+#define FS_PIPE 0x10
+/// Identifies a symbolic link.
+#define FS_SYMLINK 0x20
+/// Identifies a mount-point.
+#define FS_MOUNTPOINT 0x40
+
+/// @brief Information concerning a file.
+typedef struct initrd_file_t {
+	/// Number used as delimiter, it must be set to 0xBF.
+	int magic;
+	/// The name of the file.
+	char fileName[INITFSCP_NAME_MAX];
+	/// The type of the file.
+	short int file_type;
+	/// The uid of the owner.
+	int uid;
+	/// Offset of the starting address.
+	unsigned int offset;
+	/// Dimension of the file.
+	unsigned int length;
+} initrd_file_t;
+
 static FILE *target_fs = NULL;
-static initrd_file_t headers[MAX_FILES];
-static char mount_points[MAX_FILES][MAX_FILENAME_LENGTH];
+static initrd_file_t headers[INITFSCP_MAX_FILES];
+static char mount_points[INITFSCP_MAX_FILES][INITFSCP_NAME_MAX];
 static int mountpoint_idx = 0;
 static int header_idx = 0;
 static int header_offset = 0;
@@ -91,9 +135,9 @@ static bool open_target_fs(int argc, char *argv[])
 static bool init_headers()
 {
 	printf("%-64s", "Initializing headers structures...");
-	for (size_t i = 0; i < MAX_FILES; i++) {
+	for (size_t i = 0; i < INITFSCP_MAX_FILES; i++) {
 		headers[i].magic = 0xBF;
-		memset(headers[i].fileName, 0, MAX_FILENAME_LENGTH);
+		memset(headers[i].fileName, 0, INITFSCP_NAME_MAX);
 		headers[i].file_type = 0;
 		headers[i].uid = 0;
 		headers[i].offset = 0;
@@ -218,7 +262,7 @@ static bool create_file_headers(char *mountpoint, char *directory)
 static bool write_file_system(char *mountpoint)
 {
 	printf("Copying data to filesystem...\n");
-	for (int i = 0; i < MAX_FILES; i++) {
+	for (int i = 0; i < INITFSCP_MAX_FILES; i++) {
 		// --------------------------------------------------------------------
 		char absolute_path[256];
 		memset(absolute_path, 0, 256);
@@ -288,7 +332,8 @@ int main(int argc, char *argv[])
 
 	// ------------------------------------------------------------------------
 	// Create file headers.
-	header_offset = sizeof(struct initrd_file_t) * MAX_FILES + sizeof(int);
+	header_offset =
+		sizeof(struct initrd_file_t) * INITFSCP_MAX_FILES + sizeof(int);
 	printf("Creating headers...\n");
 	for (uint32_t i = 1; i < argc; ++i) {
 		if (is_option_source(argv[i]) && ((i + 1) < argc)) {

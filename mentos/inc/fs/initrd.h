@@ -29,7 +29,7 @@ typedef struct initrd_file_t {
 	/// Number used as delimiter, it must be set to 0xBF.
 	int magic;
 	/// The name of the file.
-	char fileName[MAX_FILENAME_LENGTH];
+	char fileName[NAME_MAX];
 	/// The type of the file.
 	short int file_type;
 	/// The uid of the owner.

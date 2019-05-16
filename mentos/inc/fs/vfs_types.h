@@ -97,7 +97,7 @@ typedef struct mountpoint_t {
 	/// The id of the mountpoint.
 	int32_t mp_id;
 	/// Name of the mountpoint.
-	char mountpoint[MAX_FILENAME_LENGTH];
+	char mountpoint[NAME_MAX];
 	/// Maschera dei permessi.
 	unsigned int pmask;
 	/// User ID.

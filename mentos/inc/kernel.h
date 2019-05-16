@@ -12,12 +12,6 @@
 #include "stdbool.h"
 #include "multiboot.h"
 
-/// The maximum length of a file name.
-#define MAX_FILENAME_LENGTH 64
-
-/// The maximum length of a path.
-#define MAX_PATH_LENGTH 256
-
 /// The maximum number of modules.
 #define MAX_MODULES 10
 
