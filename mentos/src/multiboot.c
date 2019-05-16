@@ -81,22 +81,22 @@ void dump_multiboot(multiboot_info_t *mbi)
 	dbg_print("MULTIBOOT header at 0x%x:\n", mbi);
 
 	// Print out the flags.
-	dbg_print("flags = 0x%x\n", mbi->flags);
+	dbg_print("%-16s = 0x%x\n", "flags", mbi->flags);
 
 	// Are mem_* valid?
 	if (has_flag(mbi->flags, MULTIBOOT_FLAG_MEM)) {
-		dbg_print("mem_lower = %u Kb (%u Mb), "
-				  "mem_upper = %u Kb (%u Mb), "
-				  "total = %u Kb (%u Mb)\n",
-				  mbi->mem_lower, mbi->mem_lower / K, mbi->mem_upper,
-				  mbi->mem_upper / K, mbi->mem_lower + mbi->mem_upper,
+		dbg_print("%-16s = %u Kb (%u Mb)\n", "mem_lower", mbi->mem_lower,
+				  mbi->mem_lower / K);
+		dbg_print("%-16s = %u Kb (%u Mb)\n", "mem_upper", mbi->mem_upper,
+				  mbi->mem_upper / K);
+		dbg_print("%-16s = %u Kb (%u Mb)\n", "total",
+				  mbi->mem_lower + mbi->mem_upper,
 				  (mbi->mem_lower + mbi->mem_upper) / K);
 	}
 
 	// Is boot_device valid?
 	if (has_flag(mbi->flags, MULTIBOOT_FLAG_DEVICE)) {
-		dbg_print("boot_device = 0x%x (0x%x)", mbi->boot_device,
-				  ((mbi->boot_device) & 0xFF000000));
+		dbg_print("%-16s = 0x%x (0x%x)", "boot_device", mbi->boot_device);
 		switch ((mbi->boot_device) & 0xFF000000) {
 		case 0x00000000:
 			dbg_print("(floppy)\n");
@@ -111,16 +111,19 @@ void dump_multiboot(multiboot_info_t *mbi)
 
 	// Is the command line passed?
 	if (has_flag(mbi->flags, MULTIBOOT_FLAG_CMDLINE)) {
-		dbg_print("cmdline: %s\n", (char *)mbi->cmdline);
+		dbg_print("%-16s = %s\n", "cmdline", (char *)mbi->cmdline);
 	}
 
 	// Are mods_* valid?
 	if (has_flag(mbi->flags, MULTIBOOT_FLAG_MODS)) {
-		dbg_print("mods_count = %d, mods_addr = 0x%x\n", (int)mbi->mods_count,
-				  (int)mbi->mods_addr);
+		dbg_print("%-16s = %d\n", "mods_count", mbi->mods_count);
+		dbg_print("%-16s = 0x%x\n", "mods_addr", mbi->mods_addr);
 		multiboot_module_t *mod = first_module(mbi);
 		for (int i = 0; mod; ++i, mod = next_module(mbi, mod)) {
-			dbg_print(" [%2d] mod_start = 0x%x, mod_end = 0x%x, cmdline = %s\n",
+			dbg_print("    [%2d] "
+					  "mod_start = 0x%x, "
+					  "mod_end = 0x%x, "
+					  "cmdline = %s\n",
 					  i, mod->mod_start, mod->mod_end, (char *)mod->cmdline);
 		}
 	}
@@ -152,30 +155,39 @@ void dump_multiboot(multiboot_info_t *mbi)
 
 	// Are mmap_* valid?
 	if (has_flag(mbi->flags, MULTIBOOT_FLAG_MMAP)) {
-		dbg_print("mmap_addr = 0x%x, mmap_length = 0x%x\n", mbi->mmap_addr,
-				  mbi->mmap_length);
+		dbg_print("%-16s = 0x%x\n", "mmap_addr", mbi->mmap_addr);
+		dbg_print("%-16s = 0x%x (%d entries)\n", "mmap_length",
+				  mbi->mmap_length,
+				  mbi->mmap_length / sizeof(multiboot_memory_map_t));
 		multiboot_memory_map_t *mmap = first_mmap_entry(mbi);
 		for (int i = 0; mmap; ++i, mmap = next_mmap_entry(mbi, mmap)) {
-			dbg_print(" [%2d] base_addr = 0x%09x%09x,"
-					  " length = 0x%09x%09x, type = 0x%x (%s)\n",
+			dbg_print("    [%2d] "
+					  "base_addr = 0x%09x%09x, "
+					  "length = 0x%09x%09x, "
+					  "type = 0x%x (%s)\n",
 					  i, mmap->base_addr_high, mmap->base_addr_low,
 					  mmap->length_high, mmap->length_low, mmap->type,
 					  mmap_type_name(mmap));
 		}
 	}
+
 	if (has_flag(mbi->flags, MULTIBOOT_FLAG_DRIVE_INFO)) {
 		dbg_print("Drives: 0x%x\n", mbi->drives_length);
 		dbg_print("Addr  : 0x%x\n", mbi->drives_addr);
 	}
+
 	if (has_flag(mbi->flags, MULTIBOOT_FLAG_CONFIG_TABLE)) {
 		dbg_print("Config: 0x%x\n", mbi->config_table);
 	}
+
 	if (has_flag(mbi->flags, MULTIBOOT_FLAG_BOOT_LOADER_NAME)) {
 		dbg_print("boot_loader_name: %s\n", (char *)mbi->boot_loader_name);
 	}
+
 	if (has_flag(mbi->flags, MULTIBOOT_FLAG_APM_TABLE)) {
 		dbg_print("APM   : 0x%x\n", mbi->apm_table);
 	}
+
 	if (has_flag(mbi->flags, MULTIBOOT_FLAG_VBE_INFO)) {
 		dbg_print("VBE Co: 0x%x\n", mbi->vbe_control_info);
 		dbg_print("VBE Mo: 0x%x\n", mbi->vbe_mode_info);

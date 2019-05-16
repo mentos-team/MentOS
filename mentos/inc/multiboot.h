@@ -124,16 +124,12 @@ typedef struct multiboot_module {
 
 typedef struct multiboot_memory_map {
 	uint32_t size;
-	uint32_t base_addr_low, base_addr_high;
-	uint32_t length_low, length_high;
+	uint32_t base_addr_low;
+	uint32_t base_addr_high;
+	uint32_t length_low;
+	uint32_t length_high;
 	uint32_t type;
 } multiboot_memory_map_t;
-
-typedef struct multiboot_color {
-	uint8_t red;
-	uint8_t green;
-	uint8_t blue;
-} multiboot_color_t;
 
 // TODO: doxygen comment.
 typedef struct multiboot_info {
@@ -205,17 +201,6 @@ typedef struct multiboot_info {
 		};
 	};
 } __attribute__((packed)) multiboot_info_t;
-
-// Be careful that the offset 0 is base_addr_low but no size.
-/// @brief The memory map.
-typedef struct memory_map {
-	uint32_t size;
-	uint32_t base_addr_low;
-	uint32_t base_addr_high;
-	uint32_t length_low;
-	uint32_t length_high;
-	uint32_t type;
-} memory_map_t;
 
 // TODO: doxygen comment.
 void dump_multiboot(multiboot_info_t *mboot_ptr);
