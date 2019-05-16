@@ -21,9 +21,6 @@
 /// The maximum number of modules.
 #define MAX_MODULES 10
 
-/// This should be in %eax.
-#define MULTIBOOT_BOOTLOADER_MAGIC 0x2BADB002
-
 /// Our kernel now loads at 0xC0000000, so what low memory address such as
 /// 0xb800 you used to access, should be LOAD_MEMORY_ADDRESS + 0xb800
 #define LOAD_MEMORY_ADDRESS 0x00000000

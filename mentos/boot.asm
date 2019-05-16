@@ -7,20 +7,26 @@
 [BITS 32]       ; All instructions should be 32-bit.
 [EXTERN kmain]  ; The start point of our C code
 
-; Grub is informed with this flag to load
-; the kernel and kernel modules on a page boundary.
-MBOOT_PAGE_ALIGN    equ 1<<0
-; Grub is informed with this flag to provide the kernel
-; with memory information.
-MBOOT_MEM_INFO      equ 1<<1
-; This is the multiboot magic value.
-MBOOT_HEADER_MAGIC  equ 0x1BADB002
+; The magic field should contain this.
+MULTIBOOT_HEADER_MAGIC     equ 0x1BADB002
+; This should be in %eax.
+MULTIBOOT_BOOTLOADER_MAGIC equ 0x2BADB002
+
+; = Specify what GRUB should PROVIDE =========================================
+; Align the kernel and kernel modules on i386 page (4KB) boundaries.
+MULTIBOOT_PAGE_ALIGN  equ 0x00000001
+; Provide the kernel with memory information.
+MULTIBOOT_MEMORY_INFO equ 0x00000002
+; Must pass video information to OS.
+MULTIBOOT_VIDEO_MODE  equ 0x00000004
+; -----------------------------------------------------------------------------
+
 ; This is the flag combination that we prepare for Grub
 ; to read at kernel load time.
-MBOOT_HEADER_FLAGS  equ MBOOT_PAGE_ALIGN | MBOOT_MEM_INFO
+MULTIBOOT_HEADER_FLAGS  equ (MULTIBOOT_PAGE_ALIGN | MULTIBOOT_MEMORY_INFO | MULTIBOOT_VIDEO_MODE)
 ; Grub reads this value to make sure it loads a kernel
 ; and not just garbage.
-MBOOT_CHECKSUM      equ - (MBOOT_HEADER_MAGIC + MBOOT_HEADER_FLAGS)
+MULTIBOOT_CHECKSUM      equ -(MULTIBOOT_HEADER_MAGIC + MULTIBOOT_HEADER_FLAGS)
 
 LOAD_MEMORY_ADDRESS equ 0x00000000
 ; reserve (1024*1024) for the stack on a doubleword boundary
@@ -33,9 +39,12 @@ section .multiboot_header
 align 4
 ; This is the GRUB Multiboot header.
 multiboot_header:
-    dd MBOOT_HEADER_MAGIC
-    dd MBOOT_HEADER_FLAGS
-    dd MBOOT_CHECKSUM
+    ; magic
+    dd MULTIBOOT_HEADER_MAGIC
+    ; flags
+    dd MULTIBOOT_HEADER_FLAGS
+    ; checksum
+    dd MULTIBOOT_CHECKSUM
 
 ; -----------------------------------------------------------------------------
 ; SECTION (data)
@@ -61,7 +70,6 @@ kernel_entry:
     mov esp, stack_top
     ; pass the initial ESP
     push esp
-    ;mov ebp, esp
     ; pass Multiboot info structure
     push ebx
     ; pass Multiboot magic number

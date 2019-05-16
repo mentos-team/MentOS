@@ -10,42 +10,45 @@
 
 #include "stdint.h"
 
-#define MULTIBOOT_FLAG_MEM 0x001
+// The magic field should contain this.
+#define MULTIBOOT_HEADER_MAGIC 0x1BADB002
+// This should be in %eax.
+#define MULTIBOOT_BOOTLOADER_MAGIC 0x2BADB002
 
-#define MULTIBOOT_FLAG_DEVICE 0x002
-
-#define MULTIBOOT_FLAG_CMDLINE 0x004
-
-#define MULTIBOOT_FLAG_MODS 0x008
-
-#define MULTIBOOT_FLAG_AOUT 0x010
-
-#define MULTIBOOT_FLAG_ELF 0x020
-
-#define MULTIBOOT_FLAG_MMAP 0x040
-
-#define MULTIBOOT_FLAG_CONFIG 0x080
-
-#define MULTIBOOT_FLAG_LOADER 0x100
-
-#define MULTIBOOT_FLAG_APM 0x200
-
-#define MULTIBOOT_FLAG_VBE 0x400
+/// Is there basic lower/upper memory information?
+#define MULTIBOOT_FLAG_MEM 0x00000001U
+/// is there a boot device set?
+#define MULTIBOOT_FLAG_DEVICE 0x00000002U
+/// is the command-line defined?
+#define MULTIBOOT_FLAG_CMDLINE 0x00000004U
+/// are there modules to do something with?
+#define MULTIBOOT_FLAG_MODS 0x00000008U
+/// is there a symbol table loaded?
+#define MULTIBOOT_FLAG_AOUT 0x00000010U
+/// is there an ELF section header table?
+#define MULTIBOOT_FLAG_ELF 0x00000020U
+/// is there a full memory map?
+#define MULTIBOOT_FLAG_MMAP 0x00000040U
+/// Is there drive info?
+#define MULTIBOOT_FLAG_DRIVE_INFO 0x00000080U
+/// Is there a config table?
+#define MULTIBOOT_FLAG_CONFIG_TABLE 0x00000100U
+/// Is there a boot loader name?
+#define MULTIBOOT_FLAG_BOOT_LOADER_NAME 0x00000200U
+/// Is there a APM table?
+#define MULTIBOOT_FLAG_APM_TABLE 0x00000400U
+/// Is there video information?
+#define MULTIBOOT_FLAG_VBE_INFO 0x00000800U
+#define MULTIBOOT_FLAG_FRAMEBUFFER_INFO 0x00001000U
 
 #define MULTIBOOT_FRAMEBUFFER_TYPE_INDEXED 0
-
 #define MULTIBOOT_FRAMEBUFFER_TYPE_RGB 1
-
 #define MULTIBOOT_FRAMEBUFFER_TYPE_EGA_TEXT 2
 
 #define MULTIBOOT_MEMORY_AVAILABLE 1
-
 #define MULTIBOOT_MEMORY_RESERVED 2
-
 #define MULTIBOOT_MEMORY_ACPI_RECLAIMABLE 3
-
 #define MULTIBOOT_MEMORY_NVS 4
-
 #define MULTIBOOT_MEMORY_BADRAM 5
 
 //            +-------------------+
@@ -109,7 +112,7 @@ typedef struct multiboot_elf_section_header_table {
 } multiboot_elf_section_header_table_t;
 
 // TODO: doxygen comment.
-typedef struct multiboot_mod_list {
+typedef struct multiboot_module {
 	// The memory used goes from bytes 'mod_start' to 'mod_end-1' inclusive.
 	uint32_t mod_start;
 	uint32_t mod_end;
@@ -119,13 +122,18 @@ typedef struct multiboot_mod_list {
 	uint32_t pad;
 } multiboot_module_t;
 
-// TODO: doxygen comment.
-typedef struct multiboot_mmap_entry {
+typedef struct multiboot_memory_map {
 	uint32_t size;
-	uint64_t addr;
-	uint64_t len;
+	uint32_t base_addr_low, base_addr_high;
+	uint32_t length_low, length_high;
 	uint32_t type;
-} __attribute__((packed)) multiboot_memory_map_t;
+} multiboot_memory_map_t;
+
+typedef struct multiboot_color {
+	uint8_t red;
+	uint8_t green;
+	uint8_t blue;
+} multiboot_color_t;
 
 // TODO: doxygen comment.
 typedef struct multiboot_info {
