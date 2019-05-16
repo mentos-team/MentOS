@@ -215,8 +215,8 @@ static void shell_print_prompt()
 	video_set_color(BRIGHT_BLUE);
 	printf(current_user.username);
 	video_set_color(WHITE);
-	char cwd[MAX_PATH_LENGTH];
-	getcwd(cwd, MAX_PATH_LENGTH);
+	char cwd[PATH_MAX];
+	getcwd(cwd, PATH_MAX);
 	printf("~:%s# ", cwd);
 	// Update the lower-bounds for the video.
 	lower_bound_x = video_get_column();

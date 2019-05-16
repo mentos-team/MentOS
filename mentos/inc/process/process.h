@@ -17,6 +17,7 @@
 #include "unistd.h"
 #include "list_head.h"
 #include "signal_defs.h"
+#include "limits.h"
 
 /// The maximum length of a name for a task_struct.
 #define TASK_NAME_MAX_LENGTH 100
@@ -170,7 +171,7 @@ typedef struct task_struct {
 	int error_no;
 
 	/// The current working directory.
-	char cwd[MAX_PATH_LENGTH];
+	char cwd[PATH_MAX];
 
 	//==== Future work =========================================================
 	// - task's attributes:

@@ -8,6 +8,7 @@
 
 #include "stdint.h"
 #include "kernel.h"
+#include "limits.h"
 
 /// Maximum length of credentials.
 #define CREDENTIALS_LENGTH  50
@@ -55,7 +56,7 @@ typedef struct userenv_t
     char username[CREDENTIALS_LENGTH];
 
     /// The current path.
-    char cur_path[MAX_PATH_LENGTH];
+    char cur_path[PATH_MAX];
 
     /// The user identifier.
     unsigned int uid;

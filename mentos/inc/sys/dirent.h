@@ -7,9 +7,7 @@
 #pragma once
 
 #include "stddef.h"
-
-/// The maximum length for a name.
-#define NAME_MAX 30
+#include "limits.h"
 
 /// @brief Contains the entries of a directory.
 typedef struct dirent_t {

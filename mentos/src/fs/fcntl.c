@@ -7,10 +7,11 @@
 #include "fcntl.h"
 #include "string.h"
 #include "vfs.h"
+#include "limits.h"
 
 int remove(const char *pathname)
 {
-	char absolute_path[MAX_PATH_LENGTH];
+	char absolute_path[PATH_MAX];
 	strcpy(absolute_path, pathname);
 	if (pathname[0] != '/') {
 		get_absolute_path(absolute_path);

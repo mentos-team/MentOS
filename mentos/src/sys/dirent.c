@@ -17,7 +17,7 @@
 
 DIR *opendir(const char *path)
 {
-	char absolute_path[MAX_PATH_LENGTH];
+	char absolute_path[PATH_MAX];
 	DIR *pdir = NULL;
 
 	strcpy(absolute_path, path);

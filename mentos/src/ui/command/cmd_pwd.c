@@ -13,7 +13,7 @@ void cmd_pwd(int argc, char **argv)
 {
 	(void)argc;
 	(void)argv;
-	char cwd[MAX_PATH_LENGTH];
-	getcwd(cwd, MAX_PATH_LENGTH);
+	char cwd[PATH_MAX];
+	getcwd(cwd, PATH_MAX);
 	printf("%s\n", cwd);
 }

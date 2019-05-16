@@ -7,6 +7,7 @@
 #include "libgen.h"
 #include "string.h"
 #include "initrd.h"
+#include "limits.h"
 
 int parse_path(char *out, char **cur, char sep, size_t max)
 {
@@ -31,7 +32,7 @@ int parse_path(char *out, char **cur, char sep, size_t max)
 
 char *dirname(const char *path)
 {
-	static char s[MAX_PATH_LENGTH];
+	static char s[PATH_MAX];
 
 	static char dot[2] = ".";
 

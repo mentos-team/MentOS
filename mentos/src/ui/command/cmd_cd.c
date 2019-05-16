@@ -16,11 +16,11 @@
 void cmd_cd(int argc, char **argv)
 {
 	DIR *dirp = NULL;
-	char path[MAX_PATH_LENGTH];
-	memset(path, 0, MAX_PATH_LENGTH);
+	char path[PATH_MAX];
+	memset(path, 0, PATH_MAX);
 
-	char current_path[MAX_PATH_LENGTH];
-	getcwd(current_path, MAX_PATH_LENGTH);
+	char current_path[PATH_MAX];
+	getcwd(current_path, PATH_MAX);
 
 	if (argc <= 1) {
 		strcpy(path, "/");

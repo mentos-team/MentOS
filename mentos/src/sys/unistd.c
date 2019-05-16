@@ -7,12 +7,13 @@
 #include "unistd.h"
 
 #include "string.h"
+#include "limits.h"
 #include "stdio.h"
 #include "vfs.h"
 
 int rmdir(const char *path)
 {
-	char absolute_path[MAX_PATH_LENGTH];
+	char absolute_path[PATH_MAX];
 	strcpy(absolute_path, path);
 
 	if (path[0] != '/') {

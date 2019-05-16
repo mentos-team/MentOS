@@ -39,3 +39,9 @@
 
 /// Maximum value a `signed long int' can hold.
 #define LONG_MIN (-LONG_MAX - 1L)
+
+/// Maximum number of characters in a file name.
+#define NAME_MAX 255
+
+/// Maximum number of characters in a path name.
+#define PATH_MAX 4096

@@ -92,8 +92,8 @@ void cmd_ls(int argc, char **argv)
 		print_ls(dirp, flags);
 	}
 	if (no_directory) {
-		char cwd[MAX_PATH_LENGTH];
-		getcwd(cwd, MAX_PATH_LENGTH);
+		char cwd[PATH_MAX];
+		getcwd(cwd, PATH_MAX);
 		DIR *dirp = opendir(cwd);
 		if (dirp == NULL) {
 			printf("%s: cannot access '%s': %s\n\n", argv[0], cwd, "unknown");

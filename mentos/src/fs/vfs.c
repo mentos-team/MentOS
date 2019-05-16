@@ -12,6 +12,7 @@
 #include "shell.h"
 #include "string.h"
 #include "initrd.h"
+#include "limits.h"
 
 int current_fd;
 char *module_start[MAX_MODULES];
@@ -106,7 +107,7 @@ mountpoint_t *get_mountpoint_from_id(int32_t mp_id)
 
 int get_relative_path(uint32_t mp_id, char *path)
 {
-	char relative_path[MAX_PATH_LENGTH];
+	char relative_path[PATH_MAX];
 
 	// Get the size of the path.
 	size_t path_size = strlen(path);
@@ -133,9 +134,9 @@ int get_relative_path(uint32_t mp_id, char *path)
 int get_absolute_path(char *path)
 {
 	if (path[0] != '/') {
-		char abspath[MAX_PATH_LENGTH];
-		memset(abspath, '\0', MAX_PATH_LENGTH);
-		getcwd(abspath, MAX_PATH_LENGTH);
+		char abspath[PATH_MAX];
+		memset(abspath, '\0', PATH_MAX);
+		getcwd(abspath, PATH_MAX);
 		int abs_size = strlen(abspath);
 		if (abspath[abs_size - 1] == '/') {
 			strncat(abspath, path, strlen(path));

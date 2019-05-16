@@ -9,6 +9,7 @@
 #include "stdio.h"
 #include "string.h"
 #include "initrd.h"
+#include "limits.h"
 
 int sys_stat(const char *path, stat_t *buf)
 {
@@ -23,7 +24,7 @@ int sys_stat(const char *path, stat_t *buf)
     buf->st_mtime = 0;
     buf->st_ctime = 0;
 
-    char absolute_path[MAX_PATH_LENGTH];
+    char absolute_path[PATH_MAX];
     strcpy(absolute_path, path);
 
     if (path[0] != '/')
@@ -53,7 +54,7 @@ int sys_stat(const char *path, stat_t *buf)
 
 int sys_mkdir(const char *path, mode_t mode)
 {
-    char absolute_path[MAX_PATH_LENGTH];
+    char absolute_path[PATH_MAX];
     strcpy(absolute_path, path);
     int result = -1;
 

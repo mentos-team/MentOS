@@ -71,7 +71,7 @@ task_struct *create_init_process()
 	// Enable the interrupts.
 	init_proc->thread.eflags = init_proc->thread.eflags | EFLAG_IF;
 	// Clear the current working directory.
-	memset(init_proc->cwd, '\0', MAX_PATH_LENGTH);
+	memset(init_proc->cwd, '\0', PATH_MAX);
 	// Set the state of the process as running.
 	init_proc->state = TASK_RUNNING;
 	// Active the current process.

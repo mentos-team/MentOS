@@ -6,6 +6,7 @@
 
 #include "syscall.h"
 #include "string.h"
+#include "limits.h"
 #include "debug.h"
 #include "stdio.h"
 #include "vfs.h"
@@ -13,7 +14,7 @@
 int sys_open(const char *pathname, int flags, mode_t mode)
 {
 	// Allocate a variable for the path.
-	char absolute_path[MAX_PATH_LENGTH];
+	char absolute_path[PATH_MAX];
 
 	// Copy the path to the working variable.
 	strcpy(absolute_path, pathname);
