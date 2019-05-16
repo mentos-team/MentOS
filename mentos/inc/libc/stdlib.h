@@ -11,29 +11,15 @@
 /// @brief Malloc based on the number of elements.
 void *calloc(size_t element_number, size_t element_size);
 
-/// @brief Allows to set the seed of the random value generator.
-void srand(int x);
-
 void *malloc(unsigned int size);
 
 void free(void * p);
 
+/// The maximum value returned by the rand function.
+#define RAND_MAX ((1U << 31U) - 1U)
 
-#ifndef MS_RAND
-
-/// @brief The maximum value of the random.
-#define RAND_MAX ((1U << 31) - 1)
+/// @brief Allows to set the seed of the random value generator.
+void srand(int x);
 
 /// @brief Generates a random value.
 int rand();
-
-// MS rand
-#else
-
-#define RAND_MAX_32 ((1U << 31) - 1)
-
-#define RAND_MAX ((1U << 15) - 1)
-
-int rand();
-
-#endif
