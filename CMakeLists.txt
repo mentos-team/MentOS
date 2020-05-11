@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 2.8.4)
 
+project(MentOS)
+
 # ------------------------------------------------------------------------------
 # Add the debugging option.
 set(DEBUGGING_TYPE "DEBUG_STDIO" CACHE STRING
