@@ -10,7 +10,7 @@ set_property(
     DEBUG_LOG)
 if ("${DEBUGGING_TYPE}" STREQUAL "DEBUG_STDIO" OR
     "${DEBUGGING_TYPE}" STREQUAL "DEBUG_LOG")
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D${DEBUGGING_TYPE}")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fcommon -D${DEBUGGING_TYPE}")
     message(STATUS "Setting debugging type to ${DEBUGGING_TYPE}.")
 else ()
     message(FATAL_ERROR "Debugging type ${DEBUGGING_TYPE} is not valid.")
