@@ -135,6 +135,10 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -ggdb")
 #set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wuninitialized")
 #set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fmessage-length=0")
 
+if (CMAKE_C_COMPILER_VERSION VERSION_GREATER_EQUAL 10)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fcommon")
+endif()
+
 # ------------------------------------------------------------------------------
 
 if (CMAKE_BUILD_TYPE MATCHES "Release")
