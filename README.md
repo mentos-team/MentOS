@@ -36,6 +36,9 @@ Main Developers:
 
 Prerequisites
 -----------------
+
+MentOS is compatible with the main Unix distribution operating systems. It has been tested with *Ubuntu* and *MacOS*, but specifically tested on *Ubuntu 18.04*.
+
 For compiling the main system:
 
  * nasm
@@ -55,9 +58,13 @@ For debugging:
  * gdb or cgdb
  * xterm
 
+For MacOS users only, you have additional dependencies:
+ * i386-elf-binutils
+ * i386-elf-gcc
+
 Compiling MentOS
 -----------------
-Compile and boot MentOS with qemu:
+Compile and boot MentOS with qemu in Linux systems :
 
 ```
 cd <clone_directory>
@@ -69,6 +76,11 @@ make qemu
 ```
 
 If you want to access to the shell, use one of the usernames listed in files/passwd.
+
+**Only for Mac** user, instead of `cmake ..` only, you have to put an additional argument:
+```
+cmake -DCMAKE_TOOLCHAIN_FILE=../toolchain.cmake ..
+```
 
 Change the scheduling algorithm
 -----------------
