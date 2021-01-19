@@ -8,12 +8,31 @@ message(STATUS "Crosscompiling: ${CMAKE_CROSSCOMPILING}")
 # ------------------------------------------------------------------------------
 # Add operating system specific option.
 message(STATUS "System name: ${CMAKE_HOST_SYSTEM_NAME}")
-message(STATUS "System version: ${CMAKE_SYSTEM_VERSION}")
-if ((${CMAKE_HOST_SYSTEM_NAME} STREQUAL "Darwin") OR APPLE) # Apple MacOSx
-elseif ((${CMAKE_HOST_SYSTEM_NAME} STREQUAL "Windows") OR WIN32) # Windows
+message(STATUS "Kernel version: ${CMAKE_SYSTEM_VERSION}")
+if ((${CMAKE_HOST_SYSTEM_NAME} STREQUAL "Darwin") OR APPLE)
+    # Apple MacOSx
+elseif ((${CMAKE_HOST_SYSTEM_NAME} STREQUAL "Windows") OR WIN32)
+    # Windows
     set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -sdl)
-else() # Generic Unix System
-    set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -sdl)
+else()
+    # Generic Unix System
+    find_program(LSB_RELEASE_EXEC lsb_release)
+    execute_process(COMMAND "${LSB_RELEASE_EXEC}" --short --release
+        OUTPUT_VARIABLE LSB_RELEASE_VERSION_SHORT
+        OUTPUT_STRIP_TRAILING_WHITESPACE)
+    message(STATUS "LSB version: ${LSB_RELEASE_VERSION_SHORT}")
+    if (${LSB_RELEASE_VERSION_SHORT} MATCHES "^18")
+        # Ubuntu 18
+        set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -sdl)
+    elseif (${LSB_RELEASE_VERSION_SHORT} MATCHES "^19")
+        # Ubuntu 19
+        set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -display gtk)
+    elseif (${LSB_RELEASE_VERSION_SHORT} MATCHES "^20")
+        # Ubuntu 20
+        set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -display gtk)
+    else()
+        set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -sdl)
+    endif()
 endif()
 
 # ------------------------------------------------------------------------------
