@@ -3,6 +3,8 @@
 project(MentOs)
 cmake_minimum_required(VERSION 2.8.4)
 
+message(STATUS "Crosscompiling: ${CMAKE_CROSSCOMPILING}")
+
 # ------------------------------------------------------------------------------
 # Add operating system specific option.
 message(STATUS "System name: ${CMAKE_HOST_SYSTEM_NAME}")

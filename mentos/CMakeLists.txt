@@ -1,16 +1,16 @@
 # ------------------------------------------------------------------------------
 # Initialize the project.
-project(MentOs C ASM ASM_NASM)
+project(MentOs C ASM)
 set(PROJECT_NAME MentOs)
 
 # ------------------------------------------------------------------------------
 # Add operating system specific option.
 if((${CMAKE_HOST_SYSTEM_NAME} STREQUAL "Darwin") OR APPLE) # Apple MacOSx
-    set(CMAKE_ASM_NASM_COMPILER nasm)
+    set(CMAKE_ASM_COMPILER nasm)
 elseif ((${CMAKE_HOST_SYSTEM_NAME} STREQUAL "Windows") OR WIN32) # Windows
-    set(CMAKE_ASM_NASM_COMPILER ${CMAKE_SOURCE_DIR}/third_party/nasm/bin/nasm)
+    set(CMAKE_ASM_COMPILER ${CMAKE_SOURCE_DIR}/third_party/nasm/bin/nasm)
 else () # Generic Unix System
-    set(CMAKE_ASM_NASM_COMPILER ${CMAKE_SOURCE_DIR}/third_party/nasm/bin/nasm)
+    set(CMAKE_ASM_COMPILER ${CMAKE_SOURCE_DIR}/third_party/nasm/bin/nasm)
 endif ()
 
 # ------------------------------------------------------------------------------
@@ -144,11 +144,11 @@ endif (CMAKE_BUILD_TYPE MATCHES "Release")
 
 # ------------------------------------------------------------------------------
 # Set the assembly flags.
-set(CMAKE_ASM_NASM_FLAGS "${CMAKE_ASM_NASM_FLAGS} -g")
-set(CMAKE_ASM_NASM_FLAGS "${CMAKE_ASM_NASM_FLAGS} -O0")
-set(CMAKE_ASM_NASM_FLAGS "${CMAKE_ASM_NASM_FLAGS} -f elf")
-set(CMAKE_ASM_NASM_FLAGS "${CMAKE_ASM_NASM_FLAGS} -F dwarf")
-set(CMAKE_ASM_NASM_COMPILE_OBJECT "<CMAKE_ASM_NASM_COMPILER> <FLAGS> <SOURCE> -o <OBJECT>")
+set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -g")
+set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -O0")
+set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -f elf")
+set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -F dwarf")
+set(CMAKE_ASM_COMPILE_OBJECT "<CMAKE_ASM_COMPILER> <FLAGS> <SOURCE> -o <OBJECT>")
 
 # ------------------------------------------------------------------------------
 # Add the includes.

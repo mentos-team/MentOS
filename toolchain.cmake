@@ -1,17 +1,5 @@
 set(CMAKE_SYSTEM_NAME Generic)
 
-message(STATUS "Cross compiling")
-
-# ------------------------------------------------------------------------------
-# Add operating system specific option.
-if((${CMAKE_HOST_SYSTEM_NAME} STREQUAL "Darwin") OR APPLE) # Apple MacOSx
-    set(CMAKE_ASM_NASM_COMPILER nasm)
-elseif ((${CMAKE_HOST_SYSTEM_NAME} STREQUAL "Windows") OR WIN32) # Windows
-    set(CMAKE_ASM_NASM_COMPILER ${CMAKE_SOURCE_DIR}/third_party/nasm/bin/nasm)
-else () # Generic Unix System
-    set(CMAKE_ASM_NASM_COMPILER ${CMAKE_SOURCE_DIR}/third_party/nasm/bin/nasm)
-endif ()
-
 if(CMAKE_VERSION VERSION_LESS "3.6.0")
     INCLUDE(CMakeForceCompiler)
     CMAKE_FORCE_C_COMPILER(i386-elf-gcc Clang)
