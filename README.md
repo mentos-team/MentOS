@@ -36,6 +36,9 @@ Main Developers:
 
 Prerequisites
 -----------------
+
+MentOS is compatible with the main Unix distribution operating systems. It has been tested with *Ubuntu* and *MacOS*, but specifically tested on *Ubuntu 18.04*.
+
 For compiling the main system:
 
  * nasm
@@ -47,17 +50,43 @@ For compiling the main system:
 
 To run and try:
 
- * qemu-system-x86
+ * qemu-system-i386
 
 For debugging:
 
  * ccmake
- * gdb or cgdb
+ * cgdb
  * xterm
+
+For MacOS, you have additional dependencies:
+
+ * i386-elf-binutils
+ * i386-elf-gcc
+
+Prerequisites installation commands
+-----------------
+
+For Ubuntu:
+
+```
+sudo apt-get update && sudo apt-get upgrade -y
+sudo apt-get install -y build-essential git cmake qemu-system-i386 
+sudo apt-get install -y cgdb xterm #<- for debug only
+```
+
+For MacOS:
+
+You need to install additionally the i386-elf cross-compiler. The simplest installation method is through Homebrew package manager. Install [Homebrew](https://brew.sh/index_it) if you don't already have and exec the following commands:
+
+```
+brew update && brew upgrade
+brew install i386-elf-binutils i386-elf-gcc git cmake qemu nasm
+brew install cgdb xterm #<- for debug only
+```
 
 Compiling MentOS
 -----------------
-Compile and boot MentOS with qemu:
+Compile and boot MentOS with qemu in Unix systems:
 
 ```
 cd <clone_directory>
@@ -70,6 +99,12 @@ make qemu
 
 If you want to access to the shell, use one of the usernames listed in files/passwd.
 
+**For MacOS**, the steps are the same but instead of `cmake ..`, you have to put an additional argument in order to use the i386-elf cross-compiler:
+
+```
+cmake -DCMAKE_TOOLCHAIN_FILE=../toolchain.cmake ..
+```
+
 Change the scheduling algorithm
 -----------------
 
@@ -80,6 +115,23 @@ MentOS provides three different scheduling algorithms:
 * Completely Fair Scheduling
 
 If you want to change the scheduling algorithm:
+
+```
+cd build
+
+# Round Robin scheduling algorithm
+cmake -DSCHEDULER_TYPE=SCHEDULER_RR ..
+# Priority scheduling algorithm
+cmake -DSCHEDULER_TYPE=SCHEDULER_PRIORITY ..
+# Completely Fair Scheduling algorithm
+cmake -DSCHEDULER_TYPE=SCHEDULER_CFS ..
+
+make
+make qemu
+```
+
+Otherwise you can use `ccmake`:
+
 ```
 cd build
 cmake ..
@@ -114,6 +166,16 @@ MentOS provides a Buddy System to manage the allocation and deallocation of
 page frames in the physical memory.
 
 If you want to enable the MentOS's Buddy System:
+
+```
+cd build
+cmake -DENABLE_BUDDY_SYSTEM=ON ..
+make
+make qemu
+```
+
+Otherwise you can use `ccmake`:
+
 ```
 cd build
 cmake ..

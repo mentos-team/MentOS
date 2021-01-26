@@ -1,10 +1,17 @@
 # ------------------------------------------------------------------------------
 # Initialize the project.
 project(MentOs C ASM)
+set(PROJECT_NAME MentOs)
 
 # ------------------------------------------------------------------------------
-# Set the project name.
-set(PROJECT_NAME MentOs)
+# Add operating system specific option.
+if((${CMAKE_HOST_SYSTEM_NAME} STREQUAL "Darwin") OR APPLE) # Apple MacOSx
+    set(CMAKE_ASM_COMPILER nasm)
+elseif ((${CMAKE_HOST_SYSTEM_NAME} STREQUAL "Windows") OR WIN32) # Windows
+    set(CMAKE_ASM_COMPILER ${CMAKE_SOURCE_DIR}/third_party/nasm/bin/nasm)
+else () # Generic Unix System
+    set(CMAKE_ASM_COMPILER ${CMAKE_SOURCE_DIR}/third_party/nasm/bin/nasm)
+endif ()
 
 # ------------------------------------------------------------------------------
 # Find doxygen
@@ -128,6 +135,10 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -ggdb")
 #set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wuninitialized")
 #set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fmessage-length=0")
 
+if (CMAKE_C_COMPILER_VERSION VERSION_GREATER_EQUAL 10)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fcommon")
+endif()
+
 # ------------------------------------------------------------------------------
 
 if (CMAKE_BUILD_TYPE MATCHES "Release")
@@ -137,13 +148,11 @@ endif (CMAKE_BUILD_TYPE MATCHES "Release")
 
 # ------------------------------------------------------------------------------
 # Set the assembly flags.
-enable_language(ASM)
-set(CMAKE_ASM_COMPILER ${CMAKE_SOURCE_DIR}/third_party/nasm/bin/nasm)
-SET(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -g")
-SET(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -O0")
-SET(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -f elf")
-SET(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -F dwarf")
-set(CMAKE_ASM_COMPILE_OBJECT "<CMAKE_ASM_COMPILER> <FLAGS> -o <OBJECT> <SOURCE>")
+set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -g")
+set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -O0")
+set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -f elf")
+set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -F dwarf")
+set(CMAKE_ASM_COMPILE_OBJECT "<CMAKE_ASM_COMPILER> <FLAGS> <SOURCE> -o <OBJECT>")
 
 # ------------------------------------------------------------------------------
 # Add the includes.
@@ -319,7 +328,7 @@ add_library(${PROJECT_NAME} ${SOURCE_FILES})
 add_custom_command(
     TARGET MentOs
     POST_BUILD
-    COMMAND $(LD)
+    COMMAND ${CMAKE_LINKER}
     -melf_i386
     -static
     --oformat elf32-i386
