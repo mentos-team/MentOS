@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 2.8.4)
 
+project(MentOsProject)
+
 # ------------------------------------------------------------------------------
 # Add the debugging option.
 set(DEBUGGING_TYPE "DEBUG_STDIO" CACHE STRING
@@ -49,7 +51,6 @@ elseif (${DEBUGGING_TYPE} STREQUAL DEBUG_STDIO)
 endif ()
 SET(EMULATOR_FLAGS ${EMULATOR_FLAGS} -vga std)
 SET(EMULATOR_FLAGS ${EMULATOR_FLAGS} -k it)
-SET(EMULATOR_FLAGS ${EMULATOR_FLAGS} -sdl)
 SET(EMULATOR_FLAGS ${EMULATOR_FLAGS} -m ${MEMORY_SIZE})
 SET(EMULATOR_KERNEL -kernel mentos/kernel.bin)
 SET(EMULATOR_FS -initrd initfs)

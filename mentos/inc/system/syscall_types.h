@@ -217,4 +217,10 @@
 #define __NR_vfork 188
 #define __NR_free 189 // TODO: remove me!
 
-#define SYSCALL_NUMBER 190
+#define __NR_lock_create 190
+#define __NR_lock_destroy 191
+#define __NR_lock_init 192
+#define __NR_lock_try_acquire 193
+#define __NR_lock_release 194
+
+#define SYSCALL_NUMBER 195

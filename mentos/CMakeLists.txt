@@ -24,11 +24,11 @@ if (BUILD_DOCUMENTATION)
     configure_file(${doxyfile_in} ${doxyfile} @ONLY)
 
     add_custom_target(
-        doc
-        COMMAND ${DOXYGEN_EXECUTABLE} ${doxyfile}
-        WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
-        COMMENT "Generating API documentation with Doxygen"
-        VERBATIM
+            doc
+            COMMAND ${DOXYGEN_EXECUTABLE} ${doxyfile}
+            WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+            COMMENT "Generating API documentation with Doxygen"
+            VERBATIM
     )
     install(DIRECTORY ${CMAKE_BINARY_DIR}/html DESTINATION share/doc)
 endif (BUILD_DOCUMENTATION)
@@ -36,17 +36,17 @@ endif (BUILD_DOCUMENTATION)
 # ------------------------------------------------------------------------------
 # Add the scheduling option.
 set(SCHEDULER_TYPE
-    "SCHEDULER_RR"
-    CACHE STRING
-    "Chose the type of scheduler: SCHEDULER_RR SCHEDULER_PRIORITY SCHEDULER_CFS")
+        "SCHEDULER_RR"
+        CACHE STRING
+        "Chose the type of scheduler: SCHEDULER_RR SCHEDULER_PRIORITY SCHEDULER_CFS")
 set_property(
-    CACHE SCHEDULER_TYPE PROPERTY STRINGS
-    SCHEDULER_RR
-    SCHEDULER_PRIORITY
-    SCHEDULER_CFS)
+        CACHE SCHEDULER_TYPE PROPERTY STRINGS
+        SCHEDULER_RR
+        SCHEDULER_PRIORITY
+        SCHEDULER_CFS)
 if ("${SCHEDULER_TYPE}" STREQUAL "SCHEDULER_RR" OR
-    "${SCHEDULER_TYPE}" STREQUAL "SCHEDULER_PRIORITY" OR
-    "${SCHEDULER_TYPE}" STREQUAL "SCHEDULER_CFS")
+        "${SCHEDULER_TYPE}" STREQUAL "SCHEDULER_PRIORITY" OR
+        "${SCHEDULER_TYPE}" STREQUAL "SCHEDULER_CFS")
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D${SCHEDULER_TYPE}")
     message(STATUS "Setting scheduler type to ${SCHEDULER_TYPE}.")
 else ()
@@ -148,171 +148,175 @@ set(CMAKE_ASM_COMPILE_OBJECT "<CMAKE_ASM_COMPILER> <FLAGS> -o <OBJECT> <SOURCE>"
 # ------------------------------------------------------------------------------
 # Add the includes.
 include_directories(
-    inc
-    inc/descriptor_tables
-    inc/devices
-    inc/drivers
-    inc/drivers/keyboard
-    inc/fs
-    inc/hardware
-    inc/io
-    inc/kernel
-    inc/libc
-    inc/lng
-    inc/mem
-    inc/misc
-    inc/sys
-    inc/system
-    inc/process
-    inc/elf
-    inc/ui
-    inc/ui/shell
-    inc/ui/command
-    inc/ui/init
+        inc
+        inc/descriptor_tables
+        inc/devices
+        inc/drivers
+        inc/drivers/keyboard
+        inc/fs
+        inc/hardware
+        inc/io
+        inc/kernel
+        inc/libc
+        inc/lng
+        inc/mem
+        inc/misc
+        inc/sys
+        inc/experimental
+        inc/system
+        inc/process
+        inc/elf
+        inc/ui
+        inc/ui/shell
+        inc/ui/command
+        inc/ui/init
 )
 
 # ------------------------------------------------------------------------------
 # Add the source files.
 set(SOURCE_FILES
-    boot.asm
+        boot.asm
 
-    src/kernel.c
-    src/multiboot.c
+        src/kernel.c
+        src/multiboot.c
 
-    src/devices/pci.c
-    src/devices/fpu.c
+        src/devices/pci.c
+        src/devices/fpu.c
 
-    src/drivers/ata.c
-    src/drivers/fdc.c
-    src/drivers/mouse.c
-    src/drivers/keyboard/keyboard.c
-    src/drivers/keyboard/keymap.c
+        src/drivers/ata.c
+        src/drivers/fdc.c
+        src/drivers/mouse.c
+        src/drivers/keyboard/keyboard.c
+        src/drivers/keyboard/keymap.c
 
-    src/fs/fcntl.c
-    src/fs/initrd.c
-    src/fs/vfs.c
-    src/fs/read_write.c
-    src/fs/open.c
-    src/fs/stat.c
-    src/fs/readdir.c
+        src/experimental/smart_lock.c
+        src/experimental/smart_sem.c
 
-    src/sys/module.c
-    src/sys/unistd.c
-    src/hardware/timer.c
-    src/hardware/cpuid.c
-    src/hardware/pic8259.c
-    src/io/port_io.c
-    src/io/mm_io.c
-    src/io/video.c
+        src/fs/fcntl.c
+        src/fs/initrd.c
+        src/fs/vfs.c
+        src/fs/read_write.c
+        src/fs/open.c
+        src/fs/stat.c
+        src/fs/readdir.c
 
-    src/kernel/sys.c
+        src/sys/module.c
+        src/sys/unistd.c
+        src/hardware/timer.c
+        src/hardware/cpuid.c
+        src/hardware/pic8259.c
+        src/io/port_io.c
+        src/io/mm_io.c
+        src/io/video.c
 
-    src/libc/assert.c
-    src/libc/ctype.c
-    src/libc/stdio.c
-    src/libc/string.c
-    src/libc/vsprintf.c
-    src/libc/queue.c
-    src/libc/stdlib.c
-    src/libc/spinlock.c
-    src/libc/list.c
-    src/libc/ordered_array.c
-    src/libc/mutex.c
-    src/libc/libgen.c
-    src/libc/strerror.c
-    src/libc/tree.c
-    src/libc/bitset.c
-    src/libc/fcvt.c
-    src/libc/rbtree.c
-    src/libc/math.c
-    src/libc/hashmap.c
+        src/kernel/sys.c
 
-    src/libc/unistd/getppid.c
-    src/libc/unistd/getpid.c
-    src/libc/unistd/exit.c
-    src/libc/unistd/vfork.c
-    src/libc/unistd/read.c
-    src/libc/unistd/write.c
-    src/libc/unistd/execve.c
-    src/libc/unistd/nice.c
-    src/libc/unistd/open.c
-    src/libc/unistd/reboot.c
-    src/libc/unistd/waitpid.c
-    src/libc/unistd/chdir.c
-    src/libc/unistd/getcwd.c
-    src/libc/unistd/close.c
-    src/libc/unistd/stat.c
-    src/libc/unistd/mkdir.c
+        src/libc/assert.c
+        src/libc/ctype.c
+        src/libc/stdio.c
+        src/libc/string.c
+        src/libc/vsprintf.c
+        src/libc/queue.c
+        src/libc/stdlib.c
+        src/libc/spinlock.c
+        src/libc/list.c
+        src/libc/ordered_array.c
+        src/libc/mutex.c
+        src/libc/libgen.c
+        src/libc/strerror.c
+        src/libc/tree.c
+        src/libc/bitset.c
+        src/libc/fcvt.c
+        src/libc/rbtree.c
+        src/libc/math.c
+        src/libc/hashmap.c
 
-    src/mem/kheap.c
-    src/mem/paging.c
-    src/mem/zone_allocator.c
+        src/libc/unistd/getppid.c
+        src/libc/unistd/getpid.c
+        src/libc/unistd/exit.c
+        src/libc/unistd/vfork.c
+        src/libc/unistd/read.c
+        src/libc/unistd/write.c
+        src/libc/unistd/execve.c
+        src/libc/unistd/nice.c
+        src/libc/unistd/open.c
+        src/libc/unistd/reboot.c
+        src/libc/unistd/waitpid.c
+        src/libc/unistd/chdir.c
+        src/libc/unistd/getcwd.c
+        src/libc/unistd/close.c
+        src/libc/unistd/stat.c
+        src/libc/unistd/mkdir.c
 
-    src/misc/bitops.c
-    src/misc/clock.c
-    src/misc/debug.c
-    src/sys/dirent.c
-    src/sys/utsname.c
-    src/elf/elf.c
+        src/mem/kheap.c
+        src/mem/paging.c
+        src/mem/zone_allocator.c
 
-    src/descriptor_tables/gdt.c
-    src/descriptor_tables/gdt.asm
-    src/descriptor_tables/interrupt.c
-    src/descriptor_tables/exception.c
-    src/descriptor_tables/interrupt.asm
-    src/descriptor_tables/exception.asm
-    src/descriptor_tables/idt.c
-    src/descriptor_tables/idt.asm
-    src/descriptor_tables/tss.c
-    src/descriptor_tables/tss.asm
+        src/misc/bitops.c
+        src/misc/clock.c
+        src/misc/debug.c
+        src/sys/dirent.c
+        src/sys/utsname.c
+        src/elf/elf.c
 
-    src/process/scheduler.c
-    src/process/scheduler_algorithm.c
-    src/process/process.c
-    src/process/user.asm
+        src/descriptor_tables/gdt.c
+        src/descriptor_tables/gdt.asm
+        src/descriptor_tables/interrupt.c
+        src/descriptor_tables/exception.c
+        src/descriptor_tables/interrupt.asm
+        src/descriptor_tables/exception.asm
+        src/descriptor_tables/idt.c
+        src/descriptor_tables/idt.asm
+        src/descriptor_tables/tss.c
+        src/descriptor_tables/tss.asm
 
-    src/system/errno.c
-    src/system/panic.c
-    src/system/syscall.c
-    src/system/printk.c
+        src/process/scheduler.c
+        src/process/scheduler_algorithm.c
+        src/process/process.c
+        src/process/user.asm
 
-    src/ui/command/cmd_cd.c
-    src/ui/command/cmd_clear.c
-    src/ui/command/cmd_cpuid.c
-    src/ui/command/cmd_credits.c
-    src/ui/command/cmd_date.c
-    src/ui/command/cmd_drv_load.c
-    src/ui/command/cmd_echo.c
-    src/ui/command/cmd_logo.c
-    src/ui/command/cmd_ls.c
-    src/ui/command/cmd_mkdir.c
-    src/ui/command/cmd_more.c
-    src/ui/command/cmd_newfile.c
-    src/ui/command/cmd_poweroff.c
-    src/ui/command/cmd_ps.c
-    src/ui/command/cmd_pwd.c
-    src/ui/command/cmd_rm.c
-    src/ui/command/cmd_rmdir.c
-    src/ui/command/cmd_showpid.c
-    src/ui/command/cmd_sleep.c
-    #src/ui/command/cmd_tester.c
-    src/ui/command/cmd_touch.c
-    src/ui/command/cmd_uname.c
-    src/ui/command/cmd_whoami.c
-    src/ui/command/cmd_ipcs.c
-    src/ui/command/cmd_ipcrm.c
-    src/ui/command/cmd_nice.c
+        src/system/errno.c
+        src/system/panic.c
+        src/system/syscall.c
+        src/system/printk.c
 
-    src/ui/init/init.c
+        src/ui/command/cmd_cd.c
+        src/ui/command/cmd_clear.c
+        src/ui/command/cmd_cpuid.c
+        src/ui/command/cmd_credits.c
+        src/ui/command/cmd_date.c
+        src/ui/command/cmd_drv_load.c
+        src/ui/command/cmd_echo.c
+        src/ui/command/cmd_logo.c
+        src/ui/command/cmd_ls.c
+        src/ui/command/cmd_mkdir.c
+        src/ui/command/cmd_more.c
+        src/ui/command/cmd_newfile.c
+        src/ui/command/cmd_poweroff.c
+        src/ui/command/cmd_ps.c
+        src/ui/command/cmd_pwd.c
+        src/ui/command/cmd_rm.c
+        src/ui/command/cmd_rmdir.c
+        src/ui/command/cmd_showpid.c
+        src/ui/command/cmd_sleep.c
+        #src/ui/command/cmd_tester.c
+        src/ui/command/cmd_touch.c
+        src/ui/command/cmd_uname.c
+        src/ui/command/cmd_whoami.c
+        src/ui/command/cmd_ipcs.c
+        src/ui/command/cmd_ipcrm.c
+        src/ui/command/cmd_nice.c
 
-    src/ui/shell/shell.c
-    src/ui/shell/shell_login.c
-    )
+        src/ui/init/init.c
+
+        src/ui/shell/shell.c
+        src/ui/shell/shell_login.c
+        )
 
 if (ENABLE_BUDDY_SYSTEM MATCHES "ON")
     set(SOURCE_FILES
-        ${SOURCE_FILES}
-        src/mem/buddysystem.c)
+            ${SOURCE_FILES}
+            src/mem/buddysystem.c)
 endif (ENABLE_BUDDY_SYSTEM MATCHES "ON")
 
 # ------------------------------------------------------------------------------
@@ -322,15 +326,15 @@ add_library(${PROJECT_NAME} ${SOURCE_FILES})
 # ------------------------------------------------------------------------------
 # Build the kernel.
 add_custom_command(
-    TARGET MentOs
-    POST_BUILD
-    COMMAND $(LD)
-    -melf_i386
-    -static
-    --oformat elf32-i386
-    -Ttext 0x100000
-    --output=${CMAKE_CURRENT_BINARY_DIR}/kernel.bin
-    --script=${CMAKE_CURRENT_SOURCE_DIR}/kernel.lds
-    ${CMAKE_CURRENT_BINARY_DIR}/lib${PROJECT_NAME}.a
-    -Map ${CMAKE_CURRENT_BINARY_DIR}/kernel.map
+        TARGET MentOs
+        POST_BUILD
+        COMMAND $(LD)
+        -melf_i386
+        -static
+        --oformat elf32-i386
+        -Ttext 0x100000
+        --output=${CMAKE_CURRENT_BINARY_DIR}/kernel.bin
+        --script=${CMAKE_CURRENT_SOURCE_DIR}/kernel.lds
+        ${CMAKE_CURRENT_BINARY_DIR}/lib${PROJECT_NAME}.a
+        -Map ${CMAKE_CURRENT_BINARY_DIR}/kernel.map
 )

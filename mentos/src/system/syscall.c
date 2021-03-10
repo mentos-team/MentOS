@@ -4,6 +4,7 @@
 /// @copyright (c) 2019 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
+#include <smart_lock.h>
 #include "syscall.h"
 #include "shm.h"
 #include "isr.h"
@@ -61,6 +62,12 @@ void syscall_init()
 	sys_call_table[__NR_getcwd] = (SystemCall)sys_getcwd;
 	sys_call_table[__NR_brk] = (SystemCall)umalloc; // TODO: sys_brk
 	sys_call_table[__NR_free] = (SystemCall)ufree; // TODO: sys_brk
+
+	sys_call_table[__NR_lock_create] = (SystemCall)lock_create;
+	sys_call_table[__NR_lock_destroy] = (SystemCall)lock_destroy;
+	sys_call_table[__NR_lock_init] = (SystemCall)lock_init;
+	sys_call_table[__NR_lock_try_acquire] = (SystemCall)lock_try_acquire;
+	sys_call_table[__NR_lock_release] = (SystemCall)lock_release;
 
 	isr_install_handler(SYSTEM_CALL, &syscall_handler, "syscall_handler");
 }
