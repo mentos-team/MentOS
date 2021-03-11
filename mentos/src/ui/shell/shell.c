@@ -75,7 +75,8 @@ struct {
 	{ "clear", cmd_clear, "Clears the screen" },
 	{ "showpid", cmd_showpid, "Shows the PID of the shell" },
 	{ "history", cmd_show_history, "Shows the shell history" },
-	{ "nice", cmd_nice, "Change the nice value of the process" }
+	{ "nice", cmd_nice, "Change the nice value of the process" },
+    { "deadlock", cmd_deadlock, "Test deadlock behavior" }
 };
 
 /// @brief Completely delete the current command.

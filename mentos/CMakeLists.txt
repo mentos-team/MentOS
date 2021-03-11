@@ -306,6 +306,7 @@ set(SOURCE_FILES
         src/ui/command/cmd_ipcs.c
         src/ui/command/cmd_ipcrm.c
         src/ui/command/cmd_nice.c
+        src/ui/command/cmd_deadlock.c
 
         src/ui/init/init.c
 

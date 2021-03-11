@@ -91,3 +91,6 @@ void cmd_ipcrm(int argc, char **argv);
 
 /// @brief Change the nice value.
 void cmd_nice(int argc, char **argv);
+
+/// @brief Test deadlock behavior with tasks and shared resources.
+void cmd_deadlock(int argc, char **argv);
