@@ -84,9 +84,20 @@ void *kcalloc(unsigned int num, unsigned int size);
 /// @return
 void *krealloc(void *ptr, unsigned int size);
 
+/// @brief Allocate a matrix with n rows of a specific size.
+/// @param n     Number of matrix rows.
+/// @param size  Size of each matrix row.
+/// @return Matrix pointer.
+void **kmmalloc(size_t n, size_t size);
+
 /// @brief Wrapper function for free.
 /// @param p
 void kfree(void *p);
+
+/// @brief Free a matrix of n rows.
+/// @param src Matrix to free.
+/// @param n   Number of matrix rows.
+void kmfree(void **src, size_t n);
 
 /// @brief Allocates size bytes of uninitialized storage.
 //void *malloc(unsigned int size);

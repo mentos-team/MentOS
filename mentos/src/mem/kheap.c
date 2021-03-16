@@ -793,9 +793,28 @@ void *krealloc(void *ptr, uint32_t size)
     return __do_realloc(&kernel_heap, ptr, size);
 }
 
+void **kmmalloc(size_t n, size_t size)
+{
+    void **ret = (void **) kmalloc(n * sizeof(void *));
+    for (size_t i = 0; i < n; i++)
+    {
+        *(ret + i) = kmalloc(size);
+    }
+    return ret;
+}
+
 void kfree(void *ptr)
 {
     __do_free(&kernel_heap, ptr);
+}
+
+void kmfree(void **src, size_t n)
+{
+    for (size_t i = 0; i < n; i++)
+    {
+        kfree(*(src + i));
+    }
+    kfree(src);
 }
 
 /// @brief Find the current user heap.
