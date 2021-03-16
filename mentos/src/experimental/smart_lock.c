@@ -12,10 +12,8 @@
 #define SEM_VALUE_MAX 32
 
 typedef struct {
-    union{
-        volatile atomic_t value;
-        volatile atomic_t mutex;
-    };
+    volatile atomic_t value;
+    volatile atomic_t mutex;
 	bool_t used;
 	resource_t *sem_resource;
 } lock_t;
