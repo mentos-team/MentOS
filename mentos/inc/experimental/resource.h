@@ -50,10 +50,13 @@ void resource_destroy(resource_t *r);
 void resource_assign(resource_t *r);
 void resource_deassign(resource_t *r);
 
+size_t kernel_get_active_resources();
 void clean_resource_reference(resource_t *r);
 
-void init_deadlock_structures(uint32_t **alloc, uint32_t **max, uint32_t *available, task_struct *idx_map_task_struct[]);
-void reset_deadlock_structures(uint32_t **alloc, uint32_t **max, uint32_t *available, task_struct *idx_map_task_struct[]);
+void init_deadlock_structures(uint32_t **alloc, uint32_t **max, uint32_t *available,
+        uint32_t **need, task_struct *idx_map_task_struct[]);
+void reset_deadlock_structures(uint32_t **alloc, uint32_t **max, uint32_t *available,
+        task_struct *idx_map_task_struct[]);
 task_struct **compute_index_map_task_struct(task_struct *idx_map_task_struct[]);
 uint32_t **fill_alloc(uint32_t **alloc, task_struct *idx_map_task_struct[]);
 uint32_t **fill_max(uint32_t **max, task_struct *idx_map_task_struct[]);

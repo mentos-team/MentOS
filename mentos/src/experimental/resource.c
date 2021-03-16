@@ -7,6 +7,7 @@
 #include "resource.h"
 #include "kheap.h"
 #include "string.h"
+#include "arr_math.h"
 
 
 /// The list of processes.
@@ -101,13 +102,23 @@ void clean_resource_reference(resource_t *r)
     }
 }
 
-void init_deadlock_structures(uint32_t **alloc, uint32_t **max, uint32_t *available, struct task_struct *idx_map_task_struct[])
+void init_deadlock_structures(uint32_t **alloc, uint32_t **max, uint32_t *available,
+        uint32_t **need, struct task_struct *idx_map_task_struct[])
 {
     reset_deadlock_structures(alloc, max, available, idx_map_task_struct);
     compute_index_map_task_struct(idx_map_task_struct);
     fill_alloc(alloc, idx_map_task_struct);
     fill_max(max, idx_map_task_struct);
     fill_available(available);
+
+    // Calculate need[i][j] = max[i][j] - alloc[i][j].
+    size_t n = kernel_get_active_processes();
+    size_t m = kernel_get_active_resources();
+    for (size_t i = 0; i < n; i++)
+    {
+        memcpy(need[i],  max[i],   m * sizeof(uint32_t));
+        arr_sub(need[i], alloc[i], m);
+    }
 }
 
 void reset_deadlock_structures(uint32_t **alloc, uint32_t **max, uint32_t *available, struct task_struct *idx_map_task_struct[])
