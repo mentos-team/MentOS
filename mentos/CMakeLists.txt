@@ -64,6 +64,16 @@ else (ENABLE_BUDDY_SYSTEM)
 endif (ENABLE_BUDDY_SYSTEM)
 
 # ------------------------------------------------------------------------------
+# Add the option to enable deadlock prevention.
+option(ENABLE_DEADLOCK_PREVENTION "Enables the buddy system" ON)
+if (ENABLE_DEADLOCK_PREVENTION)
+    message(STATUS "Enabling deadlock prevention.")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DENABLE_DEADLOCK_PREVENTION")
+else (ENABLE_DEADLOCK_PREVENTION)
+    message(STATUS "Deadlock prevention disabled.")
+endif (ENABLE_DEADLOCK_PREVENTION)
+
+# ------------------------------------------------------------------------------
 # Set the compiler options (original).
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -nostdlib")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -nostdinc")
@@ -163,6 +173,7 @@ include_directories(
         inc/misc
         inc/sys
         inc/experimental
+        inc/experimental/math
         inc/system
         inc/process
         inc/elf
@@ -192,6 +203,7 @@ set(SOURCE_FILES
         src/experimental/smart_lock.c
         src/experimental/smart_sem.c
         src/experimental/resource.c
+        src/experimental/math/arr_math.c
 
         src/fs/fcntl.c
         src/fs/initrd.c
@@ -320,6 +332,12 @@ if (ENABLE_BUDDY_SYSTEM MATCHES "ON")
             ${SOURCE_FILES}
             src/mem/buddysystem.c)
 endif (ENABLE_BUDDY_SYSTEM MATCHES "ON")
+
+if (ENABLE_DEADLOCK_PREVENTION MATCHES "ON")
+    set(SOURCE_FILES
+            ${SOURCE_FILES}
+            src/experimental/deadlock_prevention.c)
+endif (ENABLE_DEADLOCK_PREVENTION MATCHES "ON")
 
 # ------------------------------------------------------------------------------
 # Add the executable.
