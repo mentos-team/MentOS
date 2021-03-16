@@ -191,6 +191,7 @@ set(SOURCE_FILES
 
         src/experimental/smart_lock.c
         src/experimental/smart_sem.c
+        src/experimental/resource.c
 
         src/fs/fcntl.c
         src/fs/initrd.c

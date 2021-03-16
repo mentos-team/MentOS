@@ -25,6 +25,9 @@
 /// The default dimension of the stack of a process (1 MByte).
 #define DEFAULT_STACK_SIZE 0x100000
 
+/// The maximum number of resources for a task.
+#define TASK_RESOURCE_MAX_AMOUNT 32
+
 //==== Task state ==============================================================
 // Used in tsk->state
 /// The task is running.
@@ -172,6 +175,9 @@ typedef struct task_struct {
 
 	/// The current working directory.
 	char cwd[PATH_MAX];
+
+	/// Array of resource pointers that task need for.
+	struct resource *resources[TASK_RESOURCE_MAX_AMOUNT];
 
 	//==== Future work =========================================================
 	// - task's attributes:
