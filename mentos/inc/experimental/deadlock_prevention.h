@@ -5,8 +5,8 @@
  * @copyright (c) University of Verona
  */
 
-#ifndef DEADLOCK_PREVENTION_H_
-#define DEADLOCK_PREVENTION_H_
+#pragma once
+
 
 #include "stdio.h"
 #include "stdlib.h"
@@ -46,4 +46,4 @@ extern uint32_t ** need;
  */
 deadlock_status_t request(uint32_t *req_vec, size_t task_i, size_t n, size_t m);
 
-#endif  // DEADLOCK_PREVENTION_H_
+#pragma once

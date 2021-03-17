@@ -23,6 +23,8 @@ typedef struct {
 
 lock_t semaphores[SEM_MAX] = { 0 };
 
+static bool_t lock_try(int id);
+
 
 int lock_create()
 {
@@ -62,14 +64,28 @@ int lock_try_acquire(int id)
 {
 	if ((id < 0) || (id > SEM_MAX))
 		return -1;
-	/*
-	if (atomic_set_and_test(&semaphores[id].value, 1) == 0) {
+
+	if (lock_try(id)) {
 	    resource_assign(semaphores[id].sem_resource);
 	    return 1;
-	}*/
-	int ret = 0;
+	}
 
-	// Init deadlock prevention structures.
+    return 0;
+}
+
+int lock_release(int id)
+{
+	if ((id < 0) || (id > SEM_MAX))
+		return -1;
+	atomic_set(&semaphores[id].value, 0);
+    resource_deassign(semaphores[id].sem_resource);
+	return 0;
+}
+
+static bool_t lock_try(int id)
+{
+#if ENABLE_DEADLOCK_PREVENTION
+    // Init deadlock prevention structures.
     size_t n = kernel_get_active_processes();
     size_t m = kernel_get_active_resources();
     available = (uint32_t *)  kmalloc(m * sizeof(uint32_t));
@@ -94,19 +110,17 @@ int lock_try_acquire(int id)
         }
     }
 
+    bool_t ret = false;
     switch (request(req_vec, current_task_idx, n, m)) {
         case WAIT:
         case WAIT_UNSAFE:
-            ret = 0;
             break;
         case SAFE:
             if (atomic_set_and_test(&semaphores[id].value, 1) == 0) {
-                resource_assign(semaphores[id].sem_resource);
-                ret = 1;
+                ret = true;
             } else {
                 kernel_panic("allocation request return bad safe status");
             }
-            break;
         case ERROR:
         default:
             kernel_panic("deadlock prevention error");
@@ -119,14 +133,8 @@ int lock_try_acquire(int id)
     kfree(idx_map_task_struct);
     kfree(req_vec);
 
-	return ret;
-}
-
-int lock_release(int id)
-{
-	if ((id < 0) || (id > SEM_MAX))
-		return -1;
-	atomic_set(&semaphores[id].value, 0);
-    resource_deassign(semaphores[id].sem_resource);
-	return 0;
+    return ret;
+#else
+    return atomic_set_and_test(&semaphores[id].value, 1) == 0;
+#endif
 }
