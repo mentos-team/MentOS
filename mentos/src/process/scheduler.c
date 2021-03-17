@@ -377,6 +377,10 @@ void sys_exit(int exit_code)
 	}
 	// Free the space occupied by the stack.
 	destroy_process_image(runqueue.curr->mm);
+	// Clean resources needed by.
+	for (size_t i = 0; i < TASK_RESOURCE_MAX_AMOUNT; i++) {
+	    runqueue.curr->resources[i] = NULL;
+	}
 	// Debugging message.
 	dbg_print("Process %d exited with value %d\n", runqueue.curr->pid,
 			  exit_code);
