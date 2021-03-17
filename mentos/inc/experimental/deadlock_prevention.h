@@ -20,7 +20,7 @@ typedef enum {
     WAIT,        ///< State waiting.
     WAIT_UNSAFE, ///< State waiting for unsafe detection.
     ERROR,       ///< State error.
-} status_t;
+} deadlock_status_t;
 //------------------------------------------------------------------------------
 
 /// @brief Number of instances of each resources currently available.
@@ -44,6 +44,6 @@ extern uint32_t ** need;
  * @param m       Number of resource types in the system.
  * @return Status of the request (see status_t enum).
  */
-status_t request(uint32_t *req_vec, size_t task_i, size_t n, size_t m);
+deadlock_status_t request(uint32_t *req_vec, size_t task_i, size_t n, size_t m);
 
 #endif  // DEADLOCK_PREVENTION_H_

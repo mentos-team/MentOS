@@ -35,7 +35,6 @@ resource_t *resource_create(const char *category)
     new->category = category;
 
     // The task that create this resource is the current running task.
-    new->created_by_task = current_task;
     current_task->resources[i] = new;
     // The number of resource instances: for now always 1.
     new->n_instances = 1;
@@ -60,10 +59,12 @@ void resource_destroy(resource_t *r)
     kfree(r);
     r_list.num_active--;
 
+    // Normalize resource ids.
     list_head *resource_it;
     size_t rid = 0;
     list_for_each (resource_it, &r_list.head) {
-        resource_t *resource = list_entry(resource_it, resource_t, resources_list);
+        resource_t *resource = list_entry(resource_it, resource_t,
+                resources_list);
         if (resource != NULL) {
             resource->rid = rid;
         }
@@ -91,7 +92,8 @@ void clean_resource_reference(resource_t *r)
 {
     list_head *it;
     list_for_each (it, &runqueue.queue) {
-        struct task_struct *entry = list_entry(it, struct task_struct, run_list);
+        struct task_struct *entry = list_entry(it, struct task_struct,
+                run_list);
         if (entry != NULL) {
             for (size_t r_i = 0; r_i < TASK_RESOURCE_MAX_AMOUNT; r_i++) {
                 if (entry->resources[r_i] == r) {
@@ -102,8 +104,9 @@ void clean_resource_reference(resource_t *r)
     }
 }
 
-void init_deadlock_structures(uint32_t **alloc, uint32_t **max, uint32_t *available,
-        uint32_t **need, struct task_struct *idx_map_task_struct[])
+void init_deadlock_structures(uint32_t **alloc, uint32_t **max,
+        uint32_t *available, uint32_t **need,
+        struct task_struct *idx_map_task_struct[])
 {
     reset_deadlock_structures(alloc, max, available, idx_map_task_struct);
     compute_index_map_task_struct(idx_map_task_struct);
@@ -121,30 +124,31 @@ void init_deadlock_structures(uint32_t **alloc, uint32_t **max, uint32_t *availa
     }
 }
 
-void reset_deadlock_structures(uint32_t **alloc, uint32_t **max, uint32_t *available, struct task_struct *idx_map_task_struct[])
+void reset_deadlock_structures(uint32_t **alloc, uint32_t **max,
+        uint32_t *available, struct task_struct *idx_map_task_struct[])
 {
-    for (size_t t_i = 0; t_i < kernel_get_active_processes(); t_i++) {
-        idx_map_task_struct[t_i] = NULL;
+    size_t n = kernel_get_active_processes();
+    size_t m = kernel_get_active_resources();
 
-        // Clean row of resources.
-        for (size_t r_i = 0; r_i < kernel_get_active_resources(); r_i++) {
-            alloc[t_i][r_i] = 0;
-            max[t_i][r_i] = 0;
-        }
+    // Clean idx_map_task_struct and rows of max and alloc.
+    for (size_t t_i = 0; t_i < n; t_i++) {
+        idx_map_task_struct[t_i] = NULL;
+        memset(alloc[t_i], 0, m * sizeof(uint32_t));
+        memset(max[t_i], 0, m * sizeof(uint32_t));
     }
 
     // Clean row of resources.
-    for (size_t r_i = 0; r_i < kernel_get_active_resources(); r_i++) {
-        available[r_i] = 0;
-    }
+    memset(available, 0, m * sizeof(uint32_t));
 }
 
-struct task_struct **compute_index_map_task_struct(struct task_struct *idx_map_task_struct[])
+struct task_struct **compute_index_map_task_struct(
+        struct task_struct *idx_map_task_struct[])
 {
     list_head *task_it;
     size_t t_i = 0;
     list_for_each (task_it, &runqueue.queue) {
-        struct task_struct *task = list_entry(task_it, struct task_struct, run_list);
+        struct task_struct *task = list_entry(task_it, struct task_struct,
+                run_list);
         if (task != NULL) {
             idx_map_task_struct[t_i] = task;
             t_i++;
@@ -154,13 +158,15 @@ struct task_struct **compute_index_map_task_struct(struct task_struct *idx_map_t
     return idx_map_task_struct;
 }
 
-uint32_t **fill_alloc(uint32_t **alloc, struct task_struct *idx_map_task_struct[])
+uint32_t **fill_alloc(uint32_t **alloc,
+        struct task_struct *idx_map_task_struct[])
 {
     size_t tasks_amount = kernel_get_active_processes();
 
     list_head *resource_it;
     list_for_each (resource_it, &r_list.head) {
-        resource_t *resource = list_entry(resource_it, resource_t, resources_list);
+        resource_t *resource = list_entry(resource_it, resource_t,
+                resources_list);
         for (size_t t_i = 0; t_i < tasks_amount; t_i++) {
             if (idx_map_task_struct[t_i] == resource->assigned_task) {
                 alloc[t_i][resource->rid] = resource->assigned_instances;
@@ -193,8 +199,10 @@ uint32_t *fill_available(uint32_t *available)
 {
     list_head *resource_it;
     list_for_each (resource_it, &r_list.head) {
-        resource_t *resource = list_entry(resource_it, resource_t, resources_list);
-        available[resource->rid] = resource->n_instances - resource->assigned_instances;
+        resource_t *resource = list_entry(resource_it, resource_t,
+                resources_list);
+        available[resource->rid] =
+                resource->n_instances - resource->assigned_instances;
     }
 
     return available;

@@ -76,11 +76,13 @@ int lock_try_acquire(int id)
     max       = (uint32_t **) kmmalloc(n, m * sizeof(uint32_t));
     alloc     = (uint32_t **) kmmalloc(n, m * sizeof(uint32_t));
     need      = (uint32_t **) kmmalloc(n, m * sizeof(uint32_t));
-    struct task_struct **idx_map_task_struct = (struct task_struct **)  kmalloc(n * sizeof(struct task_struct *));
+    struct task_struct **idx_map_task_struct = (struct task_struct **) kmalloc(
+            n * sizeof(struct task_struct *));
     init_deadlock_structures(alloc, max, available, need, idx_map_task_struct);
 
     // Init request vector.
     uint32_t *req_vec = (uint32_t *) kmalloc(m * sizeof(uint32_t));
+    memset(req_vec, 0, m * sizeof(uint32_t));
     req_vec[semaphores[id].sem_resource->rid] = 1;
 
     // Find current task correct index.
@@ -88,6 +90,7 @@ int lock_try_acquire(int id)
     for (size_t t_i = 0; t_i < n; t_i++) {
         if (idx_map_task_struct[t_i] == kernel_get_current_process()) {
             current_task_idx = t_i;
+            break;
         }
     }
 
