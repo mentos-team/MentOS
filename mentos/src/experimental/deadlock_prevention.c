@@ -42,8 +42,8 @@ uint32_t ** need;
 
 /// @brief Check if the current system resource allocation maintains the system
 /// in a safe state.
-/// @param n Number of tasks currently in the system (length of req_vec).
-/// @param m Number of resource types in the system.
+/// @param n Number of tasks currently in the system.
+/// @param m Number of resource types in the system (length of req_vec).
 static bool_t state_safe(size_t n, size_t m)
 {
     // Allocate work as a copy of available.

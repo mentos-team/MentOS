@@ -75,6 +75,7 @@ static bool_t lock_try(int id)
             } else {
                 kernel_panic("allocation request return bad safe status");
             }
+            break;
         case ERROR:
         default:
             kernel_panic("deadlock prevention error");
