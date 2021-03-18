@@ -111,8 +111,9 @@ int lock_create()
 
 int lock_destroy(int id)
 {
-	if ((id < 0) || (id > SEM_MAX))
-		return -1;
+	if ((id < 0) || (id > SEM_MAX)) {
+        return -1;
+    }
 	semaphores[id].used = false;
 	resource_destroy(semaphores[id].sem_resource);
 	return 0;
@@ -120,10 +121,12 @@ int lock_destroy(int id)
 
 int lock_init(int id)
 {
-	if ((id < 0) || (id > SEM_MAX))
-		return -1;
-	if (!semaphores[id].used)
-	    return -1;
+	if ((id < 0) || (id > SEM_MAX)) {
+        return -1;
+    }
+	if (!semaphores[id].used) {
+        return -1;
+    }
 	atomic_set(&semaphores[id].value, 0);
 	resource_init(semaphores[id].sem_resource);
 	return 0;
@@ -131,10 +134,12 @@ int lock_init(int id)
 
 int lock_try_acquire(int id)
 {
-	if ((id < 0) || (id > SEM_MAX))
-		return -1;
-    if (!semaphores[id].used)
+	if ((id < 0) || (id > SEM_MAX)) {
         return -1;
+    }
+    if (!semaphores[id].used) {
+        return -1;
+    }
 
 	if (lock_try(id)) {
 	    resource_assign(semaphores[id].sem_resource);
@@ -146,10 +151,12 @@ int lock_try_acquire(int id)
 
 int lock_release(int id)
 {
-	if ((id < 0) || (id > SEM_MAX))
-		return -1;
-    if (!semaphores[id].used)
+	if ((id < 0) || (id > SEM_MAX)) {
         return -1;
+    }
+	if (!semaphores[id].used) {
+	    return -1;
+	}
 	atomic_set(&semaphores[id].value, 0);
     resource_deassign(semaphores[id].sem_resource);
 	return 0;

@@ -65,7 +65,7 @@ endif (ENABLE_BUDDY_SYSTEM)
 
 # ------------------------------------------------------------------------------
 # Add the option to enable deadlock prevention.
-option(ENABLE_DEADLOCK_PREVENTION "Enables the buddy system" ON)
+option(ENABLE_DEADLOCK_PREVENTION "Enables the buddy system" OFF)
 if (ENABLE_DEADLOCK_PREVENTION)
     message(STATUS "Enabling deadlock prevention.")
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DENABLE_DEADLOCK_PREVENTION")
