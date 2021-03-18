@@ -1,6 +1,6 @@
 ///                MentOS, The Mentoring Operating system project
 /// @file smart_sem.c
-/// @brief
+/// @brief Semaphore user-side implementation source code.
 /// @copyright (c) 2019 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
