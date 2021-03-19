@@ -336,7 +336,8 @@ endif (ENABLE_BUDDY_SYSTEM MATCHES "ON")
 if (ENABLE_DEADLOCK_PREVENTION MATCHES "ON")
     set(SOURCE_FILES
             ${SOURCE_FILES}
-            src/experimental/deadlock_prevention.c)
+            src/experimental/deadlock_prevention.c
+            src/experimental/deadlock_simulation.c)
 endif (ENABLE_DEADLOCK_PREVENTION MATCHES "ON")
 
 # ------------------------------------------------------------------------------

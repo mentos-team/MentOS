@@ -17,6 +17,7 @@
 #include "rbtree.h"
 #include "stdlib.h"
 #include "list_head.h"
+#include "deadlock_simulation.h"
 
 /// @brief          Assembly function setting the kernel stack to jump into
 ///                 location in Ring 3 mode (USER mode).
@@ -68,6 +69,11 @@ void kernel_initialize_scheduler()
 	runqueue.curr = NULL;
 	// Reset the number of active tasks.
 	runqueue.num_active = 0;
+
+#if ENABLE_DEADLOCK_PREVENTION
+    // Simulate deadlock.
+    deadlock_simulation();
+#endif
 }
 
 void enqueue_task(task_struct *process)
