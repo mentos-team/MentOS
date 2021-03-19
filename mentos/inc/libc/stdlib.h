@@ -15,6 +15,17 @@ void *malloc(unsigned int size);
 
 void free(void * p);
 
+/// @brief Allocate a matrix with n rows of a specific size.
+/// @param n     Number of matrix rows.
+/// @param size  Size of each matrix row.
+/// @return Matrix pointer.
+void **mmalloc(size_t n, size_t size);
+
+/// @brief Free a matrix of n rows.
+/// @param src Matrix to free.
+/// @param n   Number of matrix rows.
+void mfree(void **src, size_t n);
+
 /// The maximum value returned by the rand function.
 #define RAND_MAX ((1U << 31U) - 1U)
 

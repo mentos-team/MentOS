@@ -32,6 +32,25 @@ void *calloc(size_t element_number, size_t element_size)
 	return ptr;
 }
 
+void **mmalloc(size_t n, size_t size)
+{
+    void **ret = (void **) malloc(n * sizeof(void *));
+    for (size_t i = 0; i < n; i++)
+    {
+        *(ret + i) = malloc(size);
+    }
+    return ret;
+}
+
+void mfree(void **src, size_t n)
+{
+    for (size_t i = 0; i < n; i++)
+    {
+        free(*(src + i));
+    }
+    free(src);
+}
+
 /// Seed used to generate random numbers.
 static int rseed = 0;
 
