@@ -50,12 +50,21 @@ static bool_t lock_try(int id)
     need      = (uint32_t **) kmmalloc(n, m * sizeof(uint32_t));
     task_struct **idx_map_task_struct = (task_struct **) kmalloc(
             n * sizeof(task_struct *));
-    init_deadlock_structures(available, max, alloc, need, idx_map_task_struct);
+    if (available && max && alloc && need && idx_map_task_struct) {
+        init_deadlock_structures(available, max, alloc, need,
+                idx_map_task_struct);
+    } else {
+        kernel_panic("not able to perform allocation for deadlock prevention");
+    }
 
     // Init request vector.
     uint32_t *req_vec = (uint32_t *) kmalloc(m * sizeof(uint32_t));
-    memset(req_vec, 0, m * sizeof(uint32_t));
-    req_vec[semaphores[id].sem_resource->rid] = 1;
+    if (req_vec) {
+        memset(req_vec, 0, m * sizeof(uint32_t));
+        req_vec[semaphores[id].sem_resource->rid] = 1;
+    } else {
+        kernel_panic("not able to perform allocation for deadlock prevention");
+    }
 
     // Find current task correct index.
     int32_t current_task_idx = get_current_task_idx_from(idx_map_task_struct);
@@ -87,6 +96,9 @@ static bool_t lock_try(int id)
     kmfree((void **) need, n);
     kfree(idx_map_task_struct);
     kfree(req_vec);
+    max   = NULL;
+    alloc = NULL;
+    need  = NULL;
 
     return ret;
 #else
