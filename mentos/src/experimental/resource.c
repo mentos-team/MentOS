@@ -14,6 +14,15 @@ extern runqueue_t runqueue;
 /// The list of resources.
 resource_list_t r_list;
 
+/// Array of resources instances currently available;
+uint32_t *  available;
+/// Matrix of the maximum resources instances that each task may require;
+uint32_t ** max;
+/// Matrix of current resources instances allocation of each task.
+uint32_t ** alloc;
+/// Matrix of current resources instances need of each task.
+uint32_t ** need;
+
 /// @brief Remove the resource reference dependency from each task in running
 /// state.
 /// @param r Resource pointer.

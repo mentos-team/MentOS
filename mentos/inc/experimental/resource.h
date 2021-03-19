@@ -44,6 +44,16 @@ typedef struct resource_list {
     list_head head;
 } resource_list_t;
 
+/// @brief Number of instances of each resources currently available.
+extern uint32_t *  available;
+/// @brief Matrix of maximum resources instances that each task may need.
+extern uint32_t ** max;
+/// @brief Matrix of current resource allocation for each task.
+extern uint32_t ** alloc;
+/// @brief Matrix of current resource needs for each task.
+/// need[i][j] = max[i][j] - alloc[i][j]
+extern uint32_t ** need;
+
 /// @brief Resource creation.
 /// @param category Resource category string, used to group resources.
 /// @return The pointer to the resource created.
