@@ -14,9 +14,9 @@
 
 #define DEFAULT_ITER "1"
 
-/// @brief First concurrent task on resource r1 and r2.
+/// @brief Task 1 for reproducing deadlock on resource r1 and r2.
 static int _deadlock_task1(int argc, char **argv, char **envp);
-/// @brief Second concurrent task on resource r1 and r2.
+/// @brief Task 2 for reproducing deadlock on resource r1 and r2.
 static int _deadlock_task2(int argc, char **argv, char **envp);
 
 /// @brief Mutex semaphores that manage the resources access.
@@ -31,8 +31,7 @@ static int _deadlock_task1(int argc, char **argv, char **envp)
 
     size_t iter = (size_t) atoi(argc > 1 ? argv[1] : DEFAULT_ITER);
 
-    if ((cpid2 = vfork()) == 0)
-    {
+    if ((cpid2 = vfork()) == 0) {
         char *_argv[] = {"_deadlock_task2", argc > 1 ? argv[1] : DEFAULT_ITER, (char *) NULL};
         char *_envp[] = {(char *) NULL};
 
@@ -42,8 +41,7 @@ static int _deadlock_task1(int argc, char **argv, char **envp)
         return 0;
     }
 
-    for (size_t i = 0; i < iter; i++)
-    {
+    for (size_t i = 0; i < iter; i++) {
         sem_acquire(mutex_r1);
         sem_acquire(mutex_r2); //< DEADLOCK!
 
@@ -65,13 +63,13 @@ static int _deadlock_task1(int argc, char **argv, char **envp)
     return 0;
 }
 
-static int _deadlock_task2(int argc, char **argv, char **envp) {
+static int _deadlock_task2(int argc, char **argv, char **envp)
+{
     (void) envp;
 
     size_t iter = (size_t) atoi(argc > 1 ? argv[1] : DEFAULT_ITER);
 
-    for (size_t i = 0; i < iter; i++)
-    {
+    for (size_t i = 0; i < iter; i++) {
         sem_acquire(mutex_r2);
         sem_acquire(mutex_r1); //< DEADLOCK!
 
@@ -102,13 +100,11 @@ void cmd_deadlock(int argc, char **argv)
     pid_t cpid1;
 
     char *iter_str = DEFAULT_ITER;
-    if (argc > 2 && (strcmp(argv[1], "-i") == 0))
-    {
+    if (argc > 2 && (strcmp(argv[1], "-i") == 0)) {
         iter_str = argv[2];
     }
 
-    if ((cpid1 = vfork()) == 0)
-    {
+    if ((cpid1 = vfork()) == 0) {
         char *_argv[] = {"_deadlock_task1", iter_str, (char *) NULL};
         char *_envp[] = {(char *) NULL};
 
