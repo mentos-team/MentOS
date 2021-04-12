@@ -60,8 +60,8 @@ For debugging:
 
 For MacOS, you have additional dependencies:
 
- * i386-elf-binutils
- * i386-elf-gcc
+ * i386-elf-binutils (from [i386-elf-toolchain](https://github.com/nativeos/homebrew-i386-elf-toolchain))
+ * i386-elf-gcc (from [i386-elf-toolchain](https://github.com/nativeos/homebrew-i386-elf-toolchain))
 
 Prerequisites installation commands
 -----------------
@@ -80,6 +80,7 @@ You need to install additionally the i386-elf cross-compiler. The simplest insta
 
 ```
 brew update && brew upgrade
+brew tap nativeos/i386-elf-toolchain
 brew install i386-elf-binutils i386-elf-gcc git cmake qemu nasm
 brew install cgdb xterm #<- for debug only
 ```
