@@ -1,7 +1,7 @@
 ///                MentOS, The Mentoring Operating system project
 /// @file   version.h
 /// @brief  Version information.
-/// @copyright (c) 2019 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #pragma once
@@ -10,7 +10,10 @@
 #define OS_NAME "MentOS"
 
 /// The site of the operating system.
-#define OS_SITEURL "..."
+#define OS_SITEURL "https://mentos-team.github.io/MentOS"
+
+/// The email of the reference developer.
+#define OS_REF_EMAIL "enry.frak@gmail.com"
 
 /// Major version of the operating system.
 #define OS_MAJOR_VERSION 0
@@ -28,7 +31,6 @@
 #define OS_STR(x) OS_STR_HELPER(x)
 
 /// Complete version of the operating system.
-#define OS_VERSION \
-    OS_STR(OS_MAJOR_VERSION) "." \
-    OS_STR(OS_MINOR_VERSION) "." \
-    OS_STR(OS_MICRO_VERSION)
+#define OS_VERSION           \
+    OS_STR(OS_MAJOR_VERSION) \
+    "." OS_STR(OS_MINOR_VERSION) "." OS_STR(OS_MICRO_VERSION)

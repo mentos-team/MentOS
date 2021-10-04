@@ -1,169 +1,504 @@
 ///                MentOS, The Mentoring Operating system project
 /// @file vfs.c
 /// @brief Headers for Virtual File System (VFS).
-/// @copyright (c) 2019 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include <process/process.h>
-#include <libc/stdlib.h>
-#include "video.h"
 #include "vfs.h"
-#include "debug.h"
-#include "shell.h"
-#include "string.h"
-#include "initrd.h"
-#include "limits.h"
 
-int current_fd;
-char *module_start[MAX_MODULES];
-file_descriptor_t fd_list[MAX_OPEN_FD];
-mountpoint_t mountpoint_list[MAX_MOUNTPOINT];
+#include "scheduler.h"
+#include "spinlock.h"
+#include "strerror.h"
+#include "syscall.h"
+#include "hashmap.h"
+#include "string.h"
+#include "procfs.h"
+#include "assert.h"
+#include "libgen.h"
+#include "debug.h"
+#include "panic.h"
+#include "stdio.h"
+
+/// The hashmap that associates a type of Filesystem `name` to its `mount` function;
+static hashmap_t *vfs_filesystems;
+/// The list of superblocks.
+static list_head vfs_super_blocks;
+/// The maximum number of filesystem types.
+static const unsigned vfs_filesystems_max = 10;
+/// Lock for refcount field.
+static spinlock_t vfs_spinlock_refcount;
+/// Spinlock for the entire virtual filesystem.
+static spinlock_t vfs_spinlock;
+/// VFS memory cache for superblocks.
+static kmem_cache_t *vfs_superblock_cache;
+
+/// VFS memory cache for files.
+kmem_cache_t *vfs_file_cache;
 
 void vfs_init()
 {
-	current_fd = 0;
-
-	for (int32_t i = 0; i < MAX_MOUNTPOINT; ++i) {
-		strcpy(mountpoint_list[i].mountpoint, "");
-		mountpoint_list[i].mp_id = i;
-		mountpoint_list[i].uid = 0;
-		mountpoint_list[i].gid = 0;
-		mountpoint_list[i].pmask = 0;
-		mountpoint_list[i].dev_id = 0;
-		mountpoint_list[i].start_address = 0;
-		mountpoint_list[i].dir_op.opendir_f = NULL;
-		mountpoint_list[i].operations.open_f = NULL;
-		mountpoint_list[i].operations.close_f = NULL;
-		mountpoint_list[i].operations.read_f = NULL;
-		mountpoint_list[i].operations.write_f = NULL;
-		mountpoint_list[i].stat_op.stat_f = NULL;
-	}
-
-	for (int32_t i = 0; i < MAX_OPEN_FD; ++i) {
-		fd_list[i].fs_spec_id = -1;
-		fd_list[i].mountpoint_id = -1;
-		fd_list[i].offset = 0;
-		fd_list[i].flags_mask = 0;
-	}
-
-	strcpy(mountpoint_list[0].mountpoint, "/");
-	mountpoint_list[0].uid = 0;
-	mountpoint_list[0].gid = 0;
-	mountpoint_list[0].pmask = 0;
-	mountpoint_list[0].dev_id = 0;
-	mountpoint_list[0].start_address = (unsigned int)module_start[0];
-	mountpoint_list[0].end_address = (unsigned int)module_end[0];
-	mountpoint_list[0].dir_op.opendir_f = initfs_opendir;
-	mountpoint_list[0].dir_op.closedir_f = initfs_closedir;
-	mountpoint_list[0].dir_op.readdir_f = initrd_readdir;
-	mountpoint_list[0].dir_op.mkdir_f = initrd_mkdir;
-	mountpoint_list[0].dir_op.rmdir_f = initrd_rmdir;
-	mountpoint_list[0].operations.open_f = initfs_open;
-	mountpoint_list[0].operations.remove_f = initfs_remove;
-	mountpoint_list[0].operations.close_f = initrd_close;
-	mountpoint_list[0].operations.read_f = initfs_read;
-	mountpoint_list[0].operations.write_f = initrd_write;
-	mountpoint_list[0].stat_op.stat_f = initrd_stat;
+    // Initialize the list of superblocks.
+    list_head_init(&vfs_super_blocks);
+    // Initialize the caches for superblocks and files.
+    vfs_superblock_cache = KMEM_CREATE(super_block_t);
+    vfs_file_cache       = KMEM_CREATE(vfs_file_t);
+    // Allocate the hashmap for the different filesystems.
+    vfs_filesystems = hashmap_create(
+        vfs_filesystems_max,
+        hashmap_str_hash,
+        hashmap_str_comp,
+        hashmap_do_not_duplicate,
+        hashmap_do_not_free);
+    // Initialize the spinlock.
+    spinlock_init(&vfs_spinlock);
+    spinlock_init(&vfs_spinlock_refcount);
 }
 
-int32_t get_mountpoint_id(const char *path)
+int vfs_register_filesystem(file_system_type *fs)
 {
-	size_t last_mpl = 0;
-	int32_t last_mp_id = -1;
-
-	for (uint32_t it = 0; it < MAX_MOUNTPOINT; ++it) {
-		size_t mpl = strlen(mountpoint_list[it].mountpoint);
-
-		if (!strncmp(path, mountpoint_list[it].mountpoint, mpl)) {
-			if (((mpl > last_mpl) && it > 0) || (it == 0)) {
-				last_mpl = mpl;
-				last_mp_id = it;
-			}
-		}
-	}
-
-	return last_mp_id;
+    if (hashmap_set(vfs_filesystems, (void *)fs->name, (void *)fs) != NULL) {
+        pr_err("Filesystem already registered.\n");
+        return 0;
+    }
+    pr_debug("vfs_register_filesystem(`%s`) : %p\n", fs->name, fs);
+    return 1;
 }
 
-mountpoint_t *get_mountpoint(const char *path)
+int vfs_unregister_filesystem(file_system_type *fs)
 {
-	int32_t mp_id = get_mountpoint_id(path);
-
-	if (mp_id < 0) {
-		return NULL;
-	}
-
-	return &mountpoint_list[mp_id];
+    if (hashmap_remove(vfs_filesystems, (void *)fs->name) != NULL) {
+        pr_err("Filesystem not present to unregister.\n");
+        return 0;
+    }
+    return 1;
 }
 
-mountpoint_t *get_mountpoint_from_id(int32_t mp_id)
+super_block_t *vfs_get_superblock(const char *absolute_path)
 {
-	if (mp_id >= MAX_MOUNTPOINT) {
-		return NULL;
-	}
-
-	return &mountpoint_list[mp_id];
+    size_t last_sb_len     = 0;
+    super_block_t *last_sb = NULL, *superblock = NULL;
+    list_head *it;
+    list_for_each (it, &vfs_super_blocks) {
+        superblock = list_entry(it, super_block_t, mounts);
+        int len    = strlen(superblock->name);
+        if (!strncmp(absolute_path, superblock->name, len)) {
+            size_t sbl = strlen(superblock->name);
+            if (sbl > last_sb_len) {
+                last_sb_len = sbl;
+                last_sb     = superblock;
+            }
+        }
+    }
+    return last_sb;
 }
 
-int get_relative_path(uint32_t mp_id, char *path)
+vfs_file_t *vfs_open(const char *path, int flags, mode_t mode)
 {
-	char relative_path[PATH_MAX];
-
-	// Get the size of the path.
-	size_t path_size = strlen(path);
-
-	// Get the size of the mount-point.
-	size_t mnpt_size = strlen(mountpoint_list[mp_id].mountpoint);
-
-	// Get the size of the relative path.
-	size_t rltv_size = path_size - mnpt_size;
-
-	// Copy the relative path.
-	if (rltv_size > 0) {
-		size_t i;
-		for (i = 0; i < rltv_size; ++i) {
-			relative_path[i] = path[mnpt_size + i];
-		}
-		relative_path[i] = '\0';
-		strcpy(path, relative_path);
-	}
-
-	return strlen(path);
+    // Allocate a variable for the path.
+    char absolute_path[PATH_MAX];
+    // If the first character is not the '/' then get the absolute path.
+    if (!realpath(path, absolute_path)) {
+        pr_err("vfs_open(%s): Cannot get the absolute path!\n", path);
+        errno = ENODEV;
+        return NULL;
+    }
+    super_block_t *sb = vfs_get_superblock(absolute_path);
+    if (sb == NULL) {
+        pr_err("vfs_open(%s): Cannot find the superblock!\n", path);
+        errno = ENOENT;
+        return NULL;
+    }
+    vfs_file_t *sb_root = sb->root;
+    if (sb_root == NULL) {
+        pr_err("vfs_open(%s): Cannot find the superblock root!\n", path);
+        errno = ENOENT;
+        return NULL;
+    }
+    // Rebase the absolute path.
+    //size_t name_offset = (strcmp(mp->name, "/") == 0) ? 0 : strlen(mp->name);
+    // Check if the function is implemented.
+    if (sb_root->fs_operations->open_f == NULL) {
+        pr_err("vfs_open(%s): Function not supported in current filesystem.", path);
+        errno = ENOSYS;
+        return NULL;
+    }
+    // Retrieve the file.
+    vfs_file_t *file = sb_root->fs_operations->open_f(absolute_path, flags, mode);
+    if (file == NULL) {
+        pr_err("vfs_open(%s): Cannot find the given file (%s)!\n", path, strerror(errno));
+        errno = ENOENT;
+        return NULL;
+    }
+    // Increment file reference counter.
+    ++file->count;
+    // Return the file.
+    return file;
 }
 
-int get_absolute_path(char *path)
+int vfs_close(vfs_file_t *file)
 {
-	if (path[0] != '/') {
-		char abspath[PATH_MAX];
-		memset(abspath, '\0', PATH_MAX);
-		getcwd(abspath, PATH_MAX);
-		int abs_size = strlen(abspath);
-		if (abspath[abs_size - 1] == '/') {
-			strncat(abspath, path, strlen(path));
-		} else {
-			strncat(abspath, "/", strlen(path));
-			strncat(abspath, path, strlen(path));
-		}
-		strcpy(path, abspath);
+    // Decrement file reference counter.
+    file->count--;
 
-		return strlen(path);
-	}
-
-	return 0;
+    // Close file if it's the last reference.
+    if (file->count == 0) {
+        // Check if the filesystem has the close function.
+        if (file->fs_operations->close_f == NULL) {
+            return -ENOSYS;
+        }
+        file->fs_operations->close_f(file);
+    }
+    return 0;
 }
 
-void vfs_dump()
+ssize_t vfs_read(vfs_file_t *file, void *buf, size_t offset, size_t nbytes)
 {
-	dbg_print("File Descriptors:\n");
-	int i = 0;
+    if (file->fs_operations->read_f == NULL) {
+        pr_err("No READ function found for the current filesystem.\n");
+        return -ENOSYS;
+    }
+    return file->fs_operations->read_f(file, buf, offset, nbytes);
+}
 
-	while (i < MAX_OPEN_FD) {
-		if (fd_list[i].mountpoint_id != -1) {
-			dbg_print("[%d] %s\n", i,
-					  mountpoint_list[fd_list[i].mountpoint_id].mountpoint);
-		} else {
-			dbg_print("[%d] Free\n", i);
-		}
-		++i;
-	}
+ssize_t vfs_write(vfs_file_t *file, void *buf, size_t offset, size_t nbytes)
+{
+    if (file->fs_operations->write_f == NULL) {
+        pr_err("No WRITE function found for the current filesystem.\n");
+        return -ENOSYS;
+    }
+    return file->fs_operations->write_f(file, buf, offset, nbytes);
+}
+
+off_t vfs_lseek(vfs_file_t *file, off_t offset, int whence)
+{
+    if (file->fs_operations->lseek_f == NULL) {
+        pr_err("No WRITE function found for the current filesystem.\n");
+        return -ENOSYS;
+    }
+    return file->fs_operations->lseek_f(file, offset, whence);
+}
+
+int vfs_getdents(vfs_file_t *file, dirent_t *dirp, off_t off, size_t count)
+{
+    if (file->fs_operations->getdents_f == NULL) {
+        pr_err("No GETDENTS function found for the current filesystem.\n");
+        return -ENOSYS;
+    }
+    return file->fs_operations->getdents_f(file, dirp, off, count);
+}
+
+int vfs_ioctl(vfs_file_t *file, int request, void *data)
+{
+    if (file->fs_operations->ioctl_f == NULL) {
+        pr_err("No IOCTL function found for the current filesystem.\n");
+        return -ENOSYS;
+    }
+    return file->fs_operations->ioctl_f(file, request, data);
+}
+
+int vfs_unlink(const char *path)
+{
+    // Allocate a variable for the path.
+    char absolute_path[PATH_MAX];
+    // If the first character is not the '/' then get the absolute path.
+    if (!realpath(path, absolute_path)) {
+        pr_err("vfs_unlink(%s): Cannot get the absolute path.", path);
+        return -ENODEV;
+    }
+    super_block_t *sb = vfs_get_superblock(absolute_path);
+    if (sb == NULL) {
+        pr_err("vfs_unlink(%s): Cannot find the superblock!\n");
+        return -ENODEV;
+    }
+    vfs_file_t *sb_root = sb->root;
+    if (sb_root == NULL) {
+        pr_err("vfs_unlink(%s): Cannot find the superblock root.", path);
+        return -ENOENT;
+    }
+    // Check if the function is implemented.
+    if (sb_root->fs_operations->unlink_f == NULL) {
+        pr_err("vfs_unlink(%s): Function not supported in current filesystem.", path);
+        return -ENOSYS;
+    }
+    return sb_root->fs_operations->unlink_f(absolute_path);
+}
+
+int vfs_mkdir(const char *path, mode_t mode)
+{
+    // Allocate a variable for the path.
+    char absolute_path[PATH_MAX];
+    // If the first character is not the '/' then get the absolute path.
+    if (!realpath(path, absolute_path)) {
+        pr_err("vfs_mkdir(%s): Cannot get the absolute path.", path);
+        return -ENODEV;
+    }
+    super_block_t *sb = vfs_get_superblock(absolute_path);
+    if (sb == NULL) {
+        pr_err("vfs_mkdir(%s): Cannot find the superblock!\n");
+        return -ENODEV;
+    }
+    vfs_file_t *sb_root = sb->root;
+    if (sb_root == NULL) {
+        pr_err("vfs_mkdir(%s): Cannot find the superblock root.", path);
+        return -ENOENT;
+    }
+    // Check if the function is implemented.
+    if (sb_root->sys_operations->mkdir_f == NULL) {
+        pr_err("vfs_mkdir(%s): Function not supported in current filesystem.", path);
+        return -ENOSYS;
+    }
+    return sb_root->sys_operations->mkdir_f(absolute_path, mode);
+}
+
+int vfs_rmdir(const char *path)
+{
+    // Allocate a variable for the path.
+    char absolute_path[PATH_MAX];
+    // If the first character is not the '/' then get the absolute path.
+    if (!realpath(path, absolute_path)) {
+        pr_err("vfs_rmdir(%s): Cannot get the absolute path.", path);
+        return -ENODEV;
+    }
+    super_block_t *sb = vfs_get_superblock(absolute_path);
+    if (sb == NULL) {
+        pr_err("vfs_rmdir(%s): Cannot find the superblock!\n");
+        return -ENODEV;
+    }
+    vfs_file_t *sb_root = sb->root;
+    if (sb_root == NULL) {
+        pr_err("vfs_rmdir(%s): Cannot find the superblock root.", path);
+        return -ENOENT;
+    }
+    // Check if the function is implemented.
+    if (sb_root->sys_operations->rmdir_f == NULL) {
+        pr_err("vfs_rmdir(%s): Function not supported in current filesystem.", path);
+        return -ENOSYS;
+    }
+    // Remove the file.
+    return sb_root->sys_operations->rmdir_f(absolute_path);
+}
+
+int vfs_stat(const char *path, stat_t *buf)
+{
+    // Allocate a variable for the path.
+    char absolute_path[PATH_MAX];
+    // If the first character is not the '/' then get the absolute path.
+    if (!realpath(path, absolute_path)) {
+        pr_err("vfs_stat(%s): Cannot get the absolute path.", path);
+        return -ENODEV;
+    }
+    super_block_t *sb = vfs_get_superblock(absolute_path);
+    if (sb == NULL) {
+        pr_err("vfs_stat(%s): Cannot find the superblock!\n");
+        return -ENODEV;
+    }
+    vfs_file_t *sb_root = sb->root;
+    if (sb_root == NULL) {
+        pr_err("vfs_stat(%s): Cannot find the superblock root.", path);
+        return -ENOENT;
+    }
+    // Check if the function is implemented.
+    if (sb_root->sys_operations->stat_f == NULL) {
+        pr_err("vfs_rmdir(%s): Function not supported in current filesystem.", path);
+        return -ENOSYS;
+    }
+    // Reset the structure.
+    buf->st_dev   = 0;
+    buf->st_ino   = 0;
+    buf->st_mode  = 0;
+    buf->st_uid   = 0;
+    buf->st_gid   = 0;
+    buf->st_size  = 0;
+    buf->st_atime = 0;
+    buf->st_mtime = 0;
+    buf->st_ctime = 0;
+    // Retrieve the file.
+    return sb_root->sys_operations->stat_f(absolute_path, buf);
+}
+
+int vfs_fstat(vfs_file_t *file, stat_t *buf)
+{
+    if (file->fs_operations->stat_f == NULL) {
+        pr_err("No FSTAT function found for the current filesystem.\n");
+        return -ENOSYS;
+    }
+    // Reset the structure.
+    buf->st_dev   = 0;
+    buf->st_ino   = 0;
+    buf->st_mode  = 0;
+    buf->st_uid   = 0;
+    buf->st_gid   = 0;
+    buf->st_size  = 0;
+    buf->st_atime = 0;
+    buf->st_mtime = 0;
+    buf->st_ctime = 0;
+    return file->fs_operations->stat_f(file, buf);
+}
+
+int vfs_mount(const char *path, vfs_file_t *new_fs_root)
+{
+    if (!path || path[0] != '/') {
+        pr_err("vfs_mount(%s): Path must be absolute for superblock.\n", path);
+        return 0;
+    }
+    if (new_fs_root == NULL) {
+        pr_err("vfs_mount(%s): You must provide a valid file!\n", path);
+        return 0;
+    }
+    // Lock the vfs spinlock.
+    spinlock_lock(&vfs_spinlock);
+    pr_debug("Mounting file with path `%s` as root '%s'...\n", new_fs_root->name, path);
+    // Create the superblock.
+    super_block_t *sb = kmem_cache_alloc(vfs_superblock_cache, GFP_KERNEL);
+    if (!sb) {
+        pr_debug("Cannot allocate memory for the superblock.\n");
+    } else {
+        // Copy the name.
+        strcpy(sb->name, new_fs_root->name);
+        // Set the pointer.
+        sb->root = new_fs_root;
+        // Add to the list.
+        list_head_add(&sb->mounts, &vfs_super_blocks);
+    }
+    spinlock_unlock(&vfs_spinlock);
+    pr_debug("Correctly mounted '%s' on '%s'...\n", path, new_fs_root->name);
+    return 1;
+}
+
+int do_mount(const char *type, const char *path, const char *args)
+{
+    file_system_type *fst = (file_system_type *)hashmap_get(vfs_filesystems, type);
+    if (fst == NULL) {
+        pr_err("Unknown filesystem type: %s\n", type);
+        return -ENODEV;
+    }
+    vfs_file_t *file = fst->mount(path, args);
+    if (file == NULL) {
+        pr_err("Mount callback return a null pointer: %s\n", type);
+        return -ENODEV;
+    }
+    if (!vfs_mount(path, file)) {
+        pr_err("do_mount(`%s`, `%s`, `%s`) : failed to mount.\n", type, path, args);
+        return -ENODEV;
+    }
+    super_block_t *sb = vfs_get_superblock(path);
+    if (sb == NULL) {
+        pr_err("do_mount(`%s`, `%s`, `%s`) : Cannot find the superblock.\n", type, path, args);
+        return -ENODEV;
+    }
+    // Set the filesystem type.
+    sb->type = fst;
+    pr_debug("Mounted %s[%s] to `%s`: file = %p\n", type, args, path, file);
+    return 0;
+}
+
+void vfs_lock(vfs_file_t *file)
+{
+    spinlock_lock(&vfs_spinlock_refcount);
+    file->refcount = -1;
+    spinlock_unlock(&vfs_spinlock_refcount);
+}
+
+int vfs_extend_task_fd_list(struct task_struct *task)
+{
+    if (!task) {
+        pr_err("Null process.\n");
+        errno = ESRCH;
+        return 0;
+    }
+    // Set the max number of file descriptors.
+    int new_max_fd = (task->fd_list) ? task->max_fd * 2 + 1 : MAX_OPEN_FD;
+    // Allocate the memory for the list.
+    void *new_fd_list = kmalloc(new_max_fd * sizeof(vfs_file_descriptor_t));
+    // Check the new list.
+    if (!new_fd_list) {
+        pr_err("Failed to allocate memory for `fd_list`.\n");
+        errno = EMFILE;
+        return 0;
+    }
+    // Clear the memory of the new list.
+    memset(new_fd_list, 0, task->max_fd * sizeof(vfs_file_descriptor_t));
+    // Deal with pre-existing list.
+    if (task->fd_list) {
+        // Copy the old entries.
+        memcpy(new_fd_list, task->fd_list, task->max_fd * sizeof(vfs_file_descriptor_t));
+        // Free the memory of the old list.
+        kfree(task->fd_list);
+    }
+    // Set the new maximum number of file descriptors.
+    task->max_fd = new_max_fd;
+    // Set the new list.
+    task->fd_list = new_fd_list;
+    return 1;
+}
+
+int vfs_init_task(task_struct *task)
+{
+    if (!task) {
+        pr_err("Null process.\n");
+        errno = ESRCH;
+        return 0;
+    }
+    // Initialize the file descriptor list.
+    if (!vfs_extend_task_fd_list(task)) {
+        pr_err("Error while trying to initialize the `fd_list` for process `%d`: %s\n", task->pid, strerror(errno));
+        return 0;
+    }
+    // Create the proc entry.
+    if (proc_create_entry_pid(task)) {
+        pr_err("Error while trying to create proc entry for process `%d`: %s\n", task->pid, strerror(errno));
+        return 0;
+    }
+    return 1;
+}
+
+int vfs_dup_task(task_struct *task, task_struct *old_task)
+{
+    // Copy the maximum number of file descriptors.
+    task->max_fd = old_task->max_fd;
+    // Allocate the memory for the new list.
+    task->fd_list = kmalloc(task->max_fd * sizeof(vfs_file_descriptor_t));
+    // Copy the old list.
+    memcpy(task->fd_list, old_task->fd_list, task->max_fd * sizeof(vfs_file_descriptor_t));
+    // Increase the counters to the open files.
+    for (int fd = 0; fd < task->max_fd; fd++) {
+        // Check if the file descriptor is associated with a file.
+        if (task->fd_list[fd].file_struct) {
+            // Increase the counter.
+            ++task->fd_list[fd].file_struct->count;
+        }
+    }
+    // Create the proc entry.
+    if (proc_create_entry_pid(task)) {
+        pr_err("Error while trying to create proc entry for '%d': %s\n", task->pid, strerror(errno));
+        return 0;
+    }
+    return 1;
+}
+
+int vfs_destroy_task(task_struct *task)
+{
+    // Decrease the counters to the open files.
+    for (int fd = 0; fd < task->max_fd; fd++) {
+        // Check if the file descriptor is associated with a file.
+        if (task->fd_list[fd].file_struct) {
+            // Decrease the counter.
+            --task->fd_list[fd].file_struct->count;
+            // If counter is zero, close the file.
+            if (task->fd_list[fd].file_struct->count == 0)
+                task->fd_list[fd].file_struct->fs_operations->close_f(task->fd_list[fd].file_struct);
+            // Clear the pointer to the file structure.
+            task->fd_list[fd].file_struct = NULL;
+        }
+    }
+    // Set the maximum file descriptors to 0.
+    task->max_fd = 0;
+    // Free the memory of the list.
+    kfree(task->fd_list);
+    // Remove the proc entry.
+    if (proc_destroy_entry_pid(task)) {
+        pr_err("Error while trying to remove proc entry for '%d': %s\n", task->pid, strerror(errno));
+        return 0;
+    }
+    return 1;
 }

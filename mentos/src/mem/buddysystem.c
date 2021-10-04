@@ -1,173 +1,417 @@
+///                MentOS, The Mentoring Operating system project
 /// @file buddysystem.c
 /// @brief Buddy System.
-/// @date Apr 2019.
+/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
+/// See LICENSE.md for details.
+
+/// Change the header.
+#define __DEBUG_HEADER__ "[BUDDY ]"
 
 #include "buddysystem.h"
-#include "debug.h"
+#include "paging.h"
 #include "assert.h"
+#include "debug.h"
+#include "panic.h"
+
+/// @brief Cache level low limit after which allocation starts.
+#define LOW_WATERMARK_LEVEL 10
+/// @brief Cache level high limit, above it deallocation happens.
+#define HIGH_WATERMARK_LEVEL 70
+/// @brief Cache level midway limit.
+#define MID_WATERMARK_LEVEL ((LOW_WATERMARK_LEVEL + HIGH_WATERMARK_LEVEL) / 2)
+
+/// @brief Bitwise flags for identifying page types and statuses.
+enum bb_flag {
+    FREE_PAGE = 0, ///< Bit position that identifies when a page is free or not.
+    ROOT_PAGE = 1  ///< Bit position that identifies when a page is the root page.
+};
+
+/// @brief Sets the given flag in the page.
+/// @param page The page of which we want to modify the flag.
+/// @param flag The flag we want to set.
+static inline void __bb_set_flag(bb_page_t *page, int flag)
+{
+    set_bit(flag, &page->flags);
+}
+
+/// @brief Clears the given flag from the page.
+/// @param page The page of which we want to modify the flag.
+/// @param flag The flag we want to clear.
+static inline void __bb_clear_flag(bb_page_t *page, int flag)
+{
+    clear_bit(flag, &page->flags);
+}
+
+/// @brief Gets the given flag from the page.
+/// @param page The page of which we want to modify the flag.
+/// @param flag The flag we want to test.
+/// @return 1 if the bit is set, 0 otherwise.
+static inline int __bb_test_flag(bb_page_t *page, int flag)
+{
+    return test_bit(flag, &page->flags);
+}
+
+/// @brief Returns the page at the given index, starting from the given base.
+/// @param instance The buddy system instance we are working with.
+/// @param base     The base page from which we move at the given index.
+/// @param index    The number of pages we want to move from the base.
+/// @return The page we found.
+static inline bb_page_t *__get_page_from_base(bb_instance_t *instance, bb_page_t *base, unsigned int index)
+{
+    return (bb_page_t *)(((uint32_t)base) + instance->pgs_size * index);
+}
+
+/// @brief Returns the page at the given index, starting from the first page of the BB system.
+/// @param instance The buddy system instance we are working with.
+/// @param index    The number of pages we want to move from the first page.
+/// @return The page we found.
+static inline bb_page_t *__get_page_at_index(bb_instance_t *instance, unsigned int index)
+{
+    return __get_page_from_base(instance, instance->base_page, index);
+}
+
+/// @brief Computes the number of pages separating the two pages (begin, end).
+/// @param instance The buddy system instance we are working with.
+/// @param begin    The first page.
+/// @param end      The second page.
+/// @return The number of pages between begin and end.
+static inline unsigned int __get_page_range(bb_instance_t *instance, bb_page_t *begin, bb_page_t *end)
+{
+    return (((uintptr_t)end) - ((uintptr_t)begin)) / instance->pgs_size;
+}
 
 /// @brief           Get the buddy index of a page.
+/// @details
+///  ----------------------- xor -----------------------
+/// | page_idx    ^   (1UL << order)    =     buddy_idx |
+/// |     1                  1                    0     |
+/// |     0                  1                    1     |
+///  ---------------------------------------------------
+/// If the bit of page_idx that corresponds to the block
+/// size, is 1, then we have to take the block on the
+/// left (0), otherwise we have to take the block on the right (1).
 /// @param  page_idx A page index.
 /// @param  order    The logarithm of the size of the block.
 /// @return          The page index of the buddy of page.
-static unsigned long get_buddy_idx(unsigned long page_idx, unsigned int order)
+static inline unsigned long __get_buddy_at_index(unsigned long page_idx, unsigned int order)
 {
-	/*  Get the index of the buddy block.
-     *
-     *  ----------------------- xor -----------------------
-     * | page_idx    ^   (1UL << order)    =     buddy_idx |
-     * |     1                  1                    0     |
-     * |     0                  1                    1     |
-     *  ---------------------------------------------------
-     *
-     * If the bit of page_idx that corresponds to the block
-     * size, is 1, then we have to take the block on the
-     * left (0), otherwise we have to take the block on the right (1).
-     */
-	unsigned long buddy_idx = page_idx ^ (1UL << order);
-
-	return buddy_idx;
+    return (page_idx ^ (1UL << order));
 }
 
-
-page_t *bb_alloc_pages(zone_t *zone, unsigned int order)
+static inline bool_t __page_is_buddy(bb_page_t *page, unsigned int order)
 {
-	page_t *page = NULL;
-	free_area_t *area = NULL;
+    return __bb_test_flag(page, FREE_PAGE) && (page->order == order);
+}
 
-	// Search for a free_area_t with at least one available block of pages.
-	unsigned int current_order;
-	for (current_order = order; current_order < MAX_ORDER; ++current_order) {
-		// get the free_area_t at index 'current_order'
-		area = // ...
+bb_page_t *bb_alloc_pages(bb_instance_t *instance, unsigned int order)
+{
+    bb_page_t *page      = NULL;
+    bb_free_area_t *area = NULL;
 
-		// check if area is not empty (is there at least a block here?)
-		if (!list_head_empty(&/*...*/)) {
-			goto block_found;
-		}
-	}
+    // Cyclic search through each list for an available block,
+    // starting with the list for the requested order and
+    // continuing if necessary to larger orders.
+    unsigned int current_order;
+    for (current_order = order; current_order < MAX_BUDDYSYSTEM_GFP_ORDER; ++current_order) {
+        // Get the free_area_t at index 'current_order'.
+        area = /* ... */;
+        // Check if area is not empty, which means that there is at least a block inside the list.
+        if (!list_head_empty(&/* ... */)) {
+            goto block_found;
+        }
+    }
 
-	// No suitable free block has been found.
-	return NULL;
+    // No suitable free block has been found.
+    return NULL;
 
 block_found:
-	// Get a block of pages from the found free_area_t.
-	// Here we have to manage pages. Recall, free_area_t collects the first
-	// page_t of each free block of 2^order contiguous page frames.
+    // Get a block of pages from the found free_area_t. Here we have to manage
+    // pages. Recall, free_area_t collects the first page_t of each free block
+    // of 2^order contiguous page frames.
+    page = list_entry(/* ... */, /* ... */, /* ... */);
 
-	page = list_entry(/*...*/);
+    // Remove the descriptor of its first page frame.
+    list_head_del(&/* ... */);
 
-	// Remove page from the list_head in the found free_area_t.
-	list_head_del(/*...*/);
+    // Set the page as allocated, thus, remove the flag FREE_PAGE.
+    __bb_clear_flag(/* ... */, /* ... */);
 
-	// Set page as taken.
-	page->_count = // ...
-	page->private = 0;
+    // Check that the page is a ROOT_PAGE
+    assert(__bb_test_flag(/* ... */, /* ... */));
 
-	// Decrease the number of free blocks in the found free_area_t.
-	// ...
+    // Decrease the number of free block of the free_area_t.
+    /* ... */ -= 1;
 
-	/* We found a block with 2^k page frames to satisfy a request
-     * of 2^h page frames. If h < k, then we can split the block with 2^k
-	 * pages until it is large 2^h pages, namely k == h.
-     */
+    // Found a block of 2^k page frames, to satisfy a request
+    // for 2^h page frames (h < k) the program allocates
+    // the first 2^h page frames and iteratively reassigns
+    // the last 2^k – 2^h page frames to the free_area lists
+    // that have indexes between h and k.
+    unsigned int size = 1UL << current_order;
+    while (current_order > order) {
+        // At each loop, we have to set free the right half of the found block.
 
-	// We can exploit size(=2^k) to have at each loop the address the page that
-	// resides in the midle of the found block.
-	unsigned int size = 1 << current_order;
-	while (current_order > order) {
+        // Refer to the lower free_area_t and order.
+        area--;
+        current_order--;
 
-		// At each loop, we have to set free the right half of the found block.
+        // Split the block and set free the second half.
+        size >>= /* ... */;
 
-		// Split the block size in half
-		size = // ...
+        // Get the address of the page in the midle of the found block.
+        bb_page_t *buddy = __get_page_from_base(/* ... */, /* ... */, /* ... */);
 
-		// get the address of the page in the midle of the found block.
-		page_t *buddy = // ...
+        // Check that the buddy is free and not a root page.
+        assert(/* ... */ &&!/* ... */);
 
-		// set the order of pages after the buddy page_t (the field 'private')
-		// ...
+        // Insert buddy as first element in the list of available blocks (free_list).
+        list_head_add(&/* ... */.siblings, &/* ... */);
 
-		// get the free_area_t collecting blocks with 2^(k-1) page frames
-		area = // ...
+        // Increase the number of free block of the free_area_t.
+        /* ... */ += 1;
 
-		// add the buddy block in its list of available blocks
-		// ...
+        // Save the order of the buddy.
+        /* ... */ = current_order;
 
-		// Increase the number of free blocks of the free_area_t.
-		// ...
-	}
+        // Set the buddy as a root page.
+        /* ... */;
+    }
 
-	buddy_system_dump(zone);
+    // Set the order of the page we are returning.
+    /* ... */;
 
-	return page;
+    // Set the page as root page.
+    /* ... */;
+
+    // Clear the free-page status from the page.
+    /* ... */;
+
+#if 0
+    buddy_system_dump(instance);
+#endif
+    return page;
 }
 
-void bb_free_pages(zone_t *zone, page_t *page, unsigned int order)
+void bb_free_pages(bb_instance_t *instance, bb_page_t *page)
 {
-	// Take the first page descriptor of the zone.
-	page_t *base = zone->zone_mem_map;
+    // Take the first page descriptor of the zone.
+    bb_page_t *base = instance->base_page;
+    // Take the page frame index of page compared to the zone.
+    unsigned long page_idx = __get_page_range(instance, base, page);
+    // Set the page freed, but do not set the private
+    // field because we want to try to merge. FIXME: Add this line on zone page deallocate!
+    //	set_page_count(page, -1);
 
-	// Take the page frame index of page compared to the zone.
-	unsigned long page_idx = page - base;
+    unsigned int order = page->order;
 
-	// Set the given page as free
-	page->_count = // ...
+    // Check that the page is free, or that it is not a root page.
+    if (/* ... */ || !/* ... */) {
+        kernel_panic("Double deallocation in buddy system!");
+    }
 
-	// At each loop, check if the buddy block can be merged with page.
-	while (order < MAX_ORDER - 1) {
-		// Get the index of the buddy block of page.
-		unsigned long buddy_idx = get_buddy_idx(page_idx, order);
-		// Get the page_t of the buddy block, namely its first page frame.
-		page_t *buddy = base + buddy_idx;
+    // Performs a cycle that starts with the smallest
+    // order block and moves up to the top order.
+    while (order < MAX_BUDDYSYSTEM_GFP_ORDER - 1) {
+        // Get the base page index.
+        page = __get_page_from_base(instance, base, page_idx);
 
-		// If the buddy is free and it has the same size of page, then
-		// they can be merged. Otherwise, we can stop the while-loop and insert
-		// page in the list of free blocks.
+        // Get the index of the buddy.
+        unsigned long buddy_idx = __get_buddy_at_index(page_idx, order);
 
-		if (!(/*...it is free...*/ && /*...they have the same size...*/)) {
-			break;
-		}
+        // Return the page descriptor of the buddy.
+        bb_page_t *buddy = __get_page_from_base(instance, base, buddy_idx);
 
-		// we are here only if buddy is free and can be merged with page.
+        // If the page is not a buddy, stop the loop. So it should not be free
+        // and having the same size.
+        if (!(/* ... */ &&/* ... */))
+            break;
 
-		// remove buddy from the list of available blocks in its free_area_t
-		// ....
+        // If buddy is free, remove buddy from the current free list,
+        // because then the coalesced block will be inserted on a
+        // upper order.
+        /* ... */;
 
-		// Decrease the number of free block of the current free_area_t.
-		// ...
+        // Decrease the number of free block of the current free_area_t.
+        /* ... */;
 
-		// buddy no longer represents a free block, so clear the private field.
-		buddy->private = 0;
+        // Get the page that gets forgotten, it's always the one on the right (the greatest)
+        bb_page_t *forgot_page = buddy > page ? buddy : page;
+        
+        // Clear the root flag from the forgotten page.
+        /* ... */;
 
-		// Update the page index with the index of the coalesced block.
-		// ...
+        // Set the forgotten page as a free page.
+        /* ... */;
 
-		order++;
-	}
+        // Update the page index with the index of the coalesced block.
+        /* ... */ &= /* ... */;
 
-	// The coalesced block is the result of the merging procedure.
-	page_t *coalesced = base + page_idx;
+        order++;
+    }
 
-	// Update the field private to set the size.
-	coalesced->private = // ...
+    // Take the coalesced block with the order reached up.
+    bb_page_t *coalesced = __get_page_from_base(instance, base, page_idx);
 
-	// Insert the coalesced block in the free_area as available block
-	// ...
+    // Update the order of the coalesced page.
+    /* ... */;
+    
+    // Set it to be a root page and a free page
+    /* ... */;
+    /* ... */;
 
-	// Increase the number of free blocks of the free_area.
-	// ...
+    // Insert coalesced as first element in the free list.
+    list_head_add(&/* ... */, &/* ... */);
+    
+    // Increase the number of free block of the free_area_t.
+    /* ... */;
 
-	buddy_system_dump(zone);
+#if 0
+    buddy_system_dump(instance);
+#endif
 }
 
-void buddy_system_dump(zone_t *zone)
+void buddy_system_init(bb_instance_t *instance,
+                       const char *name,
+                       void *pages_start,
+                       uint32_t bbpage_offset,
+                       uint32_t pages_stride,
+                       uint32_t pages_count)
 {
-	// Print free_list's size of each area of the zone.
-	dbg_print("Zone\t%s\t", zone->name);
-	for (int order = 0; order < MAX_ORDER; order++) {
-		free_area_t *area = zone->free_area + order;
-		dbg_print("%d\t", area->nr_free);
-	}
-	dbg_print("\n");
+    // Compute the base bb page of the struct
+    instance->base_page = ((bb_page_t *)(((uint32_t)pages_start) + bbpage_offset));
+
+    // Save all needed page info
+    instance->bbpg_offset = bbpage_offset;
+    instance->pgs_size    = pages_stride;
+    instance->size        = pages_count;
+    instance->name        = name;
+
+    // Initialize all pages
+    for (uint32_t i = 0; i < pages_count; i++) {
+        bb_page_t *page = __get_page_at_index(instance, i);
+        page->flags     = 0;
+        // Mark page as free
+        __bb_set_flag(page, FREE_PAGE);
+        // Initialize siblings list
+        list_head_init(&(page->location.siblings));
+    }
+
+    // Initialize the free_lists of each area of the zone.
+    for (unsigned int order = 0; order < MAX_BUDDYSYSTEM_GFP_ORDER; order++) {
+        bb_free_area_t *area = instance->free_area + order;
+        area->nr_free        = 0;
+        list_head_init(&area->free_list);
+    }
+
+    // Current base page descriptor of the zone.
+    bb_page_t *page = instance->base_page;
+    // Address of the last page descriptor of the zone.
+    bb_page_t *last_page = __get_page_from_base(instance, page, instance->size);
+
+    // Get the free area collecting the larges block of page frames.
+    const unsigned int order = MAX_BUDDYSYSTEM_GFP_ORDER - 1;
+    bb_free_area_t *area     = instance->free_area + order;
+
+    // Add all zone's pages to the largest free area block.
+    uint32_t block_size = 1UL << order;
+    while ((page + block_size) <= last_page) {
+        // Save the order of the page.
+        page->order = order;
+        // Set the page as root
+        __bb_set_flag(page, ROOT_PAGE);
+
+        // Insert page as first element in the list.
+        list_head_add_tail(&page->location.siblings, &area->free_list);
+        // Increase the number of free block of the free_area_t.
+        area->nr_free++;
+
+        page = __get_page_from_base(instance, page, block_size);
+    }
+
+    assert(page == last_page &&
+           "Memory size is not aligned to MAX_ORDER size!");
+}
+
+void buddy_system_dump(bb_instance_t *instance)
+{
+    // Print free_list's size of each area of the zone.
+    pr_debug("Zone %-12s ", instance->name);
+    for (int order = 0; order < MAX_BUDDYSYSTEM_GFP_ORDER; order++) {
+        bb_free_area_t *area = instance->free_area + order;
+        pr_debug("%2d ", area->nr_free);
+    }
+    pr_debug(": %s\n", to_human_size(buddy_system_get_free_space(instance)));
+}
+
+unsigned long buddy_system_get_total_space(bb_instance_t *instance)
+{
+    return instance->size * PAGE_SIZE;
+}
+
+unsigned long buddy_system_get_free_space(bb_instance_t *instance)
+{
+    unsigned int size = 0;
+    for (int order = 0; order < MAX_BUDDYSYSTEM_GFP_ORDER; ++order)
+        size += instance->free_area[order].nr_free * (1UL << order) * PAGE_SIZE;
+    return size;
+}
+
+unsigned long buddy_system_get_cached_space(bb_instance_t *instance)
+{
+    unsigned int size = 0;
+    for (int order = 0; order < MAX_BUDDYSYSTEM_GFP_ORDER; ++order)
+        size += instance->free_pages_cache_size * PAGE_SIZE;
+    return size;
+}
+
+static void __cache_extend(bb_instance_t *instance, int count)
+{
+    for (int i = 0; i < count; i++) {
+        bb_page_t *page = bb_alloc_pages(instance, 0);
+        list_head_add(&page->location.cache, &instance->free_pages_cache_list);
+        instance->free_pages_cache_size++;
+    }
+}
+
+static void __cache_shrink(bb_instance_t *instance, int count)
+{
+    for (int i = 0; i < count; i++) {
+        list_head *page_list = list_head_pop(&instance->free_pages_cache_list);
+        bb_page_t *page      = list_entry(page_list, bb_page_t, location.cache);
+        bb_free_pages(instance, page);
+        instance->free_pages_cache_size--;
+    }
+}
+
+static bb_page_t *__cached_alloc(bb_instance_t *instance)
+{
+    if (instance->free_pages_cache_size < LOW_WATERMARK_LEVEL) {
+        // Request pages from the buddy system
+        uint32_t pages_to_request = MID_WATERMARK_LEVEL - instance->free_pages_cache_size;
+        __cache_extend(instance, pages_to_request);
+    }
+    list_head *page_list = list_head_pop(&instance->free_pages_cache_list);
+    bb_page_t *page      = list_entry(page_list, bb_page_t, location.cache);
+    return page;
+}
+
+static void __cached_free(bb_instance_t *instance, bb_page_t *page)
+{
+    list_head_add(&page->location.cache, &instance->free_pages_cache_list);
+
+    if (instance->free_pages_cache_size > HIGH_WATERMARK_LEVEL) {
+        // Free pages to the buddy system
+        uint32_t pages_to_free = instance->free_pages_cache_size - MID_WATERMARK_LEVEL;
+        __cache_shrink(instance, pages_to_free);
+    }
+}
+
+bb_page_t *bb_alloc_page_cached(bb_instance_t *instance)
+{
+    return __cached_alloc(instance);
+}
+
+void bb_free_page_cached(bb_instance_t *instance, bb_page_t *page)
+{
+    __cached_free(instance, page);
 }

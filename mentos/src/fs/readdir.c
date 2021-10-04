@@ -1,28 +1,54 @@
 ///                MentOS, The Mentoring Operating system project
 /// @file readdir.c
 /// @brief Function for accessing directory entries.
-/// @copyright (c) 2019 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "dirent.h"
+#include "sys/dirent.h"
+#include "scheduler.h"
 #include "syscall.h"
+#include "printk.h"
+#include "errno.h"
 #include "stdio.h"
 #include "vfs.h"
 
-dirent_t *sys_readdir(DIR *dirp)
+int sys_getdents(int fd, dirent_t *dirp, unsigned int count)
 {
-	if (dirp == NULL) {
-		printf("readdir: cannot read directory :"
-			   "Directory pointer is not valid\n");
+    if (dirp == NULL) {
+        printf("getdents: cannot read directory :"
+               "Directory pointer is not valid\n");
+        return 0;
+    }
+    // Get the current task.
+    task_struct *task = scheduler_get_current_process();
 
-		return NULL;
-	}
-	if (mountpoint_list[dirp->fd].dir_op.readdir_f == NULL) {
-		printf("readdir: cannot read directory '%s':"
-			   "No readdir function\n",
-			   dirp->path);
+    // Check the current FD.
+    if (fd < 0 || fd >= task->max_fd) {
+        return -EMFILE;
+    }
 
-		return NULL;
-	}
-	return mountpoint_list[dirp->fd].dir_op.readdir_f(dirp);
+    // Get the file descriptor.
+    vfs_file_descriptor_t *vfd = &task->fd_list[fd];
+
+    // Check the permissions.
+#if 0
+    if (!(task->fd_list[fd].flags_mask & O_RDONLY)) {
+        return -EROFS;
+    }
+#endif
+
+    // Get the file.
+    vfs_file_t *file = vfd->file_struct;
+    if (file == NULL) {
+        return -ENOSYS;
+    }
+
+    // Perform the read.
+    int actual_read = vfs_getdents(file, dirp, vfd->file_struct->f_pos, count);
+
+    // Update the offset.
+    if (actual_read > 0) {
+        vfd->file_struct->f_pos += (actual_read / sizeof(dirent_t));
+    }
+    return actual_read;
 }

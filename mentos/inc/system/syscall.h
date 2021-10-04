@@ -1,39 +1,55 @@
 ///                MentOS, The Mentoring Operating system project
 /// @file   syscall.h
 /// @brief  System Call handler definition.
-/// @copyright (c) 2019 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #pragma once
 
 #include "syscall_types.h"
+#include "vfs_types.h"
 #include "kernel.h"
-#include "dirent.h"
+#include "sys/dirent.h"
 #include "types.h"
-#include "stat.h"
 
 /// @brief Initialize the system calls.
 void syscall_init();
 
 /// @brief Handler for the system calls.
-void syscall_handler(pt_regs *r);
+/// @param f The interrupt stack frame.
+void syscall_handler(pt_regs *f);
+
+/// @brief Returns the current interrupt stack frame.
+/// @return Pointer to the stack frame.
+pt_regs* get_current_interrupt_stack_frame();
 
 /// The exit() function causes normal process termination.
+/// @param exit_code The exit code.
 void sys_exit(int exit_code);
 
-/// @brief        Read data from a file descriptor.
+/// @brief Read data from a file descriptor.
 /// @param fd     The file descriptor.
 /// @param buf    The buffer.
 /// @param nbytes The number of bytes to read.
-/// @return       The number of read characters.
+/// @return The number of read characters.
 ssize_t sys_read(int fd, void *buf, size_t nbytes);
 
-/// @brief        Write data into a file descriptor.
+/// @brief Write data into a file descriptor.
 /// @param fd     The file descriptor.
 /// @param buf    The buffer collecting data to written.
 /// @param nbytes The number of bytes to write.
-/// @return       The number of written bytes.
+/// @return The number of written bytes.
 ssize_t sys_write(int fd, void *buf, size_t nbytes);
+
+/// @brief Repositions the file offset inside a file.
+/// @param fd     The file descriptor of the file.
+/// @param offset The offest to use for the operation.
+/// @param whence The type of operation.
+/// @return  Upon successful completion, returns the resulting offset
+/// location as measured in bytes from the beginning of the file. On
+/// error, the value (off_t) -1 is returned and errno is set to
+/// indicate the error.
+off_t sys_lseek(int fd, off_t offset, int whence);
 
 /// @brief          Given a pathname for a file, open() returns a file
 ///                 descriptor, a small, nonnegative integer for use in
@@ -52,33 +68,134 @@ int sys_open(const char *pathname, int flags, mode_t mode);
 /// @return
 int sys_close(int fd);
 
+/// @brief Delete a name and possibly the file it refers to.
+/// @param path A pathname for a file.
+/// @return On success, zero is returned. On error, -1 is returned, and errno is set appropriately.
+int sys_unlink(const char *path);
+
 /// @brief Suspends execution of the calling thread until a child specified
-/// by pid argument has changed state.
+///        by pid argument has changed state.
+/// @param pid     The pid to wait.
+/// @param status  If not NULL, store status information here.
+/// @param options Determines the wait behaviour.
+/// @return on success, returns the process ID of the terminated
+///         child; on error, -1 is returned.
 pid_t sys_waitpid(pid_t pid, int *status, int options);
 
 /// @brief Replaces the current process image with a new process image.
-int sys_execve(pt_regs *r);
+/// @param f CPU registers whe calling this function.
+/// @return 0 on success, -1 on error.
+int sys_execve(pt_regs *f);
 
+/// @brief Changes the working directory.
+/// @param path The new working directory.
 void sys_chdir(char const *path);
 
-/// Returns the process ID (PID) of the calling process.
+/// @brief Changes the working directory.
+/// @param fd File descriptor of the new working directory.
+void sys_fchdir(int fd);
+
+/// @brief Returns the process ID (PID) of the calling process.
+/// @return The process ID.
 pid_t sys_getpid();
 
-/// @brief Adds the increment to the priority value of the task.
-int sys_nice(int increment);
+///@brief  Return session id of the given process.
+///        If pid == 0 return the SID of the calling process
+///        If pid != 0 return the SID corresponding to the process having identifier == pid
+///@param pid process identifier from wich we want the SID
+///@return On success return SID of the session
+///        Otherwise return -1 with errno set on: EPERM or ESRCH  
+pid_t sys_getsid(pid_t pid);
 
-/// Returns the parent process ID (PPID) of the calling process.
+///@brief creates a new session if the calling process is not a
+///       process group leader.  The calling process is the leader of the
+///       new session (i.e., its session ID is made the same as its process
+///       ID).  The calling process also becomes the process group leader
+///       of a new process group in the session (i.e., its process group ID
+///       is made the same as its process ID).
+///@return On success return SID of the session just created
+///        Otherwise return -1 with errno : EPERM 
+pid_t sys_setsid();
+
+///@brief returns the group ID of the calling process.
+///@return GID of the current process
+pid_t sys_getgid();
+
+///@brief sets the effective group ID of the calling process.
+///@param pid process identifier to 
+///@return On success, zero is returned.
+///        Otherwise returns -1 with errno set to :EINVAL or EPERM  
+int sys_setgid(pid_t pid);
+
+/// @brief Returns the parent process ID (PPID) of the calling process.
+/// @return The parent process ID.
 pid_t sys_getppid();
 
+/// @brief Adds the increment to the priority value of the task.
+/// @param increment The modifier to apply to the nice value.
+/// @return The new nice value.
+int sys_nice(int increment);
+
+/// @brief Reboots the system, or enables/disables the reboot keystroke.
+/// @param magic1 fails (with the error EINVAL) unless equals LINUX_REBOOT_MAGIC1.
+/// @param magic2 fails (with the error EINVAL) unless equals LINUX_REBOOT_MAGIC2.
+/// @param cmd The command to send to the reboot.
+/// @param arg Argument passed with some specific commands.
+/// @return For the values of cmd that stop or restart the system, a
+///         successful call to reboot() does not return. For the other cmd
+///         values, zero is returned on success. In all cases, -1 is
+///         returned on failure, and errno is set appropriately.
 int sys_reboot(int magic1, int magic2, unsigned int cmd, void *arg);
 
-void sys_getcwd(char *path, size_t size);
+/// @brief Get current working directory.
+/// @param buf  The array where the CWD will be copied.
+/// @param size The size of the array.
+/// @return On success, returns the same pointer to buf.
+///         On failure, returnr NULL, and errno is set to indicate the error.
+char *sys_getcwd(char *buf, size_t size);
 
-/// @brief Create a child process.
-pid_t sys_vfork(pt_regs *r);
+/// @brief Clone the calling process, but without copying the whole address space.
+///        The calling process is suspended until the new process exits or is
+///        replaced by a call to `execve'.
+/// @param f CPU registers whe calling this function.
+/// @return Return -1 for errors, 0 to the new process, and the process ID of
+///         the new process to the old process.
+pid_t sys_fork(pt_regs *f);
 
+/// @brief Stat the file at the given path.
+/// @param path Path to the file for which we are retrieving the statistics.
+/// @param buf  Buffer where we are storing the statistics.
+/// @return 0 on success, a negative number if fails and errno is set.
 int sys_stat(const char *path, stat_t *buf);
 
+/// @brief Retrieves information about the file at the given location.
+/// @param fd  The file descriptor of the file that is being inquired.
+/// @param buf A structure where data about the file will be stored.
+/// @return Returns a negative value on failure.
+int sys_fstat(int fd, stat_t *buf);
+
+/// @brief Creates a new directory at the given path.
+/// @param path The path of the new directory.
+/// @param mode The permission of the new directory.
+/// @return Returns a negative value on failure.
 int sys_mkdir(const char *path, mode_t mode);
 
-dirent_t *sys_readdir(DIR *dirp);
+/// @brief Removes the given directory.
+/// @param path The path to the directory to remove.
+/// @return Returns a negative value on failure.
+int sys_rmdir(const char *path);
+
+/// Provide access to the directory entries.
+/// @param fd    The file descriptor of the directory for which we accessing
+///              the entries.
+/// @param dirp  The buffer where de data should be placed.
+/// @param count The size of the buffer.
+/// @return On success, the number of bytes read is returned.  On end of
+///         directory, 0 is returned.  On error, -1 is returned, and errno is set
+///         appropriately.
+int sys_getdents(int fd, dirent_t *dirp, unsigned int count);
+
+/// @brief Returns the current time.
+/// @param time Where the time should be stored.
+/// @return The current time.
+time_t sys_time(time_t *time);

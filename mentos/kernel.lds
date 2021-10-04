@@ -1,52 +1,53 @@
 OUTPUT_FORMAT("elf")
 OUTPUT_ARCH(i386)
 
-ENTRY(kernel_entry)
+ENTRY(kmain)
 
-KERNEL_PHYSICAL_ADDRESS = 0x00100000;
-LOAD_MEMORY_ADDRESS     = 0x00000000;
+KERNEL_VIRTUAL_ADDRESS = 0xC0000000;
+
+MEMORY {
+	USER_SPACE : ORIGIN = 0x00000000, LENGTH = 3072M
+	KERNEL_LOWMEM : ORIGIN = KERNEL_VIRTUAL_ADDRESS, LENGTH = 896M
+	KERNEL_HIGHMEM : ORIGIN = 0xF8000000, LENGTH = 128M
+}
+
 
 SECTIONS
 {
-    . = KERNEL_PHYSICAL_ADDRESS;
-
-    /* Put the .multiboot_header and .text section. */
-    .text : AT(ADDR(.text))
+	. = KERNEL_VIRTUAL_ADDRESS;
+    /* Put the .text section. */
+    .text . : AT(ADDR(.text))
     {
-        _multiboot_header_start = .;
-        *(.multiboot_header)
-        _multiboot_header_end   = .;
-
         _text_start = .;
-        *(.text)
+        EXCLUDE_FILE(*boot.*.o) *(.text)
         _text_end   = .;
-    }
+    } > KERNEL_LOWMEM
 
     /* Read-only data. */
     .rodata ALIGN(4K) : AT(ADDR(.rodata))
     {
         _rodata_start = .;
-        *(.rodata)
+        EXCLUDE_FILE(*boot.*.o) *(.rodata)
         _rodata_end   = .;
-    }
+    } > KERNEL_LOWMEM
 
     /* Read-write data (initialized) */
     .data   ALIGN(4K) : AT(ADDR(.data))
     {
         _data_start = .;
-        *(.data)
+        EXCLUDE_FILE(*boot.*.o) *(.data)
         _data_end   = .;
-    }
+    } > KERNEL_LOWMEM
 
     /* Read-write data (uninitialized) and stack */
     .bss    ALIGN(4K) : AT(ADDR(.bss))
     {
         _bss_start = .;
-        *(.bss)
+        *(.bss*)
         _bss_end   = .;
-    }
+    } > KERNEL_LOWMEM
 
     /* Put a symbol end here, it tells us where all the kernel code/data ends,
        it means everything after 'end' can be used for something else. */
-    end = .;
+    _kernel_end = .;
 }

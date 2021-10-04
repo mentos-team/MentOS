@@ -1,8 +1,9 @@
 ///                MentOS, The Mentoring Operating system project
 /// @file   pci.h
 /// @brief  Routines for PCI initialization.
-/// @copyright (c) 2019 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
+///! @cond Doxygen_Suppress
 
 #pragma once
 
@@ -82,116 +83,95 @@
 /// register, and reading it back. Only 1 bits are decoded.
 /// @{
 
-#define PCI_BASE_ADDRESS_0 0x10
-
-#define PCI_BASE_ADDRESS_1 0x14
-
-#define PCI_BASE_ADDRESS_2 0x18
-
-#define PCI_BASE_ADDRESS_3 0x1c
-
-#define PCI_BASE_ADDRESS_4 0x20
-
-#define PCI_BASE_ADDRESS_5 0x24
+#define PCI_BASE_ADDRESS_0 0x10 ///< Location of base address 0.
+#define PCI_BASE_ADDRESS_1 0x14 ///< Location of base address 1.
+#define PCI_BASE_ADDRESS_2 0x18 ///< Location of base address 2.
+#define PCI_BASE_ADDRESS_3 0x1c ///< Location of base address 3.
+#define PCI_BASE_ADDRESS_4 0x20 ///< Location of base address 4.
+#define PCI_BASE_ADDRESS_5 0x24 ///< Location of base address 5.
 
 /// @} pci_base_addresses
 
 /// Points to the Card Information Structure and is used by devices that
 /// share silicon between CardBus and PCI.
 #define PCI_CARDBUS_CIS 0x28
-
+/// Points to the Subsystem Vendor ID
 #define PCI_SUBSYSTEM_VENDOR_ID 0x2c
-
+/// Points to the Subsystem Device ID
 #define PCI_SUBSYSTEM_ID 0x2e
-
+/// Bits 31..11 are address, 10..1 reserved
 #define PCI_ROM_ADDRESS 0x30
-
 /// Points to a linked list of new capabilities implemented by the device.
 /// Used if bit 4 of the status register (Capabilities List bit) is set to 1.
 /// The bottom two bits are reserved and should be masked before the Pointer
 /// is used to access the Configuration Space.
 #define PCI_CAPABILITY_LIST 0x34
-
 /// Specifies which input of the system interrupt controllers the device's
 /// interrupt pin is connected to and is implemented by any device that makes
 /// use of an interrupt pin. For the x86 architecture this register
 /// corresponds to the PIC IRQ numbers 0-15 (and not I/O APIC IRQ numbers) and
 /// a value of 0xFF defines no connection.
 #define PCI_INTERRUPT_LINE 0x3c
-
 /// Specifies which interrupt pin the device uses. Where a value of 0x01 is
 /// INTA#, 0x02 is INTB#, 0x03 is INTC#, 0x04 is INTD#, and 0x00 means the
 /// device does not use an interrupt pin.
 #define PCI_INTERRUPT_PIN 0x3d
-
 /// A read-only register that specifies the burst period length, in 1/4
 /// microsecond units, that the device needs (assuming a 33 MHz clock rate).
 #define PCI_MIN_GNT 0x3e
-
 /// A read-only register that specifies how often the device needs access to
 /// the PCI bus (in 1/4 microsecond units).
 #define PCI_MAX_LAT 0x3f
 
 /// @} pci_configuration_space
 
-#define PCI_SECONDARY_BUS 0x19
+#define PCI_PRIMARY_BUS   0x18 ///< Primary bus number.
+#define PCI_SECONDARY_BUS 0x19 ///< Secondary bus number.
 
-#define PCI_HEADER_TYPE_DEVICE 0
+#define PCI_HEADER_TYPE_NORMAL  0 ///< TODO: Document.
+#define PCI_HEADER_TYPE_BRIDGE  1 ///< TODO: Document.
+#define PCI_HEADER_TYPE_CARDBUS 2 ///< TODO: Document.
 
-#define PCI_HEADER_TYPE_BRIDGE 1
+#define PCI_TYPE_BRIDGE 0x060400 ///< TODO: Document.
+#define PCI_TYPE_SATA   0x010600 ///< TODO: Document.
 
-#define PCI_HEADER_TYPE_CARDBUS 2
+#define PCI_ADDRESS_PORT 0xCF8  ///< TODO: Document.
+#define PCI_VALUE_PORT   0xCFC  ///< TODO: Document.
+#define PCI_NONE         0xFFFF ///< TODO: Document.
 
-#define PCI_TYPE_BRIDGE 0x060400
+/// @brief PIC scan function.
+typedef void (*pci_scan_func_t)(uint32_t device, uint16_t vendor_id, uint16_t device_id, void *extra);
 
-#define PCI_TYPE_SATA 0x010600
-
-#define PCI_ADDRESS_PORT 0xCF8
-
-#define PCI_VALUE_PORT 0xCFC
-
-#define PCI_NONE 0xFFFF
-
-// TODO: doxygen comment.
-/// @brief
-typedef void (*pci_func_t)(uint32_t device, uint16_t vendor_id,
-						   uint16_t device_id, void *extra);
-
-// TODO: doxygen comment.
-/// @brief
+/// @brief Extract the `bus` from the device.
 static inline int pci_extract_bus(uint32_t device)
 {
-	return (uint8_t)((device >> 16));
+    return (uint8_t)((device >> 16));
 }
 
-// TODO: doxygen comment.
-/// @brief
+/// @brief Extract the `slot` from the device.
 static inline int pci_extract_slot(uint32_t device)
 {
-	return (uint8_t)((device >> 8));
+    return (uint8_t)((device >> 8));
 }
 
-// TODO: doxygen comment.
-/// @brief
+/// @brief Extract the `func` from the device.
 static inline int pci_extract_func(uint32_t device)
 {
-	return (uint8_t)(device);
+    return (uint8_t)(device);
 }
 
-// TODO: doxygen comment.
-/// @brief
+/// @brief TODO: doxygen comment.
 static inline uint32_t pci_get_addr(uint32_t device, int field)
 {
-	return 0x80000000 | (pci_extract_bus(device) << 16) |
-		   (pci_extract_slot(device) << 11) | (pci_extract_func(device) << 8) |
-		   ((field)&0xFC);
+    return 0x80000000 | (pci_extract_bus(device) << 16) |
+           (pci_extract_slot(device) << 11) | (pci_extract_func(device) << 8) |
+           ((field)&0xFC);
 }
 
-// TODO: doxygen comment.
-/// @brief
+/// @brief TODO: doxygen comment.
 static inline uint32_t pci_box_device(int bus, int slot, int func)
 {
-	return (uint32_t)((bus << 16) | (slot << 8) | func);
+    return (uint32_t)((bus << 16) | (slot << 8) | func);
 }
 
 /// @brief Reads a field from the given PCI device.
@@ -212,27 +192,26 @@ const char *pci_vendor_lookup(unsigned short vendor_id);
 // TODO: doxygen comment.
 /// @brief
 const char *pci_device_lookup(unsigned short vendor_id,
-							  unsigned short device_id);
+                              unsigned short device_id);
 // TODO: doxygen comment.
 /// @brief
-void pci_scan_hit(pci_func_t f, uint32_t dev, void *extra);
+void pci_scan_hit(pci_scan_func_t f, uint32_t dev, void *extra);
 
 // TODO: doxygen comment.
 /// @brief
-void pci_scan_func(pci_func_t f, int type, int bus, int slot, int func,
-				   void *extra);
+void pci_scan_func(pci_scan_func_t f, int type, int bus, int slot, int func, void *extra);
 
 // TODO: doxygen comment.
 /// @brief
-void pci_scan_slot(pci_func_t f, int type, int bus, int slot, void *extra);
+void pci_scan_slot(pci_scan_func_t f, int type, int bus, int slot, void *extra);
 
 // TODO: doxygen comment.
 /// @brief
-void pci_scan_bus(pci_func_t f, int type, int bus, void *extra);
+void pci_scan_bus(pci_scan_func_t f, int type, int bus, void *extra);
 
 // TODO: doxygen comment.
 /// @brief
-void pci_scan(pci_func_t f, int type, void *extra);
+void pci_scan(pci_scan_func_t f, int type, void *extra);
 
 // TODO: doxygen comment.
 /// @brief
@@ -245,3 +224,5 @@ int pci_get_interrupt(uint32_t device);
 // TODO: doxygen comment.
 /// @brief
 void pci_debug_scan();
+
+///! @endcond

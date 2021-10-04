@@ -1,7 +1,7 @@
 ///                MentOS, The Mentoring Operating system project
 /// @file printk.c
-/// @brief
-/// @copyright (c) 2019 This file is distributed under the MIT License.
+/// @brief Functions for managing the kernel messages.
+/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #include "printk.h"
@@ -9,15 +9,14 @@
 #include "stdio.h"
 #include "video.h"
 
-void printk(const char *format, ...)
+int sys_syslog(const char *format, ...)
 {
-	char buffer[4096];
-	va_list ap;
-	// Start variabile argument's list.
-	va_start(ap, format);
-	int len = vsprintf(buffer, format, ap);
-	va_end(ap);
-
-	for (size_t i = 0; (i < len); ++i)
-		video_putc(buffer[i]);
+    char buffer[4096];
+    va_list ap;
+    // Start variabile argument's list.
+    va_start(ap, format);
+    int len = vsprintf(buffer, format, ap);
+    va_end(ap);
+    video_puts(buffer);
+    return len;
 }

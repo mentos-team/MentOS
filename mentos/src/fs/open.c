@@ -1,98 +1,93 @@
 ///                MentOS, The Mentoring Operating system project
 /// @file open.c
 /// @brief
-/// @copyright (c) 2019 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
+#include "process/scheduler.h"
+#include "process/process.h"
+#include "system/printk.h"
+#include "fcntl.h"
 #include "syscall.h"
 #include "string.h"
 #include "limits.h"
 #include "debug.h"
+#include "errno.h"
 #include "stdio.h"
 #include "vfs.h"
 
 int sys_open(const char *pathname, int flags, mode_t mode)
 {
-	// Allocate a variable for the path.
-	char absolute_path[PATH_MAX];
+    // Get the current task.
+    task_struct *task = scheduler_get_current_process();
 
-	// Copy the path to the working variable.
-	strcpy(absolute_path, pathname);
+    // Search for an unused fd.
+    int fd;
+    for (fd = 0; fd < task->max_fd; ++fd) {
+        if (!task->fd_list[fd].file_struct) {
+            break;
+        }
+    }
 
-	// If the first character is not the '/' then get the absolute path.
-	if (absolute_path[0] != '/') {
-		if (!get_absolute_path(absolute_path)) {
-			dbg_print("Cannot get the absolute path.\n");
-			return -1;
-		}
-	}
+    // Check if there is not fd available.
+    if (fd >= MAX_OPEN_FD) {
+        return -EMFILE;
+    }
 
-	// Search for an unused fd.
-	for (current_fd = 0; current_fd < MAX_OPEN_FD; ++current_fd) {
-		if (fd_list[current_fd].mountpoint_id == -1) {
-			break;
-		}
-	}
+    // If fd limit is reached, try to allocate more
+    if (fd == task->max_fd) {
+        if (!vfs_extend_task_fd_list(task)) {
+            pr_err("Failed to extend the file descriptor list.\n");
+            return -EMFILE;
+        }
+    }
 
-	// Check if there is not fd available.
-	if (current_fd == MAX_OPEN_FD) {
-		//errno = EMFILE;
-		return -1;
-	}
+    // Try to open the file.
+    vfs_file_t *file = vfs_open(pathname, flags, mode);
+    if (file == NULL) {
+        return -errno;
+    }
 
-	// Get the mountpoint.
-	mountpoint_t *mp = get_mountpoint(absolute_path);
-	if (mp == NULL) {
-		//errno = ENODEV;
-		return -1;
-	}
+    // Set the file descriptor id.
+    task->fd_list[fd].file_struct = file;
 
-	// Check if the function is implemented.
-	if (mp->operations.open_f == NULL) {
-		//errno = ENOSYS;
-		// Reset the file descriptor.
-		sys_close(current_fd);
-		return -1;
-	}
+    if (!bitmask_check(flags, O_APPEND)) {
+        // Reset the offset.
+        task->fd_list[fd].file_struct->f_pos = 0;
+    } else {
+        stat_t stat;
+        // Stat the file.
+        file->fs_operations->stat_f(file, &stat);
+        // Point at the last character
+        task->fd_list[fd].file_struct->f_pos = stat.st_size;
+    }
 
-	int32_t fs_spec_id = mp->operations.open_f(absolute_path, flags, mode);
-	if (fs_spec_id == -1) {
-		// Reset the file descriptor.
-		sys_close(current_fd);
-		return -1;
-	}
+    // Set the flags.
+    task->fd_list[fd].flags_mask = flags;
 
-	// Set the file descriptor id.
-	fd_list[current_fd].fs_spec_id = fs_spec_id;
-
-	// Set the mount point id.
-	fd_list[current_fd].mountpoint_id = mp->mp_id;
-
-	// Reset the offset.
-	fd_list[current_fd].offset = 0;
-
-	// Set the flags.
-	fd_list[current_fd].flags_mask = flags;
-
-	// Return the file descriptor and increment it.
-	return (current_fd++);
+    // Return the file descriptor and increment it.
+    return fd;
 }
 
 int sys_close(int fd)
 {
-	if (fd < 0) {
-		return -1;
-	}
-	if (fd_list[fd].fs_spec_id >= -1) {
-		int mp_id = fd_list[fd].mountpoint_id;
-		if (mountpoint_list[mp_id].operations.close_f != NULL) {
-			int fs_fd = fd_list[fd].fs_spec_id;
-			mountpoint_list[mp_id].operations.close_f(fs_fd);
-		}
-		fd_list[fd].fs_spec_id = -1;
-		fd_list[fd].mountpoint_id = -1;
-	} else {
-		return -1;
-	}
-	return 0;
+    // Get the current task.
+    task_struct *task = scheduler_get_current_process();
+
+    // Check the current FD.
+    if (fd < 0 || fd >= task->max_fd) {
+        return -EMFILE;
+    }
+
+    // Get the file.
+    vfs_file_t *file = task->fd_list[fd].file_struct;
+    if (file == NULL) {
+        return -1;
+    }
+
+    // Remove the reference to the file.
+    task->fd_list[fd].file_struct = NULL;
+
+    // Call the close function.
+    return vfs_close(file);
 }

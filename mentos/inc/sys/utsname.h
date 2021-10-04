@@ -1,7 +1,7 @@
 ///                MentOS, The Mentoring Operating system project
 /// @file utsname.h
 /// @brief Functions used to provide information about the machine & OS.
-/// @copyright (c) 2019 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #pragma once
@@ -11,18 +11,19 @@
 
 /// @brief Holds information concerning the machine and the os.
 typedef struct utsname_t {
-	/// The name of the system.
-	char sysname[SYS_LEN];
-
-	/// The name of the node.
-	char nodename[SYS_LEN];
-
-	/// The version of the OS.
-	char version[SYS_LEN];
-
-	/// The name of the machine.
-	char machine[SYS_LEN];
+    /// The name of the system.
+    char sysname[SYS_LEN];
+    /// The name of the node.
+    char nodename[SYS_LEN];
+    /// Operating system release (e.g., "2.6.28").
+    char release[SYS_LEN];
+    /// The version of the OS.
+    char version[SYS_LEN];
+    /// The name of the machine.
+    char machine[SYS_LEN];
 } utsname_t;
 
-/// @brief Sets the values of os_infos.
-int uname(utsname_t *os_infos);
+/// @brief Returns system information in the structure pointed to by buf.
+/// @param buf Buffer where the info will be placed.
+/// @return 0 on success, a negative value on failure.
+int sys_uname(utsname_t *buf);
