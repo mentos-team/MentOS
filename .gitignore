@@ -99,3 +99,6 @@ src/initscp/initfscp
 
 # OS generated files
 .DS_Store
+
+# OS filesystem files.
+files/bin/**

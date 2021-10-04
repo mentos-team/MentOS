@@ -73,7 +73,8 @@ set(PROGRAMS
     kill.c
     ipcrm.c
     ipcs.c
-    sleep.c)
+    sleep.c
+    help.c)
 foreach(PROGRAM ${PROGRAMS})
   # Prepare the program name.
   string(REPLACE ".c" "" PROGRAM_NAME ${PROGRAM})
