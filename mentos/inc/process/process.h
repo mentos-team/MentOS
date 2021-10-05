@@ -6,9 +6,9 @@
 
 #pragma once
 
-#include "paging.h"
-#include "signal.h"
-#include "fpu.h"
+#include "mem/paging.h"
+#include "system/signal.h"
+#include "devices/fpu.h"
 
 /// The maximum length of a name for a task_struct.
 #define TASK_NAME_MAX_LENGTH 100

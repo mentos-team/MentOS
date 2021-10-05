@@ -7,11 +7,11 @@
 /// Change the header.
 #define __DEBUG_HEADER__ "[PROCFS]"
 
-#include "procfs.h"
-#include "vfs.h"
+#include "fs/procfs.h"
+#include "fs/vfs.h"
 #include "string.h"
-#include "errno.h"
-#include "debug.h"
+#include "sys/errno.h"
+#include "misc/debug.h"
 #include "fcntl.h"
 #include "libgen.h"
 #include "assert.h"

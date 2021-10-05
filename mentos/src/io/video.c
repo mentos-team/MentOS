@@ -4,8 +4,8 @@
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "port_io.h"
-#include "video.h"
+#include "io/port_io.h"
+#include "io/video.h"
 #include "stdbool.h"
 #include "ctype.h"
 #include "string.h"

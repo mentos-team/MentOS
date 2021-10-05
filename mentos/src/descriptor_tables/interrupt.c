@@ -4,15 +4,15 @@
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "isr.h"
+#include "descriptor_tables/isr.h"
 
-#include "scheduler.h"
-#include "pic8259.h"
-#include "printk.h"
+#include "process/scheduler.h"
+#include "hardware/pic8259.h"
+#include "system/printk.h"
 #include "assert.h"
 #include "stdio.h"
-#include "debug.h"
-#include "idt.h"
+#include "misc/debug.h"
+#include "descriptor_tables/idt.h"
 
 /// @brief Shared interrupt handlers, stored into a double-linked list.
 typedef struct irq_struct_t {

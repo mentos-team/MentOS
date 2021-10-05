@@ -4,7 +4,7 @@
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "mm_io.h"
+#include "io/mm_io.h"
 
 uint8_t in_memb(uint32_t addr)
 {

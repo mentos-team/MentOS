@@ -6,7 +6,7 @@
 
 #pragma once
 
-#include "process.h"
+#include "process/process.h"
 #include "stdint.h"
 
 /// @defgroup header_segment_types Program Header Segment Types

@@ -4,17 +4,17 @@
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "fpu.h"
-#include "kheap.h"
-#include "syscall.h"
-#include "isr.h"
-#include "errno.h"
+#include "devices/fpu.h"
+#include "mem/kheap.h"
+#include "system/syscall.h"
+#include "descriptor_tables/isr.h"
+#include "sys/errno.h"
 #include "kernel.h"
-#include "process.h"
-#include "scheduler.h"
-#include "utsname.h"
-#include "ioctl.h"
-#include "timer.h"
+#include "process/process.h"
+#include "process/scheduler.h"
+#include "sys/utsname.h"
+#include "fs/ioctl.h"
+#include "hardware/timer.h"
 
 #include "ipc/msg.h"
 #include "ipc/sem.h"

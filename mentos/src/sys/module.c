@@ -4,11 +4,11 @@
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "slab.h"
-#include "module.h"
+#include "mem/slab.h"
+#include "sys/module.h"
 #include "string.h"
 #include "sys/bitops.h"
-#include "debug.h"
+#include "misc/debug.h"
 
 /// Defined in kernel.ld, points at the end of kernel's data segment.
 extern void *_kernel_end;

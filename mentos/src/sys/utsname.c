@@ -5,12 +5,12 @@
 /// See LICENSE.md for details.
 
 #include "string.h"
-#include "utsname.h"
+#include "sys/utsname.h"
 #include "version.h"
-#include "debug.h"
-#include "errno.h"
+#include "misc/debug.h"
+#include "sys/errno.h"
 #include "fcntl.h"
-#include "vfs.h"
+#include "fs/vfs.h"
 
 static inline int __gethostname(char *name, size_t len)
 {

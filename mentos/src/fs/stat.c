@@ -4,13 +4,13 @@
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "debug.h"
-#include "errno.h"
-#include "vfs.h"
-#include "kheap.h"
+#include "misc/debug.h"
+#include "sys/errno.h"
+#include "fs/vfs.h"
+#include "mem/kheap.h"
 #include "stdio.h"
 #include "string.h"
-#include "initrd.h"
+#include "fs/initrd.h"
 #include "limits.h"
 
 int sys_stat(const char *path, stat_t *buf)

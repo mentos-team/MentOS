@@ -4,11 +4,11 @@
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "tss.h"
+#include "descriptor_tables/tss.h"
 
 #include "string.h"
-#include "debug.h"
-#include "gdt.h"
+#include "misc/debug.h"
+#include "descriptor_tables/gdt.h"
 
 static tss_entry_t kernel_tss;
 

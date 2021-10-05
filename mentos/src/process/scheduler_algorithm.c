@@ -4,13 +4,13 @@
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "timer.h"
-#include "prio.h"
-#include "debug.h"
+#include "hardware/timer.h"
+#include "process/prio.h"
+#include "misc/debug.h"
 #include "assert.h"
-#include "list_head.h"
-#include "wait.h"
-#include "scheduler.h"
+#include "klib/list_head.h"
+#include "process/wait.h"
+#include "process/scheduler.h"
 
 /// @brief Updates task execution statistics.
 /// @param task the task to update.

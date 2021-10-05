@@ -6,8 +6,8 @@
 
 #pragma once
 
-#include "list_head.h"
-#include "spinlock.h"
+#include "klib/list_head.h"
+#include "klib/spinlock.h"
 
 /// @brief Return immediately if no child is there to be waited for.
 #define WNOHANG 0x00000001

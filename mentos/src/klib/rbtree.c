@@ -4,11 +4,11 @@
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "rbtree.h"
+#include "klib/rbtree.h"
 
 #include "assert.h"
-#include "debug.h"
-#include "slab.h"
+#include "misc/debug.h"
+#include "mem/slab.h"
 
 /// @brief Stores information of a node.
 struct rbtree_node_t {

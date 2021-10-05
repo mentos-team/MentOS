@@ -4,10 +4,10 @@
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "list.h"
+#include "klib/list.h"
 #include "assert.h"
 #include "string.h"
-#include "slab.h"
+#include "mem/slab.h"
 
 static inline listnode_t *__node_alloc()
 {

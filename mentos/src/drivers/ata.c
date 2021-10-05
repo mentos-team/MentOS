@@ -5,22 +5,22 @@
 /// See LICENSE.md for details.
 ///! @cond Doxygen_Suppress
 
-#include "ata.h"
-#include "spinlock.h"
+#include "drivers/ata.h"
+#include "klib/spinlock.h"
 #include "fcntl.h"
-#include "vmem_map.h"
-#include "list.h"
+#include "mem/vmem_map.h"
+#include "klib/list.h"
 #include "stdio.h"
-#include "isr.h"
-#include "vfs.h"
-#include "pci.h"
-#include "debug.h"
-#include "kheap.h"
+#include "descriptor_tables/isr.h"
+#include "fs/vfs.h"
+#include "devices/pci.h"
+#include "misc/debug.h"
+#include "mem/kheap.h"
 #include "assert.h"
 #include "string.h"
 #include "kernel.h"
-#include "pic8259.h"
-#include "port_io.h"
+#include "hardware/pic8259.h"
+#include "io/port_io.h"
 #include "time.h"
 
 // #define COMPLETE_SCHEDULER

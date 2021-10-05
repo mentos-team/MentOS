@@ -6,7 +6,7 @@
 ///! @cond Doxygen_Suppress
 
 #include "ipc/msg.h"
-#include "panic.h"
+#include "system/panic.h"
 
 long sys_msgget(key_t key, int msgflg)
 {

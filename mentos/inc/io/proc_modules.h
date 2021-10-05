@@ -6,7 +6,7 @@
 
 #pragma once
 
-#include "vfs.h"
+#include "fs/vfs.h"
 
 /// @brief Initialize the procfs video files.
 /// @return 0 on success, 1 on failure.

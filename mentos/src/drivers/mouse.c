@@ -6,9 +6,9 @@
 ///// See LICENSE.md for details.
 /////! @cond Doxygen_Suppress
 
-#include "mouse.h"
-#include "pic8259.h"
-#include "port_io.h"
+#include "drivers/mouse.h"
+#include "hardware/pic8259.h"
+#include "io/port_io.h"
 
 static uint8_t mouse_cycle = 0;
 

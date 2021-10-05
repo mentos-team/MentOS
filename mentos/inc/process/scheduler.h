@@ -6,8 +6,8 @@
 
 #pragma once
 
-#include "list_head.h"
-#include "process.h"
+#include "klib/list_head.h"
+#include "process/process.h"
 #include "stddef.h"
 
 /// @brief Structure that contains information about live processes.

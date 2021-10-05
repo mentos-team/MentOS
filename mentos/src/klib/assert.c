@@ -6,7 +6,7 @@
 
 #include "assert.h"
 #include "stdio.h"
-#include "panic.h"
+#include "system/panic.h"
 
 void __assert_fail(const char *assertion, const char *file, const char *function, unsigned int line)
 {

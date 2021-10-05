@@ -4,10 +4,10 @@
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "hashmap.h"
+#include "klib/hashmap.h"
 #include "assert.h"
 #include "string.h"
-#include "slab.h"
+#include "mem/slab.h"
 
 /// @brief Stores information of an entry of the hashmap.
 struct hashmap_entry_t {

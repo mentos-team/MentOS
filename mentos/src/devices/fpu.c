@@ -4,15 +4,15 @@
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "fpu.h"
-#include "isr.h"
-#include "debug.h"
+#include "devices/fpu.h"
+#include "descriptor_tables/isr.h"
+#include "misc/debug.h"
 #include "string.h"
 #include "assert.h"
-#include "scheduler.h"
+#include "process/scheduler.h"
 #include "math.h"
-#include "process.h"
-#include "signal.h"
+#include "process/process.h"
+#include "system/signal.h"
 
 /// Pointerst to the current thread using the FPU.
 task_struct *thread_using_fpu = NULL;

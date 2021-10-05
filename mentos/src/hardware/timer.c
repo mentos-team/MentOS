@@ -4,22 +4,22 @@
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "timer.h"
+#include "hardware/timer.h"
 
-#include "irqflags.h"
-#include "scheduler.h"
-#include "pic8259.h"
-#include "port_io.h"
+#include "klib/irqflags.h"
+#include "process/scheduler.h"
+#include "hardware/pic8259.h"
+#include "io/port_io.h"
 #include "stdint.h"
-#include "kheap.h"
-#include "debug.h"
-#include "wait.h"
-#include "rtc.h"
-#include "isr.h"
-#include "fpu.h"
-#include "signal.h"
+#include "mem/kheap.h"
+#include "misc/debug.h"
+#include "process/wait.h"
+#include "drivers/rtc.h"
+#include "descriptor_tables/isr.h"
+#include "devices/fpu.h"
+#include "system/signal.h"
 #include "assert.h"
-#include "errno.h"
+#include "sys/errno.h"
 
 /// Number of ticks per seconds.
 #define TICKS_PER_SECOND 1193

@@ -6,9 +6,9 @@
 
 #pragma once
 
-#include "list_head.h"
+#include "klib/list_head.h"
 #include "stddef.h"
-#include "gfp.h"
+#include "mem/gfp.h"
 
 //#define ENABLE_CACHE_TRACE
 //#define ENABLE_ALLOC_TRACE

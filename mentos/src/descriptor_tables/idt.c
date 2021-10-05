@@ -4,9 +4,9 @@
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "idt.h"
-#include "gdt.h"
-#include "isr.h"
+#include "descriptor_tables/idt.h"
+#include "descriptor_tables/gdt.h"
+#include "descriptor_tables/isr.h"
 
 /// @brief This function is in idt.asm.
 /// @param idt_pointer Address of the idt.

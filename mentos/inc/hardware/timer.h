@@ -8,9 +8,9 @@
 
 #include "kernel.h"
 #include "stdint.h"
-#include "list_head.h"
-#include "spinlock.h"
-#include "process.h"
+#include "klib/list_head.h"
+#include "klib/spinlock.h"
+#include "process/process.h"
 #include "time.h"
 
 /// This enables the dynamic timer system use an hierarchical timing wheel,

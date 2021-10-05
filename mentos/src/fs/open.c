@@ -8,13 +8,13 @@
 #include "process/process.h"
 #include "system/printk.h"
 #include "fcntl.h"
-#include "syscall.h"
+#include "system/syscall.h"
 #include "string.h"
 #include "limits.h"
-#include "debug.h"
-#include "errno.h"
+#include "misc/debug.h"
+#include "sys/errno.h"
 #include "stdio.h"
-#include "vfs.h"
+#include "fs/vfs.h"
 
 int sys_open(const char *pathname, int flags, mode_t mode)
 {

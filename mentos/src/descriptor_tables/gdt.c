@@ -4,9 +4,9 @@
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "debug.h"
-#include "gdt.h"
-#include "tss.h"
+#include "misc/debug.h"
+#include "descriptor_tables/gdt.h"
+#include "descriptor_tables/tss.h"
 
 /// The maximum dimension of the GDT.
 #define GDT_SIZE 10

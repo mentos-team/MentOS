@@ -6,7 +6,7 @@
 
 #pragma once
 
-#include "list.h"
+#include "klib/list.h"
 
 // == OPAQUE TYPES ============================================================
 /// @brief Stores information of an entry of the hashmap.

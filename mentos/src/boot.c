@@ -6,10 +6,10 @@
 
 #include "link_access.h"
 #include "multiboot.h"
-#include "paging.h"
-#include "module.h"
+#include "mem/paging.h"
+#include "sys/module.h"
 #include "stdint.h"
-#include "elf.h"
+#include "elf/elf.h"
 
 /// @defgroup bootloader Bootloader
 /// @brief Set of functions and variables for booting the kernel.

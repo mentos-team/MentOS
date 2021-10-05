@@ -8,7 +8,7 @@
 #pragma once
 
 #include "kernel.h"
-#include "scheduler.h"
+#include "process/scheduler.h"
 
 /// @brief Initialize heap.
 /// @param initial_size Starting size.

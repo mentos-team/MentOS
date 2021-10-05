@@ -5,26 +5,26 @@
 /// See LICENSE.md for details.
 
 
-#include "kernel_levels.h"
+#include "sys/kernel_levels.h"
 
 //#ifndef __DEBUG_LEVEL__
 //#define __DEBUG_LEVEL__ LOGLEVEL_DEBUG
 //#endif
 
-#include <errno.h>
-#include "process.h"
-#include "scheduler.h"
+#include "process/process.h"
+#include "process/scheduler.h"
 #include "assert.h"
 #include "libgen.h"
 #include "string.h"
-#include "timer.h"
+#include "hardware/timer.h"
+#include "sys/errno.h"
 #include "fcntl.h"
-#include "panic.h"
-#include "debug.h"
-#include "wait.h"
-#include "prio.h"
-#include "vfs.h"
-#include "elf.h"
+#include "system/panic.h"
+#include "misc/debug.h"
+#include "process/wait.h"
+#include "process/prio.h"
+#include "fs/vfs.h"
+#include "elf/elf.h"
 
 /// Cache for creating the task structs.
 static kmem_cache_t *task_struct_cache;

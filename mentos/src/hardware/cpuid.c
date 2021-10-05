@@ -4,7 +4,7 @@
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "cpuid.h"
+#include "hardware/cpuid.h"
 #include "string.h"
 
 void get_cpuid(cpuinfo_t *cpuinfo)

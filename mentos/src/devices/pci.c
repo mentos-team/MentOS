@@ -5,10 +5,10 @@
 /// See LICENSE.md for details.
 ///! @cond Doxygen_Suppress
 
-#include "pci.h"
-#include "debug.h"
+#include "devices/pci.h"
+#include "misc/debug.h"
 #include "string.h"
-#include "port_io.h"
+#include "io/port_io.h"
 
 void pci_write_field(uint32_t device, int field, int size, uint32_t value)
 {

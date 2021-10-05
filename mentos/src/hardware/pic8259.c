@@ -4,8 +4,8 @@
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "pic8259.h"
-#include "port_io.h"
+#include "hardware/pic8259.h"
+#include "io/port_io.h"
 #include "stddef.h"
 
 /// End-of-interrupt command code.

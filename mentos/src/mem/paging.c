@@ -7,15 +7,15 @@
 /// Change the header.
 #define __DEBUG_HEADER__ "[PAGING]"
 
-#include "paging.h"
-#include "isr.h"
-#include "vmem_map.h"
-#include "zone_allocator.h"
-#include "kheap.h"
-#include "debug.h"
+#include "mem/paging.h"
+#include "descriptor_tables/isr.h"
+#include "mem/vmem_map.h"
+#include "mem/zone_allocator.h"
+#include "mem/kheap.h"
+#include "misc/debug.h"
 #include "assert.h"
 #include "string.h"
-#include "panic.h"
+#include "system/panic.h"
 
 /// Cache for storing mm_struct.
 kmem_cache_t *mm_cache;

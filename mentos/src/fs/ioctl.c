@@ -4,12 +4,12 @@
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "ioctl.h"
-#include "scheduler.h"
-#include "printk.h"
+#include "fs/ioctl.h"
+#include "process/scheduler.h"
+#include "system/printk.h"
 #include "stdio.h"
-#include "errno.h"
-#include "vfs.h"
+#include "sys/errno.h"
+#include "fs/vfs.h"
 
 int sys_ioctl(int fd, int request, void *data)
 {

@@ -4,7 +4,7 @@
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "kheap.h"
+#include "mem/kheap.h"
 #include "stdio.h"
 #include "fcntl.h"
 #include "string.h"

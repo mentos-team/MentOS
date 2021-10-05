@@ -6,9 +6,9 @@
 
 #pragma once
 
-#include "buddysystem.h"
-#include "zone_allocator.h"
-#include "paging.h"
+#include "mem/buddysystem.h"
+#include "mem/zone_allocator.h"
+#include "mem/paging.h"
 
 /// Size of the virtual memory.
 #define VIRTUAL_MEMORY_SIZE_MB 128

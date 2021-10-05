@@ -4,17 +4,17 @@
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "keyboard.h"
+#include "drivers/keyboard/keyboard.h"
 
-#include "port_io.h"
-#include "pic8259.h"
-#include "keymap.h"
+#include "io/port_io.h"
+#include "hardware/pic8259.h"
+#include "drivers/keyboard/keymap.h"
 #include "sys/bitops.h"
-#include "video.h"
-#include "debug.h"
+#include "io/video.h"
+#include "misc/debug.h"
 #include "ctype.h"
-#include "isr.h"
-#include "scheduler.h"
+#include "descriptor_tables/isr.h"
+#include "process/scheduler.h"
 
 /// A macro from Ivan to update buffer indexes.
 #define STEP(x) (((x) == BUFSIZE - 1) ? 0 : ((x) + 1))

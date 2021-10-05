@@ -4,19 +4,19 @@
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "vfs.h"
+#include "fs/vfs.h"
 
-#include "scheduler.h"
-#include "spinlock.h"
+#include "process/scheduler.h"
+#include "klib/spinlock.h"
 #include "strerror.h"
-#include "syscall.h"
-#include "hashmap.h"
+#include "system/syscall.h"
+#include "klib/hashmap.h"
 #include "string.h"
-#include "procfs.h"
+#include "fs/procfs.h"
 #include "assert.h"
 #include "libgen.h"
-#include "debug.h"
-#include "panic.h"
+#include "misc/debug.h"
+#include "system/panic.h"
 #include "stdio.h"
 
 /// The hashmap that associates a type of Filesystem `name` to its `mount` function;

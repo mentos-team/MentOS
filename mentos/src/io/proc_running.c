@@ -2,15 +2,15 @@
 // Created by andrea on 02/05/20.
 //
 
-#include "procfs.h"
+#include "fs/procfs.h"
 
-#include "process.h"
+#include "process/process.h"
 #include "string.h"
 #include "libgen.h"
 #include "stdio.h"
-#include "errno.h"
-#include "debug.h"
-#include "prio.h"
+#include "sys/errno.h"
+#include "misc/debug.h"
+#include "process/prio.h"
 
 /// @brief Returns the character identifying the process state.
 /// @details

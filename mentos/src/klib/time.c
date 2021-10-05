@@ -4,13 +4,13 @@
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "debug.h"
+#include "misc/debug.h"
 #include "time.h"
 #include "stdio.h"
 #include "stddef.h"
-#include "port_io.h"
-#include "timer.h"
-#include "rtc.h"
+#include "io/port_io.h"
+#include "hardware/timer.h"
+#include "drivers/rtc.h"
 
 static const char *str_weekdays[] = { "Sunday", "Monday", "Tuesday", "Wednesday",
                                       "Thursday", "Friday", "Saturday" };

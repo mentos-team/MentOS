@@ -7,14 +7,14 @@
 /// Change the header.
 #define __DEBUG_HEADER__ "[PMM   ]"
 
-#include "zone_allocator.h"
-#include "buddysystem.h"
-#include "list_head.h"
+#include "mem/zone_allocator.h"
+#include "mem/buddysystem.h"
+#include "klib/list_head.h"
 #include "kernel.h"
 #include "assert.h"
-#include "paging.h"
+#include "mem/paging.h"
 #include "string.h"
-#include "debug.h"
+#include "misc/debug.h"
 
 /// TODO: Comment.
 #define MIN_PAGE_ALIGN(addr) ((addr) & (~(PAGE_SIZE - 1)))

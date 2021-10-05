@@ -6,7 +6,7 @@
 
 #pragma once
 
-#include "zone_allocator.h"
+#include "mem/zone_allocator.h"
 #include "proc_access.h"
 #include "kernel.h"
 #include "stddef.h"

@@ -134,32 +134,7 @@ endif(CMAKE_BUILD_TYPE STREQUAL "Debug")
 
 # =============================================================================
 # Add the includes.
-include_directories(
-  inc
-  inc/bits
-  inc/descriptor_tables
-  inc/devices
-  inc/drivers
-  inc/drivers/keyboard
-  inc/fs
-  inc/hardware
-  inc/io
-  inc/io/vga
-  inc/ipc
-  inc/kernel
-  inc/klib
-  inc/lng
-  inc/mem
-  inc/misc
-  inc/sys
-  inc/system
-  inc/process
-  inc/elf
-  inc/ui
-  inc/ui/shell
-  inc/ui/command
-  inc/ui/init
-  ../libc/inc)
+include_directories(inc ../libc/inc)
 
 # =============================================================================
 # Add kernel library.

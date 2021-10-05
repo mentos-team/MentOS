@@ -7,13 +7,13 @@
 /// Change the header.
 #define __DEBUG_HEADER__ "[KHEAP ]"
 
-#include "kheap.h"
+#include "mem/kheap.h"
 #include "math.h"
-#include "debug.h"
+#include "misc/debug.h"
 #include "string.h"
-#include "paging.h"
+#include "mem/paging.h"
 #include "assert.h"
-#include "list_head.h"
+#include "klib/list_head.h"
 
 /// Overhead given by the block_t itself.
 #define OVERHEAD sizeof(block_t)

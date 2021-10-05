@@ -8,7 +8,7 @@
 
 #include "stdint.h"
 #include "stdbool.h"
-#include "compiler.h"
+#include "klib/compiler.h"
 
 /// @brief Standard structure for atomic operations (see below
 ///        for volatile explanation).

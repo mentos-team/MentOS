@@ -4,13 +4,13 @@
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "scheduler.h"
-#include "vfs_types.h"
-#include "panic.h"
-#include "errno.h"
+#include "process/scheduler.h"
+#include "fs/vfs_types.h"
+#include "system/panic.h"
+#include "sys/errno.h"
 #include "fcntl.h"
 #include "stdio.h"
-#include "vfs.h"
+#include "fs/vfs.h"
 
 ssize_t sys_read(int fd, void *buf, size_t nbytes)
 {

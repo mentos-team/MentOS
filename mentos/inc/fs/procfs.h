@@ -6,7 +6,7 @@
 
 #pragma once
 
-#include "process.h"
+#include "process/process.h"
 
 /// @brief Stores information about a procfs directory entry.
 typedef struct proc_dir_entry_t {

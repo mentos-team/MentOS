@@ -7,11 +7,11 @@
 /// Change the header.
 #define __DEBUG_HEADER__ "[BUDDY ]"
 
-#include "buddysystem.h"
-#include "paging.h"
+#include "mem/buddysystem.h"
+#include "mem/paging.h"
 #include "assert.h"
-#include "debug.h"
-#include "panic.h"
+#include "misc/debug.h"
+#include "system/panic.h"
 
 /// @brief Cache level low limit after which allocation starts.
 #define LOW_WATERMARK_LEVEL 10

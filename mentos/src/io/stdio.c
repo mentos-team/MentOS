@@ -2,12 +2,12 @@
 /// @brief  Standard I/0 functions.
 /// @date   Apr 2019
 
-#include "syscall.h"
-#include "errno.h"
+#include "system/syscall.h"
+#include "sys/errno.h"
 #include "stdio.h"
-#include "video.h"
+#include "io/video.h"
 #include "ctype.h"
-#include "keyboard.h"
+#include "drivers/keyboard/keyboard.h"
 #include "string.h"
 
 void putchar(int character)

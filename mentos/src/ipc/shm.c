@@ -6,7 +6,7 @@
 ///! @cond Doxygen_Suppress
 
 #include "ipc/shm.h"
-#include "panic.h"
+#include "system/panic.h"
 
 #if 0
 struct shmid_ds *head        = NULL;

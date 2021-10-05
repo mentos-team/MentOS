@@ -4,11 +4,11 @@
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "panic.h"
-#include "isr.h"
-#include "idt.h"
+#include "system/panic.h"
+#include "descriptor_tables/isr.h"
+#include "descriptor_tables/idt.h"
 #include "stdio.h"
-#include "debug.h"
+#include "misc/debug.h"
 
 // Default error messages for exceptions.
 static const char *exception_messages[32] = {

@@ -7,9 +7,9 @@
 /// Change the header.
 #define __DEBUG_HEADER__ "[VMEM  ]"
 
-#include "vmem_map.h"
+#include "mem/vmem_map.h"
 #include "string.h"
-#include "panic.h"
+#include "system/panic.h"
 
 /// Virtual addresses manager.
 static virt_map_page_manager_t virt_default_mapping;

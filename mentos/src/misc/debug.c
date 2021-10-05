@@ -5,13 +5,13 @@
 /// See LICENSE.md for details.
 
 #include "sys/bitops.h"
-#include "debug.h"
-#include "spinlock.h"
-#include "port_io.h"
+#include "misc/debug.h"
+#include "klib/spinlock.h"
+#include "io/port_io.h"
 #include "kernel.h"
 #include "string.h"
 #include "stdio.h"
-#include "video.h"
+#include "io/video.h"
 
 /// Serial port for QEMU.
 #define SERIAL_COM1 (0x03F8)

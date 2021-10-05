@@ -4,14 +4,14 @@
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "procfs.h"
+#include "fs/procfs.h"
 #include "version.h"
-#include "process.h"
+#include "process/process.h"
 #include "string.h"
 #include "stdio.h"
-#include "errno.h"
-#include "debug.h"
-#include "timer.h"
+#include "sys/errno.h"
+#include "misc/debug.h"
+#include "hardware/timer.h"
 
 static ssize_t procs_do_uptime(char *buffer, size_t bufsize);
 

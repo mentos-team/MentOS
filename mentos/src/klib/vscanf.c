@@ -4,10 +4,10 @@
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "vfs.h"
+#include "fs/vfs.h"
 #include "ctype.h"
 #include "string.h"
-#include "debug.h"
+#include "misc/debug.h"
 #include "stdio.h"
 
 static int vsscanf(const char *buf, const char *s, va_list ap)

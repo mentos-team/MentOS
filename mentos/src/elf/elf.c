@@ -7,17 +7,17 @@
 /// Change the header.
 #define __DEBUG_HEADER__ "[ELF   ]"
 
-#include "elf.h"
+#include "elf/elf.h"
 
-#include "scheduler.h"
-#include "vmem_map.h"
-#include "process.h"
+#include "process/scheduler.h"
+#include "mem/vmem_map.h"
+#include "process/process.h"
 #include "string.h"
 #include "stddef.h"
-#include "debug.h"
+#include "misc/debug.h"
 #include "stdio.h"
-#include "slab.h"
-#include "vfs.h"
+#include "mem/slab.h"
+#include "fs/vfs.h"
 
 /// @brief Reads the program header from file.
 /// @param file The file from which we extract the program header.

@@ -4,11 +4,11 @@
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "debug.h"
-#include "ndtree.h"
+#include "misc/debug.h"
+#include "klib/ndtree.h"
 #include "assert.h"
-#include "list_head.h"
-#include "slab.h"
+#include "klib/list_head.h"
+#include "mem/slab.h"
 
 // ============================================================================
 // Tree types.

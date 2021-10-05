@@ -6,7 +6,7 @@
 ///! @cond Doxygen_Suppress
 
 #include "ipc/sem.h"
-#include "panic.h"
+#include "system/panic.h"
 
 long sys_semget(key_t key, int nsems, int semflg)
 {

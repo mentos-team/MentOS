@@ -7,15 +7,15 @@
 /// Change the header.
 #define __DEBUG_HEADER__ "[SIGNAL]"
 
-#include "signal.h"
-#include "wait.h"
-#include "scheduler.h"
-#include "process.h"
-#include "errno.h"
+#include "system/signal.h"
+#include "process/wait.h"
+#include "process/scheduler.h"
+#include "process/process.h"
+#include "sys/errno.h"
 #include "assert.h"
-#include "debug.h"
+#include "misc/debug.h"
 #include "string.h"
-#include "irqflags.h"
+#include "klib/irqflags.h"
 
 /// SLAB caches for signal bits.
 static kmem_cache_t *sigqueue_cachep;

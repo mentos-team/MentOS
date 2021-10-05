@@ -5,12 +5,12 @@
 /// See LICENSE.md for details.
 
 #include "sys/dirent.h"
-#include "scheduler.h"
-#include "syscall.h"
-#include "printk.h"
-#include "errno.h"
+#include "process/scheduler.h"
+#include "system/syscall.h"
+#include "system/printk.h"
+#include "sys/errno.h"
 #include "stdio.h"
-#include "vfs.h"
+#include "fs/vfs.h"
 
 int sys_getdents(int fd, dirent_t *dirp, unsigned int count)
 {

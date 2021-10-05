@@ -7,7 +7,7 @@
 /// Change the header.
 #define __DEBUG_HEADER__ "[WAIT  ]"
 
-#include "wait.h"
+#include "process/wait.h"
 
 static inline void __add_wait_queue(wait_queue_head_t *head, wait_queue_entry_t *wq)
 {

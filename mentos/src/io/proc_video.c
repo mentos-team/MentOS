@@ -2,16 +2,16 @@
 // Created by andrea on 02/05/20.
 //
 
-#include "termios-struct.h"
-#include "keyboard.h"
-#include "procfs.h"
-#include "ioctls.h"
+#include "bits/termios-struct.h"
+#include "drivers/keyboard/keyboard.h"
+#include "fs/procfs.h"
+#include "bits/ioctls.h"
 #include "sys/bitops.h"
-#include "video.h"
-#include "debug.h"
-#include "errno.h"
+#include "io/video.h"
+#include "misc/debug.h"
+#include "sys/errno.h"
 #include "fcntl.h"
-#include "vfs.h"
+#include "fs/vfs.h"
 
 static termios ktermios = {
     .c_cflag = 0,

@@ -1,13 +1,13 @@
-#include "vga.h"
+#include "io/vga/vga.h"
 
-#include "vga_palette.h"
-#include "vga_mode.h"
-#include "vga_font.h"
+#include "io/vga/vga_palette.h"
+#include "io/vga/vga_mode.h"
+#include "io/vga/vga_font.h"
 
-#include "port_io.h"
+#include "io/port_io.h"
 #include "stdbool.h"
 #include "string.h"
-#include "debug.h"
+#include "misc/debug.h"
 #include "math.h"
 
 #define COUNT_OF(x) ((sizeof(x) / sizeof(0 [x])) / ((size_t)(!(sizeof(x) % sizeof(0 [x])))))

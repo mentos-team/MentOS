@@ -7,11 +7,11 @@
 /// Change the header.
 #define __DEBUG_HEADER__ "[SLAB  ]"
 
-#include "zone_allocator.h"
-#include "paging.h"
+#include "mem/zone_allocator.h"
+#include "mem/paging.h"
 #include "assert.h"
-#include "debug.h"
-#include "slab.h"
+#include "misc/debug.h"
+#include "mem/slab.h"
 
 /// @brief Use it to manage cached pages.
 typedef struct kmem_obj {

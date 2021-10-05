@@ -4,9 +4,9 @@
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "errno.h"
-#include "vfs.h"
-#include "scheduler.h"
+#include "sys/errno.h"
+#include "fs/vfs.h"
+#include "process/scheduler.h"
 
 int sys_unlink(const char *path)
 {

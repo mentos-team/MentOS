@@ -4,7 +4,7 @@
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "spinlock.h"
+#include "klib/spinlock.h"
 
 void spinlock_init(spinlock_t *spinlock)
 {

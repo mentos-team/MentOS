@@ -11,7 +11,7 @@
 #include "stdbool.h"
 #include "stdint.h"
 #include "stdio.h"
-#include "video.h"
+#include "io/video.h"
 #include "fcvt.h"
 
 /// Size of the buffer used to call cvt functions.

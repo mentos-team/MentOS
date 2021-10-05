@@ -4,13 +4,13 @@
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "syscall.h"
+#include "system/syscall.h"
 #include "libgen.h"
 #include "string.h"
-#include "initrd.h"
+#include "fs/initrd.h"
 #include "limits.h"
 #include "assert.h"
-#include "paging.h"
+#include "mem/paging.h"
 
 int parse_path(char *out, char **cur, char sep, size_t max)
 {

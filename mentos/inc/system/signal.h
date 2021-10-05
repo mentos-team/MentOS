@@ -6,10 +6,10 @@
 
 #pragma once
 
-#include "stdatomic.h"
-#include "spinlock.h"
-#include "list_head.h"
-#include "syscall.h"
+#include "klib/stdatomic.h"
+#include "klib/spinlock.h"
+#include "klib/list_head.h"
+#include "system/syscall.h"
 
 /// @brief Signal codes.
 typedef enum {

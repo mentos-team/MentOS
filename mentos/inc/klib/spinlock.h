@@ -6,7 +6,7 @@
 
 #pragma once
 
-#include "stdatomic.h"
+#include "klib/stdatomic.h"
 
 /// Determines if the spinlock is free.
 #define SPINLOCK_FREE 0

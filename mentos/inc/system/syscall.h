@@ -6,11 +6,11 @@
 
 #pragma once
 
-#include "syscall_types.h"
-#include "vfs_types.h"
+#include "system/syscall_types.h"
+#include "fs/vfs_types.h"
 #include "kernel.h"
 #include "sys/dirent.h"
-#include "types.h"
+#include "sys/types.h"
 
 /// @brief Initialize the system calls.
 void syscall_init();

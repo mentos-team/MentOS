@@ -6,8 +6,8 @@
 
 #pragma once
 
-#include "vfs_types.h"
-#include "slab.h"
+#include "fs/vfs_types.h"
+#include "mem/slab.h"
 
 #define MAX_OPEN_FD 16 ///< Maximum number of opened file.
 

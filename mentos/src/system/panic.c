@@ -4,8 +4,8 @@
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "panic.h"
-#include "debug.h"
+#include "system/panic.h"
+#include "misc/debug.h"
 
 void kernel_panic(const char *msg)
 {

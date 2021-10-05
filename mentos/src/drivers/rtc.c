@@ -4,13 +4,13 @@
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "rtc.h"
+#include "drivers/rtc.h"
 
-#include "pic8259.h"
+#include "hardware/pic8259.h"
 #include "string.h"
-#include "port_io.h"
+#include "io/port_io.h"
 #include "kernel.h"
-#include "isr.h"
+#include "descriptor_tables/isr.h"
 
 #define CMOS_ADDR 0x70 ///< Addess where we need to write the Address.
 #define CMOS_DATA 0x71 ///< Addess where we need to write the Data.

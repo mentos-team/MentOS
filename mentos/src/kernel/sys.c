@@ -5,10 +5,10 @@
 /// See LICENSE.md for details.
 
 #include "stdio.h"
-#include "errno.h"
-#include "reboot.h"
-#include "stdatomic.h"
-#include "mutex.h"
+#include "sys/errno.h"
+#include "sys/reboot.h"
+#include "klib/stdatomic.h"
+#include "klib/mutex.h"
 
 static void machine_power_off()
 {
