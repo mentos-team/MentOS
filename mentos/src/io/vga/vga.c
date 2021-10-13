@@ -29,6 +29,7 @@
 #define CRTC_DATA         0x03D5
 #define INPUT_STATUS_READ 0x03DA
 
+/// VGA pointers for drawing operations.
 typedef struct {
     /// Writes a pixel.
     void (*write_pixel)(unsigned int x, unsigned int y, unsigned char c);
@@ -40,18 +41,20 @@ typedef struct {
     void (*fill_rect)(unsigned int x, unsigned int y, unsigned int wd, unsigned int ht, unsigned char c);
 } vga_ops_t;
 
+/// VGA font details.
 typedef struct {
-    unsigned char *font;
-    unsigned width;
-    unsigned height;
+    unsigned char *font; ///< Pointer to the array holding the shape of each character.
+    unsigned width;      ///< Width of the font.
+    unsigned height;     ///< Height of the font.
 } vga_font_t;
 
+/// VGA driver details.
 typedef struct {
-    int width;
-    int height;
-    int bpp;
-    char *address;
-    vga_ops_t *ops;
+    int width;      ///< Screen's width.
+    int height;     ///< Screen's height.
+    int bpp;        ///< Bits per pixel (bpp).
+    char *address;  ///< Starting address of the screen.
+    vga_ops_t *ops; ///< Writing operations.
 } vga_driver_t;
 
 static bool_t vga_enable = false;
@@ -177,7 +180,7 @@ static void __set_mode(vga_mode_t *vga_mode)
         outportb(CRTC_DATA, *ptr);
         ++ptr;
     }
-    
+
     // write GRAPHICS CONTROLLER regs.
     for (unsigned i = 0; i < MODE_NUM_GC_REGS; i++) {
         outportb(GC_INDEX, i);

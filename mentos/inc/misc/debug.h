@@ -11,6 +11,7 @@
 struct pt_regs;
 
 #ifndef __DEBUG_LEVEL__
+/// Defines the debug level.
 #define __DEBUG_LEVEL__ LOGLEVEL_NOTICE
 #endif
 

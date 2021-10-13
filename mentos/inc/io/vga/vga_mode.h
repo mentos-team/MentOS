@@ -1,4 +1,4 @@
-/// @brief
+/// Structure that holds the information about a VGA mode.
 typedef struct {
     unsigned char misc; ///< 00h --
     /// @brief The Sequencer Registers.
@@ -9,6 +9,7 @@ typedef struct {
         unsigned char character_map_select;  ///< 03h --
         unsigned char sequencer_memory_mode; ///< 04h --
     } sc;
+    /// @brief CRT Controller (CRTC) Registers
     struct {
         unsigned char horizontal_total;          ///< 00h --
         unsigned char end_horizontal_display;    ///< 01h --
