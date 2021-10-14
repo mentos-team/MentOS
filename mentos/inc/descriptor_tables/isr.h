@@ -1,7 +1,7 @@
 ///                MentOS, The Mentoring Operating system project
 /// @file   isr.h
 /// @brief  Data structures concerning the Interrupt Service Routines (ISRs).
-/// @copyright (c) 2019 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #pragma once
@@ -19,9 +19,9 @@ typedef void (*interrupt_handler_t)(pt_regs *f);
 ///        prints the rose exceptions and stops kernel execution.
 void isrs_init();
 
-/// @brief For each interrupt irqs_init sets a default handler which
+/// @brief For each interrupt irq_init sets a default handler which
 ///        prints the rose IRQ line and stops kernel execution.
-void irqs_init();
+void irq_init();
 
 /* Even if an interrupt service routine is called for exceptions and
  * interrupts, we use two distinct methods to logically setup an ISR to
@@ -31,99 +31,52 @@ void irqs_init();
  * for a same IRQ.
  */
 
-/// @brief                     Installs an ISR to handle an exception.
-/// @param i                   Exception identifier.
-/// @param handler             Exception handler.
-/// @return 0                  On success, -1 otherwise.
-int isr_install_handler(uint32_t i, interrupt_handler_t handler,
-						char *description);
+/// @brief Installs an ISR to handle an exception.
+/// @param i           Exception identifier.
+/// @param handler     Exception handler.
+/// @param description Exception description.
+/// @return 0 on success, -1 otherwise.
+int isr_install_handler(uint32_t i, interrupt_handler_t handler, char *description);
 
-/// @brief                     Installs an ISR to handle an interrupt.
-/// @param i                   Interrupt identifier.
-/// @param handler             Interrupt handler.
-/// @return 0                  On success, -1 otherwise.
-int irq_install_handler(uint32_t i, interrupt_handler_t handler,
-						char *description);
+/// @brief Installs an ISR to handle an interrupt.
+/// @param i           Interrupt identifier.
+/// @param handler     Interrupt handler.
+/// @param description Interrupt description.
+/// @return 0 on success, -1 otherwise.
+int irq_install_handler(unsigned i, interrupt_handler_t handler, char *description);
 
-/// @brief      Method called by CPU to handle interrupts.
-/// @param f    The interrupt stack frame.
+/// @brief Method called by CPU to handle interrupts.
+/// @param f The interrupt stack frame.
 extern void irq_handler(pt_regs *f);
 
-/// @brief      Method called by CPU to handle exceptions.
-/// @param f    The interrupt stack frame.
+/// @brief Method called by CPU to handle exceptions.
+/// @param f The interrupt stack frame.
 extern void isq_handler(pt_regs *f);
 
 //==== List of exceptions generated internally by the CPU ======================
-/// @brief DE Divide Error.
-#define DIVIDE_ERROR 0
-
-/// @brief DB Debug.
-#define DEBUG_EXC 1
-
-/// @brief Non Mascable Interrupt.
-#define NMI_INTERRUPT 2
-
-/// @brief BP Breakpoint.
-#define BREAKPOINT 3
-
-/// @brief OF Overflow.
-#define OVERFLOW 4
-
-/// @brief BR Bound Range Exception.
-#define BOUND_RANGE_EXCEED 5
-
-/// @brief UD Invalid OpCode Exception.
-#define INVALID_OPCODE 6
-
-/// @brief NM Device Not Available.
-#define DEV_NOT_AVL 7
-
-/// @brief DF Double Fault.
-#define DOUBLE_FAULT 8
-
-/// @brief Coprocessor Segment Overrun.
-#define COPROC_SEG_OVERRUN 9
-
-/// @brief TS Invalid TSS.
-#define INVALID_TSS 10
-
-/// @brief NP Segment Not Present.
-#define SEGMENT_NOT_PRESENT 11
-
-/// @brief SS Stack Segment Fault.
-#define STACK_SEGMENT_FAULT 12
-
-/// @brief GP General Protection.
-#define GENERAL_PROTECTION 13
-
-/// @brief PF Page Fault.
-#define PAGE_FAULT 14
-
-/// @brief XX Reserverd.
-#define INT_RSV 15
-
-/// @brief MF Floating Point.
-#define FLOATING_POINT_ERR 16
-
-/// @brief AC Alignment Check.
-#define ALIGNMENT_CHECK 17
-
-/// @brief MC Machine Check.
-#define MACHINE_CHECK 18
-
-/// @brief XF Streaming SIMD Exception.
-#define SIMD_FP_EXC 19
-
-/// @brief Virtualization Exception.
-#define VIRT_EXC 20
-
-/// @brief Reserved [21-29].
-/// @brief Security Exception.
-#define SECURITY_EXC 30
-
-/// @brief Triple Fault
-#define TRIPLE_FAULT 31
-
-/// @brief System call interrupt.
-#define SYSTEM_CALL 80
+#define DIVIDE_ERROR        0 ///< DE Divide Error.
+#define DEBUG_EXC           1 ///< DB Debug.
+#define NMI_INTERRUPT       2 ///< Non Mascable Interrupt.
+#define BREAKPOINT          3 ///< BP Breakpoint.
+#define OVERFLOW            4 ///< OF Overflow.
+#define BOUND_RANGE_EXCEED  5 ///< BR Bound Range Exception.
+#define INVALID_OPCODE      6 ///< UD Invalid OpCode Exception.
+#define DEV_NOT_AVL         7 ///< NM Device Not Available.
+#define DOUBLE_FAULT        8 ///< DF Double Fault.
+#define COPROC_SEG_OVERRUN  9 ///< Coprocessor Segment Overrun.
+#define INVALID_TSS         10 ///< TS Invalid TSS.
+#define SEGMENT_NOT_PRESENT 11 ///< NP Segment Not Present.
+#define STACK_SEGMENT_FAULT 12 ///< SS Stack Segment Fault.
+#define GENERAL_PROTECTION  13 ///< GP General Protection.
+#define PAGE_FAULT          14 ///< PF Page Fault.
+#define INT_RSV             15 ///< XX Reserverd.
+#define FLOATING_POINT_ERR  16 ///< MF Floating Point.
+#define ALIGNMENT_CHECK     17 ///< AC Alignment Check.
+#define MACHINE_CHECK       18 ///< MC Machine Check.
+#define SIMD_FP_EXC         19 ///< XF Streaming SIMD Exception.
+#define VIRT_EXC            20 ///< Virtualization Exception.
+// Reserved [21-29].
+#define SECURITY_EXC 30 ///< Security Exception.
+#define TRIPLE_FAULT 31 ///< Triple Fault
+#define SYSTEM_CALL  80 ///< System call interrupt.
 //==============================================================================

@@ -1,80 +1,205 @@
 ///                MentOS, The Mentoring Operating system project
 /// @file   multiboot.c
 /// @brief
-/// @copyright (c) 2019 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
+/// Set the debug level to 0.
+#define __DEBUG_LEVEL__ 0
+
 #include "multiboot.h"
-#include "bitops.h"
-#include "debug.h"
+#include "kernel.h"
+#include "sys/bitops.h"
+#include "stddef.h"
+#include "misc/debug.h"
+#include "system/panic.h"
+#include "stddef.h"
+
+
+multiboot_memory_map_t *mmap_first_entry(multiboot_info_t *info)
+{
+    if (!bitmask_check(info->flags, MULTIBOOT_FLAG_MMAP))
+        return NULL;
+    return (multiboot_memory_map_t *)((uintptr_t)info->mmap_addr);
+}
+
+multiboot_memory_map_t *mmap_first_entry_of_type(multiboot_info_t *info,
+                                                 uint32_t type)
+{
+    multiboot_memory_map_t *entry = mmap_first_entry(info);
+    if (entry && (entry->type == type))
+        return entry;
+    return mmap_next_entry_of_type(info, entry, type);
+}
+
+multiboot_memory_map_t *mmap_next_entry(multiboot_info_t *info,
+                                        multiboot_memory_map_t *entry)
+{
+    uintptr_t next = ((uintptr_t)entry) + entry->size + sizeof(entry->size);
+    if (next >= (info->mmap_addr + info->mmap_length))
+        return NULL;
+    return (multiboot_memory_map_t *)next;
+}
+
+multiboot_memory_map_t *mmap_next_entry_of_type(multiboot_info_t *info,
+                                                multiboot_memory_map_t *entry,
+                                                uint32_t type)
+{
+    do {
+        entry = mmap_next_entry(info, entry);
+    } while (entry && entry->type != type);
+    return entry;
+}
+
+char *mmap_type_name(multiboot_memory_map_t *entry)
+{
+    if (entry->type == MULTIBOOT_MEMORY_AVAILABLE)
+        return "AVAILABLE";
+    if (entry->type == MULTIBOOT_MEMORY_RESERVED)
+        return "RESERVED";
+    return "NONE";
+}
+
+multiboot_module_t *first_module(multiboot_info_t *info)
+{
+    if (!bitmask_check(info->flags, MULTIBOOT_FLAG_MODS))
+        return NULL;
+    if (!info->mods_count)
+        return NULL;
+    return (multiboot_module_t *)(uintptr_t)info->mods_addr;
+}
+
+multiboot_module_t *next_module(multiboot_info_t *info,
+                                multiboot_module_t *mod)
+{
+    multiboot_module_t *first = (multiboot_module_t *)((uintptr_t)info->mods_addr);
+    ++mod;
+    if ((mod - first) >= info->mods_count)
+        return NULL;
+    return mod;
+}
 
 void dump_multiboot(multiboot_info_t *mbi)
 {
-	dbg_print("\n--------------------------------------------------\n");
-	dbg_print("MULTIBOOT header at 0x%x:\n", mbi);
-	dbg_print("Flags : 0x%x\n", mbi->flags);
-	if (has_flag(mbi->flags, MULTIBOOT_FLAG_MEM)) {
-		dbg_print("Mem Lo: 0x%x\n", mbi->mem_lower * K);
-		dbg_print("Mem Hi: 0x%x (%dMB)\n", mbi->mem_upper * K,
-				  (mbi->mem_upper / 1024));
-	}
-	if (has_flag(mbi->flags, MULTIBOOT_FLAG_DEVICE)) {
-		dbg_print("Boot d: 0x%x\n", mbi->boot_device);
-	}
-	if (has_flag(mbi->flags, MULTIBOOT_FLAG_CMDLINE)) {
-		dbg_print("cmdlin: 0x%x (%s)\n", mbi->cmdline, (char *)mbi->cmdline);
-	}
-	if (has_flag(mbi->flags, MULTIBOOT_FLAG_MODS)) {
-		dbg_print("Mods  : 0x%x\n", mbi->mods_count);
+    pr_debug("\n--------------------------------------------------\n");
+    pr_debug("MULTIBOOT header at 0x%x:\n", mbi);
 
-		multiboot_module_t *mod = (multiboot_module_t *)mbi->mods_addr;
+    // Print out the flags.
+    pr_debug("%-16s = 0x%x\n", "flags", mbi->flags);
 
-		if (mbi->mods_count > 0) {
-			for (uint32_t i = 0; i < mbi->mods_count && i < MAX_MODULES;
-				 i++, mod++) {
-				uint32_t start = mod->mod_start;
-				uint32_t end = mod->mod_end;
-				dbg_print("\tModule %d is at 0x%x:0x%x\n", i + 1, start, end);
-			}
+    // Are mem_* valid?
+    if (bitmask_check(mbi->flags, MULTIBOOT_FLAG_MEM)) {
+        pr_debug("%-16s = %u Kb (%u Mb)\n", "mem_lower", mbi->mem_lower,
+                 mbi->mem_lower / K);
+        pr_debug("%-16s = %u Kb (%u Mb)\n", "mem_upper", mbi->mem_upper,
+                 mbi->mem_upper / K);
+        pr_debug("%-16s = %u Kb (%u Mb)\n", "total",
+                 mbi->mem_lower + mbi->mem_upper,
+                 (mbi->mem_lower + mbi->mem_upper) / K);
+    }
 
-			/* Last implementation
-            for (uint32_t i = 0; i < mbi->mods_count; ++i)
-            {
-                // uint32_t start = *((uint32_t *) (mbi->mods_addr + 8 * i));
-                uint32_t start = mbi->mods_addr + 8 * i;
-                // uint32_t end = *((uint32_t *) (mbi->mods_addr + 8 * i + 4));
-                uint32_t end = mbi->mods_addr + 8 * i + 4;
-                dbg_print("\tModule %d is at 0x%x:0x%x\n", i + 1, start, end);
-            }
-             */
-		}
-	}
-	if (has_flag(mbi->flags, MULTIBOOT_FLAG_AOUT)) {
-		dbg_print("AOUT t : 0x%x\n", mbi->u.aout_sym.tabsize);
-		dbg_print("AOUT s : 0x%x\n", mbi->u.aout_sym.strsize);
-		dbg_print("AOUT a : 0x%x\n", mbi->u.aout_sym.addr);
-		dbg_print("AOUT r : 0x%x\n", mbi->u.aout_sym.reserved);
-	}
-	if (has_flag(mbi->flags, MULTIBOOT_FLAG_ELF)) {
-		dbg_print("ELF n : 0x%x\n", mbi->u.elf_sec.num);
-		dbg_print("ELF s : 0x%x\n", mbi->u.elf_sec.size);
-		dbg_print("ELF a : 0x%x\n", mbi->u.elf_sec.addr);
-		dbg_print("ELF h : 0x%x\n", mbi->u.elf_sec.shndx);
-	}
-	dbg_print("MMap  : 0x%x\n", mbi->mmap_length);
-	dbg_print("Addr  : 0x%x\n", mbi->mmap_addr);
-	dbg_print("Drives: 0x%x\n", mbi->drives_length);
-	dbg_print("Addr  : 0x%x\n", mbi->drives_addr);
-	dbg_print("Config: 0x%x\n", mbi->config_table);
-	dbg_print("Loader: 0x%x (%s)\n", mbi->boot_loader_name,
-			  (char *)mbi->boot_loader_name);
-	dbg_print("APM   : 0x%x\n", mbi->apm_table);
-	dbg_print("VBE Co: 0x%x\n", mbi->vbe_control_info);
-	dbg_print("VBE Mo: 0x%x\n", mbi->vbe_mode_info);
-	dbg_print("VBE In: 0x%x\n", mbi->vbe_mode);
-	dbg_print("VBE se: 0x%x\n", mbi->vbe_interface_seg);
-	dbg_print("VBE of: 0x%x\n", mbi->vbe_interface_off);
-	dbg_print("VBE le: 0x%x\n", mbi->vbe_interface_len);
-	dbg_print("--------------------------------------------------\n");
-	dbg_print("\n");
+    // Is boot_device valid?
+    if (bitmask_check(mbi->flags, MULTIBOOT_FLAG_DEVICE)) {
+        pr_debug("%-16s = 0x%x (0x%x)", "boot_device", mbi->boot_device);
+        switch ((mbi->boot_device) & 0xFF000000) {
+        case 0x00000000:
+            pr_debug("(floppy)\n");
+            break;
+        case 0x80000000:
+            pr_debug("(disk)\n");
+            break;
+        default:
+            pr_debug("(unknown)\n");
+        }
+    }
+
+    // Is the command line passed?
+    if (bitmask_check(mbi->flags, MULTIBOOT_FLAG_CMDLINE)) {
+        pr_debug("%-16s = %s\n", "cmdline", (char *)mbi->cmdline);
+    }
+
+    // Are mods_* valid?
+    if (bitmask_check(mbi->flags, MULTIBOOT_FLAG_MODS)) {
+        pr_debug("%-16s = %d\n", "mods_count", mbi->mods_count);
+        pr_debug("%-16s = 0x%x\n", "mods_addr", mbi->mods_addr);
+        multiboot_module_t *mod = first_module(mbi);
+        for (int i = 0; mod; ++i, mod = next_module(mbi, mod)) {
+            pr_debug("    [%2d] "
+                     "mod_start = 0x%x, "
+                     "mod_end = 0x%x, "
+                     "cmdline = %s\n",
+                     i, mod->mod_start, mod->mod_end, (char *)mod->cmdline);
+        }
+    }
+    // Bits 4 and 5 are mutually exclusive!
+    if (bitmask_check(mbi->flags, MULTIBOOT_FLAG_AOUT) &&
+        bitmask_check(mbi->flags, MULTIBOOT_FLAG_ELF)) {
+        kernel_panic("Both bits 4 and 5 are set.\n");
+        return;
+    }
+
+    // Is the symbol table of a.out valid?
+    if (bitmask_check(mbi->flags, MULTIBOOT_FLAG_AOUT)) {
+        multiboot_aout_symbol_table_t *multiboot_aout_sym = &(mbi->u.aout_sym);
+        pr_debug("multiboot_aout_symbol_table: tabsize = 0x%0x, "
+                 "strsize = 0x%x, addr = 0x%x\n",
+                 multiboot_aout_sym->tabsize, multiboot_aout_sym->strsize,
+                 multiboot_aout_sym->addr);
+    }
+
+    // Is the section header table of ELF valid?
+    if (bitmask_check(mbi->flags, MULTIBOOT_FLAG_ELF)) {
+        multiboot_elf_section_header_table_t *multiboot_elf_sec =
+            &(mbi->u.elf_sec);
+        pr_debug("multiboot_elf_sec: num = %u, size = 0x%x,"
+                 " addr = 0x%x, shndx = 0x%x\n",
+                 multiboot_elf_sec->num, multiboot_elf_sec->size,
+                 multiboot_elf_sec->addr, multiboot_elf_sec->shndx);
+    }
+
+    // Are mmap_* valid?
+    if (bitmask_check(mbi->flags, MULTIBOOT_FLAG_MMAP)) {
+        pr_debug("%-16s = 0x%x\n", "mmap_addr", mbi->mmap_addr);
+        pr_debug("%-16s = 0x%x (%d entries)\n", "mmap_length",
+                 mbi->mmap_length,
+                 mbi->mmap_length / sizeof(multiboot_memory_map_t));
+        multiboot_memory_map_t *mmap = mmap_first_entry(mbi);
+        for (int i = 0; mmap; ++i, mmap = mmap_next_entry(mbi, mmap)) {
+            pr_debug("    [%2d] "
+                     "base_addr = 0x%09x%09x, "
+                     "length = 0x%09x%09x, "
+                     "type = 0x%x (%s)\n",
+                     i, mmap->base_addr_high, mmap->base_addr_low,
+                     mmap->length_high, mmap->length_low, mmap->type,
+                     mmap_type_name(mmap));
+        }
+    }
+
+    if (bitmask_check(mbi->flags, MULTIBOOT_FLAG_DRIVE_INFO)) {
+        pr_debug("Drives: 0x%x\n", mbi->drives_length);
+        pr_debug("Addr  : 0x%x\n", mbi->drives_addr);
+    }
+
+    if (bitmask_check(mbi->flags, MULTIBOOT_FLAG_CONFIG_TABLE)) {
+        pr_debug("Config: 0x%x\n", mbi->config_table);
+    }
+
+    if (bitmask_check(mbi->flags, MULTIBOOT_FLAG_BOOT_LOADER_NAME)) {
+        pr_debug("boot_loader_name: %s\n", (char *)mbi->boot_loader_name);
+    }
+
+    if (bitmask_check(mbi->flags, MULTIBOOT_FLAG_APM_TABLE)) {
+        pr_debug("APM   : 0x%x\n", mbi->apm_table);
+    }
+
+    if (bitmask_check(mbi->flags, MULTIBOOT_FLAG_VBE_INFO)) {
+        pr_debug("VBE Co: 0x%x\n", mbi->vbe_control_info);
+        pr_debug("VBE Mo: 0x%x\n", mbi->vbe_mode_info);
+        pr_debug("VBE In: 0x%x\n", mbi->vbe_mode);
+        pr_debug("VBE se: 0x%x\n", mbi->vbe_interface_seg);
+        pr_debug("VBE of: 0x%x\n", mbi->vbe_interface_off);
+        pr_debug("VBE le: 0x%x\n", mbi->vbe_interface_len);
+    }
+    pr_debug("--------------------------------------------------\n");
+    pr_debug("\n");
 }

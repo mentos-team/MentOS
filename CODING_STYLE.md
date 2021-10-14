@@ -1,7 +1,4 @@
-Code Styles for this project
-============================
-
-
+# Coding Style
 If you'd like to contribute you are welcome, thus refer to the following coding
 styles please:
 

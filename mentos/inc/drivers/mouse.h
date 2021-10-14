@@ -1,24 +1,25 @@
 ///                MentOS, The Mentoring Operating system project
 /// @file   mouse.h
 /// @brief  Driver for *PS2* Mouses.
-/// @copyright (c) 2019 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
+///! @cond Doxygen_Suppress
 
 #pragma once
 
 /* The mouse starts sending automatic packets when the mouse moves or is
  * clicked.
  */
-#include <kernel.h>
+#include "kernel.h"
 
-#define MOUSE_ENABLE_PACKET         0xF4
+#define MOUSE_ENABLE_PACKET 0xF4
 
 /// The mouse stops sending automatic packets.
-#define MOUSE_DISABLE_PACKET        0xF5
+#define MOUSE_DISABLE_PACKET 0xF5
 
 /// Disables streaming, sets the packet rate to 100 per second, and
 /// resolution to 4 pixels per mm.
-#define MOUSE_USE_DEFAULT_SETTINGS  0xF6
+#define MOUSE_USE_DEFAULT_SETTINGS 0xF6
 
 /// @brief Sets up the mouse by installing the mouse handler into IRQ12.
 void mouse_install();
@@ -41,5 +42,8 @@ void mouse_write(unsigned char data);
 /// @return The data received from mouse.
 unsigned char mouse_read();
 
-/// @brief The mouse handler.
-void mouse_isr(register_t *r);
+/// @brief The interrupt service routine of the mouse.
+/// @param f The interrupt stack frame.
+void mouse_isr(pt_regs *f);
+
+///! @endcond

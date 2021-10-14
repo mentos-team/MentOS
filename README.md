@@ -1,95 +1,93 @@
-MentOS
-======
+# MentOS
 
 [![forthebadge](https://forthebadge.com/images/badges/built-with-love.svg)](https://forthebadge.com)
 [![forthebadge](https://forthebadge.com/images/badges/made-with-c.svg)](https://forthebadge.com)
 [![forthebadge](https://forthebadge.com/images/badges/for-you.svg)](https://forthebadge.com)
 
-What is MentOS
------------------
+## 1. What is MentOS
 
-MentOS (Mentoring Operating system) is an open source educational operating
-system.
-The goal of MentOS is to provide a project environment that is realistic
-enough to show how a real Operating System work, yet simple enough that
-students can understand and modify it in significant ways.
+MentOS (Mentoring Operating System) is an open source educational operating
+system. The goal of MentOS is to provide a project environment that is realistic
+enough to show how a real Operating System work, yet simple enough that students
+can understand and modify it in significant ways.
 
-There are so many operating systems, why did we write MentOS?
-It is true, there are a lot of education operating system, BUT
-how many of them follow the guideline defined by Linux?
+There are so many operating systems, why did we write MentOS? It is true, there
+are a lot of education operating system, BUT how many of them follow the
+guideline de fined by Linux?
 
-MentOS aims to have the same Linux's data structures and algorithms. It
-has a well-documented source code, and you can compile it on your laptop
-in a few seconds!
+MentOS aims to have the same Linux's data structures and algorithms. It has a
+well-documented source code, and you can compile it on your laptop in a few
+seconds!
+
 If you are a beginner in Operating-System developing, perhaps MentOS is the
 right operating system to start with.
 
+Parts of MentOS are inherited or inspired by a similar educational operating 
+system called [DreamOs](https://github.com/dreamos82/DreamOs) written by Ivan
+Gualandri.
 
-Developers
-----------------
-Main Developers:
+## 2. Prerequisites
 
- * [Enrico Fraccaroli](https://github.com/Galfurian)
- * [Alessandro Danese](https://github.com/alessandroDanese88)
- * [Luigi Capogrosso](https://github.com/luigicapogrosso)
- * [Mirco De Marchi](https://github.com/mircodemarchi)
+MentOS is compatible with the main **unix-based** operating systems. It has been
+tested with *Ubuntu*, *WSL1*, *WSL2*, and  *MacOS*.
 
-Prerequisites
------------------
+### 2.1. Generic Prerequisites
 
-MentOS is compatible with the main Unix distribution operating systems. It has been tested with *Ubuntu* and *MacOS*, but specifically tested on *Ubuntu 18.04*.
+#### 3.1.1. Compile
 
-For compiling the main system:
+For compiling the system:
 
- * nasm
- * gcc
- * g++
- * make
- * cmake
- * git
+ - nasm
+ - gcc
+ - make
+ - cmake
+ - git
+ - ccmake (suggested)
 
-To run and try:
+Under **MacOS**, for compiling, you have additional dependencies:
 
- * qemu-system-i386
+ - i386-elf-binutils
+ - i386-elf-gcc
 
-For debugging:
+#### 3.1.2. Execute
 
- * ccmake
- * cgdb
- * xterm
+To execute the operating system, you need to install:
 
-For MacOS, you have additional dependencies:
+ - qemu-system-i386 (or qemu-system-x86)
 
- * i386-elf-binutils (from [i386-elf-toolchain](https://github.com/nativeos/homebrew-i386-elf-toolchain))
- * i386-elf-gcc (from [i386-elf-toolchain](https://github.com/nativeos/homebrew-i386-elf-toolchain))
+#### 3.1.3. Debug
 
-Prerequisites installation commands
------------------
+For debugging we suggest using:
 
-For Ubuntu:
+ - cgdb
+ - xterm
 
-```
+### 2.2. installation Prerequisites
+
+Under **Ubuntu**, you can type the following commands:
+
+```bash
 sudo apt-get update && sudo apt-get upgrade -y
 sudo apt-get install -y build-essential git cmake qemu-system-i386 
-sudo apt-get install -y cgdb xterm #<- for debug only
+sudo apt-get install -y cgdb xterm
 ```
 
-For MacOS:
+Under **MacOS** you also need to install the i386-elf cross-compiler. The
+simplest installation method is through Homebrew package manager.
+Install [Homebrew](https://brew.sh/index_it) if you don't already have it, and
+then type the following commands:
 
-You need to install additionally the i386-elf cross-compiler. The simplest installation method is through Homebrew package manager. Install [Homebrew](https://brew.sh/index_it) if you don't already have and exec the following commands:
-
-```
+```bash
 brew update && brew upgrade
-brew tap nativeos/i386-elf-toolchain
 brew install i386-elf-binutils i386-elf-gcc git cmake qemu nasm
 brew install cgdb xterm #<- for debug only
 ```
 
-Compiling MentOS
------------------
-Compile and boot MentOS with qemu in Unix systems:
+## 3. Compiling MentOS
 
-```
+Compile and boot MentOS with qemu:
+
+```bash
 cd <clone_directory>
 mkdir build
 cd build
@@ -98,26 +96,20 @@ make
 make qemu
 ```
 
-If you want to access to the shell, use one of the usernames listed in files/passwd.
+To login, use one of the usernames listed in `files/etc/passwd`.
 
-**For MacOS**, the steps are the same but instead of `cmake ..`, you have to put an additional argument in order to use the i386-elf cross-compiler:
-
-```
-cmake -DCMAKE_TOOLCHAIN_FILE=../toolchain.cmake ..
-```
-
-Change the scheduling algorithm
------------------
+## 4. Change the scheduling algorithm
 
 MentOS provides three different scheduling algorithms:
 
-* Round-Robin
-* Priority
-* Completely Fair Scheduling
+ - Round-Robin
+ - Priority
+ - Completely Fair Scheduling
 
 If you want to change the scheduling algorithm:
 
-```
+```bash
+
 cd build
 
 # Round Robin scheduling algorithm
@@ -133,7 +125,7 @@ make qemu
 
 Otherwise you can use `ccmake`:
 
-```
+```bash
 cd build
 cmake ..
 ccmake ..
@@ -151,72 +143,20 @@ SCHEDULER_TYPE                   SCHEDULER_RR
 ```
 
 Select SCHEDULER_TYPE, and type Enter to scroll the three available algorithms
-(SCHEDULER_RR, SCHEDULER_PRIORITY, SCHEDULER_CFS).
-Afterwards,
-```
-type c
-type g
+(SCHEDULER_RR, SCHEDULER_PRIORITY, SCHEDULER_CFS). Afterwards,
+
+```bash
+<press c>
+<press g>
 make
 make qemu
 ```
 
-Enable to Buddy System
------------------
+## 5. Use Debugger
 
-MentOS provides a Buddy System to manage the allocation and deallocation of
-page frames in the physical memory.
-
-If you want to enable the MentOS's Buddy System:
-
-```
-cd build
-cmake -DENABLE_BUDDY_SYSTEM=ON ..
-make
-make qemu
-```
-
-Otherwise you can use `ccmake`:
-
-```
-cd build
-cmake ..
-ccmake ..
-```
-
-Now you should see something like this:
-
-```
-BUILD_DOCUMENTATION              ON
-CMAKE_BUILD_TYPE
-CMAKE_INSTALL_PREFIX             /usr/local
-DEBUGGING_TYPE                   DEBUG_STDIO
-ENABLE_BUDDY_SYSTEM              OFF
-SCHEDULER_TYPE                   SCHEDULER_RR
-```
-
-Select ENABLE_BUDDY_SYSTEM, and type Enter.
-You should see something like this:
-```
-BUILD_DOCUMENTATION              ON
-CMAKE_BUILD_TYPE
-CMAKE_INSTALL_PREFIX             /usr/local
-DEBUGGING_TYPE                   DEBUG_STDIO
-ENABLE_BUDDY_SYSTEM              ON
-SCHEDULER_TYPE                   SCHEDULER_RR
-```
-
-Afterwards,
-```
-type c
-type g
-make
-make qemu
-```
-
-Use Debugger
------------------
 If you want to use GDB to debug MentOS:
-```
+
+```bash
 cd build
 cmake ..
 make
@@ -224,8 +164,29 @@ make qemu-gdb
 ```
 
 If you did everything correctly, you should have 3 windows with:
-```
-1) - Kernel Booting on qemu
-2) - Shell with video printing of statistics previously discussed
-3) - Debugger cgdb with code screening
-```
+
+1. Kernel Booting on qemu
+2. Shell with video printing of statistics previously discussed
+3. Debugger cgdb with code screening
+
+## Developers
+
+Main Developers:
+
+* [Enrico Fraccaroli](https://github.com/Galfurian)
+    - Mr. Wolf
+* [Alessandro Danese](https://github.com/alessandroDanese88), [Luigi Capogrosso](https://github.com/luigicapogrosso), [Mirco De Marchi](https://github.com/mircodemarchi)
+    - Protection ring
+    - libc
+* Andrea Cracco
+    - Buddy System, Heap, Paging, Slab, Caching, Zone
+    - Process Image, ELF
+    - VFS: procfs
+    - Bootloader
+* Linda Sacchetto, Marco Berti
+    - Real time scheduler
+* Daniele Nicoletti, Filippo Ziche
+    - Real time scheduler (Asynchronous EDF)
+    - Soft IRQs
+    - Timer
+    - Signals

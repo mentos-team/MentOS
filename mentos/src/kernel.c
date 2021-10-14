@@ -1,261 +1,349 @@
 ///                MentOS, The Mentoring Operating system project
 /// @file   kernel.c
 /// @brief  Kernel main function.
-/// @copyright (c) 2019 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
+#include "io/proc_modules.h"
+#include "mem/vmem_map.h"
+#include "fs/procfs.h"
+#include "devices/pci.h"
+#include "drivers/ata.h"
+#include "descriptor_tables/idt.h"
 #include "kernel.h"
-#include "zone_allocator.h"
-#include "gdt.h"
-#include "syscall.h"
+#include "mem/zone_allocator.h"
+#include "descriptor_tables/gdt.h"
+#include "system/syscall.h"
 #include "version.h"
-#include "video.h"
-
-#include "pic8259.h"
-
-#include "cmd_cpuid.h"
-#include "debug.h"
-#include "fdc.h"
-#include "initrd.h"
-#include "irqflags.h"
-#include "keyboard.h"
-#include "scheduler.h"
-#include "shell.h"
+#include "io/video.h"
+#include "hardware/pic8259.h"
+#include "misc/debug.h"
+#include "drivers/fdc.h"
+#include "fs/initrd.h"
+#include "klib/irqflags.h"
+#include "drivers/keyboard/keyboard.h"
+#include "process/scheduler.h"
+#include "hardware/timer.h"
+#include "fs/vfs.h"
+#include "devices/fpu.h"
+#include "system/printk.h"
+#include "sys/module.h"
+#include "drivers/rtc.h"
 #include "stdio.h"
-#include "timer.h"
-#include "vfs.h"
+#include "assert.h"
+#include "io/vga/vga.h"
 
-#include "kheap.h"
-
-#include "init.h"
-
-#include "pci.h"
-#include "fpu.h"
-#include "ata.h"
-
-#include "printk.h"
-
-/// Describe start and end address of grub multiboot modules
+/// Describe start address of grub multiboot modules.
 char *module_start[MAX_MODULES];
+/// Describe end address of grub multiboot modules.
 char *module_end[MAX_MODULES];
 
-/// Defined in kernel.ld, points at the multiheader grub info.
+// Everything is defined in kernel.ld.
+
+/// Points at the multiheader grub info, starting address.
 extern uint32_t _multiboot_header_start;
+/// Points at the multiheader grub info, ending address.
 extern uint32_t _multiboot_header_end;
-/// Defined in kernel.ld, points at the kernel code.
+/// Points at the kernel code, starting address.
 extern uint32_t _text_start;
+/// Points at the kernel code, ending address.
 extern uint32_t _text_end;
-/// Defined in kernel.ld, points at the read-only kernel data.
+/// Points at the read-only kernel data, starting address.
 extern uint32_t _rodata_start;
+/// Points at the read-only kernel data, ending address.
 extern uint32_t _rodata_end;
-/// Defined in kernel.ld, points at the read-write kernel data initialized.
+/// Points at the read-write kernel data initialized, starting address.
 extern uint32_t _data_start;
+/// Points at the read-write kernel data initialized, ending address.
 extern uint32_t _data_end;
-/// Defined in kernel.ld, points at the read-write kernel data uninitialized an kernel stack.
+/// Points at the read-write kernel data uninitialized an kernel stack, starting address.
 extern uint32_t _bss_start;
+/// Points at the read-write kernel data uninitialized an kernel stack, ending address.
 extern uint32_t _bss_end;
+/// Points at the top of the kernel stack.
 extern uint32_t stack_top;
+/// Points at the bottom of the kernel stack.
 extern uint32_t stack_bottom;
-/// Defined in kernel.ld, points at the end of kernel code/data.
+/// Points at the end of kernel code/data.
 extern uint32_t end;
 
+/// Initial ESP.
 uintptr_t initial_esp = 0;
+/// The boot info.
+boot_info_t boot_info;
 
-int kmain(uint32_t magic, multiboot_info_t *header, uintptr_t esp)
+/// @brief Prints [OK] at the current row and column 60.
+static inline void print_ok()
 {
-	dbg_print("\n");
-	dbg_print("--------------------------------------------------\n");
-	dbg_print("- Booting...\n");
-	dbg_print("--------------------------------------------------\n");
+    video_move_cursor(75, video_get_y());
+    video_puts("[" FG_GREEN_BRIGHT "OK" FG_WHITE "]\n");
+}
 
-	// Print kernel initial state
-	dbg_print("\n  KERNEL STATE ON BOOTING");
-	dbg_print("\nKernel multiboot header:   [ 0x%p - 0x%p ]               ",
-			  &_multiboot_header_start, &_multiboot_header_end);
-	dbg_print("\nKernel code:               [ 0x%p - 0x%p ] <- text       ",
-			  &_text_start, &_text_end);
-	dbg_print("\nKernel read-only data:     [ 0x%p - 0x%p ] <- rodata     ",
-			  &_rodata_start, &_rodata_end);
-	dbg_print("\nKernel initialized data:   [ 0x%p - 0x%p ] <- data       ",
-			  &_data_start, &_data_end);
-	dbg_print("\nKernel uninitialized data: [ 0x%p - 0x%p ] <- stack & bss",
-			  &_bss_start, &_bss_end);
-	dbg_print("\n   - Kernel stack:         [ 0x%p - 0x%p ]               ",
-			  &stack_bottom, &stack_top);
-	dbg_print("\n   - Kernel bss:           [ 0x%p - 0x%p ]               ",
-			  &stack_top, &_bss_end);
-	dbg_print("\nKernel image end:            0x%p", &end);
+/// @brief Prints [FAIL] at the current row and column 60.
+static inline void print_fail()
+{
+    video_move_cursor(75, video_get_y());
+    video_puts("[" FG_RED_BRIGHT "FAIL" FG_WHITE "]\n");
+}
 
-	// Am I booted by a Multiboot-compliant boot loader?
-	if (magic != MULTIBOOT_BOOTLOADER_MAGIC) {
-		printk("Invalid magic number: 0x%x\n", (unsigned)magic);
-		return 1;
-	}
+/// @brief Entry point of the kernel.
+/// @param boot_informations Information concerning the boot.
+/// @return The exit status of the kernel.
+int kmain(boot_info_t *boot_informations)
+{
+    pr_notice("Booting...\n");
+    // Make a copy for when paging is enabled
+    boot_info = *boot_informations;
+    // Am I booted by a Multiboot-compliant boot loader?
+    if (boot_info.magic != MULTIBOOT_BOOTLOADER_MAGIC) {
+        printf("Invalid magic number: 0x%x\n", (unsigned)boot_info.magic);
+        return 1;
+    }
+    // Set the initial esp.
+    initial_esp = boot_info.stack_base;
+    // Dump the multiboot structure.
+    dump_multiboot(boot_info.multiboot_header);
+    //==========================================================================
+    pr_notice("Initialize the video...\n");
+    vga_initialize();
+    video_init();
 
-	// Set the initial esp.
-	initial_esp = esp;
+    //==========================================================================
+    printf(OS_NAME " " OS_VERSION);
+    printf("\nSite:");
+    printf(OS_SITEURL);
+    printf("\n\n");
 
-	// Dump the multiboot structure.
-	dump_multiboot(header);
+    //==========================================================================
+    pr_notice("Initialize modules...\n");
+    printf("Initialize modules...");
+    if (!init_modules(boot_info.multiboot_header)) {
+        print_fail();
+        return 1;
+    }
+    print_ok();
+    pr_debug("End of modules: 0x%09p\n", get_address_after_modules());
 
-	//=== Initialize the video =================================================
-	video_init();
-	//--------------------------------------------------------------------------
+    //==========================================================================
+    pr_notice("Initialize physical memory manager...\n");
+    printf("Initialize physical memory manager...");
+    if (!pmmngr_init(&boot_info)) {
+        print_fail();
+        return 1;
+    }
+    print_ok();
 
-	//==== Show Operating System Version =======================================
-	video_set_color(BRIGHT_GREEN);
-	printk(OS_NAME " " OS_VERSION);
-	video_set_color(WHITE);
-	printk("\nSite:");
-	video_set_color(BRIGHT_BLUE);
-	printk(OS_SITEURL);
-	printk("\n");
-	video_set_color(WHITE);
-	printk("\n");
-	//--------------------------------------------------------------------------
+    //==========================================================================
+    pr_notice("Initialize slab allocator.\n");
+    printf("Initialize slab...");
+    kmem_cache_init();
+    print_ok();
 
-	//==== Set the starting point and end point of the module ==================
-	int i = 0;
-	multiboot_module_t *mod = (multiboot_module_t *)header->mods_addr;
-	for (; i < header->mods_count && i < MAX_MODULES; i++, mod++) {
-		module_start[i] = (char *)mod->mod_start;
-		module_end[i] = (char *)mod->mod_end;
-	}
-	//==========================================================================
+    //==========================================================================
+    // The Global Descriptor Table (GDT) is a data structure used by Intel
+    // x86-family processors starting with the 80286 in order to define the
+    // characteristics of the various memory areas used during program execution,
+    // including the base address, the size, and access privileges like
+    // executability and writability. These memory areas are called segments in
+    // Intel terminology.
+    pr_notice("Initialize Global Descriptor Table (GDT)...\n");
+    printf("Initialize GDT...");
+    init_gdt();
+    print_ok();
+    // The IDT is used to show the processor what Interrupt Service Routine
+    // (ISR) to call to handle an exception. IDT entries are also called
+    // Interrupt requests whenever a device has completed a request and needs to
+    // be serviced.
+    // ISRs are used to save the current processor state and set up the
+    // appropriate segment registers needed for kernel mode before the kernel’s
+    // C-level interrupt handler is called. To handle the right exception, the
+    // correct entry in the IDT should be pointed to the correct ISR.
+    pr_notice("Initialize Interrupt Service Routine(ISR)...\n");
+    printf("Initialize IDT...");
+    init_idt();
+    print_ok();
 
-	//==== Initialize memory ===================================================
-	printk("Initialize physical memory manager...");
-	// Memoria fisica totale allocata: 1096 MB
-	if (!pmmngr_init(1096 * M + 512 * 4 * K)) {
-		video_print_fail();
-		return 1;
-	}
-	video_print_ok();
-	//==========================================================================
+    //==========================================================================
+    pr_notice("Initialize system calls...\n");
+    printf("Initialize system calls...");
+    syscall_init();
+    print_ok();
 
-	//==== Initialize kernel heap ==============================================
-	dbg_print("Initialize kernel heap.\n");
-	printk("Initialize heap...");
-	kheap_init(KHEAP_INITIAL_SIZE);
-	video_print_ok();
-	//==========================================================================
+    //==========================================================================
+    pr_notice("Initialize IRQ...\n");
+    printf("Initialize IRQ...");
+    pic8259_init_irq();
+    print_ok();
 
-	//==== Initialize core modules =============================================
-	// The Global Descriptor Table (GDT) is a data structure used by Intel
-	// x86-family processors starting with the 80286 in order to define the
-	// characteristics of the various memory areas used during program execution,
-	// including the base address, the size, and access privileges like
-	// executability and writability. These memory areas are called segments in
-	// Intel terminology.
-	printk("Initialize GDT...");
-	init_gdt();
-	video_print_ok();
+    //==========================================================================
+    pr_notice("Relocate modules.\n");
+    printf("Relocate modules...");
+    relocate_modules();
+    print_ok();
 
-	// The IDT is used to show the processor what Interrupt Service Routine
-	// (ISR) to call to handle an exception. IDT entries are also called
-	// Interrupt requests whenever a device has completed a request and needs to
-	// be serviced.
-	// ISRs are used to save the current processor state and set up the
-	// appropriate segment registers needed for kernel mode before the kernel’s
-	// C-level interrupt handler is called. To handle the right exception, the
-	// correct entry in the IDT should be pointed to the correct ISR.
-	printk("Initialize IDT...");
-	init_idt();
-	video_print_ok();
-	//--------------------------------------------------------------------------
+    //==========================================================================
+    pr_notice("Initialize paging.\n");
+    printf("Initialize paging...");
+    paging_init(&boot_info);
+    print_ok();
 
-	// Initialize the system calls.
-	printk("Initialize system calls...");
-	syscall_init();
-	video_print_ok();
+    //==========================================================================
+    pr_notice("Initialize virtual memory mapping.\n");
+    printf("Initialize virtual memory mapping...");
+    virt_init();
+    print_ok();
 
-	// Set the IRQs.
-	printk("Initialize IRQ...");
-	pic8259_init_irq();
-	video_print_ok();
+    //==========================================================================
+    pr_notice("Install the timer.\n");
+    printf("Setting up timer...");
+    timer_install();
+    print_ok();
 
-	//dbg_print("Initialize the paging.\n");
-	// Initialize the paging.
-	//printk("Initialize the paging...");
-	//paging_init();
-	//video_print_ok();
+    //==========================================================================
+    pr_notice("Install RTC.\n");
+    printf("Setting up RTC...");
+    rtc_install();
+    print_ok();
 
-	dbg_print("Install the timer.\n");
-	// Install the timer.
-	printk(" * Setting up timer...");
-	timer_install();
-	video_print_ok();
+    //==========================================================================
+    pr_notice("Initialize the filesystem.\n");
+    printf("Initialize the filesystem...");
+    vfs_init();
+    print_ok();
 
-	//dbg_print("Alloc and fill CPUID structure.\n");
-	// Alloc and fill CPUID structure.
-	//printk(LNG_INIT_CPUID);
-	//get_cpuid(&sinfo);
-	//video_print_ok();
+    //==========================================================================
+    pr_notice("    Initialize 'initrd'...\n");
+    printf("    Initialize 'initrd'...");
+    if (initrd_init_module()) {
+        print_fail();
+        pr_emerg("Failed to register `initrd`!\n");
+        return 1;
+    }
+    print_ok();
+    if (do_mount("initrd", "/", "/dev/ram0")) {
+        pr_emerg("Failed to mount root `/`!\n");
+        return 1;
+    }
 
-	dbg_print("Initialize the filesystem.\n");
-	// Initialize the filesystem.
-	printk("Initialize the fylesystem...");
-	vfs_init();
-	video_print_ok();
-	initfs_init();
+    //==========================================================================
+    pr_notice("    Initialize 'procfs'...\n");
+    printf("    Initialize 'procfs'...");
+    if (procfs_module_init()) {
+        print_fail();
+        pr_emerg("Failed to register `procfs`!\n");
+        return 1;
+    }
+    print_ok();
+    if (do_mount("procfs", "/proc", NULL)) {
+        pr_emerg("Failed to mount procfs at `/proc`!\n");
+        return 1;
+    }
 
-	//dbg_print("Get the kernel image from the boot info.\n");
-	// Get the kernel image from the boot info
-	//build_elf_symbols_from_multiboot(header);
+    //==========================================================================
+    pr_notice("Initialize video procfs file...\n");
+    printf("Initialize video procfs file...");
+    if (procv_module_init()) {
+        print_fail();
+        pr_emerg("Failed to initialize `/proc/video`!\n");
+        return 1;
+    }
+    print_ok();
 
-	//==== Install/Uninstall devices ===========================================
-	// For debugging, show the list of PCI devices.
-	// pci_debug_scan();
-	// Scan for ata devices.
-	// ata_initialize();
+    //==========================================================================
+    pr_notice("Initialize system procfs file...\n");
+    printf("Initialize system procfs file...");
+    if (procs_module_init()) {
+        print_fail();
+        pr_emerg("Failed to initialize proc system entries!\n");
+        return 1;
+    }
+    print_ok();
 
-	dbg_print("Install the keyboard.\n");
-	printk(" * Setting up keyboard driver...");
-	keyboard_install();
-	video_print_ok();
+    //==========================================================================
+#if 0
+     // For debugging, show the list of PCI devices.
+     pci_debug_scan();
+     // Scan for ata devices.
+     ata_initialize();
+#endif
 
-	// dbg_print("Install the mouse.\n");
-	// printf(" * Setting up mouse driver...");
-	// mouse_install();     // Install the mouse.
-	// video_print_ok();
+    //==========================================================================
+    pr_notice("Setting up keyboard driver...\n");
+    printf("Setting up keyboard driver...");
+    keyboard_install();
+    print_ok();
 
-	dbg_print("Uninstall the floppy driver.\n");
-	fdc_disable_motor(); // We disable floppy driver motor
-	//--------------------------------------------------------------------------
+    //==========================================================================
+#if 0
+     pr_notice("Install the mouse.\n");
+     printf(" * Setting up mouse driver...");
+     mouse_install();     // Install the mouse.
+     print_ok();
+#endif
 
-	//==== Initialize the scheduler ============================================
-	dbg_print("Initialize the scheduler.\n");
-	printk("Initialize the scheduler...");
-	kernel_initialize_scheduler();
-	video_print_ok();
-	//--------------------------------------------------------------------------
+    //==========================================================================
+    pr_notice("Uninstall the floppy driver.\n");
+    fdc_disable_motor();
 
-	// create init process
-	task_struct *init_p = create_init_process();
+    //==========================================================================
+    pr_notice("Initialize the scheduler.\n");
+    printf("Initialize the scheduler...");
+    scheduler_initialize();
+    print_ok();
 
-	//==== Initialize the FPU =================================================
-	// Initialize the Floating Point Unit (FPU).
-	dbg_print("Initialize the Floating Point Unit (FPU).\n");
-	printk("Initialize floating point unit...");
-	if (!fpu_install()) {
-		video_print_fail();
-		return 1;
-	}
-	video_print_ok();
+    //==========================================================================
+    pr_notice("Init process management...\n");
+    printf("Init process management...");
+    if (!init_tasking()) {
+        print_fail();
+        return 1;
+    }
+    print_ok();
 
-	dbg_print("--------------------------------------------------\n");
-	dbg_print("- Booting Done\n");
-	dbg_print("- Jumping into init process, hopefully...\n");
-	dbg_print("--------------------------------------------------\n");
+    //==========================================================================
+    pr_notice("Creating init process...\n");
+    printf("Creating init process...");
+    task_struct *init_p = process_create_init("/bin/init");
+    if (!init_p) {
+        print_fail();
+        return 1;
+    }
+    print_ok();
 
-	// Jump into init process.
-	enter_user_jmp(
-		// Entry point.
-		init_p->thread.eip,
-		// Stack pointer.
-		init_p->thread.useresp);
+    //==========================================================================
+    pr_notice("Initialize floating point unit...\n");
+    printf("Initialize floating point unit...");
+    if (!fpu_install()) {
+        print_fail();
+        return 1;
+    }
+    print_ok();
 
-	dbg_print("Dear developer, we have to talk...\n");
+    //==========================================================================
+    pr_notice("Initialize signals...\n");
+    printf("Initialize signals...");
+    if (!signals_init()) {
+        print_fail();
+        return 1;
+    }
+    print_ok();
 
-	return 1;
+    // We have completed the booting procedure.
+    pr_notice("Booting done, jumping into init process.\n");
+    // Print the welcome message.
+    printf("\n                .: Welcome to MentOS :.\n\n");
+    // Switch to the page directory of init.
+    paging_switch_directory_va(init_p->mm->pgd);
+    // Jump into init process.
+    scheduler_enter_user_jmp(
+        // Entry point.
+        init_p->thread.regs.eip,
+        // Stack pointer.
+        init_p->thread.regs.useresp);
+    // Enable interrupt requests.
+    sti();
+    for (;;) {}
+    // We should not be here.
+    pr_emerg("Dear developer, we have to talk...\n");
+    return 1;
 }

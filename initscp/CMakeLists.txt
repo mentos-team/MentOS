@@ -1,6 +1,6 @@
 # ------------------------------------------------------------------------------
 # Initialize the project.
-project(initfscp C ASM)
+project(initfscp C)
 
 # ------------------------------------------------------------------------------
 # Set the project name.
@@ -18,10 +18,6 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g3")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -ggdb")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=gnu99")
-
-# ------------------------------------------------------------------------------
-# Add the includes.
-include_directories(inc)
 
 # ------------------------------------------------------------------------------
 # Add the source files.

@@ -1,455 +1,681 @@
 ///                MentOS, The Mentoring Operating system project
 /// @file initrd.c
 /// @brief Headers of functions for initrd filesystem.
-/// @copyright (c) 2019 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "stdio.h"
-#include "vfs.h"
-#include "errno.h"
-#include "debug.h"
-#include "shell.h"
-#include "kheap.h"
+#include "assert.h"
+#include "system/syscall.h"
+#include "sys/module.h"
+#include "system/panic.h"
+#include "fs/vfs.h"
+#include "sys/errno.h"
+#include "misc/debug.h"
+#include "mem/kheap.h"
 #include "fcntl.h"
-#include "libgen.h"
-#include "bitops.h"
-#include "initrd.h"
+#include "sys/bitops.h"
+#include "fs/initrd.h"
 #include "string.h"
+#include "stdio.h"
+#include "libgen.h"
+#include "fcntl.h"
 
-char *module_start[MAX_MODULES];
+/// Maximum length of name in INITRD.
+#define INITRD_NAME_MAX 255U
+/// Maximum number of files in INITRD.
+#define INITRD_MAX_FILES 128U
+/// Maximum size of files in INITRD.
+#define INITRD_MAX_FS_SIZE 1048576
 
-initrd_t *fs_specs;
-initrd_file_t *fs_headers;
-unsigned int fs_end;
+/// @brief Information concerning a file.
+typedef struct initrd_file_t {
+    /// Number used as delimiter, it must be set to 0xBF.
+    int magic;
+    /// The inode of the file.
+    unsigned int inode;
+    /// The name of the file.
+    char fileName[INITRD_NAME_MAX];
+    /// The type of the file.
+    short int file_type;
+    /// The permissions mask.
+    unsigned int mask;
+    /// The id of the owner.
+    unsigned int uid;
+    /// The id of the group.
+    unsigned int gid;
+    /// Time of last access.
+    unsigned int atime;
+    /// Time of last data modification.
+    unsigned int mtime;
+    /// Time of last status change.
+    unsigned int ctime;
+    /// Offset of the starting address.
+    unsigned int offset;
+    /// Dimension of the file.
+    unsigned int length;
+} __attribute__((aligned(16))) initrd_file_t;
 
-/// The list of file descriptors.
-initrd_fd ird_descriptors[MAX_INITRD_DESCRIPTORS];
+/// @brief The details regarding the filesystem.
+/// @brief Contains the number of files inside the initrd filesystem.
+static struct initrd_t {
+    /// Number of files.
+    unsigned int nfiles;
+    /// List of headers.
+    initrd_file_t headers[INITRD_MAX_FILES];
+} fs_specs __attribute__((aligned(16)));
 
-/// The currently opened file descriptor.
-unsigned int cur_irdfd;
+static vfs_file_t *initrd_create_file_struct(
+    ino_t ino,
+    const char *name,
+    size_t size,
+    int flags);
 
-static inline initrd_file_t *get_initrd_file(const char *path)
+/// @brief Searches for the file at the given path.
+/// @param path The path where to search the file.
+/// @return The file if found, NULL otherwise.
+static inline initrd_file_t *initrd_find_file(const char *path)
 {
-	for (uint32_t i = 0; i < MAX_FILES; ++i) {
-		// Discard the headers which has a different name.
-		if (strcmp(path, fs_headers[i].fileName) == 0) {
-			return &(fs_headers[i]);
-		}
-	}
-
-	return NULL;
+    for (unsigned int i = 0; i < INITRD_MAX_FILES; ++i)
+        if (strcmp(path, fs_specs.headers[i].fileName) == 0)
+            return &(fs_specs.headers[i]);
+    return NULL;
 }
 
-static inline size_t get_free_header(initrd_file_t **free_header)
+/// @brief Searches for the file at the given path.
+/// @param path The path where to search the file.
+/// @return The file if found, NULL otherwise.
+static inline ino_t initrd_find_inode(const char *path)
 {
-	for (size_t i = 0; i < MAX_FILES; ++i) {
-		// TODO: If the header has type 0, then I suppose it is not used.
-		if (fs_headers[i].file_type == 0) {
-			(*free_header) = &(fs_headers[i]);
-			return i;
-		}
-	}
-
-	return 0;
+    for (unsigned int i = 0; i < INITRD_MAX_FILES; ++i)
+        if (strcmp(path, fs_specs.headers[i].fileName) == 0)
+            return fs_specs.headers[i].inode;
+    return -1;
 }
 
-uint32_t initfs_init()
+static inline initrd_file_t *get_free_header()
 {
-	fs_end = 0;
-	fs_specs = (initrd_t *)module_start[0];
-	fs_headers = (initrd_file_t *)(module_start[0] + sizeof(initrd_t));
-
-	for (int i = 0; i < MAX_INITRD_DESCRIPTORS; ++i) {
-		ird_descriptors[i].file_descriptor = -1;
-		ird_descriptors[i].cur_pos = 0;
-	}
-	cur_irdfd = 0;
-	printf(" * Number of Files: %d\n", fs_specs->nfiles);
-	fs_end = fs_headers[(fs_specs->nfiles) - 1].offset +
-			 fs_headers[(fs_specs->nfiles) - 1].length;
-	printf(" * Filesystem end : %d\n", fs_end);
-	//dump_initrd_fs();
-
-	return fs_specs->nfiles;
+    for (size_t i = 0; i < INITRD_MAX_FILES; ++i)
+        if (fs_specs.headers[i].file_type == 0)
+            return &(fs_specs.headers[i]);
+    return NULL;
 }
 
-DIR *initfs_opendir(const char *path)
+static inline bool_t check_if_occupied(size_t offset)
 {
-	initrd_file_t *direntry = get_initrd_file(path);
-
-	if ((direntry == NULL) && (strcmp(path, "/") != 0)) {
-		dbg_print("Cannot find '%s'\n", path);
-
-		return NULL;
-	}
-
-	DIR *pdir = kmalloc(sizeof(DIR));
-	pdir->handle = -1;
-	pdir->cur_entry = 0;
-	strcpy(pdir->path, path);
-
-	return pdir;
+    for (size_t i = 0; i < INITRD_MAX_FILES; ++i) {
+        initrd_file_t *h = &fs_specs.headers[i];
+        if ((h->file_type != 0) && (offset >= h->offset) && (offset <= (h->offset + h->length))) {
+            return true;
+        }
+    }
+    return false;
 }
 
-int initfs_closedir(DIR *dirp)
+static inline int get_free_slot_offset()
 {
-	if (dirp != NULL) {
-		kfree(dirp);
-	}
-
-	return 0;
+    int offset = sizeof(struct initrd_t);
+    for (size_t i = 0; i < INITRD_MAX_FILES; ++i) {
+        initrd_file_t *h = &fs_specs.headers[i];
+        if ((h->file_type != 0) && (offset >= h->offset) && (offset <= (h->offset + h->length))) {
+            offset = (int)(h->offset + h->length);
+            continue;
+        }
+        return offset;
+    }
+    return -1;
 }
 
-dirent_t *initrd_readdir(DIR *dirp)
+// TODO: doxygen comment.
+static void dump_initrd_fs(void)
 {
-	if (dirp->cur_entry >= MAX_FILES) {
-		return NULL;
-	}
-
-	for (; dirp->cur_entry < MAX_FILES; ++dirp->cur_entry) {
-		initrd_file_t *entry = &fs_headers[dirp->cur_entry];
-		if (entry->fileName[0] == '\0') {
-			continue;
-		}
-		// Get the directory of the file.
-		char *filedir = dirname(entry->fileName);
-
-		// Check if directory path and file directory are the same, or if
-		// the directory is the root and the file directory is dot.
-		if (strcmp(dirp->path, filedir) == 0) {
-			dirp->entry.d_ino = dirp->cur_entry;
-			dirp->entry.d_type = entry->file_type;
-			strcpy(dirp->entry.d_name, entry->fileName);
-			++dirp->cur_entry;
-
-			return &(dirp->entry);
-		}
-	}
-
-	return NULL;
+    for (size_t i = 0; i < INITRD_MAX_FILES; ++i) {
+        initrd_file_t *file = &fs_specs.headers[i];
+        pr_debug("[%3d][%c%c%c%c%c%c%c%c%c%c] %s\n",
+                 i,
+                 dt_char_array[file->file_type],
+                 (file->mask & S_IRUSR) != 0 ? 'r' : '-',
+                 (file->mask & S_IWUSR) != 0 ? 'w' : '-',
+                 (file->mask & S_IXUSR) != 0 ? 'x' : '-',
+                 (file->mask & S_IRGRP) != 0 ? 'r' : '-',
+                 (file->mask & S_IWGRP) != 0 ? 'w' : '-',
+                 (file->mask & S_IXGRP) != 0 ? 'x' : '-',
+                 (file->mask & S_IROTH) != 0 ? 'r' : '-',
+                 (file->mask & S_IWOTH) != 0 ? 'w' : '-',
+                 (file->mask & S_IXOTH) != 0 ? 'x' : '-',
+                 file->fileName);
+    }
 }
 
-int initrd_mkdir(const char *path, mode_t mode)
+/// @brief Reads contents of the directories to a dirent buffer, updating
+///        the offset and returning the number of written bytes in the buffer,
+///        it assumes that all paths are well-formed.
+/// @param file  The directory handler.
+/// @param dirp  The buffer where the data should be written.
+/// @param doff  The offset inside the buffer where the data should be written.
+/// @param count The maximum length of the buffer.
+/// @return The number of written bytes in the buffer.
+static int initrd_getdents(vfs_file_t *file, dirent_t *dirp, off_t doff, size_t count)
 {
-	(void)mode;
-	initrd_file_t *direntry = NULL;
+    if (file->ino >= INITRD_MAX_FILES) {
+        return -1;
+    }
+    memset(dirp, 0, count);
 
-	// Check if the directory already exists.
-	direntry = get_initrd_file(path);
-	if (direntry != NULL) {
-		printf("initrd_mkdir: cannot create directory '%s': "
-			   "File exists\n\n",
-			   path);
-		return -1;
-	}
-	// Check if the directories before it exist.
-	if ((strcmp(dirname(path), ".") != 0) &&
-		(strcmp(dirname(path), "/") != 0)) {
-		dbg_print("initrd_mkdir: %s\n", dirname(path));
-		direntry = get_initrd_file(dirname(path));
-		if (direntry == NULL) {
-			printf("initrd_mkdir: cannot create directory '%s': "
-				   "No such file or directory\n\n",
-				   path);
+    initrd_file_t *tdir = &fs_specs.headers[file->ino];
+    int len             = strlen(tdir->fileName);
+    size_t written      = 0;
+    off_t current       = 0;
 
-			return -1;
-		}
-		if ((direntry->file_type != FS_DIRECTORY) &&
-			(direntry->file_type != FS_MOUNTPOINT)) {
-			printf("initrd_mkdir: cannot create directory '%s': "
-				   "Not a directory\n\n",
-				   path);
-
-			return -1;
-		}
-	}
-	// Get a free header.
-	initrd_file_t *free_header = NULL;
-	get_free_header(&free_header);
-	if (free_header == NULL) {
-		printf("initrd_mkdir: cannot create directory '%s': "
-			   "Maximum number of headers reached\n\n",
-			   path);
-
-		return -1;
-	}
-	// Create the directory.
-	free_header->magic = 0xBF;
-	strcpy(free_header->fileName, path);
-	free_header->file_type = FS_DIRECTORY;
-	free_header->uid = current_user.uid;
-	free_header->offset = ++fs_end;
-	free_header->length = 0;
-	// Increase the number of files.
-	++fs_specs->nfiles;
-
-	return 1;
+    char *parent = NULL;
+    for (off_t it = 0; (it < INITRD_MAX_FILES) && (written < count); ++it) {
+        initrd_file_t *entry = &fs_specs.headers[it];
+        if (entry->fileName[0] == '\0') {
+            continue;
+        }
+        // If the entry is the directory itself, skip.
+        if (strcmp(tdir->fileName, entry->fileName) == 0) {
+            continue;
+        }
+        // Get the parent directory.
+        parent = dirname(entry->fileName);
+        // Check if the entry is inside the directory.
+        if (strcmp(tdir->fileName, parent) != 0) {
+            continue;
+        }
+        // Skip if already provided.
+        if (current++ < doff) {
+            continue;
+        }
+        if (*(entry->fileName + len) == '/')
+            ++len;
+        // Write on current dirp.
+        dirp->d_ino  = it;
+        dirp->d_type = entry->file_type;
+        strcpy(dirp->d_name, entry->fileName + len);
+        dirp->d_off    = sizeof(dirent_t);
+        dirp->d_reclen = sizeof(dirent_t);
+        // Increment the written counter.
+        written += sizeof(dirent_t);
+        // Move to next writing position.
+        dirp += 1;
+    }
+    return written;
 }
 
-int initrd_rmdir(const char *path)
+/// @brief      Creates a new directory.
+/// @param path The path to the new directory.
+/// @param mode The file mode.
+/// @return 0   if success.
+static int initrd_mkdir(const char *path, mode_t mode)
 {
-	initrd_file_t *direntry = NULL;
-
-	// Check if the directory exists.
-	direntry = get_initrd_file(path);
-	if (direntry == NULL) {
-		//errno = ENOENT;
-		return -1;
-	}
-
-	if ((direntry->file_type != FS_DIRECTORY)) {
-		//errno = ENOTDIR;
-		return -1;
-	}
-
-	for (int i = 0; i < MAX_FILES; ++i) {
-		initrd_file_t *entry = &fs_headers[i];
-		if (entry->fileName[0] == '\0') {
-			continue;
-		}
-		// Get the directory of the file.
-		char *filedir = dirname(entry->fileName);
-		// Check if directory path and file directory are the same.
-		if (strcmp(direntry->fileName, filedir) == 0) {
-			//errno = ENOTEMPTY;
-			return -1;
-		}
-	}
-	// Remove the directory.
-	direntry->magic = 0;
-	memset(direntry->fileName, 0, MAX_FILENAME_LENGTH);
-	direntry->file_type = 0;
-	direntry->uid = 0;
-	direntry->offset = 0;
-	direntry->length = 0;
-	// Decrease the number of files.
-	--fs_specs->nfiles;
-
-	return 0;
+    if ((strcmp(path, ".") == 0) || (strcmp(path, "..") == 0)) {
+        return -EPERM;
+    }
+    initrd_file_t *direntry = initrd_find_file(path);
+    if (direntry != NULL) {
+        return -EEXIST;
+    }
+    // Check if the directories before it exist.
+    char *parent = dirname(path);
+    if ((strcmp(parent, ".") != 0) && (strcmp(parent, "/") != 0)) {
+        direntry = initrd_find_file(parent);
+        if (direntry == NULL) {
+            return -ENOENT;
+        }
+        if (direntry->file_type != DT_DIR) {
+            return -ENOTDIR;
+        }
+    }
+    // Get a free header.
+    initrd_file_t *initrd_file = get_free_header();
+    if (!initrd_file) {
+        pr_err("Cannot create initrd_file for `%s`...\n", path);
+        return -ENFILE;
+    }
+    int offset = get_free_slot_offset();
+    if (offset < 0) {
+        pr_err("There are no free slot available for `%s`...\n", path);
+        return -ENFILE;
+    }
+    // Create the file.
+    initrd_file->magic = 0xBF;
+    strcpy(initrd_file->fileName, path);
+    initrd_file->file_type = DT_DIR;
+    initrd_file->uid       = scheduler_get_current_process()->uid;
+    initrd_file->gid       = scheduler_get_current_process()->uid;
+    initrd_file->offset    = offset;
+    initrd_file->length    = 0;
+    initrd_file->atime     = sys_time(NULL);
+    initrd_file->mtime     = sys_time(NULL);
+    initrd_file->ctime     = sys_time(NULL);
+    // Increase the number of files.
+    ++fs_specs.nfiles;
+    return 0;
 }
 
-int initfs_open(const char *path, int flags, ...)
+/// @brief Removes a directory.
+/// @param path The path to the directory.
+/// @return 0 if success.
+static int initrd_rmdir(const char *path)
 {
-	// If we have reached the maximum number of descriptors, just try to find
-	// a non-used one.
-	if (cur_irdfd >= MAX_INITRD_DESCRIPTORS) {
-		// Reset the current ird file descriptor.
-		cur_irdfd = 0;
-		while ((ird_descriptors[cur_irdfd].file_descriptor != -1) &&
-			   (cur_irdfd < MAX_INITRD_DESCRIPTORS)) {
-			++cur_irdfd;
-		}
-	}
-
-	for (uint32_t it = 0; it < fs_specs->nfiles; ++it) {
-		// Discard the headers which has a different name.
-		if (strcmp(path, fs_headers[it].fileName) != 0) {
-			continue;
-		}
-
-		// However, if the name is the same, but the file type is different,
-		// stop the function and return failure value.
-		if ((fs_headers[it].file_type == FS_DIRECTORY) ||
-			(fs_headers[it].file_type == FS_MOUNTPOINT)) {
-			//errno = EISDIR;
-			return -1;
-		}
-
-		if (has_flag(flags, O_CREAT)) {
-			//errno = EEXIST;
-			return -1;
-		}
-
-		// Otherwise, if the file is correct, update
-		ird_descriptors[cur_irdfd].file_descriptor = it;
-		ird_descriptors[cur_irdfd].cur_pos = 0;
-		if (has_flag(flags, O_APPEND)) {
-			ird_descriptors[cur_irdfd].cur_pos = fs_headers[it].length;
-		}
-
-		return cur_irdfd++;
-	}
-	if (has_flag(flags, O_CREAT)) {
-		// Check if the directories before it exist.
-		if ((strcmp(dirname(path), ".") != 0) &&
-			(strcmp(dirname(path), "/") != 0)) {
-			initrd_file_t *direntry = get_initrd_file(dirname(path));
-			if (direntry == NULL) {
-				//errno = ENOENT;
-				return -1;
-			}
-		}
-		// Get a free header.
-		initrd_file_t *free_header = NULL;
-		size_t fd = get_free_header(&free_header);
-		if (free_header == NULL) {
-			//errno = ENFILE;
-			return -1;
-		}
-		// Create the file.
-		free_header->magic = 0xBF;
-		strcpy(free_header->fileName, path);
-		free_header->file_type = FS_FILE;
-		free_header->uid = current_user.uid;
-		free_header->offset = ++fs_end;
-		free_header->length = 0;
-		// Set the descriptor.
-		ird_descriptors[cur_irdfd].file_descriptor = fd;
-		ird_descriptors[cur_irdfd].cur_pos = 0;
-		// Increase the number of files.
-		++fs_specs->nfiles;
-
-		return cur_irdfd++;
-	}
-
-	//errno = ENOENT;
-	return -1;
+    if ((strcmp(path, ".") == 0) || (strcmp(path, "..") == 0)) {
+        pr_err("initrd_rmdir(%s): Cannot remove `.` or `..`.\n", path);
+        return -EPERM;
+    }
+    // Check if the directory exists.
+    initrd_file_t *direntry = initrd_find_file(path);
+    if (direntry == NULL) {
+        pr_err("initrd_rmdir(%s): Cannot find the directory.\n", path);
+        return -ENOENT;
+    }
+    // Check the type.
+    if (direntry->file_type != DT_DIR) {
+        pr_err("initrd_rmdir(%s): The entry is not a directory.\n", path);
+        return -ENOTDIR;
+    }
+    for (int i = 0; i < INITRD_MAX_FILES; ++i) {
+        initrd_file_t *entry = &fs_specs.headers[i];
+        if (entry->fileName[0] == '\0') {
+            continue;
+        }
+        // Get the directory of the file.
+        char *filedir = dirname(entry->fileName);
+        // Check if directory path and file directory are the same.
+        if (strcmp(direntry->fileName, filedir) == 0) {
+            pr_err("initrd_rmdir(%s): The directory is not empty.\n", path);
+            return -ENOTEMPTY;
+        }
+    }
+    // Remove the directory.
+    direntry->magic = 0;
+    memset(direntry->fileName, 0, NAME_MAX);
+    direntry->file_type = 0;
+    direntry->uid       = 0;
+    direntry->offset    = 0;
+    direntry->length    = 0;
+    // Decrease the number of files.
+    --fs_specs.nfiles;
+    return 0;
 }
 
-int initfs_remove(const char *path)
+/// @brief Open the file at the given path and returns its file descriptor.
+/// @param path  The path to the file.
+/// @param flags The flags used to determine the behavior of the function.
+/// @param mode  The mode with which we open the file.
+/// @return The file descriptor of the opened file, otherwise returns -1.
+static vfs_file_t *initrd_open(const char *path, int flags, mode_t mode)
 {
-	initrd_file_t *file = get_initrd_file(path);
-
-	if (file == NULL) {
-		return -1;
-	}
-
-	if (file->file_type != FS_FILE) {
-		return -1;
-	}
-
-	// Remove the directory.
-	file->magic = 0;
-	memset(file->fileName, 0, MAX_FILENAME_LENGTH);
-	file->file_type = 0;
-	file->uid = 0;
-	file->offset = 0;
-	file->length = 0;
-	// Decrease the number of files.
-	--fs_specs->nfiles;
-
-	return 0;
+    initrd_file_t *initrd_file = initrd_find_file(path);
+    if (initrd_file != NULL) {
+        // Check if it is a directory.
+        if (flags == (O_RDONLY | O_DIRECTORY)) {
+            if (initrd_file->file_type != DT_DIR) {
+                pr_err("Is not a directory `%s`...\n", path);
+                errno = ENOTDIR;
+                return NULL;
+            }
+            // Create the file structure.
+            vfs_file_t *vfs_file = initrd_create_file_struct(
+                initrd_file->inode,
+                initrd_file->fileName,
+                initrd_file->length,
+                DT_DIR);
+            if (!vfs_file) {
+                pr_err("Cannot create vfs file for opening directory `%s`...\n", path);
+                errno = ENOMEM;
+                return NULL;
+            }
+            // Update file access.
+            initrd_file->atime = sys_time(NULL);
+            return vfs_file;
+        } else if (initrd_file->file_type == DT_DIR) {
+            pr_err("Is a directory `%s`...\n", path);
+            errno = EISDIR;
+            return NULL;
+        }
+        // Check if the open has to create.
+        if (flags & O_CREAT) {
+            pr_err("Cannot create, it exists `%s`...\n", path);
+            errno = EEXIST;
+            return NULL;
+        }
+        // Create the file structure.
+        vfs_file_t *vfs_file = initrd_create_file_struct(
+            initrd_file->inode,
+            initrd_file->fileName,
+            initrd_file->length,
+            DT_REG);
+        if (!vfs_file) {
+            pr_err("Cannot create vfs file for opening file `%s`...\n", path);
+            errno = ENOMEM;
+            return NULL;
+        }
+        // Update file access.
+        initrd_file->atime = sys_time(NULL);
+        return vfs_file;
+    }
+    if (flags & O_CREAT) {
+        // Check if the parent directory exists.
+        char *dir = dirname(path);
+        if ((strcmp(dir, ".") != 0) && (strcmp(dir, "/") != 0)) {
+            if (initrd_find_file(dir) == NULL) {
+                errno = ENOENT;
+                return NULL;
+            }
+        }
+        // Get a free header.
+        initrd_file = get_free_header();
+        if (!initrd_file) {
+            pr_err("Cannot create initrd_file for `%s`...\n", path);
+            errno = ENFILE;
+            return NULL;
+        }
+        int offset = get_free_slot_offset();
+        if (offset < 0) {
+            pr_err("There are no free slot available for `%s`...\n", path);
+            errno = ENFILE;
+            return NULL;
+        }
+        // Create the file.
+        initrd_file->magic = 0xBF;
+        strcpy(initrd_file->fileName, path);
+        initrd_file->file_type = DT_REG;
+        initrd_file->mask      = S_IRWXU;
+        initrd_file->uid       = scheduler_get_current_process()->uid;
+        initrd_file->gid       = scheduler_get_current_process()->uid;
+        initrd_file->offset    = offset;
+        initrd_file->length    = 0;
+        initrd_file->atime     = sys_time(NULL);
+        initrd_file->mtime     = sys_time(NULL);
+        initrd_file->ctime     = sys_time(NULL);
+        // Increase the number of files.
+        ++fs_specs.nfiles;
+        // Create the file structure.
+        vfs_file_t *vfs_file = initrd_create_file_struct(
+            initrd_file->inode,
+            initrd_file->fileName,
+            initrd_file->length,
+            DT_REG);
+        if (!vfs_file) {
+            pr_err("Cannot create vfs file for opening file `%s`...\n", path);
+            errno = ENOMEM;
+            return NULL;
+        }
+        return vfs_file;
+    }
+    errno = ENOENT;
+    return NULL;
 }
 
-ssize_t initfs_read(int fildes, char *buf, size_t nbyte)
+/// @brief      Deletes the file at the given path.
+/// @param path The path to the file.
+/// @return     On success, zero is returned. On error, -1 is returned.
+static int initrd_unlink(const char *path)
 {
-	// If the number of byte to read is zero, skip.
-	if (nbyte == 0) {
-		return 0;
-	}
-
-	// Get the file descriptor of the file.
-	int lfd = ird_descriptors[fildes].file_descriptor;
-
-	// Get the current position.
-	int read_pos = ird_descriptors[fildes].cur_pos;
-
-	// Get the legnth of the file.
-	int file_size = fs_headers[lfd].length;
-
-	// Get the begin of the file.
-	char *file_start = (module_start[0] + fs_headers[lfd].offset);
-
-	// Declare an iterator.
-	size_t it = 0;
-
-	while ((it < nbyte) && (read_pos < file_size)) {
-		*buf++ = file_start[read_pos];
-		++read_pos;
-		++it;
-	}
-
-	ird_descriptors[fildes].cur_pos = read_pos;
-	if (read_pos == file_size) {
-		return EOF;
-	}
-
-	return nbyte;
+    if ((strcmp(path, ".") == 0) || (strcmp(path, "..") == 0)) {
+        return -EPERM;
+    }
+    // Check if the directory exists.
+    initrd_file_t *file = initrd_find_file(path);
+    if (file == NULL) {
+        pr_err("initrd_unlink(%s): Cannot find the file.\n", path);
+        return -ENOENT;
+    }
+    if (file->file_type != DT_REG) {
+        if (file->file_type == DT_DIR) {
+            pr_err("initrd_unlink(%s): The file is a directory.\n", path);
+            return -EISDIR;
+        }
+        pr_err("initrd_unlink(%s): The file is not a regular file.\n", path);
+        return -EACCES;
+    }
+    // Remove the directory.
+    file->magic = 0;
+    memset(file->fileName, 0, NAME_MAX);
+    file->file_type = 0;
+    file->uid       = 0;
+    file->offset    = 0;
+    file->length    = 0;
+    // Decrease the number of files.
+    --fs_specs.nfiles;
+    return 0;
 }
 
-int initrd_stat(const char *path, stat_t *stat)
+/// @brief Reads from the file identified by the file descriptor.
+/// @param file   The file.
+/// @param buf    Buffer where the read content must be placed.
+/// @param offset Offset from which we start reading from the file.
+/// @param nbyte  The number of bytes to read.
+/// @return The number of red bytes.
+static ssize_t initrd_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyte)
 {
-	int i;
-	i = 0;
-
-	while (i < MAX_FILES) {
-		if (!strcmp(path, fs_headers[i].fileName)) {
-			stat->st_uid = fs_headers[i].uid;
-			stat->st_size = fs_headers[i].length;
-
-			break;
-		}
-		i++;
-	}
-	//dbg_print("Initrd stat function\n");
-	//buf->st_uid = 33;
-	if (i == MAX_FILES) {
-		return -1;
-	} else {
-		return 0;
-	}
+    // If the number of byte to read is zero, skip.
+    if (nbyte == 0) {
+        return 0;
+    }
+    // Get the file descriptor of the file.
+    int lfd = file->ino;
+    // Get the current position.
+    int read_pos = offset;
+    // Get the length of the file.
+    int file_size = (int)fs_specs.headers[lfd].length;
+    // If we have reached the end of the file, return.
+    if (read_pos == file_size) {
+        return EOF;
+    }
+    // Get the begin of the file.
+    char *file_start = (char *)(modules[0].mod_start + fs_specs.headers[lfd].offset);
+    // Declare an iterator, used afterward to return the number of bytes read.
+    ssize_t it = 0;
+    while ((it < nbyte) && (read_pos < file_size)) {
+        *buf++ = file_start[read_pos];
+        ++read_pos;
+        ++it;
+    }
+    return it;
 }
 
-ssize_t initrd_write(int fildes, const void *buf, size_t nbyte)
+static int _initrd_stat(const initrd_file_t *file, stat_t *stat)
 {
-	// If the number of byte to write is zero, skip.
-	if (nbyte == 0) {
-		return 0;
-	}
-
-	// Make a copy of the buffer.
-	char *tmp = (char *)kmalloc(strlen(buf) * sizeof(char));
-	strcpy(tmp, buf);
-
-	// Get the file descriptor of the file.
-	int lfd = ird_descriptors[fildes].file_descriptor;
-
-	printf("Please wait, im writing the world...\n");
-	printf("And the world begun with those words: %s and his mark his: %d\n",
-		   tmp, lfd);
-	// Get the begin of the file.
-	char *file_start = (module_start[0] + fs_headers[lfd].offset +
-						ird_descriptors[fildes].cur_pos);
-	// Declare an iterator.
-	size_t it = 0;
-	while (it <= nbyte) {
-		file_start[it] = tmp[it];
-		++it;
-	}
-
-	// Increment the length of the file.
-	fs_headers[lfd].length = fs_headers[lfd].length + it;
-	// Free the memory of the temporary file.
-	kfree(tmp);
-	// Return the number of written bytes.
-
-	return it;
+    stat->st_dev   = 0;
+    stat->st_ino   = file - fs_specs.headers;
+    stat->st_mode  = file->mask;
+    stat->st_uid   = file->uid;
+    stat->st_gid   = file->gid;
+    stat->st_atime = file->atime;
+    stat->st_mtime = file->mtime;
+    stat->st_ctime = file->ctime;
+    stat->st_size  = file->length;
+    return 0;
 }
 
-int initrd_close(int fildes)
+/// @brief Retrieves information concerning the file at the given position.
+/// @param file The file struct.
+/// @param stat The structure where the information are stored.
+/// @return 0 if success.
+static int initrd_fstat(vfs_file_t *file, stat_t *stat)
 {
-	ird_descriptors[fildes].file_descriptor = -1;
-	ird_descriptors[fildes].cur_pos = 0;
-
-	return 0;
+    return _initrd_stat(&fs_specs.headers[file->ino], stat);
 }
 
-size_t initrd_nfiles()
+/// @brief Retrieves information concerning the file at the given position.
+/// @param path The path where the file resides.
+/// @param stat The structure where the information are stored.
+/// @return 0 if success.
+static int initrd_stat(const char *path, stat_t *stat)
 {
-	size_t nfiles = 0;
+    int i;
+    i = 0;
 
-	for (size_t i = 0; i < MAX_FILES; ++i) {
-		if (fs_headers[i].file_type != 0) {
-			++nfiles;
-		}
-	}
+    while (i < INITRD_MAX_FILES) {
+        if (!strcmp(path, fs_specs.headers[i].fileName)) {
+            stat->st_uid  = fs_specs.headers[i].uid;
+            stat->st_size = fs_specs.headers[i].length;
+            break;
+        }
+        i++;
+    }
 
-	return nfiles;
+    if (i == INITRD_MAX_FILES) {
+        return -ENOENT;
+    } else {
+        return _initrd_stat(&fs_specs.headers[i], stat);
+    }
 }
 
-void dump_initrd_fs()
+/// @brief Writes the given content inside the file.
+/// @param file   The file descriptor of the file.
+/// @param buf    The content to write.
+/// @param offset Offset from which we start writing in the file.
+/// @param nbyte  The number of bytes to write.
+/// @return The number of written bytes.
+static ssize_t initrd_write(vfs_file_t *file, const void *buf, off_t offset, size_t nbyte)
 {
-	for (uint32_t i = 0; i < MAX_FILES; ++i) {
-		dbg_print("[%2d] %s\n", i, fs_headers[i].fileName);
-	}
+    // Get the header.
+    initrd_file_t *header = &fs_specs.headers[file->ino];
+    // If the number of byte to write is zero, skip.
+    if (nbyte == 0) {
+        return 0;
+    }
+    if (check_if_occupied(offset + nbyte)) {
+        pr_emerg("We need to move the file.\n");
+        TODO("Implement file movement.");
+    }
+    // Prepare pointers to the contents.
+    char *dest = (char *)(&fs_specs + header->offset + offset), *src = (char *)buf;
+    // Copy the content.
+    int num = 0;
+    while ((num < nbyte) && (*dest++ = *src++)) {
+        ++num;
+    }
+    dest[num]     = '\0';
+    dest[num + 1] = EOF;
+    // Increment the length of the file.
+    header->length += num;
+    return num;
+}
+
+static off_t initrd_lseek(vfs_file_t *file, off_t offset, int whence)
+{
+    // Get the header.
+    initrd_file_t *header = &fs_specs.headers[file->ino];
+
+    switch (whence) {
+    case SEEK_END:
+        offset += header->length;
+        break;
+    case SEEK_CUR:
+        if (offset == 0) {
+            return file->f_pos;
+        }
+        offset += file->f_pos;
+        break;
+    case SEEK_SET:
+        break;
+    default:
+        return -EINVAL;
+    }
+    if (offset >= 0) {
+        if (offset != file->f_pos) {
+            file->f_pos = offset;
+        }
+        return offset;
+    }
+    return -EINVAL;
+}
+
+/// @brief Closes the given file.
+/// @param file The file structure.
+static int initrd_close(vfs_file_t *file)
+{
+    assert(file && "Received null file.");
+    // Remove the file from the list of the corresponding entry inside the `header_files`.
+    list_head_del(&file->siblings);
+    // Free the memory of the file.
+    kmem_cache_free(file);
+    return 0;
+}
+
+/// Filesystem general operations.
+static vfs_sys_operations_t initrd_sys_operations = {
+    .mkdir_f = initrd_mkdir,
+    .rmdir_f = initrd_rmdir,
+    .stat_f  = initrd_stat
+};
+
+/// Filesystem file operations.
+static vfs_file_operations_t initrd_fs_operations = {
+    .open_f     = initrd_open,
+    .unlink_f   = initrd_unlink,
+    .close_f    = initrd_close,
+    .read_f     = initrd_read,
+    .write_f    = initrd_write,
+    .lseek_f    = initrd_lseek,
+    .stat_f     = initrd_fstat,
+    .ioctl_f    = NULL,
+    .getdents_f = initrd_getdents
+};
+
+static vfs_file_t *initrd_create_file_struct(
+    ino_t ino,
+    const char *name,
+    size_t size,
+    int flags)
+{
+    vfs_file_t *file = kmem_cache_alloc(vfs_file_cache, GFP_KERNEL);
+    if (!file) {
+        pr_err("Failed to allocation memory for the file.");
+        return NULL;
+    }
+    memset(file, 0, sizeof(vfs_file_t));
+
+    strcpy(file->name, name);
+    file->device         = (void *)file;
+    file->ino            = ino;
+    file->uid            = 0;
+    file->gid            = 0;
+    file->mask           = S_IRUSR | S_IRGRP | S_IROTH;
+    file->length         = size;
+    file->flags          = flags;
+    file->sys_operations = &initrd_sys_operations;
+    file->fs_operations  = &initrd_fs_operations;
+
+    return file;
+}
+
+static vfs_file_t *initrd_mount_callback(const char *path, const char *device)
+{
+    dump_initrd_fs();
+    // Create the associated file.
+    vfs_file_t *vfs_file = initrd_create_file_struct(0, path, 0, DT_DIR);
+    assert(vfs_file && "Failed to create vfs_file.");
+    // Initialize the proc_root.
+    return vfs_file;
+}
+
+/// Filesystem information.
+static file_system_type initrd_file_system_type = {
+    .name     = "initrd",
+    .fs_flags = 0,
+    .mount    = initrd_mount_callback
+};
+
+int initrd_init_module(void)
+{
+    for (int i = 0; i < MAX_MODULES; ++i) {
+        if (strcmp((char *)modules[i].cmdline, "initrd") == 0) {
+            assert(sizeof(struct initrd_t) <= (modules[i].mod_end - modules[i].mod_start));
+            // Copy the FS specification.
+            memcpy(&fs_specs, (void *)modules[i].mod_start, sizeof(struct initrd_t));
+            // Register the filesystem.
+            vfs_register_filesystem(&initrd_file_system_type);
+        }
+    }
+    return 0;
+}
+
+int initrd_cleanup_module(void)
+{
+    vfs_unregister_filesystem(&initrd_file_system_type);
+    return 0;
 }

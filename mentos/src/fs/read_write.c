@@ -1,64 +1,97 @@
 ///                MentOS, The Mentoring Operating system project
 /// @file read_write.c
 /// @brief Read and write functions.
-/// @copyright (c) 2019 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include <misc/debug.h>
-#include "read_write.h"
-#include "vfs.h"
-#include "stdio.h"
+#include "process/scheduler.h"
+#include "fs/vfs_types.h"
+#include "system/panic.h"
+#include "sys/errno.h"
 #include "fcntl.h"
-#include "unistd.h"
-#include "keyboard.h"
-#include "video.h"
+#include "stdio.h"
+#include "fs/vfs.h"
 
 ssize_t sys_read(int fd, void *buf, size_t nbytes)
 {
-	if (fd == STDIN_FILENO) {
-		*((char *)buf) = keyboard_getc();
-		return 1;
-	}
+    // Get the current task.
+    task_struct *task = scheduler_get_current_process();
 
-	int mp_id = fd_list[fd].mountpoint_id;
-	int fs_fd = fd_list[fd].fs_spec_id;
+    // Check the current FD.
+    if (fd < 0 || fd >= task->max_fd) {
+        return -EMFILE;
+    }
 
-	if (mountpoint_list[mp_id].operations.read_f != NULL) {
-		return mountpoint_list[mp_id].operations.read_f(fs_fd, buf, nbytes);
-	} else {
-		printf("No READ Found for that file system\n");
-	}
+    // Get the file descriptor.
+    vfs_file_descriptor_t *vfd = &task->fd_list[fd];
 
-	return 0;
+    // Check the permissions.
+#if 0
+    if (!(vfd->flags_mask & O_RDONLY)) {
+        return -EROFS;
+    }
+#endif
+
+    // Check the file.
+    if (vfd->file_struct == NULL) {
+        return -ENOSYS;
+    }
+
+    // Perform the read.
+    int read = vfs_read(vfd->file_struct, buf, vfd->file_struct->f_pos, nbytes);
+
+    // Update the offset.
+    if (read > 0) {
+        vfd->file_struct->f_pos += read;
+    }
+    return read;
 }
 
 ssize_t sys_write(int fd, void *buf, size_t nbytes)
 {
-	if ((fd == STDOUT_FILENO) || (fd == STDERR_FILENO)) {
-		for (size_t i = 0; (i < nbytes); ++i)
-			video_putc(((char *)buf)[i]);
-		return nbytes;
-	}
+    // Get the current task.
+    task_struct *task = scheduler_get_current_process();
 
-	if (fd > MAX_OPEN_FD) {
-		//errno = EBADF;
-		return -1;
-	}
+    // Check the current FD.
+    if (fd < 0 || fd >= task->max_fd) {
+        return -EMFILE;
+    }
 
-	if (!(fd_list[fd].flags_mask & O_RDWR)) {
-		//errno = EROFS;
-		return -1;
-	}
+    // Get the file descriptor.
+    vfs_file_descriptor_t *vfd = &task->fd_list[fd];
 
-	mountpoint_t *mp = &mountpoint_list[fd_list[fd].mountpoint_id];
-	if (mp == NULL) {
-		//errno = ENODEV;
-		return -1;
-	}
-	if (mp->operations.write_f == NULL) {
-		//errno = ENOSYS;
-		return -1;
-	}
+    // Check the permissions.
+    if (!(vfd->flags_mask & O_WRONLY)) {
+        return -EROFS;
+    }
 
-	return mp->operations.write_f(fd_list[fd].fs_spec_id, buf, nbytes);
+    // Check the file.
+    if (vfd->file_struct == NULL) {
+        return -ENOSYS;
+    }
+
+    // Perform the write.
+    int written = vfs_write(vfd->file_struct, buf, vfd->file_struct->f_pos, nbytes);
+
+    // Update the offset.
+    if (written > 0) {
+        vfd->file_struct->f_pos += written;
+    }
+    return written;
+}
+
+off_t sys_lseek(int fd, off_t offset, int whence)
+{
+    task_struct *task = scheduler_get_current_process();
+    if (fd < 0 || fd >= task->max_fd) {
+        return -1;
+    }
+    // Get the file descriptor.
+    vfs_file_descriptor_t *vfd = &task->fd_list[fd];
+    // Check the file.
+    if (vfd->file_struct == NULL) {
+        return -ENOSYS;
+    }
+    // Perform the lseek.
+    return vfs_lseek(vfd->file_struct, offset, whence);
 }

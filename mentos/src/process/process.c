@@ -1,308 +1,498 @@
 ///                MentOS, The Mentoring Operating system project
 /// @file process.c
 /// @brief Process data structures and functions.
-/// @copyright (c) 2019 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "process.h"
-#include "prio.h"
-#include "init.h"
-#include "panic.h"
-#include "kheap.h"
-#include "debug.h"
-#include "unistd.h"
+
+#include "sys/kernel_levels.h"
+
+//#ifndef __DEBUG_LEVEL__
+//#define __DEBUG_LEVEL__ LOGLEVEL_DEBUG
+//#endif
+
+#include "process/process.h"
+#include "process/scheduler.h"
+#include "assert.h"
+#include "libgen.h"
 #include "string.h"
-#include "list_head.h"
-#include "stdatomic.h"
-#include "scheduler.h"
+#include "hardware/timer.h"
+#include "sys/errno.h"
+#include "fcntl.h"
+#include "system/panic.h"
+#include "misc/debug.h"
+#include "process/wait.h"
+#include "process/prio.h"
+#include "fs/vfs.h"
+#include "elf/elf.h"
 
-#define PUSH_ON_STACK(stack, type, item)                                       \
-	*((type *)(stack -= sizeof(type))) = item
-
+/// Cache for creating the task structs.
+static kmem_cache_t *task_struct_cache;
 /// @brief The task_struct of the init process.
 static task_struct *init_proc;
 
-void exit_handler()
+static inline int __push_args_on_stack(uintptr_t *esp, char *args[], char ***argsptr)
 {
-	exit(1);
-	kernel_panic("I should not be here.\n");
+    int argc = 0;
+    char *args_ptr[256];
+    // Count the number of arguments.
+    while (args[argc] != NULL) {
+        ++argc;
+    }
+
+    // Prepare args with space for the terminating NULL.
+    for (int i = argc - 1; i >= 0; --i) {
+        for (int j = strlen(args[i]); j >= 0; --j) {
+            PUSH_ARG((*esp), char, args[i][j]);
+        }
+        args_ptr[i] = (char *)(*esp);
+    }
+    // Push terminating NULL.
+    PUSH_ARG((*esp), char *, (char *)NULL);
+    // Push array of pointers to the arguments.
+    for (int i = argc - 1; i >= 0; --i) {
+        PUSH_ARG((*esp), char *, args_ptr[i]);
+    }
+    (*argsptr) = (char **)(*esp);
+
+    return argc;
 }
 
-task_struct *create_init_process()
+static int __reset_process(task_struct *task)
 {
-	dbg_print("Building init process...\n");
-	// Create a new task_struct.
-	init_proc = kmalloc(sizeof(task_struct));
-	// TODO: process is IN USER SPACE! it should be in KERNEL SPACE!
-	memset(init_proc, 0, sizeof(task_struct));
-	// Set the id of the process.
-	init_proc->pid = get_new_pid();
-	// Set the name of the process.
-	strcpy(init_proc->name, "init");
-	// Set the statistics of the process.
-	init_proc->se.prio = DEFAULT_PRIO;
-	init_proc->se.start_runtime = 0;
-	init_proc->se.exec_start = 0;
-	init_proc->se.sum_exec_runtime = 0;
-	init_proc->se.vruntime = 0;
-	// Initialize the list_head.
-	list_head_init(&init_proc->run_list);
-	// Initialize the children list_head.
-	list_head_init(&init_proc->children);
-	// Initialize the sibling list_head.
-	list_head_init(&init_proc->sibling);
-	// Create a new stack segment.
-	init_proc->mm = create_process_image(DEFAULT_STACK_SIZE);
-	char *stack = (char *)init_proc->mm->start_stack;
-	// Clean stack space.
-	memset(stack, 0, DEFAULT_STACK_SIZE);
-	// Set the base address of the stack.
-	char *ebp = (char *)(stack + DEFAULT_STACK_SIZE);
-	// Create a pointer to keep track of the top of the stack.
-	char *esp = ebp;
-	// Set exit_handler as terminating function for init.
-	PUSH_ON_STACK(esp, uintptr_t, (uintptr_t)&exit_handler);
-	// Set the top address of the stack.
-	init_proc->thread.useresp = (uintptr_t)esp;
-	// Set the base address of the stack.
-	init_proc->thread.ebp = (uintptr_t)ebp;
-	// Set the program counter.
-	init_proc->thread.eip = (uintptr_t)&main_init;
-	// Enable the interrupts.
-	init_proc->thread.eflags = init_proc->thread.eflags | EFLAG_IF;
-	// Clear the current working directory.
-	memset(init_proc->cwd, '\0', MAX_PATH_LENGTH);
-	// Set the state of the process as running.
-	init_proc->state = TASK_RUNNING;
-	// Active the current process.
-	enqueue_task(init_proc);
+    pr_debug("__reset_process(%p `%s`)\n", task, task->name);
+    // Create a new stack segment.
+    task->mm = create_blank_process_image(DEFAULT_STACK_SIZE);
+    if (task->mm == NULL) {
+        pr_err("Failed to initialize process mm structure.\n");
+        return 0;
+    }
 
-	dbg_print("--------------------------------------------------\n");
-	dbg_print("- %s process (PID: %d, eflags: %d)\n", init_proc->name,
-			  init_proc->pid, init_proc->thread.eflags);
-	dbg_print("\tStack: [0x%p - 0x%p]\n", init_proc->mm->start_stack,
-			  init_proc->mm->start_stack + DEFAULT_STACK_SIZE);
-	dbg_print("\tebp: 0x%p\n", init_proc->thread.ebp);
-	dbg_print("\tesp: 0x%p\n", init_proc->thread.useresp);
-	dbg_print("\teip: 0x%p\n", init_proc->thread.eip);
-	dbg_print("--------------------------------------------------\n");
+    // Save the current page directory.
+    page_directory_t *crtdir = paging_get_current_directory();
+    // FIXME: Now to clear the stack a pgdir switch is made, it should be a kernel mmapping.
+    paging_switch_directory_va(task->mm->pgd);
 
-	return init_proc;
+    // Clean stack space.
+    memset((char *)task->mm->start_stack, 0, DEFAULT_STACK_SIZE);
+    // Set the base address of the stack.
+    task->thread.regs.ebp = (uintptr_t)(task->mm->start_stack + DEFAULT_STACK_SIZE);
+    // Set the top address of the stack.
+    task->thread.regs.useresp = task->thread.regs.ebp;
+    // Enable the interrupts.
+    task->thread.regs.eflags = task->thread.regs.eflags | EFLAG_IF;
+
+    // Restore previous pgdir
+    paging_switch_directory(crtdir);
+
+    return 1;
 }
 
-char *get_current_dir_name()
+static int __load_executable(const char *path, task_struct *task, uint32_t *entry)
 {
-	task_struct *current_process = kernel_get_current_process();
-	if (current_process != NULL) {
-		return strdup(current_process->cwd);
-	}
-
-	return kstrdup("/");
+    pr_debug("__load_executable(`%s`, %p `%s`, %p)\n", path, task, task->name, entry);
+    vfs_file_t *file = vfs_open(path, O_RDONLY, 0);
+    if (file == NULL) {
+        pr_err("Cannot find executable!\n");
+        return 0;
+    }
+    // Check that the file is actually an executable before destroying the `mm`.
+    if (!elf_check_file_type(file, ET_EXEC)) {
+        pr_err("This is not a valid ELF executable `%s`!\n", path);
+        return 0;
+    }
+    // FIXME: When threads will be implemented
+    // they should share the mm, so the destroy_process_image must be called
+    // only when all the threads are terminated. This can be accomplished by using
+    // an internal counter on the mm.
+    if (task->mm)
+        destroy_process_image(task->mm);
+    // Return code variable.
+    int ret = 0;
+    // Recreate the memory of the process.
+    if (__reset_process(task)) {
+        // Load the elf file, check if 0 is returned and print the error.
+        if (!(ret = elf_load_file(task, file, entry))) {
+            pr_err("Failed to load ELF file `%s`!\n", path);
+        }
+    }
+    // Close the file.
+    vfs_close(file);
+    return ret;
 }
 
-void sys_getcwd(char *path, size_t size)
+static inline int __count_args_bytes(char **args)
 {
-	task_struct *current_process = kernel_get_current_process();
-	if ((current_process != NULL) && (path != NULL)) {
-		strncpy(path, current_process->cwd, size);
-	}
+    int argc  = 0;
+    int bytes = 0;
+
+    // Count the number of arguments.
+    while (args[argc] != NULL) {
+        ++argc;
+    }
+
+    for (int i = 0; i < argc; i++) {
+        bytes += strlen(args[i]) + 1;
+    }
+
+    return bytes + (argc + 1 /* The NULL terminator */) * sizeof(char *);
+}
+
+static inline task_struct *__alloc_task(task_struct *source, task_struct *parent, const char *name)
+{
+    // Create a new task_struct.
+    task_struct *proc = kmem_cache_alloc(task_struct_cache, GFP_KERNEL);
+    // Clear the memory.
+    memset(proc, 0, sizeof(task_struct));
+    // Set the id of the process.
+    proc->pid = scheduler_getpid();
+    // Set the state of the process as running.
+    proc->state = TASK_RUNNING;
+    // Set the current opened file descriptors and the maximum number of file descriptors.
+    if (source)
+        vfs_dup_task(proc, source);
+    else
+        vfs_init_task(proc);
+    // Set the pointer to process's parent.
+    proc->parent = parent;
+    // Initialize the list_head.
+    list_head_init(&proc->run_list);
+    // Initialize the children list_head.
+    list_head_init(&proc->children);
+    // Initialize the sibling list_head.
+    list_head_init(&proc->sibling);
+    // If we have a parent, set the sibling child relation.
+    if (parent) {
+        // Set the new_process as child of current.
+        list_head_add_tail(&proc->sibling, &parent->children);
+    }
+    if (source)
+        memcpy(&proc->thread, &source->thread, sizeof(thread_struct_t));
+    // Set the statistics of the process.
+    proc->uid                   = 0;
+    proc->sid                   = 0;
+    proc->gid                   = 0;
+    proc->se.prio               = DEFAULT_PRIO;
+    proc->se.start_runtime      = timer_get_ticks();
+    proc->se.exec_start         = timer_get_ticks();
+    proc->se.exec_runtime       = 0;
+    proc->se.sum_exec_runtime   = 0;
+    proc->se.vruntime           = 0;
+    proc->se.period             = 0;
+    proc->se.deadline           = 0;
+    proc->se.arrivaltime        = timer_get_ticks();
+    proc->se.executed           = false;
+    proc->se.is_periodic        = false;
+    proc->se.is_under_analysis  = false;
+    proc->se.next_period        = 0;
+    proc->se.worst_case_exec    = 0;
+    proc->se.utilization_factor = 0;
+    // Initialize the exit code of the process.
+    proc->exit_code = 0;
+    // Copy the name.
+    if (name)
+        strcpy(proc->name, name);
+    // Do not touch the task's segments.
+    proc->mm = NULL;
+    // Initialize the error number.
+    proc->error_no = 0;
+    // Initialize the current working directory.
+    if (source)
+        strcpy(proc->cwd, source->cwd);
+    else
+        strcpy(proc->cwd, "/");
+    // Clear the signal handler.
+    memset(&proc->sighand, 0x00, sizeof(sighand_t));
+    spinlock_init(&proc->sighand.siglock);
+    atomic_set(&proc->sighand.count, 0);
+    for (int i = 0; i < NSIG; ++i) {
+        proc->sighand.action[i].sa_handler = SIG_DFL;
+        sigemptyset(&proc->sighand.action[i].sa_mask);
+        proc->sighand.action[i].sa_flags = 0;
+    }
+    // Clear the masks.
+    sigemptyset(&proc->blocked);
+    sigemptyset(&proc->real_blocked);
+    sigemptyset(&proc->saved_sigmask);
+    // Initialzie the data structure storing the pending signals.
+    list_head_init(&proc->pending.list);
+    sigemptyset(&proc->pending.signal);
+
+    // Initalize real_timer for intervals
+    proc->real_timer = NULL;
+
+    return proc;
+}
+
+int init_tasking()
+{
+    if ((task_struct_cache = KMEM_CREATE(task_struct)) == NULL) {
+        return 0;
+    }
+    return 1;
+}
+
+task_struct *process_create_init(const char *path)
+{
+    pr_debug("Building init process...\n");
+    // Allocate the memory for the process.
+    init_proc = __alloc_task(NULL, NULL, "init");
+
+    // == INITIALIZE `/proc/video` ============================================
+    // Check that the fd_list is initialized.
+    assert(init_proc->fd_list && "File descriptor list not initialized.");
+    assert((init_proc->max_fd > 3) && "File descriptor list cannot contain the standard IOs.");
+
+    // Create STDIN descriptor.
+    vfs_file_t *stdin = vfs_open("/proc/video", O_RDONLY, 0);
+    stdin->count++;
+    init_proc->fd_list[STDIN_FILENO].file_struct = stdin;
+    init_proc->fd_list[STDIN_FILENO].flags_mask  = O_RDONLY;
+    pr_debug("`/proc/video` stdin  : %p\n", stdin);
+
+    // Create STDOUT descriptor.
+    vfs_file_t *stdout = vfs_open("/proc/video", O_WRONLY, 0);
+    stdout->count++;
+    init_proc->fd_list[STDOUT_FILENO].file_struct = stdout;
+    init_proc->fd_list[STDOUT_FILENO].flags_mask  = O_WRONLY;
+    pr_debug("`/proc/video` stdout : %p\n", stdout);
+
+    // Create STDERR descriptor.
+    vfs_file_t *stderr = vfs_open("/proc/video", O_WRONLY, 0);
+    stderr->count++;
+    init_proc->fd_list[STDERR_FILENO].file_struct = stderr;
+    init_proc->fd_list[STDERR_FILENO].flags_mask  = O_WRONLY;
+    pr_debug("`/proc/video` stderr : %p\n", stderr);
+    // ------------------------------------------------------------------------
+
+    // == INITIALIZE TASK MEMORY ==============================================
+    // Load the executable.
+    if (!__load_executable(path, init_proc, &init_proc->thread.regs.eip)) {
+        pr_err("Entry for init: %d\n", init_proc->thread.regs.eip);
+        kernel_panic("Init not valid (%d)!");
+    }
+    // ------------------------------------------------------------------------
+
+    // == INITIALIZE PROGRAM ARGUMENTS ========================================
+    // Save the current page directory.
+    page_directory_t *crtdir = paging_get_current_directory();
+    // Switch to init page directory.
+    paging_switch_directory_va(init_proc->mm->pgd);
+
+    // Prepare argv and envp for the init process.
+    char **argv_ptr, **envp_ptr;
+    int argc            = 1;
+    static char *argv[] = {
+        "/bin/init",
+        (char *)NULL
+    };
+    static char *envp[] = {
+        (char *)NULL
+    };
+    // Save where the arguments start.
+    init_proc->mm->arg_start = init_proc->thread.regs.useresp;
+    // Push the arguments on the stack.
+    __push_args_on_stack(&init_proc->thread.regs.useresp, argv, &argv_ptr);
+    // Save where the arguments end.
+    init_proc->mm->arg_end = init_proc->thread.regs.useresp;
+    // Save where the environmental variables start.
+    init_proc->mm->env_start = init_proc->thread.regs.useresp;
+    // Push the environment on the stack.
+    __push_args_on_stack(&init_proc->thread.regs.useresp, envp, &envp_ptr);
+    // Save where the environmental variables end.
+    init_proc->mm->env_end = init_proc->thread.regs.useresp;
+    // Push the `main` arguments on the stack (argc, argv, envp).
+    PUSH_ARG(init_proc->thread.regs.useresp, char **, envp_ptr);
+    PUSH_ARG(init_proc->thread.regs.useresp, char **, argv_ptr);
+    PUSH_ARG(init_proc->thread.regs.useresp, int, argc);
+
+    // Restore previous pgdir
+    paging_switch_directory(crtdir);
+    // ------------------------------------------------------------------------
+
+    // Active the current process.
+    scheduler_enqueue_task(init_proc);
+
+    pr_debug("Executing '%s' (pid: %d)...\n", init_proc->name, init_proc->pid);
+
+    return init_proc;
+}
+
+char *sys_getcwd(char *buf, size_t size)
+{
+    task_struct *current_process = scheduler_get_current_process();
+    if ((current_process != NULL) && (buf != NULL)) {
+        strncpy(buf, current_process->cwd, size);
+        return buf;
+    }
+    return (char *)-EACCES;
 }
 
 void sys_chdir(char const *path)
 {
-	task_struct *current_process = kernel_get_current_process();
-	if ((current_process != NULL) && (path != NULL)) {
-		strcpy(current_process->cwd, path);
-	}
+    task_struct *current_process = scheduler_get_current_process();
+    if ((current_process != NULL) && (path != NULL)) {
+        char absolute_path[PATH_MAX];
+        realpath(path, absolute_path);
+        strcpy(current_process->cwd, absolute_path);
+    }
 }
 
-pid_t sys_vfork(pt_regs *r)
+void sys_fchdir(int fd)
 {
-	task_struct *current = kernel_get_current_process();
-	if (current == NULL) {
-		kernel_panic("There is no current process!");
-	}
-
-	dbg_print("Forking '%s'(%d) process...\n", current->name, current->pid);
-
-	// Create a new task_struct.
-	// TODO: process is IN USER SPACE! it should be in KERNEL SPACE!
-	task_struct *new_process = kmalloc(sizeof(task_struct));
-
-	// TODO: this is NOT a deep copy. should a deep copy be used here?
-	memcpy(new_process, current, sizeof(task_struct));
-
-	// Set the id of the process.
-	new_process->pid = get_new_pid();
-
-	// Set the statistics of the process.
-	new_process->se.prio = DEFAULT_PRIO;
-	new_process->se.start_runtime = 0;
-	new_process->se.exec_start = 0;
-	new_process->se.sum_exec_runtime = 0;
-	// TODO: vruntime should be the scheduled highest values so far.
-	new_process->se.vruntime = current->se.vruntime;
-
-	// Create a new stack segment.
-	new_process->mm = create_process_image(DEFAULT_STACK_SIZE);
-	char *stack = (char *)new_process->mm->start_stack;
-	// Copy the father's stack.
-	memcpy((char *)new_process->mm->start_stack,
-		   (char *)current->mm->start_stack, DEFAULT_STACK_SIZE);
-	// Set the base address of the stack.
-	char *ebp = stack + DEFAULT_STACK_SIZE; // TODO: da controllare
-	// Create a pointer to keep track of the top of the stack.
-	char *esp = stack + (r->useresp - current->mm->start_stack);
-
-	// Set the top address of the stack.
-	new_process->thread.useresp = (uintptr_t)esp;
-	// Set the base address of the stack.
-	new_process->thread.ebp = (uintptr_t)ebp;
-	// Set the program counter.
-	new_process->thread.eip = r->eip;
-
-	// Set the base registers.
-	new_process->thread.eax = 0;
-	new_process->thread.ebx = r->ebx;
-	new_process->thread.ecx = r->ecx;
-	new_process->thread.edx = r->edx;
-
-	// Enable the interrupts.
-	new_process->thread.eflags = new_process->thread.eflags | EFLAG_IF;
-
-	// Set the state of the process as running.
-	new_process->state = TASK_RUNNING;
-
-	// Set current as parent for the new process
-	new_process->parent = current;
-
-	// Initialize the list_head.
-	list_head_init(&new_process->run_list);
-
-	// Initialize the children list_head.
-	list_head_init(&new_process->children);
-
-	// Initialize the children list_head.
-	list_head_init(&new_process->sibling);
-
-	// Set the new_process as child of current.
-	list_head_add_tail(&current->children, &new_process->sibling);
-
-	// Active the new process.
-	enqueue_task(new_process);
-
-	dbg_print("--------------------------------------------------\n");
-	dbg_print("- %s process (PID: %d, eflags: %d)\n", new_process->name,
-			  new_process->pid, new_process->thread.eflags);
-	dbg_print("\teip    : 0x%p\n", new_process->thread.eip);
-	dbg_print("\tebp    : 0x%p\n", new_process->thread.ebp);
-	dbg_print("\tesp    : 0x%p\n", new_process->thread.useresp);
-	dbg_print("\tStack  : 0x%p\n", new_process->mm->start_stack);
-	dbg_print("\tRunList: 0x%p\n", &new_process->run_list);
-	dbg_print("--------------------------------------------------\n");
-
-	dbg_print("Fork of '%s' (child pid: %d) process completed.\n",
-			  current->name, current->pid);
-
-	// Return PID of child process to parent.
-	return new_process->pid;
+    // Get the current task.
+    task_struct *task = scheduler_get_current_process();
+    // Check the current FD.
+    if (fd >= 0 && fd < task->max_fd) {
+        // Get the file descriptor.
+        vfs_file_descriptor_t *vfd = &task->fd_list[fd];
+        // Check the file.
+        if (vfd->file_struct != NULL) {
+            char absolute_path[PATH_MAX];
+            realpath(vfd->file_struct->name, absolute_path);
+            strcpy(task->cwd, absolute_path);
+        }
+    }
 }
 
-static inline int push_args_on_stack(uintptr_t *esp, char *args[],
-									 char ***argsptr)
+pid_t sys_fork(pt_regs *f)
 {
-	int argc = 0;
-	char *args_ptr[256];
-	// Count the number of arguments.
-	while (args[argc] != NULL) {
-		++argc;
-	}
-	// Push terminating NULL.
-	PUSH_ON_STACK((*esp), char *, (char *)NULL);
-	// Prepare args with space for the terminating NULL.
-	for (int i = argc - 1; i >= 0; --i) {
-		for (int j = strlen(args[i]); j >= 0; --j) {
-			PUSH_ON_STACK((*esp), char, args[i][j]);
-		}
-		args_ptr[i] = (char *)(*esp);
-	}
-	// Push terminating NULL.
-	PUSH_ON_STACK((*esp), char *, (char *)NULL);
-	// Push array of pointers to the arguments.
-	for (int i = argc - 1; i >= 0; --i) {
-		PUSH_ON_STACK((*esp), char *, args_ptr[i]);
-	}
-	(*argsptr) = (char **)(*esp);
+    task_struct *current = scheduler_get_current_process();
+    if (current == NULL)
+        kernel_panic("There is no current process!");
 
-	return argc;
+    pr_debug("Forking   '%s' (pid: %d)...\n", current->name, current->pid);
+
+    // Update current process registers, they should be equal
+    // to the ones of the child process, except for eax.
+    scheduler_store_context(f, current);
+    // Allocate the memory for the process.
+    task_struct *proc = __alloc_task(current, current, current->name);
+    // Copy the father's stack, memory, heap etc... to the child process
+    proc->mm = clone_process_image(current->mm);
+    // Set the eax as 0, to indicate the child process
+    proc->thread.regs.eax = 0;
+    // Enable the interrupts.
+    proc->thread.regs.eflags = proc->thread.regs.eflags | EFLAG_IF;
+
+    // Copy session and group id of the parent into the child
+    proc->sid = current->sid;
+    proc->gid = current->gid;
+
+    // Active the new process.
+    scheduler_enqueue_task(proc);
+
+    pr_debug("Forked    '%s' (pid: %d, gid: %d, sid: %d)...\n", proc->name, proc->pid, proc->gid, proc->sid);
+
+    // Return PID of child process to parent.
+    return proc->pid;
 }
 
-int sys_execve(pt_regs *r)
+int sys_execve(pt_regs *f)
 {
-	char **argv, **_argv, **envp, **_envp;
-	// Check the current process.
-	task_struct *current = kernel_get_current_process();
-	if (current == NULL) {
-		kernel_panic("There is no current process!");
-	}
+    // Check the current process.
+    task_struct *current = scheduler_get_current_process();
+    if (current == NULL)
+        kernel_panic("There is no current process!");
 
-	// Get the filename.
-	uintptr_t *filename = (uintptr_t *)r->ebx;
-	if (filename == NULL) {
-		return -1;
-	}
+    char **origin_argv, **saved_argv, **final_argv;
+    char **origin_envp, **saved_envp, **final_envp;
+    char name_buffer[NAME_MAX];
 
-	// Get the arguments.
-	argv = (char **)r->ecx;
-	// Get the environment.
-	envp = (char **)r->edx;
+    // Get the filename.
+    char *filename = (char *)f->ebx;
+    if (filename == NULL) {
+        pr_err("Received NULL filename.\n");
+        return -1;
+    }
+    // Get the arguments
+    origin_argv = (char **)f->ecx;
+    // Get the environment.
+    origin_envp = (char **)f->edx;
+    // Check the argument, the environment, and that at least the name is provided.
+    if (origin_argv == NULL) {
+        pr_err("sys_execve failed: must provide argv.\n");
+        return -1;
+    }
+    if (origin_argv[0] == NULL) {
+        pr_err("sys_execve failed: must provide the name.\n");
+        return -1;
+    }
+    if (origin_envp == NULL) {
+        pr_err("sys_execve failed: must provide the environment.\n");
+        return -1;
+    }
 
-	// Check the argument and that at least the name is provided.
-	if ((argv == NULL) || (argv[0] == NULL)) {
-		return -1;
-	}
+    // Save the name of the process.
+    strcpy(name_buffer, origin_argv[0]);
 
-	// Check that the environment is provided.
-	if (envp == NULL) {
-		kernel_panic("You must provide at least an empty list for envp!");
-	}
+    // == COPY PROGRAM ARGUMENTS ==============================================
+    // Copy argv and envp to kernel memory, because all the old process memory will be discarded.
+    int argv_bytes = __count_args_bytes(origin_argv);
+    int envp_bytes = __count_args_bytes(origin_envp);
+    if ((argv_bytes < 0) || (envp_bytes < 0)) {
+        pr_err("Failed to count required memory to store arguments and environment (%d + %d).\n",
+               argv_bytes, envp_bytes);
+        return -1;
+    }
+    void *args_mem = kmalloc(argv_bytes + envp_bytes);
+    if (!args_mem) {
+        pr_err("Failed to allocate memory for arguments and environment %d (%d + %d).\n",
+               argv_bytes + envp_bytes, argv_bytes, envp_bytes);
+        return -1;
+    }
+    // Copy the arguments.
+    uint32_t args_mem_ptr = (uint32_t)args_mem + (argv_bytes + envp_bytes);
+    __push_args_on_stack(&args_mem_ptr, origin_argv, &saved_argv);
+    __push_args_on_stack(&args_mem_ptr, origin_envp, &saved_envp);
+    // Check the memory pointer.
+    assert(args_mem_ptr == (uint32_t)args_mem);
+    // ------------------------------------------------------------------------
 
-	// Set the name.
-	strcpy(current->name, argv[0]);
+    // == INITIALIZE TASK MEMORY ==============================================
+    if (!__load_executable(filename, current, &current->thread.regs.eip)) {
+        pr_err("Failed to load executable!\n");
+        // Free the temporary args memory.
+        kfree(args_mem);
+        return -1;
+    }
+    // ------------------------------------------------------------------------
 
-	// Set the top address of the stack.
-	current->thread.useresp = (uintptr_t)current->thread.ebp;
+    // == INITIALIZE PROGRAM ARGUMENTS ========================================
+    // Save the current page directory.
+    page_directory_t *crtdir = paging_get_current_directory();
 
-	// Set the program counter.
-	current->thread.eip = (uintptr_t)filename;
+    // Change the page directory to point to the newly created process
+    paging_switch_directory_va(current->mm->pgd);
 
-	int argc = push_args_on_stack(&current->thread.useresp, argv, &_argv);
-	push_args_on_stack(&current->thread.useresp, envp, &_envp);
+    // Save where the arguments start.
+    current->mm->arg_start = current->thread.regs.useresp;
+    // Push the arguments on the stack.
+    int argc = __push_args_on_stack(&current->thread.regs.useresp, saved_argv, &final_argv);
+    // Save where the arguments end, and the env starts.
+    current->mm->env_start = current->mm->arg_end = current->thread.regs.useresp;
+    // Push the environment on the stack.
+    int envc = __push_args_on_stack(&current->thread.regs.useresp, saved_envp, &final_envp);
+    // Save where the environmental variables end.
+    current->mm->env_end = current->thread.regs.useresp;
+    // Push the `main` arguments on the stack (argc, argv, envp).
+    PUSH_ARG(current->thread.regs.useresp, char **, final_envp);
+    PUSH_ARG(current->thread.regs.useresp, char **, final_argv);
+    PUSH_ARG(current->thread.regs.useresp, int, argc);
 
-	PUSH_ON_STACK(current->thread.useresp, char **, _envp);
-	PUSH_ON_STACK(current->thread.useresp, char **, _argv);
-	PUSH_ON_STACK(current->thread.useresp, int, argc);
-	PUSH_ON_STACK(current->thread.useresp, uintptr_t, (uintptr_t)exit_handler);
+    // Restore previous pgdir
+    paging_switch_directory(crtdir);
+    // ------------------------------------------------------------------------
 
-//	dbg_print("_ARGV:0x%09x {\n", _argv);
-//	for (int i = 0; _argv[i] != NULL; ++i) {
-//		dbg_print("\t[%d][0x%09x]%s\n", i, _argv[i], _argv[i]);
-//	}
-//	dbg_print("}\n");
-//
-//	if (_envp != NULL) {
-//		dbg_print("_ENVP:0x%09x {\n", _envp);
-//		for (int i = 0; _envp[i] != NULL; ++i) {
-//			dbg_print("\t[%d][0x%09x]%s\n", i, _envp[i], _envp[i]);
-//		}
-//		dbg_print("}\n");
-//	}
+    // Change the name of the process.
+    strcpy(current->name, name_buffer);
 
-	// Perform the switch to the new process.
-	do_switch(current, r);
+    // Free the temporary args memory.
+    kfree(args_mem);
 
-	dbg_print("Executing '0x%p' for process %d with %d arguments (0x%p)...\n",
-			  filename, current->pid, argc, argv);
+    // Perform the switch to the new process.
+    scheduler_restore_context(current, f);
 
-	return 0;
+    pr_debug("Executing '%s' (pid: %d)...\n", current->name, current->pid);
+    return 0;
 }
