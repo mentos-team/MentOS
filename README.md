@@ -22,6 +22,10 @@ seconds!
 If you are a beginner in Operating-System developing, perhaps MentOS is the
 right operating system to start with.
 
+Parts of MentOS are inherited or inspired by a similar educational operating 
+system called [DreamOs](https://github.com/dreamos82/DreamOs) written by Ivan
+Gualandri.
+
 ## 2. Prerequisites
 
 MentOS is compatible with the main **unix-based** operating systems. It has been
