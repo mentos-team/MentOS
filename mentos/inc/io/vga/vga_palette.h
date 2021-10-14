@@ -6,12 +6,14 @@
 
 #pragma once
 
+/// Structure that simplifies defining a palette.
 typedef struct {
-    unsigned char red;
-    unsigned char green;
-    unsigned char blue;
+    unsigned char red;   ///< Red value.
+    unsigned char green; ///< Green value.
+    unsigned char blue;  ///< Blue value.
 } palette_entry_t;
 
+/// 16 color palette.
 palette_entry_t ansi_16_palette[17] = {
     { 0x00, 0x00, 0x00 }, // Black
     { 0xAA, 0x00, 0x00 }, // Red
@@ -31,6 +33,7 @@ palette_entry_t ansi_16_palette[17] = {
     { 0xFF, 0xFF, 0xFF }, // White
 };
 
+/// 256 color palette.
 palette_entry_t ansi_256_palette[256] = {
     { 0, 0, 0 },       // Black
     { 128, 0, 0 },     // Maroon

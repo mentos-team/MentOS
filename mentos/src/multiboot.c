@@ -4,6 +4,7 @@
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
+/// Set the debug level to 0.
 #define __DEBUG_LEVEL__ 0
 
 #include "multiboot.h"
