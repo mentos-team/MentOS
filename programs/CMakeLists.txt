@@ -74,7 +74,8 @@ set(PROGRAMS
     ipcrm.c
     ipcs.c
     sleep.c
-    help.c)
+    man.c
+  )
 foreach(PROGRAM ${PROGRAMS})
   # Prepare the program name.
   string(REPLACE ".c" "" PROGRAM_NAME ${PROGRAM})
