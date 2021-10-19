@@ -6,6 +6,7 @@
 
 /// Change the header.
 #define __DEBUG_HEADER__ "[BUDDY ]"
+#define __DEBUG_LEVEL__  100
 
 #include "mem/buddysystem.h"
 #include "mem/paging.h"
@@ -71,16 +72,16 @@ static inline bb_page_t *__get_page_at_index(bb_instance_t *instance, unsigned i
 }
 
 /// @brief Computes the number of pages separating the two pages (begin, end).
-/// @param instance The buddy system instance we are working with.
-/// @param begin    The first page.
-/// @param end      The second page.
+/// @param instance the buddy system instance we are working with.
+/// @param begin    the first page.
+/// @param end      the second page.
 /// @return The number of pages between begin and end.
 static inline unsigned int __get_page_range(bb_instance_t *instance, bb_page_t *begin, bb_page_t *end)
 {
     return (((uintptr_t)end) - ((uintptr_t)begin)) / instance->pgs_size;
 }
 
-/// @brief           Get the buddy index of a page.
+/// @brief Get the buddy index of a page.
 /// @details
 ///  ----------------------- xor -----------------------
 /// | page_idx    ^   (1UL << order)    =     buddy_idx |
@@ -90,14 +91,28 @@ static inline unsigned int __get_page_range(bb_instance_t *instance, bb_page_t *
 /// If the bit of page_idx that corresponds to the block
 /// size, is 1, then we have to take the block on the
 /// left (0), otherwise we have to take the block on the right (1).
-/// @param  page_idx A page index.
-/// @param  order    The logarithm of the size of the block.
-/// @return          The page index of the buddy of page.
+/// @param  page_idx the page index.
+/// @param  order    the logarithm of the size of the block.
+/// @return the page index of the buddy of page.
 static inline unsigned long __get_buddy_at_index(unsigned long page_idx, unsigned int order)
 {
     return (page_idx ^ (1UL << order));
 }
 
+/// @brief Returns the pointer to the free-area manager for the given order.
+/// 
+/// @param instance the buddysystem instance.
+/// @param order    the desired order.
+/// @return pointer to the free-area manager.
+static inline bb_free_area_t *__get_area_of_order(bb_instance_t *instance, unsigned int order)
+{
+    return instance->free_area + order;
+}
+
+/// @brief Checks if the page is FREE and has the same order.
+/// @param page  the page to check.
+/// @param order the oder to check.
+/// @return true if the page is buddy, false otherwise.
 static inline bool_t __page_is_buddy(bb_page_t *page, unsigned int order)
 {
     return __bb_test_flag(page, FREE_PAGE) && (page->order == order);
@@ -236,7 +251,7 @@ void bb_free_pages(bb_instance_t *instance, bb_page_t *page)
 
         // Get the page that gets forgotten, it's always the one on the right (the greatest)
         bb_page_t *forgot_page = buddy > page ? buddy : page;
-        
+
         // Clear the root flag from the forgotten page.
         /* ... */;
 
@@ -254,14 +269,14 @@ void bb_free_pages(bb_instance_t *instance, bb_page_t *page)
 
     // Update the order of the coalesced page.
     /* ... */;
-    
+
     // Set it to be a root page and a free page
     /* ... */;
     /* ... */;
 
     // Insert coalesced as first element in the free list.
     list_head_add(&/* ... */, &/* ... */);
-    
+
     // Increase the number of free block of the free_area_t.
     /* ... */;
 
@@ -277,29 +292,34 @@ void buddy_system_init(bb_instance_t *instance,
                        uint32_t pages_stride,
                        uint32_t pages_count)
 {
-    // Compute the base bb page of the struct
+    // Compute the base base page of the buddysystem instance.
     instance->base_page = ((bb_page_t *)(((uint32_t)pages_start) + bbpage_offset));
-
-    // Save all needed page info
+    // Save all needed page info.
     instance->bbpg_offset = bbpage_offset;
     instance->pgs_size    = pages_stride;
     instance->size        = pages_count;
     instance->name        = name;
 
-    // Initialize all pages
-    for (uint32_t i = 0; i < pages_count; i++) {
-        bb_page_t *page = __get_page_at_index(instance, i);
-        page->flags     = 0;
-        // Mark page as free
+    // Initialize all pages.
+    for (uint32_t index = 0; index < pages_count; ++index) {
+        // Get the page at the given index.
+        bb_page_t *page = __get_page_at_index(instance, index);
+        // Initialize the flags of the page.
+        page->flags = 0;
+        // Mark page as free.
         __bb_set_flag(page, FREE_PAGE);
-        // Initialize siblings list
+        // Initialize siblings list.
         list_head_init(&(page->location.siblings));
+        // N.B.: The order is initialized afterwards.
     }
 
     // Initialize the free_lists of each area of the zone.
     for (unsigned int order = 0; order < MAX_BUDDYSYSTEM_GFP_ORDER; order++) {
-        bb_free_area_t *area = instance->free_area + order;
-        area->nr_free        = 0;
+        // Get the area that manages the given order.
+        bb_free_area_t *area = __get_area_of_order(instance, order);
+        // Initialize the number of free pages.
+        area->nr_free = 0;
+        // Initialize linked list of free pages.
         list_head_init(&area->free_list);
     }
 
@@ -307,29 +327,27 @@ void buddy_system_init(bb_instance_t *instance,
     bb_page_t *page = instance->base_page;
     // Address of the last page descriptor of the zone.
     bb_page_t *last_page = __get_page_from_base(instance, page, instance->size);
-
+    // Initially, all the memory is divided into blocks of the higher order.
+    const unsigned int max_order = MAX_BUDDYSYSTEM_GFP_ORDER - 1;
     // Get the free area collecting the larges block of page frames.
-    const unsigned int order = MAX_BUDDYSYSTEM_GFP_ORDER - 1;
-    bb_free_area_t *area     = instance->free_area + order;
-
+    bb_free_area_t *area = __get_area_of_order(instance, max_order);
+    // Compute the block size.
+    uint32_t block_size = 1UL << max_order;
     // Add all zone's pages to the largest free area block.
-    uint32_t block_size = 1UL << order;
     while ((page + block_size) <= last_page) {
         // Save the order of the page.
-        page->order = order;
-        // Set the page as root
+        page->order = max_order;
+        // Set the page as root.
         __bb_set_flag(page, ROOT_PAGE);
-
-        // Insert page as first element in the list.
+        // Insert the page inside the list of free pages of the area.
         list_head_add_tail(&page->location.siblings, &area->free_list);
-        // Increase the number of free block of the free_area_t.
+        // Increase the number of free block of the area.
         area->nr_free++;
-
+        // Move to the next page.
         page = __get_page_from_base(instance, page, block_size);
     }
-
-    assert(page == last_page &&
-           "Memory size is not aligned to MAX_ORDER size!");
+    // Check that the page we have reached with the iteration is the last page.
+    assert(page == last_page && "Memory size is not aligned to MAX_ORDER size!");
 }
 
 void buddy_system_dump(bb_instance_t *instance)
