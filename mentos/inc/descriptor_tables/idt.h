@@ -4,6 +4,14 @@
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
+/// @addtogroup descriptor_tables Descriptor Tables
+/// @{
+/// @addtogroup idt Interrupt Descriptor Table (IDT)
+/// @brief Is a data structure used by the x86 architecture to implement an 
+/// interrupt vector table. The IDT is used by the processor to determine the 
+/// correct response to interrupts and exceptions.
+/// @{
+
 #pragma once
 
 #include "stdint.h"
@@ -157,5 +165,5 @@ extern void IRQ_14();
 
 extern void IRQ_15();
 
-//! @endcond
-// ============================================================================
+/// @}
+/// @}

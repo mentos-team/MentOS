@@ -4,6 +4,13 @@
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
+/// @addtogroup descriptor_tables Descriptor Tables
+/// @{
+/// @defgroup tss Task State Segment (TSS)
+/// @brief Is a special structure on x86-based computers which holds information
+/// about a task. It is used by the operating system kernel for task management.
+/// @{
+
 #pragma once
 
 #include "stdint.h"
@@ -53,3 +60,6 @@ void tss_init(uint8_t idx, uint32_t ss0);
 /// @param kss  Kernel data segment.
 /// @param kesp Kernel stack address.
 void tss_set_stack(uint32_t kss, uint32_t kesp);
+
+/// @}
+/// @}

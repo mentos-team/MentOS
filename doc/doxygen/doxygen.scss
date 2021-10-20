@@ -205,8 +205,7 @@ span.legend {
 }
 
 span.arrow {
-    /* width: 32px; */
-    padding-left: 0px;
+    width: 16px;
 }
 
 h3.version {
@@ -963,8 +962,8 @@ div.directory {
 .directory td.entry {
     white-space: nowrap;
     padding-right: 6px;
-    padding-top: 3px;
-    padding-bottom: 3px;
+    padding-top: 2px;
+    padding-bottom: 2px;
 }
 
 .directory td.entry a {

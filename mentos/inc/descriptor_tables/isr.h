@@ -4,6 +4,12 @@
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
+/// @addtogroup descriptor_tables Descriptor Tables
+/// @{
+/// @addtogroup isr Interrupt Service Routines (ISRs)
+/// @brief are software routines that hardware invokes in response to an interrupt.
+/// @{
+
 #pragma once
 
 #include "kernel.h"
@@ -80,3 +86,6 @@ extern void isq_handler(pt_regs *f);
 #define TRIPLE_FAULT 31 ///< Triple Fault
 #define SYSTEM_CALL  80 ///< System call interrupt.
 //==============================================================================
+
+/// @}
+/// @}

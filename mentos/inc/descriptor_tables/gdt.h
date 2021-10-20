@@ -4,17 +4,23 @@
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
+/// @addtogroup descriptor_tables Memory Management Modules
+/// @brief GDT, IDT and TSS are all data structures specified by Intel x86
+/// architecture in memory management module.
+/// @{
+/// @addtogroup gdt Global Descriptor Table (GDT)
+/// @brief Is used to define the characteristics of the various memory areas
+/// used during program execution, including the base address, the size and
+/// access privileges like executability and writability.
+/// @{
+
 #pragma once
 
 #include "stdint.h"
 
-/// @defgroup gdt_bits List of GDT Bits.
 /// @brief Bitmasks used to access to specific bits of the GDT.
 /// @details
 /// @image html gdt_bits.png
-/// #### PR (Present bit)
-/// This must be 1 for all valid selectors.
-///
 /// #### PRIV (Privilege bits)
 /// Contains the ring level, specifically:
 ///   - `00 (0)` = highest (kernel),
@@ -63,57 +69,35 @@
 ///
 ///  You can have both 16 bit and 32 bit selectors at once.
 ///
-/// @{
-
-/// @brief Present bit.
-/// This must be 1 for all valid selectors.
-#define GDT_PRESENT 128U // 0b10000000U
-
-/// @brief Sets the 2 privilege bits (ring level) to 0 = highest (kernel).
-#define GDT_KERNEL 0U // 0b00000000U
-
-/// @brief Sets the 2 privilege bits (ring level) to 3 = lowest (user applications).
-#define GDT_USER 96U // 0b01100000U
-
-/// @brief Descriptor type.
-/// This bit should be set for code or data segments and should be cleared for system segments (eg. a Task State Segment)
-#define GDT_S 16U // 0b00010000U
-
-/// @brief Executable bit.
-/// If 1 code in this segment can be executed, ie. a code selector. If 0 it is a data selector.
-#define GDT_EX 8U // 0b00001000U
-
-/// @brief Direction bit/Conforming bit.
-#define GDT_DC 4U // 0b00000100U
-
-/// @brief Readable bit/Writable bit.
-#define GDT_RW 2U // 0b00000010U
-
-/// @brief Accessed bit.
-/// Just set to 0. The CPU sets this to 1 when the segment is accessed.
-#define GDT_AC 1U // 0b00000001U
-
-/// @brief Identifies an executable code segment.
-#define GDT_CODE (GDT_S | GDT_EX)
-
-/// @brief Identifies a writable data segment.
-#define GDT_DATA (GDT_S | GDT_RW)
-
-/// @brief Granularity bit.
-/// If 0 the limit is in 1 B blocks (byte granularity),
-/// if 1 the limit is in 4 KiB blocks (page granularity).
-#define GDT_GRANULARITY 128U // 0b10000000U
-
-/// @brief Size bit.
-/// If 0 the selector defines 16 bit protected mode.
-/// If 1 it defines 32 bit protected mode.
-/// You can have both 16 bit and 32 bit selectors at once.
-#define GDT_OPERAND_SIZE 64U // 0b01000000U
-
-/// @}
+enum gdt_bits_t {
+    /// @brief `0b10000000U` (Present): This must be 1 for all valid selectors.
+    GDT_PRESENT = 128U,
+    /// @brief `0b00000000U` (Privilege): Sets the 2 privilege bits (ring level) to 0 = highest (kernel).
+    GDT_KERNEL = 0U,
+    /// @brief `0b01100000U` (Privilege): Sets the 2 privilege bits (ring level) to 3 = lowest (user applications).
+    GDT_USER = 96U,
+    /// @brief `0b00010000U` (Descriptor): This bit should be set for code or data segments and should be cleared for system segments (eg. a Task State Segment)
+    GDT_S = 16U,
+    /// @brief `0b00001000U` (Executable): If 1 code in this segment can be executed, ie. a code selector. If 0 it is a data selector.
+    GDT_EX = 8U,
+    /// @brief `0b00000100U` (Direction/Conforming)
+    GDT_DC = 4U,
+    /// @brief `0b00000010U` (Readable/Writable)
+    GDT_RW = 2U,
+    /// @brief `0b00000001U` (Accessed): Just set to 0. The CPU sets this to 1 when the segment is accessed.
+    GDT_AC = 1U,
+    /// @brief `0b00001100U` (Executable Code): Identifies an executable code segment.
+    GDT_CODE = (GDT_S | GDT_EX),
+    /// @brief `0b00001001U` (Writable Data): Identifies a writable data segment.
+    GDT_DATA = (GDT_S | GDT_RW),
+    /// @brief `0b10000000U` (Granularity): If 0 the limit is in 1 B blocks (byte granularity), if 1 the limit is in 4 KiB blocks (page granularity).
+    GDT_GRANULARITY = 128U,
+    /// @brief `0b01000000U` (Size): If 0 the selector defines 16 bit protected mode. If 1 it defines 32 bit protected mode. You can have both 16 bit and 32 bit selectors at once.
+    GDT_OPERAND_SIZE = 64U,
+} gdt_bits_t;
 
 /// @brief Used in IDT for padding.
-#define IDT_PADDING 14U // 0b00001110U
+#define IDT_PADDING 14U // `0b00001110U
 
 /// @brief Data structure representing a GDT descriptor.
 typedef struct gdt_descriptor_t {
@@ -154,3 +138,6 @@ void init_gdt();
 /// @param access  Type (4bit) - S (1) bit -DPL (2 bit) - P(1 bit).
 /// @param granul  SegLimit_hi(4 bit) AVL(1 bit) L(1 bit) D/B(1 bit) G(1bit).
 void gdt_set_gate(uint8_t index, uint32_t base, uint32_t limit, uint8_t access, uint8_t granul);
+
+/// @}
+/// @}
