@@ -1,6 +1,6 @@
 ///                MentOS, The Mentoring Operating system project
-/// @file   isr.h
-/// @brief  Data structures concerning the Interrupt Service Routines (ISRs).
+/// @file isr.h
+/// @brief Data structures concerning the Interrupt Service Routines (ISRs).
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 

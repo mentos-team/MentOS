@@ -1,6 +1,6 @@
 ///                MentOS, The Mentoring Operating system project
-/// @file   vga_palette.h
-/// @brief  VGA color palettes.
+/// @file vga_palette.h
+/// @brief VGA color palettes.
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 

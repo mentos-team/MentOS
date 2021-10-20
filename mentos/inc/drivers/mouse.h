@@ -1,6 +1,6 @@
 ///                MentOS, The Mentoring Operating system project
-/// @file   mouse.h
-/// @brief  Driver for *PS2* Mouses.
+/// @file mouse.h
+/// @brief Driver for *PS2* Mouses.
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 ///! @cond Doxygen_Suppress

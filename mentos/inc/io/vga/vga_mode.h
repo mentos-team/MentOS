@@ -1,3 +1,11 @@
+///                MentOS, The Mentoring Operating system project
+/// @file vga_model.h
+/// @brief VGA models.
+/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
+/// See LICENSE.md for details.
+
+#pragma once
+
 /// Structure that holds the information about a VGA mode.
 typedef struct {
     unsigned char misc; ///< 00h --

@@ -1,6 +1,6 @@
 ///                MentOS, The Mentoring Operating system project
 /// @file elf.h
-/// @brief Function for multiboot support.
+/// @brief Function for managing the Executable and Linkable Format (ELF).
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 

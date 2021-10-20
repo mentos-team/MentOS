@@ -1,6 +1,6 @@
 ///                MentOS, The Mentoring Operating system project
-/// @file   tss.h
-/// @brief
+/// @file tss.h
+/// @brief Data structures concerning the Task State Segment (TSS).
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 

@@ -1,6 +1,6 @@
 ///                MentOS, The Mentoring Operating system project
 /// @file hashmap.h
-/// @brief
+/// @brief Functions for managing a structure that can map keys to values.
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 

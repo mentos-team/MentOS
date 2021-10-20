@@ -1,6 +1,6 @@
 ///                MentOS, The Mentoring Operating system project
-/// @file   fdc.h
-/// @brief  Definitions about the floppy.
+/// @file fdc.h
+/// @brief Definitions about the floppy.
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 

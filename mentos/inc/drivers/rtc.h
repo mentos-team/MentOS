@@ -1,6 +1,6 @@
 ///                MentOS, The Mentoring Operating system project
-/// @file   rtc.h
-/// @brief  Real Time Clock (RTC) driver.
+/// @file rtc.h
+/// @brief Real Time Clock (RTC) driver.
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 

@@ -1,5 +1,5 @@
 ///                MentOS, The Mentoring Operating system project
-/// @file   list_head.h
+/// @file list_head.h
 /// @brief
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.

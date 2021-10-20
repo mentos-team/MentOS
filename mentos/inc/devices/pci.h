@@ -1,6 +1,6 @@
 ///                MentOS, The Mentoring Operating system project
-/// @file   pci.h
-/// @brief  Routines for PCI initialization.
+/// @file pci.h
+/// @brief Routines for interfacing with the Peripheral Component Interconnect (PCI).
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 ///! @cond Doxygen_Suppress

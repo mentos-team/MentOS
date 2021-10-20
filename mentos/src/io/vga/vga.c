@@ -494,7 +494,7 @@ void vga_draw_rectangle(unsigned int sx, unsigned int sy, unsigned int ex, unsig
     vga_draw_line(ex, ey, ex, sy, fill);
 }
 
-void vga_draw_circle(unsigned int xc, unsigned int yc, unsigned int r, unsigned char col)
+void vga_draw_circle(unsigned int xc, unsigned int yc, unsigned int r, unsigned char fill)
 {
     unsigned int x = 0;
     unsigned int y = r;
@@ -504,14 +504,14 @@ void vga_draw_circle(unsigned int xc, unsigned int yc, unsigned int r, unsigned 
 
     while (y >= x) // only formulate 1/8 of circle
     {
-        driver->ops->write_pixel(xc - x, yc - y, col); //upper left left
-        driver->ops->write_pixel(xc - y, yc - x, col); //upper upper left
-        driver->ops->write_pixel(xc + y, yc - x, col); //upper upper right
-        driver->ops->write_pixel(xc + x, yc - y, col); //upper right right
-        driver->ops->write_pixel(xc - x, yc + y, col); //lower left left
-        driver->ops->write_pixel(xc - y, yc + x, col); //lower lower left
-        driver->ops->write_pixel(xc + y, yc + x, col); //lower lower right
-        driver->ops->write_pixel(xc + x, yc + y, col); //lower right right
+        driver->ops->write_pixel(xc - x, yc - y, fill); //upper left left
+        driver->ops->write_pixel(xc - y, yc - x, fill); //upper upper left
+        driver->ops->write_pixel(xc + y, yc - x, fill); //upper upper right
+        driver->ops->write_pixel(xc + x, yc - y, fill); //upper right right
+        driver->ops->write_pixel(xc - x, yc + y, fill); //lower left left
+        driver->ops->write_pixel(xc - y, yc + x, fill); //lower lower left
+        driver->ops->write_pixel(xc + y, yc + x, fill); //lower lower right
+        driver->ops->write_pixel(xc + x, yc + y, fill); //lower right right
         if (p < 0)
             p += 4 * x++ + 6;
         else
@@ -519,11 +519,11 @@ void vga_draw_circle(unsigned int xc, unsigned int yc, unsigned int r, unsigned 
     }
 }
 
-void vga_draw_triangle(unsigned int x1, unsigned int y1, unsigned int x2, unsigned int y2, unsigned int x3, unsigned int y3, unsigned char col)
+void vga_draw_triangle(unsigned int x1, unsigned int y1, unsigned int x2, unsigned int y2, unsigned int x3, unsigned int y3, unsigned char fill)
 {
-    vga_draw_line(x1, y1, x2, y2, col);
-    vga_draw_line(x2, y2, x3, y3, col);
-    vga_draw_line(x3, y3, x1, y1, col);
+    vga_draw_line(x1, y1, x2, y2, fill);
+    vga_draw_line(x2, y2, x3, y3, fill);
+    vga_draw_line(x3, y3, x1, y1, fill);
 }
 
 static void __test_vga(void)

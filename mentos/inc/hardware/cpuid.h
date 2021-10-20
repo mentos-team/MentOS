@@ -1,6 +1,10 @@
 ///                MentOS, The Mentoring Operating system project
 /// @file cpuid.h
-/// @brief CPUID definitions.
+/// @brief Structures and functions to handle the CPUID.
+/// @details
+/// CPUID instruction (identified by a CPUID opcode) is a processor
+/// supplementary instruction (its name derived from CPU IDentification)
+/// allowing software to discover details of the processor.
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
