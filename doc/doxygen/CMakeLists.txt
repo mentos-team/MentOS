@@ -2,12 +2,12 @@
 find_package(Doxygen)
 
 if (DOXYGEN_FOUND)
-    set(DOXYGEN_OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/doc_doxygen)
+    set(DOXYGEN_OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR})
     set(DOXYGEN_INDEX_FILE ${DOXYGEN_OUTPUT_DIR}/html/index.html)
 
     # Replace variables inside @@ with the current values.
-    set(DOXYFILE_IN  ${CMAKE_CURRENT_SOURCE_DIR}/Doxygen)
-    set(DOXYFILE_OUT ${CMAKE_CURRENT_BINARY_DIR}/Doxygen)
+    set(DOXYFILE_IN  ${CMAKE_CURRENT_SOURCE_DIR}/Doxyfile)
+    set(DOXYFILE_OUT ${CMAKE_CURRENT_BINARY_DIR}/Doxyfile)
     configure_file(${DOXYFILE_IN} ${DOXYFILE_OUT} @ONLY)
 
     # Copy the files needd by the documentation.
@@ -26,7 +26,7 @@ if (DOXYGEN_FOUND)
             COMMENT "Generating docs"
     )
     add_custom_target(
-            Doxygen
+            doxygen_doc
             DEPENDS
             ${DOXYGEN_INDEX_FILE}
             ${DOXYFILE_IN}

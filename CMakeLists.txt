@@ -78,7 +78,7 @@ add_subdirectory(programs/tests)
 add_subdirectory(mentos)
 add_subdirectory(initscp)
 add_subdirectory(libc)
-add_subdirectory(doc)
+add_subdirectory(doc/doxygen)
 
 # =============================================================================
 # Target to generate the initrd filesystem.
