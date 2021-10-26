@@ -3,6 +3,11 @@
 /// @brief Real Time Clock (RTC) driver.
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
+/// @addtogroup drivers Device Drivers
+/// @{
+/// @addtogroup rtc Real Time Clock (RTC)
+/// @brief Routines for interfacing with the real-time clock.
+/// @{
 
 #pragma once
 
@@ -14,3 +19,5 @@ extern void gettime(tm_t *time);
 
 /// @brief Installs the Real Time Clock.
 extern void rtc_install(void);
+
+/// @}

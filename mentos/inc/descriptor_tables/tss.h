@@ -3,7 +3,6 @@
 /// @brief Data structures concerning the Task State Segment (TSS).
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
-
 /// @addtogroup descriptor_tables Descriptor Tables
 /// @{
 /// @defgroup tss Task State Segment (TSS)

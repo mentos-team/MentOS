@@ -7,11 +7,26 @@ $cyan-color: #56b6c2;
 $yellow-color: #e5c07b;
 $blue-color: #61afef;
 $gutter-color: #4b5263;
-// $code-font: "Courier New", Courier, "Lucida Sans Typewriter", "Lucida Typewriter", monospace;
-$code-font: monaco,
-Consolas,
-"Lucida Console",
-monospace;
+
+/* font families */
+
+$page-font-family: Roboto,
+Lucida,
+sans-serif;
+$code-font-family: Consolas,
+monospace,
+fixed;
+
+/* font sizes */
+
+$title-font-size: 22px;
+$page-font-size: 16px;
+$code-font-size: 14px;
+$page-line-height: $page-font-size+6px;
+$code-line-height: $code-font-size+4px;
+
+/* colors */
+
 $title-fg-color: $white-color;
 $title-bg-color: $black-color;
 $menu-bg-color: $gutter-color;
@@ -69,7 +84,10 @@ table,
 div,
 p,
 dl {
-    font: 400 14px/22px Roboto, sans-serif;
+    font-size: $page-font-size;
+    font-family: $page-font-family;
+    font-weight: 400;
+    line-height: $page-line-height;
     display: block;
     margin-block-start: 0em;
     margin-block-end: 0em;
@@ -89,7 +107,10 @@ ul {
 
 p.reference,
 p.definition {
-    font: 400 14px/22px Roboto, sans-serif;
+    font-size: $page-font-size;
+    font-family: $page-font-family;
+    font-weight: 400;
+    line-height: $page-line-height;
 }
 
 
@@ -100,7 +121,10 @@ h1.groupheader {
 }
 
 .title {
-    font: 400 14px/28px Roboto, sans-serif;
+    font-size: $page-font-size;
+    font-family: $page-font-family;
+    font-weight: 400;
+    line-height: $page-line-height;
     font-size: 150%;
     font-weight: bold;
     margin: 10px 2px;
@@ -326,7 +350,7 @@ pre.fragment {
     overflow: auto;
     word-wrap: break-word;
     line-height: 125%;
-    font-family: $code-font;
+    font-family: $code-font-family;
     font-size: 105%;
     color: $code-fg-color;
 }
@@ -341,10 +365,9 @@ div.fragment {
 }
 
 div.line {
-    font-family: monospace, fixed;
-    font-size: 13px;
-    min-height: 13px;
-    line-height: 1.0;
+    font-family: $code-font-family;
+    font-size: $code-font-size;
+    line-height: $code-line-height;
     text-wrap: unrestricted;
     white-space: -moz-pre-wrap;
     /* Moz */
@@ -651,7 +674,7 @@ table.memberdecls {
 
 .memItemLeft,
 .memItemRight {
-    font-family: $code-font;
+    font-family: $code-font-family;
 }
 
 .mdescLeft,
@@ -779,7 +802,7 @@ table.memberdecls {
 }
 
 .memname {
-    font-family: $code-font;
+    font-family: $code-font-family;
     font-weight: 400;
     margin-left: 6px;
 }
@@ -1023,8 +1046,8 @@ div.directory {
     font-family: Arial, Helvetica;
     font-weight: bold;
     font-size: 12px;
-    height: 14px;
-    width: 16px;
+    height: $page-font-size;
+    width: $page-font-size;
     display: inline-block;
     background-color: #728DC1;
     color: white;
@@ -1074,7 +1097,10 @@ div.directory {
 }
 
 table.directory {
-    font: 400 14px Roboto, sans-serif;
+    font-size: $page-font-size;
+    font-family: $page-font-family;
+    font-weight: 400;
+    line-height: $page-line-height;
 }
 
 
@@ -1272,7 +1298,7 @@ table.classindex {
 }
 
 div.ingroups {
-    font-size: 8pt;
+    font-size: 10pt;
     width: 50%;
     text-align: left;
 }
@@ -1686,7 +1712,7 @@ tr.heading h2 {
 #powerTip div {
     margin: 0px;
     padding: 0px;
-    font: 12px/16px Roboto, sans-serif;
+    font: 12px/16px $page-font-family;
 }
 
 #powerTip:before,

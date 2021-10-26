@@ -3,7 +3,12 @@
 /// @brief Floating Point Unit (FPU).
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
-
+/// @addtogroup devices Hardware Interfaces
+/// @brief Data structures and functions for managing hardware devices.
+/// @{
+/// @addtogroup fpu Floating Point Unit (FPU)
+/// @brief Device designed to carry out operations on floating-point numbers.
+/// @{
 #pragma once
 
 #include "stdint.h"
@@ -124,3 +129,6 @@ void unswitch_fpu();
 /// @brief Enable the FPU context handling.
 /// @return 0 if fails, 1 if succeed.
 int fpu_install();
+
+/// @}
+/// @}
