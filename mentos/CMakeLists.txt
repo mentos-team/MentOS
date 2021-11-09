@@ -9,7 +9,7 @@ project(mentos C ASM)
 set(KERNEL_NAME ${PROJECT_NAME}_kernel)
 set(BOOTLOADER_NAME ${PROJECT_NAME}_bootloader)
 set(BUDDY_SYSTEM_NAME ${PROJECT_NAME}_memory)
-set(BUDDY_SYSTEM_FILE ${PROJECT_SOURCE_DIR}/lib${PROJECT_NAME}_memory.a)
+set(BUDDY_SYSTEM_FILE ${PROJECT_SOURCE_DIR}/src/mem/libbuddysystem.a)
 
 # =============================================================================
 # Set the default build type to Debug.
@@ -306,9 +306,10 @@ else(USE_BUDDY_SYSTEM)
   # Link the exercise libraries.
   target_link_libraries(${KERNEL_NAME} ${BUDDY_SYSTEM_FILE})
 endif(USE_BUDDY_SYSTEM)
+
 # =============================================================================
 # Add bootloader library.
-add_library(${BOOTLOADER_NAME} src/boot.c boot.S)
+add_library(${BOOTLOADER_NAME} src/boot.c src/boot.S)
 
 # =============================================================================
 # Build the kernel.
