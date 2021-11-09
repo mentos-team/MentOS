@@ -4,15 +4,14 @@
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#ifndef MENTOS_BOOT_H
-#define MENTOS_BOOT_H
+#pragma once
 
 #include "multiboot.h"
 
 /// @brief Mentos structure to communicate bootloader info to the kernel
 typedef struct boot_info_t {
     /// Boot magic number.
-    uint32_t magic;
+    unsigned int magic;
 
     /*
      * Bootloader physical range
@@ -20,9 +19,9 @@ typedef struct boot_info_t {
      * */
 
     /// bootloader code start
-    uint32_t bootloader_phy_start;
+    unsigned int bootloader_phy_start;
     /// bootloader code end
-    uint32_t bootloader_phy_end;
+    unsigned int bootloader_phy_end;
 
     /*
      * Kernel virtual and physical range
@@ -31,20 +30,20 @@ typedef struct boot_info_t {
      * */
 
     /// kernel physical code start
-    uint32_t kernel_phy_start;
+    unsigned int kernel_phy_start;
     /// kernel physical code end
-    uint32_t kernel_phy_end;
+    unsigned int kernel_phy_end;
 
     /// kernel code start
-    uint32_t kernel_start;
+    unsigned int kernel_start;
     /// kernel code end
-    uint32_t kernel_end;
+    unsigned int kernel_end;
 
     /// kernel size.
-    uint32_t kernel_size;
+    unsigned int kernel_size;
 
     /// Address after the modules.
-    uint32_t module_end;
+    unsigned int module_end;
 
     /*
      * Range of addressable lowmemory, is memory that is available
@@ -53,17 +52,17 @@ typedef struct boot_info_t {
      * */
 
     /// lowmem physical addressable start
-    uint32_t lowmem_phy_start;
+    unsigned int lowmem_phy_start;
     /// lowmem physical addressable end
-    uint32_t lowmem_phy_end;
+    unsigned int lowmem_phy_end;
 
     /// lowmem addressable start
-    uint32_t lowmem_start;
+    unsigned int lowmem_start;
     /// lowmem addressable end
-    uint32_t lowmem_end;
+    unsigned int lowmem_end;
 
     /// stack end (comes after lowmem_end, and is the end of the low mapped memory)
-    uint32_t stack_end;
+    unsigned int stack_end;
 
     /*
      * Range of non-addressable highmemory, is memory that can be
@@ -71,15 +70,13 @@ typedef struct boot_info_t {
      * */
 
     /// highmem addressable start
-    uint32_t highmem_phy_start;
+    unsigned int highmem_phy_start;
     /// highmem addressable end
-    uint32_t highmem_phy_end;
+    unsigned int highmem_phy_end;
 
     /// multiboot info
     multiboot_info_t *multiboot_header;
 
     /// stack suggested start address (also set by the bootloader)
-    uint32_t stack_base;
+    unsigned int stack_base;
 } boot_info_t;
-
-#endif //MENTOS_BOOT_H

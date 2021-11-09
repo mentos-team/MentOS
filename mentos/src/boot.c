@@ -4,11 +4,11 @@
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
+#include "boot.h"
+
 #include "link_access.h"
-#include "multiboot.h"
-#include "mem/paging.h"
 #include "sys/module.h"
-#include "stdint.h"
+#include "mem/paging.h"
 #include "elf/elf.h"
 
 /// @defgroup bootloader Bootloader
@@ -42,18 +42,25 @@ static page_directory_t boot_pgdir;
 /// @brief Boot page tables.
 static page_table_t boot_pgtables[1024];
 
+/// @brief      Use this to write to I/O ports to send bytes to devices.
+/// @param port The output port.
+/// @param data The data to write.
 static inline void __outportb(uint16_t port, uint8_t data)
 {
     __asm__ __volatile__("outb %%al, %%dx" ::"a"(data), "d"(port));
 }
 
+/// @brief Writes the given character on the debug port.
+/// @param c the character to send to the debug port.
 static inline void __debug_putchar(char c)
 {
 #if (defined(DEBUG_STDIO) || defined(DEBUG_LOG))
-    __outportb(SERIAL_COM1, c);
+    outportb(SERIAL_COM1, c);
 #endif
 }
 
+/// @brief Writes the given string on the debug port.
+/// @param s the string to send to the debug port.
 static inline void __debug_puts(char *s)
 {
 #if (defined(DEBUG_STDIO) || defined(DEBUG_LOG))
@@ -62,19 +69,29 @@ static inline void __debug_puts(char *s)
 #endif
 }
 
-/// @brief Align memory to the specified value (round up).
+/// @brief Align memory address to the specified value (round up).
+/// @param addr the address to align
+/// @param value the value used to align.
+/// @return the aligned address.
 static inline uint32_t __align_rup(uint32_t addr, uint32_t value)
 {
     uint32_t reminder = (addr % value);
     return addr + (reminder ? (value - reminder) : 0);
 }
 
-/// @brief Align memory to the specified value (round down).
+/// @brief Align memory address to the specified value (round down).
+/// @param addr the address to align
+/// @param value the value used to align.
+/// @return the aligned address.
 static inline uint32_t __align_rdown(uint32_t addr, uint32_t value)
 {
     return addr - (addr % value);
 }
 
+/// @brief Prepares the page frames.
+/// @param pfn_virt_start The first virtual page frame.
+/// @param pfn_phys_start The first physical page frame.
+/// @param pfn_count The number of page frames.
 static void __setup_pages(uint32_t pfn_virt_start, uint32_t pfn_phys_start, uint32_t pfn_count)
 {
     uint32_t base_pgtable = pfn_virt_start / 1024;
@@ -93,7 +110,6 @@ static void __setup_pages(uint32_t pfn_virt_start, uint32_t pfn_phys_start, uint
             table->pages[j].global  = 0;
             table->pages[j].user    = 0;
         }
-
         boot_pgdir.entries[i].rw        = 1;
         boot_pgdir.entries[i].present   = 1;
         boot_pgdir.entries[i].available = 1;
@@ -101,23 +117,19 @@ static void __setup_pages(uint32_t pfn_virt_start, uint32_t pfn_phys_start, uint
     }
 }
 
-/*
- * Setup paging mapping all the low memory to two places:
- * one is the physical address of the memory itself
- * the other is in the virtual kernel address space
- * */
+/// @brief Setup paging mapping all the low memory to two places: one is the
+/// physical address of the memory itself the other is in the virtual kernel
+/// address space.
 static inline void __setup_boot_paging()
 {
     uint32_t kernel_base_phy_page  = boot_info.kernel_phy_start >> 12U;
     uint32_t kernel_base_virt_page = boot_info.kernel_start >> 12U;
-
+    // Compute the last physical page.
     uint32_t lowmem_last_phy_page = ((uint32_t)(boot_info.lowmem_phy_end - 1)) >> 12U;
-
+    // Compute the number of pages.
     uint32_t num_pages = lowmem_last_phy_page - kernel_base_phy_page + 1;
-
     // Map lowmem physical pages also to their physical address (to keep bootloader working)
     __setup_pages(0, 0, lowmem_last_phy_page);
-
     // Setup kernel virtual address space + lowmem
     __setup_pages(kernel_base_virt_page, kernel_base_phy_page, num_pages);
 }
@@ -126,9 +138,7 @@ static inline void __setup_boot_paging()
 /// @param elf_hdr The elf header of the kernel.
 /// @param virt_low  Output variable where we store the lowest address of the kernel.
 /// @param virt_high Output variable where we store the highest address of the kernel.
-static void __get_kernel_low_high(elf_header_t *elf_hdr,
-                                  uint32_t *virt_low,
-                                  uint32_t *virt_high)
+static void __get_kernel_low_high(elf_header_t *elf_hdr, uint32_t *virt_low, uint32_t *virt_high)
 {
     // Prepare a pointer to a program header.
     elf_program_header_t *program_header;
@@ -208,7 +218,7 @@ static inline void __relocate_kernel_image(elf_header_t *elf_hdr)
 /// @param esp    The initial stack pointer.
 void boot_main(uint32_t magic, multiboot_info_t *header, uint32_t esp)
 {
-    __debug_puts("\nbootloader: Start...\n");
+    __debug_puts("\n[bootloader] Start...\n");
     elf_header_t *elf_hdr = (elf_header_t *)LDVAR(kernel_bin);
 
     // Get the physical addresses of where the kernel starts and ends.
@@ -221,7 +231,7 @@ void boot_main(uint32_t magic, multiboot_info_t *header, uint32_t esp)
     __get_kernel_low_high(elf_hdr, &kernel_virt_low, &kernel_virt_high);
 
     // Initialize the boot_info_t structure.
-    __debug_puts("bootloader: Initializing the boot_info structure...\n");
+    __debug_puts("[bootloader] Initializing the boot_info structure...\n");
     boot_info.magic                = magic;
     boot_info.bootloader_phy_start = boot_start;
     boot_info.bootloader_phy_end   = boot_end;
@@ -263,15 +273,15 @@ void boot_main(uint32_t magic, multiboot_info_t *header, uint32_t esp)
     boot_info.stack_end         = boot_info.lowmem_end;
 
     // Setup the page directory and page tables for the boot.
-    __debug_puts("bootloader: Setting up paging...\n");
+    __debug_puts("[bootloader] Setting up paging...\n");
     __setup_boot_paging();
 
     // Switch to the newly created page directory.
-    __debug_puts("bootloader: Switching page directory...\n");
+    __debug_puts("[bootloader] Switching page directory...\n");
     paging_switch_directory(&boot_pgdir);
 
     // Enable paging.
-    __debug_puts("bootloader: Enabling paging...\n");
+    __debug_puts("[bootloader] Enabling paging...\n");
     paging_enable();
 
     // Reserve space for the kernel stack at the end of lowmem.
@@ -279,20 +289,10 @@ void boot_main(uint32_t magic, multiboot_info_t *header, uint32_t esp)
     boot_info.lowmem_phy_end = boot_info.lowmem_phy_end - KERNEL_STACK_SIZE;
     boot_info.lowmem_end     = boot_info.lowmem_end - KERNEL_STACK_SIZE;
 
-    __debug_puts("bootloader: Relocating kernel image...\n");
+    __debug_puts("[bootloader] Relocating kernel image...\n");
     __relocate_kernel_image(elf_hdr);
 
-#if 0
-    for (int i = 0; i < elf_hdr->shnum; i++) {
-        struct elf_section_header *section_header =
-            (elf_section_header_t *)(LDVAR(kernel_bin) + elf_hdr->shoff + elf_hdr->shentsize * i);
-        for (int j = 0; j < section_header->; j++) {
-            ((char *)section_header->vaddr)[j] = (LDVAR(kernel_bin) + section_header->offset)[j];
-        }
-    }
-#endif
-
-    __debug_puts("bootloader: Calling `boot_kernel`...\n\n");
+    __debug_puts("[bootloader] Calling `boot_kernel`...\n\n");
     boot_kernel(boot_info.stack_base, elf_hdr->entry, &boot_info);
 }
 
