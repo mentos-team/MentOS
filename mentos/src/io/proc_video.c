@@ -8,7 +8,7 @@
 #include "bits/ioctls.h"
 #include "sys/bitops.h"
 #include "io/video.h"
-#include "misc/debug.h"
+#include "io/debug.h"
 #include "sys/errno.h"
 #include "fcntl.h"
 #include "fs/vfs.h"

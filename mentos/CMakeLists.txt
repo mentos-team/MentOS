@@ -167,6 +167,7 @@ if(USE_BUDDY_SYSTEM)
     src/io/mm_io.c
     src/io/video.c
     src/io/stdio.c
+    src/io/debug.c
     src/io/proc_video.c
     src/io/proc_running.c
     src/io/proc_system.c
@@ -197,7 +198,6 @@ if(USE_BUDDY_SYSTEM)
     src/mem/vmem_map.c
     src/mem/zone_allocator.c
     src/mem/buddysystem.c
-    src/misc/debug.c
     src/elf/elf.c
     src/descriptor_tables/gdt.c
     src/descriptor_tables/gdt.S
@@ -250,6 +250,7 @@ else(USE_BUDDY_SYSTEM)
     src/io/mm_io.c
     src/io/video.c
     src/io/stdio.c
+    src/io/debug.c
     src/io/proc_video.c
     src/io/proc_running.c
     src/io/proc_system.c
@@ -279,7 +280,6 @@ else(USE_BUDDY_SYSTEM)
     src/mem/slab.c
     src/mem/vmem_map.c
     src/mem/zone_allocator.c
-    src/misc/debug.c
     src/elf/elf.c
     src/descriptor_tables/gdt.c
     src/descriptor_tables/gdt.S

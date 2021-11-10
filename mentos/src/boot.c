@@ -55,7 +55,7 @@ static inline void __outportb(uint16_t port, uint8_t data)
 static inline void __debug_putchar(char c)
 {
 #if (defined(DEBUG_STDIO) || defined(DEBUG_LOG))
-    outportb(SERIAL_COM1, c);
+    __outportb(SERIAL_COM1, c);
 #endif
 }
 

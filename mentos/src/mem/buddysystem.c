@@ -11,7 +11,7 @@
 #include "mem/buddysystem.h"
 #include "mem/paging.h"
 #include "assert.h"
-#include "misc/debug.h"
+#include "io/debug.h"
 #include "system/panic.h"
 
 /// @brief Cache level low limit after which allocation starts.

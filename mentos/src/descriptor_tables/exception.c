@@ -8,7 +8,7 @@
 #include "descriptor_tables/isr.h"
 #include "descriptor_tables/idt.h"
 #include "stdio.h"
-#include "misc/debug.h"
+#include "io/debug.h"
 
 // Default error messages for exceptions.
 static const char *exception_messages[32] = {

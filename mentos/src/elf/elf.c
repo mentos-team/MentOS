@@ -14,7 +14,7 @@
 #include "process/process.h"
 #include "string.h"
 #include "stddef.h"
-#include "misc/debug.h"
+#include "io/debug.h"
 #include "stdio.h"
 #include "mem/slab.h"
 #include "fs/vfs.h"

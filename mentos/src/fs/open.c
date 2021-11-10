@@ -11,7 +11,7 @@
 #include "system/syscall.h"
 #include "string.h"
 #include "limits.h"
-#include "misc/debug.h"
+#include "io/debug.h"
 #include "sys/errno.h"
 #include "stdio.h"
 #include "fs/vfs.h"

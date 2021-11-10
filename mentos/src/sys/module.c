@@ -8,7 +8,7 @@
 #include "sys/module.h"
 #include "string.h"
 #include "sys/bitops.h"
-#include "misc/debug.h"
+#include "io/debug.h"
 
 /// Defined in kernel.ld, points at the end of kernel's data segment.
 extern void *_kernel_end;

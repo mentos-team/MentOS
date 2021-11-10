@@ -6,7 +6,7 @@
 
 #include "devices/fpu.h"
 #include "descriptor_tables/isr.h"
-#include "misc/debug.h"
+#include "io/debug.h"
 #include "string.h"
 #include "assert.h"
 #include "process/scheduler.h"

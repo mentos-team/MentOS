@@ -7,7 +7,7 @@
 #include "descriptor_tables/tss.h"
 
 #include "string.h"
-#include "misc/debug.h"
+#include "io/debug.h"
 #include "descriptor_tables/gdt.h"
 
 static tss_entry_t kernel_tss;

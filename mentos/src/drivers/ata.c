@@ -16,7 +16,7 @@
 #include "descriptor_tables/isr.h"
 #include "fs/vfs.h"
 #include "devices/pci.h"
-#include "misc/debug.h"
+#include "io/debug.h"
 #include "mem/kheap.h"
 #include "assert.h"
 #include "string.h"

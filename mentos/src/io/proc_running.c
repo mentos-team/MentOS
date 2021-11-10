@@ -9,7 +9,7 @@
 #include "libgen.h"
 #include "stdio.h"
 #include "sys/errno.h"
-#include "misc/debug.h"
+#include "io/debug.h"
 #include "process/prio.h"
 
 /// @brief Returns the character identifying the process state.

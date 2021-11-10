@@ -13,7 +13,7 @@
 #include "process/process.h"
 #include "sys/errno.h"
 #include "assert.h"
-#include "misc/debug.h"
+#include "io/debug.h"
 #include "string.h"
 #include "klib/irqflags.h"
 

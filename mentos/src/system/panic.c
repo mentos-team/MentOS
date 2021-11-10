@@ -5,7 +5,7 @@
 /// See LICENSE.md for details.
 
 #include "system/panic.h"
-#include "misc/debug.h"
+#include "io/debug.h"
 
 void kernel_panic(const char *msg)
 {

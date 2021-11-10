@@ -14,7 +14,7 @@
 #include "assert.h"
 #include "mem/paging.h"
 #include "string.h"
-#include "misc/debug.h"
+#include "io/debug.h"
 
 /// TODO: Comment.
 #define MIN_PAGE_ALIGN(addr) ((addr) & (~(PAGE_SIZE - 1)))

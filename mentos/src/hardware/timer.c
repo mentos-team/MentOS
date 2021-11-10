@@ -12,7 +12,7 @@
 #include "io/port_io.h"
 #include "stdint.h"
 #include "mem/kheap.h"
-#include "misc/debug.h"
+#include "io/debug.h"
 #include "process/wait.h"
 #include "drivers/rtc.h"
 #include "descriptor_tables/isr.h"

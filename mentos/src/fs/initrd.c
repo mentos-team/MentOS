@@ -10,7 +10,7 @@
 #include "system/panic.h"
 #include "fs/vfs.h"
 #include "sys/errno.h"
-#include "misc/debug.h"
+#include "io/debug.h"
 #include "mem/kheap.h"
 #include "fcntl.h"
 #include "sys/bitops.h"

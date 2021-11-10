@@ -17,7 +17,7 @@
 #include "process/wait.h"
 #include "mem/kheap.h"
 #include "system/panic.h"
-#include "misc/debug.h"
+#include "io/debug.h"
 #include "time.h"
 #include "sys/errno.h"
 #include "klib/list_head.h"

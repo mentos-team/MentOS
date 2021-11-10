@@ -10,7 +10,7 @@
 #include "string.h"
 #include "stdio.h"
 #include "sys/errno.h"
-#include "misc/debug.h"
+#include "io/debug.h"
 #include "hardware/timer.h"
 
 static ssize_t procs_do_uptime(char *buffer, size_t bufsize);

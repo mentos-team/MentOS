@@ -20,7 +20,7 @@
 #include "sys/errno.h"
 #include "fcntl.h"
 #include "system/panic.h"
-#include "misc/debug.h"
+#include "io/debug.h"
 #include "process/wait.h"
 #include "process/prio.h"
 #include "fs/vfs.h"

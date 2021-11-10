@@ -5,7 +5,7 @@
 /// See LICENSE.md for details.
 
 #include "sys/bitops.h"
-#include "misc/debug.h"
+#include "io/debug.h"
 #include "klib/spinlock.h"
 #include "io/port_io.h"
 #include "kernel.h"

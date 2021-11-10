@@ -6,7 +6,7 @@
 ///! @cond Doxygen_Suppress
 
 #include "devices/pci.h"
-#include "misc/debug.h"
+#include "io/debug.h"
 #include "string.h"
 #include "io/port_io.h"
 

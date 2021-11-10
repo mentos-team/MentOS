@@ -4,7 +4,7 @@
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "misc/debug.h"
+#include "io/debug.h"
 #include "sys/errno.h"
 #include "fs/vfs.h"
 #include "mem/kheap.h"

@@ -7,7 +7,7 @@
 #include "klib/rbtree.h"
 
 #include "assert.h"
-#include "misc/debug.h"
+#include "io/debug.h"
 #include "mem/slab.h"
 
 /// @brief Stores information of a node.

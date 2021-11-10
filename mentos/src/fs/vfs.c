@@ -15,7 +15,7 @@
 #include "fs/procfs.h"
 #include "assert.h"
 #include "libgen.h"
-#include "misc/debug.h"
+#include "io/debug.h"
 #include "system/panic.h"
 #include "stdio.h"
 

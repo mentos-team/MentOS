@@ -9,7 +9,7 @@
 
 #include "mem/kheap.h"
 #include "math.h"
-#include "misc/debug.h"
+#include "io/debug.h"
 #include "string.h"
 #include "mem/paging.h"
 #include "assert.h"

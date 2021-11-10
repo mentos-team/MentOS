@@ -11,7 +11,7 @@
 #include "fs/vfs.h"
 #include "string.h"
 #include "sys/errno.h"
-#include "misc/debug.h"
+#include "io/debug.h"
 #include "fcntl.h"
 #include "libgen.h"
 #include "assert.h"

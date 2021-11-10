@@ -5,7 +5,7 @@
 /// See LICENSE.md for details.
 
 #include "klib/mutex.h"
-#include "misc/debug.h"
+#include "io/debug.h"
 
 void mutex_lock(mutex_t *mutex, uint32_t owner)
 {

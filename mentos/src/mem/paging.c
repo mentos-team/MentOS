@@ -12,7 +12,7 @@
 #include "mem/vmem_map.h"
 #include "mem/zone_allocator.h"
 #include "mem/kheap.h"
-#include "misc/debug.h"
+#include "io/debug.h"
 #include "assert.h"
 #include "string.h"
 #include "system/panic.h"

@@ -17,7 +17,7 @@
 #include "version.h"
 #include "io/video.h"
 #include "hardware/pic8259.h"
-#include "misc/debug.h"
+#include "io/debug.h"
 #include "drivers/fdc.h"
 #include "fs/initrd.h"
 #include "klib/irqflags.h"

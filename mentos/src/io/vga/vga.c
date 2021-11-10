@@ -7,7 +7,7 @@
 #include "io/port_io.h"
 #include "stdbool.h"
 #include "string.h"
-#include "misc/debug.h"
+#include "io/debug.h"
 #include "math.h"
 
 #define COUNT_OF(x) ((sizeof(x) / sizeof(0 [x])) / ((size_t)(!(sizeof(x) % sizeof(0 [x])))))

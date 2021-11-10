@@ -11,7 +11,7 @@
 #include "kernel.h"
 #include "sys/bitops.h"
 #include "stddef.h"
-#include "misc/debug.h"
+#include "io/debug.h"
 #include "system/panic.h"
 #include "stddef.h"
 

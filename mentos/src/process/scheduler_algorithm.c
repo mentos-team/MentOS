@@ -6,7 +6,7 @@
 
 #include "hardware/timer.h"
 #include "process/prio.h"
-#include "misc/debug.h"
+#include "io/debug.h"
 #include "assert.h"
 #include "klib/list_head.h"
 #include "process/wait.h"

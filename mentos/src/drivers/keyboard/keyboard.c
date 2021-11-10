@@ -13,7 +13,7 @@
 #include "drivers/keyboard/keymap.h"
 #include "sys/bitops.h"
 #include "io/video.h"
-#include "misc/debug.h"
+#include "io/debug.h"
 #include "ctype.h"
 #include "descriptor_tables/isr.h"
 #include "process/scheduler.h"

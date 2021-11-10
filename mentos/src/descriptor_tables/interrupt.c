@@ -11,7 +11,7 @@
 #include "system/printk.h"
 #include "assert.h"
 #include "stdio.h"
-#include "misc/debug.h"
+#include "io/debug.h"
 #include "descriptor_tables/idt.h"
 
 /// @brief Shared interrupt handlers, stored into a double-linked list.

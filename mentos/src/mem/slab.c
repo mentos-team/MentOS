@@ -10,7 +10,7 @@
 #include "mem/zone_allocator.h"
 #include "mem/paging.h"
 #include "assert.h"
-#include "misc/debug.h"
+#include "io/debug.h"
 #include "mem/slab.h"
 
 /// @brief Use it to manage cached pages.

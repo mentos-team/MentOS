@@ -7,7 +7,7 @@
 #include "fs/vfs.h"
 #include "ctype.h"
 #include "string.h"
-#include "misc/debug.h"
+#include "io/debug.h"
 #include "stdio.h"
 
 static int vsscanf(const char *buf, const char *s, va_list ap)
