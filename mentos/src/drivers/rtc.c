@@ -3,6 +3,8 @@
 /// @brief  Real Time Clock (RTC) driver.
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
+/// @addtogroup rtc
+/// @{
 
 #include "drivers/rtc.h"
 
@@ -117,7 +119,7 @@ void gettime(tm_t *time)
     memcpy(time, &global_time, sizeof(tm_t));
 }
 
-void rtc_install(void)
+int rtc_initialize()
 {
     unsigned char status;
 
@@ -135,4 +137,16 @@ void rtc_install(void)
     irq_install_handler(IRQ_REAL_TIME_CLOCK, rtc_handler_isr, "Real Time Clock (RTC)");
     // Enable the IRQ.
     pic8259_irq_enable(IRQ_REAL_TIME_CLOCK);
+    return 0;
 }
+
+int rtc_finalize()
+{
+    // Uninstall the IRQ.
+    irq_uninstall_handler(IRQ_REAL_TIME_CLOCK, rtc_handler_isr);
+    // Disable the IRQ.
+    pic8259_irq_disable(IRQ_REAL_TIME_CLOCK);
+    return 0;
+}
+
+/// @}

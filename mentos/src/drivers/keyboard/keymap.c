@@ -3,6 +3,8 @@
 /// @brief Keymap for keyboard.
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
+/// @addtogroup keyboard
+/// @{
 
 #include "drivers/keyboard/keymap.h"
 #include "string.h"
@@ -282,3 +284,5 @@ void init_keymaps()
     keymaps[KEYMAP_US].numlock[KEY_KP8]    = '8';
     keymaps[KEYMAP_US].numlock[KEY_KP9]    = '9';
 }
+
+/// @}

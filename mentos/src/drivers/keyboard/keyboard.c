@@ -3,6 +3,8 @@
 /// @brief Keyboard handling.
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
+/// @addtogroup keyboard
+/// @{
 
 #include "drivers/keyboard/keyboard.h"
 
@@ -15,6 +17,9 @@
 #include "ctype.h"
 #include "descriptor_tables/isr.h"
 #include "process/scheduler.h"
+
+/// The dimension of the circular buffer used to store video history.
+#define BUFSIZE 256
 
 /// A macro from Ivan to update buffer indexes.
 #define STEP(x) (((x) == BUFSIZE - 1) ? 0 : ((x) + 1))
@@ -60,16 +65,6 @@ static inline int read_character()
         buf_r = STEP(buf_r);
     }
     return c;
-}
-
-void keyboard_install()
-{
-    // Initialize the keymaps.
-    init_keymaps();
-    // Install the IRQ.
-    irq_install_handler(IRQ_KEYBOARD, keyboard_isr, "keyboard");
-    // Enable the IRQ.
-    pic8259_irq_enable(IRQ_KEYBOARD);
 }
 
 void keyboard_isr(pt_regs *f)
@@ -273,3 +268,25 @@ int keyboard_getc()
 {
     return read_character();
 }
+
+int keyboard_initialize()
+{
+    // Initialize the keymaps.
+    init_keymaps();
+    // Install the IRQ.
+    irq_install_handler(IRQ_KEYBOARD, keyboard_isr, "keyboard");
+    // Enable the IRQ.
+    pic8259_irq_enable(IRQ_KEYBOARD);
+    return 0;
+}
+
+int keyboard_finalize()
+{
+    // Install the IRQ.
+    irq_uninstall_handler(IRQ_KEYBOARD, keyboard_isr);
+    // Enable the IRQ.
+    pic8259_irq_disable(IRQ_KEYBOARD);
+    return 0;
+}
+
+/// @}

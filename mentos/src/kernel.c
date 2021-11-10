@@ -202,7 +202,7 @@ int kmain(boot_info_t *boot_informations)
     //==========================================================================
     pr_notice("Install RTC.\n");
     printf("Setting up RTC...");
-    rtc_install();
+    rtc_initialize();
     print_ok();
 
     //==========================================================================
@@ -270,7 +270,7 @@ int kmain(boot_info_t *boot_informations)
     //==========================================================================
     pr_notice("Setting up keyboard driver...\n");
     printf("Setting up keyboard driver...");
-    keyboard_install();
+    keyboard_initialize();
     print_ok();
 
     //==========================================================================
@@ -280,10 +280,6 @@ int kmain(boot_info_t *boot_informations)
      mouse_install();     // Install the mouse.
      print_ok();
 #endif
-
-    //==========================================================================
-    pr_notice("Uninstall the floppy driver.\n");
-    fdc_disable_motor();
 
     //==========================================================================
     pr_notice("Initialize the scheduler.\n");

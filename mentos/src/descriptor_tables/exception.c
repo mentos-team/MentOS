@@ -89,7 +89,7 @@ void isrs_init()
     }
 }
 
-int isr_install_handler(uint32_t i, interrupt_handler_t handler, char *description)
+int isr_install_handler(unsigned i, interrupt_handler_t handler, char *description)
 {
     // Sanity check.
     if (i > 31 && i != 80) {
@@ -97,5 +97,15 @@ int isr_install_handler(uint32_t i, interrupt_handler_t handler, char *descripti
     }
     isr_routines[i]             = handler;
     isr_routines_description[i] = description;
+    return 0;
+}
+
+int isr_uninstall_handler(unsigned i)
+{
+    if (i > 31 && i != 80) {
+        return -1;
+    }
+    isr_routines[i]             = default_isr_handler;
+    isr_routines_description[i] = "NONE";
     return 0;
 }

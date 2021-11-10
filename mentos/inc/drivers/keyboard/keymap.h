@@ -3,6 +3,10 @@
 /// @brief Keymap for keyboard.
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
+/// @addtogroup drivers Device Drivers
+/// @{
+/// @addtogroup keyboard Keyboard
+/// @{
 
 #pragma once
 
@@ -40,7 +44,7 @@ const keymap_t *get_keymap();
 /// @brief Initializes the supported keymaps.
 void init_keymaps();
 
-/// @defgroup keyboardcodes Keyboard Codes
+/// @name Keyboard Codes
 /// @brief This is the list of keyboard codes.
 /// @{
 
@@ -148,4 +152,7 @@ void init_keymaps();
 #define KEY_DOWN_ARROW    0xe050U ///< Down Arrow 57424
 #define CODE_BREAK        0x0080U ///< Code break code
 
+/// @}
+
+/// @}
 /// @}

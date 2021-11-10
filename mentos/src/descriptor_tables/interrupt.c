@@ -62,13 +62,44 @@ void irq_init()
 int irq_install_handler(unsigned i, interrupt_handler_t handler, char *description)
 {
     // We have maximun IRQ_NUM IRQ lines.
-    assert((i < IRQ_NUM) && "Unidentified IRQ number.");
+    if (i >= IRQ_NUM) {
+        pr_err("There are no handler for IRQ `%d`\n", i);
+        return -1;
+    }
     // Create a new irq_struct_t to save the given handler.
     irq_struct_t *irq_struct = __irq_struct_alloc();
-    irq_struct->description  = description;
-    irq_struct->handler      = handler;
+    if (irq_struct == NULL) {
+        pr_err("Failed to allocate more IRQ structures for IRQ `%d`\n", i);
+        return -1;
+    }
+    irq_struct->description = description;
+    irq_struct->handler     = handler;
     // Add the handler to the list of his siblings.
     list_head_add_tail(&irq_struct->siblings, &shared_interrupt_handlers[i]);
+    return 0;
+}
+
+int irq_uninstall_handler(unsigned i, interrupt_handler_t handler)
+{
+    // We have maximun IRQ_NUM IRQ lines.
+    if (i >= IRQ_NUM) {
+        pr_err("There are no handler for IRQ `%d`\n", i);
+        return -1;
+    }
+    if (list_head_empty(&shared_interrupt_handlers[i])) {
+        pr_err("There are no handler for IRQ `%d`\n", i);
+        return -1;
+    }
+    list_for_each_decl(it, &shared_interrupt_handlers[i])
+    {
+        // Get the interrupt structure.
+        irq_struct_t *irq_struct = list_entry(it, irq_struct_t, siblings);
+        assert(irq_struct && "Something went wrong.");
+        if (irq_struct->handler == handler) {
+            list_head_del(&irq_struct->siblings);
+        }
+        __irq_struct_dealloc(irq_struct);
+    }
     return 0;
 }
 

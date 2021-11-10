@@ -41,7 +41,12 @@ void irq_init();
 /// @param handler     Exception handler.
 /// @param description Exception description.
 /// @return 0 on success, -1 otherwise.
-int isr_install_handler(uint32_t i, interrupt_handler_t handler, char *description);
+int isr_install_handler(unsigned i, interrupt_handler_t handler, char *description);
+
+/// @brief Uninstall an ISR handler.
+/// @param i           Interrupt identifier.
+/// @return 0 on success, -1 otherwise.
+int isr_uninstall_handler(unsigned i);
 
 /// @brief Installs an ISR to handle an interrupt.
 /// @param i           Interrupt identifier.
@@ -49,6 +54,11 @@ int isr_install_handler(uint32_t i, interrupt_handler_t handler, char *descripti
 /// @param description Interrupt description.
 /// @return 0 on success, -1 otherwise.
 int irq_install_handler(unsigned i, interrupt_handler_t handler, char *description);
+
+/// @brief Uninstall an IRQ handler.
+/// @param i           Interrupt identifier.
+/// @return 0 on success, -1 otherwise.
+int irq_uninstall_handler(unsigned i, interrupt_handler_t handler);
 
 /// @brief Method called by CPU to handle interrupts.
 /// @param f The interrupt stack frame.
