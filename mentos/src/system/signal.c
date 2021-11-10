@@ -16,6 +16,7 @@
 #include "io/debug.h"
 #include "string.h"
 #include "klib/irqflags.h"
+#include "klib/stack_helper.h"
 
 /// SLAB caches for signal bits.
 static kmem_cache_t *sigqueue_cachep;
@@ -289,14 +290,14 @@ static inline int __handle_signal(int signr, siginfo_t *info, sigaction_t *ka, s
         // We push on the stack the entire siginfo.
         __copy_siginfo(siginfo_addr, info);
         // We push on the stack the pointer to the siginfo we copied on the stack.
-        PUSH_ARG(regs->useresp, siginfo_t *, siginfo_addr);
+        PUSH_VALUE_ON_STACK(regs->useresp, siginfo_addr);
     }
 
     // Push on the stack the signal number, first and only argument of the handler.
-    PUSH_ARG(regs->useresp, int, signr);
+    PUSH_VALUE_ON_STACK(regs->useresp, signr);
 
     // Push on the stack the function required to handle the signal return.
-    PUSH_ARG(regs->useresp, uint32_t, current->sigreturn_eip);
+    PUSH_VALUE_ON_STACK(regs->useresp, current->sigreturn_eip);
 
     return 1;
 }

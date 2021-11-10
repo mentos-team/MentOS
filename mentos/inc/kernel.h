@@ -11,9 +11,6 @@
 /// @brief The initial stack pointer.
 extern uintptr_t initial_esp;
 
-/// @brief Push the `item` of a given `type` on the `stack`.
-#define PUSH_ARG(stack, type, item) (*((type *)((stack) -= sizeof(type))) = (item))
-
 /// Kilobytes.
 #define K 1024
 /// Megabytes.

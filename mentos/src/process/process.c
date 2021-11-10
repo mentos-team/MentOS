@@ -4,7 +4,6 @@
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-
 #include "sys/kernel_levels.h"
 
 //#ifndef __DEBUG_LEVEL__
@@ -25,37 +24,62 @@
 #include "process/prio.h"
 #include "fs/vfs.h"
 #include "elf/elf.h"
+#include "klib/stack_helper.h"
 
 /// Cache for creating the task structs.
 static kmem_cache_t *task_struct_cache;
 /// @brief The task_struct of the init process.
 static task_struct *init_proc;
 
-static inline int __push_args_on_stack(uintptr_t *esp, char *args[], char ***argsptr)
+/// @brief Counts the number of arguments.
+/// @param args the array of arguments, it must be NULL terminated.
+/// @return the number of arguments.
+static inline int __count_args(char **args)
 {
     int argc = 0;
-    char *args_ptr[256];
-    // Count the number of arguments.
-    while (args[argc] != NULL) {
+    while (args[argc] != NULL)
         ++argc;
-    }
+    return argc;
+}
 
+/// @brief Counts the bytes occupied by the arguments.
+/// @param args the array of arguments, it must be NULL terminated.
+/// @return the bytes occupied by the arguments.
+static inline int __count_args_bytes(char **args)
+{
+    // Count the number of arguments.
+    int argc = __count_args(args);
+    // Count the number of characters.
+    int nchar = 0;
+    for (int i = 0; i < argc; i++) {
+        nchar += strlen(args[i]) + 1;
+    }
+    return nchar + (argc + 1 /* The NULL terminator */) * sizeof(char *);
+}
+
+/// @brief Pushes the arguments on the stack.
+/// @param stack pointer to the stack location.
+/// @param args the list of arguments.
+/// @return the final position of the stack, where the list of pushed arguments is stored.
+static inline char **__push_args_on_stack(uintptr_t *stack, char *args[])
+{
+    // Count the number of arguments.
+    int argc = __count_args(args);
     // Prepare args with space for the terminating NULL.
+    char *args_location[256];
     for (int i = argc - 1; i >= 0; --i) {
         for (int j = strlen(args[i]); j >= 0; --j) {
-            PUSH_ARG((*esp), char, args[i][j]);
+            PUSH_VALUE_ON_STACK(*stack, args[i][j]);
         }
-        args_ptr[i] = (char *)(*esp);
+        args_location[i] = (char *)(*stack);
     }
     // Push terminating NULL.
-    PUSH_ARG((*esp), char *, (char *)NULL);
+    PUSH_VALUE_ON_STACK(*stack, (char *)NULL);
     // Push array of pointers to the arguments.
     for (int i = argc - 1; i >= 0; --i) {
-        PUSH_ARG((*esp), char *, args_ptr[i]);
+        PUSH_VALUE_ON_STACK(*stack, args_location[i]);
     }
-    (*argsptr) = (char **)(*esp);
-
-    return argc;
+    return (char **)(*stack);
 }
 
 static int __reset_process(task_struct *task)
@@ -119,23 +143,6 @@ static int __load_executable(const char *path, task_struct *task, uint32_t *entr
     // Close the file.
     vfs_close(file);
     return ret;
-}
-
-static inline int __count_args_bytes(char **args)
-{
-    int argc  = 0;
-    int bytes = 0;
-
-    // Count the number of arguments.
-    while (args[argc] != NULL) {
-        ++argc;
-    }
-
-    for (int i = 0; i < argc; i++) {
-        bytes += strlen(args[i]) + 1;
-    }
-
-    return bytes + (argc + 1 /* The NULL terminator */) * sizeof(char *);
 }
 
 static inline task_struct *__alloc_task(task_struct *source, task_struct *parent, const char *name)
@@ -292,19 +299,19 @@ task_struct *process_create_init(const char *path)
     // Save where the arguments start.
     init_proc->mm->arg_start = init_proc->thread.regs.useresp;
     // Push the arguments on the stack.
-    __push_args_on_stack(&init_proc->thread.regs.useresp, argv, &argv_ptr);
+    argv_ptr = __push_args_on_stack(&init_proc->thread.regs.useresp, argv);
     // Save where the arguments end.
     init_proc->mm->arg_end = init_proc->thread.regs.useresp;
     // Save where the environmental variables start.
     init_proc->mm->env_start = init_proc->thread.regs.useresp;
     // Push the environment on the stack.
-    __push_args_on_stack(&init_proc->thread.regs.useresp, envp, &envp_ptr);
+    envp_ptr = __push_args_on_stack(&init_proc->thread.regs.useresp, envp);
     // Save where the environmental variables end.
     init_proc->mm->env_end = init_proc->thread.regs.useresp;
     // Push the `main` arguments on the stack (argc, argv, envp).
-    PUSH_ARG(init_proc->thread.regs.useresp, char **, envp_ptr);
-    PUSH_ARG(init_proc->thread.regs.useresp, char **, argv_ptr);
-    PUSH_ARG(init_proc->thread.regs.useresp, int, argc);
+    PUSH_VALUE_ON_STACK(init_proc->thread.regs.useresp, envp_ptr);
+    PUSH_VALUE_ON_STACK(init_proc->thread.regs.useresp, argv_ptr);
+    PUSH_VALUE_ON_STACK(init_proc->thread.regs.useresp, argc);
 
     // Restore previous pgdir
     paging_switch_directory(crtdir);
@@ -428,7 +435,9 @@ int sys_execve(pt_regs *f)
 
     // == COPY PROGRAM ARGUMENTS ==============================================
     // Copy argv and envp to kernel memory, because all the old process memory will be discarded.
+    int argc       = __count_args(origin_argv);
     int argv_bytes = __count_args_bytes(origin_argv);
+    int envc       = __count_args(origin_envp);
     int envp_bytes = __count_args_bytes(origin_envp);
     if ((argv_bytes < 0) || (envp_bytes < 0)) {
         pr_err("Failed to count required memory to store arguments and environment (%d + %d).\n",
@@ -443,8 +452,8 @@ int sys_execve(pt_regs *f)
     }
     // Copy the arguments.
     uint32_t args_mem_ptr = (uint32_t)args_mem + (argv_bytes + envp_bytes);
-    __push_args_on_stack(&args_mem_ptr, origin_argv, &saved_argv);
-    __push_args_on_stack(&args_mem_ptr, origin_envp, &saved_envp);
+    saved_argv            = __push_args_on_stack(&args_mem_ptr, origin_argv);
+    saved_envp            = __push_args_on_stack(&args_mem_ptr, origin_envp);
     // Check the memory pointer.
     assert(args_mem_ptr == (uint32_t)args_mem);
     // ------------------------------------------------------------------------
@@ -468,17 +477,17 @@ int sys_execve(pt_regs *f)
     // Save where the arguments start.
     current->mm->arg_start = current->thread.regs.useresp;
     // Push the arguments on the stack.
-    int argc = __push_args_on_stack(&current->thread.regs.useresp, saved_argv, &final_argv);
+    final_argv = __push_args_on_stack(&current->thread.regs.useresp, saved_argv);
     // Save where the arguments end, and the env starts.
     current->mm->env_start = current->mm->arg_end = current->thread.regs.useresp;
     // Push the environment on the stack.
-    int envc = __push_args_on_stack(&current->thread.regs.useresp, saved_envp, &final_envp);
+    final_envp = __push_args_on_stack(&current->thread.regs.useresp, saved_envp);
     // Save where the environmental variables end.
     current->mm->env_end = current->thread.regs.useresp;
     // Push the `main` arguments on the stack (argc, argv, envp).
-    PUSH_ARG(current->thread.regs.useresp, char **, final_envp);
-    PUSH_ARG(current->thread.regs.useresp, char **, final_argv);
-    PUSH_ARG(current->thread.regs.useresp, int, argc);
+    PUSH_VALUE_ON_STACK(current->thread.regs.useresp, final_envp);
+    PUSH_VALUE_ON_STACK(current->thread.regs.useresp, final_argv);
+    PUSH_VALUE_ON_STACK(current->thread.regs.useresp, argc);
 
     // Restore previous pgdir
     paging_switch_directory(crtdir);
