@@ -260,12 +260,12 @@ int kmain(boot_info_t *boot_informations)
     print_ok();
 
     //==========================================================================
-#if 0
-     // For debugging, show the list of PCI devices.
-     pci_debug_scan();
-     // Scan for ata devices.
-     ata_initialize();
-#endif
+    // Scan for ata devices.
+    if (!ata_initialize()) {
+        print_fail();
+        return 1;
+    }
+    print_ok();
 
     //==========================================================================
     pr_notice("Setting up keyboard driver...\n");
