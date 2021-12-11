@@ -107,7 +107,7 @@ add_custom_target(
   COMMAND echo "break boot.c: boot_main" >> ${CMAKE_BINARY_DIR}/.gdbinit
   COMMAND echo "break kernel.c: kmain" >> ${CMAKE_BINARY_DIR}/.gdbinit
   COMMAND echo "target remote localhost:1234" >> ${CMAKE_BINARY_DIR}/.gdbinit
-  DEPENDS ${PROJECT_NAME}_bootloader
+  DEPENDS kernel-bootloader.bin
   DEPENDS all_programs all_tests
   DEPENDS libc)
 
@@ -120,7 +120,7 @@ add_custom_target(
   COMMAND bash ${CMAKE_SOURCE_DIR}/scripts/get_text_address.sh ${CMAKE_BINARY_DIR}/mentos/kernel.bin > ${CMAKE_BINARY_DIR}/.gdbinit
   COMMAND bash ${CMAKE_SOURCE_DIR}/scripts/get_text_address.sh ${CMAKE_BINARY_DIR}/mentos/kernel-bootloader.bin >> ${CMAKE_BINARY_DIR}/.gdbinit
   COMMAND bash ${CMAKE_SOURCE_DIR}/scripts/get_text_address.sh ${CMAKE_BINARY_DIR}/programs/prog_* >> ${CMAKE_BINARY_DIR}/.gdbinit
-  DEPENDS ${PROJECT_NAME}_bootloader
+  DEPENDS kernel-bootloader.bin
   DEPENDS all_programs all_tests
   DEPENDS libc)
 
@@ -153,6 +153,10 @@ set(EMULATOR_FLAGS_GDB ${EMULATOR_FLAGS} -s -S)
 add_custom_target(
   qemu-gdb
   COMMAND ${EMULATOR} ${EMULATOR_FLAGS_GDB} ${EMULATOR_KERNEL} ${EMULATOR_FS} &
+  COMMAND echo "\n\n"
+  COMMAND echo "Now, QEMU has loaded the kernel, and it is waiting that you remotely connect to it."
+  COMMAND echo "To start debugging, open a new shell in THIS same folder, and just type \"gdb\"!"
+  COMMAND echo "\n\n"
   DEPENDS gdb_file kernel-bootloader.bin initrd)
 
 add_custom_target(all-execs-clion-embedded DEPENDS gdb_file_clion_embedded kernel-bootloader.bin initrd)
