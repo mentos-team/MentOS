@@ -152,7 +152,7 @@ set(EMULATOR_FLAGS_GDB ${EMULATOR_FLAGS} -s -S)
 
 add_custom_target(
   qemu-gdb
-  COMMAND ${EMULATOR} ${EMULATOR_FLAGS_GDB} ${EMULATOR_KERNEL} ${EMULATOR_FS} &
+  COMMAND ${EMULATOR} ${EMULATOR_FLAGS_GDB} ${EMULATOR_KERNEL} ${EMULATOR_FS}
   COMMAND echo "\n\n"
   COMMAND echo "Now, QEMU has loaded the kernel, and it is waiting that you remotely connect to it."
   COMMAND echo "To start debugging, open a new shell in THIS same folder, and just type \"gdb\"!"
