@@ -138,6 +138,7 @@ elseif(${DEBUGGING_TYPE} STREQUAL DEBUG_STDIO)
 endif(${DEBUGGING_TYPE} STREQUAL DEBUG_LOG)
 set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -vga std)
 set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -m ${MEMORY_SIZE})
+set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -drive file=rootfs.img,format=raw)
 set(EMULATOR_KERNEL -kernel mentos/kernel-bootloader.bin)
 set(EMULATOR_FS -initrd initrd)
 

@@ -261,7 +261,7 @@ int kmain(boot_info_t *boot_informations)
 
     //==========================================================================
     // Scan for ata devices.
-    if (!ata_initialize()) {
+    if (ata_initialize()) {
         print_fail();
         return 1;
     }
