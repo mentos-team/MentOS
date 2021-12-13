@@ -372,6 +372,10 @@ int do_mount(const char *type, const char *path, const char *args)
         pr_err("Unknown filesystem type: %s\n", type);
         return -ENODEV;
     }
+    if (fst->mount == NULL) {
+        pr_err("No mount callback set: %s\n", type);
+        return -ENODEV;
+    }
     vfs_file_t *file = fst->mount(path, args);
     if (file == NULL) {
         pr_err("Mount callback return a null pointer: %s\n", type);
