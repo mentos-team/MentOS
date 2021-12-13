@@ -20,6 +20,7 @@
 #include "io/debug.h"
 #include "drivers/fdc.h"
 #include "fs/initrd.h"
+#include "fs/ext2.h"
 #include "klib/irqflags.h"
 #include "drivers/keyboard/keyboard.h"
 #include "process/scheduler.h"
@@ -266,6 +267,11 @@ int kmain(boot_info_t *boot_informations)
     if (ata_initialize()) {
         pr_emerg("Failed to initialize ATA devices!\n");
         return 1;
+    }
+
+    ext2_initialize();
+    if (do_mount("ext2", "/mnt", "/dev/hda")) {
+        pr_warning("Failed to mount ext at `/dev/hda`!\n");
     }
 
     //==========================================================================

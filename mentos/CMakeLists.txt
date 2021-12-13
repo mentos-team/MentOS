@@ -160,6 +160,7 @@ if(USE_BUDDY_SYSTEM)
     src/fs/procfs.c
     src/fs/ioctl.c
     src/fs/namei.c
+    src/fs/ext2.c
     src/hardware/timer.c
     src/hardware/cpuid.c
     src/hardware/pic8259.c
@@ -243,6 +244,7 @@ else(USE_BUDDY_SYSTEM)
     src/fs/procfs.c
     src/fs/ioctl.c
     src/fs/namei.c
+    src/fs/ext2.c
     src/hardware/timer.c
     src/hardware/cpuid.c
     src/hardware/pic8259.c
