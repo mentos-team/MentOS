@@ -261,11 +261,12 @@ int kmain(boot_info_t *boot_informations)
 
     //==========================================================================
     // Scan for ata devices.
+    pr_notice("Initialize ATA devices...\n");
+    printf("Initialize ATA devices...\n");
     if (ata_initialize()) {
-        print_fail();
+        pr_emerg("Failed to initialize ATA devices!\n");
         return 1;
     }
-    print_ok();
 
     //==========================================================================
     pr_notice("Setting up keyboard driver...\n");
