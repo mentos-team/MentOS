@@ -233,9 +233,9 @@ typedef struct ext2_inode_t {
             /// [ 4 byte]
             uint32_t indir_block;
             /// [ 4 byte]
-            uint32_t double_indir_block;
+            uint32_t doubly_indir_block;
             /// [ 4 byte]
-            uint32_t triple_indir_block;
+            uint32_t trebly_indir_block;
         } blocks;
         /// [60 byte]
         char symlink[60];
@@ -298,6 +298,13 @@ typedef struct ext2_filesystem_t {
     unsigned int bgdt_end_block;
     /// The number of blocks containing the BGDT
     unsigned int bgdt_length;
+
+    /// Index of indirect blocks.
+    unsigned int indirect_blocks_index;
+    /// Index of doubly-indirect blocks.
+    unsigned int doubly_indirect_blocks_index;
+    /// Index of trebly-indirect blocks.
+    unsigned int trebly_indirect_blocks_index;
 
     /// Spinlock for protecting filesystem operations.
     spinlock_t spinlock;
@@ -444,7 +451,7 @@ static inline int ext2_write_superblock(ext2_filesystem_t *fs)
 /// @param block_index the index of the block we want to read.
 /// @param buffer the buffer where the content will be placed.
 /// @return the amount of data we read, or negative value for an error.
-static inline int ext2_read_block(ext2_filesystem_t *fs, unsigned int block_index, uint8_t *buffer)
+static inline int ext2_read_block(ext2_filesystem_t *fs, unsigned int block_index, char *buffer)
 {
     pr_debug("Read block %4d for EXT2 filesystem (0x%x)\n", block_index, fs);
     if (block_index == 0) {
@@ -463,7 +470,7 @@ static inline int ext2_read_block(ext2_filesystem_t *fs, unsigned int block_inde
 /// @param block_index the index of the block we want to read.
 /// @param buffer the buffer where the content will be placed.
 /// @return the amount of data we wrote, or negative value for an error.
-static inline int ext2_write_block(ext2_filesystem_t *fs, unsigned int block_index, uint8_t *buffer)
+static inline int ext2_write_block(ext2_filesystem_t *fs, unsigned int block_index, char *buffer)
 {
     pr_debug("Write block %4d for EXT2 filesystem (0x%x)\n", block_index, fs);
     if (block_index == 0) {
@@ -485,7 +492,7 @@ static inline bool_t ext2_read_bgdt(ext2_filesystem_t *fs)
     pr_debug("Read BGDT for EXT2 filesystem (0x%x)\n", fs);
     if (fs->block_groups) {
         for (unsigned i = 0; i < fs->bgdt_length; ++i)
-            ext2_read_block(fs, fs->bgdt_start_block + i, (uint8_t *)((uintptr_t)fs->block_groups + (fs->block_size * i)));
+            ext2_read_block(fs, fs->bgdt_start_block + i, (char *)((uintptr_t)fs->block_groups + (fs->block_size * i)));
         return true;
     }
     pr_err("The `block_groups` list is not initialized.\n");
@@ -500,7 +507,7 @@ static inline bool_t ext2_write_bgdt(ext2_filesystem_t *fs)
     pr_debug("Write BGDT for EXT2 filesystem (0x%x)\n", fs);
     if (fs->block_groups) {
         for (unsigned i = 0; i < fs->bgdt_length; ++i)
-            ext2_write_block(fs, fs->bgdt_start_block + i, (uint8_t *)((uintptr_t)fs->block_groups + (fs->block_size * i)));
+            ext2_write_block(fs, fs->bgdt_start_block + i, (char *)((uintptr_t)fs->block_groups + (fs->block_size * i)));
         return true;
     }
     pr_err("The `block_groups` list is not initialized.\n");
@@ -518,7 +525,7 @@ static inline void ext2_dump_bgdt(ext2_filesystem_t *fs)
         pr_debug("    Free Inodes : %4d of %d\n", gd->free_inodes_count, fs->superblock.inodes_per_group);
 
         // Dump the block bitmap.
-        ext2_read_block(fs, gd->block_bitmap, (uint8_t *)fs->block_buffer);
+        ext2_read_block(fs, gd->block_bitmap, fs->block_buffer);
         pr_debug("    Block Bitmap at %d\n", gd->block_bitmap);
         for (unsigned j = 0; j < fs->block_size; ++j) {
             if ((j % 8) == 0)
@@ -530,7 +537,7 @@ static inline void ext2_dump_bgdt(ext2_filesystem_t *fs)
         }
 
         // Dump the block bitmap.
-        ext2_read_block(fs, gd->inode_bitmap, (uint8_t *)fs->block_buffer);
+        ext2_read_block(fs, gd->inode_bitmap, fs->block_buffer);
         pr_debug("    Inode Bitmap at %d\n", gd->inode_bitmap);
         for (unsigned j = 0; j < fs->block_size; ++j) {
             if ((j % 8) == 0)
@@ -567,7 +574,7 @@ static inline int read_inode(ext2_filesystem_t *fs, ext2_inode_t *inode, unsigne
     uint32_t offset_in_block = inode_index - block_offset * (fs->block_size / fs->superblock.inode_size);
 
     // Read the block containing the inode table.
-    ext2_read_block(fs, group_desc->inode_table + block_offset, (uint8_t *)fs->block_buffer);
+    ext2_read_block(fs, group_desc->inode_table + block_offset, fs->block_buffer);
     // Get the first entry inside the inode table.
     ext2_inode_t *inode_table = (ext2_inode_t *)fs->block_buffer;
 
@@ -601,15 +608,15 @@ static int write_inode(ext2_filesystem_t *fs, ext2_inode_t *inode, unsigned inod
     uint32_t offset_in_block = inode_index - block_offset * (fs->block_size / fs->superblock.inode_size);
 
     // Read the block containing the inode table.
-    ext2_read_block(fs, group_desc->inode_table + block_offset, (uint8_t *)fs->block_buffer);
+    ext2_read_block(fs, group_desc->inode_table + block_offset, fs->block_buffer);
     // Get the first entry inside the inode table.
     ext2_inode_t *inode_table = (ext2_inode_t *)fs->block_buffer;
 
     // Write the inode.
-    memcpy((uint8_t *)((uintptr_t)inode_table + offset_in_block * fs->superblock.inode_size), inode, fs->superblock.inode_size);
+    memcpy((char *)((uintptr_t)inode_table + offset_in_block * fs->superblock.inode_size), inode, fs->superblock.inode_size);
 
     // Write back the block.
-    ext2_write_block(fs, group_desc->inode_table + block_offset, (uint8_t *)inode_table);
+    ext2_write_block(fs, group_desc->inode_table + block_offset, (char *)inode_table);
 
     return 0;
 }
@@ -624,7 +631,7 @@ static uint32_t ext2_allocate_block(ext2_filesystem_t *fs)
         // Check if there are free blocks in this block group.
         if (fs->block_groups[group_index].free_blocks_count > 0) {
             // Read the block bitmap.
-            ext2_read_block(fs, fs->block_groups[group_index].block_bitmap, (uint8_t *)fs->block_buffer);
+            ext2_read_block(fs, fs->block_groups[group_index].block_bitmap, fs->block_buffer);
             // Find the first free block.
             for (linear_index = 0; linear_index < fs->block_size; ++linear_index) {
                 // We found a free block.
@@ -648,7 +655,7 @@ static uint32_t ext2_allocate_block(ext2_filesystem_t *fs)
     // Set the block as occupied.
     ext2_set_block_bit(fs->block_buffer, linear_index, ext2_block_status_occupied);
     // Update the bitmap.
-    ext2_write_block(fs, fs->block_groups[group_index].block_bitmap, (uint8_t *)fs->block_buffer);
+    ext2_write_block(fs, fs->block_groups[group_index].block_bitmap, fs->block_buffer);
     // Decrease the number of free blocks inside the BGDT entry.
     fs->block_groups[group_index].free_blocks_count -= 1;
     // Update the BGDT.
@@ -659,23 +666,75 @@ static uint32_t ext2_allocate_block(ext2_filesystem_t *fs)
     ext2_write_superblock(fs);
     // Empty out the new block.
     memset(fs->block_buffer, 0, fs->block_size);
-    ext2_write_block(fs, block_index, (uint8_t *)fs->block_buffer);
+    ext2_write_block(fs, block_index, fs->block_buffer);
     // Unlock the spinlock.
     spinlock_unlock(&fs->spinlock);
     return block_index;
 }
 
-static unsigned int ext2_get_real_block_index(ext2_filesystem_t *fs, ext2_inode_t *inode, unsigned int block_index)
+static uint32_t ext2_get_real_block_index(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t block_index)
 {
     // Return the direct block pointer.
     if (block_index < EXT2_INDIRECT_BLOCKS) {
         return inode->data.blocks.dir_blocks[block_index];
     }
-    // Return the indirect block pointers.
-    if (block_index < (EXT2_INDIRECT_BLOCKS + fs->pointers_per_block)) {
-        return 0;
+
+    // Check if the index is among the indirect blocks.
+    if (block_index < fs->indirect_blocks_index) {
+        // Compute the indirect indices.
+        uint32_t a = block_index - EXT2_INDIRECT_BLOCKS;
+
+        // Read the indirect block (which contains pointers to the next set of blocks).
+        ext2_read_block(fs, inode->data.blocks.indir_block, fs->block_buffer);
+
+        // Compute the index inside the final block.
+        return (uint32_t)fs->block_buffer[a];
+    }
+    // For simplicity.
+    uint32_t p1 = fs->pointers_per_block, p2 = fs->pointers_per_block * fs->pointers_per_block;
+
+    // Check if the index is among the doubly-indirect blocks.
+    if (block_index < fs->doubly_indirect_blocks_index) {
+        // Compute the indirect indices.
+        uint32_t a = block_index - EXT2_INDIRECT_BLOCKS;
+        uint32_t b = a - p1;
+        uint32_t c = b / p1;
+        uint32_t d = b - (c * p1);
+
+        // Read the doubly-indirect block (which contains pointers to indirect blocks).
+        ext2_read_block(fs, inode->data.blocks.doubly_indir_block, fs->block_buffer);
+
+        // Compute the index inside the indirect block.
+        ext2_read_block(fs, (uint32_t)fs->block_buffer[c], fs->block_buffer);
+
+        // Compute the index inside the final block.
+        return (uint32_t)fs->block_buffer[d];
     }
 
+    // Check if the index is among the trebly-indirect blocks.
+    if (block_index < fs->trebly_indirect_blocks_index) {
+        // Compute the indirect indices.
+        uint32_t a = block_index - EXT2_INDIRECT_BLOCKS;
+        uint32_t b = a - p1;
+        uint32_t c = b - p2;
+        uint32_t d = c / p2;
+        uint32_t e = c - (d * p2);
+        uint32_t f = e / p1;
+        uint32_t g = e - (f * p1);
+
+        // Read the trebly-indirect block (which contains pointers to doubly-indirect blocks).
+        ext2_read_block(fs, inode->data.blocks.trebly_indir_block, fs->block_buffer);
+
+        // Read the doubly-indirect block (which contains pointers to indirect blocks).
+        ext2_read_block(fs, (uint32_t)fs->block_buffer[d], fs->block_buffer);
+
+        // Read the indirect block (which contains pointers to the next set of blocks).
+        ext2_read_block(fs, (uint32_t)fs->block_buffer[f], fs->block_buffer);
+
+        // Compute the index inside the final block.
+        return (uint32_t)fs->block_buffer[g];
+    }
+    pr_err("We failed to retrieve the real block number of the block with index `%d`\n", block_index);
     return -1;
 }
 
@@ -725,6 +784,11 @@ static vfs_file_t *ext2_mount(vfs_file_t *block_device)
     fs->blocks_per_block_count = fs->block_size / 512U;
     // Compute the number of block pointers per block.
     fs->pointers_per_block = fs->block_size / 4U;
+    // Compute the index of indirect blocks.
+    fs->indirect_blocks_index        = EXT2_INDIRECT_BLOCKS + fs->pointers_per_block;
+    fs->doubly_indirect_blocks_index = EXT2_INDIRECT_BLOCKS + fs->pointers_per_block * (fs->pointers_per_block + 1);
+    fs->trebly_indirect_blocks_index = fs->doubly_indirect_blocks_index +
+                                       (fs->pointers_per_block * fs->pointers_per_block) * (fs->pointers_per_block + 1);
     // Compute the number of block groups.
     fs->block_groups_count = fs->superblock.blocks_count / fs->superblock.blocks_per_group;
     if (fs->superblock.blocks_per_group * fs->block_groups_count < fs->superblock.blocks_count) {
