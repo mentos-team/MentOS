@@ -536,7 +536,6 @@ static inline int buffer_compare(uint32_t *ptr1, uint32_t *ptr2, size_t size)
         if (*ptr1 != *ptr2) {
             return 1;
         }
-
         ptr1++;
         ptr2++;
         i += sizeof(uint32_t);
@@ -611,7 +610,7 @@ static void ata_device_read_sector(ata_device_t *dev, uint32_t lba, uint8_t *buf
     if ((dev->type != ata_dev_type_pata) && (dev->type != ata_dev_type_sata)) {
         return;
     }
-    pr_debug("ata_device_read_sector(%p, %d, %p)\n", dev, lba, buffer);
+    pr_debug("ata_device_read_sector(dev: %p, lba: %d, buff: %p)\n", dev, lba, buffer);
     spinlock_lock(&ata_lock);
 
     ata_wait(dev, 0);
@@ -645,7 +644,7 @@ static void ata_device_read_sector(ata_device_t *dev, uint32_t lba, uint8_t *buf
     outportb(dev->io_reg.lba_hi, (lba & 0xff0000000000) >> 40);
 
     outportb(dev->io_reg.sector_count, 1);
-    outportb(dev->io_reg.lba_lo, (lba & 0x000000ff));
+    outportb(dev->io_reg.lba_lo, (lba & 0x000000ff) >> 0);
     outportb(dev->io_reg.lba_mid, (lba & 0x0000ff00) >> 8);
     outportb(dev->io_reg.lba_hi, (lba & 0x00ff0000) >> 16);
 
@@ -684,10 +683,12 @@ static void ata_device_read_sector(ata_device_t *dev, uint32_t lba, uint8_t *buf
 
 static void ata_device_write_sector(ata_device_t *dev, uint32_t lba, uint8_t *buffer)
 {
+    pr_debug("ata_device_write_sector(dev: %p, lba: %d, buff: %p)\n", dev, lba, buffer);
+
     spinlock_lock(&ata_lock);
 
     // Copy the buffer over to the DMA area
-    memcpy(dev->dma_prdt, buffer, ATA_DMA_SIZE);
+    memcpy(dev->dma_start, buffer, ATA_DMA_SIZE);
 
     // Reset bus master register's command register
     outportb(dev->bmr.command, 0);
@@ -699,17 +700,17 @@ static void ata_device_write_sector(ata_device_t *dev, uint32_t lba, uint8_t *bu
     outportb(dev->bmr.status, inportb(dev->bmr.status) | 0x04 | 0x02);
 
     // Select drive
-    ata_wait(dev, false);
+    ata_wait(dev, 0);
     outportb(dev->io_reg.hddevsel, 0xe0 | dev->slave << 4 | (lba & 0x0f000000) >> 24);
-    ata_wait(dev, false);
+    ata_wait(dev, 0);
 
     // Set sector counts and LBAs
     outportb(dev->io_reg.feature, 0x00);
     outportb(dev->io_reg.sector_count, 1);
-    outportb(dev->io_reg.lba_lo, lba & 0x000000ff);
+    outportb(dev->io_reg.lba_lo, (lba & 0x000000ff) >> 0);
     outportb(dev->io_reg.lba_mid, (lba & 0x0000ff00) >> 8);
     outportb(dev->io_reg.lba_hi, (lba & 0x00ff0000) >> 16);
-    ata_wait(dev, false);
+    ata_wait(dev, 0);
 
     // Notify that we are starting DMA writing.
     outportb(dev->io_reg.command, ata_dma_command_write);
@@ -871,7 +872,6 @@ static ssize_t ata_write(vfs_file_t *file, const void *buffer, off_t offset, siz
     ata_device_t *dev = (ata_device_t *)file->device;
     // Check the device.
     assert(dev && "Device not set.");
-
     if ((dev->type == ata_dev_type_pata) || (dev->type == ata_dev_type_sata)) {
         uint32_t start_block  = offset / ATA_SECTOR_SIZE;
         uint32_t start_offset = offset % ATA_SECTOR_SIZE;
@@ -891,7 +891,6 @@ static ssize_t ata_write(vfs_file_t *file, const void *buffer, off_t offset, siz
         if (offset + size > max_offset) {
             size = max_offset - offset;
         }
-
         if (start_offset) {
             ata_device_read_sector(dev, start_block, (uint8_t *)support_buffer);
             memcpy((void *)((uintptr_t)support_buffer + (start_offset)), buffer, prefix_size);
