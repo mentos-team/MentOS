@@ -602,6 +602,7 @@ static inline vfs_file_t *procfs_create_file_struct(procfs_file_t *procfs_file)
     file->flags          = procfs_file->flags;
     file->sys_operations = &procfs_sys_operations;
     file->fs_operations  = &procfs_fs_operations;
+    list_head_init(&file->siblings);
     //pr_debug("procfs_create_file_struct(%p): VFS file : %p\n", procfs_file, file);
     return file;
 }

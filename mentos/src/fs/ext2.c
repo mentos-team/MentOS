@@ -28,18 +28,32 @@
 #define EXT2_MAX_SYMLINK_COUNT 8      ///< Maximum nesting of symlinks, used to prevent a loop.
 #define EXT2_NAME_LEN          255    ///< The lenght of names inside directory entries.
 
-#define EXT2_S_IRWXO 0x0007 ///< -------rwx : Others can read/write/execute
-#define EXT2_S_IXOTH 0x0001 ///< ---------x : Others can execute
-#define EXT2_S_IWOTH 0x0002 ///< --------w- : Others can write
-#define EXT2_S_IROTH 0x0004 ///< -------r-- : Others can read
-#define EXT2_S_IRWXG 0x0038 ///< -------rwx : Group can read/write/execute
-#define EXT2_S_IXGRP 0x0008 ///< ------x--- : Group can execute
-#define EXT2_S_IWGRP 0x0010 ///< -----w---- : Group can write
-#define EXT2_S_IRGRP 0x0020 ///< ----r----- : Group can read
-#define EXT2_S_IRWXU 0x01C0 ///< -------rwx : User can read/write/execute
-#define EXT2_S_IXUSR 0x0040 ///< ---x------ : User can execute
-#define EXT2_S_IWUSR 0x0080 ///< --w------- : User can write
+// File types.
+#define EXT2_S_IFMT   0xF000 ///< Format mask
+#define EXT2_S_IFSOCK 0xC000 ///< Socket
+#define EXT2_S_IFLNK  0xA000 ///< Symbolic link
+#define EXT2_S_IFREG  0x8000 ///< Regular file
+#define EXT2_S_IFBLK  0x6000 ///< Block device
+#define EXT2_S_IFDIR  0x4000 ///< Directory
+#define EXT2_S_IFCHR  0x2000 ///< Character device
+#define EXT2_S_IFIFO  0x1000 ///< Fifo
+
+// Permissions bit.
+#define EXT2_S_ISUID 0x0800 ///< SUID
+#define EXT2_S_ISGID 0x0400 ///< SGID
+#define EXT2_S_ISVTX 0x0200 ///< Sticky Bit
+#define EXT2_S_IRWXU 0x01C0 ///< rwx------- : User can read/write/execute
 #define EXT2_S_IRUSR 0x0100 ///< -r-------- : User can read
+#define EXT2_S_IWUSR 0x0080 ///< --w------- : User can write
+#define EXT2_S_IXUSR 0x0040 ///< ---x------ : User can execute
+#define EXT2_S_IRWXG 0x0038 ///< ----rwx--- : Group can read/write/execute
+#define EXT2_S_IRGRP 0x0020 ///< ----r----- : Group can read
+#define EXT2_S_IWGRP 0x0010 ///< -----w---- : Group can write
+#define EXT2_S_IXGRP 0x0008 ///< ------x--- : Group can execute
+#define EXT2_S_IRWXO 0x0007 ///< -------rwx : Others can read/write/execute
+#define EXT2_S_IROTH 0x0004 ///< -------r-- : Others can read
+#define EXT2_S_IWOTH 0x0002 ///< --------w- : Others can write
+#define EXT2_S_IXOTH 0x0001 ///< ---------x : Others can execute
 
 typedef enum ext2_block_status_t {
     ext2_block_status_free     = 0, ///< The block is free.
@@ -960,6 +974,108 @@ static ssize_t ext2_read_inode_block(ext2_filesystem_t *fs, ext2_inode_t *inode,
     return ext2_read_block(fs, real_index, buffer);
 }
 
+static ssize_t ext2_read(vfs_file_t *file, char *buffer, off_t offset, size_t nbyte)
+{
+    // Get the filesystem.
+    ext2_filesystem_t *fs = (ext2_filesystem_t *)file->device;
+    if (fs == NULL) {
+        pr_err("The file does not belong to an EXT2 filesystem (%s).\n", file->name);
+        return -1;
+    }
+    // Get the inode associated with the file.
+    ext2_inode_t inode;
+    if (ext2_read_inode(fs, &inode, file->ino) == -1) {
+        pr_err("Failed to read the inode (%s).\n", file->name);
+        return -1;
+    }
+    // Check if the file is empty.
+    if (inode.size == 0)
+        return 0;
+
+    uint32_t end;
+    if ((offset + nbyte) > inode.size) {
+        end = inode.size;
+    } else {
+        end = offset + nbyte;
+    }
+    uint32_t start_block  = offset / fs->block_size;
+    uint32_t end_block    = end / fs->block_size;
+    uint32_t end_size     = end - end_block * fs->block_size;
+    uint32_t size_to_read = end - offset;
+
+    if (start_block == end_block) {
+        // Read the real block.
+        ext2_read_inode_block(fs, &inode, start_block, fs->block_buffer);
+        // Copy the content back to the buffer.
+        memcpy(buffer, (uint8_t *)(((uintptr_t)fs->block_buffer) + ((uintptr_t)offset % fs->block_size)), size_to_read);
+    } else {
+        uint32_t block_offset;
+        uint32_t blocks_read = 0;
+        for (block_offset = start_block; block_offset < end_block; block_offset++, blocks_read++) {
+            if (block_offset == start_block) {
+                ext2_read_inode_block(fs, &inode, block_offset, fs->block_buffer);
+                memcpy(buffer, (uint8_t *)(((uintptr_t)fs->block_buffer) + ((uintptr_t)offset % fs->block_size)), fs->block_size - (offset % fs->block_size));
+            } else {
+                ext2_read_inode_block(fs, &inode, block_offset, fs->block_buffer);
+                memcpy(buffer + fs->block_size * blocks_read - (offset % fs->block_size), fs->block_buffer, fs->block_size);
+            }
+        }
+        if (end_size) {
+            ext2_read_inode_block(fs, &inode, end_block, fs->block_buffer);
+            memcpy(buffer + fs->block_size * blocks_read - (offset % fs->block_size), fs->block_buffer, end_size);
+        }
+    }
+    return size_to_read;
+}
+
+static int ext2_set_root(ext2_filesystem_t *fs, ext2_inode_t *inode)
+{
+    // Information for root dir.
+    fs->root->device  = (void *)fs;
+    fs->root->ino     = 2;
+    fs->root->name[0] = '/';
+    fs->root->name[1] = '\0';
+    // Information from the inode.
+    fs->root->uid    = inode->uid;
+    fs->root->gid    = inode->gid;
+    fs->root->length = inode->size;
+    fs->root->mask   = inode->mode & 0xFFF;
+    fs->root->nlink  = inode->links_count;
+    // File flags.
+    fs->root->flags = 0;
+    if ((inode->mode & EXT2_S_IFREG) == EXT2_S_IFREG) {
+        pr_err("The root inode is a regular file.\n");
+        kmem_cache_free(fs->root);
+        return -1;
+    }
+    if ((inode->mode & EXT2_S_IFDIR) == EXT2_S_IFDIR) {
+        fs->root->flags |= DT_DIR;
+    } else {
+        pr_err("The root inode is not a directory.\n");
+        kmem_cache_free(fs->root);
+        return -1;
+    }
+    if ((inode->mode & EXT2_S_IFBLK) == EXT2_S_IFBLK) {
+        fs->root->flags |= DT_BLK;
+    }
+    if ((inode->mode & EXT2_S_IFCHR) == EXT2_S_IFCHR) {
+        fs->root->flags |= DT_CHR;
+    }
+    if ((inode->mode & EXT2_S_IFIFO) == EXT2_S_IFIFO) {
+        fs->root->flags |= DT_FIFO;
+    }
+    if ((inode->mode & EXT2_S_IFLNK) == EXT2_S_IFLNK) {
+        fs->root->flags |= DT_LNK;
+    }
+    fs->root->atime          = inode->atime;
+    fs->root->mtime          = inode->mtime;
+    fs->root->ctime          = inode->ctime;
+    fs->root->sys_operations = NULL;
+    fs->root->fs_operations  = NULL;
+    list_head_init(&fs->root->siblings);
+    return 0;
+}
+
 static vfs_file_t *ext2_mount(vfs_file_t *block_device)
 {
     // Create the ext2 filesystem.
@@ -973,17 +1089,15 @@ static vfs_file_t *ext2_mount(vfs_file_t *block_device)
     // Read the superblock.
     if (ext2_read_superblock(fs) == -1) {
         pr_err("Failed to read the superblock table at 1024.\n");
-        // Free the memory occupied by the filesystem.
-        kfree(fs);
-        return NULL;
+        // Free just the filesystem.
+        goto free_filesystem;
     }
     // Check the superblock magic number.
     if (fs->superblock.magic != EXT2_SUPERBLOCK_MAGIC) {
         pr_err("Wrong magic number, it is not an EXT2 filesystem.\n");
         ext2_dump_superblock(&fs->superblock);
-        // Free the memory occupied by the filesystem.
-        kfree(fs);
-        return NULL;
+        // Free just the filesystem.
+        goto free_filesystem;
     }
     // Compute the volume size.
     fs->block_size = 1024U << fs->superblock.log_block_size;
@@ -1035,30 +1149,23 @@ static vfs_file_t *ext2_mount(vfs_file_t *block_device)
     fs->block_groups = kmalloc(fs->block_size * fs->bgdt_length);
     if (fs->block_groups == NULL) {
         pr_err("Failed to allocate memory for the block buffer.\n");
-        // Free the memory occupied by the filesystem.
-        kfree(fs);
-        return NULL;
+        // Free just the filesystem.
+        goto free_filesystem;
     }
 
     // Try to read the BGDT.
     if (ext2_read_bgdt(fs) == -1) {
         pr_err("Failed to read the BGDT.\n");
-        // Free the memory occupied by the block groups.
-        kfree(fs->block_groups);
-        // Free the memory occupied by the filesystem.
-        kfree(fs);
-        return NULL;
+        // Free the block_groups and the filesystem.
+        goto free_block_groups;
     }
 
     // Preentively allocate a buffer for reading blocks.
     fs->block_buffer = kmalloc(fs->block_size * sizeof(char));
     if (fs->block_buffer == NULL) {
         pr_err("Failed to allocate memory for the block buffer.\n");
-        // Free the memory occupied by the block groups.
-        kfree(fs->block_groups);
-        // Free the memory occupied by the filesystem.
-        kfree(fs);
-        return NULL;
+        // Free the block_groups and the filesystem.
+        goto free_block_groups;
     }
     memset(fs->block_buffer, 0, sizeof(char) * fs->block_size);
 
@@ -1066,15 +1173,33 @@ static vfs_file_t *ext2_mount(vfs_file_t *block_device)
     fs->inode_buffer = kmalloc(fs->superblock.inode_size * sizeof(char));
     if (fs->inode_buffer == NULL) {
         pr_err("Failed to allocate memory for the block buffer.\n");
-        // Free the memory occupied by the block buffer.
-        kfree(fs->block_buffer);
-        // Free the memory occupied by the block groups.
-        kfree(fs->block_groups);
-        // Free the memory occupied by the filesystem.
-        kfree(fs);
-        return NULL;
+        // Free the block_buffer, the block_groups and the filesystem.
+        goto free_block_buffer;
     }
     memset(fs->inode_buffer, 0, sizeof(char) * fs->superblock.inode_size);
+
+    // We need the root inode in order to set the root file.
+    ext2_inode_t root_inode;
+    if (ext2_read_inode(fs, &root_inode, 2U) == -1) {
+        pr_err("Failed to set the root inode.\n");
+        // Free the block_buffer, the block_groups and the filesystem.
+        goto free_inode_buffer;
+    }
+
+    // Allocate the memory for the root.
+    fs->root = kmem_cache_alloc(vfs_file_cache, GFP_KERNEL);
+    if (!fs->root) {
+        pr_err("Failed to allocate memory for the EXT2 root file!\n");
+        // Free the block_buffer, the block_groups and the filesystem.
+        goto free_inode_buffer;
+    }
+
+    if (ext2_set_root(fs, &root_inode) == -1) {
+        pr_err("Failed to set the EXT2 root.\n");
+        // Free the block_buffer, the block_groups and the filesystem.
+        goto free_all;
+    }
+    pr_notice("Mounted EXT2 disk, root VFS node is at 0x%x.\n", (uintptr_t)fs->root);
 
     // Dump the filesystem details for debugging.
     ext2_dump_filesystem(fs);
@@ -1083,12 +1208,19 @@ static vfs_file_t *ext2_mount(vfs_file_t *block_device)
     // Dump the block group descriptor table.
     ext2_dump_bgdt(fs);
 
-    // Free the memory occupied by the block buffer.
-    kfree(fs->block_buffer);
+free_all:
+    // Free the memory occupied by the root.
+    kmem_cache_free(fs->root);
+free_inode_buffer:
     // Free the memory occupied by the inode buffer.
     kfree(fs->inode_buffer);
+free_block_buffer:
+    // Free the memory occupied by the block buffer.
+    kfree(fs->block_buffer);
+free_block_groups:
     // Free the memory occupied by the block groups.
     kfree(fs->block_groups);
+free_filesystem:
     // Free the memory occupied by the filesystem.
     kfree(fs);
     return NULL;
