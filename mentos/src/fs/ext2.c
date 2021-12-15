@@ -486,32 +486,32 @@ static inline int ext2_write_block(ext2_filesystem_t *fs, unsigned int block_ind
 
 /// @brief Reads the Block Group Descriptor Table (BGDT) from the block device associated with this filesystem.
 /// @param fs the ext2 filesystem structure.
-/// @return if we correctly read the BGDT.
-static inline bool_t ext2_read_bgdt(ext2_filesystem_t *fs)
+/// @return 0 on success, -1 on failure.
+static inline int ext2_read_bgdt(ext2_filesystem_t *fs)
 {
     pr_debug("Read BGDT for EXT2 filesystem (0x%x)\n", fs);
     if (fs->block_groups) {
         for (unsigned i = 0; i < fs->bgdt_length; ++i)
             ext2_read_block(fs, fs->bgdt_start_block + i, (char *)((uintptr_t)fs->block_groups + (fs->block_size * i)));
-        return true;
+        return 0;
     }
     pr_err("The `block_groups` list is not initialized.\n");
-    return false;
+    return -1;
 }
 
 /// @brief Writes the Block Group Descriptor Table (BGDT) to the block device associated with this filesystem.
 /// @param fs the ext2 filesystem structure.
-/// @return if we correctly wrote the BGDT.
-static inline bool_t ext2_write_bgdt(ext2_filesystem_t *fs)
+/// @return 0 on success, -1 on failure.
+static inline int ext2_write_bgdt(ext2_filesystem_t *fs)
 {
     pr_debug("Write BGDT for EXT2 filesystem (0x%x)\n", fs);
     if (fs->block_groups) {
         for (unsigned i = 0; i < fs->bgdt_length; ++i)
             ext2_write_block(fs, fs->bgdt_start_block + i, (char *)((uintptr_t)fs->block_groups + (fs->block_size * i)));
-        return true;
+        return 0;
     }
     pr_err("The `block_groups` list is not initialized.\n");
-    return false;
+    return -1;
 }
 
 static inline void ext2_dump_bgdt(ext2_filesystem_t *fs)
@@ -550,7 +550,12 @@ static inline void ext2_dump_bgdt(ext2_filesystem_t *fs)
     }
 }
 
-static inline int read_inode(ext2_filesystem_t *fs, ext2_inode_t *inode, unsigned inode_index)
+/// @brief Reads an inode.
+/// @param fs the filesystem.
+/// @param inode the inode which we are working with.
+/// @param inode_index The index of the inode.
+/// @return 0 on success, -1 on failure.
+static inline int ext2_read_inode(ext2_filesystem_t *fs, ext2_inode_t *inode, unsigned inode_index)
 {
     if (inode_index == 0) {
         pr_err("You are trying to read an invalid inode index (%d).\n", inode_index);
@@ -572,19 +577,21 @@ static inline int read_inode(ext2_filesystem_t *fs, ext2_inode_t *inode, unsigne
     unsigned block_offset = (inode_index * fs->superblock.inode_size) / fs->block_size;
     // Get the offset inside the block.
     uint32_t offset_in_block = inode_index - block_offset * (fs->block_size / fs->superblock.inode_size);
-
     // Read the block containing the inode table.
     ext2_read_block(fs, group_desc->inode_table + block_offset, fs->block_buffer);
     // Get the first entry inside the inode table.
     ext2_inode_t *inode_table = (ext2_inode_t *)fs->block_buffer;
-
     // Save the inode content.
     memcpy(inode, (uint8_t *)((uintptr_t)inode_table + offset_in_block * fs->superblock.inode_size), fs->superblock.inode_size);
-
     return 0;
 }
 
-static int write_inode(ext2_filesystem_t *fs, ext2_inode_t *inode, unsigned inode_index)
+/// @brief Writes the inode.
+/// @param fs the filesystem.
+/// @param inode the inode which we are working with.
+/// @param inode_index The index of the inode.
+/// @return 0 on success, -1 on failure.
+static int ext2_write_inode(ext2_filesystem_t *fs, ext2_inode_t *inode, unsigned inode_index)
 {
     if (inode_index == 0) {
         pr_err("You are trying to read an invalid inode index (%d).\n", inode_index);
@@ -606,21 +613,20 @@ static int write_inode(ext2_filesystem_t *fs, ext2_inode_t *inode, unsigned inod
     unsigned block_offset = (inode_index * fs->superblock.inode_size) / fs->block_size;
     // Get the offset inside the block.
     uint32_t offset_in_block = inode_index - block_offset * (fs->block_size / fs->superblock.inode_size);
-
     // Read the block containing the inode table.
     ext2_read_block(fs, group_desc->inode_table + block_offset, fs->block_buffer);
     // Get the first entry inside the inode table.
     ext2_inode_t *inode_table = (ext2_inode_t *)fs->block_buffer;
-
     // Write the inode.
     memcpy((char *)((uintptr_t)inode_table + offset_in_block * fs->superblock.inode_size), inode, fs->superblock.inode_size);
-
     // Write back the block.
     ext2_write_block(fs, group_desc->inode_table + block_offset, (char *)inode_table);
-
     return 0;
 }
 
+/// @brief Allocates a new block.
+/// @param fs the filesystem.
+/// @return 0 on failure, or the index of the new block on success.
 static uint32_t ext2_allocate_block(ext2_filesystem_t *fs)
 {
     uint32_t group_index, block_index, linear_index;
@@ -659,7 +665,12 @@ static uint32_t ext2_allocate_block(ext2_filesystem_t *fs)
     // Decrease the number of free blocks inside the BGDT entry.
     fs->block_groups[group_index].free_blocks_count -= 1;
     // Update the BGDT.
-    ext2_write_bgdt(fs);
+    if (ext2_write_bgdt(fs) == -1) {
+        pr_err("Cannot allocate the block.\n");
+        // Unlock the spinlock.
+        spinlock_unlock(&fs->spinlock);
+        return 0;
+    }
     // Decrease the number of free blocks inside the superblock.
     fs->superblock.free_blocks_count -= 1;
     // Update the superblock.
@@ -672,6 +683,167 @@ static uint32_t ext2_allocate_block(ext2_filesystem_t *fs)
     return block_index;
 }
 
+/// @brief Sets the real block index based on the block index inside an inode.
+/// @param fs the filesystem.
+/// @param inode the inode which we are working with.
+/// @param block_index the block index inside the inode.
+/// @param real_index the real block number.
+/// @return 0 on success, a negative value on failure.
+static int ext2_set_real_block_index(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t inode_index, uint32_t block_index, uint32_t real_index)
+{
+    // Set the direct block pointer.
+    if (block_index < EXT2_INDIRECT_BLOCKS) {
+        inode->data.blocks.dir_blocks[block_index] = real_index;
+        return 0;
+    }
+    // Check if the index is among the indirect blocks.
+    if (block_index < fs->indirect_blocks_index) {
+        // Compute the indirect indices.
+        uint32_t a = block_index - EXT2_INDIRECT_BLOCKS;
+
+        // Check that the indirect block points to a valid block.
+        if (!inode->data.blocks.indir_block) {
+            // Allocate a new block.
+            unsigned int new_block_index = ext2_allocate_block(fs);
+            if (new_block_index == 0)
+                return -1;
+            // Update the index.
+            inode->data.blocks.indir_block = new_block_index;
+            // Update the inode.
+            if (ext2_write_inode(fs, inode, inode_index) == -1)
+                return -1;
+        }
+
+        // Read the indirect block (which contains pointers to the next set of blocks).
+        ext2_read_block(fs, inode->data.blocks.indir_block, fs->block_buffer);
+        // Write the index inside the final block.
+        fs->block_buffer[a] = real_index;
+        // Write back the indirect block.
+        ext2_read_block(fs, inode->data.blocks.indir_block, fs->block_buffer);
+        return 0;
+    }
+
+    // For simplicity.
+    uint32_t p1 = fs->pointers_per_block, p2 = fs->pointers_per_block * fs->pointers_per_block;
+
+    // Check if the index is among the doubly-indirect blocks.
+    if (block_index < fs->doubly_indirect_blocks_index) {
+        // Compute the indirect indices.
+        uint32_t a = block_index - EXT2_INDIRECT_BLOCKS;
+        uint32_t b = a - p1;
+        uint32_t c = b / p1;
+        uint32_t d = b - (c * p1);
+
+        // Check that the indirect block points to a valid block.
+        if (!inode->data.blocks.doubly_indir_block) {
+            // Allocate a new block.
+            unsigned int new_block_index = ext2_allocate_block(fs);
+            if (new_block_index == 0)
+                return -1;
+            // Update the index.
+            inode->data.blocks.doubly_indir_block = new_block_index;
+            // Update the inode.
+            if (ext2_write_inode(fs, inode, inode_index) == -1)
+                return -1;
+        }
+
+        // Read the doubly-indirect block (which contains pointers to indirect blocks).
+        ext2_read_block(fs, inode->data.blocks.doubly_indir_block, fs->block_buffer);
+        // Check that the indirect block points to a valid block.
+        if (!fs->block_buffer[c]) {
+            // Allocate a new block.
+            unsigned int new_block_index = ext2_allocate_block(fs);
+            if (new_block_index == 0)
+                return -1;
+            // Update the index.
+            fs->block_buffer[c] = new_block_index;
+            // Write the doubly-indirect block back.
+            ext2_write_block(fs, inode->data.blocks.doubly_indir_block, fs->block_buffer);
+        }
+
+        // Compute the index inside the indirect block.
+        ext2_read_block(fs, (uint32_t)fs->block_buffer[c], fs->block_buffer);
+        // Write the index inside the final block.
+        fs->block_buffer[d] = real_index;
+        // Write back the indirect block.
+        ext2_read_block(fs, (uint32_t)fs->block_buffer[c], fs->block_buffer);
+        return 0;
+    }
+
+    // Check if the index is among the trebly-indirect blocks.
+    if (block_index < fs->trebly_indirect_blocks_index) {
+        // Compute the indirect indices.
+        uint32_t a = block_index - EXT2_INDIRECT_BLOCKS;
+        uint32_t b = a - p1;
+        uint32_t c = b - p2;
+        uint32_t d = c / p2;
+        uint32_t e = c - (d * p2);
+        uint32_t f = e / p1;
+        uint32_t g = e - (f * p1);
+        uint32_t block_index_save;
+
+        // Check that the indirect block points to a valid block.
+        if (!inode->data.blocks.trebly_indir_block) {
+            // Allocate a new block.
+            unsigned int new_block_index = ext2_allocate_block(fs);
+            if (new_block_index == 0)
+                return -1;
+            // Update the index.
+            inode->data.blocks.trebly_indir_block = new_block_index;
+            // Update the inode.
+            if (ext2_write_inode(fs, inode, inode_index) == -1)
+                return -1;
+        }
+
+        // Read the trebly-indirect block (which contains pointers to doubly-indirect blocks).
+        ext2_read_block(fs, inode->data.blocks.trebly_indir_block, fs->block_buffer);
+        // Check that the indirect block points to a valid block.
+        if (!fs->block_buffer[d]) {
+            // Allocate a new block.
+            unsigned int new_block_index = ext2_allocate_block(fs);
+            if (new_block_index == 0)
+                return -1;
+            // Update the index.
+            fs->block_buffer[d] = new_block_index;
+            // Write the doubly-indirect block back.
+            ext2_write_block(fs, inode->data.blocks.trebly_indir_block, fs->block_buffer);
+        }
+        // Save the block index, otherwise with the next read we lose the block index list [d].
+        block_index_save = (uint32_t)fs->block_buffer[d];
+
+        // Read the doubly-indirect block (which contains pointers to indirect blocks).
+        ext2_read_block(fs, block_index_save, fs->block_buffer);
+        // Check that the indirect block points to a valid block.
+        if (!fs->block_buffer[f]) {
+            // Allocate a new block.
+            unsigned int new_block_index = ext2_allocate_block(fs);
+            if (new_block_index == 0)
+                return -1;
+            // Update the index.
+            fs->block_buffer[f] = new_block_index;
+            // Write the doubly-indirect block back.
+            ext2_write_block(fs, block_index_save, fs->block_buffer);
+        }
+
+        // Get the next group index.
+        block_index_save = (uint32_t)fs->block_buffer[f];
+        // Read the indirect block (which contains pointers to the next set of blocks).
+        ext2_read_block(fs, block_index_save, fs->block_buffer);
+        // Write the index inside the final block.
+        fs->block_buffer[g] = real_index;
+        // Write back the indirect block.
+        ext2_read_block(fs, block_index_save, fs->block_buffer);
+        return 0;
+    }
+    pr_err("We failed to write the real block number of the block with index `%d`\n", block_index);
+    return -1;
+}
+
+/// @brief Returns the real block index starting from a block index inside an inode.
+/// @param fs the filesystem.
+/// @param inode the inode which we are working with.
+/// @param block_index the block index inside the inode.
+/// @return the real block number.
 static uint32_t ext2_get_real_block_index(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t block_index)
 {
     // Return the direct block pointer.
@@ -735,7 +907,57 @@ static uint32_t ext2_get_real_block_index(ext2_filesystem_t *fs, ext2_inode_t *i
         return (uint32_t)fs->block_buffer[g];
     }
     pr_err("We failed to retrieve the real block number of the block with index `%d`\n", block_index);
-    return -1;
+    return 0;
+}
+
+/// @brief Allocate a new block for an inode.
+/// @param fs the filesystem.
+/// @param inode the inode which we are working with.
+/// @param inode_index The index of the inode.
+/// @param block_index The index of the block within the inode.
+/// @return 0 on success, -1 on failure.
+static int ext2_allocate_inode_block(ext2_filesystem_t *fs, ext2_inode_t *inode, unsigned int inode_index, unsigned int block_index)
+{
+    pr_debug("Allocating block with index `%d` for inode with index `%d`.\n", block_index, inode_index);
+    // Allocate the block.
+    int real_index = ext2_allocate_block(fs);
+    if (real_index == -1)
+        return -1;
+    // Associate the real index and the index inside the inode.
+    if (ext2_set_real_block_index(fs, inode, inode_index, block_index, real_index) == -1)
+        return -1;
+    // Compute the new blocks count.
+    unsigned int blocks_count = (block_index + 1) * fs->blocks_per_block_count;
+    if (inode->blocks_count < blocks_count) {
+        inode->blocks_count = blocks_count;
+        pr_debug("Setting the block count for inode to %d = (%d blocks)",
+                 blocks_count, blocks_count / fs->blocks_per_block_count);
+    }
+    // Update the inode.
+    if (ext2_write_inode(fs, inode, inode_index) == -1)
+        return -1;
+    return 0;
+}
+
+/// @brief Reads the real block starting from an inode and the block index inside the inode.
+/// @param fs the filesystem.
+/// @param inode the inode which we are working with.
+/// @param block_index the index of the block within the inode.
+/// @param buffer the buffer where to put the data.
+/// @return the amount read.
+static ssize_t ext2_read_inode_block(ext2_filesystem_t *fs, ext2_inode_t *inode, unsigned int block_index, char *buffer)
+{
+    if (block_index >= (inode->blocks_count / fs->blocks_per_block_count)) {
+        pr_err("Tried to read an invalid block `%d`, but inode only has %d!",
+               block_index, (inode->blocks_count / fs->blocks_per_block_count));
+        return -1;
+    }
+    // Get the real index.
+    unsigned int real_index = ext2_get_real_block_index(fs, inode, block_index);
+    if (real_index == 0)
+        return -1;
+    // Read the block.
+    return ext2_read_block(fs, real_index, buffer);
 }
 
 static vfs_file_t *ext2_mount(vfs_file_t *block_device)
@@ -806,17 +1028,52 @@ static vfs_file_t *ext2_mount(vfs_file_t *block_device)
     fs->bgdt_end_block = fs->bgdt_start_block + ((sizeof(ext2_group_descriptor_t) * fs->block_groups_count) / fs->block_size) + 1;
     // Compute the length in blocks of the BGDT.
     fs->bgdt_length = fs->bgdt_end_block - fs->bgdt_start_block;
+
     // Now, we have the size of a block, calculate the location of the Block
     // Group Descriptor Table (BGDT). The BGDT is located directly after the
     // superblock, so obtain the block of the superblock first.
     fs->block_groups = kmalloc(fs->block_size * fs->bgdt_length);
+    if (fs->block_groups == NULL) {
+        pr_err("Failed to allocate memory for the block buffer.\n");
+        // Free the memory occupied by the filesystem.
+        kfree(fs);
+        return NULL;
+    }
+
     // Try to read the BGDT.
-    ext2_read_bgdt(fs);
+    if (ext2_read_bgdt(fs) == -1) {
+        pr_err("Failed to read the BGDT.\n");
+        // Free the memory occupied by the block groups.
+        kfree(fs->block_groups);
+        // Free the memory occupied by the filesystem.
+        kfree(fs);
+        return NULL;
+    }
+
     // Preentively allocate a buffer for reading blocks.
     fs->block_buffer = kmalloc(fs->block_size * sizeof(char));
+    if (fs->block_buffer == NULL) {
+        pr_err("Failed to allocate memory for the block buffer.\n");
+        // Free the memory occupied by the block groups.
+        kfree(fs->block_groups);
+        // Free the memory occupied by the filesystem.
+        kfree(fs);
+        return NULL;
+    }
     memset(fs->block_buffer, 0, sizeof(char) * fs->block_size);
+
     // Preentively allocate a buffer for reading inodes.
     fs->inode_buffer = kmalloc(fs->superblock.inode_size * sizeof(char));
+    if (fs->inode_buffer == NULL) {
+        pr_err("Failed to allocate memory for the block buffer.\n");
+        // Free the memory occupied by the block buffer.
+        kfree(fs->block_buffer);
+        // Free the memory occupied by the block groups.
+        kfree(fs->block_groups);
+        // Free the memory occupied by the filesystem.
+        kfree(fs);
+        return NULL;
+    }
     memset(fs->inode_buffer, 0, sizeof(char) * fs->superblock.inode_size);
 
     // Dump the filesystem details for debugging.
@@ -826,9 +1083,13 @@ static vfs_file_t *ext2_mount(vfs_file_t *block_device)
     // Dump the block group descriptor table.
     ext2_dump_bgdt(fs);
 
+    // Free the memory occupied by the block buffer.
     kfree(fs->block_buffer);
+    // Free the memory occupied by the inode buffer.
     kfree(fs->inode_buffer);
+    // Free the memory occupied by the block groups.
     kfree(fs->block_groups);
+    // Free the memory occupied by the filesystem.
     kfree(fs);
     return NULL;
 }
