@@ -22,9 +22,24 @@
 #include "stdio.h"
 #include "fcntl.h"
 
-#define EXT2_SUPERBLOCK_MAGIC 0xEF53
-#define EXT2_INDIRECT_BLOCKS  12
-#define EXT2_NAME_LEN         255
+#define EXT2_SUPERBLOCK_MAGIC  0xEF53 ///< Magic value used to identify an ext2 filesystem.
+#define EXT2_INDIRECT_BLOCKS   12     ///< Amount of indirect blocks in an inode.
+#define EXT2_PATH_MAX          4096   ///< Maximum length of a pathname.
+#define EXT2_MAX_SYMLINK_COUNT 8      ///< Maximum nesting of symlinks, used to prevent a loop.
+#define EXT2_NAME_LEN          255    ///< The lenght of names inside directory entries.
+
+#define EXT2_S_IRWXO 0x0007 ///< -------rwx : Others can read/write/execute
+#define EXT2_S_IXOTH 0x0001 ///< ---------x : Others can execute
+#define EXT2_S_IWOTH 0x0002 ///< --------w- : Others can write
+#define EXT2_S_IROTH 0x0004 ///< -------r-- : Others can read
+#define EXT2_S_IRWXG 0x0038 ///< -------rwx : Group can read/write/execute
+#define EXT2_S_IXGRP 0x0008 ///< ------x--- : Group can execute
+#define EXT2_S_IWGRP 0x0010 ///< -----w---- : Group can write
+#define EXT2_S_IRGRP 0x0020 ///< ----r----- : Group can read
+#define EXT2_S_IRWXU 0x01C0 ///< -------rwx : User can read/write/execute
+#define EXT2_S_IXUSR 0x0040 ///< ---x------ : User can execute
+#define EXT2_S_IWUSR 0x0080 ///< --w------- : User can write
+#define EXT2_S_IRUSR 0x0100 ///< -r-------- : User can read
 
 /// @brief The superblock contains all the information about the configuration
 /// of the filesystem.
@@ -48,7 +63,7 @@ typedef struct ext2_superblock_t {
     /// @brief The number to shift 1024 to the left by to obtain the block size
     /// (log2 (block size) - 10).
     uint32_t log_block_size;
-    /// @brief The number to shift 1,024 to the left by to obtain the fragment
+    /// @brief The number to shift 1024 to the left by to obtain the fragment
     /// size (log2 (fragment size) - 10).
     uint32_t log_frag_size;
     /// @brief Number of blocks in each block group.
@@ -204,13 +219,20 @@ typedef struct ext2_inode_t {
     uint32_t flags;
     /// @brief OS dependant value.
     uint32_t osd1;
-    union {
-        struct datablocks {
+    /// @brief
+    union blocks_t {
+        /// [60 byte]
+        struct blocks_data_t {
+            /// [48 byte]
             uint32_t dir_blocks[EXT2_INDIRECT_BLOCKS];
+            /// [ 4 byte]
             uint32_t indir_block;
+            /// [ 4 byte]
             uint32_t double_indir_block;
+            /// [ 4 byte]
             uint32_t triple_indir_block;
         } blocks;
+        /// [60 byte]
         char symlink[60];
     } data;
     /// @brief Value used to indicate the file version (used by NFS).
@@ -239,6 +261,40 @@ typedef struct ext2_dirent_t {
     char name[EXT2_NAME_LEN];
 } ext2_dirent_t;
 
+/// @brief The details regarding the filesystem.
+typedef struct ext2_filesystem_t {
+    /// Pointer to the block device.
+    vfs_file_t *block_device;
+    /// Device superblock, contains important information.
+    ext2_superblock_t superblock;
+    /// Block Group Descriptor / Block groups.
+    ext2_group_descriptor_t *block_groups;
+    /// A buffer the size of a block.
+    char *block_buffer;
+    /// A buffer the size of an inode.
+    char *inode_buffer;
+    /// Root FS node (attached to mountpoint).
+    vfs_file_t *root;
+
+    /// Size of one block.
+    unsigned int block_size;
+
+    /// Number of inodes that fit in a block.
+    unsigned int inodes_per_block_count;
+    /// Number of blocks that fit in a block.
+    unsigned int blocks_per_block_count;
+    /// Number of blocks groups.
+    unsigned int block_groups_count;
+    /// Number of block pointers per block.
+    unsigned int pointers_per_block;
+    /// Index in terms of blocks where the BGDT starts.
+    unsigned int bgdt_start_block;
+    /// Index in terms of blocks where the BGDT ends.
+    unsigned int bgdt_end_block;
+    /// The number of blocks containing the BGDT
+    unsigned int bgdt_length;
+} ext2_filesystem_t;
+
 static const char *uuid_to_string(uint8_t uuid[16])
 {
     static char s[33] = { 0 };
@@ -256,7 +312,7 @@ static const char *time_to_string(uint32_t time)
     return s;
 }
 
-static void ext2_dump_superblock(ext2_superblock_t *sb)
+static inline void ext2_dump_superblock(ext2_superblock_t *sb)
 {
     pr_debug("inodes_count          : %d\n", sb->inodes_count);
     pr_debug("blocks_count          : %d\n", sb->blocks_count);
@@ -305,24 +361,307 @@ static void ext2_dump_superblock(ext2_superblock_t *sb)
     pr_debug("first_meta_bg         : %d\n", sb->first_meta_block_group_id);
 }
 
+static inline void ext2_dump_group_descriptor(ext2_group_descriptor_t *gd)
+{
+    pr_debug("block_bitmap          : %d\n", gd->block_bitmap);
+    pr_debug("inode_bitmap          : %d\n", gd->inode_bitmap);
+    pr_debug("inode_table           : %d\n", gd->inode_table);
+    pr_debug("free_blocks_count     : %d\n", gd->free_blocks_count);
+    pr_debug("free_inodes_count     : %d\n", gd->free_inodes_count);
+    pr_debug("used_dirs_count       : %d\n", gd->used_dirs_count);
+}
+
+static inline void ext2_dump_filesystem(ext2_filesystem_t *fs)
+{
+    pr_debug("block_device          : 0x%x\n", fs->block_device);
+    pr_debug("superblock            : 0x%x\n", fs->superblock);
+    pr_debug("block_buffer          : 0x%x\n", fs->block_buffer);
+    pr_debug("inode_buffer          : 0x%x\n", fs->inode_buffer);
+    pr_debug("block_groups          : 0x%x\n", fs->block_groups);
+    pr_debug("root                  : 0x%x\n", fs->root);
+    pr_debug("block_size            : %d\n", fs->block_size);
+    pr_debug("inodes_per_block_count: %d\n", fs->inodes_per_block_count);
+    pr_debug("blocks_per_block_count: %d\n", fs->blocks_per_block_count);
+    pr_debug("block_groups_count    : %d\n", fs->block_groups_count);
+    pr_debug("pointers_per_block    : %d\n", fs->pointers_per_block);
+    pr_debug("bgdt_start_block      : %d\n", fs->bgdt_start_block);
+    pr_debug("bgdt_end_block        : %d\n", fs->bgdt_end_block);
+    pr_debug("bgdt_length           : %d\n", fs->bgdt_length);
+}
+
+/// @brief Cheks if the bit at the given index is free.
+/// @param block_buffer the buffer containing the bitmap
+/// @param index the index we want to check.
+/// @return if the bit is 0 or 1.
+/// @details
+/// How we access the specific bits inside the bitmap takes inspiration from the
+/// mailman's algorithm.
+static inline bool_t ext2_check_block_bit(char *block_buffer, unsigned int index)
+{
+    return bit_check(block_buffer[index / 8], index % 8) != 0;
+}
+
+/// @brief Reads the superblock from the block device associated with this filesystem.
+/// @param fs the ext2 filesystem structure.
+/// @return the amount of data we read, or negative value for an error.
+static inline int ext2_read_superblock(ext2_filesystem_t *fs)
+{
+    return vfs_read(fs->block_device, &fs->superblock, 1024, sizeof(super_block_t));
+}
+
+/// @brief Writes the superblock on the block device associated with this filesystem.
+/// @param fs the ext2 filesystem structure.
+/// @return the amount of data we wrote, or negative value for an error.
+static inline int ext2_write_superblock(ext2_filesystem_t *fs)
+{
+    return vfs_write(fs->block_device, &fs->superblock, 1024, sizeof(super_block_t));
+}
+
+/// @brief Read a block from the block device associated with this filesystem.
+/// @param fs the ext2 filesystem structure.
+/// @param block_index the index of the block we want to read.
+/// @param buffer the buffer where the content will be placed.
+/// @return the amount of data we read, or negative value for an error.
+static inline int ext2_read_block(ext2_filesystem_t *fs, unsigned int block_index, uint8_t *buffer)
+{
+    if (block_index == 0) {
+        pr_err("You are trying to read an invalid block index (%d).\n", block_index);
+        return -1;
+    }
+    if (buffer == NULL) {
+        pr_err("You are trying to read with a NULL buffer.\n");
+        return -1;
+    }
+    return vfs_read(fs->block_device, buffer, block_index * fs->block_size, fs->block_size);
+}
+
+/// @brief Writes a block on the block device associated with this filesystem.
+/// @param fs the ext2 filesystem structure.
+/// @param block_index the index of the block we want to read.
+/// @param buffer the buffer where the content will be placed.
+/// @return the amount of data we wrote, or negative value for an error.
+static inline int ext2_write_block(ext2_filesystem_t *fs, unsigned int block_index, uint8_t *buffer)
+{
+    if (block_index == 0) {
+        pr_err("You are trying to write on an invalid block index (%d).\n", block_index);
+        return -1;
+    }
+    if (buffer == NULL) {
+        pr_err("You are trying to write with a NULL buffer.\n");
+        return -1;
+    }
+    return vfs_write(fs->block_device, buffer, block_index * fs->block_size, fs->block_size);
+}
+
+static inline int read_inode(ext2_filesystem_t *fs, ext2_inode_t *inode, unsigned inode_index)
+{
+    if (inode_index == 0) {
+        pr_err("You are trying to read an invalid inode index (%d).\n", inode_index);
+        return -1;
+    }
+    // Update the inode index.
+    inode_index -= 1;
+    // Retrieve the group index.
+    unsigned group_index = inode_index / fs->superblock.inodes_per_group;
+    if (group_index > fs->block_groups_count) {
+        pr_err("Invalid group index computed from inode index `%d`.\n", inode_index);
+        return -1;
+    }
+    // Retrieve the group.
+    ext2_group_descriptor_t *group_desc = &fs->block_groups[group_index];
+    // Get the index of the inode inside the group.
+    inode_index -= group_index * fs->superblock.inodes_per_group;
+    // Get the block offest.
+    unsigned block_offset = (inode_index * fs->superblock.inode_size) / fs->block_size;
+    // Get the offset inside the block.
+    uint32_t offset_in_block = inode_index - block_offset * (fs->block_size / fs->superblock.inode_size);
+
+    // Read the block containing the inode table.
+    ext2_read_block(fs, group_desc->inode_table + block_offset, (uint8_t *)fs->block_buffer);
+    // Get the first entry inside the inode table.
+    ext2_inode_t *inode_table = (ext2_inode_t *)fs->block_buffer;
+
+    // Save the inode content.
+    memcpy(inode, (uint8_t *)((uintptr_t)inode_table + offset_in_block * fs->superblock.inode_size), fs->superblock.inode_size);
+
+    return 0;
+}
+
+static int write_inode(ext2_filesystem_t *fs, ext2_inode_t *inode, unsigned inode_index)
+{
+    if (inode_index == 0) {
+        pr_err("You are trying to read an invalid inode index (%d).\n", inode_index);
+        return -1;
+    }
+    // Update the inode index.
+    inode_index -= 1;
+    // Retrieve the group index.
+    unsigned group_index = inode_index / fs->superblock.inodes_per_group;
+    if (group_index > fs->block_groups_count) {
+        pr_err("Invalid group index computed from inode index `%d`.\n", inode_index);
+        return -1;
+    }
+    // Retrieve the group.
+    ext2_group_descriptor_t *group_desc = &fs->block_groups[group_index];
+    // Get the index of the inode inside the group.
+    inode_index -= group_index * fs->superblock.inodes_per_group;
+    // Get the block offest.
+    unsigned block_offset = (inode_index * fs->superblock.inode_size) / fs->block_size;
+    // Get the offset inside the block.
+    uint32_t offset_in_block = inode_index - block_offset * (fs->block_size / fs->superblock.inode_size);
+
+    // Read the block containing the inode table.
+    ext2_read_block(fs, group_desc->inode_table + block_offset, (uint8_t *)fs->block_buffer);
+    // Get the first entry inside the inode table.
+    ext2_inode_t *inode_table = (ext2_inode_t *)fs->block_buffer;
+
+    // Write the inode.
+    memcpy((uint8_t *)((uintptr_t)inode_table + offset_in_block * fs->superblock.inode_size), inode, fs->superblock.inode_size);
+
+    // Write back the block.
+    ext2_write_block(fs, group_desc->inode_table + block_offset, (uint8_t *)inode_table);
+
+    return 0;
+}
+
+static unsigned int ext2_get_real_block_index(ext2_filesystem_t *fs, ext2_inode_t *inode, unsigned int block_index)
+{
+    // Return the direct block pointer.
+    if (block_index < EXT2_INDIRECT_BLOCKS) {
+        return inode->data.blocks.dir_blocks[block_index];
+    }
+    // Return the indirect block pointers.
+    return -1;
+}
+
+static vfs_file_t *ext2_mount(vfs_file_t *block_device)
+{
+    // Create the ext2 filesystem.
+    ext2_filesystem_t *fs = kmalloc(sizeof(ext2_filesystem_t));
+    // Clean the memory.
+    memset(fs, 0, sizeof(ext2_filesystem_t));
+    // Set the pointer to the block device.
+    fs->block_device = block_device;
+    // Read the superblock.
+    if (ext2_read_superblock(fs) == -1) {
+        pr_err("Failed to read the superblock table at 1024.\n");
+        // Free the memory occupied by the filesystem.
+        kfree(fs);
+        return NULL;
+    }
+    // Check the superblock magic number.
+    if (fs->superblock.magic != EXT2_SUPERBLOCK_MAGIC) {
+        pr_err("Wrong magic number, it is not an EXT2 filesystem.\n");
+        // Free the memory occupied by the filesystem.
+        kfree(fs);
+        return NULL;
+    }
+    // Compute the volume size.
+    fs->block_size = 1024U << fs->superblock.log_block_size;
+    // Compute the maximum number of inodes per block.
+    fs->inodes_per_block_count = fs->block_size / sizeof(ext2_inode_t);
+    // Compute the number of blocks per block. This value is mostly used for
+    // inodes.
+    // If you check inside the inode structure you will find the `blocks_count`
+    // field. A 32-bit value representing the total number of 512-bytes blocks
+    // reserved to contain the data of this inode, regardless if these blocks
+    // are used or not. The block numbers of these reserved blocks are contained
+    // in the `block` array.
+    // Since this value represents 512-byte blocks and not file system blocks,
+    // this value should not be directly used as an index to the `block` array.
+    // Rather, the maximum index of the `block` array should be computed from
+    //      inode->blocks_count / ((1024 << superblock->log_block_size) / 512)
+    // or once simplified:
+    //      inode->blocks_count / (2 << superblock->log_block_size)
+    // Now we just need to precompute the right part.
+    fs->blocks_per_block_count = fs->block_size / 512U;
+    // Compute the number of block pointers per block.
+    fs->pointers_per_block = fs->block_size / 4U;
+    // Compute the number of block groups.
+    fs->block_groups_count = fs->superblock.blocks_count / fs->superblock.blocks_per_group;
+    if (fs->superblock.blocks_per_group * fs->block_groups_count < fs->superblock.blocks_count) {
+        fs->block_groups_count += 1;
+    }
+    // The block group descriptor table starts on the first block following the
+    // superblock. This would be the second block for 2KiB and larger block file systems.
+    if (fs->block_size > K) {
+        fs->bgdt_start_block = 1;
+    } else {
+        // However, it would be the third block on a 1KiB block file system.
+        fs->bgdt_start_block = 2;
+    }
+    // The block group descriptor table ends a certain amount of blocks.
+    fs->bgdt_end_block = fs->bgdt_start_block + ((sizeof(ext2_group_descriptor_t) * fs->block_groups_count) / fs->block_size) + 1;
+    // Compute the length in blocks of the BGDT.
+    fs->bgdt_length = fs->bgdt_end_block - fs->bgdt_start_block;
+    // Now, we have the size of a block, calculate the location of the Block
+    // Group Descriptor Table (BGDT). The BGDT is located directly after the
+    // superblock, so obtain the block of the superblock first.
+    fs->block_groups = kmalloc(fs->block_size * fs->bgdt_length);
+    // Try to read the BGDT.
+    for (unsigned i = 0; i < fs->bgdt_length; ++i) {
+        ext2_read_block(fs, fs->bgdt_start_block + i, (uint8_t *)((uintptr_t)fs->block_groups + (fs->block_size * i)));
+    }
+    // Preentively allocate a buffer for reading blocks.
+    fs->block_buffer = kmalloc(fs->block_size * sizeof(char));
+    // Preentively allocate a buffer for reading inodes.
+    fs->inode_buffer = kmalloc(fs->superblock.inode_size * sizeof(char));
+
+    // Dump the filesystem details for debugging.
+    ext2_dump_filesystem(fs);
+    // Dump the superblock details for debugging.
+    ext2_dump_superblock(&fs->superblock);
+
+#if 0
+    ext2_group_descriptor_t *gd;
+    for (uint32_t i = 0, j, byte_index, bit_index; i < fs->block_groups_count; ++i) {
+        gd = &(fs->block_groups[i]);
+        pr_debug("Block Group Descriptor [%d] @ %d:\n", i, fs->bgdt_start_block + i * fs->superblock.blocks_per_group);
+        pr_debug("    Free Blocks : %d\n", gd->free_blocks_count);
+        pr_debug("    Free Inodes : %d\n", gd->free_inodes_count);
+        pr_debug("    Block Bitmap at %d\n", gd->block_bitmap);
+        ext2_read_block(fs, gd->block_bitmap, (uint8_t *)fs->block_buffer);
+        for (unsigned j = 0; j < fs->block_size; ++j) {
+            if (j % 8 == 0)
+                pr_debug("        [%4d] %s (%d)\n", j / 8, dec_to_binary(fs->block_buffer[j / 8], 8), j);
+            if (!ext2_check_block_bit(fs->block_buffer, j)) {
+                pr_debug("    First free block in group is %d\n", (gd->block_bitmap - 2) + j);
+                break;
+            }
+        }
+        pr_debug("    Inode Bitmap at %d\n", gd->inode_bitmap);
+        ext2_read_block(fs, gd->inode_bitmap, (uint8_t *)fs->block_buffer);
+        for (unsigned j = 0; j < fs->block_size; ++j) {
+            if (j % 8 == 0)
+                pr_debug("        [%4d] %s (%d)\n", j / 8, dec_to_binary(fs->block_buffer[j / 8], 8), j);
+            if (!ext2_check_block_bit(fs->block_buffer, j)) {
+                pr_debug("    First free block in group is %d\n", fs->inodes_per_group * i + j + 1);
+                break;
+            }
+        }
+    }
+#endif
+
+    kfree(fs->block_buffer);
+    kfree(fs->inode_buffer);
+    kfree(fs->block_groups);
+    kfree(fs);
+    return NULL;
+}
+
 static vfs_file_t *ext2_mount_callback(const char *path, const char *device)
 {
-    vfs_file_t *dev = vfs_open(device, 0, 0);
-    if (dev && (dev->flags == DT_BLK)) {
-        pr_debug("Correctly found block device.\n");
-        ext2_superblock_t sb;
-        memset(&sb, 0, sizeof(ext2_superblock_t));
-        if (vfs_read(dev, &sb, 1024, sizeof(ext2_superblock_t)) == -1) {
-            pr_err("Failed to read the superblock table at 1024.\n");
-            return NULL;
-        }
-        if (sb.magic != EXT2_SUPERBLOCK_MAGIC) {
-            pr_err("Wrong magic number, it is not an EXT2 filesystem.\n");
-            return NULL;
-        }
-        ext2_dump_superblock(&sb);
+    vfs_file_t *block_device = vfs_open(device, 0, 0);
+    if (!block_device) {
+        pr_warning("Can find the device at path `%s`.\n", path);
+        return NULL;
     }
-    return NULL;
+    if (block_device->flags != DT_BLK) {
+        pr_warning("The device at path `%s` is not a block device.\n", path);
+        vfs_close(block_device);
+        return NULL;
+    }
+    return ext2_mount(block_device);
 }
 
 /// Filesystem general operations.
