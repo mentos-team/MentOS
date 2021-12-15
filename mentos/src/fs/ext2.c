@@ -41,6 +41,11 @@
 #define EXT2_S_IWUSR 0x0080 ///< --w------- : User can write
 #define EXT2_S_IRUSR 0x0100 ///< -r-------- : User can read
 
+typedef enum ext2_block_status_t {
+    ext2_block_status_free     = 0, ///< The block is free.
+    ext2_block_status_occupied = 1  ///< The block is occupied.
+} ext2_block_status_t;
+
 /// @brief The superblock contains all the information about the configuration
 /// of the filesystem.
 /// @details The primary copy of the superblock is stored at an offset of 1024
@@ -293,6 +298,9 @@ typedef struct ext2_filesystem_t {
     unsigned int bgdt_end_block;
     /// The number of blocks containing the BGDT
     unsigned int bgdt_length;
+
+    /// Spinlock for protecting filesystem operations.
+    spinlock_t spinlock;
 } ext2_filesystem_t;
 
 static const char *uuid_to_string(uint8_t uuid[16])
@@ -401,11 +409,24 @@ static inline bool_t ext2_check_block_bit(char *block_buffer, unsigned int index
     return bit_check(block_buffer[index / 8], index % 8) != 0;
 }
 
+/// @brief Sets the bit at the given index accordingly to `status`.
+/// @param block_buffer the buffer containing the bitmap
+/// @param index the index we want to check.
+/// @param status the new status of the block (free|occupied).
+static inline void ext2_set_block_bit(char *block_buffer, unsigned int index, ext2_block_status_t status)
+{
+    if (status == ext2_block_status_occupied)
+        bit_set_assign(block_buffer[index / 8], index % 8);
+    else
+        bit_clear_assign(block_buffer[index / 8], index % 8);
+}
+
 /// @brief Reads the superblock from the block device associated with this filesystem.
 /// @param fs the ext2 filesystem structure.
 /// @return the amount of data we read, or negative value for an error.
 static inline int ext2_read_superblock(ext2_filesystem_t *fs)
 {
+    pr_debug("Read superblock for EXT2 filesystem (0x%x)\n", fs);
     return vfs_read(fs->block_device, &fs->superblock, 1024, sizeof(super_block_t));
 }
 
@@ -414,6 +435,7 @@ static inline int ext2_read_superblock(ext2_filesystem_t *fs)
 /// @return the amount of data we wrote, or negative value for an error.
 static inline int ext2_write_superblock(ext2_filesystem_t *fs)
 {
+    pr_debug("Write superblock for EXT2 filesystem (0x%x)\n", fs);
     return vfs_write(fs->block_device, &fs->superblock, 1024, sizeof(super_block_t));
 }
 
@@ -424,6 +446,7 @@ static inline int ext2_write_superblock(ext2_filesystem_t *fs)
 /// @return the amount of data we read, or negative value for an error.
 static inline int ext2_read_block(ext2_filesystem_t *fs, unsigned int block_index, uint8_t *buffer)
 {
+    pr_debug("Read block %4d for EXT2 filesystem (0x%x)\n", block_index, fs);
     if (block_index == 0) {
         pr_err("You are trying to read an invalid block index (%d).\n", block_index);
         return -1;
@@ -442,6 +465,7 @@ static inline int ext2_read_block(ext2_filesystem_t *fs, unsigned int block_inde
 /// @return the amount of data we wrote, or negative value for an error.
 static inline int ext2_write_block(ext2_filesystem_t *fs, unsigned int block_index, uint8_t *buffer)
 {
+    pr_debug("Write block %4d for EXT2 filesystem (0x%x)\n", block_index, fs);
     if (block_index == 0) {
         pr_err("You are trying to write on an invalid block index (%d).\n", block_index);
         return -1;
@@ -451,6 +475,72 @@ static inline int ext2_write_block(ext2_filesystem_t *fs, unsigned int block_ind
         return -1;
     }
     return vfs_write(fs->block_device, buffer, block_index * fs->block_size, fs->block_size);
+}
+
+/// @brief Reads the Block Group Descriptor Table (BGDT) from the block device associated with this filesystem.
+/// @param fs the ext2 filesystem structure.
+/// @return if we correctly read the BGDT.
+static inline bool_t ext2_read_bgdt(ext2_filesystem_t *fs)
+{
+    pr_debug("Read BGDT for EXT2 filesystem (0x%x)\n", fs);
+    if (fs->block_groups) {
+        for (unsigned i = 0; i < fs->bgdt_length; ++i)
+            ext2_read_block(fs, fs->bgdt_start_block + i, (uint8_t *)((uintptr_t)fs->block_groups + (fs->block_size * i)));
+        return true;
+    }
+    pr_err("The `block_groups` list is not initialized.\n");
+    return false;
+}
+
+/// @brief Writes the Block Group Descriptor Table (BGDT) to the block device associated with this filesystem.
+/// @param fs the ext2 filesystem structure.
+/// @return if we correctly wrote the BGDT.
+static inline bool_t ext2_write_bgdt(ext2_filesystem_t *fs)
+{
+    pr_debug("Write BGDT for EXT2 filesystem (0x%x)\n", fs);
+    if (fs->block_groups) {
+        for (unsigned i = 0; i < fs->bgdt_length; ++i)
+            ext2_write_block(fs, fs->bgdt_start_block + i, (uint8_t *)((uintptr_t)fs->block_groups + (fs->block_size * i)));
+        return true;
+    }
+    pr_err("The `block_groups` list is not initialized.\n");
+    return false;
+}
+
+static inline void ext2_dump_bgdt(ext2_filesystem_t *fs)
+{
+    for (uint32_t i = 0; i < fs->block_groups_count; ++i) {
+        // Get the pointer to the current group descriptor.
+        ext2_group_descriptor_t *gd = &(fs->block_groups[i]);
+
+        pr_debug("Block Group Descriptor [%d] @ %d:\n", i, fs->bgdt_start_block + i * fs->superblock.blocks_per_group);
+        pr_debug("    Free Blocks : %4d of %d\n", gd->free_blocks_count, fs->superblock.blocks_per_group);
+        pr_debug("    Free Inodes : %4d of %d\n", gd->free_inodes_count, fs->superblock.inodes_per_group);
+
+        // Dump the block bitmap.
+        ext2_read_block(fs, gd->block_bitmap, (uint8_t *)fs->block_buffer);
+        pr_debug("    Block Bitmap at %d\n", gd->block_bitmap);
+        for (unsigned j = 0; j < fs->block_size; ++j) {
+            if ((j % 8) == 0)
+                pr_debug("        Block index: %4d, Bitmap: %s\n", j / 8, dec_to_binary(fs->block_buffer[j / 8], 8));
+            if (!ext2_check_block_bit(fs->block_buffer, j)) {
+                pr_debug("    First free block in group is in block %d, the linear index is %d\n", j / 8, j);
+                break;
+            }
+        }
+
+        // Dump the block bitmap.
+        ext2_read_block(fs, gd->inode_bitmap, (uint8_t *)fs->block_buffer);
+        pr_debug("    Inode Bitmap at %d\n", gd->inode_bitmap);
+        for (unsigned j = 0; j < fs->block_size; ++j) {
+            if ((j % 8) == 0)
+                pr_debug("        Block index: %4d, Bitmap: %s\n", j / 8, dec_to_binary(fs->block_buffer[j / 8], 8));
+            if (!ext2_check_block_bit(fs->block_buffer, j)) {
+                pr_debug("    First free block in group is in block %d, the linear index is %d\n", j / 8, j);
+                break;
+            }
+        }
+    }
 }
 
 static inline int read_inode(ext2_filesystem_t *fs, ext2_inode_t *inode, unsigned inode_index)
@@ -524,6 +614,57 @@ static int write_inode(ext2_filesystem_t *fs, ext2_inode_t *inode, unsigned inod
     return 0;
 }
 
+static uint32_t ext2_allocate_block(ext2_filesystem_t *fs)
+{
+    uint32_t group_index, block_index, linear_index;
+    // Lock the filesystem.
+    spinlock_lock(&fs->spinlock);
+    // Get the group and bit index of the first free block.
+    for (group_index = 0; group_index < fs->block_groups_count; ++group_index) {
+        // Check if there are free blocks in this block group.
+        if (fs->block_groups[group_index].free_blocks_count > 0) {
+            // Read the block bitmap.
+            ext2_read_block(fs, fs->block_groups[group_index].block_bitmap, (uint8_t *)fs->block_buffer);
+            // Find the first free block.
+            for (linear_index = 0; linear_index < fs->block_size; ++linear_index) {
+                // We found a free block.
+                if (!ext2_check_block_bit(fs->block_buffer, linear_index)) {
+                    // Compute the block index.
+                    block_index = (fs->superblock.blocks_per_group * group_index) + linear_index;
+                    break;
+                }
+            }
+            if (block_index != 0)
+                break;
+        }
+    }
+    // Check if we have found a free block.
+    if (block_index == 0) {
+        pr_err("Cannot find a free block.\n");
+        // Unlock the spinlock.
+        spinlock_unlock(&fs->spinlock);
+        return 0;
+    }
+    // Set the block as occupied.
+    ext2_set_block_bit(fs->block_buffer, linear_index, ext2_block_status_occupied);
+    // Update the bitmap.
+    ext2_write_block(fs, fs->block_groups[group_index].block_bitmap, (uint8_t *)fs->block_buffer);
+    // Decrease the number of free blocks inside the BGDT entry.
+    fs->block_groups[group_index].free_blocks_count -= 1;
+    // Update the BGDT.
+    ext2_write_bgdt(fs);
+    // Decrease the number of free blocks inside the superblock.
+    fs->superblock.free_blocks_count -= 1;
+    // Update the superblock.
+    ext2_write_superblock(fs);
+    // Empty out the new block.
+    memset(fs->block_buffer, 0, fs->block_size);
+    ext2_write_block(fs, block_index, (uint8_t *)fs->block_buffer);
+    // Unlock the spinlock.
+    spinlock_unlock(&fs->spinlock);
+    return block_index;
+}
+
 static unsigned int ext2_get_real_block_index(ext2_filesystem_t *fs, ext2_inode_t *inode, unsigned int block_index)
 {
     // Return the direct block pointer.
@@ -531,6 +672,10 @@ static unsigned int ext2_get_real_block_index(ext2_filesystem_t *fs, ext2_inode_
         return inode->data.blocks.dir_blocks[block_index];
     }
     // Return the indirect block pointers.
+    if (block_index < (EXT2_INDIRECT_BLOCKS + fs->pointers_per_block)) {
+        return 0;
+    }
+
     return -1;
 }
 
@@ -540,6 +685,8 @@ static vfs_file_t *ext2_mount(vfs_file_t *block_device)
     ext2_filesystem_t *fs = kmalloc(sizeof(ext2_filesystem_t));
     // Clean the memory.
     memset(fs, 0, sizeof(ext2_filesystem_t));
+    // Initialize the filesystem spinlock.
+    spinlock_init(&fs->spinlock);
     // Set the pointer to the block device.
     fs->block_device = block_device;
     // Read the superblock.
@@ -552,6 +699,7 @@ static vfs_file_t *ext2_mount(vfs_file_t *block_device)
     // Check the superblock magic number.
     if (fs->superblock.magic != EXT2_SUPERBLOCK_MAGIC) {
         pr_err("Wrong magic number, it is not an EXT2 filesystem.\n");
+        ext2_dump_superblock(&fs->superblock);
         // Free the memory occupied by the filesystem.
         kfree(fs);
         return NULL;
@@ -599,48 +747,20 @@ static vfs_file_t *ext2_mount(vfs_file_t *block_device)
     // superblock, so obtain the block of the superblock first.
     fs->block_groups = kmalloc(fs->block_size * fs->bgdt_length);
     // Try to read the BGDT.
-    for (unsigned i = 0; i < fs->bgdt_length; ++i) {
-        ext2_read_block(fs, fs->bgdt_start_block + i, (uint8_t *)((uintptr_t)fs->block_groups + (fs->block_size * i)));
-    }
+    ext2_read_bgdt(fs);
     // Preentively allocate a buffer for reading blocks.
     fs->block_buffer = kmalloc(fs->block_size * sizeof(char));
+    memset(fs->block_buffer, 0, sizeof(char) * fs->block_size);
     // Preentively allocate a buffer for reading inodes.
     fs->inode_buffer = kmalloc(fs->superblock.inode_size * sizeof(char));
+    memset(fs->inode_buffer, 0, sizeof(char) * fs->superblock.inode_size);
 
     // Dump the filesystem details for debugging.
     ext2_dump_filesystem(fs);
     // Dump the superblock details for debugging.
     ext2_dump_superblock(&fs->superblock);
-
-#if 0
-    ext2_group_descriptor_t *gd;
-    for (uint32_t i = 0, j, byte_index, bit_index; i < fs->block_groups_count; ++i) {
-        gd = &(fs->block_groups[i]);
-        pr_debug("Block Group Descriptor [%d] @ %d:\n", i, fs->bgdt_start_block + i * fs->superblock.blocks_per_group);
-        pr_debug("    Free Blocks : %d\n", gd->free_blocks_count);
-        pr_debug("    Free Inodes : %d\n", gd->free_inodes_count);
-        pr_debug("    Block Bitmap at %d\n", gd->block_bitmap);
-        ext2_read_block(fs, gd->block_bitmap, (uint8_t *)fs->block_buffer);
-        for (unsigned j = 0; j < fs->block_size; ++j) {
-            if (j % 8 == 0)
-                pr_debug("        [%4d] %s (%d)\n", j / 8, dec_to_binary(fs->block_buffer[j / 8], 8), j);
-            if (!ext2_check_block_bit(fs->block_buffer, j)) {
-                pr_debug("    First free block in group is %d\n", (gd->block_bitmap - 2) + j);
-                break;
-            }
-        }
-        pr_debug("    Inode Bitmap at %d\n", gd->inode_bitmap);
-        ext2_read_block(fs, gd->inode_bitmap, (uint8_t *)fs->block_buffer);
-        for (unsigned j = 0; j < fs->block_size; ++j) {
-            if (j % 8 == 0)
-                pr_debug("        [%4d] %s (%d)\n", j / 8, dec_to_binary(fs->block_buffer[j / 8], 8), j);
-            if (!ext2_check_block_bit(fs->block_buffer, j)) {
-                pr_debug("    First free block in group is %d\n", fs->inodes_per_group * i + j + 1);
-                break;
-            }
-        }
-    }
-#endif
+    // Dump the block group descriptor table.
+    ext2_dump_bgdt(fs);
 
     kfree(fs->block_buffer);
     kfree(fs->inode_buffer);
