@@ -38,7 +38,7 @@ const char *to_human_size(unsigned long bytes);
 /// @brief Transforms the given value to a binary string.
 /// @param value The decimal value.
 /// @return String representing the binary value.
-const char *dec_to_binary(unsigned long value);
+const char *dec_to_binary(unsigned long value, unsigned length);
 
 /// Prints a debugging message.
 #define pr_debug(...) dbg_printf(__FILENAME__, __func__, __LINE__, __DEBUG_HEADER__ __VA_ARGS__)

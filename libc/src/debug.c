@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/bitops.h>
+#include <math.h>
 
 /// Serial port for QEMU.
 #define SERIAL_COM1 (0x03F8)
@@ -96,10 +97,10 @@ const char *to_human_size(unsigned long bytes)
     return output;
 }
 
-const char *dec_to_binary(unsigned long value)
+const char *dec_to_binary(unsigned long value, unsigned length)
 {
     static char buffer[33];
-    for (int i = 0; i < 32; ++i)
-        buffer[i] = bit_check(value, 31 - i) ? '1' : '0';
+    for (int i = 0, j = 32 - min(max(0, length), 32); j < 32; ++i, ++j)
+        buffer[i] = bit_check(value, 31 - j) ? '1' : '0';
     return buffer;
 }
