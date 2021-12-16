@@ -268,15 +268,15 @@ typedef struct ext2_inode_t {
 
 /// @brief The header of an ext2 directory entry.
 typedef struct ext2_dirent_t {
-    /// @brief Inode number.
+    /// Number of the inode that this directory entry points to.
     uint32_t inode;
-    /// @brief Directory entry length
-    uint16_t direntlen;
-    /// @brief Name length
-    uint8_t namelen;
-    /// @brief File type.
-    uint8_t filetype;
-    /// @brief File name.
+    /// Length of this directory entry. Must be a multiple of 4.
+    uint16_t rec_len;
+    /// Length of the file name.
+    uint8_t name_len;
+    /// File type code.
+    uint8_t file_type;
+    /// File name.
     char name[EXT2_NAME_LEN];
 } ext2_dirent_t;
 
@@ -958,7 +958,7 @@ static int ext2_allocate_inode_block(ext2_filesystem_t *fs, ext2_inode_t *inode,
 /// @param inode the inode which we are working with.
 /// @param block_index the index of the block within the inode.
 /// @param buffer the buffer where to put the data.
-/// @return the amount read.
+/// @return the amount of data we read, or negative value for an error.
 static ssize_t ext2_read_inode_block(ext2_filesystem_t *fs, ext2_inode_t *inode, unsigned int block_index, char *buffer)
 {
     if (block_index >= (inode->blocks_count / fs->blocks_per_block_count)) {
@@ -972,6 +972,177 @@ static ssize_t ext2_read_inode_block(ext2_filesystem_t *fs, ext2_inode_t *inode,
         return -1;
     // Read the block.
     return ext2_read_block(fs, real_index, buffer);
+}
+
+/// @brief Writes the real block starting from an inode and the block index inside the inode.
+/// @param fs the filesystem.
+/// @param inode the inode which we are working with.
+/// @param inode_index The index of the inode.
+/// @param block_index the index of the block within the inode.
+/// @param buffer the buffer where to put the data.
+/// @return the amount of data we wrote, or negative value for an error.
+static ssize_t ext2_write_inode_block(ext2_filesystem_t *fs, ext2_inode_t *inode, unsigned int inode_index, unsigned int block_index, char *buffer)
+{
+    while (block_index >= (inode->blocks_count / fs->blocks_per_block_count)) {
+        pr_err("Tried to read an invalid block `%d`, but inode only has %d!",
+               block_index, (inode->blocks_count / fs->blocks_per_block_count));
+        ext2_allocate_inode_block(fs, inode, inode_index, (inode->blocks_count / fs->blocks_per_block_count));
+        ext2_write_inode(fs, inode, inode_index);
+    }
+    // Get the real index.
+    unsigned int real_index = ext2_get_real_block_index(fs, inode, block_index);
+    if (real_index == 0)
+        return -1;
+    // Write the block.
+    return ext2_write_block(fs, real_index, buffer);
+}
+
+static ssize_t ext2_write_inode_data(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t inode_index, off_t offset, size_t nbyte, char *buffer)
+{
+    uint32_t end = offset + nbyte;
+    if (end > inode->size) {
+        inode->size = end;
+    }
+    uint32_t start_block  = offset / fs->block_size;
+    uint32_t end_block    = end / fs->block_size;
+    uint32_t end_size     = end - end_block * fs->block_size;
+    uint32_t size_to_read = end - offset;
+
+    if (start_block == end_block) {
+        if (!ext2_read_inode_block(fs, inode, start_block, fs->block_buffer)) {
+            pr_err("Failed to read the inode block `%d`\n", start_block);
+            return -1;
+        }
+        memcpy((uint8_t *)(((uintptr_t)fs->block_buffer) + ((uintptr_t)offset % fs->block_size)), buffer, size_to_read);
+        if (!ext2_write_inode_block(fs, inode, inode_index, start_block, fs->block_buffer)) {
+            pr_err("Failed to write the inode block `%d`\n", start_block);
+            return -1;
+        }
+    } else {
+        uint32_t block_offset, blocks_read = 0;
+        for (block_offset = start_block; block_offset < end_block; ++block_offset, ++blocks_read) {
+            if (block_offset == start_block) {
+                if (!ext2_read_inode_block(fs, inode, block_offset, fs->block_buffer)) {
+                    pr_err("Failed to read the inode block `%d`\n", block_offset);
+                    return -1;
+                }
+                memcpy((uint8_t *)(((uintptr_t)fs->block_buffer) + ((uintptr_t)offset % fs->block_size)), buffer, fs->block_size - (offset % fs->block_size));
+                if (!ext2_write_inode_block(fs, inode, inode_index, block_offset, fs->block_buffer)) {
+                    pr_err("Failed to write the inode block `%d`\n", start_block);
+                    return -1;
+                }
+                //if (!b) {
+                //    refresh_inode(fs, inode, inode_index);
+                //}
+            } else {
+                if (!ext2_read_inode_block(fs, inode, block_offset, fs->block_buffer)) {
+                    pr_err("Failed to read the inode block `%d`\n", block_offset);
+                    return -1;
+                }
+                memcpy(fs->block_buffer, buffer + fs->block_size * blocks_read - (offset % fs->block_size), fs->block_size);
+                if (!ext2_write_inode_block(fs, inode, inode_index, block_offset, fs->block_buffer)) {
+                    pr_err("Failed to write the inode block `%d`\n", start_block);
+                    return -1;
+                }
+                //if (!b) {
+                //    refresh_inode(fs, inode, inode_index);
+                //}
+            }
+        }
+        if (end_size) {
+            if (!ext2_read_inode_block(fs, inode, end_block, fs->block_buffer)) {
+                pr_err("Failed to read the inode block `%d`\n", block_offset);
+                return -1;
+            }
+            memcpy(fs->block_buffer, buffer + fs->block_size * blocks_read - (offset % fs->block_size), end_size);
+            if (ext2_write_inode_block(fs, inode, inode_index, end_block, fs->block_buffer)) {
+                pr_err("Failed to write the inode block `%d`\n", start_block);
+                return -1;
+            }
+        }
+    }
+    return size_to_read;
+}
+
+static int ext2_init_file(ext2_filesystem_t *fs, ext2_inode_t *inode, ext2_dirent_t *direntry, vfs_file_t *file);
+
+static vfs_file_t *ext2_find_entry(vfs_file_t *file, char *name)
+{
+    // Get the filesystem.
+    ext2_filesystem_t *fs = (ext2_filesystem_t *)file->device;
+    if (fs == NULL) {
+        pr_err("The file does not belong to an EXT2 filesystem (%s).\n", file->name);
+        return NULL;
+    }
+    // Get the inode associated with the file.
+    ext2_inode_t inode;
+    if (ext2_read_inode(fs, &inode, file->ino) == -1) {
+        pr_err("Failed to read the inode (%d).\n", file->ino);
+        return NULL;
+    }
+    uint32_t block_index = 0, dir_offset = 0, total_offset = 0;
+    ext2_dirent_t *direntry = NULL;
+    // Start by reading the first block of the inode.
+    if (!ext2_read_inode_block(fs, &inode, block_index, fs->block_buffer)) {
+        pr_err("Failed to read the inode block `%d`\n", block_index);
+        return NULL;
+    }
+    // Keep reading until we searched the whole inode.
+    while (total_offset < inode.size) {
+        // If we exceed the size of a block, move to the next block.
+        if (dir_offset >= fs->block_size) {
+            // Increase the block index.
+            ++block_index;
+            // Remove the exceeding size, so that we start correctly in the new block.
+            dir_offset -= fs->block_size;
+            // Read the new block.
+            if (!ext2_read_inode_block(fs, &inode, block_index, fs->block_buffer)) {
+                pr_err("Failed to read the inode block `%d`\n", block_index);
+                return NULL;
+            }
+        }
+        // Get the directory entry.
+        direntry = (ext2_dirent_t *)((uintptr_t)fs->block_buffer + dir_offset);
+        pr_debug("direntry : `%s` (%d vs %d)\n", direntry->name, direntry->name_len, strlen(name));
+        // Check if the entry has the same name.
+        if ((direntry->inode != 0) && (strlen(name) == direntry->name_len))
+            if (!strcmp(direntry->name, name))
+                break;
+        // Advance the offsets.
+        dir_offset += direntry->rec_len;
+        total_offset += direntry->rec_len;
+        // Reset the direntry pointer.
+        direntry = NULL;
+    }
+
+    if (!direntry) {
+        return NULL;
+    }
+
+    vfs_file_t *new_file = kmem_cache_alloc(vfs_file_cache, GFP_KERNEL);
+    memset(new_file, 0, sizeof(vfs_file_t));
+
+    if (ext2_read_inode(fs, &inode, direntry->inode) == -1) {
+        pr_err("Failed to read the inode (%d).\n", direntry->inode);
+        kmem_cache_free(new_file);
+        return NULL;
+    }
+    if (ext2_init_file(fs, &inode, direntry, new_file) == -1) {
+        pr_err("Failed to initialize the new file (%d).\n", direntry->inode);
+        kmem_cache_free(new_file);
+        return NULL;
+    }
+    return new_file;
+}
+
+static vfs_file_t *ext2_open(const char *path, int flags, mode_t mode)
+{
+    return NULL;
+}
+
+static int ext2_close(vfs_file_t *file)
+{
+    return 0;
 }
 
 static ssize_t ext2_read(vfs_file_t *file, char *buffer, off_t offset, size_t nbyte)
@@ -1028,6 +1199,86 @@ static ssize_t ext2_read(vfs_file_t *file, char *buffer, off_t offset, size_t nb
     return size_to_read;
 }
 
+static ssize_t ext2_write(vfs_file_t *file, const void *buffer, off_t offset, size_t nbyte)
+{
+    // Get the filesystem.
+    ext2_filesystem_t *fs = (ext2_filesystem_t *)file->device;
+    if (fs == NULL) {
+        pr_err("The file does not belong to an EXT2 filesystem (%s).\n", file->name);
+        return -1;
+    }
+    // Get the inode associated with the file.
+    ext2_inode_t inode;
+    if (ext2_read_inode(fs, &inode, file->ino) == -1) {
+        pr_err("Failed to read the inode (%s).\n", file->name);
+        return -1;
+    }
+    return ext2_write_inode_data(fs, &inode, file->ino, offset, nbyte, (char *)buffer);
+}
+
+/// Filesystem general operations.
+static vfs_sys_operations_t ext2_sys_operations = {
+    .mkdir_f = NULL,
+    .rmdir_f = NULL,
+    .stat_f  = NULL
+};
+
+/// Filesystem file operations.
+static vfs_file_operations_t ext2_fs_operations = {
+    .open_f     = ext2_open,
+    .unlink_f   = NULL,
+    .close_f    = ext2_close,
+    .read_f     = ext2_read,
+    .write_f    = ext2_write,
+    .lseek_f    = NULL,
+    .stat_f     = NULL,
+    .ioctl_f    = NULL,
+    .getdents_f = NULL
+};
+
+static int ext2_init_file(ext2_filesystem_t *fs, ext2_inode_t *inode, ext2_dirent_t *direntry, vfs_file_t *file)
+{
+    // Information for root dir.
+    file->device = (void *)fs;
+    file->ino    = direntry->inode;
+    memcpy(&file->name, &direntry->name, direntry->name_len);
+    file->name[direntry->name_len] = '\0';
+    // Information from the inode.
+    file->uid    = inode->uid;
+    file->gid    = inode->gid;
+    file->length = inode->size;
+    file->mask   = inode->mode & 0xFFF;
+    file->nlink  = inode->links_count;
+
+    // File flags.
+    file->flags = 0;
+    if ((inode->mode & EXT2_S_IFREG) == EXT2_S_IFREG) {
+        file->flags |= DT_REG;
+    }
+    if ((inode->mode & EXT2_S_IFDIR) == EXT2_S_IFDIR) {
+        file->flags |= DT_DIR;
+    }
+    if ((inode->mode & EXT2_S_IFBLK) == EXT2_S_IFBLK) {
+        file->flags |= DT_BLK;
+    }
+    if ((inode->mode & EXT2_S_IFCHR) == EXT2_S_IFCHR) {
+        file->flags |= DT_CHR;
+    }
+    if ((inode->mode & EXT2_S_IFIFO) == EXT2_S_IFIFO) {
+        file->flags |= DT_FIFO;
+    }
+    if ((inode->mode & EXT2_S_IFLNK) == EXT2_S_IFLNK) {
+        file->flags |= DT_LNK;
+    }
+    file->atime          = inode->atime;
+    file->mtime          = inode->mtime;
+    file->ctime          = inode->ctime;
+    file->sys_operations = &ext2_sys_operations;
+    file->fs_operations  = &ext2_fs_operations;
+    list_head_init(&file->siblings);
+    return 0;
+}
+
 static int ext2_set_root(ext2_filesystem_t *fs, ext2_inode_t *inode)
 {
     // Information for root dir.
@@ -1045,14 +1296,12 @@ static int ext2_set_root(ext2_filesystem_t *fs, ext2_inode_t *inode)
     fs->root->flags = 0;
     if ((inode->mode & EXT2_S_IFREG) == EXT2_S_IFREG) {
         pr_err("The root inode is a regular file.\n");
-        kmem_cache_free(fs->root);
         return -1;
     }
     if ((inode->mode & EXT2_S_IFDIR) == EXT2_S_IFDIR) {
         fs->root->flags |= DT_DIR;
     } else {
         pr_err("The root inode is not a directory.\n");
-        kmem_cache_free(fs->root);
         return -1;
     }
     if ((inode->mode & EXT2_S_IFBLK) == EXT2_S_IFBLK) {
@@ -1070,8 +1319,8 @@ static int ext2_set_root(ext2_filesystem_t *fs, ext2_inode_t *inode)
     fs->root->atime          = inode->atime;
     fs->root->mtime          = inode->mtime;
     fs->root->ctime          = inode->ctime;
-    fs->root->sys_operations = NULL;
-    fs->root->fs_operations  = NULL;
+    fs->root->sys_operations = &ext2_sys_operations;
+    fs->root->fs_operations  = &ext2_fs_operations;
     list_head_init(&fs->root->siblings);
     return 0;
 }
@@ -1240,26 +1489,6 @@ static vfs_file_t *ext2_mount_callback(const char *path, const char *device)
     }
     return ext2_mount(block_device);
 }
-
-/// Filesystem general operations.
-static vfs_sys_operations_t ext2_sys_operations = {
-    .mkdir_f = NULL,
-    .rmdir_f = NULL,
-    .stat_f  = NULL
-};
-
-/// Filesystem file operations.
-static vfs_file_operations_t ext2_fs_operations = {
-    .open_f     = NULL,
-    .unlink_f   = NULL,
-    .close_f    = NULL,
-    .read_f     = NULL,
-    .write_f    = NULL,
-    .lseek_f    = NULL,
-    .stat_f     = NULL,
-    .ioctl_f    = NULL,
-    .getdents_f = NULL
-};
 
 /// Filesystem information.
 static file_system_type ext2_file_system_type = {
