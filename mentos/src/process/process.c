@@ -6,9 +6,7 @@
 
 #include "sys/kernel_levels.h"
 
-//#ifndef __DEBUG_LEVEL__
-//#define __DEBUG_LEVEL__ LOGLEVEL_DEBUG
-//#endif
+#define __DEBUG_LEVEL__ 100
 
 #include "process/process.h"
 #include "process/scheduler.h"

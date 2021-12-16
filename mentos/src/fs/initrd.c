@@ -556,6 +556,14 @@ static ssize_t initrd_write(vfs_file_t *file, const void *buf, off_t offset, siz
     return num;
 }
 
+/// @brief Repositions the file offset inside a file.
+/// @param file the file we are working with.
+/// @param offset the offest to use for the operation. 
+/// @param whence the type of operation.
+/// @return  Upon successful completion, returns the resulting offset
+/// location as measured in bytes from the beginning of the file. On
+/// error, the value (off_t) -1 is returned and errno is set to
+/// indicate the error.
 static off_t initrd_lseek(vfs_file_t *file, off_t offset, int whence)
 {
     // Get the header.

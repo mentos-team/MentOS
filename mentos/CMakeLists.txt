@@ -71,9 +71,10 @@ endif()
 # =============================================================================
 # Warning flags.
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall")
-# set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Werror")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Werror")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wpedantic")
-# set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -pedantic-errors")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wshadow")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -pedantic-errors")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-unused-function")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-unused-variable")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-unknown-pragmas")

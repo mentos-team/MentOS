@@ -10,6 +10,8 @@
 
 /// Change the header.
 #define __DEBUG_HEADER__ "[ATA   ]"
+/// Defines the debug level.
+//#define __DEBUG_LEVEL__ 100
 
 #include "descriptor_tables/isr.h"
 #include "hardware/pic8259.h"
@@ -128,7 +130,7 @@ typedef struct prdt_t {
 /// @brief Stores information about an ATA device.
 typedef struct ata_device_t {
     /// Name of the device.
-    char name[256];
+    char name[NAME_MAX];
     /// Name of the device.
     char path[PATH_MAX];
     /// Does the device support ATA Packet Interface (ATAPI).
@@ -760,7 +762,13 @@ static vfs_file_operations_t ata_fs_operations = {
 static vfs_file_t *ata_device_create(ata_device_t *dev)
 {
     // Create the file.
-    vfs_file_t *file = vfs_open(dev->path, O_RDWR | O_CREAT, 0);
+    vfs_file_t *file = kmem_cache_alloc(vfs_file_cache, GFP_KERNEL);
+    if (file == NULL) {
+        pr_err("Failed to create ATA device.\n");
+        return NULL;
+    }
+    // Set the device name.
+    memcpy(file->name, dev->name, NAME_MAX);
     // Set the device.
     file->device = dev;
     // Re-set the flags.
@@ -982,7 +990,7 @@ static ata_device_type_t ata_device_detect(ata_device_t *dev)
             return 1;
         }
         // Try to mount the drive.
-        if (!vfs_mount(dev->fs_root->name, dev->fs_root)) {
+        if (!vfs_mount(dev->path, dev->fs_root)) {
             pr_crit("Failed to mount ata device!\n");
             return 1;
         }
@@ -1049,18 +1057,22 @@ int ata_initialize()
     type = ata_device_detect(&ata_primary_master);
     if ((type != ata_dev_type_no_device) && (type != ata_dev_type_unknown)) {
         printf("    Found %s device connected to primary master.\n", ata_get_device_type_str(type));
+        pr_notice("    Found %s device connected to primary master.\n", ata_get_device_type_str(type));
     }
     type = ata_device_detect(&ata_primary_slave);
     if ((type != ata_dev_type_no_device) && (type != ata_dev_type_unknown)) {
         printf("    Found %s device connected to primary slave.\n", ata_get_device_type_str(type));
+        pr_notice("    Found %s device connected to primary slave.\n", ata_get_device_type_str(type));
     }
     type = ata_device_detect(&ata_secondary_master);
     if ((type != ata_dev_type_no_device) && (type != ata_dev_type_unknown)) {
         printf("    Found %s device connected to secondary master.\n", ata_get_device_type_str(type));
+        pr_notice("    Found %s device connected to secondary master.\n", ata_get_device_type_str(type));
     }
     type = ata_device_detect(&ata_secondary_slave);
     if ((type != ata_dev_type_no_device) && (type != ata_dev_type_unknown)) {
         printf("    Found %s device connected to secondary slave.\n", ata_get_device_type_str(type));
+        pr_notice("    Found %s device connected to secondary slave.\n", ata_get_device_type_str(type));
     }
     return 0;
 }

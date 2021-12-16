@@ -134,6 +134,8 @@ struct vfs_file_t {
 typedef struct super_block_t {
     /// Name of the superblock.
     char name[NAME_MAX];
+    /// Path of the superblock.
+    char path[PATH_MAX];
     /// Pointer to the root file of the given filesystem.
     vfs_file_t *root;
     /// Pointer to the information regarding the filesystem.

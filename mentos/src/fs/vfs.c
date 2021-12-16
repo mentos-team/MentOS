@@ -6,6 +6,9 @@
 
 #include "fs/vfs.h"
 
+#define __DEBUG_HEADER__ "[VFS   ]"
+#define __DEBUG_LEVEL__  100
+
 #include "process/scheduler.h"
 #include "klib/spinlock.h"
 #include "strerror.h"
@@ -80,7 +83,9 @@ super_block_t *vfs_get_superblock(const char *absolute_path)
     list_head *it;
     list_for_each (it, &vfs_super_blocks) {
         superblock = list_entry(it, super_block_t, mounts);
+#if 0
         int len    = strlen(superblock->name);
+        pr_debug("`%s` vs `%s`\n", absolute_path, superblock->name);
         if (!strncmp(absolute_path, superblock->name, len)) {
             size_t sbl = strlen(superblock->name);
             if (sbl > last_sb_len) {
@@ -88,6 +93,15 @@ super_block_t *vfs_get_superblock(const char *absolute_path)
                 last_sb     = superblock;
             }
         }
+#else
+        int len = strlen(superblock->path);
+        if (!strncmp(absolute_path, superblock->path, len)) {
+            if (len > last_sb_len) {
+                last_sb_len = len;
+                last_sb     = superblock;
+            }
+        }
+#endif
     }
     return last_sb;
 }
@@ -207,7 +221,7 @@ int vfs_unlink(const char *path)
     }
     super_block_t *sb = vfs_get_superblock(absolute_path);
     if (sb == NULL) {
-        pr_err("vfs_unlink(%s): Cannot find the superblock!\n");
+        pr_err("vfs_unlink(%s): Cannot find the superblock!\n", path);
         return -ENODEV;
     }
     vfs_file_t *sb_root = sb->root;
@@ -299,7 +313,7 @@ int vfs_stat(const char *path, stat_t *buf)
     }
     // Check if the function is implemented.
     if (sb_root->sys_operations->stat_f == NULL) {
-        pr_err("vfs_rmdir(%s): Function not supported in current filesystem.", path);
+        pr_err("vfs_stat(%s): Function not supported in current filesystem.", path);
         return -ENOSYS;
     }
     // Reset the structure.
@@ -355,13 +369,15 @@ int vfs_mount(const char *path, vfs_file_t *new_fs_root)
     } else {
         // Copy the name.
         strcpy(sb->name, new_fs_root->name);
+        // Copy the path.
+        strcpy(sb->path, path);
         // Set the pointer.
         sb->root = new_fs_root;
         // Add to the list.
         list_head_add(&sb->mounts, &vfs_super_blocks);
     }
     spinlock_unlock(&vfs_spinlock);
-    pr_debug("Correctly mounted '%s' on '%s'...\n", path, new_fs_root->name);
+    pr_debug("Correctly mounted '%s' on '%s'...\n", new_fs_root->name, path);
     return 1;
 }
 

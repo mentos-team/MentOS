@@ -33,6 +33,7 @@
 #include "stdio.h"
 #include "assert.h"
 #include "io/vga/vga.h"
+#include "string.h"
 
 /// Describe start address of grub multiboot modules.
 char *module_start[MAX_MODULES];
@@ -213,6 +214,32 @@ int kmain(boot_info_t *boot_informations)
     print_ok();
 
     //==========================================================================
+    // Scan for ata devices.
+    pr_notice("Initialize ATA devices...\n");
+    printf("Initialize ATA devices...\n");
+    if (ata_initialize()) {
+        pr_emerg("Failed to initialize ATA devices!\n");
+        return 1;
+    }
+
+    //==========================================================================
+    pr_notice("Initialize EXT2 filesystem...\n");
+    printf("Initialize EXT2 filesystem...\n");
+    if (ext2_initialize()) {
+        pr_emerg("Failed to initialize EXT2 filesystem!\n");
+        return 1;
+    }
+
+    //==========================================================================
+    pr_notice("Mount EXT2 filesystem...\n");
+    printf("Mount EXT2 filesystem...\n");
+    if (do_mount("ext2", "/", "/dev/hda")) {
+        pr_emerg("Failed to mount EXT2 filesystem...\n");
+        return 1;
+    }
+
+    //==========================================================================
+#if 0
     pr_notice("    Initialize 'initrd'...\n");
     printf("    Initialize 'initrd'...");
     if (initrd_init_module()) {
@@ -225,6 +252,7 @@ int kmain(boot_info_t *boot_informations)
         pr_emerg("Failed to mount root `/`!\n");
         return 1;
     }
+#endif
 
     //==========================================================================
     pr_notice("    Initialize 'procfs'...\n");
@@ -235,6 +263,10 @@ int kmain(boot_info_t *boot_informations)
         return 1;
     }
     print_ok();
+
+    //==========================================================================
+    pr_notice("    Mounting 'procfs'...\n");
+    printf("    Mounting 'procfs'...");
     if (do_mount("procfs", "/proc", NULL)) {
         pr_emerg("Failed to mount procfs at `/proc`!\n");
         return 1;
@@ -259,20 +291,6 @@ int kmain(boot_info_t *boot_informations)
         return 1;
     }
     print_ok();
-
-    //==========================================================================
-    // Scan for ata devices.
-    pr_notice("Initialize ATA devices...\n");
-    printf("Initialize ATA devices...\n");
-    if (ata_initialize()) {
-        pr_emerg("Failed to initialize ATA devices!\n");
-        return 1;
-    }
-
-    ext2_initialize();
-    if (do_mount("ext2", "/mnt", "/dev/hda")) {
-        pr_warning("Failed to mount ext at `/dev/hda`!\n");
-    }
 
     //==========================================================================
     pr_notice("Setting up keyboard driver...\n");

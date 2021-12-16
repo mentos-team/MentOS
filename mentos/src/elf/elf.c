@@ -109,11 +109,15 @@ static inline char *elf_get_strtable(vfs_file_t *file, elf_header_t *hdr, int nd
 static inline int elf_load_sigreturn(task_struct *task, vfs_file_t *file, elf_header_t *hdr)
 {
     elf_section_header_t shdr;
-    if (elf_find_section_header(file, hdr, SHT_SYMTAB, &shdr) == -1)
+    if (elf_find_section_header(file, hdr, SHT_SYMTAB, &shdr) == -1) {
+        pr_err("Cannot find the section header.\n");
         return -1;
+    }
     char *strtable = elf_get_strtable(file, hdr, shdr.link);
-    if (strtable == NULL)
+    if (strtable == NULL) {
+        pr_err("Cannot fint the string table.\n");
         return -1;
+    }
     uint32_t symtab_entries = shdr.size / sizeof(elf_symbol_t);
     elf_symbol_t symbol;
     for (int i = 0; i < symtab_entries; ++i) {

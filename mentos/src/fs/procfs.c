@@ -6,6 +6,7 @@
 
 /// Change the header.
 #define __DEBUG_HEADER__ "[PROCFS]"
+#define __DEBUG_LEVEL__  100
 
 #include "fs/procfs.h"
 #include "fs/vfs.h"
@@ -547,6 +548,9 @@ static inline procfs_file_t *procfs_create_file(const char *path, unsigned flags
     file->dir_entry.fs_operations  = NULL;
     // Increase the number of files.
     ++fs_specs.nfiles;
+
+    pr_debug("procfs_create_file(%s): PROCFS file : %p\n", path, file);
+
     return file;
 }
 
@@ -603,7 +607,7 @@ static inline vfs_file_t *procfs_create_file_struct(procfs_file_t *procfs_file)
     file->sys_operations = &procfs_sys_operations;
     file->fs_operations  = &procfs_fs_operations;
     list_head_init(&file->siblings);
-    //pr_debug("procfs_create_file_struct(%p): VFS file : %p\n", procfs_file, file);
+    pr_debug("procfs_create_file_struct(%p): VFS file : %p\n", procfs_file, file);
     return file;
 }
 
