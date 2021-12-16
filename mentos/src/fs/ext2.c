@@ -1064,24 +1064,105 @@ static ssize_t ext2_write_inode_data(ext2_filesystem_t *fs, ext2_inode_t *inode,
     return size_to_read;
 }
 
-static int ext2_init_file(ext2_filesystem_t *fs, ext2_inode_t *inode, ext2_dirent_t *direntry, vfs_file_t *file);
-
-static vfs_file_t *ext2_find_entry(vfs_file_t *file, char *name)
+/// @brief Reads contents of the directories to a dirent buffer, updating
+///        the offset and returning the number of written bytes in the buffer,
+///        it assumes that all paths are well-formed.
+/// @param file  The directory handler.
+/// @param dirp  The buffer where the data should be written.
+/// @param doff  The offset inside the buffer where the data should be written.
+/// @param count The maximum length of the buffer.
+/// @return The number of written bytes in the buffer.
+static int ext2_getdents(vfs_file_t *file, dirent_t *dirp, off_t doff, size_t count)
 {
     // Get the filesystem.
     ext2_filesystem_t *fs = (ext2_filesystem_t *)file->device;
     if (fs == NULL) {
         pr_err("The file does not belong to an EXT2 filesystem (%s).\n", file->name);
-        return NULL;
+        return -1;
     }
     // Get the inode associated with the file.
     ext2_inode_t inode;
     if (ext2_read_inode(fs, &inode, file->ino) == -1) {
         pr_err("Failed to read the inode (%d).\n", file->ino);
+        return -1;
+    }
+
+    uint32_t block_index = 0, dir_offset = 0, total_offset = 0, written = 0;
+    off_t current           = 0;
+    ext2_dirent_t *direntry = NULL;
+
+    // Start by reading the first block of the inode.
+    if (!ext2_read_inode_block(fs, &inode, block_index, fs->block_buffer)) {
+        pr_err("Failed to read the inode block `%d`\n", block_index);
+        return -1;
+    }
+
+    // Keep reading until we searched the whole inode.
+    while ((total_offset < inode.size) && (written < count)) {
+        // If we exceed the size of a block, move to the next block.
+        if (dir_offset >= fs->block_size) {
+            // Increase the block index.
+            ++block_index;
+            // Remove the exceeding size, so that we start correctly in the new block.
+            dir_offset -= fs->block_size;
+            // Read the new block.
+            if (!ext2_read_inode_block(fs, &inode, block_index, fs->block_buffer)) {
+                pr_err("Failed to read the inode block `%d`\n", block_index);
+                return -1;
+            }
+        }
+        // Get the directory entry.
+        direntry = (ext2_dirent_t *)((uintptr_t)fs->block_buffer + dir_offset);
+        if (direntry == NULL) {
+            pr_err("We found a NULL ext2_dirent_t\n");
+            return -1;
+        }
+
+        // Advance the offsets.
+        dir_offset += direntry->rec_len;
+        total_offset += direntry->rec_len;
+
+        // Skip if already provided.
+        current += sizeof(dirent_t);
+        if (current <= doff) {
+            continue;
+        }
+
+        // Write on current directory entry data.
+        dirp->d_ino  = direntry->inode;
+        dirp->d_type = direntry->file_type;
+        memset(dirp->d_name, 0, NAME_MAX);
+        strncpy(dirp->d_name, direntry->name, direntry->name_len);
+        dirp->d_off    = direntry->rec_len;
+        dirp->d_reclen = direntry->rec_len;
+
+        // Increment the amount written.
+        written += sizeof(dirent_t);
+
+        // Move to next writing position.
+        ++dirp;
+    }
+    return written;
+}
+
+static int ext2_init_file(ext2_filesystem_t *fs, ext2_inode_t *inode, ext2_dirent_t *direntry, vfs_file_t *file);
+
+static vfs_file_t *ext2_find_entry(vfs_file_t *directory, char *name)
+{
+    // Get the filesystem.
+    ext2_filesystem_t *fs = (ext2_filesystem_t *)directory->device;
+    if (fs == NULL) {
+        pr_err("The file does not belong to an EXT2 filesystem (%s).\n", directory->name);
+        return NULL;
+    }
+    // Get the inode associated with the file.
+    ext2_inode_t inode;
+    if (ext2_read_inode(fs, &inode, directory->ino) == -1) {
+        pr_err("Failed to read the inode (%d).\n", directory->ino);
         return NULL;
     }
     uint32_t block_index = 0, dir_offset = 0, total_offset = 0;
-    ext2_dirent_t *direntry = NULL;
+    ext2_dirent_t direntry, *entry = NULL;
     // Start by reading the first block of the inode.
     if (!ext2_read_inode_block(fs, &inode, block_index, fs->block_buffer)) {
         pr_err("Failed to read the inode block `%d`\n", block_index);
@@ -1102,33 +1183,32 @@ static vfs_file_t *ext2_find_entry(vfs_file_t *file, char *name)
             }
         }
         // Get the directory entry.
-        direntry = (ext2_dirent_t *)((uintptr_t)fs->block_buffer + dir_offset);
-        pr_debug("direntry : `%s` (%d vs %d)\n", direntry->name, direntry->name_len, strlen(name));
+        entry = (ext2_dirent_t *)((uintptr_t)fs->block_buffer + dir_offset);
         // Check if the entry has the same name.
-        if ((direntry->inode != 0) && (strlen(name) == direntry->name_len))
-            if (!strcmp(direntry->name, name))
+        if ((entry->inode != 0) && (strlen(name) == entry->name_len))
+            if (!strncmp(entry->name, name, entry->name_len))
                 break;
         // Advance the offsets.
-        dir_offset += direntry->rec_len;
-        total_offset += direntry->rec_len;
+        dir_offset += entry->rec_len;
+        total_offset += entry->rec_len;
         // Reset the direntry pointer.
-        direntry = NULL;
+        entry = NULL;
     }
-
-    if (!direntry) {
+    if (!entry) {
         return NULL;
     }
+    memcpy(&direntry, entry, sizeof(ext2_dirent_t));
 
     vfs_file_t *new_file = kmem_cache_alloc(vfs_file_cache, GFP_KERNEL);
     memset(new_file, 0, sizeof(vfs_file_t));
 
-    if (ext2_read_inode(fs, &inode, direntry->inode) == -1) {
-        pr_err("Failed to read the inode (%d).\n", direntry->inode);
+    if (ext2_read_inode(fs, &inode, direntry.inode) == -1) {
+        pr_err("Failed to read the inode (%d).\n", direntry.inode);
         kmem_cache_free(new_file);
         return NULL;
     }
-    if (ext2_init_file(fs, &inode, direntry, new_file) == -1) {
-        pr_err("Failed to initialize the new file (%d).\n", direntry->inode);
+    if (ext2_init_file(fs, &inode, &direntry, new_file) == -1) {
+        pr_err("Failed to initialize the new file (%d).\n", direntry.inode);
         kmem_cache_free(new_file);
         return NULL;
     }
@@ -1233,7 +1313,7 @@ static vfs_file_operations_t ext2_fs_operations = {
     .lseek_f    = NULL,
     .stat_f     = NULL,
     .ioctl_f    = NULL,
-    .getdents_f = NULL
+    .getdents_f = ext2_getdents
 };
 
 static int ext2_init_file(ext2_filesystem_t *fs, ext2_inode_t *inode, ext2_dirent_t *direntry, vfs_file_t *file)

@@ -159,7 +159,6 @@ static int initrd_getdents(vfs_file_t *file, dirent_t *dirp, off_t doff, size_t 
     if (file->ino >= INITRD_MAX_FILES) {
         return -1;
     }
-    memset(dirp, 0, count);
 
     initrd_file_t *tdir = &fs_specs.headers[file->ino];
     int len             = strlen(tdir->fileName);
@@ -183,9 +182,11 @@ static int initrd_getdents(vfs_file_t *file, dirent_t *dirp, off_t doff, size_t 
             continue;
         }
         // Skip if already provided.
-        if (current++ < doff) {
+        current += sizeof(dirent_t);
+        if (current <= doff) {
             continue;
         }
+
         if (*(entry->fileName + len) == '/')
             ++len;
         // Write on current dirp.

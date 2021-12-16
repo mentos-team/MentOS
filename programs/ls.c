@@ -25,77 +25,92 @@
 #define FG_BRIGHT_WHITE  "\033[97m"
 #define FG_BRIGHT_YELLOW "\033[93m"
 
+#define DENTS_NUM 12
+
+static inline void print_dir_entry(dirent_t *dirent, const char *path, unsigned int flags, size_t *total_size)
+{
+    static char relative_path[PATH_MAX];
+    tm_t *timeinfo;
+    stat_t dstat;
+
+    // Check if the file starts with a dot (hidden), and we did not receive
+    // the `a` flag.
+    if ((dirent->d_name[0] == '.') && !bitmask_check(flags, FLAG_A)) {
+        return;
+    }
+
+    // Prepare the relative path.
+    strcpy(relative_path, path);
+    if (strcmp(path, "/") != 0)
+        strcat(relative_path, "/");
+    strcat(relative_path, dirent->d_name);
+
+    // Stat the file.
+    if (stat(relative_path, &dstat) == -1) {
+        return;
+    }
+
+    // Deal with the coloring.
+    if ((dirent->d_type == DT_REG) && bitmask_check(dstat.st_mode, S_IXUSR)) {
+        puts(FG_BRIGHT_YELLOW);
+    } else if (dirent->d_type == DT_DIR) {
+        puts(FG_BRIGHT_CYAN);
+    } else if (dirent->d_type == DT_BLK) {
+        puts(FG_BRIGHT_GREEN);
+    }
+
+    // Deal with the -l.
+    if (bitmask_check(flags, FLAG_L)) {
+        // Get the broken down time from the creation time of the file.
+        timeinfo = localtime(&dstat.st_ctime);
+        // Print the file type.
+        putchar(dt_char_array[dirent->d_type]);
+        // Print the access permissions.
+        putchar(bitmask_check(dstat.st_mode, S_IRUSR) ? 'r' : '-');
+        putchar(bitmask_check(dstat.st_mode, S_IWUSR) ? 'w' : '-');
+        putchar(bitmask_check(dstat.st_mode, S_IXUSR) ? 'x' : '-');
+        putchar(bitmask_check(dstat.st_mode, S_IRGRP) ? 'r' : '-');
+        putchar(bitmask_check(dstat.st_mode, S_IWGRP) ? 'w' : '-');
+        putchar(bitmask_check(dstat.st_mode, S_IXGRP) ? 'x' : '-');
+        putchar(bitmask_check(dstat.st_mode, S_IROTH) ? 'r' : '-');
+        putchar(bitmask_check(dstat.st_mode, S_IWOTH) ? 'w' : '-');
+        putchar(bitmask_check(dstat.st_mode, S_IXOTH) ? 'x' : '-');
+        // Add a space.
+        putchar(' ');
+        // Print the rest.
+        printf("%4d %4d %11s %2d/%2d %2d:%2d %s\n",
+               dstat.st_uid,
+               dstat.st_gid,
+               to_human_size(dstat.st_size),
+               timeinfo->tm_mon,
+               timeinfo->tm_mday,
+               timeinfo->tm_hour,
+               timeinfo->tm_min,
+               dirent->d_name);
+        (*total_size) += dstat.st_size;
+    } else {
+        printf("%s ", dirent->d_name);
+    }
+
+    // Reset the color.
+    puts(FG_BRIGHT_WHITE);
+}
+
 static void print_ls(int fd, const char *path, unsigned int flags)
 {
-    char relative_path[PATH_MAX], hidden = 0;
-    dirent_t dent;
-    stat_t dstat;
+    dirent_t dents[DENTS_NUM];
+    memset(&dents, 0, DENTS_NUM * sizeof(dirent_t));
+
     size_t total_size = 0;
-    tm_t *timeinfo;
-    while (getdents(fd, &dent, sizeof(dirent_t)) == sizeof(dirent_t)) {
-        // Check if the file starts with a dot (hidden), and we did not receive
-        // the `a` flag.
-        if ((dent.d_name[0] == '.') && !bitmask_check(flags, FLAG_A)) {
-            continue;
+    while (getdents(fd, dents, DENTS_NUM * sizeof(dirent_t))) {
+        for (size_t i = 0; i < DENTS_NUM; ++i) {
+            if (dents[i].d_ino == 0)
+                break;
+            print_dir_entry(&dents[i], path, flags, &total_size);
         }
-
-        // Prepare the relative path.
-        strcpy(relative_path, path);
-        if (strcmp(path, "/") != 0)
-            strcat(relative_path, "/");
-        strcat(relative_path, dent.d_name);
-
-        // Stat the file.
-        if (stat(relative_path, &dstat) == -1) {
-            continue;
-        }
-
-        // Deal with the coloring.
-        if ((dent.d_type == DT_REG) && bitmask_check(dstat.st_mode, S_IXUSR)) {
-            puts(FG_BRIGHT_YELLOW);
-        } else if (dent.d_type == DT_DIR) {
-            puts(FG_BRIGHT_CYAN);
-        } else if (dent.d_type == DT_BLK) {
-            puts(FG_BRIGHT_GREEN);
-        }
-
-        // Deal with the -l.
-        if (bitmask_check(flags, FLAG_L)) {
-            // Get the broken down time from the creation time of the file.
-            timeinfo = localtime(&dstat.st_ctime);
-            // Print the file type.
-            putchar(dt_char_array[dent.d_type]);
-            // Print the access permissions.
-            putchar(bitmask_check(dstat.st_mode, S_IRUSR) ? 'r' : '-');
-            putchar(bitmask_check(dstat.st_mode, S_IWUSR) ? 'w' : '-');
-            putchar(bitmask_check(dstat.st_mode, S_IXUSR) ? 'x' : '-');
-            putchar(bitmask_check(dstat.st_mode, S_IRGRP) ? 'r' : '-');
-            putchar(bitmask_check(dstat.st_mode, S_IWGRP) ? 'w' : '-');
-            putchar(bitmask_check(dstat.st_mode, S_IXGRP) ? 'x' : '-');
-            putchar(bitmask_check(dstat.st_mode, S_IROTH) ? 'r' : '-');
-            putchar(bitmask_check(dstat.st_mode, S_IWOTH) ? 'w' : '-');
-            putchar(bitmask_check(dstat.st_mode, S_IXOTH) ? 'x' : '-');
-            // Add a space.
-            putchar(' ');
-            // Print the rest.
-            printf("%4d %4d %11s %2d/%2d %2d:%2d %s\n",
-                   dstat.st_uid,
-                   dstat.st_gid,
-                   to_human_size(dstat.st_size),
-                   timeinfo->tm_mon,
-                   timeinfo->tm_mday,
-                   timeinfo->tm_hour,
-                   timeinfo->tm_min,
-                   dent.d_name);
-            total_size += dstat.st_size;
-        } else {
-            printf("%s ", dent.d_name);
-        }
-
-        // Reset the color.
-        puts(FG_BRIGHT_WHITE);
     }
     printf("\n");
+
     if (bitmask_check(flags, FLAG_L)) {
         printf("Total: %d byte\n", total_size);
     }
