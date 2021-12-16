@@ -1488,7 +1488,7 @@ static vfs_file_t *ext2_open(const char *path, int flags, mode_t mode)
     }
     ext2_dirent_t direntry;
     memset(&direntry, 0, sizeof(ext2_dirent_t));
-    if (ext2_resolve_path(sb_root, absolute_path, &direntry)) {
+    if (ext2_resolve_path(sb_root, absolute_path, &direntry) == -1) {
         pr_err("ext2_open(%s): Failed to find path `%s`.\n", path, absolute_path);
         return NULL;
     }

@@ -137,8 +137,8 @@ static inline int setup_env(passwd_t *pwd)
         printf( "Failed to set env: `SHELL`\n");
         return 0;
     }
-    sprintf(env_buffer, "/home/%s", pwd->pw_name);
-    if (setenv("HOME", env_buffer, 0) == -1) {
+    // Set the HOME.
+    if (setenv("HOME", pwd->pw_dir, 0) == -1) {
         printf("Failed to set env: `HOME`\n");
         return 0;
     }

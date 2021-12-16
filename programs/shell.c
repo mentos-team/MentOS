@@ -332,7 +332,7 @@ static int __cd(int argc, char *argv[])
         return 1;
     }
     // Set current working directory.
-    fchdir(fd);
+    chdir(path);
     close(fd);
     // Get the updated working directory.
     char cwd[PATH_MAX];
