@@ -76,24 +76,23 @@ endif()
 add_subdirectory(programs)
 add_subdirectory(programs/tests)
 add_subdirectory(mentos)
-add_subdirectory(initscp)
 add_subdirectory(libc)
 add_subdirectory(doc/doxygen)
 
 # =============================================================================
-# Target to generate the initrd filesystem.
+# Target to generate the EXT2 filesystem.
 add_custom_target(
-  initrd
-  COMMAND echo "---------------------------------------------"
-  COMMAND echo "Initializing 'initrd'..."
-  COMMAND echo "---------------------------------------------"
-  COMMAND initfscp -s ${CMAKE_SOURCE_DIR}/files -t ${CMAKE_BINARY_DIR}/initrd -m /dev
-  COMMAND echo "---------------------------------------------"
-  COMMAND echo "Done!"
-  COMMAND echo "---------------------------------------------"
-  DEPENDS initfscp
-  DEPENDS all_programs all_tests)
-
+    rootfs.img
+    COMMAND echo "---------------------------------------------"
+    COMMAND echo "Creating EXT2 filesystem..."
+    COMMAND echo "---------------------------------------------"
+    COMMAND mke2fs -L 'rootfs' -N 0 -d ${CMAKE_SOURCE_DIR}/files -m 5 -r 1 -t ext2 -v -F rootfs.img 32M
+    COMMAND echo "---------------------------------------------"
+    COMMAND echo "Done!"
+    COMMAND echo "---------------------------------------------"
+    DEPENDS all_programs all_tests
+)
+  
 # =============================================================================
 # Update GDB symbol file.
 add_custom_target(
@@ -140,12 +139,11 @@ set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -vga std)
 set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -m ${MEMORY_SIZE})
 set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -drive file=rootfs.img,format=raw)
 set(EMULATOR_KERNEL -kernel mentos/kernel-bootloader.bin)
-set(EMULATOR_FS -initrd initrd)
 
 add_custom_target(
   qemu
   COMMAND ${EMULATOR} ${EMULATOR_FLAGS} ${EMULATOR_KERNEL} ${EMULATOR_FS}
-  DEPENDS kernel-bootloader.bin initrd all_programs all_tests libc)
+  DEPENDS kernel-bootloader.bin rootfs.img all_programs all_tests libc)
 
 # =============================================================================
 # Builds the code and runs qemu with the built Os.
@@ -158,6 +156,6 @@ add_custom_target(
   COMMAND echo "Now, QEMU has loaded the kernel, and it is waiting that you remotely connect to it."
   COMMAND echo "To start debugging, open a new shell in THIS same folder, and just type \"gdb\"!"
   COMMAND echo "\n\n"
-  DEPENDS gdb_file kernel-bootloader.bin initrd)
+  DEPENDS gdb_file kernel-bootloader.bin rootfs.img)
 
-add_custom_target(all-execs-clion-embedded DEPENDS gdb_file_clion_embedded kernel-bootloader.bin initrd)
+add_custom_target(all-execs-clion-embedded DEPENDS gdb_file_clion_embedded kernel-bootloader.bin rootfs.img)

@@ -11,7 +11,7 @@
 /// Change the header.
 #define __DEBUG_HEADER__ "[ATA   ]"
 /// Defines the debug level.
-//#define __DEBUG_LEVEL__ 100
+#define __DEBUG_LEVEL__  100
 
 #include "descriptor_tables/isr.h"
 #include "hardware/pic8259.h"
@@ -612,7 +612,7 @@ static void ata_device_read_sector(ata_device_t *dev, uint32_t lba, uint8_t *buf
     if ((dev->type != ata_dev_type_pata) && (dev->type != ata_dev_type_sata)) {
         return;
     }
-    pr_debug("ata_device_read_sector(dev: %p, lba: %d, buff: %p)\n", dev, lba, buffer);
+    //pr_debug("ata_device_read_sector(dev: %p, lba: %d, buff: %p)\n", dev, lba, buffer);
     spinlock_lock(&ata_lock);
 
     ata_wait(dev, 0);
