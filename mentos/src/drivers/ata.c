@@ -11,7 +11,7 @@
 /// Change the header.
 #define __DEBUG_HEADER__ "[ATA   ]"
 /// Defines the debug level.
-#define __DEBUG_LEVEL__  100
+//#define __DEBUG_LEVEL__  100
 
 #include "descriptor_tables/isr.h"
 #include "hardware/pic8259.h"
