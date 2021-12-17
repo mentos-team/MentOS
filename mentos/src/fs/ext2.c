@@ -1292,7 +1292,9 @@ static int ext2_find_entry(ext2_filesystem_t *fs, ino_t ino, const char *name, e
         }
         // Get the directory entry.
         entry = (ext2_dirent_t *)((uintptr_t)cache + dir_offset);
-
+        if (!strcmp(entry->name, ".") && !strcmp(name, "/")) {
+            break;
+        }
         // Check if the entry has the same name.
         if ((entry->inode != 0) && (strlen(name) == entry->name_len))
             if (!strncmp(entry->name, name, entry->name_len))
@@ -1322,6 +1324,7 @@ free_cache_return_error:
 /// @return 0 on success, -1 on failure.
 static int ext2_resolve_path(vfs_file_t *directory, char *path, ext2_dirent_t *direntry)
 {
+    pr_debug("ext2_resolve_path(%s, %s, %p)\n", directory->name, path, direntry);
     // Check the pointers.
     if (directory == NULL) {
         pr_err("You provided a NULL directory.\n");
@@ -1340,6 +1343,10 @@ static int ext2_resolve_path(vfs_file_t *directory, char *path, ext2_dirent_t *d
     if (fs == NULL) {
         pr_err("The file does not belong to an EXT2 filesystem `%s`.\n", directory->name);
         return -1;
+    }
+    if (strcmp(path, "/") == 0) {
+        ext2_find_entry(fs, directory->ino, path, direntry);
+        return 0;
     }
     ino_t ino   = directory->ino;
     char *token = strtok(path, "/");
@@ -1535,6 +1542,16 @@ static vfs_file_t *ext2_open(const char *path, int flags, mode_t mode)
 /// @param file The file structure.
 static int ext2_close(vfs_file_t *file)
 {
+    // Get the filesystem.
+    ext2_filesystem_t *fs = (ext2_filesystem_t *)file->device;
+    if (fs == NULL) {
+        pr_err("The file does not belong to an EXT2 filesystem `%s`.\n", file->name);
+        return -1;
+    }
+    // We cannot close the root.
+    if (file == fs->root) {
+        return -1;
+    }
     pr_debug("ext2_close(%p) : Closing file `%s`\n", file, file->name);
     // Remove the file from the list of opened files.
     list_head_del(&file->siblings);
