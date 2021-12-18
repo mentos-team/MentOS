@@ -339,7 +339,15 @@ void sys_chdir(char const *path)
     if ((current_process != NULL) && (path != NULL)) {
         char absolute_path[PATH_MAX];
         realpath(path, absolute_path);
-        strcpy(current_process->cwd, absolute_path);
+        // Check that the directory exists.
+        vfs_file_t *dir = vfs_open(absolute_path, O_RDONLY, S_IXUSR);
+        if (dir != NULL) {
+            pr_debug("Success `%s` -> `%s` -> `%s`\n", path, absolute_path, dir->name);
+            strcpy(current_process->cwd, absolute_path);
+            vfs_close(dir);
+        }else{
+            pr_debug("Failed  `%s` -> `%s` -> `NULL`\n", path, absolute_path);
+        }
     }
 }
 

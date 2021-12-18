@@ -1348,11 +1348,14 @@ static int ext2_resolve_path(vfs_file_t *directory, char *path, ext2_dirent_t *d
         ext2_find_entry(fs, directory->ino, path, direntry);
         return 0;
     }
-    ino_t ino   = directory->ino;
+    ino_t ino     = directory->ino;
     char *token = strtok(path, "/");
     while (token) {
         if (!ext2_find_entry(fs, ino, token, direntry)) {
             ino = direntry->inode;
+        } else {
+            memset(direntry, 0, sizeof(ext2_dirent_t));
+            return -1;
         }
         token = strtok(NULL, "/");
     }
@@ -1507,7 +1510,6 @@ static vfs_file_t *ext2_open(const char *path, int flags, mode_t mode)
     }
     vfs_file_t *file = NULL;
     if (!list_head_empty(&fs->opened_files)) {
-        pr_debug("ext2_open(%s, %d, %d) : Searching among already opened files...\n", path, flags, mode);
         list_for_each_decl(it, &fs->opened_files)
         {
             // Get the file structure.
@@ -1518,9 +1520,7 @@ static vfs_file_t *ext2_open(const char *path, int flags, mode_t mode)
             }
         }
     }
-    if (file != NULL) {
-        pr_debug("ext2_open(%s, %d, %d) : File already opened `%p`\n", path, flags, mode, file);
-    } else {
+    if (file == NULL) {
         // Allocate the memory for the file.
         file = kmem_cache_alloc(vfs_file_cache, GFP_KERNEL);
         if (file == NULL) {
@@ -1531,7 +1531,6 @@ static vfs_file_t *ext2_open(const char *path, int flags, mode_t mode)
             pr_err("ext2_open(%s): Failed to properly set the VFS file.\n", path);
             return NULL;
         }
-        pr_debug("ext2_open(%s, %d, %d) : Opening new file `%p`\n", path, flags, mode, file);
         // Add the vfs_file to the list of associated files.
         list_head_add_tail(&file->siblings, &fs->opened_files);
     }
