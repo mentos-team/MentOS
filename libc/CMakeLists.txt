@@ -7,22 +7,10 @@ cmake_minimum_required(VERSION 2.8)
 project(libc C ASM)
 
 # =============================================================================
-# Set the default build type to Debug.
-if(NOT CMAKE_BUILD_TYPE)
-  message(STATUS "Setting build type to 'Debug' as none was specified.")
-  set(CMAKE_BUILD_TYPE
-      "Debug"
-      CACHE STRING "Choose the type of build." FORCE)
-endif()
-
-# =============================================================================
 # Enable the assembly language.
 enable_language(ASM)
 # Find the NASM compiler.
-find_program(ASM_COMPILER
-    NAMES nasm
-    HINTS /usr/bin/ ${CMAKE_SOURCE_DIR}/third_party/nasm/bin
-)
+find_program(ASM_COMPILER NAMES nasm HINTS /usr/bin/ ${CMAKE_SOURCE_DIR}/third_party/nasm/bin)
 # Check that we have found the compiler.
 if(NOT ASM_COMPILER)
     message(FATAL_ERROR "ASM compiler not found!")
@@ -89,17 +77,13 @@ add_library(
     ${PROJECT_SOURCE_DIR}/src/setenv.c
     ${PROJECT_SOURCE_DIR}/src/assert.c
     ${PROJECT_SOURCE_DIR}/src/abort.c
-
     ${PROJECT_SOURCE_DIR}/src/io/mm_io.c
     ${PROJECT_SOURCE_DIR}/src/io/port_io.c
-
     ${PROJECT_SOURCE_DIR}/src/ipc/ipc.c
-
     ${PROJECT_SOURCE_DIR}/src/sys/unistd.c
     ${PROJECT_SOURCE_DIR}/src/sys/errno.c
     ${PROJECT_SOURCE_DIR}/src/sys/utsname.c
     ${PROJECT_SOURCE_DIR}/src/sys/ioctl.c
-
     ${PROJECT_SOURCE_DIR}/src/unistd/getppid.c
     ${PROJECT_SOURCE_DIR}/src/unistd/getpid.c
     ${PROJECT_SOURCE_DIR}/src/unistd/exit.c
@@ -129,7 +113,6 @@ add_library(
     ${PROJECT_SOURCE_DIR}/src/unistd/interval.c
     ${PROJECT_SOURCE_DIR}/src/libc_start.c
     ${PROJECT_SOURCE_DIR}/src/debug.c
-
     ${PROJECT_SOURCE_DIR}/src/crt0.S
 )
 

@@ -43,6 +43,7 @@ For compiling the system:
  - cmake
  - git
  - ccmake (suggested)
+ - e2fsprogs (should be already installed)
 
 Under **MacOS**, for compiling, you have additional dependencies:
 
@@ -59,8 +60,7 @@ To execute the operating system, you need to install:
 
 For debugging we suggest using:
 
- - cgdb
- - xterm
+ - gdb or cgdb
 
 ### 2.2. installation Prerequisites
 
@@ -68,8 +68,8 @@ Under **Ubuntu**, you can type the following commands:
 
 ```bash
 sudo apt-get update && sudo apt-get upgrade -y
-sudo apt-get install -y build-essential git cmake qemu-system-i386 
-sudo apt-get install -y cgdb xterm
+sudo apt-get install -y build-essential git cmake qemu-system-i386 e2fsprogs
+sudo apt-get install -y gdb cgdb
 ```
 
 Under **MacOS** you also need to install the i386-elf cross-compiler. The
@@ -79,13 +79,13 @@ then type the following commands:
 
 ```bash
 brew update && brew upgrade
-brew install i386-elf-binutils i386-elf-gcc git cmake qemu nasm
-brew install cgdb xterm #<- for debug only
+brew install i386-elf-binutils i386-elf-gcc git cmake qemu nasm e2fsprogs
+brew install gdb cgdb #<- for debug only
 ```
 
-## 3. Compiling MentOS
+## 3. Compiling MentOS and generating the EXT2 filesystem
 
-Compile and boot MentOS with qemu:
+Compile MentOS with:
 
 ```bash
 cd <clone_directory>
@@ -93,12 +93,26 @@ mkdir build
 cd build
 cmake ..
 make
+```
+
+Then, generate the EXT2 filesystem with:
+
+```bash
+make filesystem
+```
+you just need to generate the filesystem once. If you change a `program` you need to re-generate the entire filesystem with `make filesystem`, but this will override any changes you made to the files inside the `rootfs.img`. In the future I will find a way to update just the `/usr/bin` directory and the programs.
+
+## 4. Running MentOS
+
+Boot MentOS with qemu:
+
+```bash
 make qemu
 ```
 
 To login, use one of the usernames listed in `files/etc/passwd`.
 
-## 4. Change the scheduling algorithm
+## 5. Change the scheduling algorithm
 
 MentOS provides three different scheduling algorithms:
 
@@ -152,29 +166,63 @@ make
 make qemu
 ```
 
-## 5. Use Debugger
+## 6. Use Debugger
 
-If you want to use GDB to debug MentOS:
+If you want to use GDB to debug MentOS, first you need to compile everything:
 
 ```bash
 cd build
 cmake ..
 make
-make qemu-gdb
 ```
 
-If you did everything correctly, you should have 3 windows with:
+Then, you need to generate a file called `.gdbinit` placed inside the `build` directory, which will tell **gdb** which *object* file he needs to read in order to allow proper debugging.
+```bash
+make gdb_file
+```
 
-1. Kernel Booting on qemu
-2. Shell with video printing of statistics previously discussed
-3. Debugger cgdb with code screening
+Finally, you run qemu in debugging mode with:
+```bash
+make qemu-gdb
+```
+If you did everything correctly, you should see an empty QEMU window. Basically, QEMU is waiting for you to connect *remotely* with gdb. Anyway, running `make qemu-gdb` will make your current shell busy, you cannot call `gdb` in it. You need to open a new shell inside the `build` folder and do a:
+```bash
+cgdb -q -iex 'add-auto-load-safe-path .'
+```
 
-## Developers
+Now you will have:
+1. the QEMU window waiting for you,
+2. the shell where you ran `make qemu-gdb` also waiting for you,
+3. the debugger that loaded a series of symbol files and the location of their `.text` section.
 
-Main Developers:
+By default I placed a breakpoint at the begginning of 1) the bootloader, 2) the `kmain` function of the kernel.
+
+So, when gdb starts you need to first give a continue:
+```bash
+(gdb) continue
+```
+
+This will make the kernel run, and stop at the first breakpoint which is inside the *bootloader*:
+```bash
+Breakpoint 1, boot_main (...) at .../mentos/src/boot.c:220
+220     {
+```
+
+giving a second `continue` will get you to the start of the operating system:
+
+This will make the kernel run, and stop at the first breakpoint which is inside the *bootloader*:
+```bash
+Breakpoint 2, kmain (...) at .../mentos/src/kernel.c:95
+95      {
+```
+
+## Contributors
+
+Project Manager:
 
 * [Enrico Fraccaroli](https://github.com/Galfurian)
-    - Mr. Wolf
+
+Developers:
 * [Alessandro Danese](https://github.com/alessandroDanese88), [Luigi Capogrosso](https://github.com/luigicapogrosso), [Mirco De Marchi](https://github.com/mircodemarchi)
     - Protection ring
     - libc

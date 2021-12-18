@@ -73,13 +73,14 @@ endif()
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Werror")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wpedantic")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wshadow")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -pedantic-errors")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wshadow")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-unused-function")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-unused-variable")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-unknown-pragmas")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-unused-but-set-variable")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=gnu99")
+
 # Set the compiler options.
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -nostdlib")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -nostdinc")
@@ -88,23 +89,19 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-builtin")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-pic")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-stack-protector")
 if(CMAKE_C_COMPILER_VERSION VERSION_GREATER_EQUAL 10)
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fcommon")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fcommon")
 endif()
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -march=i686")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -m32")
 
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g3")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ggdb")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O0")
-  add_definitions(-DDEBUG)
-
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g3")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ggdb")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O0")
+    add_definitions(-DDEBUG)
 elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
-
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3")
-  add_definitions(-DRELEASE)
-
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3")
+    add_definitions(-DRELEASE)
 endif(CMAKE_BUILD_TYPE STREQUAL "Debug")
 
 # =============================================================================
@@ -112,12 +109,13 @@ endif(CMAKE_BUILD_TYPE STREQUAL "Debug")
 enable_language(ASM)
 # Find the NASM compiler.
 find_program(
-  ASM_COMPILER
-  NAMES nasm
-  HINTS /usr/bin/ ${CMAKE_SOURCE_DIR}/third_party/nasm/bin)
+    ASM_COMPILER
+    NAMES nasm
+    HINTS /usr/bin/ ${CMAKE_SOURCE_DIR}/third_party/nasm/bin
+)
 # Check that we have found the compiler.
 if(NOT ASM_COMPILER)
-  message(FATAL_ERROR "ASM compiler not found!")
+    message(FATAL_ERROR "ASM compiler not found!")
 endif(NOT ASM_COMPILER)
 # Set the asm compiler.
 set(CMAKE_ASM_COMPILER ${ASM_COMPILER})
@@ -125,12 +123,12 @@ set(CMAKE_ASM_COMPILER ${ASM_COMPILER})
 set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -f elf")
 set(CMAKE_ASM_COMPILE_OBJECT "<CMAKE_ASM_COMPILER> <FLAGS> -o <OBJECT> <SOURCE>")
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-  set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -g")
-  set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -O0")
-  set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -F dwarf")
+    set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -g")
+    set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -O0")
+    set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -F dwarf")
 elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
-  set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -g")
-  set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -O3")
+    set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -g")
+    set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -O3")
 endif(CMAKE_BUILD_TYPE STREQUAL "Debug")
 
 # =============================================================================
@@ -138,176 +136,100 @@ endif(CMAKE_BUILD_TYPE STREQUAL "Debug")
 include_directories(inc ../libc/inc)
 
 # =============================================================================
+# Define the list of files.
+set(KERNEL_SOURCES
+    src/kernel.c
+    src/multiboot.c
+    src/devices/pci.c
+    src/devices/fpu.c
+    src/drivers/ata.c
+    src/drivers/rtc.c
+    src/drivers/fdc.c
+    src/drivers/mouse.c
+    src/drivers/keyboard/keyboard.c
+    src/drivers/keyboard/keymap.c
+    src/fs/initrd.c
+    src/fs/vfs.c
+    src/fs/read_write.c
+    src/fs/open.c
+    src/fs/stat.c
+    src/fs/readdir.c
+    src/fs/procfs.c
+    src/fs/ioctl.c
+    src/fs/namei.c
+    src/fs/ext2.c
+    src/hardware/timer.c
+    src/hardware/cpuid.c
+    src/hardware/pic8259.c
+    src/io/port_io.c
+    src/io/mm_io.c
+    src/io/video.c
+    src/io/stdio.c
+    src/io/debug.c
+    src/io/proc_video.c
+    src/io/proc_running.c
+    src/io/proc_system.c
+    src/io/vga/vga.c
+    src/ipc/msg.c
+    src/ipc/sem.c
+    src/ipc/shm.c
+    src/kernel/sys.c
+    src/klib/assert.c
+    src/klib/ctype.c
+    src/klib/mutex.c
+    src/klib/string.c
+    src/klib/vsprintf.c
+    src/klib/vscanf.c
+    src/klib/time.c
+    src/klib/libgen.c
+    src/klib/strerror.c
+    src/klib/math.c
+    src/klib/fcvt.c
+    src/klib/spinlock.c
+    src/klib/rbtree.c
+    src/klib/ndtree.c
+    src/klib/hashmap.c
+    src/klib/list.c
+    src/mem/kheap.c
+    src/mem/paging.c
+    src/mem/slab.c
+    src/mem/vmem_map.c
+    src/mem/zone_allocator.c
+    src/elf/elf.c
+    src/descriptor_tables/gdt.c
+    src/descriptor_tables/gdt.S
+    src/descriptor_tables/interrupt.c
+    src/descriptor_tables/exception.c
+    src/descriptor_tables/interrupt.S
+    src/descriptor_tables/exception.S
+    src/descriptor_tables/idt.c
+    src/descriptor_tables/idt.S
+    src/descriptor_tables/tss.c
+    src/descriptor_tables/tss.S
+    src/process/scheduler_algorithm.c
+    src/process/scheduler.c
+    src/process/process.c
+    src/process/wait.c
+    src/process/user.S
+    src/sys/utsname.c
+    src/sys/module.c
+    src/system/errno.c
+    src/system/panic.c
+    src/system/printk.c
+    src/system/signal.c
+    src/system/syscall.c
+)
+
+# =============================================================================
 # Add kernel library.
 if(USE_BUDDY_SYSTEM)
-  add_library(
-    ${KERNEL_NAME}
-    src/kernel.c
-    src/multiboot.c
-    src/devices/pci.c
-    src/devices/fpu.c
-    src/drivers/ata.c
-    src/drivers/rtc.c
-    src/drivers/fdc.c
-    src/drivers/mouse.c
-    src/drivers/keyboard/keyboard.c
-    src/drivers/keyboard/keymap.c
-    src/fs/initrd.c
-    src/fs/vfs.c
-    src/fs/read_write.c
-    src/fs/open.c
-    src/fs/stat.c
-    src/fs/readdir.c
-    src/fs/procfs.c
-    src/fs/ioctl.c
-    src/fs/namei.c
-    src/fs/ext2.c
-    src/hardware/timer.c
-    src/hardware/cpuid.c
-    src/hardware/pic8259.c
-    src/io/port_io.c
-    src/io/mm_io.c
-    src/io/video.c
-    src/io/stdio.c
-    src/io/debug.c
-    src/io/proc_video.c
-    src/io/proc_running.c
-    src/io/proc_system.c
-    src/io/vga/vga.c
-    src/ipc/msg.c
-    src/ipc/sem.c
-    src/ipc/shm.c
-    src/kernel/sys.c
-    src/klib/assert.c
-    src/klib/ctype.c
-    src/klib/mutex.c
-    src/klib/string.c
-    src/klib/vsprintf.c
-    src/klib/vscanf.c
-    src/klib/time.c
-    src/klib/libgen.c
-    src/klib/strerror.c
-    src/klib/math.c
-    src/klib/fcvt.c
-    src/klib/spinlock.c
-    src/klib/rbtree.c
-    src/klib/ndtree.c
-    src/klib/hashmap.c
-    src/klib/list.c
-    src/mem/kheap.c
-    src/mem/paging.c
-    src/mem/slab.c
-    src/mem/vmem_map.c
-    src/mem/zone_allocator.c
-    src/mem/buddysystem.c
-    src/elf/elf.c
-    src/descriptor_tables/gdt.c
-    src/descriptor_tables/gdt.S
-    src/descriptor_tables/interrupt.c
-    src/descriptor_tables/exception.c
-    src/descriptor_tables/interrupt.S
-    src/descriptor_tables/exception.S
-    src/descriptor_tables/idt.c
-    src/descriptor_tables/idt.S
-    src/descriptor_tables/tss.c
-    src/descriptor_tables/tss.S
-    src/process/scheduler_algorithm.c
-    src/process/scheduler.c
-    src/process/process.c
-    src/process/wait.c
-    src/process/user.S
-    src/sys/utsname.c
-    src/sys/module.c
-    src/system/errno.c
-    src/system/panic.c
-    src/system/printk.c
-    src/system/signal.c
-    src/system/syscall.c)
+    # Add the library with `buddysystem.c`.
+    add_library(${KERNEL_NAME} ${KERNEL_SOURCES} src/mem/buddysystem.c)
 else(USE_BUDDY_SYSTEM)
-  add_library(
-    ${KERNEL_NAME}
-    src/kernel.c
-    src/multiboot.c
-    src/devices/pci.c
-    src/devices/fpu.c
-    src/drivers/ata.c
-    src/drivers/rtc.c
-    src/drivers/fdc.c
-    src/drivers/mouse.c
-    src/drivers/keyboard/keyboard.c
-    src/drivers/keyboard/keymap.c
-    src/fs/initrd.c
-    src/fs/vfs.c
-    src/fs/read_write.c
-    src/fs/open.c
-    src/fs/stat.c
-    src/fs/readdir.c
-    src/fs/procfs.c
-    src/fs/ioctl.c
-    src/fs/namei.c
-    src/fs/ext2.c
-    src/hardware/timer.c
-    src/hardware/cpuid.c
-    src/hardware/pic8259.c
-    src/io/port_io.c
-    src/io/mm_io.c
-    src/io/video.c
-    src/io/stdio.c
-    src/io/debug.c
-    src/io/proc_video.c
-    src/io/proc_running.c
-    src/io/proc_system.c
-    src/io/vga/vga.c
-    src/ipc/msg.c
-    src/ipc/sem.c
-    src/ipc/shm.c
-    src/kernel/sys.c
-    src/klib/assert.c
-    src/klib/ctype.c
-    src/klib/mutex.c
-    src/klib/string.c
-    src/klib/vsprintf.c
-    src/klib/vscanf.c
-    src/klib/time.c
-    src/klib/libgen.c
-    src/klib/strerror.c
-    src/klib/math.c
-    src/klib/fcvt.c
-    src/klib/spinlock.c
-    src/klib/rbtree.c
-    src/klib/ndtree.c
-    src/klib/hashmap.c
-    src/klib/list.c
-    src/mem/kheap.c
-    src/mem/paging.c
-    src/mem/slab.c
-    src/mem/vmem_map.c
-    src/mem/zone_allocator.c
-    src/elf/elf.c
-    src/descriptor_tables/gdt.c
-    src/descriptor_tables/gdt.S
-    src/descriptor_tables/interrupt.c
-    src/descriptor_tables/exception.c
-    src/descriptor_tables/interrupt.S
-    src/descriptor_tables/exception.S
-    src/descriptor_tables/idt.c
-    src/descriptor_tables/idt.S
-    src/descriptor_tables/tss.c
-    src/descriptor_tables/tss.S
-    src/process/scheduler_algorithm.c
-    src/process/scheduler.c
-    src/process/process.c
-    src/process/wait.c
-    src/process/user.S
-    src/sys/utsname.c
-    src/sys/module.c
-    src/system/errno.c
-    src/system/panic.c
-    src/system/printk.c
-    src/system/signal.c
-    src/system/syscall.c)
-  # Link the exercise libraries.
-  target_link_libraries(${KERNEL_NAME} ${BUDDY_SYSTEM_FILE})
+    # Add the library without `buddysystem.c`.
+    add_library(${KERNEL_NAME} ${KERNEL_SOURCES})
+    # Link the exercise libraries.
+    target_link_libraries(${KERNEL_NAME} ${BUDDY_SYSTEM_FILE})
 endif(USE_BUDDY_SYSTEM)
 
 # =============================================================================
@@ -317,12 +239,12 @@ add_library(${BOOTLOADER_NAME} src/boot.c src/boot.S)
 # =============================================================================
 # Build the kernel.
 add_custom_target(
-  kernel-bootloader.bin ALL
-  COMMAND mkdir -p ${PROJECT_BINARY_DIR}/../debug_sym
-  COMMAND ${CMAKE_LINKER} -melf_i386 -static --oformat elf32-i386 --output kernel.bin --script ${CMAKE_CURRENT_SOURCE_DIR}/kernel.lds -Map kernel.map -u kmain
-          $<TARGET_FILE_NAME:${KERNEL_NAME}> ${BUDDY_SYSTEM_FILE}
-  COMMAND objcopy -I binary -O elf32-i386 -B i386 kernel.bin kernel.bin.o
-  COMMAND ${CMAKE_LINKER} -melf_i386 -static --oformat elf32-i386 --output kernel-bootloader.bin --script ${CMAKE_CURRENT_SOURCE_DIR}/boot.lds -Map kernel-bootloader.map
-          kernel.bin.o $<TARGET_FILE_NAME:${BOOTLOADER_NAME}>
-  DEPENDS ${KERNEL_NAME}
-  DEPENDS ${BOOTLOADER_NAME})
+    kernel-bootloader.bin ALL
+    COMMAND ${CMAKE_LINKER} -melf_i386 -static --oformat elf32-i386 --output kernel.bin --script ${CMAKE_CURRENT_SOURCE_DIR}/kernel.lds -Map kernel.map -u kmain
+            $<TARGET_FILE_NAME:${KERNEL_NAME}> ${BUDDY_SYSTEM_FILE}
+    COMMAND objcopy -I binary -O elf32-i386 -B i386 kernel.bin kernel.bin.o
+    COMMAND ${CMAKE_LINKER} -melf_i386 -static --oformat elf32-i386 --output kernel-bootloader.bin --script ${CMAKE_CURRENT_SOURCE_DIR}/boot.lds -Map kernel-bootloader.map
+            kernel.bin.o $<TARGET_FILE_NAME:${BOOTLOADER_NAME}>
+    DEPENDS ${KERNEL_NAME}
+    DEPENDS ${BOOTLOADER_NAME}
+)
