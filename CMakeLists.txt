@@ -125,7 +125,7 @@ set(EMULATOR_KERNEL -kernel mentos/kernel-bootloader.bin)
 
 add_custom_target(
     qemu
-    COMMAND ${EMULATOR} ${EMULATOR_FLAGS} ${EMULATOR_KERNEL} ${EMULATOR_FS}
+    COMMAND ${EMULATOR} ${EMULATOR_FLAGS} ${EMULATOR_KERNEL}
     DEPENDS kernel-bootloader.bin
     DEPENDS all_programs
     DEPENDS all_tests
@@ -142,7 +142,7 @@ add_custom_target(
     COMMAND echo "in THIS same folder, and just type :\n"
     COMMAND printf "    cgdb -q -iex %q" "add-auto-load-safe-path ."
     COMMAND echo "\n\n"
-    COMMAND ${EMULATOR} ${EMULATOR_KERNEL} ${EMULATOR_FS} -s -S
+    COMMAND ${EMULATOR} ${EMULATOR_FLAGS} ${EMULATOR_KERNEL} -s -S
     DEPENDS kernel-bootloader.bin
     DEPENDS all_programs
     DEPENDS all_tests
