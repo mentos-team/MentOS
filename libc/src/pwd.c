@@ -16,7 +16,7 @@
 static inline void __parse_line(passwd_t *pwd, char *buf)
 {
     assert(pwd && "Received null pwd!");
-    char *token;
+    char *token, *ch;
     // Parse the username.
     if ((token = strtok(buf, ":")) != NULL)
         pwd->pw_name = token;
@@ -36,8 +36,15 @@ static inline void __parse_line(passwd_t *pwd, char *buf)
     if ((token = strtok(NULL, ":")) != NULL)
         pwd->pw_dir = token;
     // Parse the shell.
-    if ((token = strtok(NULL, ":")) != NULL)
+    if ((token = strtok(NULL, ":")) != NULL) {
         pwd->pw_shell = token;
+        // Find carriege return.
+        if ((ch = strchr(pwd->pw_shell, '\r')))
+            *ch = 0;
+        // Find newline.
+        if ((ch = strchr(pwd->pw_shell, '\n')))
+            *ch = 0;
+    }
 }
 
 ssize_t __readline(int fd, char *buffer, size_t buflen)

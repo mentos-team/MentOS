@@ -54,19 +54,15 @@ static inline void __outportb(uint16_t port, uint8_t data)
 /// @param c the character to send to the debug port.
 static inline void __debug_putchar(char c)
 {
-#if (defined(DEBUG_STDIO) || defined(DEBUG_LOG))
     __outportb(SERIAL_COM1, c);
-#endif
 }
 
 /// @brief Writes the given string on the debug port.
 /// @param s the string to send to the debug port.
 static inline void __debug_puts(char *s)
 {
-#if (defined(DEBUG_STDIO) || defined(DEBUG_LOG))
     while ((*s) != 0)
         __outportb(SERIAL_COM1, *s++);
-#endif
 }
 
 /// @brief Align memory address to the specified value (round up).

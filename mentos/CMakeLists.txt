@@ -15,9 +15,7 @@ set(BUDDY_SYSTEM_FILE ${PROJECT_SOURCE_DIR}/src/mem/libbuddysystem.a)
 # Set the default build type to Debug.
 if(NOT CMAKE_BUILD_TYPE)
   message(STATUS "Setting build type to 'Debug' as none was specified.")
-  set(CMAKE_BUILD_TYPE
-      "Debug"
-      CACHE STRING "Choose the type of build." FORCE)
+  set(CMAKE_BUILD_TYPE "Debug" CACHE STRING "Choose the type of build." FORCE)
 endif()
 
 # =============================================================================

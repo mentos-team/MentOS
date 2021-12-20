@@ -17,6 +17,8 @@
 #include <strerror.h>
 #include <stdlib.h>
 
+#include <debug.h>
+
 #define CREDENTIALS_LENGTH 50
 
 #define FG_BLACK "\033[30m"
@@ -125,20 +127,18 @@ static bool_t get_input(char *input, size_t max_len, bool_t hide)
 
 static inline int setup_env(passwd_t *pwd)
 {
-    // Set the HOME.
-    char env_buffer[BUFSIZ];
     // Set the USER.
-    if (setenv("USER", pwd->pw_name, 0) == -1) {
-        printf( "Failed to set env: `USER`\n");
+    if (setenv("USER", pwd->pw_name, 1) == -1) {
+        printf("Failed to set env: `USER`\n");
         return 0;
     }
     // Set the SHELL.
-    if (setenv("SHELL", pwd->pw_shell, 0) == -1) {
-        printf( "Failed to set env: `SHELL`\n");
+    if (setenv("SHELL", pwd->pw_shell, 1) == -1) {
+        printf("Failed to set env: `SHELL`\n");
         return 0;
     }
     // Set the HOME.
-    if (setenv("HOME", pwd->pw_dir, 0) == -1) {
+    if (setenv("HOME", pwd->pw_dir, 1) == -1) {
         printf("Failed to set env: `HOME`\n");
         return 0;
     }

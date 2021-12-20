@@ -18,17 +18,13 @@
 
 void dbg_putchar(char c)
 {
-#if (defined(DEBUG_STDIO) || defined(DEBUG_LOG))
     outportb(SERIAL_COM1, (uint8_t)c);
-#endif
 }
 
 void dbg_puts(const char *s)
 {
-#if (defined(DEBUG_STDIO) || defined(DEBUG_LOG))
     while ((*s) != 0)
         dbg_putchar(*s++);
-#endif
 }
 
 static inline void __debug_print_header(const char *file, const char *fun, int line)
