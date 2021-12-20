@@ -60,6 +60,17 @@
 // Data Structures
 // ============================================================================
 
+typedef enum ext2_file_type_t {
+    ext2_file_type_unknown,          ///< Unknown type.
+    ext2_file_type_regular_file,     ///< Regular file.
+    ext2_file_type_directory,        ///< Directory.
+    ext2_file_type_character_device, ///< Character device.
+    ext2_file_type_block_device,     ///< Block device.
+    ext2_file_type_named_pipe,       ///< Named pipe.
+    ext2_file_type_socket,           ///< Socket
+    ext2_file_type_symbolic_link     ///< Symbolic link.
+} ext2_file_type_t;
+
 typedef enum ext2_block_status_t {
     ext2_block_status_free     = 0, ///< The block is free.
     ext2_block_status_occupied = 1  ///< The block is occupied.
@@ -392,6 +403,25 @@ static const char *uuid_to_string(uint8_t uuid[16])
             uuid[0], uuid[1], uuid[2], uuid[3], uuid[4], uuid[5], uuid[6], uuid[7],
             uuid[8], uuid[9], uuid[10], uuid[11], uuid[12], uuid[13], uuid[14], uuid[15]);
     return s;
+}
+
+static int ext2_file_type_to_vfs_file_type(int ext2_type)
+{
+    if (ext2_type == ext2_file_type_regular_file)
+        return DT_REG;
+    if (ext2_type == ext2_file_type_directory)
+        return DT_DIR;
+    if (ext2_type == ext2_file_type_character_device)
+        return DT_CHR;
+    if (ext2_type == ext2_file_type_block_device)
+        return DT_BLK;
+    if (ext2_type == ext2_file_type_named_pipe)
+        return DT_FIFO;
+    if (ext2_type == ext2_file_type_socket)
+        return DT_SOCK;
+    if (ext2_type == ext2_file_type_symbolic_link)
+        return DT_LNK;
+    return DT_UNKNOWN;
 }
 
 /// @brief Turns the time to string.
@@ -1679,7 +1709,7 @@ static int ext2_getdents(vfs_file_t *file, dirent_t *dirp, off_t doff, size_t co
 
         // Write on current directory entry data.
         dirp->d_ino  = direntry->inode;
-        dirp->d_type = direntry->file_type;
+        dirp->d_type = ext2_file_type_to_vfs_file_type(direntry->file_type);
         memset(dirp->d_name, 0, NAME_MAX);
         strncpy(dirp->d_name, direntry->name, direntry->name_len);
         dirp->d_off    = direntry->rec_len;
