@@ -71,7 +71,7 @@ typedef struct procfs_t {
     /// List of headers.
     list_head files;
     /// Cache for creating new `procfs_file_t`.
-    kmem_cache_t *procfs_cache;
+    kmem_cache_t *procfs_file_cache;
 } procfs_t;
 
 procfs_t fs;
@@ -233,7 +233,7 @@ static inline int procfs_check_if_empty(const char *path)
 /// @return a pointer to the new PROCFS file, NULL otherwise.
 static inline procfs_file_t *procfs_create_file(const char *path, unsigned flags)
 {
-    procfs_file_t *procfs_file = (procfs_file_t *)kmem_cache_alloc(fs.procfs_cache, GFP_KERNEL);
+    procfs_file_t *procfs_file = (procfs_file_t *)kmem_cache_alloc(fs.procfs_file_cache, GFP_KERNEL);
     if (!procfs_file) {
         pr_err("Failed to get free entry (%p).\n", procfs_file);
         return NULL;
@@ -334,17 +334,6 @@ static void dump_procfs()
                 pr_debug("[%3d] `%s`\n", file->inode, file->name);
         }
     }
-}
-
-/// @brief Initializes the procfs.
-static void procfs_init()
-{
-    // Initialize the procfs.
-    memset(&fs, 0, sizeof(struct procfs_t));
-    // Initialize the cache.
-    fs.procfs_cache = KMEM_CREATE(procfs_file_t);
-    // Initialize the list of procfs files.
-    list_head_init(&fs.files);
 }
 
 // ============================================================================
@@ -804,7 +793,11 @@ static file_system_type procfs_file_system_type = {
 int procfs_module_init()
 {
     // Initialize the procfs.
-    procfs_init();
+    memset(&fs, 0, sizeof(struct procfs_t));
+    // Initialize the cache.
+    fs.procfs_file_cache = KMEM_CREATE(procfs_file_t);
+    // Initialize the list of procfs files.
+    list_head_init(&fs.files);
     // Register the filesystem.
     vfs_register_filesystem(&procfs_file_system_type);
     return 0;
@@ -812,6 +805,8 @@ int procfs_module_init()
 
 int procfs_cleanup_module()
 {
+    // Destroy the cache.
+    kmem_cache_destroy(fs.procfs_file_cache);
     // Unregister the filesystem.
     vfs_register_filesystem(&procfs_file_system_type);
     return 0;
