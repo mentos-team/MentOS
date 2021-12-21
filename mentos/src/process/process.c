@@ -6,7 +6,12 @@
 
 #include "sys/kernel_levels.h"
 
-#define __DEBUG_LEVEL__ 100
+// Include the kernel log levels.
+#include "sys/kernel_levels.h"
+// Change the header.
+#define __DEBUG_HEADER__ "[PROC  ]"
+// Set the log level.
+#define __DEBUG_LEVEL__ LOGLEVEL_NOTICE
 
 #include "process/process.h"
 #include "process/scheduler.h"
@@ -340,12 +345,12 @@ void sys_chdir(char const *path)
         char absolute_path[PATH_MAX];
         realpath(path, absolute_path);
         // Check that the directory exists.
-        vfs_file_t *dir = vfs_open(absolute_path, O_RDONLY, S_IXUSR);
+        vfs_file_t *dir = vfs_open(absolute_path, O_RDONLY | O_DIRECTORY, S_IXUSR);
         if (dir != NULL) {
             pr_debug("Success `%s` -> `%s` -> `%s`\n", path, absolute_path, dir->name);
             strcpy(current_process->cwd, absolute_path);
             vfs_close(dir);
-        }else{
+        } else {
             pr_debug("Failed  `%s` -> `%s` -> `NULL`\n", path, absolute_path);
         }
     }

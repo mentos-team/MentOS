@@ -4,8 +4,12 @@
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-/// Change the header.
+// Include the kernel log levels.
+#include "sys/kernel_levels.h"
+// Change the header.
 #define __DEBUG_HEADER__ "[WAIT  ]"
+// Set the log level.
+#define __DEBUG_LEVEL__ LOGLEVEL_NOTICE
 
 #include "process/wait.h"
 

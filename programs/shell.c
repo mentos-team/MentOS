@@ -326,7 +326,7 @@ static int __cd(int argc, char *argv[])
             return 1;
         }
     }
-    int fd = open(path, O_RDONLY | O_DIRECTORY, 0);
+    int fd = open(path, O_RDONLY | O_DIRECTORY, S_IXUSR);
     if (fd == -1) {
         printf("cd: %s: %s\n\n", argv[0], strerror(errno), path);
         return 1;

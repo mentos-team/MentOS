@@ -8,8 +8,12 @@
 
 #include "fs/ext2.h"
 
+// Include the kernel log levels.
+#include "sys/kernel_levels.h"
+// Change the header.
 #define __DEBUG_HEADER__ "[EXT2  ]"
-//#define __DEBUG_LEVEL__  100
+// Set the log level.
+#define __DEBUG_LEVEL__ LOGLEVEL_NOTICE
 
 #include "process/scheduler.h"
 #include "process/process.h"

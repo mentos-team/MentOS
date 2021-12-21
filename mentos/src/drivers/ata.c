@@ -8,10 +8,12 @@
 
 #include "drivers/ata.h"
 
-/// Change the header.
+// Include the kernel log levels.
+#include "sys/kernel_levels.h"
+// Change the header.
 #define __DEBUG_HEADER__ "[ATA   ]"
-/// Defines the debug level.
-//#define __DEBUG_LEVEL__  100
+// Set the log level.
+#define __DEBUG_LEVEL__ LOGLEVEL_NOTICE
 
 #include "descriptor_tables/isr.h"
 #include "hardware/pic8259.h"
@@ -1057,22 +1059,22 @@ int ata_initialize()
     type = ata_device_detect(&ata_primary_master);
     if ((type != ata_dev_type_no_device) && (type != ata_dev_type_unknown)) {
         printf("    Found %s device connected to primary master.\n", ata_get_device_type_str(type));
-        pr_notice("    Found %s device connected to primary master.\n", ata_get_device_type_str(type));
+        pr_info("    Found %s device connected to primary master.\n", ata_get_device_type_str(type));
     }
     type = ata_device_detect(&ata_primary_slave);
     if ((type != ata_dev_type_no_device) && (type != ata_dev_type_unknown)) {
         printf("    Found %s device connected to primary slave.\n", ata_get_device_type_str(type));
-        pr_notice("    Found %s device connected to primary slave.\n", ata_get_device_type_str(type));
+        pr_info("    Found %s device connected to primary slave.\n", ata_get_device_type_str(type));
     }
     type = ata_device_detect(&ata_secondary_master);
     if ((type != ata_dev_type_no_device) && (type != ata_dev_type_unknown)) {
         printf("    Found %s device connected to secondary master.\n", ata_get_device_type_str(type));
-        pr_notice("    Found %s device connected to secondary master.\n", ata_get_device_type_str(type));
+        pr_info("    Found %s device connected to secondary master.\n", ata_get_device_type_str(type));
     }
     type = ata_device_detect(&ata_secondary_slave);
     if ((type != ata_dev_type_no_device) && (type != ata_dev_type_unknown)) {
         printf("    Found %s device connected to secondary slave.\n", ata_get_device_type_str(type));
-        pr_notice("    Found %s device connected to secondary slave.\n", ata_get_device_type_str(type));
+        pr_info("    Found %s device connected to secondary slave.\n", ata_get_device_type_str(type));
     }
     return 0;
 }
