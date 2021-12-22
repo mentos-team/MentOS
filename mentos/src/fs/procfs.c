@@ -437,7 +437,7 @@ static vfs_file_t *procfs_open(const char *path, int flags, mode_t mode)
     procfs_file_t *procfs_file = procfs_find_entry_path(path);
     if (procfs_file != NULL) {
         // Check if the user wants to create a file.
-        if (bitmask_check(flags, O_CREAT)) {
+        if (bitmask_check(flags, O_CREAT | O_EXCL)) {
             pr_err("Cannot create, it exists `%s`.\n", path);
             errno = EEXIST;
             return NULL;
