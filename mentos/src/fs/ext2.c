@@ -13,7 +13,7 @@
 // Change the header.
 #define __DEBUG_HEADER__ "[EXT2  ]"
 // Set the log level.
-#define __DEBUG_LEVEL__ LOGLEVEL_NOTICE
+#define __DEBUG_LEVEL__ LOGLEVEL_DEBUG
 
 #include "process/scheduler.h"
 #include "process/process.h"
@@ -22,6 +22,7 @@
 #include "sys/errno.h"
 #include "io/debug.h"
 #include "fs/vfs.h"
+#include "assert.h"
 #include "libgen.h"
 #include "string.h"
 #include "stdio.h"
@@ -297,7 +298,7 @@ typedef struct ext2_dirent_t {
     /// File type code.
     uint8_t file_type;
     /// File name.
-    char name[EXT2_NAME_LEN];
+    char name[];
 } ext2_dirent_t;
 
 /// @brief The details regarding the filesystem.
@@ -344,23 +345,25 @@ typedef struct ext2_filesystem_t {
     spinlock_t spinlock;
 } ext2_filesystem_t;
 
+/// @brief Structure used when searching for a directory entry.
 typedef struct ext2_direntry_search_t {
-    ///
+    /// Pointer to the direntry where we store the search results.
     ext2_dirent_t *direntry;
-    ///
+    /// The inode of the parent directory.
     ino_t parent_inode;
-    ///
+    /// The index of the block where the direntry resides.
     uint32_t block_index;
-    ///
-    uint32_t dir_offset;
+    /// The offest of the direntry inside the block.
+    uint32_t block_offset;
 } ext2_direntry_search_t;
 
 // ============================================================================
 // Forward Declaration of Functions
 // ============================================================================
 
-static bool_t ext2_check_block_bit(uint8_t *buffer, uint32_t index);
-static void ext2_set_block_bit(uint8_t *buffer, uint32_t index, ext2_block_status_t status);
+static ext2_block_status_t ext2_check_bitmap_bit(uint8_t *buffer, uint32_t index);
+static void ext2_set_bitmap_bit(uint8_t *buffer, uint32_t index, ext2_block_status_t status);
+
 static int ext2_read_superblock(ext2_filesystem_t *fs);
 static int ext2_write_superblock(ext2_filesystem_t *fs);
 static int ext2_read_block(ext2_filesystem_t *fs, uint32_t block_index, uint8_t *buffer);
@@ -571,7 +574,7 @@ static void ext2_dump_bgdt(ext2_filesystem_t *fs)
         for (uint32_t j = 0; j < fs->block_size; ++j) {
             if ((j % 8) == 0)
                 pr_debug("        Block index: %4d, Bitmap: %s\n", j / 8, dec_to_binary(cache[j / 8], 8));
-            if (!ext2_check_block_bit(cache, j)) {
+            if (!ext2_check_bitmap_bit(cache, j)) {
                 pr_debug("    First free block in group is in block %d, the linear index is %d\n", j / 8, j);
                 break;
             }
@@ -582,7 +585,7 @@ static void ext2_dump_bgdt(ext2_filesystem_t *fs)
         for (uint32_t j = 0; j < fs->block_size; ++j) {
             if ((j % 8) == 0)
                 pr_debug("        Block index: %4d, Bitmap: %s\n", j / 8, dec_to_binary(cache[j / 8], 8));
-            if (!ext2_check_block_bit(cache, j)) {
+            if (!ext2_check_bitmap_bit(cache, j)) {
                 pr_debug("    First free block in group is in block %d, the linear index is %d\n", j / 8, j);
                 break;
             }
@@ -613,6 +616,35 @@ static void ext2_dump_filesystem(ext2_filesystem_t *fs)
 // EXT2 Core Functions
 // ============================================================================
 
+/// @brief Determining which block group contains an inode.
+/// @param fs the ext2 filesystem structure.
+/// @param inode_index the inode index.
+/// @return the group index.
+/// @details Remember that inode addressing starts from 1.
+static uint32_t ext2_get_group_index_from_inode(ext2_filesystem_t *fs, uint32_t inode_index)
+{
+    return (inode_index - 1) / fs->superblock.inodes_per_group;
+}
+
+/// @brief Determining the offest of the inode inside the block group.
+/// @param fs the ext2 filesystem structure.
+/// @param inode_index the inode index.
+/// @return the offset of the inode inside the group.
+/// @details Remember that inode addressing starts from 1.
+static uint32_t ext2_get_inode_offest_in_group(ext2_filesystem_t *fs, uint32_t inode_index)
+{
+    return (inode_index - 1) % fs->superblock.inodes_per_group;
+}
+
+/// @brief Determines which block contains our inode.
+/// @param fs the ext2 filesystem structure.
+/// @param inode_offset the inode offset inside the group.
+/// @return which block contains our inode.
+static uint32_t ext2_get_block_index_from_inode_offset(ext2_filesystem_t *fs, uint32_t inode_offset)
+{
+    return (inode_offset * fs->superblock.inode_size) / fs->block_size;
+}
+
 /// @brief Cheks if the bit at the given index is free.
 /// @param buffer the buffer containing the bitmap
 /// @param index the index we want to check.
@@ -620,21 +652,128 @@ static void ext2_dump_filesystem(ext2_filesystem_t *fs)
 /// @details
 /// How we access the specific bits inside the bitmap takes inspiration from the
 /// mailman's algorithm.
-static bool_t ext2_check_block_bit(uint8_t *buffer, uint32_t index)
+static ext2_block_status_t ext2_check_bitmap_bit(uint8_t *buffer, uint32_t index)
 {
-    return bit_check(buffer[index / 8], index % 8) != 0;
+    return (ext2_block_status_t)(bit_check(buffer[index / 8], index % 8) != 0);
 }
 
 /// @brief Sets the bit at the given index accordingly to `status`.
 /// @param buffer the buffer containing the bitmap
 /// @param index the index we want to check.
 /// @param status the new status of the block (free|occupied).
-static void ext2_set_block_bit(uint8_t *buffer, uint32_t index, ext2_block_status_t status)
+static void ext2_set_bitmap_bit(uint8_t *buffer, uint32_t index, ext2_block_status_t status)
 {
     if (status == ext2_block_status_occupied)
         bit_set_assign(buffer[index / 8], index % 8);
     else
         bit_clear_assign(buffer[index / 8], index % 8);
+}
+
+/// @brief Searches for a free inode inside the group data loaded inside the cache.
+/// @param fs the ext2 filesystem structure.
+/// @param cache the cache from which we read the bgdt data.
+/// @param linear_index the output variable where we store the linear indes to the free inode.
+/// @return true if we found a free inode, false otherwise.
+static inline bool_t ext2_find_free_inode_in_group(
+    ext2_filesystem_t *fs,
+    uint8_t *cache,
+    uint32_t *linear_index,
+    bool_t skip_reserved)
+{
+    for ((*linear_index) = 0; (*linear_index) < fs->superblock.inodes_per_group; ++(*linear_index)) {
+        // If we need to skip the reserved inodes, we skip the round if the
+        // index is that of a reserved inode (superblock.first_ino).
+        if (skip_reserved && ((*linear_index) < fs->superblock.first_ino))
+            continue;
+        // Check if the entry is free.
+        if (!ext2_check_bitmap_bit(cache, *linear_index))
+            return true;
+    }
+    return false;
+}
+
+/// @brief Searches for a free inode inside the Block Group Descriptor Table (BGDT).
+/// @param fs the ext2 filesystem structure.
+/// @param cache the cache from which we read the bgdt data.
+/// @param group_index the output variable where we store the group index.
+/// @param linear_index the output variable where we store the linear indes to the free inode.
+/// @return true if we found a free inode, false otherwise.
+static inline bool_t ext2_find_free_inode(
+    ext2_filesystem_t *fs,
+    uint8_t *cache,
+    uint32_t *group_index,
+    uint32_t *linear_index,
+    uint32_t preferred_group)
+{
+    // If we received a preference, try to find a free inode in that specific group.
+    if (preferred_group != 0) {
+        // Set the group index to the preferred group.
+        (*group_index) = preferred_group;
+        // Find the first free inode. We need to ask to skip reserved inodes,
+        // only if we are in group 0.
+        if (ext2_find_free_inode_in_group(fs, cache, linear_index, (*group_index) == 0))
+            return true;
+    }
+    // Get the group and bit index of the first free block.
+    for ((*group_index) = 0; (*group_index) < fs->block_groups_count; ++(*group_index)) {
+        // Check if there are free inodes in this block group.
+        if (fs->block_groups[(*group_index)].free_inodes_count > 0) {
+            // Read the block bitmap.
+            if (ext2_read_block(fs, fs->block_groups[(*group_index)].inode_bitmap, cache) < 0) {
+                pr_err("Failed to read the inode bitmap for group `%d`.\n", (*group_index));
+                return false;
+            }
+            // Find the first free inode. We need to ask to skip reserved
+            // inodes, only if we are in group 0.
+            if (ext2_find_free_inode_in_group(fs, cache, linear_index, (*group_index) == 0))
+                return true;
+        }
+    }
+    return false;
+}
+
+/// @brief Searches for a free block inside the group data loaded inside the cache.
+/// @param fs the ext2 filesystem structure.
+/// @param cache the cache from which we read the bgdt data.
+/// @param group_index the output variable where we store the group index.
+/// @param linear_index the output variable where we store the linear indes to the free block.
+/// @return true if we found a free block, false otherwise.
+static inline bool_t ext2_find_free_block_in_group(ext2_filesystem_t *fs, uint8_t *cache, uint32_t *linear_index)
+{
+    for ((*linear_index) = 0; (*linear_index) < fs->superblock.blocks_per_group; ++(*linear_index)) {
+        // Check if the entry is free.
+        if (!ext2_check_bitmap_bit(cache, *linear_index))
+            return true;
+    }
+    return false;
+}
+
+/// @brief Searches for a free block.
+/// @param fs the ext2 filesystem structure.
+/// @param cache the cache from which we read the bgdt data.
+/// @param linear_index the output variable where we store the linear indes to the free block.
+/// @return true if we found a free block, false otherwise.
+static inline bool_t ext2_find_free_block(
+    ext2_filesystem_t *fs,
+    uint8_t *cache,
+    uint32_t *group_index,
+    uint32_t *linear_index)
+{
+    // Get the group and bit index of the first free block.
+    for ((*group_index) = 0; (*group_index) < fs->block_groups_count; ++(*group_index)) {
+        // Check if there are free blocks in this block group.
+        if (fs->block_groups[(*group_index)].free_blocks_count > 0) {
+            // Read the block bitmap.
+            if (ext2_read_block(fs, fs->block_groups[(*group_index)].block_bitmap, cache) < 0) {
+                pr_err("Failed to read the block bitmap for group `%d`.\n", (*group_index));
+                return false;
+            }
+            // Find the first free block.
+            if (ext2_find_free_block_in_group(fs, cache, linear_index))
+                return true;
+        }
+    }
+    return false;
 }
 
 /// @brief Reads the superblock from the block device associated with this filesystem.
@@ -735,28 +874,25 @@ static int ext2_read_inode(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t 
         return -1;
     }
     // Retrieve the group index.
-    uint32_t group_index = (inode_index - 1U) / fs->superblock.inodes_per_group;
+    uint32_t group_index = ext2_get_group_index_from_inode(fs, inode_index);
     if (group_index > fs->block_groups_count) {
         pr_err("Invalid group index computed from inode index `%d`.\n", inode_index);
         return -1;
     }
-    // Retrieve the group.
-    ext2_group_descriptor_t *group_desc = &fs->block_groups[group_index];
     // Get the index of the inode inside the group.
-    uint32_t index = (inode_index - 1U) % fs->superblock.inodes_per_group;
+    uint32_t offset = ext2_get_inode_offest_in_group(fs, inode_index);
     // Get the block offest.
-    uint32_t block = (index * fs->superblock.inode_size) / fs->block_size;
-    // Get the real inode index inside the block.
-    index %= fs->inodes_per_block_count;
-
+    uint32_t block = ext2_get_block_index_from_inode_offset(fs, offset);
+    // Get the real inode offset inside the block.
+    offset %= fs->inodes_per_block_count;
     // Allocate the cache.
     uint8_t *cache = kmem_cache_alloc(fs->ext2_buffer_cache, GFP_KERNEL);
     // Clean the cache.
     memset(cache, 0, fs->block_size);
     // Read the block containing the inode table.
-    ext2_read_block(fs, group_desc->inode_table + block, cache);
+    ext2_read_block(fs, fs->block_groups[group_index].inode_table + block, cache);
     // Save the inode content.
-    memcpy(inode, (ext2_inode_t *)((uintptr_t)cache + (index * fs->superblock.inode_size)), fs->superblock.inode_size);
+    memcpy(inode, (ext2_inode_t *)((uintptr_t)cache + (offset * fs->superblock.inode_size)), fs->superblock.inode_size);
     // Free the cache.
     kmem_cache_free(cache);
     return 0;
@@ -774,34 +910,79 @@ static int ext2_write_inode(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t
         return -1;
     }
     // Retrieve the group index.
-    uint32_t group_index = (inode_index - 1U) / fs->superblock.inodes_per_group;
+    uint32_t group_index = ext2_get_group_index_from_inode(fs, inode_index);
     if (group_index > fs->block_groups_count) {
         pr_err("Invalid group index computed from inode index `%d`.\n", inode_index);
         return -1;
     }
-    // Retrieve the group.
-    ext2_group_descriptor_t *group_desc = &fs->block_groups[group_index];
-    // Get the index of the inode inside the group.
-    uint32_t index = (inode_index - 1U) % fs->superblock.inodes_per_group;
+    // Get the offset of the inode inside the group.
+    uint32_t offset = ext2_get_inode_offest_in_group(fs, inode_index);
     // Get the block offest.
-    uint32_t block = (index * fs->superblock.inode_size) / fs->block_size;
-    // Get the real inode index inside the block.
-    index %= fs->inodes_per_block_count;
-
+    uint32_t block = ext2_get_block_index_from_inode_offset(fs, offset);
+    // Get the real inode offset inside the block.
+    offset %= fs->inodes_per_block_count;
     // Allocate the cache.
     uint8_t *cache = kmem_cache_alloc(fs->ext2_buffer_cache, GFP_KERNEL);
     // Clean the cache.
     memset(cache, 0, fs->block_size);
     // Read the block containing the inode table.
-    ext2_read_block(fs, group_desc->inode_table + block, cache);
+    ext2_read_block(fs, fs->block_groups[group_index].inode_table + block, cache);
     // Write the inode.
-    memcpy((ext2_inode_t *)((uintptr_t)cache + (index * fs->superblock.inode_size)), inode, fs->superblock.inode_size);
+    memcpy((ext2_inode_t *)((uintptr_t)cache + (offset * fs->superblock.inode_size)), inode, fs->superblock.inode_size);
     // Write back the block.
-    ext2_write_block(fs, group_desc->inode_table + block, cache);
-
+    ext2_write_block(fs, fs->block_groups[group_index].inode_table + block, cache);
     // Free the cache.
     kmem_cache_free(cache);
     return 0;
+}
+
+/// @brief Allocate a new inode.
+/// @param fs the filesystem.
+/// @param preferred_group the preferred group.
+/// @return index of the inode.
+/// @details
+/// Here are the rules used to allocate new inodes:
+///  - the inode for a new file is allocated in the same group of the inode of
+///    its parent directory.
+///  - inodes are allocated equally between groups.
+static int ext2_allocate_inode(ext2_filesystem_t *fs, unsigned preferred_group)
+{
+    uint32_t group_index = 0, linear_index = 0, inode_index = 0;
+    // Lock the filesystem.
+    spinlock_lock(&fs->spinlock);
+    // Allocate the cache.
+    uint8_t *cache = kmem_cache_alloc(fs->ext2_buffer_cache, GFP_KERNEL);
+    // Clean the cache.
+    memset(cache, 0, fs->block_size);
+    // Search for a free inode.
+    if (!ext2_find_free_inode(fs, cache, &group_index, &linear_index, preferred_group)) {
+        pr_warning("Failed to find a free inode.\n");
+        // Unlock the filesystem.
+        spinlock_unlock(&fs->spinlock);
+        // Free the cache.
+        kmem_cache_free(cache);
+        return 0;
+    }
+    // Compute the inode index.
+    inode_index = (group_index * fs->superblock.inodes_per_group) + linear_index + 1U;
+    // Set the inode as occupied.
+    ext2_set_bitmap_bit(cache, linear_index, ext2_block_status_occupied);
+    // Write back the inode bitmap.
+    ext2_write_block(fs, fs->block_groups[group_index].inode_bitmap, cache);
+    // Free the cache.
+    kmem_cache_free(cache);
+    // Reduce the number of free inodes.
+    fs->block_groups[group_index].free_inodes_count -= 1;
+    // Update the bgdt.
+    ext2_write_bgdt(fs);
+    // Reduce the number of inodes inside the superblock.
+    fs->superblock.free_inodes_count -= 1;
+    // Update the superblock.
+    ext2_write_superblock(fs);
+    // Unlock the filesystem.
+    spinlock_unlock(&fs->spinlock);
+    // Return the inode.
+    return inode_index;
 }
 
 /// @brief Allocates a new block.
@@ -809,48 +990,32 @@ static int ext2_write_inode(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t
 /// @return 0 on failure, or the index of the new block on success.
 static uint32_t ext2_allocate_block(ext2_filesystem_t *fs)
 {
-    uint32_t group_index, block_index, linear_index;
+    uint32_t group_index = 0, linear_index = 0, block_index = 0;
     // Lock the filesystem.
     spinlock_lock(&fs->spinlock);
     // Allocate the cache.
     uint8_t *cache = kmem_cache_alloc(fs->ext2_buffer_cache, GFP_KERNEL);
     // Clean the cache.
     memset(cache, 0, fs->block_size);
-    // Get the group and bit index of the first free block.
-    for (group_index = 0; group_index < fs->block_groups_count; ++group_index) {
-        // Check if there are free blocks in this block group.
-        if (fs->block_groups[group_index].free_blocks_count > 0) {
-            // Read the block bitmap.
-            ext2_read_block(fs, fs->block_groups[group_index].block_bitmap, cache);
-            // Find the first free block.
-            for (linear_index = 0; linear_index < fs->block_size; ++linear_index) {
-                // We found a free block.
-                if (!ext2_check_block_bit(cache, linear_index)) {
-                    // Compute the block index.
-                    block_index = (fs->superblock.blocks_per_group * group_index) + linear_index;
-                    break;
-                }
-            }
-            if (block_index != 0)
-                break;
-        }
+    // Search for a free block.
+    if (!ext2_find_free_block(fs, cache, &group_index, &linear_index)) {
+        pr_warning("Failed to find a free block.\n");
+        // Unlock the filesystem.
+        spinlock_unlock(&fs->spinlock);
+        // Free the cache.
+        kmem_cache_free(cache);
+        return 0;
     }
-    // Check if we have found a free block.
-    if (block_index == 0) {
-        pr_err("Cannot find a free block.\n");
-        goto free_cache_return_error;
-    }
+    // Compute the block index.
+    block_index = (group_index * fs->superblock.blocks_per_group) + linear_index;
     // Set the block as occupied.
-    ext2_set_block_bit(cache, linear_index, ext2_block_status_occupied);
+    ext2_set_bitmap_bit(cache, linear_index, ext2_block_status_occupied);
     // Update the bitmap.
     ext2_write_block(fs, fs->block_groups[group_index].block_bitmap, cache);
     // Decrease the number of free blocks inside the BGDT entry.
     fs->block_groups[group_index].free_blocks_count -= 1;
     // Update the BGDT.
-    if (ext2_write_bgdt(fs) == -1) {
-        pr_err("Cannot allocate the block.\n");
-        goto free_cache_return_error;
-    }
+    ext2_write_bgdt(fs);
     // Decrease the number of free blocks inside the superblock.
     fs->superblock.free_blocks_count -= 1;
     // Update the superblock.
@@ -863,12 +1028,6 @@ static uint32_t ext2_allocate_block(ext2_filesystem_t *fs)
     // Unlock the spinlock.
     spinlock_unlock(&fs->spinlock);
     return block_index;
-free_cache_return_error:
-    // Free the cache.
-    kmem_cache_free(cache);
-    // Unlock the spinlock.
-    spinlock_unlock(&fs->spinlock);
-    return 0;
 }
 
 /// @brief Sets the real block index based on the block index inside an inode.
@@ -1351,16 +1510,18 @@ free_cache_return_error:
     return -1;
 }
 
+static int ext2_allocate_direntry(ext2_filesystem_t *fs, vfs_file_t *parent, char *name, uint32_t inode_index)
+{
+    pr_err("Not implemented yet.\n");
+    return -1;
+}
+
 /// @brief Finds the entry with the given `name` inside the `directory`.
 /// @param directory the directory in which we perform the search.
 /// @param name the name of the entry we are looking for.
 /// @param search the output variable where we save the info about the entry.
 /// @return 0 on success, -1 on failure.
-static int ext2_find_entry(
-    ext2_filesystem_t *fs,
-    ino_t ino,
-    const char *name,
-    ext2_direntry_search_t *search)
+static int ext2_find_entry(ext2_filesystem_t *fs, ino_t ino, const char *name, ext2_direntry_search_t *search)
 {
     if (fs == NULL) {
         pr_err("You provided a NULL filesystem.\n");
@@ -1388,7 +1549,7 @@ static int ext2_find_entry(
         pr_err("Failed to read the inode (%d).\n", ino);
         goto free_cache_return_error;
     }
-    uint32_t block_index = 0, dir_offset = 0, total_offset = 0;
+    uint32_t block_index = 0, block_offset = 0, total_offset = 0;
     ext2_dirent_t *entry = NULL;
     // Start by reading the first block of the inode.
     if (!ext2_read_inode_block(fs, &inode, block_index, cache)) {
@@ -1398,11 +1559,11 @@ static int ext2_find_entry(
     // Keep reading until we searched the whole inode.
     while (total_offset < inode.size) {
         // If we exceed the size of a block, move to the next block.
-        if (dir_offset >= fs->block_size) {
+        if (block_offset >= fs->block_size) {
             // Increase the block index.
             ++block_index;
             // Remove the exceeding size, so that we start correctly in the new block.
-            dir_offset -= fs->block_size;
+            block_offset -= fs->block_size;
             // Read the new block.
             if (!ext2_read_inode_block(fs, &inode, block_index, cache)) {
                 pr_err("Failed to read the inode block `%d`\n", block_index);
@@ -1410,7 +1571,7 @@ static int ext2_find_entry(
             }
         }
         // Get the directory entry.
-        entry = (ext2_dirent_t *)((uintptr_t)cache + dir_offset);
+        entry = (ext2_dirent_t *)((uintptr_t)cache + block_offset);
         if (!strcmp(entry->name, ".") && !strcmp(name, "/")) {
             break;
         }
@@ -1419,11 +1580,14 @@ static int ext2_find_entry(
             if (!strncmp(entry->name, name, entry->name_len))
                 break;
         // Advance the offsets.
-        dir_offset += entry->rec_len;
+        block_offset += entry->rec_len;
         total_offset += entry->rec_len;
         // Reset the direntry pointer.
         entry = NULL;
     }
+    // Copy the inode of the parent, even if we did not find the entry.
+    search->parent_inode = ino;
+    // Check if we have found the entry.
     if (entry == NULL)
         goto free_cache_return_error;
     // Copy the direntry.
@@ -1431,9 +1595,7 @@ static int ext2_find_entry(
     // Copy the index of the block containing the direntry.
     search->block_index = block_index;
     // Copy the offset of the direntry inside the block.
-    search->dir_offset = dir_offset;
-    // Copy the inode of the parent.
-    search->parent_inode = ino;
+    search->block_offset = block_offset;
     // Free the cache.
     kmem_cache_free(cache);
     return 0;
@@ -1516,9 +1678,10 @@ static int ext2_resolve_path_direntry(vfs_file_t *directory, char *path, ext2_di
     ext2_direntry_search_t search;
     memset(&search, 0, sizeof(ext2_direntry_search_t));
     // Initialize the search structure.
-    search.direntry    = direntry;
-    search.block_index = 0;
-    search.dir_offset  = 0;
+    search.direntry     = direntry;
+    search.block_index  = 0;
+    search.block_offset = 0;
+    search.parent_inode = 0;
     return ext2_resolve_path(directory, path, &search);
 }
 
@@ -1527,7 +1690,7 @@ static int ext2_resolve_path_direntry(vfs_file_t *directory, char *path, ext2_di
 /// @return a pointer to the EXT2 filesystem, NULL otherwise.
 static ext2_filesystem_t *get_ext2_filesystem(const char *absolute_path)
 {
-    pr_debug("get_ext2_filesystem(%s)\n", path);
+    pr_debug("get_ext2_filesystem(%s)\n", absolute_path);
     if (absolute_path == NULL) {
         pr_err("We received a NULL absolute path.\n");
         return NULL;
@@ -1655,9 +1818,99 @@ static int ext2_init_file(ext2_filesystem_t *fs, ext2_inode_t *inode, ext2_diren
     return 0;
 }
 
+static vfs_file_t *ext2_find_vfs_file_with_inode(ext2_filesystem_t *fs, ino_t inode)
+{
+    vfs_file_t *file = NULL;
+    if (!list_head_empty(&fs->opened_files)) {
+        list_for_each_decl(it, &fs->opened_files)
+        {
+            // Get the file structure.
+            file = list_entry(it, vfs_file_t, siblings);
+            if (file && (file->ino == inode))
+                return file;
+        }
+    }
+    return NULL;
+}
+
 // ============================================================================
 // Virtual FileSystem (VFS) Functions
 // ============================================================================
+
+static vfs_file_t *ext2_creat(vfs_file_t *parent, const char *name, mode_t mode)
+{
+    pr_err("Not implemented yet.\n");
+#if 0
+    // Get the filesystem.
+    ext2_filesystem_t *fs = (ext2_filesystem_t *)parent->device;
+    if (fs == NULL) {
+        pr_err("The parent does not belong to an EXT2 filesystem `%s`.\n", parent->name);
+        return NULL;
+    }
+    task_struct *task = scheduler_get_current_process();
+    if (task == NULL) {
+        pr_err("Failed to get the current running process.\n");
+        return NULL;
+    }
+    // Allocate an inode for it (TODO: Use the parent block hint).
+    ino_t inode_index = ext2_allocate_inode(fs, 0);
+    if (inode_index == 0) {
+        pr_err("Failed to allocate a new inode for `%s`.\n", name);
+        return NULL;
+    }
+    // Prepare the structure for the inode.
+    ext2_inode_t inode;
+    memset(&inode, 0, sizeof(ext2_inode_t));
+    // Get the inode associated with the directory entry.
+    if (ext2_read_inode(fs, &inode, inode_index) == -1) {
+        pr_err("Failed to read the newly created inode for `%s`.\n", name);
+        return NULL;
+    }
+    // Set the file mode.
+    inode.mode = EXT2_S_IFREG | (0xFFF & mode);
+    // Set the user identifiers of the owners.
+    inode.uid = task->uid;
+    // Set the size of the file in bytes.
+    inode.size = 0;
+    // Set the time that the inode was accessed.
+    inode.atime = sys_time(NULL);
+    // Set the time that the inode was created.
+    inode.ctime = inode.atime;
+    // Set the time that the inode was modified the last time.
+    inode.mtime = inode.atime;
+    // Set the time that the inode was deleted.
+    inode.dtime = 0;
+    // Set the group identifiers of the owners.
+    inode.gid = task->gid;
+    // Set the number of hard links.
+    inode.links_count = 1;
+    // Set the blocks count.
+    inode.blocks_count = 0;
+    // Set the file flags.
+    inode.flags = 0;
+    // Set the OS dependant value.
+    inode.osd1 = 0;
+    // Set the blocks data.
+    memset(&inode.data, 0, sizeof(inode.data));
+    // Set the value used to indicate the file version (used by NFS).
+    inode.generation = 0;
+    // TODO: The value indicating the block number containing the extended attributes.
+    inode.file_acl = 0;
+    // TODO: For regular files this 32bit value contains the high 32 bits of the 64bit file size.
+    inode.dir_acl = 0;
+    // TODO:Value indicating the location of the file fragment.
+    inode.fragment_addr = 0;
+    // TODO: OS dependant structure.
+    memset(&inode.osd2, 0, sizeof(inode.osd2));
+
+    // Write the inode.
+    ext2_write_inode(fs, &inode, inode_index);
+
+    // Initialize the file.
+    ext2_allocate_direntry(fs, parent, name, inode_index);
+#endif
+    return NULL;
+}
 
 /// @brief Open the file at the given path and returns its file descriptor.
 /// @param path  The path to the file.
@@ -1683,29 +1936,76 @@ static vfs_file_t *ext2_open(const char *path, int flags, mode_t mode)
     // Prepare the structure for the direntry.
     ext2_dirent_t direntry;
     memset(&direntry, 0, sizeof(ext2_dirent_t));
-    // Resolve the path.
-    if (ext2_resolve_path_direntry(fs->root, absolute_path, &direntry) == -1) {
-        pr_err("Failed to resolve absolute path `%s`.\n", absolute_path);
-        return NULL;
+    // Prepare the structure for the search.
+    ext2_direntry_search_t search;
+    memset(&search, 0, sizeof(ext2_direntry_search_t));
+    // Initialize the search structure.
+    search.direntry     = &direntry;
+    search.block_index  = 0;
+    search.block_offset = 0;
+    search.parent_inode = 0;
+    // First check, if a file with the given name already exists.
+    if (!ext2_resolve_path(fs->root, absolute_path, &search)) {
+        if (bitmask_check(flags, O_CREAT | O_EXCL)) {
+            pr_err("A file at `%s` already exists (O_CREAT | O_EXCL).\n", absolute_path);
+            return NULL;
+        }
+    } else {
+        // If we need to create it, it's ok if it does not exist.
+        if (bitmask_check(flags, O_CREAT)) {
+            pr_warning("We want to create a new file at `%s`.\n", path);
+            pr_warning("The inode of the parent is `%d`.\n", search.parent_inode);
+#if 0
+            // Prepare the structure for the inode.
+            ext2_inode_t parent_inode;
+            memset(&parent_inode, 0, sizeof(ext2_inode_t));
+            // Get the inode associated with the directory entry.
+            if (ext2_read_inode(fs, &parent_inode, search.parent_inode) == -1) {
+                pr_err("Failed to read the inode of the parent `%d`.\n", search.parent_inode);
+                return NULL;
+            }
+            // Search for the parent VFS file.
+            vfs_file_t *parent = ext2_find_vfs_file_with_inode(fs, search.parent_inode);
+            if (parent == NULL) {
+                // Allocate the memory for the parent file.
+                parent = kmem_cache_alloc(vfs_file_cache, GFP_KERNEL);
+                if (parent == NULL) {
+                    pr_err("Failed to allocate memory for the parent.\n");
+                    return NULL;
+                }
+                if (ext2_init_file(fs, &parent_inode, &direntry, parent) == -1) {
+                    pr_err("Failed to properly set the VFS file.\n");
+                    kmem_cache_free(parent);
+                    return NULL;
+                }
+                // Add the vfs_file to the list of associated files.
+                list_head_add_tail(&parent->siblings, &fs->opened_files);
+                // Create the file.
+                vfs_file_t *new_file = ext2_creat(parent, basename(path), mode);
+                // Remove the parent from the list of opened VFS files.
+                list_head_del(&parent->siblings);
+                // Destroy the VFS file.
+                kmem_cache_free(parent);
+                return new_file;
+            } else {
+                return ext2_creat(parent, basename(path), mode);
+            }
+#endif
+            return NULL;
+        } else {
+            pr_err("Failed to resolve absolute path `%s`.\n", absolute_path);
+            return NULL;
+        }
     }
-    // Get the inode associated with the directory entry.
+    // Prepare the structure for the inode.
     ext2_inode_t inode;
+    memset(&inode, 0, sizeof(ext2_inode_t));
+    // Get the inode associated with the directory entry.
     if (ext2_read_inode(fs, &inode, direntry.inode) == -1) {
         pr_err("Failed to read the inode of `%s`.\n", direntry.name);
         return NULL;
     }
-    vfs_file_t *file = NULL;
-    if (!list_head_empty(&fs->opened_files)) {
-        list_for_each_decl(it, &fs->opened_files)
-        {
-            // Get the file structure.
-            vfs_file_t *opened_file = list_entry(it, vfs_file_t, siblings);
-            if (opened_file && (opened_file->ino == direntry.inode)) {
-                file = opened_file;
-                break;
-            }
-        }
-    }
+    vfs_file_t *file = ext2_find_vfs_file_with_inode(fs, direntry.inode);
     if (file == NULL) {
         // Allocate the memory for the file.
         file = kmem_cache_alloc(vfs_file_cache, GFP_KERNEL);
@@ -1754,7 +2054,7 @@ static int ext2_unlink(const char *path)
     // Initialize the search structure.
     search.direntry     = &direntry;
     search.block_index  = 0;
-    search.dir_offset   = 0;
+    search.block_offset = 0;
     search.parent_inode = 0;
     // Resolve the path to the directory entry.
     if (ext2_resolve_path(fs->root, absolute_path, &search)) {
@@ -1776,7 +2076,7 @@ static int ext2_unlink(const char *path)
         goto free_cache_return_error;
     }
     // Get a pointer to the direntry.
-    ext2_dirent_t *actual_dirent = (ext2_dirent_t *)((uintptr_t)cache + search.dir_offset);
+    ext2_dirent_t *actual_dirent = (ext2_dirent_t *)((uintptr_t)cache + search.block_offset);
     if (actual_dirent == NULL) {
         pr_err("We found a NULL ext2_dirent_t\n");
         goto free_cache_return_error;
@@ -1788,7 +2088,7 @@ static int ext2_unlink(const char *path)
         pr_err("Failed to write the inode block `%d`\n", search.block_index);
         goto free_cache_return_error;
     }
-    // Read the inode of the actual direntry.
+    // Read the inode of the direntry we want to unlink.
     ext2_inode_t inode;
     if (ext2_read_inode(fs, &inode, direntry.inode) == -1) {
         pr_err("Failed to read the inode of `%s`.\n", direntry.name);
@@ -1998,7 +2298,7 @@ static int ext2_getdents(vfs_file_t *file, dirent_t *dirp, off_t doff, size_t co
         return -ENOENT;
     }
 
-    uint32_t block_index = 0, dir_offset = 0, total_offset = 0, written = 0;
+    uint32_t block_index = 0, block_offset = 0, total_offset = 0, written = 0;
     off_t current           = 0;
     ext2_dirent_t *direntry = NULL;
     // Allocate the cache.
@@ -2015,11 +2315,11 @@ static int ext2_getdents(vfs_file_t *file, dirent_t *dirp, off_t doff, size_t co
     // Keep reading until we searched the whole inode.
     while ((total_offset < inode.size) && (written < count)) {
         // If we exceed the size of a block, move to the next block.
-        if (dir_offset >= fs->block_size) {
+        if (block_offset >= fs->block_size) {
             // Increase the block index.
             ++block_index;
             // Remove the exceeding size, so that we start correctly in the new block.
-            dir_offset -= fs->block_size;
+            block_offset -= fs->block_size;
             // Read the new block.
             if (!ext2_read_inode_block(fs, &inode, block_index, cache)) {
                 pr_err("Failed to read the inode block `%d`\n", block_index);
@@ -2027,14 +2327,14 @@ static int ext2_getdents(vfs_file_t *file, dirent_t *dirp, off_t doff, size_t co
             }
         }
         // Get the directory entry.
-        direntry = (ext2_dirent_t *)((uintptr_t)cache + dir_offset);
+        direntry = (ext2_dirent_t *)((uintptr_t)cache + block_offset);
         if (direntry == NULL) {
             pr_err("We found a NULL ext2_dirent_t\n");
             goto free_cache_return_error;
         }
 
         // Advance the offsets.
-        dir_offset += direntry->rec_len;
+        block_offset += direntry->rec_len;
         total_offset += direntry->rec_len;
 
         // Skip if already provided.
