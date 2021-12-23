@@ -1615,7 +1615,7 @@ static int ext2_allocate_direntry(ext2_filesystem_t *fs, vfs_file_t *parent, cha
 /// @param name the name of the entry we are looking for.
 /// @param search the output variable where we save the info about the entry.
 /// @return 0 on success, -1 on failure.
-static int ext2_find_entry(ext2_filesystem_t *fs, ino_t ino, const char *name, ext2_direntry_search_t *search)
+static int ext2_find_direntry(ext2_filesystem_t *fs, ino_t ino, const char *name, ext2_direntry_search_t *search)
 {
     if (fs == NULL) {
         pr_err("You provided a NULL filesystem.\n");
@@ -1633,7 +1633,7 @@ static int ext2_find_entry(ext2_filesystem_t *fs, ino_t ino, const char *name, e
         pr_err("You provided a NULL direntry.\n");
         return -1;
     }
-    pr_debug("ext2_find_entry(ino: %d, name: \"%s\")\n", ino, name);
+    pr_debug("ext2_find_direntry(ino: %d, name: \"%s\")\n", ino, name);
     // Allocate the cache.
     uint8_t *cache = kmem_cache_alloc(fs->ext2_buffer_cache, GFP_KERNEL);
     // Clean the cache.
@@ -1660,16 +1660,19 @@ static int ext2_find_entry(ext2_filesystem_t *fs, ino_t ino, const char *name, e
     // Check if we have found the entry.
     if (it.direntry == NULL)
         goto free_cache_return_error;
-    pr_debug("ext2_find_entry(ino: %d, name: \"%s\") -> (ino: %d, name: \"%s\")\n",
-             ino, name, it.direntry->inode, it.direntry->name);
     // Copy the direntry.
     memcpy(search->direntry, it.direntry, sizeof(ext2_dirent_t));
+    // Close the name.
+    search->direntry->name[search->direntry->name_len] = 0;
     // Copy the index of the block containing the direntry.
     search->block_index = it.block_index;
     // Copy the offset of the direntry inside the block.
     search->block_offset = it.block_offset;
     // Free the cache.
     kmem_cache_free(cache);
+
+    pr_debug("ext2_find_direntry(ino: %d, name: \"%s\") -> (ino: %d, name: \"%s\")\n",
+             ino, name, search->direntry->inode, search->direntry->name);
     return 0;
 free_cache_return_error:
     // Free the cache.
@@ -1710,12 +1713,12 @@ static int ext2_resolve_path(vfs_file_t *directory, char *path, ext2_direntry_se
     }
     // If the path is `/`.
     if (strcmp(path, "/") == 0)
-        return ext2_find_entry(fs, directory->ino, path, search);
+        return ext2_find_direntry(fs, directory->ino, path, search);
     ino_t ino      = directory->ino;
     char *tmp_path = strdup(path);
     char *token    = strtok(tmp_path, "/");
     while (token) {
-        if (!ext2_find_entry(fs, ino, token, search)) {
+        if (!ext2_find_direntry(fs, ino, token, search)) {
             ino = search->direntry->inode;
         } else {
             memset(search->direntry, 0, sizeof(ext2_dirent_t));
@@ -2012,47 +2015,21 @@ static vfs_file_t *ext2_open(const char *path, int flags, mode_t mode)
     } else {
         // If we need to create it, it's ok if it does not exist.
         if (bitmask_check(flags, O_CREAT)) {
-            pr_warning("We want to create a new file at `%s`.\n", path);
-            pr_warning("The inode of the parent is `%d`.\n", search.parent_inode);
-#if 0
-            // Prepare the structure for the inode.
-            ext2_inode_t parent_inode;
-            memset(&parent_inode, 0, sizeof(ext2_inode_t));
-            // Get the inode associated with the directory entry.
-            if (ext2_read_inode(fs, &parent_inode, search.parent_inode) == -1) {
-                pr_err("Failed to read the inode of the parent `%d`.\n", search.parent_inode);
-                return NULL;
-            }
-            // Search for the parent VFS file.
-            vfs_file_t *parent = ext2_find_vfs_file_with_inode(fs, search.parent_inode);
-            if (parent == NULL) {
-                // Allocate the memory for the parent file.
-                parent = kmem_cache_alloc(vfs_file_cache, GFP_KERNEL);
-                if (parent == NULL) {
-                    pr_err("Failed to allocate memory for the parent.\n");
-                    return NULL;
+            // Get the name of the directory.
+            char *parent_path = dirname(path);
+            if (strcmp(parent_path, path)) {
+                // Get the parent VFS node.
+                vfs_file_t *parent = ext2_open(parent_path, O_RDONLY, 0);
+                if (parent) {
+                    // Create the file.
+                    ext2_creat(parent, basename(path), mode);
+                    // Close the parent directory.
+                    ext2_close(parent);
                 }
-                if (ext2_init_vfs_file(fs, &parent_inode, &direntry, parent) == -1) {
-                    pr_err("Failed to properly set the VFS file.\n");
-                    kmem_cache_free(parent);
-                    return NULL;
-                }
-                // Add the vfs_file to the list of associated files.
-                list_head_add_tail(&parent->siblings, &fs->opened_files);
-                // Create the file.
-                vfs_file_t *new_file = ext2_creat(parent, basename(path), mode);
-                // Remove the parent from the list of opened VFS files.
-                list_head_del(&parent->siblings);
-                // Destroy the VFS file.
-                kmem_cache_free(parent);
-                return new_file;
-            } else {
-                return ext2_creat(parent, basename(path), mode);
             }
-#endif
             return NULL;
         } else {
-            pr_err("Failed to resolve absolute path `%s`.\n", absolute_path);
+            pr_err("The file does not exist `%s`.\n", absolute_path);
             return NULL;
         }
     }

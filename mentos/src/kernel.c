@@ -34,6 +34,7 @@
 #include "assert.h"
 #include "io/vga/vga.h"
 #include "string.h"
+#include "fcntl.h"
 
 /// Describe start address of grub multiboot modules.
 char *module_start[MAX_MODULES];
@@ -348,6 +349,10 @@ int kmain(boot_info_t *boot_informations)
         return 1;
     }
     print_ok();
+
+    vfs_file_t *file = vfs_open("/home/test.txt", O_CREAT | O_EXCL, 0);
+
+    while (true) {}
 
     // We have completed the booting procedure.
     pr_notice("Booting done, jumping into init process.\n");
