@@ -1458,7 +1458,7 @@ static ssize_t ext2_write_inode_data(ext2_filesystem_t *fs, ext2_inode_t *inode,
         // Read the real block.
         if (ext2_read_inode_block(fs, inode, start_block, cache) == -1) {
             pr_err("Failed to read the inode block `%d`\n", start_block);
-            goto free_cache_return_error;
+            //goto free_cache_return_error;
         }
         // Copy the content back to the buffer.
         memcpy((uint8_t *)(((uintptr_t)cache) + ((uintptr_t)offset % fs->block_size)), buffer, size_to_write);
@@ -1473,7 +1473,7 @@ static ssize_t ext2_write_inode_data(ext2_filesystem_t *fs, ext2_inode_t *inode,
             // Read the real block.
             if (ext2_read_inode_block(fs, inode, block_offset, cache) == -1) {
                 pr_err("Failed to read the inode block `%d`\n", block_offset);
-                goto free_cache_return_error;
+                //goto free_cache_return_error;
             }
             if (block_offset == start_block) {
                 // Copy the content back to the buffer.
@@ -1492,7 +1492,7 @@ static ssize_t ext2_write_inode_data(ext2_filesystem_t *fs, ext2_inode_t *inode,
             // Read the real block.
             if (ext2_read_inode_block(fs, inode, end_block, cache) == -1) {
                 pr_err("Failed to read the inode block `%d`\n", block_offset);
-                goto free_cache_return_error;
+                //goto free_cache_return_error;
             }
             // Copy the content back to the buffer.
             memcpy(cache, buffer + fs->block_size * blocks_read - (offset % fs->block_size), end_size);
