@@ -298,7 +298,7 @@ typedef struct ext2_dirent_t {
     /// File type code.
     uint8_t file_type;
     /// File name.
-    char name[];
+    char name[EXT2_NAME_LEN];
 } ext2_dirent_t;
 
 /// @brief The details regarding the filesystem.
@@ -1633,6 +1633,7 @@ static int ext2_find_entry(ext2_filesystem_t *fs, ino_t ino, const char *name, e
         pr_err("You provided a NULL direntry.\n");
         return -1;
     }
+    pr_debug("ext2_find_entry(ino: %d, name: \"%s\")\n", ino, name);
     // Allocate the cache.
     uint8_t *cache = kmem_cache_alloc(fs->ext2_buffer_cache, GFP_KERNEL);
     // Clean the cache.
@@ -1659,6 +1660,8 @@ static int ext2_find_entry(ext2_filesystem_t *fs, ino_t ino, const char *name, e
     // Check if we have found the entry.
     if (it.direntry == NULL)
         goto free_cache_return_error;
+    pr_debug("ext2_find_entry(ino: %d, name: \"%s\") -> (ino: %d, name: \"%s\")\n",
+             ino, name, it.direntry->inode, it.direntry->name);
     // Copy the direntry.
     memcpy(search->direntry, it.direntry, sizeof(ext2_dirent_t));
     // Copy the index of the block containing the direntry.
@@ -1681,7 +1684,6 @@ free_cache_return_error:
 /// @return 0 on success, -1 on failure.
 static int ext2_resolve_path(vfs_file_t *directory, char *path, ext2_direntry_search_t *search)
 {
-    pr_debug("ext2_resolve_path(%s, %s, %p)\n", directory->name, path, search);
     // Check the pointers.
     if (directory == NULL) {
         pr_err("You provided a NULL directory.\n");
@@ -1699,6 +1701,7 @@ static int ext2_resolve_path(vfs_file_t *directory, char *path, ext2_direntry_se
         pr_err("You provided a NULL direntry.\n");
         return -1;
     }
+    pr_debug("ext2_resolve_path(directory: \"%s\", path: \"%s\")\n", directory->name, path);
     // Get the filesystem.
     ext2_filesystem_t *fs = (ext2_filesystem_t *)directory->device;
     if (fs == NULL) {
@@ -1708,17 +1711,22 @@ static int ext2_resolve_path(vfs_file_t *directory, char *path, ext2_direntry_se
     // If the path is `/`.
     if (strcmp(path, "/") == 0)
         return ext2_find_entry(fs, directory->ino, path, search);
-    ino_t ino   = directory->ino;
-    char *token = strtok(path, "/");
+    ino_t ino      = directory->ino;
+    char *tmp_path = strdup(path);
+    char *token    = strtok(tmp_path, "/");
     while (token) {
         if (!ext2_find_entry(fs, ino, token, search)) {
             ino = search->direntry->inode;
         } else {
             memset(search->direntry, 0, sizeof(ext2_dirent_t));
+            kfree(tmp_path);
             return -1;
         }
         token = strtok(NULL, "/");
     }
+    kfree(tmp_path);
+    pr_debug("ext2_resolve_path(directory: \"%s\", path: \"%s\") -> (ino: %d, name: \"%s\")\n",
+             directory->name, path, search->direntry->inode, search->direntry->name);
     return 0;
 }
 
@@ -1792,57 +1800,6 @@ static ext2_filesystem_t *get_ext2_filesystem(const char *absolute_path)
     return fs;
 }
 
-/// @brief Sets the filesystem root.
-/// @param fs the filesystem.
-/// @param inode the inode we use to initialize the root of the filesystem.
-/// @return 0 on success, -1 on failure.
-static int ext2_init_root(ext2_filesystem_t *fs, ext2_inode_t *inode, const char *path)
-{
-    // Information for root dir.
-    fs->root->device = (void *)fs;
-    fs->root->ino    = 2;
-    // Copy the path where the root is mounted.
-    strcpy(fs->root->name, path);
-    // Information from the inode.
-    fs->root->uid    = inode->uid;
-    fs->root->gid    = inode->gid;
-    fs->root->length = inode->size;
-    fs->root->mask   = inode->mode & 0xFFF;
-    fs->root->nlink  = inode->links_count;
-    // File flags.
-    fs->root->flags = 0;
-    if ((inode->mode & EXT2_S_IFREG) == EXT2_S_IFREG) {
-        pr_err("The root inode is a regular file.\n");
-        return -1;
-    }
-    if ((inode->mode & EXT2_S_IFDIR) == EXT2_S_IFDIR) {
-        fs->root->flags |= DT_DIR;
-    } else {
-        pr_err("The root inode is not a directory.\n");
-        return -1;
-    }
-    if ((inode->mode & EXT2_S_IFBLK) == EXT2_S_IFBLK) {
-        fs->root->flags |= DT_BLK;
-    }
-    if ((inode->mode & EXT2_S_IFCHR) == EXT2_S_IFCHR) {
-        fs->root->flags |= DT_CHR;
-    }
-    if ((inode->mode & EXT2_S_IFIFO) == EXT2_S_IFIFO) {
-        fs->root->flags |= DT_FIFO;
-    }
-    if ((inode->mode & EXT2_S_IFLNK) == EXT2_S_IFLNK) {
-        fs->root->flags |= DT_LNK;
-    }
-    fs->root->atime          = inode->atime;
-    fs->root->mtime          = inode->mtime;
-    fs->root->ctime          = inode->ctime;
-    fs->root->sys_operations = &ext2_sys_operations;
-    fs->root->fs_operations  = &ext2_fs_operations;
-    // Initialize the list of siblings.
-    list_head_init(&fs->root->siblings);
-    return 0;
-}
-
 static int ext2_init_vfs_file(
     ext2_filesystem_t *fs,
     vfs_file_t *file,
@@ -1855,7 +1812,8 @@ static int ext2_init_vfs_file(
     file->device = (void *)fs;
     file->ino    = inode_index;
     // Copy the name
-    memcpy(&file->name, name, name_len);
+    memcpy(file->name, name, name_len);
+    file->name[name_len] = 0;
     // Information from the inode.
     file->uid    = inode->uid;
     file->gid    = inode->gid;
@@ -1889,6 +1847,8 @@ static int ext2_init_vfs_file(
     file->fs_operations  = &ext2_fs_operations;
     // Initialize the list of siblings.
     list_head_init(&file->siblings);
+
+    pr_debug("ext2_init_vfs_file : [%d] `%s` (%s) (name len : %d)\n", file->ino, file->name, name, strlen(name));
     return 0;
 }
 
@@ -2018,7 +1978,7 @@ static vfs_file_t *ext2_creat(vfs_file_t *parent, const char *name, mode_t mode)
 /// @return The file descriptor of the opened file, otherwise returns -1.
 static vfs_file_t *ext2_open(const char *path, int flags, mode_t mode)
 {
-    pr_debug("ext2_open(%s, %d, %d)\n", path, flags, mode);
+    pr_debug("ext2_open(path: \"%s\", flags: %d, mode: %d)\n", path, flags, mode);
     // Get the absolute path.
     char absolute_path[PATH_MAX];
     // If the first character is not the '/' then get the absolute path.
@@ -2119,6 +2079,8 @@ static vfs_file_t *ext2_open(const char *path, int flags, mode_t mode)
         // Add the vfs_file to the list of associated files.
         list_head_add_tail(&file->siblings, &fs->opened_files);
     }
+    pr_debug("ext2_open(path: \"%s\", flags: %d, mode: %d) -> file(ino: %d, name: \"%s\")\n",
+             path, flags, mode, file->ino, file->name);
     return file;
 }
 
@@ -2224,7 +2186,7 @@ static int ext2_close(vfs_file_t *file)
     if (file == fs->root) {
         return -1;
     }
-    pr_debug("ext2_close(%p) : Closing file `%s`\n", file, file->name);
+    pr_debug("ext2_close(ino: %d, file: \"%s\")\n", file->ino, file->name);
     // Remove the file from the list of opened files.
     list_head_del(&file->siblings);
     // Free the cache.
@@ -2581,7 +2543,11 @@ static vfs_file_t *ext2_mount(vfs_file_t *block_device, const char *path)
         // Free the block_buffer, the block_groups and the filesystem.
         goto free_block_buffer;
     }
-
+    if ((root_inode.mode & EXT2_S_IFDIR) != EXT2_S_IFDIR) {
+        pr_err("The root is not a directory.\n");
+        // Free the block_buffer, the block_groups and the filesystem.
+        goto free_block_buffer;
+    }
     // Allocate the memory for the root.
     fs->root = kmem_cache_alloc(vfs_file_cache, GFP_KERNEL);
     if (!fs->root) {
@@ -2589,8 +2555,7 @@ static vfs_file_t *ext2_mount(vfs_file_t *block_device, const char *path)
         // Free the block_buffer, the block_groups and the filesystem.
         goto free_block_buffer;
     }
-
-    if (ext2_init_root(fs, &root_inode, path) == -1) {
+    if (ext2_init_vfs_file(fs, fs->root, &root_inode, 2, path, strlen(path)) == -1) {
         pr_err("Failed to set the EXT2 root.\n");
         // Free the block_buffer, the block_groups and the filesystem.
         goto free_all;
