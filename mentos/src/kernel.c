@@ -350,7 +350,9 @@ int kmain(boot_info_t *boot_informations)
     }
     print_ok();
 
-    vfs_file_t *file = vfs_open("/home/test.txt", O_CREAT | O_EXCL, 0);
+    vfs_file_t *file1 = vfs_open("/home/test4.txt", O_CREAT | O_EXCL, 0);
+    vfs_file_t *file2 = vfs_open("/home/test5.txt", O_CREAT | O_EXCL, 0);
+    vfs_file_t *file3 = vfs_open("/home/test6.txt", O_CREAT | O_EXCL, 0);
 
     while (true) {}
 
