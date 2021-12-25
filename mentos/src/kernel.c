@@ -350,15 +350,7 @@ int kmain(boot_info_t *boot_informations)
     }
     print_ok();
 
-    vfs_file_t *file1 = vfs_open("/home/test4.txt", O_CREAT | O_EXCL, 0);
-    char buffer[512];
-    for (int i = 0; i < 512; ++i) {
-        buffer[i] = '0' + (i % 9);
-    }
-    vfs_write(file1, buffer, 0, 512);
-    vfs_close(file1);
-
-    while (true) {}
+    //ext2_test();
 
     // We have completed the booting procedure.
     pr_notice("Booting done, jumping into init process.\n");
