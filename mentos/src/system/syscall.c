@@ -63,8 +63,12 @@ void syscall_init()
     sys_call_table[__NR_getpid]         = (SystemCall)sys_getpid;
     sys_call_table[__NR_getsid]         = (SystemCall)sys_getsid;
     sys_call_table[__NR_setsid]         = (SystemCall)sys_setsid;
-    sys_call_table[__NR_getgid]         =(SystemCall)sys_getgid;
-    sys_call_table[__NR_setgid]         =(SystemCall)sys_setgid;
+    sys_call_table[__NR_getpgid]        = (SystemCall)sys_getpgid;
+    sys_call_table[__NR_setpgid]        = (SystemCall)sys_setpgid;
+    sys_call_table[__NR_getuid]         = (SystemCall)sys_getuid;
+    sys_call_table[__NR_setuid]         = (SystemCall)sys_setuid;
+    sys_call_table[__NR_getgid]         = (SystemCall)sys_getgid;
+    sys_call_table[__NR_setgid]         = (SystemCall)sys_setgid;
     sys_call_table[__NR_getppid]        = (SystemCall)sys_getppid;
     sys_call_table[__NR_sigaction]      = (SystemCall)sys_sigaction;
     sys_call_table[__NR_fork]           = (SystemCall)sys_fork;

@@ -1329,11 +1329,8 @@ static int ext2_allocate_inode_block(ext2_filesystem_t *fs, ext2_inode_t *inode,
 /// @return the amount of data we read, or negative value for an error.
 static ssize_t ext2_read_inode_block(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t block_index, uint8_t *buffer)
 {
-    if (block_index >= (inode->blocks_count / fs->blocks_per_block_count)) {
-        pr_err("Tried to read an invalid block `%d`, but inode only has %d\n",
-               block_index, (inode->blocks_count / fs->blocks_per_block_count));
+    if (block_index >= (inode->blocks_count / fs->blocks_per_block_count))
         return -1;
-    }
     // Get the real index.
     uint32_t real_index = ext2_get_real_block_index(fs, inode, block_index);
     if (real_index == 0)
@@ -1352,8 +1349,6 @@ static ssize_t ext2_read_inode_block(ext2_filesystem_t *fs, ext2_inode_t *inode,
 static ssize_t ext2_write_inode_block(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t inode_index, uint32_t block_index, uint8_t *buffer)
 {
     while (block_index >= (inode->blocks_count / fs->blocks_per_block_count)) {
-        pr_warning("Tried to read an invalid block `%d`, but inode only has %d!\n",
-                   block_index, (inode->blocks_count / fs->blocks_per_block_count));
         ext2_allocate_inode_block(fs, inode, inode_index, (inode->blocks_count / fs->blocks_per_block_count));
         ext2_write_inode(fs, inode, inode_index);
     }
@@ -1463,11 +1458,8 @@ static ssize_t ext2_write_inode_data(ext2_filesystem_t *fs, ext2_inode_t *inode,
     memset(cache, 0, fs->block_size);
 
     if (start_block == end_block) {
-        // Read the real block.
-        if (ext2_read_inode_block(fs, inode, start_block, cache) == -1) {
-            pr_err("Failed to read the inode block `%d`\n", start_block);
-            //goto free_cache_return_error;
-        }
+        // Read the real block, if we fail is not a problem.
+        ext2_read_inode_block(fs, inode, start_block, cache);
         // Copy the content back to the buffer.
         memcpy((uint8_t *)(((uintptr_t)cache) + ((uintptr_t)offset % fs->block_size)), buffer, size_to_write);
         // Write the block back.
@@ -1478,11 +1470,8 @@ static ssize_t ext2_write_inode_data(ext2_filesystem_t *fs, ext2_inode_t *inode,
     } else {
         uint32_t block_offset, blocks_read = 0;
         for (block_offset = start_block; block_offset < end_block; ++block_offset, ++blocks_read) {
-            // Read the real block.
-            if (ext2_read_inode_block(fs, inode, block_offset, cache) == -1) {
-                pr_err("Failed to read the inode block `%d`\n", block_offset);
-                //goto free_cache_return_error;
-            }
+            // Read the real block, if we fail is not a problem.
+            ext2_read_inode_block(fs, inode, block_offset, cache);
             if (block_offset == start_block) {
                 // Copy the content back to the buffer.
                 memcpy((uint8_t *)(((uintptr_t)cache) + ((uintptr_t)offset % fs->block_size)), buffer, fs->block_size - (offset % fs->block_size));
@@ -1497,11 +1486,8 @@ static ssize_t ext2_write_inode_data(ext2_filesystem_t *fs, ext2_inode_t *inode,
             }
         }
         if (end_size) {
-            // Read the real block.
-            if (ext2_read_inode_block(fs, inode, end_block, cache) == -1) {
-                pr_err("Failed to read the inode block `%d`\n", block_offset);
-                //goto free_cache_return_error;
-            }
+            // Read the real block, if we fail is not a problem.
+            ext2_read_inode_block(fs, inode, end_block, cache);
             // Copy the content back to the buffer.
             memcpy(cache, buffer + fs->block_size * blocks_read - (offset % fs->block_size), end_size);
             // Write the block back.
@@ -1606,6 +1592,13 @@ void ext2_direntry_iterator_next(ext2_direntry_iterator_t *iterator)
     }
     // Read the direntry.
     iterator->direntry = ext2_direntry_iterator_get(iterator);
+}
+
+static inline bool_t ext2_directory_is_empty(ext2_filesystem_t *fs, uint8_t *cache, ext2_inode_t *inode)
+{
+    if (ext2_read_inode_block(fs, inode, 0U, cache) == -1)
+        return true;
+    return ((ext2_dirent_t *)cache) == NULL;
 }
 
 // ============================================================================
@@ -2043,6 +2036,8 @@ static int ext2_create_inode(
         pr_err("Failed to read the newly created inode.\n");
         return -1;
     }
+    pr_debug("UID = %d\n", task->uid);
+    pr_debug("GID = %d\n", task->gid);
     // Set the inode mode.
     inode->mode = mode;
     // Set the user identifiers of the owners.
@@ -2703,9 +2698,8 @@ static int ext2_rmdir(const char *path)
         goto free_cache_return_error;
     }
     // Check if the directory is empty, if it enters the loop then it means it is not empty.
-    for (ext2_direntry_iterator_t it = ext2_direntry_iterator_begin(fs, cache, &inode);
-         ext2_direntry_iterator_valid(&it); ext2_direntry_iterator_next(&it)) {
-        pr_err("The directory is not empty.\n");
+    if (!ext2_directory_is_empty(fs, cache, &inode)) {
+        pr_err("The directory is not empty `%s`.\n", direntry.name);
         kmem_cache_free(cache);
         return -ENOTEMPTY;
     }
@@ -3066,6 +3060,6 @@ void ext2_test()
     ext2_mkdir("/home/pippo", EXT2_S_IRWXU | EXT2_S_IRGRP | EXT2_S_IXGRP | EXT2_S_IROTH | EXT2_S_IXOTH);
 
     ext2_rmdir("/home/pippo");
-    
+
     ext2_rmdir("/home");
 }

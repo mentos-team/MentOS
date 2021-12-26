@@ -82,9 +82,11 @@ typedef struct task_struct {
     pid_t pid;
     /// The session id of the process
     pid_t sid;
-    /// The Group Id of the process
+    /// The Process Group Id of the process
+    pid_t pgid;
+    /// The Group ID (GID) of the process
     pid_t gid;
-    /// The uid of the user owning the process.
+    /// The User ID (UID) of the user owning the process.
     pid_t uid;
     // -1 unrunnable, 0 runnable, >0 stopped.
     /// The current state of the process:

@@ -117,6 +117,19 @@ pid_t sys_getsid(pid_t pid);
 ///        Otherwise return -1 with errno : EPERM 
 pid_t sys_setsid();
 
+///@brief returns the Process Group ID (PGID) of the process specified by pid.
+/// If pid is zero, the process ID of the calling process is used.
+/// @param pid process of which we want to know the PGID.
+/// @return the PGID of the specified process.
+pid_t sys_getpgid(pid_t pid);
+
+/// @brief Sets the Process Group ID (PGID) of the process specified by pid.
+/// If pid is zero, the process ID of the calling process is used.
+/// @param pid process of which we want to set the PGID.
+/// @param pgid the PGID we want to set.
+/// @return returns zero. On error, -1 is returned, and errno is set appropriately.
+int sys_setpgid(pid_t pid, pid_t pgid);
+
 ///@brief returns the group ID of the calling process.
 ///@return GID of the current process
 pid_t sys_getgid();
@@ -124,12 +137,22 @@ pid_t sys_getgid();
 ///@brief sets the effective group ID of the calling process.
 ///@param pid process identifier to 
 ///@return On success, zero is returned.
-///        Otherwise returns -1 with errno set to :EINVAL or EPERM  
+///        Otherwise returns -1 with errno set to :EINVAL or EPERM.
 int sys_setgid(pid_t pid);
 
 /// @brief Returns the parent process ID (PPID) of the calling process.
 /// @return The parent process ID.
 pid_t sys_getppid();
+
+/// @brief Returns the User ID (UID) of the calling process.
+/// @return The User ID.
+uid_t sys_getuid();
+
+/// @brief Tries to set the User ID (UID) of the calling process.
+/// @param uid the new User ID.
+///@return On success, zero is returned.
+///        Otherwise returns -1 with errno set to :EINVAL or EPERM.
+int sys_setuid(uid_t uid);
 
 /// @brief Adds the increment to the priority value of the task.
 /// @param increment The modifier to apply to the nice value.

@@ -27,7 +27,7 @@ int main(int argc, char** argv)
     }
     int fd = open(argv[1], O_RDONLY, 0);
     if (fd < 0) {
-        fd = open(argv[1], O_CREAT, 0);
+        fd = open(argv[1], O_CREAT, S_IWUSR | S_IRUSR | S_IRGRP | S_IROTH);
         if (fd >= 0) {
             close(fd);
         }

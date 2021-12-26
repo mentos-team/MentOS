@@ -84,6 +84,19 @@ extern pid_t getsid(pid_t pid);
 ///        Otherwise return -1 with errno : EPERM 
 extern pid_t setsid();
 
+///@brief returns the Process Group ID (PGID) of the process specified by pid.
+/// If pid is zero, the process ID of the calling process is used.
+/// @param pid process of which we want to know the PGID.
+/// @return the PGID of the specified process.
+pid_t getpgid(pid_t pid);
+
+/// @brief Sets the Process Group ID (PGID) of the process specified by pid.
+/// If pid is zero, the process ID of the calling process is used.
+/// @param pid process of which we want to set the PGID.
+/// @param pgid the PGID we want to set.
+/// @return returns zero. On error, -1 is returned, and errno is set appropriately.
+int setpgid(pid_t pid, pid_t pgid);
+
 ///@brief returns the group ID of the calling process.
 ///@return GID of the current process
 extern pid_t getgid();
@@ -93,6 +106,16 @@ extern pid_t getgid();
 ///@return On success, zero is returned.
 ///        Otherwise returns -1 with errno set to :EINVAL or EPERM  
 extern int setgid(pid_t pid);
+
+///@brief Returns the User ID of the calling process.
+///@return User ID of the current process.
+extern uid_t getuid();
+
+///@brief Sets the effective User ID of the calling process.
+///@param uid the new User ID.
+///@return On success, zero is returned.
+///        Otherwise returns -1 with errno set to :EINVAL or EPERM  
+extern int setuid(uid_t uid);
 
 /// @brief Returns the parent process ID (PPID) of the calling process.
 /// @return pid_t parent process identifier.

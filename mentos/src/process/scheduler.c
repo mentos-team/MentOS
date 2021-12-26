@@ -259,7 +259,7 @@ wait_queue_entry_t *sleep_on(wait_queue_head_t *wq)
     return wait_entry;
 }
 
-int is_orphaned_pgrp(pid_t gid)
+int is_orphaned_pgrp(pid_t pgid)
 {
     pid_t sid = 0;
 
@@ -267,7 +267,7 @@ int is_orphaned_pgrp(pid_t gid)
     list_head *it;
     list_for_each (it, &runqueue.queue) {
         task_struct *task = list_entry(it, task_struct, run_list);
-        if (task->gid == gid) {
+        if (task->pgid == pgid) {
             sid = task->sid;
             break;
         }
@@ -309,11 +309,10 @@ pid_t sys_getsid(pid_t pid)
     list_head *it;
     list_for_each (it, &runqueue.queue) {
         task_struct *task = list_entry(it, task_struct, run_list);
-        if (task->pid == pid)
-        {
-            if(runqueue.curr->sid != task->sid)     
+        if (task->pid == pid) {
+            if (runqueue.curr->sid != task->sid)
                 return -EPERM;
-            
+
             return task->sid;
         }
     }
@@ -326,54 +325,83 @@ pid_t sys_setsid()
     if (task == NULL) {
         kernel_panic("There is no current process!");
     }
-    if (task->sid == task->pid)
-    {
+    if (task->sid == task->pid) {
         pr_debug("Process %d is already a session leader.", task->pid);
         return -EPERM;
     }
 
-    task->sid = task->pid;
-    task->gid = task->pid;
+    task->sid  = task->pid;
+    task->pgid = task->pid;
 
     return task->sid;
 }
 
+pid_t sys_getpgid(pid_t pid)
+{
+    task_struct *task = NULL;
+    if (pid == 0)
+        task = runqueue.curr;
+    else
+        task = scheduler_get_running_process(pid);
+    if (task)
+        return task->pgid;
+    return 0;
+}
+
+int sys_setpgid(pid_t pid, pid_t pgid)
+{
+    task_struct *task = NULL;
+    if (pid == 0)
+        task = runqueue.curr;
+    else
+        task = scheduler_get_running_process(pid);
+    if (task) {
+        if (task->pgid == task->pid)
+            pr_debug("Process %d is already a session leader.", task->pid);
+        task->pgid = pgid;
+    }
+    return 0;
+}
+
+uid_t sys_getuid()
+{
+    if (runqueue.curr)
+        return runqueue.curr->uid;
+    return -EPERM;
+}
+
+int sys_setuid(uid_t uid)
+{
+    if (runqueue.curr && (runqueue.curr->uid == 0)) {
+        runqueue.curr->uid = uid;
+        return 0;
+    }
+    return -EPERM;
+}
+
 pid_t sys_getgid()
 {
-    task_struct *curr = runqueue.curr;
-    if (curr == NULL) {
-        kernel_panic("There is no current process!");
+    if (runqueue.curr) {
+        return runqueue.curr->gid;
     }
-
-    return curr->gid;
+    return -EPERM;
 }
 
 int sys_setgid(pid_t gid)
 {
-    task_struct *curr = runqueue.curr;
-    if (curr == NULL) {
-        kernel_panic("There is no current process!");
+    if (runqueue.curr && (runqueue.curr->uid == 0)) {
+        runqueue.curr->gid = gid;
+        return 0;
     }
-
-    if (curr->gid == curr->pid)
-        pr_debug("Process %d is already a session leader.", task->pid);
-
-    curr->gid = curr->pid;
-    return 0;
+    return -EPERM;
 }
 
 pid_t sys_getppid()
 {
     // Get the current task.
-    if (runqueue.curr == NULL) {
-        kernel_panic("There is no current process!");
-    }
-    if (runqueue.curr->parent == NULL) {
-        return 0;
-    }
-
-    // Return the parent process identifer of the process.
-    return runqueue.curr->parent->pid;
+    if (runqueue.curr && runqueue.curr->parent)
+        return runqueue.curr->parent->pid;
+    return -EPERM;
 }
 
 int sys_nice(int increment)

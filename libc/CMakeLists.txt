@@ -89,8 +89,12 @@ add_library(
     ${PROJECT_SOURCE_DIR}/src/unistd/exit.c
     ${PROJECT_SOURCE_DIR}/src/unistd/setsid.c
     ${PROJECT_SOURCE_DIR}/src/unistd/getsid.c
+    ${PROJECT_SOURCE_DIR}/src/unistd/setpgid.c
+    ${PROJECT_SOURCE_DIR}/src/unistd/getpgid.c
     ${PROJECT_SOURCE_DIR}/src/unistd/setgid.c
     ${PROJECT_SOURCE_DIR}/src/unistd/getgid.c
+    ${PROJECT_SOURCE_DIR}/src/unistd/setuid.c
+    ${PROJECT_SOURCE_DIR}/src/unistd/getuid.c
     ${PROJECT_SOURCE_DIR}/src/unistd/fork.c
     ${PROJECT_SOURCE_DIR}/src/unistd/read.c
     ${PROJECT_SOURCE_DIR}/src/unistd/write.c

@@ -457,7 +457,7 @@ int do_signal(struct pt_regs *f)
             case SIGTSTP:
             case SIGTTIN:
             case SIGTTOU:
-                if (is_orphaned_pgrp(current->gid))
+                if (is_orphaned_pgrp(current->pgid))
                     continue;
 
             case SIGSTOP:

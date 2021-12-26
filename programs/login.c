@@ -183,6 +183,9 @@ int main(int argc, char **argv)
         return 1;
     }
 
+    setgid(pwd->pw_gid);
+    setuid(pwd->pw_uid);
+
     char *_argv[] = { pwd->pw_shell, (char *)NULL };
     if (execv(pwd->pw_shell, _argv) == -1) {
         printf("%s: Failed to execute the shell.\n", argv[0]);

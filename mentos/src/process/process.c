@@ -4,14 +4,12 @@
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "sys/kernel_levels.h"
-
 // Include the kernel log levels.
 #include "sys/kernel_levels.h"
 // Change the header.
 #define __DEBUG_HEADER__ "[PROC  ]"
 // Set the log level.
-#define __DEBUG_LEVEL__ LOGLEVEL_NOTICE
+#define __DEBUG_LEVEL__ LOGLEVEL_DEBUG
 
 #include "process/process.h"
 #include "process/scheduler.h"
@@ -180,8 +178,9 @@ static inline task_struct *__alloc_task(task_struct *source, task_struct *parent
         memcpy(&proc->thread, &source->thread, sizeof(thread_struct_t));
     // Set the statistics of the process.
     proc->uid                   = 0;
-    proc->sid                   = 0;
     proc->gid                   = 0;
+    proc->sid                   = 0;
+    proc->pgid                  = 0;
     proc->se.prio               = DEFAULT_PRIO;
     proc->se.start_runtime      = timer_get_ticks();
     proc->se.exec_start         = timer_get_ticks();
@@ -394,13 +393,15 @@ pid_t sys_fork(pt_regs *f)
     proc->thread.regs.eflags = proc->thread.regs.eflags | EFLAG_IF;
 
     // Copy session and group id of the parent into the child
-    proc->sid = current->sid;
-    proc->gid = current->gid;
+    proc->sid  = current->sid;
+    proc->pgid = current->pgid;
+    proc->uid  = current->uid;
+    proc->gid  = current->gid;
 
     // Active the new process.
     scheduler_enqueue_task(proc);
 
-    pr_debug("Forked    '%s' (pid: %d, gid: %d, sid: %d)...\n", proc->name, proc->pid, proc->gid, proc->sid);
+    pr_debug("Forked    '%s' (pid: %d, gid: %d, sid: %d, pgid: %d)...\n", proc->name, proc->pid, proc->gid, proc->sid, proc->pgid);
 
     // Return PID of child process to parent.
     return proc->pid;

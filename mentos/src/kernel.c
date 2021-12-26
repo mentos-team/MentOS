@@ -350,8 +350,6 @@ int kmain(boot_info_t *boot_informations)
     }
     print_ok();
 
-    //ext2_test();
-
     // We have completed the booting procedure.
     pr_notice("Booting done, jumping into init process.\n");
     // Print the welcome message.

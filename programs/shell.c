@@ -747,7 +747,7 @@ int main(int argc, char *argv[])
             if (cpid == 0) {
                 // Makes the new process a group leader
                 pid_t pid = getpid();
-                setgid(pid);
+                setpgid(cpid, pid);
 
                 if (execvp(_argv[0], _argv) == -1) {
                     printf("\nUnknown command: %s\n", _argv[0]);

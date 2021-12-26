@@ -5,6 +5,7 @@
 /// See LICENSE.md for details.
 
 #include <stdio.h>
+#include <fcntl.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <strerror.h>
@@ -23,7 +24,7 @@ int main(int argc, char *argv[])
         printf("    %s <directory>\n", argv[0]);
         return 0;
     }
-    if (mkdir(argv[1], 0)) {
+    if (mkdir(argv[1], S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH)) {
         printf("%s: cannot create directory '%s': %s\n", argv[0], argv[1], strerror(errno));
     }
     return 0;
