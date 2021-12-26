@@ -2649,6 +2649,101 @@ static int ext2_mkdir(const char *path, mode_t permission)
 
 static int ext2_rmdir(const char *path)
 {
+    pr_debug("ext2_unlink(%s)\n", path);
+    // Get the absolute path.
+    char absolute_path[PATH_MAX];
+    // If the first character is not the '/' then get the absolute path.
+    if (!realpath(path, absolute_path)) {
+        pr_err("Cannot get the absolute path for path `%s`.\n", path);
+        return -ENOENT;
+    }
+    // Get the name of the entry we want to unlink.
+    char *name = basename(absolute_path);
+    if (name == NULL) {
+        pr_err("Cannot get the basename from the absolute path `%s`.\n", absolute_path);
+        return -ENOENT;
+    }
+    // Get the EXT2 filesystem.
+    ext2_filesystem_t *fs = get_ext2_filesystem(absolute_path);
+    if (fs == NULL) {
+        pr_err("Failed to get the EXT2 filesystem for absolute path `%s`.\n", absolute_path);
+        return -ENOENT;
+    }
+    // Prepare the structure for the direntry.
+    ext2_dirent_t direntry;
+    memset(&direntry, 0, sizeof(ext2_dirent_t));
+    // Prepare the structure for the search.
+    ext2_direntry_search_t search;
+    memset(&search, 0, sizeof(ext2_direntry_search_t));
+    // Initialize the search structure.
+    search.direntry     = &direntry;
+    search.block_index  = 0;
+    search.block_offset = 0;
+    search.parent_inode = 0;
+    // Resolve the path to the directory entry.
+    if (ext2_resolve_path(fs->root, absolute_path, &search)) {
+        pr_err("Failed to resolve path `%s`.\n", absolute_path);
+        return -ENOENT;
+    }
+    // Get the inode associated with the parent directory entry.
+    ext2_inode_t parent_inode;
+    if (ext2_read_inode(fs, &parent_inode, search.parent_inode) == -1) {
+        pr_err("ext2_stat(%s): Failed to read the inode of parent of `%s`.\n", path, direntry.name);
+        return -ENOENT;
+    }
+
+    // Allocate the cache and clean it.
+    uint8_t *cache = kmem_cache_alloc(fs->ext2_buffer_cache, GFP_KERNEL);
+    memset(cache, 0, fs->block_size);
+
+    // Read the inode of the direntry we want to unlink.
+    ext2_inode_t inode;
+    if (ext2_read_inode(fs, &inode, direntry.inode) == -1) {
+        pr_err("Failed to read the inode of `%s`.\n", direntry.name);
+        goto free_cache_return_error;
+    }
+    // Check if the directory is empty, if it enters the loop then it means it is not empty.
+    for (ext2_direntry_iterator_t it = ext2_direntry_iterator_begin(fs, cache, &inode);
+         ext2_direntry_iterator_valid(&it); ext2_direntry_iterator_next(&it)) {
+        pr_err("The directory is not empty.\n");
+        kmem_cache_free(cache);
+        return -ENOTEMPTY;
+    }
+    // Reduce the number of links to the inode.
+    if (inode.links_count > 0) {
+        inode.links_count--;
+        // Update the inode.
+        if (ext2_write_inode(fs, &inode, direntry.inode) == -1) {
+            pr_err("Failed to update the inode of `%s`.\n", direntry.name);
+            goto free_cache_return_error;
+        }
+    }
+
+    // Read the block where the direntry resides.
+    if (ext2_read_inode_block(fs, &parent_inode, search.block_index, cache) == -1) {
+        pr_err("Failed to read the parent inode block `%d`\n", search.block_index);
+        goto free_cache_return_error;
+    }
+    // Get a pointer to the direntry.
+    ext2_dirent_t *actual_dirent = (ext2_dirent_t *)((uintptr_t)cache + search.block_offset);
+    if (actual_dirent == NULL) {
+        pr_err("We found a NULL ext2_dirent_t\n");
+        goto free_cache_return_error;
+    }
+    // Set the inode to zero.
+    actual_dirent->inode = 0;
+    // Write back the parent directory block.
+    if (!ext2_write_inode_block(fs, &parent_inode, search.parent_inode, search.block_index, cache)) {
+        pr_err("Failed to write the inode block `%d`\n", search.block_index);
+        goto free_cache_return_error;
+    }
+
+    // Free the cache.
+    kmem_cache_free(cache);
+    return 0;
+free_cache_return_error:
+    // Free the cache.
+    kmem_cache_free(cache);
     return -1;
 }
 
@@ -2969,4 +3064,8 @@ void ext2_test()
     dump_dir(home);
 
     ext2_mkdir("/home/pippo", EXT2_S_IRWXU | EXT2_S_IRGRP | EXT2_S_IXGRP | EXT2_S_IROTH | EXT2_S_IXOTH);
+
+    ext2_rmdir("/home/pippo");
+    
+    ext2_rmdir("/home");
 }
