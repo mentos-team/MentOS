@@ -84,6 +84,7 @@ add_library(
     ${PROJECT_SOURCE_DIR}/src/sys/errno.c
     ${PROJECT_SOURCE_DIR}/src/sys/utsname.c
     ${PROJECT_SOURCE_DIR}/src/sys/ioctl.c
+    ${PROJECT_SOURCE_DIR}/src/unistd/creat.c
     ${PROJECT_SOURCE_DIR}/src/unistd/getppid.c
     ${PROJECT_SOURCE_DIR}/src/unistd/getpid.c
     ${PROJECT_SOURCE_DIR}/src/unistd/exit.c

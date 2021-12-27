@@ -23,6 +23,8 @@ typedef struct vfs_file_t vfs_file_t;
 typedef int (*vfs_mkdir_callback)(const char *, mode_t);
 /// Function used to remove a directory.
 typedef int (*vfs_rmdir_callback)(const char *);
+/// Function used to open a file (or directory).
+typedef vfs_file_t *(*vfs_creat_callback)(const char *, mode_t);
 /// Function used to read the entries of a directory.
 typedef int (*vfs_getdents_callback)(vfs_file_t *, dirent_t *, off_t, size_t);
 /// Function used to open a file (or directory).
@@ -62,6 +64,8 @@ typedef struct vfs_sys_operations_t {
     vfs_rmdir_callback rmdir_f;
     /// Stat function.
     vfs_stat_callback stat_f;
+    /// File creation function.
+    vfs_creat_callback creat_f;
 } vfs_sys_operations_t;
 
 /// @brief Set of functions used to perform operations on files.

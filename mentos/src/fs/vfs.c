@@ -11,7 +11,7 @@
 // Change the header.
 #define __DEBUG_HEADER__ "[VFS   ]"
 // Set the log level.
-#define __DEBUG_LEVEL__ LOGLEVEL_NOTICE
+#define __DEBUG_LEVEL__ LOGLEVEL_DEBUG
 
 #include "process/scheduler.h"
 #include "klib/spinlock.h"
@@ -144,22 +144,20 @@ vfs_file_t *vfs_open(const char *path, int flags, mode_t mode)
     vfs_file_t *file = sb_root->fs_operations->open_f(absolute_path, flags, mode);
     if (file == NULL) {
         pr_err("vfs_open(%s): Cannot find the given file (%s)!\n", path, strerror(errno));
-        errno = ENOENT;
         return NULL;
     }
     // Increment file reference counter.
-    ++file->count;
+    file->count += 1;
     // Return the file.
     return file;
 }
 
 int vfs_close(vfs_file_t *file)
 {
-    // Decrement file reference counter.
-    file->count--;
-
+    pr_debug("vfs_close(ino: %d, file: \"%s\", count: %d)\n", file->ino, file->name, file->count - 1);
+    assert(file->count > 0);
     // Close file if it's the last reference.
-    if (file->count == 0) {
+    if (--file->count == 0) {
         // Check if the filesystem has the close function.
         if (file->fs_operations->close_f == NULL) {
             return -ENOSYS;
@@ -294,6 +292,47 @@ int vfs_rmdir(const char *path)
     }
     // Remove the file.
     return sb_root->sys_operations->rmdir_f(absolute_path);
+}
+
+vfs_file_t *vfs_creat(const char *path, mode_t mode)
+{
+    // Allocate a variable for the path.
+    char absolute_path[PATH_MAX];
+    // If the first character is not the '/' then get the absolute path.
+    if (!realpath(path, absolute_path)) {
+        pr_err("vfs_creat(%s): Cannot get the absolute path.", path);
+        errno = ENODEV;
+        return NULL;
+    }
+    super_block_t *sb = vfs_get_superblock(absolute_path);
+    if (sb == NULL) {
+        pr_err("vfs_creat(%s): Cannot find the superblock!\n");
+        errno = ENODEV;
+        return NULL;
+    }
+    vfs_file_t *sb_root = sb->root;
+    if (sb_root == NULL) {
+        pr_err("vfs_creat(%s): Cannot find the superblock root.", path);
+        errno = ENOENT;
+        return NULL;
+    }
+    // Check if the function is implemented.
+    if (sb_root->sys_operations->creat_f == NULL) {
+        pr_err("vfs_creat(%s): Function not supported in current filesystem.", path);
+        errno = ENOSYS;
+        return NULL;
+    }
+    // Retrieve the file.
+    vfs_file_t *file = sb_root->sys_operations->creat_f(absolute_path, mode);
+    if (file == NULL) {
+        pr_err("vfs_open(%s): Cannot find the given file (%s)!\n", path, strerror(errno));
+        errno = ENOENT;
+        return NULL;
+    }
+    // Increment file reference counter.
+    file->count += 1;
+    // Return the file.
+    return file;
 }
 
 int vfs_stat(const char *path, stat_t *buf)

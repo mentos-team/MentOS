@@ -33,3 +33,11 @@ int mkdir(const char *path, mode_t mode);
 /// @param path The path to the directory to remove.
 /// @return Returns a negative value on failure.
 int rmdir(const char *path);
+
+/// @brief Creates a new file or rewrite an existing one.
+/// @param path path to the file.
+/// @param mode mode for file creation.
+/// @return file descriptor number, -1 otherwise and errno is set to indicate the error.
+/// @details
+/// It is equivalent to: open(path, O_WRONLY|O_CREAT|O_TRUNC, mode)
+int creat(const char *path, mode_t mode);

@@ -328,7 +328,7 @@ static int __cd(int argc, char *argv[])
     }
     int fd = open(path, O_RDONLY | O_DIRECTORY, S_IXUSR);
     if (fd == -1) {
-        printf("cd: %s: %s\n\n", argv[0], strerror(errno), path);
+        printf("cd: %s\n\n", strerror(errno), path);
         return 1;
     }
     // Set current working directory.

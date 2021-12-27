@@ -57,6 +57,7 @@ void syscall_init()
     sys_call_table[__NR_fstat]          = (SystemCall)sys_fstat;
     sys_call_table[__NR_mkdir]          = (SystemCall)sys_mkdir;
     sys_call_table[__NR_rmdir]          = (SystemCall)sys_rmdir;
+    sys_call_table[__NR_creat]          = (SystemCall)sys_creat;
     sys_call_table[__NR_unlink]         = (SystemCall)sys_unlink;
     sys_call_table[__NR_getdents]       = (SystemCall)sys_getdents;
     sys_call_table[__NR_lseek]          = (SystemCall)sys_lseek;

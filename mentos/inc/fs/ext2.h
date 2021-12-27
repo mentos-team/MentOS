@@ -15,3 +15,5 @@ int ext2_initialize();
 /// @brief De-initializes the EXT2 drivers.
 /// @return 0 on success, 1 on error.
 int ext2_finalize();
+
+void ext2_test();

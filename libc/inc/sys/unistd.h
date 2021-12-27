@@ -28,14 +28,11 @@ ssize_t read(int fd, void *buf, size_t nbytes);
 /// @return       The number of written bytes.
 ssize_t write(int fd, void *buf, size_t nbytes);
 
-/// @brief          Opens the file specified by pathname.
+/// @brief Opens the file specified by pathname.
 /// @param pathname A pathname for a file.
-/// @param flags    Used to set the file status flags and file access modes
-///                 of the open file description.
-/// @param mode     Specifies the file mode bits be applied when a new file
-///                 is created.
-/// @return         Returns a file descriptor, a small, nonnegative integer for
-///                 use in subsequent system calls.
+/// @param flags file status flags and file access modes of the open file description.
+/// @param mode the file mode bits be applied when a new file is created.
+/// @return file descriptor number, -1 otherwise and errno is set to indicate the error.
 int open(const char *pathname, int flags, mode_t mode);
 
 /// @brief Close a file descriptor.

@@ -386,6 +386,7 @@ static int ext2_getdents(vfs_file_t *file, dirent_t *dirp, off_t doff, size_t co
 static int ext2_mkdir(const char *path, mode_t mode);
 static int ext2_rmdir(const char *path);
 static int ext2_stat(const char *path, stat_t *stat);
+static vfs_file_t *ext2_creat(const char *path, mode_t permission);
 
 static vfs_file_t *ext2_mount(vfs_file_t *block_device, const char *path);
 
@@ -397,7 +398,8 @@ static vfs_file_t *ext2_mount(vfs_file_t *block_device, const char *path);
 static vfs_sys_operations_t ext2_sys_operations = {
     .mkdir_f = ext2_mkdir,
     .rmdir_f = ext2_rmdir,
-    .stat_f  = ext2_stat
+    .stat_f  = ext2_stat,
+    .creat_f = ext2_creat
 };
 
 /// Filesystem file operations.
@@ -1653,6 +1655,12 @@ static int ext2_allocate_direntry(ext2_filesystem_t *fs, vfs_file_t *parent, con
     // Iterate the directory entries.
     ext2_direntry_iterator_t it = ext2_direntry_iterator_begin(fs, cache, &parent_inode);
     for (; ext2_direntry_iterator_valid(&it); ext2_direntry_iterator_next(&it)) {
+        // If we hit a direntry with an empty inode, that is a free direntry.
+        if (it.direntry->inode == 0) {
+            pr_debug("Found free direntry: %p (%d <= %d)\n", it.direntry, it.direntry->rec_len, rec_len);
+            if (rec_len <= it.direntry->rec_len)
+                break;
+        }
         // Compute the real rec_len of the entry.
         uint32_t real_rec_len = ext2_get_rec_len_from_direntry(it.direntry);
         // If the previous direntry has a wrong rec_len (wrong because it identifies the last).
@@ -1670,12 +1678,29 @@ static int ext2_allocate_direntry(ext2_filesystem_t *fs, vfs_file_t *parent, con
             // Stop here.
             break;
         }
-        // If we hit a direntry with an empty inode, that is a free direntry.
-        if (it.direntry->inode == 0)
-            break;
     }
     if (it.direntry) {
         pr_debug("We need to replace the direntry: %p\n", it.direntry);
+        // Clean the previous name.
+        memset(it.direntry->name, 0, it.direntry->name_len);
+        // Set the inode.
+        it.direntry->inode = inode_index;
+        // Set the new name length,
+        it.direntry->name_len = strlen(name);
+        // Set the new name.
+        memcpy(it.direntry->name, name, it.direntry->name_len);
+        // Set the file type.
+        it.direntry->file_type = file_type;
+
+        if (ext2_write_inode_block(fs, &parent_inode, parent->ino, it.block_index, cache) == -1) {
+            pr_err("Failed to update the block of the father directory.\n");
+            // Free the cache.
+            kmem_cache_free(cache);
+            return -1;
+        }
+        // Free the cache.
+        kmem_cache_free(cache);
+        return 0;
     } else if ((it.block_offset + rec_len) >= fs->block_size) {
         pr_debug("We need a new direntry, and a new block (%d + %d >= %d).\n", it.block_offset, rec_len, fs->block_size);
         it.block_index += 1;
@@ -1759,12 +1784,15 @@ static int ext2_find_direntry(ext2_filesystem_t *fs, ino_t ino, const char *name
     memset(cache, 0, fs->block_size);
     ext2_direntry_iterator_t it = ext2_direntry_iterator_begin(fs, cache, &inode);
     for (; ext2_direntry_iterator_valid(&it); ext2_direntry_iterator_next(&it)) {
+        // Skip unused inode.
+        if (it.direntry->inode == 0)
+            continue;
         // Chehck the name.
         if (!strcmp(it.direntry->name, ".") && !strcmp(name, "/")) {
             break;
         }
         // Check if the entry has the same name.
-        if ((it.direntry->inode != 0) && (strlen(name) == it.direntry->name_len))
+        if (strlen(name) == it.direntry->name_len)
             if (!strncmp(it.direntry->name, name, it.direntry->name_len))
                 break;
     }
@@ -1936,19 +1964,17 @@ static int ext2_init_vfs_file(
     const char *name,
     size_t name_len)
 {
-    // Information for root dir.
-    file->device = (void *)fs;
-    file->ino    = inode_index;
     // Copy the name
     memcpy(file->name, name, name_len);
     file->name[name_len] = 0;
-    // Information from the inode.
-    file->uid    = inode->uid;
-    file->gid    = inode->gid;
-    file->length = inode->size;
-    file->mask   = inode->mode & 0xFFF;
-    file->nlink  = inode->links_count;
-    // File flags.
+    // Set the device.
+    file->device = (void *)fs;
+    // Set the mask.
+    file->mask = inode->mode & 0xFFF;
+    // Set UID and GID.
+    file->uid = inode->uid;
+    file->gid = inode->gid;
+    // Set the VFS specific flags.
     file->flags = 0;
     if ((inode->mode & EXT2_S_IFREG) == EXT2_S_IFREG) {
         file->flags |= DT_REG;
@@ -1968,15 +1994,29 @@ static int ext2_init_vfs_file(
     if ((inode->mode & EXT2_S_IFLNK) == EXT2_S_IFLNK) {
         file->flags |= DT_LNK;
     }
-    file->atime          = inode->atime;
-    file->mtime          = inode->mtime;
-    file->ctime          = inode->ctime;
+    // Set the inode.
+    file->ino = inode_index;
+    // Set the size of the file.
+    file->length = inode->size;
+    //uint32_t impl;
+    //uint32_t open_flags;
+    // Set the open count.
+    file->count = 0;
+    // Set the timing information.
+    file->atime = inode->atime;
+    file->mtime = inode->mtime;
+    file->ctime = inode->ctime;
+    // Set the FS specific operations.
     file->sys_operations = &ext2_sys_operations;
     file->fs_operations  = &ext2_fs_operations;
+    // Set the read offest.
+    file->f_pos = 0;
+    // Set the number of links.
+    file->nlink = inode->links_count;
     // Initialize the list of siblings.
     list_head_init(&file->siblings);
-
-    pr_debug("ext2_init_vfs_file : [%d] `%s` (%s) (name len : %d)\n", file->ino, file->name, name, strlen(name));
+    // Set the refcount to zero.
+    file->refcount = 0;
     return 0;
 }
 
@@ -2082,24 +2122,41 @@ static int ext2_create_inode(
     return inode_index;
 }
 
-static vfs_file_t *ext2_creat(vfs_file_t *parent, const char *name, mode_t permission)
+/// @brief Creates a new file or rewrite an existing one.
+/// @param path path to the file.
+/// @param mode mode for file creation.
+/// @return file descriptor number, -1 otherwise and errno is set to indicate the error.
+/// @details
+/// It is equivalent to: open(path, O_WRONLY|O_CREAT|O_TRUNC, mode)
+static vfs_file_t *ext2_creat(const char *path, mode_t permission)
 {
+    // Get the name of the directory.
+    const char *parent_path = dirname(path), *file_name = basename(path);
+    if (strcmp(parent_path, path) == 0) {
+        return NULL;
+    }
+    // Get the parent VFS node.
+    vfs_file_t *parent = vfs_open(parent_path, O_RDONLY, 0);
+    if (parent == NULL) {
+        errno = ENOENT;
+        return NULL;
+    }
     // flags = O_WRONLY | O_CREAT | O_TRUNC
     // Get the filesystem.
     ext2_filesystem_t *fs = (ext2_filesystem_t *)parent->device;
     if (fs == NULL) {
         pr_err("The parent does not belong to an EXT2 filesystem `%s`.\n", parent->name);
-        return NULL;
+        goto close_parent_return_null;
     }
     // Prepare the structure for the direntry.
     ext2_dirent_t direntry;
     // Prepare an inode, it will come in handy either way.
     ext2_inode_t inode;
     // Search if the entry already exists.
-    if (!ext2_find_direntry_simple(fs, parent->ino, name, &direntry)) {
+    if (!ext2_find_direntry_simple(fs, parent->ino, file_name, &direntry)) {
         if (ext2_read_inode(fs, &inode, direntry.inode) == -1) {
             pr_err("Failed to read the inode of `%s`.\n", direntry.name);
-            return NULL;
+            goto close_parent_return_null;
         }
         vfs_file_t *file = ext2_find_vfs_file_with_inode(fs, direntry.inode);
         if (file == NULL) {
@@ -2107,11 +2164,11 @@ static vfs_file_t *ext2_creat(vfs_file_t *parent, const char *name, mode_t permi
             file = kmem_cache_alloc(vfs_file_cache, GFP_KERNEL);
             if (file == NULL) {
                 pr_err("Failed to allocate memory for the EXT2 file.\n");
-                return NULL;
+                goto close_parent_return_null;
             }
             if (ext2_init_vfs_file(fs, file, &inode, direntry.inode, direntry.name, direntry.name_len) == -1) {
                 pr_err("Failed to properly set the VFS file.\n");
-                return NULL;
+                goto close_parent_return_null;
             }
             // Add the vfs_file to the list of associated files.
             list_head_add_tail(&file->siblings, &fs->opened_files);
@@ -2127,24 +2184,27 @@ static vfs_file_t *ext2_creat(vfs_file_t *parent, const char *name, mode_t permi
     int inode_index = ext2_create_inode(fs, &inode, mode, group_index);
     if (inode_index == -1) {
         pr_err("Failed to create a new inode inside `%s` (group index: %d).\n", parent->name, group_index);
-        return NULL;
+        goto close_parent_return_null;
     }
     // Initialize the file.
-    if (ext2_allocate_direntry(fs, parent, name, inode_index, ext2_file_type_regular_file) == -1) {
+    if (ext2_allocate_direntry(fs, parent, file_name, inode_index, ext2_file_type_regular_file) == -1) {
         pr_err("Failed to allocate a new direntry for the inode.\n");
-        return NULL;
+        goto close_parent_return_null;
     }
     // Allocate the memory for the file.
     vfs_file_t *new_file = kmem_cache_alloc(vfs_file_cache, GFP_KERNEL);
     if (new_file == NULL) {
         pr_err("Failed to allocate memory for the EXT2 file.\n");
-        return NULL;
+        goto close_parent_return_null;
     }
-    if (ext2_init_vfs_file(fs, new_file, &inode, inode_index, name, strlen(name)) == -1) {
+    if (ext2_init_vfs_file(fs, new_file, &inode, inode_index, file_name, strlen(file_name)) == -1) {
         pr_err("Failed to properly set the VFS file.\n");
-        return NULL;
+        goto close_parent_return_null;
     }
     return new_file;
+close_parent_return_null:
+    vfs_close(parent);
+    return NULL;
 }
 
 /// @brief Open the file at the given path and returns its file descriptor.
@@ -2182,31 +2242,16 @@ static vfs_file_t *ext2_open(const char *path, int flags, mode_t mode)
     // First check, if a file with the given name already exists.
     if (!ext2_resolve_path(fs->root, absolute_path, &search)) {
         if (bitmask_check(flags, O_CREAT | O_EXCL)) {
-            pr_err("A file at `%s` already exists (O_CREAT | O_EXCL).\n", absolute_path);
+            pr_err("A file or directory already exists at `%s` (O_CREAT | O_EXCL).\n", absolute_path);
+            return NULL;
+        } else if (bitmask_check(flags, O_DIRECTORY) && (direntry.file_type != ext2_file_type_directory)) {
+            errno = ENOTDIR;
             return NULL;
         }
     } else {
         // If we need to create it, it's ok if it does not exist.
         if (bitmask_check(flags, O_CREAT)) {
-            // Get the name of the directory.
-            char *parent_path = dirname(path);
-            if (strcmp(parent_path, path)) {
-                // Get the parent VFS node.
-                vfs_file_t *parent = ext2_open(parent_path, O_RDONLY, 0);
-                if (parent) {
-                    // Create the file.
-                    vfs_file_t *new_file = ext2_creat(parent, basename(path), mode);
-                    if (new_file) {
-                        // Add the vfs_file to the list of associated files.
-                        list_head_add_tail(&new_file->siblings, &fs->opened_files);
-                    }
-                    // Close the parent directory.
-                    ext2_close(parent);
-                    // Return the newly created file.
-                    return new_file;
-                }
-            }
-            return NULL;
+            return ext2_creat(path, mode);
         } else {
             pr_err("The file does not exist `%s`.\n", absolute_path);
             return NULL;
@@ -2522,6 +2567,9 @@ static int ext2_getdents(vfs_file_t *file, dirent_t *dirp, off_t doff, size_t co
     // Initialize the iterator.
     ext2_direntry_iterator_t it = ext2_direntry_iterator_begin(fs, cache, &inode);
     for (; ext2_direntry_iterator_valid(&it) && (written < count); ext2_direntry_iterator_next(&it)) {
+        // Skip unused inode.
+        if (it.direntry->inode == 0)
+            continue;
         // Skip if already provided.
         current += sizeof(dirent_t);
         if (current <= doff)
@@ -2566,29 +2614,8 @@ static int ext2_mkdir(const char *path, mode_t permission)
     ext2_inode_t inode;
     // Search if the entry already exists.
     if (!ext2_resolve_path_direntry(fs->root, absolute_path, &direntry)) {
-        // Get the associated inode.
-        if (ext2_read_inode(fs, &inode, direntry.inode) == -1) {
-            pr_err("Failed to read the inode of `%s`.\n", direntry.name);
-            return -ENOENT;
-        }
-        // Create a VFS file.
-        vfs_file_t *file = ext2_find_vfs_file_with_inode(fs, direntry.inode);
-        if (file == NULL) {
-            // Allocate the memory for the file.
-            file = kmem_cache_alloc(vfs_file_cache, GFP_KERNEL);
-            if (file == NULL) {
-                pr_err("Failed to allocate memory for the EXT2 file.\n");
-                return -ENOMEM;
-            }
-            if (ext2_init_vfs_file(fs, file, &inode, direntry.inode, direntry.name, direntry.name_len) == -1) {
-                pr_err("Failed to properly set the VFS file.\n");
-                return -ENOENT;
-            }
-            // Add the vfs_file to the list of associated files.
-            list_head_add_tail(&file->siblings, &fs->opened_files);
-        }
-        ext2_close(file);
-        return 0;
+        pr_err("Directory already exists.\n");
+        return -EEXIST;
     }
     // Get the parent directory.
     char *parent_path = dirname(path);
@@ -2597,7 +2624,7 @@ static int ext2_mkdir(const char *path, mode_t permission)
         return -ENOENT;
     }
     // Get the parent VFS node.
-    vfs_file_t *parent = ext2_open(parent_path, O_RDONLY, 0);
+    vfs_file_t *parent = vfs_open(parent_path, O_RDONLY, 0);
     if (parent == NULL) {
         pr_err("Failed to open parent directory (%s).\n", parent_path);
         return -ENOENT;
@@ -2612,33 +2639,18 @@ static int ext2_mkdir(const char *path, mode_t permission)
     if (inode_index == -1) {
         pr_err("Failed to create a new inode inside `%s` (group index: %d).\n", parent->name, group_index);
         // Close the parent directory.
-        ext2_close(parent);
+        vfs_close(parent);
         return -ENOENT;
     }
     // Initialize the file.
     if (ext2_allocate_direntry(fs, parent, basename(path), inode_index, ext2_file_type_directory) == -1) {
         pr_err("Failed to allocate a new direntry for the inode.\n");
         // Close the parent directory.
-        ext2_close(parent);
-        return -ENOENT;
-    }
-    // Allocate the memory for the file.
-    vfs_file_t *new_file = kmem_cache_alloc(vfs_file_cache, GFP_KERNEL);
-    if (new_file == NULL) {
-        pr_err("Failed to allocate memory for the EXT2 file.\n");
-        // Close the parent directory.
-        ext2_close(parent);
-        return -ENOMEM;
-    }
-    if (ext2_init_vfs_file(fs, new_file, &inode, inode_index, basename(path), strlen(basename(path))) == -1) {
-        pr_err("Failed to properly set the VFS file.\n");
-        // Close the parent directory.
-        ext2_close(parent);
+        vfs_close(parent);
         return -ENOENT;
     }
     // Close the parent directory.
-    ext2_close(parent);
-    ext2_close(new_file);
+    vfs_close(parent);
     return 0;
 }
 
@@ -3002,6 +3014,7 @@ void dump_dir(vfs_file_t *dir)
         pr_err("Failed to read the inode (%d).\n", dir->ino);
         return;
     }
+    pr_debug("dir: `%-s` inode: `%4d` {\n", dir->name, dir->ino);
     // Allocate the cache.
     uint8_t *cache = kmem_cache_alloc(fs->ext2_buffer_cache, GFP_KERNEL);
     // Clean the cache.
@@ -3009,39 +3022,34 @@ void dump_dir(vfs_file_t *dir)
     // Iterate the directory.
     ext2_direntry_iterator_t it = ext2_direntry_iterator_begin(fs, cache, &inode);
     for (; ext2_direntry_iterator_valid(&it); ext2_direntry_iterator_next(&it)) {
-        ext2_inode_t __inode;
-        if (ext2_read_inode(fs, &__inode, it.direntry->inode) == -1) {
-            pr_err("Failed to read the inode (%d).\n", it.direntry->inode);
+        if (it.direntry->inode != 0) {
+            ext2_inode_t __inode;
+            ext2_read_inode(fs, &__inode, it.direntry->inode);
+            pr_debug("    %-16s (inode: %4d, type: %2d, rec_len: %4d, name_len: %2d)[size: %d]\n",
+                     it.direntry->name,
+                     it.direntry->inode,
+                     it.direntry->file_type,
+                     it.direntry->rec_len,
+                     it.direntry->name_len,
+                     __inode.size);
+        } else {
+            pr_debug("    %-16s (inode: %4d, type: %2d, rec_len: %4d, name_len: %2d)\n",
+                     it.direntry->name,
+                     it.direntry->inode,
+                     it.direntry->file_type,
+                     it.direntry->rec_len,
+                     it.direntry->name_len);
         }
-        pr_debug("name: %12s inode: %4d file_type: %2d rec_len: %d name_len: %d (realRL: %d, block: %d, total: %d)\n",
-                 it.direntry->name,
-                 it.direntry->inode,
-                 it.direntry->file_type,
-                 it.direntry->rec_len,
-                 it.direntry->name_len,
-                 ext2_get_rec_len_from_direntry(it.direntry),
-                 it.block_offset,
-                 it.total_offset);
-        ext2_dump_inode(&__inode);
-        pr_debug("\n");
+        //ext2_dump_inode(&__inode);
+        //pr_debug("\n");
     }
+    pr_debug("}\n");
     kmem_cache_free(cache);
 }
 
 void ext2_test()
 {
-    vfs_file_t *home = ext2_open("/home", O_RDONLY, 0);
-    assert(home && "Failed to read home.");
-
-    dump_dir(home);
-
-    vfs_file_t *test1 = ext2_creat(home, "test1.txt", EXT2_S_IWUSR | EXT2_S_IRUSR | EXT2_S_IRGRP | EXT2_S_IROTH);
-    assert(test1 && "Failed to create test1.txt.");
-    vfs_file_t *test2 = ext2_creat(home, "test2.txt", EXT2_S_IWUSR | EXT2_S_IRUSR | EXT2_S_IRGRP | EXT2_S_IROTH);
-    assert(test2 && "Failed to create test2.txt.");
-    vfs_file_t *test3 = ext2_creat(home, "test3.txt", EXT2_S_IWUSR | EXT2_S_IRUSR | EXT2_S_IRGRP | EXT2_S_IROTH);
-    assert(test3 && "Failed to create test3.txt.");
-
+#if 0
     char buffer[256];
     memset(buffer, 0, 256);
     for (int i = 0; i < 256; ++i) {
@@ -3049,17 +3057,74 @@ void ext2_test()
     }
     buffer[255] = 0;
 
+    vfs_file_t *home, *test1, *test2, *test3;
+
+    assert(home = vfs_open("/home", O_RDONLY, 0));
     dump_dir(home);
 
-    ext2_write(test1, buffer, 0, 256);
-    ext2_write(test2, buffer, 0, 256);
-    ext2_write(test3, buffer, 0, 256);
+    assert(test1 = vfs_creat("/home/test1.txt", EXT2_S_IWUSR | EXT2_S_IRUSR | EXT2_S_IRGRP | EXT2_S_IROTH));
+    dump_dir(home);
+
+    assert(test2 = vfs_creat("/home/test2.txt", EXT2_S_IWUSR | EXT2_S_IRUSR | EXT2_S_IRGRP | EXT2_S_IROTH));
+    dump_dir(home);
+
+    assert(test3 = vfs_creat("/home/test3.txt", EXT2_S_IWUSR | EXT2_S_IRUSR | EXT2_S_IRGRP | EXT2_S_IROTH));
+    dump_dir(home);
+
+    vfs_write(test1, buffer, 0, 256);
+    vfs_close(test1);
+    dump_dir(home);
+
+    vfs_write(test2, buffer, 0, 256);
+    vfs_close(test2);
+    dump_dir(home);
+
+    vfs_write(test3, buffer, 0, 256);
+    vfs_close(test3);
+    dump_dir(home);
+
+    vfs_mkdir("/home/pippo", EXT2_S_IRWXU | EXT2_S_IRGRP | EXT2_S_IXGRP | EXT2_S_IROTH | EXT2_S_IXOTH);
+    dump_dir(home);
+
+    vfs_rmdir("/home/pippo");
+    dump_dir(home);
+
+    vfs_rmdir("/home");
+    dump_dir(home);
+
+    vfs_close(home);
+
+    vfs_unlink("/home/test1.txt");
+    dump_dir(home);
+    
+    vfs_unlink("/home/test2.txt");
+    dump_dir(home);
+
+    vfs_unlink("/home/test3.txt");
+    dump_dir(home);
+#elif 1
+    vfs_file_t *home, *file;
+    assert(home = vfs_open("/home", O_RDONLY, 0));
 
     dump_dir(home);
 
-    ext2_mkdir("/home/pippo", EXT2_S_IRWXU | EXT2_S_IRGRP | EXT2_S_IXGRP | EXT2_S_IROTH | EXT2_S_IXOTH);
+    assert(file = vfs_creat("/home/test_file_1.txt", EXT2_S_IWUSR | EXT2_S_IRUSR | EXT2_S_IRGRP | EXT2_S_IROTH));
+    vfs_close(file);
 
-    ext2_rmdir("/home/pippo");
+    assert(file = vfs_creat("/home/test_file_2.txt", EXT2_S_IWUSR | EXT2_S_IRUSR | EXT2_S_IRGRP | EXT2_S_IROTH));
+    vfs_close(file);
 
-    ext2_rmdir("/home");
+    vfs_unlink("/home/test_file_1.txt");
+    vfs_unlink("/home/test_file_2.txt");
+
+    dump_dir(home);
+
+    assert(file = vfs_creat("/home/test_file_4.txt", EXT2_S_IWUSR | EXT2_S_IRUSR | EXT2_S_IRGRP | EXT2_S_IROTH));
+    vfs_close(file);
+
+    dump_dir(home);
+
+    vfs_close(home);
+    while (true) {}
+#endif
 }

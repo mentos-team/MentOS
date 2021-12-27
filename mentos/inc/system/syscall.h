@@ -208,6 +208,14 @@ int sys_mkdir(const char *path, mode_t mode);
 /// @return Returns a negative value on failure.
 int sys_rmdir(const char *path);
 
+/// @brief Creates a new file or rewrite an existing one.
+/// @param path path to the file.
+/// @param mode mode for file creation.
+/// @return file descriptor number, -1 otherwise and errno is set to indicate the error.
+/// @details
+/// It is equivalent to: open(path, O_WRONLY|O_CREAT|O_TRUNC, mode)
+int sys_creat(const char *path, mode_t mode);
+
 /// Provide access to the directory entries.
 /// @param fd    The file descriptor of the directory for which we accessing
 ///              the entries.
