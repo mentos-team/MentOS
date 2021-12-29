@@ -461,6 +461,44 @@ static const char *time_to_string(uint32_t time)
     return s;
 }
 
+/// @brief Checks if the requests in flags are valid.
+/// @param flags the flags to check.
+/// @param mask the mask to check against.
+/// @param uid the uid of the owner.
+/// @param gid the gid of the owner.
+/// @return true on success, false otherwise.
+static bool_t ext2_valid_permissions(int flags, mode_t mask, uid_t uid, gid_t gid)
+{
+    // Check the permissions.
+    task_struct *task = scheduler_get_current_process();
+    // The current task is the owner.
+    if (task->uid == uid) {
+        if (!bitmask_check(mask, S_IRUSR))
+            return false;
+        if (bitmask_check(flags, O_WRONLY) && !bitmask_check(mask, S_IWUSR))
+            return false;
+        if (bitmask_check(flags, O_RDWR) && (!bitmask_check(mask, S_IRUSR) || !bitmask_check(mask, S_IWUSR)))
+            return false;
+    }
+    if (task->gid == gid) {
+        if (!bitmask_check(mask, S_IRGRP))
+            return false;
+        if (bitmask_check(flags, O_WRONLY) && !bitmask_check(mask, S_IWGRP))
+            return false;
+        if (bitmask_check(flags, O_RDWR) && (!bitmask_check(mask, S_IRGRP) || !bitmask_check(mask, S_IWGRP)))
+            return false;
+    }
+    if ((task->uid != uid) && (task->gid != gid)) {
+        if (!bitmask_check(mask, S_IROTH))
+            return false;
+        if (bitmask_check(flags, O_WRONLY) && !bitmask_check(mask, S_IWOTH))
+            return false;
+        if (bitmask_check(flags, O_RDWR) && (!bitmask_check(mask, S_IROTH) || !bitmask_check(mask, S_IWOTH)))
+            return false;
+    }
+    return true;
+}
+
 /// @brief Dumps on debugging output the superblock.
 /// @param sb the object to dump.
 static void ext2_dump_superblock(ext2_superblock_t *sb)
@@ -2254,6 +2292,7 @@ static vfs_file_t *ext2_open(const char *path, int flags, mode_t mode)
             return ext2_creat(path, mode);
         } else {
             pr_err("The file does not exist `%s`.\n", absolute_path);
+            errno = ENOENT;
             return NULL;
         }
     }
@@ -2265,6 +2304,12 @@ static vfs_file_t *ext2_open(const char *path, int flags, mode_t mode)
         pr_err("Failed to read the inode of `%s`.\n", direntry.name);
         return NULL;
     }
+
+    if (!ext2_valid_permissions(flags, inode.mode, inode.uid, inode.gid)) {
+        errno = EACCES;
+        return NULL;
+    }
+
     vfs_file_t *file = ext2_find_vfs_file_with_inode(fs, direntry.inode);
     if (file == NULL) {
         // Allocate the memory for the file.
@@ -2280,8 +2325,6 @@ static vfs_file_t *ext2_open(const char *path, int flags, mode_t mode)
         // Add the vfs_file to the list of associated files.
         list_head_add_tail(&file->siblings, &fs->opened_files);
     }
-    pr_debug("ext2_open(path: \"%s\", flags: %d, mode: %d) -> file(ino: %d, name: \"%s\")\n",
-             path, flags, mode, file->ino, file->name);
     return file;
 }
 

@@ -79,6 +79,8 @@ add_custom_target(filesystem
     COMMAND echo "---------------------------------------------"
     COMMAND echo "Creating EXT2 filesystem..."
     COMMAND echo "---------------------------------------------"
+    COMMAND mkdir -p ${CMAKE_SOURCE_DIR}/files/proc
+    COMMAND mkdir -p ${CMAKE_SOURCE_DIR}/files/dev
     COMMAND mke2fs -L 'rootfs' -N 0 -d ${CMAKE_SOURCE_DIR}/files -m 5 -r 1 -t ext2 -v -F ${CMAKE_BINARY_DIR}/rootfs.img 32M
     COMMAND echo "---------------------------------------------"
     COMMAND echo "Done!"

@@ -143,7 +143,7 @@ vfs_file_t *vfs_open(const char *path, int flags, mode_t mode)
     // Retrieve the file.
     vfs_file_t *file = sb_root->fs_operations->open_f(absolute_path, flags, mode);
     if (file == NULL) {
-        pr_err("vfs_open(%s): Cannot find the given file (%s)!\n", path, strerror(errno));
+        pr_debug("vfs_open(%s): Filesystem open returned NULL file (errno: %d, %s)!\n", path, errno, strerror(errno));
         return NULL;
     }
     // Increment file reference counter.

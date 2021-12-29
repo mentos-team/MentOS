@@ -15,6 +15,11 @@ char *strerror(int errnum)
     case 0:
         strcpy(error, "Success");
         break;
+#ifdef EPERM
+    case EPERM:
+        strcpy(error, "Operation not permitted");
+        break;
+#endif
 #ifdef ENOENT
     case ENOENT:
         strcpy(error, "No such file or directory");

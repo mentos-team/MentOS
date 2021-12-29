@@ -145,7 +145,7 @@ int main(int argc, char *argv[])
         no_directory = false;
         int fd       = open(argv[i], O_RDONLY | O_DIRECTORY, 0);
         if (fd == -1) {
-            printf("%s: cannot access '%s': %s\n\n", argv[0], argv[i], strerror(errno));
+            printf("ls: cannot access '%s': %s\n\n", argv[i], strerror(errno));
         } else {
             printf("%s:\n", argv[i]);
             print_ls(fd, argv[i], flags);
@@ -157,7 +157,7 @@ int main(int argc, char *argv[])
         getcwd(cwd, PATH_MAX);
         int fd = open(cwd, O_RDONLY | O_DIRECTORY, 0);
         if (fd == -1) {
-            printf("%s: cannot access '%s': %s\n\n", argv[0], cwd, strerror(errno));
+            printf("ls: cannot access '%s': %s\n\n", cwd, strerror(errno));
         } else {
             print_ls(fd, cwd, flags);
             close(fd);
