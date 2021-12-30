@@ -112,7 +112,57 @@ make qemu
 
 To login, use one of the usernames listed in `files/etc/passwd`.
 
-## 5. Change the scheduling algorithm
+## 5. Kernel logging
+The kernel provides ways of printing logging messages *from* inside the kernel code *to* the bash where you executed the `make qemu`.
+
+These *logging* functions are:
+```C++
+#define pr_emerg(...)
+#define pr_alert(...)
+#define pr_crit(...)
+#define pr_err(...)
+#define pr_warning(...)
+#define pr_notice(...)
+#define pr_info(...)
+#define pr_debug(...)
+#define pr_default(...)
+```
+
+You use them like you would use a `printf`:
+```C++
+    if (fd < 0) {
+        pr_err("Failed to open file '%s', received file descriptor %d.\n", filename, fd);
+        return 1;
+    }
+```
+
+By default only message that goes from `pr_notice` included down to `pr_emerg` are displayed.
+
+Each logging function (they are actually macros) is a wrapper that automatically sets the desired **log level**. Each log level is identified by a number, and declared as follows:
+```C++
+#define LOGLEVEL_DEFAULT (-1) ///< default-level messages.
+#define LOGLEVEL_EMERG   0    ///< system is unusable.
+#define LOGLEVEL_ALERT   1    ///< action must be taken immediately.
+#define LOGLEVEL_CRIT    2    ///< critical conditions.
+#define LOGLEVEL_ERR     3    ///< error conditions.
+#define LOGLEVEL_WARNING 4    ///< warning conditions.
+#define LOGLEVEL_NOTICE  5    ///< normal but significant condition.
+#define LOGLEVEL_INFO    6    ///< informational.
+#define LOGLEVEL_DEBUG   7    ///< debug-level messages.
+```
+
+You can change the logging level by including the following lines at the beginning of your source code:
+```C++
+// Include the kernel log levels.
+#include "sys/kernel_levels.h"
+// Change the header.
+#define __DEBUG_HEADER__ "[ATA   ]"
+// Set the log level.
+#define __DEBUG_LEVEL__ LOGLEVEL_INFO
+```
+This example sets the `__DEBUG_LEVEL__`, so that all the messages from `INFO` and below are shown. While `__DEBUG_HEADER__` is just a string that is automatically prepended to your message, helping you identifying from which code the message is coming from.
+
+## 6. Change the scheduling algorithm
 
 MentOS provides three different scheduling algorithms:
 
@@ -166,7 +216,7 @@ make
 make qemu
 ```
 
-## 6. Use Debugger
+## 7. Use Debugger
 
 If you want to use GDB to debug MentOS, first you need to compile everything:
 
