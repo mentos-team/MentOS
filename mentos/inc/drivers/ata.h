@@ -1,4 +1,3 @@
-///                MentOS, The Mentoring Operating system project
 /// @file ata.h
 /// @brief Drivers for the Advanced Technology Attachment (ATA) devices.
 /// @details

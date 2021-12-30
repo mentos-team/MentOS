@@ -1,4 +1,3 @@
-///                MentOS, The Mentoring Operating system project
 /// @file idt.h
 /// @brief Data structures concerning the Interrupt Descriptor Table (IDT).
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.

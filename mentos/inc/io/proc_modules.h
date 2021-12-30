@@ -1,4 +1,3 @@
-///                MentOS, The Mentoring Operating system project
 /// @file proc_modules.h
 /// @brief Contains functions for managing procfs filesystems.
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.

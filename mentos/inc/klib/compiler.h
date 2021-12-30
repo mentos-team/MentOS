@@ -1,4 +1,3 @@
-///                MentOS, The Mentoring Operating system project
 /// @file compiler.h
 /// @brief Definition of memory barriers.
 /// @details 

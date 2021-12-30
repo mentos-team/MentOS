@@ -1,10 +1,16 @@
-///                MentOS, The Mentoring Operating system project
 /// @file keyboard.c
 /// @brief Keyboard handling.
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 /// @addtogroup keyboard
 /// @{
+
+// Include the kernel log levels.
+#include "sys/kernel_levels.h"
+// Change the header.
+#define __DEBUG_HEADER__ "[KEYBRD]"
+// Set the log level.
+#define __DEBUG_LEVEL__ LOGLEVEL_NOTICE
 
 #include "drivers/keyboard/keyboard.h"
 

@@ -1,8 +1,14 @@
-///                MentOS, The Mentoring Operating system project
 /// @file   kernel.c
 /// @brief  Kernel main function.
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
+
+// Include the kernel log levels.
+#include "sys/kernel_levels.h"
+// Change the header.
+#define __DEBUG_HEADER__ "[KERNEL]"
+// Set the log level.
+#define __DEBUG_LEVEL__ LOGLEVEL_NOTICE
 
 #include "io/proc_modules.h"
 #include "mem/vmem_map.h"
@@ -125,7 +131,6 @@ int kmain(boot_info_t *boot_informations)
         return 1;
     }
     print_ok();
-    pr_debug("End of modules: 0x%09p\n", get_address_after_modules());
 
     //==========================================================================
     pr_notice("Initialize physical memory manager...\n");

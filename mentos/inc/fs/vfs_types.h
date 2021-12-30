@@ -1,4 +1,3 @@
-///                MentOS, The Mentoring Operating system project
 /// @file vfs_types.h
 /// @brief Virtual filesystem data types.
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.

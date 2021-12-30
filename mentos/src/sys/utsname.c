@@ -1,4 +1,3 @@
-///                MentOS, The Mentoring Operating system project
 /// @file utsname.c
 /// @brief Functions used to provide information about the machine & OS.
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.

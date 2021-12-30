@@ -1,6 +1,5 @@
-///                MentOS, The Mentoring Operating system project
 /// @file vga.h
-/// @brief FUnctions required to manage the Video Graphics Array (VGA).
+/// @brief Functions required to manage the Video Graphics Array (VGA).
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 

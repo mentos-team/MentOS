@@ -1,8 +1,5 @@
 /// @file ext2.c
-/// @author Enrico Fraccaroli (enry.frak@gmail.com)
 /// @brief EXT2 driver.
-/// @version 0.1
-/// @date 2021-12-13
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
@@ -13,7 +10,7 @@
 // Change the header.
 #define __DEBUG_HEADER__ "[EXT2  ]"
 // Set the log level.
-#define __DEBUG_LEVEL__ LOGLEVEL_DEBUG
+#define __DEBUG_LEVEL__ LOGLEVEL_NOTICE
 
 #include "process/scheduler.h"
 #include "process/process.h"

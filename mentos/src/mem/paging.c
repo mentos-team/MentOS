@@ -1,4 +1,3 @@
-///                MentOS, The Mentoring Operating system project
 /// @file paging.c
 /// @brief Implementation of a memory paging management.
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.

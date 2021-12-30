@@ -1,4 +1,3 @@
-///                MentOS, The Mentoring Operating system project
 /// @file reboot.h
 /// @brief Defines the values required to issue a reboot.
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.

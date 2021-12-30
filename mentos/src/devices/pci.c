@@ -1,9 +1,15 @@
-///                MentOS, The Mentoring Operating system project
 /// @file pci.c
 /// @brief Routines for PCI initialization.
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 ///! @cond Doxygen_Suppress
+
+// Include the kernel log levels.
+#include "sys/kernel_levels.h"
+// Change the header.
+#define __DEBUG_HEADER__ "[PCI   ]"
+// Set the log level.
+#define __DEBUG_LEVEL__ LOGLEVEL_NOTICE
 
 #include "devices/pci.h"
 #include "io/debug.h"

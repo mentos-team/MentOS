@@ -1,4 +1,3 @@
-///                MentOS, The Mentoring Operating system project
 /// @file pic8259.h
 /// @brief Data structures and functions required to manage the PIC8259.
 /// @details

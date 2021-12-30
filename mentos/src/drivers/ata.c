@@ -1,4 +1,3 @@
-///                MentOS, The Mentoring Operating system project
 /// @file ata.c
 /// @brief Advanced Technology Attachment (ATA) and Advanced Technology Attachment Packet Interface (ATAPI) drivers.
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.
@@ -6,14 +5,14 @@
 /// @addtogroup ata
 /// @{
 
-#include "drivers/ata.h"
-
 // Include the kernel log levels.
 #include "sys/kernel_levels.h"
 // Change the header.
 #define __DEBUG_HEADER__ "[ATA   ]"
 // Set the log level.
 #define __DEBUG_LEVEL__ LOGLEVEL_NOTICE
+
+#include "drivers/ata.h"
 
 #include "descriptor_tables/isr.h"
 #include "hardware/pic8259.h"

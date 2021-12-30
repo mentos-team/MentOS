@@ -1,5 +1,4 @@
-/////                MentOS, The Mentoring Operating system project
-/// @file login.c
+///// @file login.c
 /// @brief Functions used to manage login.
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.

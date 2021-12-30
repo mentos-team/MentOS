@@ -1,8 +1,5 @@
 /// @file ext2.h
-/// @author Enrico Fraccaroli (enry.frak@gmail.com)
 /// @brief EXT2 driver.
-/// @version 0.1
-/// @date 2021-12-13
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 

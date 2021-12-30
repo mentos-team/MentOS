@@ -1,4 +1,3 @@
-///                MentOS, The Mentoring Operating system project
 /// @file stdbool.h
 /// @brief Defines the boolean values.
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.

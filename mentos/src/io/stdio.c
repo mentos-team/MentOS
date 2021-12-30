@@ -1,6 +1,7 @@
-/// @file   stdio.c
-/// @brief  Standard I/0 functions.
-/// @date   Apr 2019
+/// @file stdio.c
+/// @brief Standard IO functions.
+/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
+/// See LICENSE.md for details.
 
 #include "system/syscall.h"
 #include "sys/errno.h"

@@ -1,4 +1,3 @@
-///                MentOS, The Mentoring Operating system project
 /// @file fcvt.h
 /// @brief Declare the functions required to turn double values into a string.
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.

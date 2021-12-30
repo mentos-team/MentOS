@@ -1,6 +1,7 @@
-//
-// Created by andrea on 02/05/20.
-//
+/// @file proc_running.c
+/// @brief Implementaiton of procr filesystem.
+/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
+/// See LICENSE.md for details.
 
 #include "fs/procfs.h"
 

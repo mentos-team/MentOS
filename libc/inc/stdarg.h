@@ -1,4 +1,3 @@
-///                MentOS, The Mentoring Operating system project
 /// @file stdarg.h
 /// @brief Contains the macros required to manage variable number of arguments.
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.

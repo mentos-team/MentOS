@@ -1,6 +1,7 @@
-//
-// Created by andrea on 02/05/20.
-//
+/// @file proc_video.c
+/// @brief Contains callbacks for procv system files.
+/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
+/// See LICENSE.md for details.
 
 #include "bits/termios-struct.h"
 #include "drivers/keyboard/keyboard.h"

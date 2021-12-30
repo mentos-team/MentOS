@@ -1,4 +1,3 @@
-///                MentOS, The Mentoring Operating system project
 /// @file kheap.h
 /// @brief  Interface for kernel heap functions, also provides a placement
 ///         malloc() for use before the heap is initialised.

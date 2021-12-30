@@ -1,4 +1,3 @@
-///                MentOS, The Mentoring Operating system project
 /// @file port_io.c
 /// @brief Byte I/O on ports prototypes.
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.

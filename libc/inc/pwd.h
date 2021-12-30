@@ -1,4 +1,3 @@
-///                MentOS, The Mentoring Operating system project
 /// @file pwd.h
 /// @brief Contains the structure and functions for managing passwords.
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.

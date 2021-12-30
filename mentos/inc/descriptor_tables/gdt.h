@@ -1,4 +1,3 @@
-///                MentOS, The Mentoring Operating system project
 /// @file gdt.h
 /// @brief Data structures concerning the Global Descriptor Table (GDT).
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.

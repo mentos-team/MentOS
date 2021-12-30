@@ -1,4 +1,3 @@
-///                MentOS, The Mentoring Operating system project
 /// @file process.c
 /// @brief Process data structures and functions.
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.
@@ -9,7 +8,7 @@
 // Change the header.
 #define __DEBUG_HEADER__ "[PROC  ]"
 // Set the log level.
-#define __DEBUG_LEVEL__ LOGLEVEL_DEBUG
+#define __DEBUG_LEVEL__ LOGLEVEL_NOTICE
 
 #include "process/process.h"
 #include "process/scheduler.h"

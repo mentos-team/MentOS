@@ -1,4 +1,3 @@
-///                MentOS, The Mentoring Operating system project
 /// @file sched.h
 /// @brief Structures and functions for managing the scheduler.
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.

@@ -1,4 +1,3 @@
-///                MentOS, The Mentoring Operating system project
 /// @file cpuid.h
 /// @brief Structures and functions to handle the CPUID.
 /// @details

@@ -1,3 +1,15 @@
+/// @file vga.c
+/// @brief Implementation of Video Graphics Array (VGA) drivers.
+/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
+/// See LICENSE.md for details.
+
+// Include the kernel log levels.
+#include "sys/kernel_levels.h"
+// Change the header.
+#define __DEBUG_HEADER__ "[VGA   ]"
+// Set the log level.
+#define __DEBUG_LEVEL__ LOGLEVEL_NOTICE
+
 #include "io/vga/vga.h"
 
 #include "io/vga/vga_palette.h"

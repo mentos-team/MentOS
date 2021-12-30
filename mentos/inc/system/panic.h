@@ -1,4 +1,3 @@
-///                MentOS, The Mentoring Operating system project
 /// @file panic.h
 /// @brief Functions used to manage kernel panic.
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.

@@ -1,4 +1,3 @@
-///                MentOS, The Mentoring Operating system project
 /// @file msg.h
 /// @brief Definition of structure for managing message queues.
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.

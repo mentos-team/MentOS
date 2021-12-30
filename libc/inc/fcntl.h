@@ -1,4 +1,3 @@
-///                MentOS, The Mentoring Operating system project
 /// @file fcntl.h
 /// @brief Headers of functions fcntl() and open().
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.

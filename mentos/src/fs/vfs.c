@@ -1,4 +1,3 @@
-///                MentOS, The Mentoring Operating system project
 /// @file vfs.c
 /// @brief Headers for Virtual File System (VFS).
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.
@@ -11,7 +10,7 @@
 // Change the header.
 #define __DEBUG_HEADER__ "[VFS   ]"
 // Set the log level.
-#define __DEBUG_LEVEL__ LOGLEVEL_DEBUG
+#define __DEBUG_LEVEL__ LOGLEVEL_NOTICE
 
 #include "process/scheduler.h"
 #include "klib/spinlock.h"
