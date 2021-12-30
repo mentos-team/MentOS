@@ -26,12 +26,49 @@ Parts of MentOS are inherited or inspired by a similar educational operating
 system called [DreamOs](https://github.com/dreamos82/DreamOs) written by Ivan
 Gualandri.
 
-## 2. Prerequisites
+## 2. Implemented features
+Follows the list of implemented features:
+
+**Processes and Events**
+ - [x] Memory protection (User vs Kernel);
+ - [x] Processes;
+ - [x] Scheduler (synchronous and asynchronous);
+ - [x] Interrupts and Exceptions;
+ - [x] Signals;
+ - [x] Timers and RTC;
+ - [x] Wait-queues;
+ - [x] System Calls;
+ - [ ] Multi-core;
+ 
+**Memory**
+ - [x] Paging;
+ - [x] Buddy System;
+ - [x] Slab Allocation;
+ - [x] Zone Allocator;
+ - [x] Cache Allocator;
+ - [x] Heap;
+ - [x] Virtual Addressing;
+
+**Filesystem**
+ - [x] Virtual Filesystem (VFS);
+ - [x] Initramfs;
+ - [x] EXT2;
+ - [x] Procfs;
+
+**Input/Output**
+ - [x] Programmable Interrupt Controller (PIC) drivers;
+ - [x] Keyboard drivers (IT/ENG layouts);
+ - [x] Video drivers;
+ - [ ] VGA drivers;
+
+I will try to keep it updated...
+
+## 3. Prerequisites
 
 MentOS is compatible with the main **unix-based** operating systems. It has been
 tested with *Ubuntu*, *WSL1*, *WSL2*, and  *MacOS*.
 
-### 2.1. Generic Prerequisites
+### 3.1. Generic Prerequisites
 
 #### 3.1.1. Compile
 
@@ -62,7 +99,7 @@ For debugging we suggest using:
 
  - gdb or cgdb
 
-### 2.2. installation Prerequisites
+### 3.2. installation Prerequisites
 
 Under **Ubuntu**, you can type the following commands:
 
@@ -83,7 +120,7 @@ brew install i386-elf-binutils i386-elf-gcc git cmake qemu nasm e2fsprogs
 brew install gdb cgdb #<- for debug only
 ```
 
-## 3. Compiling MentOS and generating the EXT2 filesystem
+## 4. Compiling MentOS and generating the EXT2 filesystem
 
 Compile MentOS with:
 
@@ -102,7 +139,7 @@ make filesystem
 ```
 you just need to generate the filesystem once. If you change a `program` you need to re-generate the entire filesystem with `make filesystem`, but this will override any changes you made to the files inside the `rootfs.img`. In the future I will find a way to update just the `/usr/bin` directory and the programs.
 
-## 4. Running MentOS
+## 5. Running MentOS
 
 Boot MentOS with qemu:
 
@@ -112,7 +149,7 @@ make qemu
 
 To login, use one of the usernames listed in `files/etc/passwd`.
 
-## 5. Kernel logging
+## 6. Kernel logging
 The kernel provides ways of printing logging messages *from* inside the kernel code *to* the bash where you executed the `make qemu`.
 
 These *logging* functions are:
@@ -162,7 +199,7 @@ You can change the logging level by including the following lines at the beginni
 ```
 This example sets the `__DEBUG_LEVEL__`, so that all the messages from `INFO` and below are shown. While `__DEBUG_HEADER__` is just a string that is automatically prepended to your message, helping you identifying from which code the message is coming from.
 
-## 6. Change the scheduling algorithm
+## 7. Change the scheduling algorithm
 
 MentOS provides three different scheduling algorithms:
 
@@ -216,7 +253,7 @@ make
 make qemu
 ```
 
-## 7. Use Debugger
+## 8. Use Debugger
 
 If you want to use GDB to debug MentOS, first you need to compile everything:
 
