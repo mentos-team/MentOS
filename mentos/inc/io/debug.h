@@ -57,7 +57,8 @@ void dbg_print_regs(struct pt_regs *frame);
 const char *to_human_size(unsigned long bytes);
 
 /// @brief Transforms the given value to a binary string.
-/// @param value The decimal value.
+/// @param value to print.
+/// @param length of the binary output.
 /// @return String representing the binary value.
 const char *dec_to_binary(unsigned long value, unsigned length);
 

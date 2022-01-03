@@ -2,7 +2,7 @@
 /// @brief Data structures concerning the Global Descriptor Table (GDT).
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
-/// @addtogroup descriptor_tables Memory Management Modules
+/// @addtogroup descriptor_tables Descriptor Tables
 /// @brief GDT, IDT and TSS are all data structures specified by Intel x86
 /// architecture in memory management module.
 /// @{
@@ -67,7 +67,7 @@
 ///
 ///  You can have both 16 bit and 32 bit selectors at once.
 ///
-enum gdt_bits_t {
+typedef enum gdt_bits_t {
     /// @brief `0b10000000U` (Present): This must be 1 for all valid selectors.
     GDT_PRESENT = 128U,
     /// @brief `0b00000000U` (Privilege): Sets the 2 privilege bits (ring level) to 0 = highest (kernel).

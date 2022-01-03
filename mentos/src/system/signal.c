@@ -5,9 +5,9 @@
 
 // Include the kernel log levels.
 #include "sys/kernel_levels.h"
-// Change the header.
+/// Change the header.
 #define __DEBUG_HEADER__ "[SIGNAL]"
-// Set the log level.
+/// Set the log level.
 #define __DEBUG_LEVEL__ LOGLEVEL_NOTICE
 
 #include "system/signal.h"

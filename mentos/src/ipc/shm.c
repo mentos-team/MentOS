@@ -368,7 +368,7 @@ struct shmid_ds *find_shm_fromvaddr(void *shmvaddr)
 }
 #endif
 
-long sys_shmat(int shmid, char *shmaddr, int shmflg)
+void * sys_shmat(int shmid, const void *shmaddr, int shmflg)
 {
     TODO("Not implemented");
     return 0;
@@ -380,7 +380,7 @@ long sys_shmget(key_t key, size_t size, int flag)
     return 0;
 }
 
-long sys_shmdt(char *shmaddr)
+long sys_shmdt(const void *shmaddr)
 {
     TODO("Not implemented");
     return 0;

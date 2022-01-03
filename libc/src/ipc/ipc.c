@@ -11,11 +11,11 @@
 #include "ipc/shm.h"
 #include "ipc/msg.h"
 
-_syscall3(long, shmat, int, shmid, char *, shmaddr, int, shmflg)
+_syscall3(void *, shmat, int, shmid, const void *, shmaddr, int, shmflg)
 
 _syscall3(long, shmget, key_t, key, size_t, size, int, flag)
 
-_syscall1(long, shmdt, char *, shmaddr)
+_syscall1(long, shmdt, const void *, shmaddr)
 
 _syscall3(long, shmctl, int, shmid, int, cmd, struct shmid_ds *, buf)
 

@@ -5,9 +5,9 @@
 
 // Include the kernel log levels.
 #include "sys/kernel_levels.h"
-// Change the header.
+/// Change the header.
 #define __DEBUG_HEADER__ "[VGA   ]"
-// Set the log level.
+/// Set the log level.
 #define __DEBUG_LEVEL__ LOGLEVEL_NOTICE
 
 #include "io/vga/vga.h"
@@ -22,23 +22,40 @@
 #include "io/debug.h"
 #include "math.h"
 
+/// Counts the number of elements of an array.
 #define COUNT_OF(x) ((sizeof(x) / sizeof(0 [x])) / ((size_t)(!(sizeof(x) % sizeof(0 [x])))))
 
-#define AC_INDEX          0x03C0
-#define AC_WRITE          0x03C0
-#define AC_READ           0x03C1
-#define MISC_WRITE        0x03C2
-#define MISC_READ         0x03CC
-#define SC_INDEX          0x03C4 // VGA sequence controller.
-#define SC_DATA           0x03C5
-#define PALETTE_MASK      0x03C6
-#define PALETTE_READ      0x03C7
-#define PALETTE_INDEX     0x03C8 // VGA digital-to-analog converter.
-#define PALETTE_DATA      0x03C9
-#define GC_INDEX          0x03CE // VGA graphics controller.
-#define GC_DATA           0x03CF
-#define CRTC_INDEX        0x03D4 // VGA CRT controller.
-#define CRTC_DATA         0x03D5
+/// Attribute Controller index port.
+#define AC_INDEX 0x03C0
+/// Attribute Controller write port.
+#define AC_WRITE 0x03C0
+/// Attribute Controller data port.
+#define AC_READ 0x03C1
+/// Miscellaneous output register.
+#define MISC_WRITE 0x03C2
+/// Miscellaneous input register.
+#define MISC_READ 0x03CC
+/// Sequence controller index.
+#define SC_INDEX 0x03C4
+/// Sequence controller data.
+#define SC_DATA 0x03C5
+/// DAC Mask Register.
+#define PALETTE_MASK 0x03C6
+/// Controls the DAC.
+#define PALETTE_READ 0x03C7
+/// Controls the DAC index.
+#define PALETTE_INDEX 0x03C8
+/// Controls the DAC data.
+#define PALETTE_DATA 0x03C9
+/// Graphics controller index.
+#define GC_INDEX 0x03CE
+/// Graphics controller data.
+#define GC_DATA 0x03CF
+/// CRT controller index.
+#define CRTC_INDEX 0x03D4
+/// CRT controller data.
+#define CRTC_DATA 0x03D5
+/// By reading this port it'll go to the index state.
 #define INPUT_STATUS_READ 0x03DA
 
 /// VGA pointers for drawing operations.
@@ -69,21 +86,32 @@ typedef struct {
     vga_ops_t *ops; ///< Writing operations.
 } vga_driver_t;
 
+/// Is VGA enabled.
 static bool_t vga_enable = false;
+/// The stored palette.
 palette_entry_t stored_palette[256];
+/// A buffer for storing a copy of the video memory.
 char vidmem[262144];
-
+/// Current driver.
 static vga_driver_t *driver = NULL;
-static vga_font_t *font;
+/// Current font.
+static vga_font_t *__font = NULL;
 
 // ============================================================================
 // == VGA MODEs ===============================================================
-#define MODE_NUM_SEQ_REGS  5
+/// Number of sequencer registers.
+#define MODE_NUM_SEQ_REGS 5
+/// Number of CRTC registers.
 #define MODE_NUM_CRTC_REGS 25
-#define MODE_NUM_GC_REGS   9
-#define MODE_NUM_AC_REGS   (16 + 5)
-#define MODE_NUM_REGS      (1 + MODE_NUM_SEQ_REGS + MODE_NUM_CRTC_REGS + MODE_NUM_GC_REGS + MODE_NUM_AC_REGS) // 61
+/// Number of Graphics Controller (GC) registers.
+#define MODE_NUM_GC_REGS 9
+/// Number of Attribute Controller (AC) registers.
+#define MODE_NUM_AC_REGS (16 + 5)
+/// Total number of registers.
+#define MODE_NUM_REGS (1 + MODE_NUM_SEQ_REGS + MODE_NUM_CRTC_REGS + MODE_NUM_GC_REGS + MODE_NUM_AC_REGS) // 61
 
+/// @brief Returns the video address.
+/// @return pointer to the video.
 static inline char *__get_seg(void)
 {
     unsigned int seg;
@@ -98,6 +126,11 @@ static inline char *__get_seg(void)
     return (char *)seg;
 }
 
+/// @brief Sets the color at the given index.
+/// @param index index of the palette we want to change.
+/// @param r red.
+/// @param g green.
+/// @param b blue.
 void __vga_set_color_map(unsigned int index, unsigned char r, unsigned char g, unsigned char b)
 {
     outportb(PALETTE_MASK, 0xFF);
@@ -107,6 +140,11 @@ void __vga_set_color_map(unsigned int index, unsigned char r, unsigned char g, u
     outportl(PALETTE_DATA, b);
 }
 
+/// @brief Gets the color at the given index.
+/// @param index index of the palette we want to read.
+/// @param r output value for red.
+/// @param g output value for green.
+/// @param b output value for blue.
 void __vga_get_color_map(unsigned int index, unsigned char *r, unsigned char *g, unsigned char *b)
 {
     outportb(PALETTE_MASK, 0xFF);
@@ -116,6 +154,9 @@ void __vga_get_color_map(unsigned int index, unsigned char *r, unsigned char *g,
     *b = inportl(PALETTE_DATA);
 }
 
+/// @brief Saves the current palette in p.
+/// @param p output variable where we save the palette.
+/// @param size the size of the palette.
 static void __save_palette(palette_entry_t *p, size_t size)
 {
     outportb(PALETTE_MASK, 0xFF);
@@ -127,6 +168,9 @@ static void __save_palette(palette_entry_t *p, size_t size)
     }
 }
 
+/// @brief Loads the palette p.
+/// @param p palette we are going to load.
+/// @param size the size of the palette.
 static void __load_palette(palette_entry_t *p, size_t size)
 {
     outportb(PALETTE_MASK, 0xFF);
@@ -138,6 +182,8 @@ static void __load_palette(palette_entry_t *p, size_t size)
     }
 }
 
+/// @brief Sets the current plane.
+/// @param plane the plane to set.
 static inline void __set_plane(unsigned int plane)
 {
     unsigned char pmask;
@@ -151,16 +197,23 @@ static inline void __set_plane(unsigned int plane)
     outportb(SC_DATA, pmask);
 }
 
+/// @brief Reads from the video memory.
+/// @param offset where we are going to read.
+/// @return the value we read.
 static unsigned char __read_byte(unsigned int offset)
 {
     return (unsigned char)(*(driver->address + offset));
 }
 
+/// @brief Writes onto the video memory.
+/// @param offset where we are going to write.
 static void __write_byte(unsigned int offset, unsigned char value)
 {
     *(char *)(driver->address + offset) = value;
 }
 
+/// @brief Sets the given mode.
+/// @param vga_mode the new mode we set.
 static void __set_mode(vga_mode_t *vga_mode)
 {
     unsigned char *ptr = &vga_mode->misc;
@@ -213,6 +266,8 @@ static void __set_mode(vga_mode_t *vga_mode)
     outportb(AC_INDEX, 0x20);
 }
 
+/// @brief Reads the VGA registers.
+/// @param vga_mode the current VGA mode.
 static void __read_registers(vga_mode_t *vga_mode)
 {
     unsigned char *ptr = &vga_mode->misc;
@@ -255,6 +310,9 @@ static void __read_registers(vga_mode_t *vga_mode)
     outportb(AC_INDEX, 0x20);
 }
 
+/// @brief Writes the font.
+/// @param buf buffer where the font resides.
+/// @param font_height the height of the font.
 static void __write_font(unsigned char *buf, unsigned font_height)
 {
     unsigned char seq2, seq4, gc4, gc5, gc6;
@@ -306,6 +364,10 @@ assume: chain-4 addressing already off */
 // ============================================================================
 // == WRITE PIXEL FUNCTIONS ===================================================
 
+/// @brief Writes a pixel.
+/// @param x x coordinates.
+/// @param y y coordinates.
+/// @param c color.
 static void __write_pixel_1(unsigned int x, unsigned int y, unsigned char c)
 {
     unsigned wd_in_bytes;
@@ -319,6 +381,10 @@ static void __write_pixel_1(unsigned int x, unsigned int y, unsigned char c)
     __write_byte(off, (__read_byte(off) & ~mask) | (c & mask));
 }
 
+/// @brief Writes a pixel.
+/// @param x x coordinates.
+/// @param y y coordinates.
+/// @param c color.
 static void __write_pixel_2(unsigned int x, unsigned int y, unsigned char c)
 {
     unsigned wd_in_bytes;
@@ -332,6 +398,10 @@ static void __write_pixel_2(unsigned int x, unsigned int y, unsigned char c)
     __write_byte(off, (__read_byte(off) & ~mask) | (c & mask));
 }
 
+/// @brief Writes a pixel.
+/// @param x x coordinates.
+/// @param y y coordinates.
+/// @param c color.
 static void __write_pixel_4(unsigned int x, unsigned int y, unsigned char color)
 {
     int rotation = 0;
@@ -370,6 +440,10 @@ static void __write_pixel_4(unsigned int x, unsigned int y, unsigned char color)
     }
 }
 
+/// @brief Writes a pixel.
+/// @param x x coordinates.
+/// @param y y coordinates.
+/// @param c color.
 static inline void __write_pixel_8(unsigned int x, unsigned int y, unsigned char color)
 {
     __set_plane(x);
@@ -377,6 +451,9 @@ static inline void __write_pixel_8(unsigned int x, unsigned int y, unsigned char
     // (y << 6) + (y << 4) + (x >> 2)
 }
 
+/// @brief Reverses the bits of the given number.
+/// @param num the number of which we want to reverse the bits.
+/// @return reversed bits.
 unsigned int reverseBits(char num)
 {
     unsigned int NO_OF_BITS  = sizeof(num) * 8;
@@ -408,11 +485,13 @@ int vga_height()
     return 0;
 }
 
-void vga_setfont(const vga_font_t *__font)
+/// @brief Sets the given font.
+/// @param font the new font.
+void __vga_setfont(const vga_font_t *font)
 {
-    font->font   = __font->font;
-    font->width  = __font->width;
-    font->height = __font->height;
+    __font->font   = font->font;
+    __font->width  = font->width;
+    __font->height = font->height;
 }
 
 void vga_clear_screen()
@@ -436,10 +515,10 @@ void vga_draw_char(unsigned int x, unsigned int y, unsigned char c, unsigned cha
         1u << 7u, //          128
         1u << 8u, //          256
     };
-    unsigned char *glyph = font->font + c * font->height;
-    for (unsigned cy = 0; cy < font->height; ++cy) {
-        for (unsigned cx = 0; cx < font->width; ++cx) {
-            driver->ops->write_pixel(x + (font->width - cx), y + cy, glyph[cy] & mask[cx] ? color : 0x00u);
+    unsigned char *glyph = __font->font + c * __font->height;
+    for (unsigned cy = 0; cy < __font->height; ++cy) {
+        for (unsigned cx = 0; cx < __font->width; ++cx) {
+            driver->ops->write_pixel(x + (__font->width - cx), y + cy, glyph[cy] & mask[cx] ? color : 0x00u);
         }
     }
 }
@@ -653,7 +732,7 @@ void vga_initialize()
     driver->address = __get_seg();
 
     // Set the font.
-    vga_setfont(&font_8x8);
+    __vga_setfont(&font_8x8);
 
     // Save the content of the memory.
     memcpy(vidmem, driver->address, 0x4000);

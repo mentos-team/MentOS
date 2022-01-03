@@ -21,8 +21,23 @@ typedef struct sched_param_t {
     bool_t is_periodic;
 } sched_param_t;
 
+/// @brief Sets scheduling parameters.
+/// @param pid pid of the process we want to change the parameters. If zero,
+/// then the parameters of the calling process are set.
+/// @param param The interpretation of the argument param depends on the
+/// scheduling policy of the thread identified by pid.
+/// @return 0 on success, -1 on failure and errno is set to indicate the error.
 int sched_setparam(pid_t pid, const sched_param_t *param);
 
+/// @brief Gets scheduling parameters.
+/// @param pid pid of the process we want to retrieve the parameters. If zero,
+/// then the parameters of the calling process are returned.
+/// @param param The interpretation of the argument param depends on the
+/// scheduling policy of the thread identified by pid.
+/// @return 0 on success, -1 on failure and errno is set to indicate the error.
 int sched_getparam(pid_t pid, sched_param_t *param);
 
+/// @brief Placed at the end of an infinite while loop, stops the process until,
+/// its next period starts. The calling process must be a periodic one.
+/// @return 0 on success, -1 on failure and errno is set to indicate the error.
 int waitperiod();

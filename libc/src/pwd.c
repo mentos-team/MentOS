@@ -46,6 +46,11 @@ static inline void __parse_line(passwd_t *pwd, char *buf)
     }
 }
 
+/// @brief Reads a line from the file.
+/// @param fd the file descriptor.
+/// @param buffer the buffer where we place the line.
+/// @param buflen the length of the buffer.
+/// @return the amount we read.
 ssize_t __readline(int fd, char *buffer, size_t buflen)
 {
     memset(buffer, 0, buflen);

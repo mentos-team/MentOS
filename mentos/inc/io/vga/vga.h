@@ -5,8 +5,6 @@
 
 #pragma once
 
-#pragma once
-
 /// @brief Initializes the VGA.
 void vga_initialize();
 
@@ -61,7 +59,7 @@ void vga_draw_rectangle(unsigned int sx, unsigned int sy, unsigned int ex, unsig
 /// @brief Draws a circle provided the position of the center and the radius.
 /// @param xc x-axis position.
 /// @param yc y-axis position.
-/// @param t radius.
+/// @param r radius.
 /// @param fill color used to fill the circle.
 void vga_draw_circle(unsigned int xc, unsigned int yc, unsigned int r, unsigned char fill);
 

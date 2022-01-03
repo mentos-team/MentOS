@@ -192,9 +192,9 @@ You can change the logging level by including the following lines at the beginni
 ```C++
 // Include the kernel log levels.
 #include "sys/kernel_levels.h"
-// Change the header.
+/// Change the header.
 #define __DEBUG_HEADER__ "[ATA   ]"
-// Set the log level.
+/// Set the log level.
 #define __DEBUG_LEVEL__ LOGLEVEL_INFO
 ```
 This example sets the `__DEBUG_LEVEL__`, so that all the messages from `INFO` and below are shown. While `__DEBUG_HEADER__` is just a string that is automatically prepended to your message, helping you identifying from which code the message is coming from.

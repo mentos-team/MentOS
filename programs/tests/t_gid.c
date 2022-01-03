@@ -8,15 +8,15 @@
 #include "string.h"
 #include <stdio.h>
 
-static void list_groups() {
-
-    group* iter;
+static void list_groups()
+{
+    group_t *iter;
     while ((iter = getgrent()) != NULL) {
-        printf("Group\n\tname: %s\n\tpasswd: %s\n\tnames:\n",iter->gr_name, iter->gr_passwd);
+        printf("Group\n\tname: %s\n\tpasswd: %s\n\tnames:\n", iter->gr_name, iter->gr_passwd);
 
         size_t count = 0;
         while (iter->gr_mem[count] != NULL) {
-            printf("\t\t%s\n",iter->gr_mem[count]);
+            printf("\t\t%s\n", iter->gr_mem[count]);
             count += 1;
         }
 
@@ -24,8 +24,8 @@ static void list_groups() {
     }
 }
 
-int main(int argc, char** argv) {
-
+int main(int argc, char **argv)
+{
     printf("List of all groups:\n");
 
     list_groups();
@@ -36,7 +36,7 @@ int main(int argc, char** argv) {
     list_groups();
     endgrent();
 
-    group* root_group = getgrgid(0);
+    group_t *root_group = getgrgid(0);
     if (strcmp(root_group->gr_name, "root") != 0) {
         printf("Error in getgrgid function.");
         return 1;

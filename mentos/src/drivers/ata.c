@@ -7,9 +7,9 @@
 
 // Include the kernel log levels.
 #include "sys/kernel_levels.h"
-// Change the header.
+/// Change the header.
 #define __DEBUG_HEADER__ "[ATA   ]"
-// Set the log level.
+/// Set the log level.
 #define __DEBUG_LEVEL__ LOGLEVEL_NOTICE
 
 #include "drivers/ata.h"
@@ -85,29 +85,98 @@ typedef enum {
     ata_dma_command_write_no_retry = 0xCB, ///< Write DMA without retries (28 bit LBA).
 } ata_dma_command_t;
 
+/// @brief ATA identity commands.
 typedef enum {
     ata_command_pata_ident   = 0xEC, ///< Identify Device.
     ata_command_patapi_ident = 0xA1, ///< Identify Device.
 } ata_identity_command_t;
 
+/// @brief IDENTIFY device data (response to 0xEC).
 typedef struct ata_identify_t {
-    uint16_t flags;           ///<
-    uint16_t unused1[9];      ///<
-    char serial[20];          ///<
-    uint16_t unused2[3];      ///<
-    char firmware[8];         ///<
-    char model[40];           ///<
-    uint16_t sectors_per_int; ///<
-    uint16_t unused3;         ///<
-    uint16_t capabilities[2]; ///<
-    uint16_t unused4[2];      ///<
-    uint16_t valid_ext_data;  ///<
-    uint16_t unused5[5];      ///<
-    uint16_t size_of_rw_mult; ///<
-    uint32_t sectors_28;      ///<
-    uint16_t unused6[38];     ///<
-    uint64_t sectors_48;      ///<
-    uint16_t unused7[152];    ///<
+    /// Word      0 : General configuration.
+    struct {
+        /// Reserved.
+        uint16_t reserved1 : 1;
+        /// This member is no longer used.
+        uint16_t retired3 : 1;
+        /// Indicates that the response was incomplete.
+        uint16_t response_incomplete : 1;
+        /// This member is no longer used.
+        uint16_t retired2 : 3;
+        /// Indicates when set to 1 that the device is fixed.
+        uint16_t fixed_fevice : 1;
+        /// Indicates when set to 1 that the media is removable.
+        uint16_t removable_media : 1;
+        /// This member is no longer used.
+        uint16_t retired1 : 7;
+        /// Indicates when set to 1 that the device is an ATA device.
+        uint16_t device_type : 1;
+    } general_configuration;
+    /// Word   1-9  : Unused.
+    uint16_t unused1[9];
+    /// Word  10-19 : Contains the serial number of the device.
+    uint8_t serial_number[20];
+    /// Word  20-22 : Unused.
+    uint16_t unused2[3];
+    /// Word  23-26 : Contains the revision number of the device's firmware.
+    uint8_t firmware_revision[8];
+    /// Word  27-46 : Contains the device's model number.
+    uint8_t model_number[40];
+    /// Word     47 : Maximum number of sectors that shall be transferred per interrupt.
+    uint8_t maximum_block_transfer;
+    /// Word     48 : Unused.
+    uint8_t unused3;
+    /// Word  49-50 :
+    struct {
+        /// Unused.
+        uint8_t current_long_physical_sector_alignment : 2;
+        /// Reserved.
+        uint8_t reserved_byte49 : 6;
+        /// Indicates that the device supports DMA operations.
+        uint8_t dma_supported : 1;
+        /// Indicates that the device supports logical block addressing.
+        uint8_t lba_supported : 1;
+        /// Indicates when set to 1 that I/O channel ready is disabled for the device.
+        uint8_t io_rdy_disable : 1;
+        /// Indicates when set to 1 that I/O channel ready is supported by the device.
+        uint8_t io_rdy_supported : 1;
+        /// Reserved.
+        uint8_t reserved1 : 1;
+        /// Indicates when set to 1 that the device supports standby timers.
+        uint8_t stand_by_timer_support : 1;
+        /// Reserved.
+        uint8_t reserved2 : 2;
+        /// Reserved.
+        uint16_t reserved_word50;
+    } capabilities;
+    /// Word  51-52 : Obsolete.
+    uint16_t unused4[2];
+    /// Word     53 : Bit 0 = obsolete; Bit 1 = words 70:64 valid; bit 2 = word 88 valid.
+    uint16_t valid_ext_data;
+    /// Word  54-58 : Obsolete.
+    uint16_t unused5[5];
+    /// Word     59 : Indicates the multisector setting.
+    uint8_t current_multisector_setting;
+    /// Indicates when TRUE that the multisector setting is valid.
+    uint8_t multisector_setting_valid : 1;
+    /// Reserved.
+    uint8_t reserved_byte59 : 3;
+    /// The device supports the sanitize command.
+    uint8_t sanitize_feature_supported : 1;
+    /// The device supports cryptographic erase.
+    uint8_t crypto_scramble_ext_command_supported : 1;
+    /// The device supports block overwrite.
+    uint8_t overwrite_ext_command_supported : 1;
+    /// The device supports block erase.
+    uint8_t block_erase_ext_command_supported : 1;
+    /// Word  60-61 : Contains the total number of 28 bit LBA addressable sectors on the drive.
+    uint32_t sectors_28;
+    /// Word  62-99 : We do not care for these right now.
+    uint16_t unused6[38];
+    /// Word 100-103: Contains the total number of 48 bit addressable sectors on the drive.
+    uint64_t sectors_48;
+    /// Word 104-256: We do not care for these right now.
+    uint16_t unused7[152];
 } ata_identify_t;
 
 /// @brief Physical Region Descriptor Table (PRDT) entry.
@@ -138,6 +207,7 @@ typedef struct ata_device_t {
     ata_device_type_t type;
     /// The "I/O" port base.
     unsigned io_base;
+    /// I/O registers.
     struct {
         /// [R/W] Data Register. Read/Write PIO data bytes (16-bit).
         unsigned data;
@@ -216,7 +286,7 @@ typedef struct ata_device_t {
     vfs_file_t *fs_root;
 } ata_device_t;
 
-// The sector size.
+/// The sector size.
 #define ATA_SECTOR_SIZE 512
 /// The size of the DMA area.
 #define ATA_DMA_SIZE 512
@@ -397,12 +467,10 @@ static inline void ata_device_select(ata_device_t *dev)
 
 static inline uint64_t ata_max_offset(ata_device_t *dev)
 {
-    uint64_t sectors = dev->identity.sectors_48;
-    if (!sectors) {
-        // Fall back to sectors_28.
-        sectors = dev->identity.sectors_28;
+    if (dev->identity.sectors_48) {
+        return dev->identity.sectors_48 * ATA_SECTOR_SIZE;
     }
-    return sectors * ATA_SECTOR_SIZE;
+    return dev->identity.sectors_28 * ATA_SECTOR_SIZE;
 }
 
 static inline void ata_fix_string(char *str, unsigned len)
@@ -430,11 +498,11 @@ static inline bool_t ata_read_device_identity(ata_device_t *dev, ata_identity_co
         buffer[i] = inports(dev->io_reg.data);
     }
     // Fix the serial.
-    ata_fix_string((char *)&dev->identity.serial, 20 - 1);
+    ata_fix_string((char *)&dev->identity.serial_number, 20 - 1);
     // Fix the firmware.
-    ata_fix_string((char *)&dev->identity.firmware, 8 - 1);
+    ata_fix_string((char *)&dev->identity.firmware_revision, 8 - 1);
     // Fix the model.
-    ata_fix_string((char *)&dev->identity.model, 40 - 1);
+    ata_fix_string((char *)&dev->identity.model_number, 40 - 1);
     return true;
 }
 
@@ -592,9 +660,9 @@ static bool_t ata_device_init(ata_device_t *dev)
     // Print the device data.
     pr_debug("Device name     : %s\n", dev->name);
     pr_debug("Device status   : [%s]\n", ata_get_device_status_str(dev));
-    pr_debug("Device Serial   : %s\n", dev->identity.serial);
-    pr_debug("Device Firmware : %s\n", dev->identity.firmware);
-    pr_debug("Device Model    : %s\n", dev->identity.model);
+    pr_debug("Device Serial   : %s\n", dev->identity.serial_number);
+    pr_debug("Device Firmware : %s\n", dev->identity.firmware_revision);
+    pr_debug("Device Model    : %s\n", dev->identity.model_number);
     pr_debug("Sectors (48)    : %d\n", dev->identity.sectors_48);
     pr_debug("Sectors (24)    : %d\n", dev->identity.sectors_28);
     pr_debug("PCI device ID   : 0x%x\n", ata_pci);

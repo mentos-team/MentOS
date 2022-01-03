@@ -35,7 +35,8 @@ void dbg_printf(const char *file, const char *fun, int line, const char *format,
 const char *to_human_size(unsigned long bytes);
 
 /// @brief Transforms the given value to a binary string.
-/// @param value The decimal value.
+/// @param value to print.
+/// @param length of the binary output.
 /// @return String representing the binary value.
 const char *dec_to_binary(unsigned long value, unsigned length);
 

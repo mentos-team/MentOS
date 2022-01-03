@@ -6,9 +6,9 @@
 
 // Include the kernel log levels.
 #include "sys/kernel_levels.h"
-// Change the header.
+/// Change the header.
 #define __DEBUG_HEADER__ "[PCI   ]"
-// Set the log level.
+/// Set the log level.
 #define __DEBUG_LEVEL__ LOGLEVEL_NOTICE
 
 #include "devices/pci.h"
@@ -309,43 +309,43 @@ const char *pci_class_lookup(uint32_t class_code)
     return "Unknown";
 }
 
-void pci_scan_hit(pci_scan_func_t f, uint32_t dev, void *extra)
+void pci_scan_hit(pci_scan_func_t f, uint32_t device, void *extra)
 {
-    uint16_t dev_vend = (uint16_t)pci_read_field(dev, PCI_VENDOR_ID, 2);
-    uint16_t dev_dvid = (uint16_t)pci_read_field(dev, PCI_DEVICE_ID, 2);
-    f(dev, dev_vend, dev_dvid, extra);
+    uint16_t vendor_id = (uint16_t)pci_read_field(device, PCI_VENDOR_ID, 2);
+    uint16_t device_id = (uint16_t)pci_read_field(device, PCI_DEVICE_ID, 2);
+    f(device, vendor_id, device_id, extra);
 }
 
 void pci_scan_func(pci_scan_func_t f, int type, int bus, int slot, int func, void *extra)
 {
-    uint32_t dev = pci_box_device(bus, slot, func);
+    uint32_t device = pci_box_device(bus, slot, func);
 
-    if ((type == -1) || (type == pci_find_type(dev))) {
-        pci_scan_hit(f, dev, extra);
+    if ((type == -1) || (type == pci_find_type(device))) {
+        pci_scan_hit(f, device, extra);
     }
-    if (pci_find_type(dev) == PCI_TYPE_BRIDGE) {
-        pci_scan_bus(f, type, pci_read_field(dev, PCI_SECONDARY_BUS, 1), extra);
+    if (pci_find_type(device) == PCI_TYPE_BRIDGE) {
+        pci_scan_bus(f, type, pci_read_field(device, PCI_SECONDARY_BUS, 1), extra);
     }
 }
 
 void pci_scan_slot(pci_scan_func_t f, int type, int bus, int slot, void *extra)
 {
-    uint32_t dev = pci_box_device(bus, slot, 0);
+    uint32_t device = pci_box_device(bus, slot, 0);
 
-    if (pci_read_field(dev, PCI_VENDOR_ID, 2) == PCI_NONE) {
+    if (pci_read_field(device, PCI_VENDOR_ID, 2) == PCI_NONE) {
         return;
     }
 
     pci_scan_func(f, type, bus, slot, 0, extra);
 
-    if (!pci_read_field(dev, PCI_HEADER_TYPE, 1)) {
+    if (!pci_read_field(device, PCI_HEADER_TYPE, 1)) {
         return;
     }
 
     for (int func = 1; func < 8; func++) {
-        dev = pci_box_device(bus, slot, func);
+        device = pci_box_device(bus, slot, func);
 
-        if (pci_read_field(dev, PCI_VENDOR_ID, 2) != PCI_NONE) {
+        if (pci_read_field(device, PCI_VENDOR_ID, 2) != PCI_NONE) {
             pci_scan_func(f, type, bus, slot, func, extra);
         }
     }
@@ -366,9 +366,9 @@ void pci_scan(pci_scan_func_t f, int type, void *extra)
     }
 
     for (int func = 0; func < 8; ++func) {
-        uint32_t dev = pci_box_device(0, 0, func);
+        uint32_t device = pci_box_device(0, 0, func);
 
-        if (pci_read_field(dev, PCI_VENDOR_ID, 2) == PCI_NONE) {
+        if (pci_read_field(device, PCI_VENDOR_ID, 2) == PCI_NONE) {
             break;
         }
         pci_scan_bus(f, type, func, extra);

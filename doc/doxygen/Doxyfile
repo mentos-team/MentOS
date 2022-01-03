@@ -853,7 +853,7 @@ INPUT_ENCODING         = UTF-8
 # C comment), *.py, *.pyw, *.f90, *.f95, *.f03, *.f08, *.f, *.for, *.tcl, *.vhd,
 # *.vhdl, *.ucf, *.qsf and *.ice.
 
-FILE_PATTERNS          = *.c *.h
+FILE_PATTERNS          = *.c *.h *.S
 
 # The RECURSIVE tag can be used to specify whether or not subdirectories should
 # be searched for input files as well.

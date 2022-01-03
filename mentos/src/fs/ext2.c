@@ -7,9 +7,9 @@
 
 // Include the kernel log levels.
 #include "sys/kernel_levels.h"
-// Change the header.
+/// Change the header.
 #define __DEBUG_HEADER__ "[EXT2  ]"
-// Set the log level.
+/// Set the log level.
 #define __DEBUG_LEVEL__ LOGLEVEL_NOTICE
 
 #include "process/scheduler.h"
@@ -62,6 +62,7 @@
 // Data Structures
 // ============================================================================
 
+/// @brief Types of file in an EXT2 filesystem.
 typedef enum ext2_file_type_t {
     ext2_file_type_unknown,          ///< Unknown type.
     ext2_file_type_regular_file,     ///< Regular file.
@@ -73,6 +74,7 @@ typedef enum ext2_file_type_t {
     ext2_file_type_symbolic_link     ///< Symbolic link.
 } ext2_file_type_t;
 
+/// @brief Status of a block.
 typedef enum ext2_block_status_t {
     ext2_block_status_free     = 0, ///< The block is free.
     ext2_block_status_occupied = 1  ///< The block is occupied.
@@ -210,7 +212,7 @@ typedef struct ext2_superblock_t {
     uint8_t reserved[760];
 } ext2_superblock_t;
 
-/// @brief
+/// @brief Entry of the Block Group Descriptor Table (BGDT).
 typedef struct ext2_group_descriptor_t {
     /// @brief The block number of the block bitmap for this Block Group
     uint32_t block_bitmap;
@@ -256,10 +258,10 @@ typedef struct ext2_inode_t {
     uint32_t flags;
     /// @brief OS dependant value.
     uint32_t osd1;
-    /// @brief
-    union blocks_t {
-        /// [60 byte]
-        struct blocks_data_t {
+    /// @brief Mutable data.
+    union {
+        /// [60 byte] Blocks indices.
+        struct {
             /// [48 byte]
             uint32_t dir_blocks[EXT2_INDIRECT_BLOCKS];
             /// [ 4 byte]
@@ -3031,140 +3033,4 @@ int ext2_finalize(void)
 {
     vfs_unregister_filesystem(&ext2_file_system_type);
     return 0;
-}
-
-#include "assert.h"
-
-void dump_dir(vfs_file_t *dir)
-{
-    ext2_filesystem_t *fs = (ext2_filesystem_t *)dir->device;
-    // Check the filesystem.
-    if (fs == NULL) {
-        pr_err("The directory does not belong to an EXT2 filesystem `%s`.\n", dir->name);
-        return;
-    }
-    // Check the magic number.
-    if (fs->superblock.magic != EXT2_SUPERBLOCK_MAGIC) {
-        pr_err("The directory does not belong to an EXT2 filesystem `%s`.\n", dir->name);
-        return;
-    }
-    // Get the inode associated with the directory.
-    ext2_inode_t inode;
-    if (ext2_read_inode(fs, &inode, dir->ino) == -1) {
-        pr_err("Failed to read the inode (%d).\n", dir->ino);
-        return;
-    }
-    pr_debug("dir: `%-s` inode: `%4d` {\n", dir->name, dir->ino);
-    // Allocate the cache.
-    uint8_t *cache = kmem_cache_alloc(fs->ext2_buffer_cache, GFP_KERNEL);
-    // Clean the cache.
-    memset(cache, 0, fs->block_size);
-    // Iterate the directory.
-    ext2_direntry_iterator_t it = ext2_direntry_iterator_begin(fs, cache, &inode);
-    for (; ext2_direntry_iterator_valid(&it); ext2_direntry_iterator_next(&it)) {
-        if (it.direntry->inode != 0) {
-            ext2_inode_t __inode;
-            ext2_read_inode(fs, &__inode, it.direntry->inode);
-            pr_debug("    %-16s (inode: %4d, type: %2d, rec_len: %4d, name_len: %2d)[size: %d]\n",
-                     it.direntry->name,
-                     it.direntry->inode,
-                     it.direntry->file_type,
-                     it.direntry->rec_len,
-                     it.direntry->name_len,
-                     __inode.size);
-        } else {
-            pr_debug("    %-16s (inode: %4d, type: %2d, rec_len: %4d, name_len: %2d)\n",
-                     it.direntry->name,
-                     it.direntry->inode,
-                     it.direntry->file_type,
-                     it.direntry->rec_len,
-                     it.direntry->name_len);
-        }
-        //ext2_dump_inode(&__inode);
-        //pr_debug("\n");
-    }
-    pr_debug("}\n");
-    kmem_cache_free(cache);
-}
-
-void ext2_test()
-{
-#if 0
-    char buffer[256];
-    memset(buffer, 0, 256);
-    for (int i = 0; i < 256; ++i) {
-        buffer[i] = '0' + (i % 9);
-    }
-    buffer[255] = 0;
-
-    vfs_file_t *home, *test1, *test2, *test3;
-
-    assert(home = vfs_open("/home", O_RDONLY, 0));
-    dump_dir(home);
-
-    assert(test1 = vfs_creat("/home/test1.txt", EXT2_S_IWUSR | EXT2_S_IRUSR | EXT2_S_IRGRP | EXT2_S_IROTH));
-    dump_dir(home);
-
-    assert(test2 = vfs_creat("/home/test2.txt", EXT2_S_IWUSR | EXT2_S_IRUSR | EXT2_S_IRGRP | EXT2_S_IROTH));
-    dump_dir(home);
-
-    assert(test3 = vfs_creat("/home/test3.txt", EXT2_S_IWUSR | EXT2_S_IRUSR | EXT2_S_IRGRP | EXT2_S_IROTH));
-    dump_dir(home);
-
-    vfs_write(test1, buffer, 0, 256);
-    vfs_close(test1);
-    dump_dir(home);
-
-    vfs_write(test2, buffer, 0, 256);
-    vfs_close(test2);
-    dump_dir(home);
-
-    vfs_write(test3, buffer, 0, 256);
-    vfs_close(test3);
-    dump_dir(home);
-
-    vfs_mkdir("/home/pippo", EXT2_S_IRWXU | EXT2_S_IRGRP | EXT2_S_IXGRP | EXT2_S_IROTH | EXT2_S_IXOTH);
-    dump_dir(home);
-
-    vfs_rmdir("/home/pippo");
-    dump_dir(home);
-
-    vfs_rmdir("/home");
-    dump_dir(home);
-
-    vfs_close(home);
-
-    vfs_unlink("/home/test1.txt");
-    dump_dir(home);
-    
-    vfs_unlink("/home/test2.txt");
-    dump_dir(home);
-
-    vfs_unlink("/home/test3.txt");
-    dump_dir(home);
-#elif 1
-    vfs_file_t *home, *file;
-    assert(home = vfs_open("/home", O_RDONLY, 0));
-
-    dump_dir(home);
-
-    assert(file = vfs_creat("/home/test_file_1.txt", EXT2_S_IWUSR | EXT2_S_IRUSR | EXT2_S_IRGRP | EXT2_S_IROTH));
-    vfs_close(file);
-
-    assert(file = vfs_creat("/home/test_file_2.txt", EXT2_S_IWUSR | EXT2_S_IRUSR | EXT2_S_IRGRP | EXT2_S_IROTH));
-    vfs_close(file);
-
-    vfs_unlink("/home/test_file_1.txt");
-    vfs_unlink("/home/test_file_2.txt");
-
-    dump_dir(home);
-
-    assert(file = vfs_creat("/home/test_file_4.txt", EXT2_S_IWUSR | EXT2_S_IRUSR | EXT2_S_IRGRP | EXT2_S_IROTH));
-    vfs_close(file);
-
-    dump_dir(home);
-
-    vfs_close(home);
-    while (true) {}
-#endif
 }

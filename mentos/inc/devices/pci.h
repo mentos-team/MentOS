@@ -12,6 +12,7 @@
 
 #include "stdint.h"
 
+/// @brief Types of PCI commands.
 typedef enum {
     /// @brief If set to 1 the device can respond to I/O Space accesses;
     /// otherwise, the device's response is disabled.
@@ -50,6 +51,7 @@ typedef enum {
     pci_command_interrupt_disable = 10,
 } pci_command_bit_t;
 
+/// @brief Types of PCI status.
 typedef enum {
     /// @brief Represents the state of the device's INTx# signal. If set to 1
     /// and bit 10 of the Command register (Interrupt Disable bit) is set to 0
@@ -256,61 +258,91 @@ static inline uint32_t pci_get_addr(uint32_t device, int field)
            ((field)&0xFC);
 }
 
-/// @brief TODO: doxygen comment.
+/// @brief Get device number from: bus, slot and function.
+/// @param bus
+/// @param slot
+/// @param func
+/// @return uint32_t
 static inline uint32_t pci_box_device(int bus, int slot, int func)
 {
     return (uint32_t)((bus << 16) | (slot << 8) | func);
 }
 
 /// @brief Reads a field from the given PCI device.
+/// @param device the device.
+/// @param field the field to read.
+/// @param size the size of the field.
+/// @return the value we read.
 uint32_t pci_read_field(uint32_t device, int field, int size);
 
-// TODO: doxygen comment.
-/// @brief
+/// @brief Writes a field from the given PCI device.
+/// @param device the device number.
+/// @param field the field to write.
+/// @param size the size of the field.
+/// @param value the value we write.
 void pci_write_field(uint32_t device, int field, int size, uint32_t value);
 
-// TODO: doxygen comment.
-/// @brief
+/// @brief Finds the type of the given device.
+/// @param device the device number.
+/// @return the type of the device.
 uint32_t pci_find_type(uint32_t device);
 
-// TODO: doxygen comment.
-/// @brief
+/// @brief Searches for the vendor name from the ID.
+/// @param vendor_id the vendor ID.
+/// @return the vendor name.
 const char *pci_vendor_lookup(unsigned short vendor_id);
 
-// TODO: doxygen comment.
-/// @brief
-const char *pci_device_lookup(unsigned short vendor_id,
-                              unsigned short device_id);
-// TODO: doxygen comment.
-/// @brief
-void pci_scan_hit(pci_scan_func_t f, uint32_t dev, void *extra);
+/// @brief Searches for the device name from its ID and the vendor id.
+/// @param vendor_id the vendor ID.
+/// @param device_id the device ID.
+/// @return the device name.
+const char *pci_device_lookup(unsigned short vendor_id, unsigned short device_id);
 
-// TODO: doxygen comment.
-/// @brief
+/// @brief Calls the function f on the device if found.
+/// @param f the function to call.
+/// @param device the device number.
+/// @param extra the extra arguemnts.
+void pci_scan_hit(pci_scan_func_t f, uint32_t device, void *extra);
+
+/// @brief Scans for the given type of device.
+/// @param f the function to call once we have found the device.
+/// @param type the type of device we are searching for.
+/// @param bus bus number.
+/// @param slot slot number.
+/// @param func choose a specific function in a device.
+/// @param extra the extra arguemnts.
 void pci_scan_func(pci_scan_func_t f, int type, int bus, int slot, int func, void *extra);
 
-// TODO: doxygen comment.
-/// @brief
+/// @brief Scans for the given type of device.
+/// @param f the function to call once we have found the device.
+/// @param type the type of device we are searching for.
+/// @param bus bus number.
+/// @param slot slot number.
+/// @param extra the extra arguemnts.
 void pci_scan_slot(pci_scan_func_t f, int type, int bus, int slot, void *extra);
 
-// TODO: doxygen comment.
-/// @brief
+/// @brief Scans for the given type of device.
+/// @param f the function to call once we have found the device.
+/// @param type the type of device we are searching for.
+/// @param bus bus number.
+/// @param extra the extra arguemnts.
 void pci_scan_bus(pci_scan_func_t f, int type, int bus, void *extra);
 
-// TODO: doxygen comment.
-/// @brief
+/// @brief Scans for the given type of device.
+/// @param f the function to call once we have found the device.
+/// @param type the type of device we are searching for.
+/// @param extra the extra arguemnts.
 void pci_scan(pci_scan_func_t f, int type, void *extra);
 
-// TODO: doxygen comment.
-/// @brief
+/// @brief PCI-to-ISA remapping.
 void pci_remap(void);
 
-// TODO: doxygen comment.
-/// @brief
+/// @brief Retrieves the interrupt number for the given device.
+/// @param device the device.
+/// @return interrupt number.
 int pci_get_interrupt(uint32_t device);
 
-// TODO: doxygen comment.
-/// @brief
+/// @brief Prints all the devices connected to the PCI interfance.
 void pci_debug_scan();
 
 /// @}

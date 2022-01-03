@@ -7,10 +7,16 @@
 
 #include "stddef.h"
 
-/// Domains of interval timers
-#define ITIMER_REAL    0
+/// @brief This timer counts down in real (i.e., wall clock) time. At each
+/// expiration, a SIGALRM signal is generated.
+#define ITIMER_REAL 0
+/// @brief This timer counts down against the user-mode CPU time consumed by the
+/// process. At each expiration, a SIGVTALRM signal is generated.
 #define ITIMER_VIRTUAL 1
-#define ITIMER_PROF    2
+/// @brief This timer counts down against the total (i.e., both user and system)
+/// CPU time consumed by the process. At each expiration, a SIGPROF signal is
+/// generated.
+#define ITIMER_PROF 2
 
 /// Used to store time values.
 typedef unsigned int time_t;
@@ -37,16 +43,16 @@ typedef struct tm_t {
     int tm_isdst;
 } tm_t;
 
-/// Rappresents time
+/// Rappresents time.
 typedef struct _timeval {
-    time_t tv_sec;  /* seconds */
-    time_t tv_usec; /* microseconds */
+    time_t tv_sec;  ///< Seconds.
+    time_t tv_usec; ///< Microseconds.
 } timeval;
 
-/// Rappresents a time interval
+/// Rappresents a time interval.
 typedef struct _itimerval {
-    timeval it_interval; /* next value */
-    timeval it_value;    /* current value */
+    timeval it_interval; ///< Next value.
+    timeval it_value;    ///< Current value.
 } itimerval;
 
 /// @brief Specify intervals of time with nanosecond precision.
@@ -101,9 +107,18 @@ int nanosleep(const timespec *req, timespec *rem);
 ///         left to sleep, if the call was interrupted by a signal handler.
 unsigned int sleep(unsigned int seconds);
 
-/// @brief Fills the structure pointed to by curr_value with the current setting for the timer specified by which.
+/// @brief Fills the structure pointed to by curr_value with the current setting
+/// for the timer specified by which.
+/// @param which which timer.
+/// @param curr_value where we place the timer value.
+/// @return 0 on success, -1 on failure and errno is set to indicate the error.
 int getitimer(int which, itimerval *curr_value);
 
-/// @brief The system provides each process with three interval timers, each decrementing in a distinct time domain. 
-///        When any timer expires, a signal is sent to the process, and the timer (potentially) restarts.
+/// @brief The system provides each process with three interval timers, each
+/// decrementing in a distinct time domain. When any timer expires, a signal is
+/// sent to the process, and the timer (potentially) restarts.
+/// @param which which timer.
+/// @param new_value the new value for the timer.
+/// @param old_value output variable where the function places the previous value.
+/// @return 0 on success, -1 on failure and errno is set to indicate the error.
 int setitimer(int which, const itimerval *new_value, itimerval *old_value);

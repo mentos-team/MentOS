@@ -222,11 +222,13 @@ char *getcwd(char *buf, size_t size);
 
 /// @brief Changes the current working directory to the given path.
 /// @param path The new current working directory.
+/// @return 0 on success, -1 on failure and errno is set to indicate the error.
 int chdir(char const *path);
 
 /// @brief Is identical to chdir(), the only difference is that the
 ///        directory is given as an open file descriptor.
 /// @param fd The file descriptor of the open directory.
+/// @return 0 on success, -1 on failure and errno is set to indicate the error.
 int fchdir(int fd);
 
 /// Provide access to the directory entries.
@@ -239,4 +241,9 @@ int fchdir(int fd);
 int getdents(int fd, dirent_t *dirp, unsigned int count);
 
 /// @brief Send signal to calling thread after desired seconds.
+/// @param seconds the amount of seconds.
+/// @return If there is a previous alarm() request with time remaining, alarm()
+/// shall return a non-zero value that is the number of seconds until the
+/// previous request would have generated a SIGALRM signal. Otherwise, alarm()
+/// shall return 0.
 int alarm(int seconds);
