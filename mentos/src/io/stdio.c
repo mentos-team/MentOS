@@ -11,63 +11,6 @@
 #include "drivers/keyboard/keyboard.h"
 #include "string.h"
 
-void putchar(int character)
-{
-    video_putc(character);
-}
-
-void puts(char *str)
-{
-    video_puts(str);
-}
-
-int getchar()
-{
-    return keyboard_getc();
-}
-
-char *gets(char *str)
-{
-    // Check the input string.
-    if (str == NULL)
-        return NULL;
-    // Buffer for reading input.
-    char buffer[GETS_BUFFERSIZE];
-    memset(buffer, '\0', GETS_BUFFERSIZE);
-    // Char pointer to the buffer.
-    char *cptr = buffer;
-    // Character storage and counter to prevent overflow.
-    int ch, counter = 0;
-    // Read until we find a newline or we exceed the buffer size.
-    while (((ch = getchar()) != '\n') && (counter++ < GETS_BUFFERSIZE)) {
-        // If we encounter EOF, stop.
-        if (ch == EOF) {
-            // EOF at start of line return NULL.
-            if (cptr == str) {
-                return NULL;
-            }
-            break;
-        }
-        // Backspace key
-        if (ch == '\b') {
-            if (counter > 0) {
-                counter--;
-                --cptr;
-                putchar('\b');
-            }
-        } else {
-            // The character is stored at address, and the pointer is incremented.
-            *cptr++ = ch;
-        }
-    }
-    // Add the null-terminating character.
-    *cptr = '\0';
-    // Copy the string we have read.
-    strcpy(str, buffer);
-    // Return a pointer to the original string.
-    return str;
-}
-
 int atoi(const char *str)
 {
     // Check the input string.

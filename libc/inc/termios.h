@@ -11,11 +11,11 @@
 /// @param fd
 /// @param termios_p
 /// @return
-extern int tcgetattr(int fd, termios *termios_p);
+extern int tcgetattr(int fd, termios_t *termios_p);
 
 /// @brief Set the state of FD to *TERMIOS_P.
 /// @param fd
 /// @param optional_actions
 /// @param termios_p
 /// @return
-extern int tcsetattr(int fd, int optional_actions, const termios *termios_p);
+extern int tcsetattr(int fd, int optional_actions, const termios_t *termios_p);

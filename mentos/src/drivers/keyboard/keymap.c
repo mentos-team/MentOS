@@ -146,6 +146,11 @@ void init_keymaps()
     keymaps[KEYMAP_IT].shift[KEY_KP_LESS]       = '>';
     keymaps[KEYMAP_IT].shift[KEY_KP_DIV]        = '/';
 
+    keymaps[KEYMAP_IT].alt[KEY_LEFT_BRAKET]   = '[';
+    keymaps[KEYMAP_IT].alt[KEY_RIGHT_BRAKET]  = ']';
+    keymaps[KEYMAP_IT].alt[KEY_SEMICOLON]     = '@';
+    keymaps[KEYMAP_IT].alt[KEY_DOUBLE_QUOTES] = '#';
+
     keymaps[KEYMAP_IT].numlock[KEY_KP_DEC] = '.';
     keymaps[KEYMAP_IT].numlock[KEY_KP0]    = '0';
     keymaps[KEYMAP_IT].numlock[KEY_KP1]    = '1';

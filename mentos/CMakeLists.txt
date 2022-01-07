@@ -144,6 +144,7 @@ set(KERNEL_SOURCES
     src/drivers/rtc.c
     src/drivers/fdc.c
     src/drivers/mouse.c
+    src/drivers/ps2.c
     src/drivers/keyboard/keyboard.c
     src/drivers/keyboard/keymap.c
     src/fs/initrd.c

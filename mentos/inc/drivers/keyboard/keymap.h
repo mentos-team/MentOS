@@ -24,6 +24,10 @@ typedef struct keymap_t {
     int32_t base[65536];
     /// The mapping when shifted.
     int32_t shift[65536];
+    /// The mapping when ctrl is pressed.
+    int32_t ctrl[65536];
+    /// The mapping when right alt is pressed.
+    int32_t alt[65536];
     /// The mapping when numlock is active.
     uint32_t numlock[65536];
 } keymap_t;
@@ -131,26 +135,27 @@ void init_keymaps();
 #define KEY_KP0           0x0052U ///< NP - Ins
 #define KEY_KP_DEC        0x0053U ///< NP - Del
 #define KEY_KP_LESS       0x0056U ///< NP - Del
-#define KEY_KP_RETURN     0xe01cU ///< NP - Enter 57372
+#define KEY_KP_RETURN     0xE01cU ///< NP - Enter 57372
 #define KEY_RIGHT_CONTROL 0xE01DU ///< Right Ctrl 57373
 #define KEY_KP_DIV        0xE035U ///< Divide 57397
-#define KEY_RIGHT_ALT     0xe038U ///< Right Alt 57400
-#define KEY_F11           0xe057U ///< F11 57431
-#define KEY_F12           0xe058U ///< F12 57432
-#define KEY_LEFT_WIN      0xe05bU ///< Left Winkey 57435
-#define KEY_RIGHT_WIN     0xe05cU ///< Right Winkey 57436
-#define KEY_INSERT        0xe052U ///< Ins 57426
-#define KEY_HOME          0xe047U ///< Home 57415
-#define KEY_UP_ARROW      0xe048U ///< Up Arrow 57416
-#define KEY_PAGE_UP       0xe049U ///< Pgup 57417
-#define KEY_LEFT_ARROW    0xe04bU ///< Left Arrow 57419
-#define KEY_DELETE        0xe053U ///< Del 57427
-#define KEY_END           0xe04fU ///< End 57423
-#define KEY_PAGE_DOWN     0xe051U ///< Pgdn 57425
-#define KEY_RIGHT_ARROW   0xe04dU ///< Right Arrow 57421
-#define KEY_DOWN_ARROW    0xe050U ///< Down Arrow 57424
+#define KEY_RIGHT_ALT     0xE038U ///< Right Alt 57400
+#define KEY_F11           0xE057U ///< F11 57431
+#define KEY_F12           0xE058U ///< F12 57432
+#define KEY_LEFT_WIN      0xE05bU ///< Left Winkey 57435
+#define KEY_RIGHT_WIN     0xE05cU ///< Right Winkey 57436
+#define KEY_INSERT        0xE052U ///< Ins 57426
+#define KEY_HOME          0xE047U ///< Home 57415
+#define KEY_UP_ARROW      0xE048U ///< Up Arrow 57416
+#define KEY_PAGE_UP       0xE049U ///< Pgup 57417
+#define KEY_LEFT_ARROW    0xE04bU ///< Left Arrow 57419
+#define KEY_DELETE        0xE053U ///< Del 57427
+#define KEY_END           0xE04fU ///< End 57423
+#define KEY_PAGE_DOWN     0xE051U ///< Pgdn 57425
+#define KEY_RIGHT_ARROW   0xE04dU ///< Right Arrow 57421
+#define KEY_DOWN_ARROW    0xE050U ///< Down Arrow 57424
 #define CODE_BREAK        0x0080U ///< Code break code
 
+#define MULTIMEDIA_SCAN_CODE 0xE0
 /// @}
 
 /// @}

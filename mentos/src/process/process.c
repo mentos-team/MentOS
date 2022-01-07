@@ -228,6 +228,14 @@ static inline task_struct *__alloc_task(task_struct *source, task_struct *parent
 
     // Initalize real_timer for intervals
     proc->real_timer = NULL;
+    
+    // Set the default terminal options.
+    proc->termios = (termios_t){
+        .c_cflag = 0,
+        .c_lflag = (ICANON | ECHO | ECHOE | ECHOK | ECHONL | ISIG),
+        .c_oflag = 0,
+        .c_iflag = 0
+    };
 
     return proc;
 }

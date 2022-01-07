@@ -29,6 +29,7 @@
 #include "fs/ext2.h"
 #include "klib/irqflags.h"
 #include "drivers/keyboard/keyboard.h"
+#include "drivers/ps2.h"
 #include "process/scheduler.h"
 #include "hardware/timer.h"
 #include "fs/vfs.h"
@@ -297,7 +298,19 @@ int kmain(boot_info_t *boot_informations)
         return 1;
     }
     print_ok();
-
+    
+    //==========================================================================
+#if 1
+    pr_notice("Setting up PS/2 driver...\n");
+    printf("Setting up PS/2 driver...");
+    if (ps2_initialize()) {
+        print_fail();
+        pr_emerg("Failed to initialize proc system entries!\n");
+        return 1;
+    }
+    print_ok();
+#endif
+    
     //==========================================================================
     pr_notice("Setting up keyboard driver...\n");
     printf("Setting up keyboard driver...");
@@ -354,8 +367,6 @@ int kmain(boot_info_t *boot_informations)
         return 1;
     }
     print_ok();
-
-    //ext2_test();
 
     // We have completed the booting procedure.
     pr_notice("Booting done, jumping into init process.\n");

@@ -24,7 +24,7 @@ typedef struct termios {
     cc_t c_cc[NCCS];  ///< control characters
     speed_t c_ispeed; ///< input speed
     speed_t c_ospeed; ///< output speed
-} termios;
+} termios_t;
 
 /// @brief These flags generally control higher-level aspects of input processing than the input
 /// modes flags described in Input Modes, such as echoing, signals, and the choice of canonical

@@ -67,6 +67,7 @@ set(PROGRAMS
     ipcs.c
     sleep.c
     man.c
+    edit.c
 )
 foreach(PROGRAM ${PROGRAMS})
     # Prepare the program name.

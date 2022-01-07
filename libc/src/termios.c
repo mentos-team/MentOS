@@ -8,7 +8,7 @@
 #include "sys/errno.h"
 #include "bits/ioctls.h"
 
-int tcgetattr(int fd, termios *termios_p)
+int tcgetattr(int fd, termios_t *termios_p)
 {
     int retval;
     __asm__ volatile("int $0x80"
@@ -22,7 +22,7 @@ int tcgetattr(int fd, termios *termios_p)
     return retval;
 }
 
-int tcsetattr(int fd, int optional_actions, const termios *termios_p)
+int tcsetattr(int fd, int optional_actions, const termios_t *termios_p)
 {
     int retval;
     __asm__ volatile("int $0x80"

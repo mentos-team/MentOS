@@ -5,9 +5,10 @@
 
 #pragma once
 
-#include "mem/paging.h"
+#include "bits/termios-struct.h"
 #include "system/signal.h"
 #include "devices/fpu.h"
+#include "mem/paging.h"
 
 /// The maximum length of a name for a task_struct.
 #define TASK_NAME_MAX_LENGTH 100
@@ -100,7 +101,7 @@ typedef struct task_struct {
     list_head run_list;
     /// List of children traced by the process.
     list_head children;
-    /// List of siblings.
+    /// List of siblings, namely processes created by parent process.
     list_head sibling;
     /// The context of the processors.
     thread_struct_t thread;
@@ -132,7 +133,7 @@ typedef struct task_struct {
     sigpending_t pending;
 
     /// Timer for alarm syscall.
-    struct timer_list* real_timer;
+    struct timer_list *real_timer;
 
     /// Next value for the real timer (ITIMER_REAL).
     unsigned long it_real_incr;
@@ -147,25 +148,15 @@ typedef struct task_struct {
     /// Current value for the profiling timer (ITIMER_PROF).
     unsigned long it_prof_value;
 
+    /// Process-wise terminal options.
+    termios_t termios;
+
     //==== Future work =========================================================
     // - task's attributes:
     // struct task_struct __rcu	*real_parent;
     // int exit_state;
     // int exit_signal;
     // struct thread_info thread_info;
-    // List of sibling, namely processes created by parent process
-    // list_head sibling;
-
-    // - task's file descriptor:
-    // struct files_struct *files;
-
-    // - task's signal handlers:
-    // struct signal_struct	*signal;
-    // struct sighand_struct_t *sighand;
-    // sigset_t	blocked;
-    // sigset_t	real_blocked;
-    // sigset_t	saved_sigmask;
-    // struct sigpending pending;
     //==========================================================================
 } task_struct;
 

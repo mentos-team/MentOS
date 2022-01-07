@@ -18,6 +18,11 @@ int isalpha(int c)
     return ((c >= 65 && c <= 90) || (c >= 97 && c <= 122));
 }
 
+int iscntrl(int c)
+{
+    return ((c >= 0x00 && c <= 0x1F) || (c == 0x7F));
+}
+
 int isalnum(int c)
 {
     return (isalpha(c) || isdigit(c));

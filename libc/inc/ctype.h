@@ -15,6 +15,11 @@ int isdigit(int c);
 /// @return 1 on success, 0 otherwise.
 int isalpha(int c);
 
+/// @brief Check if the given value is a control character.
+/// @param c The input character.
+/// @return 1 on success, 0 otherwise.
+int iscntrl(int c);
+
 /// @brief Check if the given value is either a letter or a digit.
 /// @param c The input character.
 /// @return 1 on success, 0 otherwise.

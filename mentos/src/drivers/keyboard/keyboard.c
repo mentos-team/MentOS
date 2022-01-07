@@ -10,7 +10,7 @@
 /// Change the header.
 #define __DEBUG_HEADER__ "[KEYBRD]"
 /// Set the log level.
-#define __DEBUG_LEVEL__ LOGLEVEL_NOTICE
+#define __DEBUG_LEVEL__ LOGLEVEL_DEBUG
 
 #include "drivers/keyboard/keyboard.h"
 
@@ -20,6 +20,7 @@
 #include "sys/bitops.h"
 #include "io/video.h"
 #include "io/debug.h"
+#include "drivers/ps2.h"
 #include "ctype.h"
 #include "descriptor_tables/isr.h"
 #include "process/scheduler.h"
@@ -65,7 +66,7 @@ static inline void push_character(uint16_t c)
 
 static inline int read_character()
 {
-    char c = -1;
+    int c = -1;
     if (buf_r != buf_w) {
         c     = circular_buffer[buf_r];
         buf_r = STEP(buf_r);
@@ -75,6 +76,7 @@ static inline int read_character()
 
 void keyboard_isr(pt_regs *f)
 {
+    unsigned int scancode;
     (void)f;
 
     if (!(inportb(0x64U) & 1U)) {
@@ -82,80 +84,83 @@ void keyboard_isr(pt_regs *f)
     }
 
     // Take scancode from the port.
-    uint32_t scancode = inportb(0x60);
+    scancode = ps2_read();
     if (scancode == 0xE0) {
-        scancode = (scancode << 8U) | inportb(0x60);
+        scancode = (scancode << 8U) | ps2_read();
     }
 
     // If the key has just been released.
-    if (scancode & 0x80U) {
-        if (scancode == (KEY_LEFT_SHIFT | CODE_BREAK)) {
-            bitmask_clear_assign(kflags, KBD_LEFT_SHIFT);
-        } else if (scancode == (KEY_RIGHT_SHIFT | CODE_BREAK)) {
-            bitmask_clear_assign(kflags, KBD_RIGHT_SHIFT);
-        } else if (scancode == (KEY_LEFT_CONTROL | CODE_BREAK)) {
-            bitmask_clear_assign(kflags, KBD_LEFT_CONTROL);
-        } else if (scancode == (KEY_RIGHT_CONTROL | CODE_BREAK)) {
-            bitmask_clear_assign(kflags, KBD_RIGHT_CONTROL);
-        } else if (scancode == (KEY_LEFT_ALT | CODE_BREAK)) {
-            bitmask_clear_assign(kflags, KBD_LEFT_ALT);
-        } else if (scancode == (KEY_RIGHT_ALT | CODE_BREAK)) {
-            bitmask_clear_assign(kflags, KBD_RIGHT_ALT);
-        }
-    } else {
-        int32_t character = 0;
-
+    if (scancode == KEY_LEFT_SHIFT) {
+        bitmask_set_assign(kflags, KBD_LEFT_SHIFT);
+        pr_debug("Press(KBD_LEFT_SHIFT)\n");
+    } else if (scancode == KEY_RIGHT_SHIFT) {
+        bitmask_set_assign(kflags, KBD_RIGHT_SHIFT);
+        pr_debug("Press(KBD_RIGHT_SHIFT)\n");
+    } else if (scancode == KEY_LEFT_CONTROL) {
+        bitmask_set_assign(kflags, KBD_LEFT_CONTROL);
+        pr_debug("Press(KBD_LEFT_CONTROL)\n");
+    } else if (scancode == KEY_RIGHT_CONTROL) {
+        bitmask_set_assign(kflags, KBD_RIGHT_CONTROL);
+        pr_debug("Press(KBD_RIGHT_CONTROL)\n");
+    } else if (scancode == KEY_LEFT_ALT) {
+        bitmask_set_assign(kflags, KBD_LEFT_ALT);
+        push_character(scancode << 16u);
+        pr_debug("Press(KBD_LEFT_ALT)\n");
+    } else if (scancode == KEY_RIGHT_ALT) {
+        bitmask_set_assign(kflags, KBD_RIGHT_ALT);
+        push_character(scancode << 16u);
+        pr_debug("Press(KBD_RIGHT_ALT)\n");
+    } else if (scancode == (KEY_LEFT_SHIFT | CODE_BREAK)) {
+        bitmask_clear_assign(kflags, KBD_LEFT_SHIFT);
+        pr_debug("Release(KBD_LEFT_SHIFT)\n");
+    } else if (scancode == (KEY_RIGHT_SHIFT | CODE_BREAK)) {
+        bitmask_clear_assign(kflags, KBD_RIGHT_SHIFT);
+        pr_debug("Release(KBD_RIGHT_SHIFT)\n");
+    } else if (scancode == (KEY_LEFT_CONTROL | CODE_BREAK)) {
+        bitmask_clear_assign(kflags, KBD_LEFT_CONTROL);
+        pr_debug("Release(KBD_LEFT_CONTROL)\n");
+    } else if (scancode == (KEY_RIGHT_CONTROL | CODE_BREAK)) {
+        bitmask_clear_assign(kflags, KBD_RIGHT_CONTROL);
+        pr_debug("Release(KBD_RIGHT_CONTROL)\n");
+    } else if (scancode == (KEY_LEFT_ALT | CODE_BREAK)) {
+        bitmask_clear_assign(kflags, KBD_LEFT_ALT);
+        pr_debug("Release(KBD_LEFT_ALT)\n");
+    } else if (scancode == (KEY_RIGHT_ALT | CODE_BREAK)) {
+        bitmask_clear_assign(kflags, KBD_RIGHT_ALT);
+        pr_debug("Release(KBD_RIGHT_ALT)\n");
+    } else if (scancode == KEY_CAPS_LOCK) {
+        bitmask_flip_assign(kflags, KBD_CAPS_LOCK);
+        keyboard_update_leds();
+        pr_debug("Toggle(KBD_CAPS_LOCK)\n");
+    } else if (scancode == KEY_NUM_LOCK) {
+        bitmask_flip_assign(kflags, KBD_NUM_LOCK);
+        keyboard_update_leds();
+        pr_debug("Toggle(KBD_NUM_LOCK)\n");
+    } else if (scancode == KEY_SCROLL_LOCK) {
+        bitmask_flip_assign(kflags, KBD_SCROLL_LOCK);
+        keyboard_update_leds();
+        pr_debug("Toggle(KBD_SCROLL_LOCK)\n");
+    } else if (scancode == KEY_BACKSPACE) {
+        push_character('\b');
+        pr_debug("Press(KEY_BACKSPACE)\n");
+    } else if (scancode == KEY_DELETE) {
+        push_character(127);
+        pr_debug("Press(KEY_DELETE)\n");
+    } else if ((scancode == KEY_ENTER) || (scancode == KEY_KP_RETURN)) {
+        push_character('\n');
+        pr_debug("Press(KEY_ENTER)\n");
+    } else if (scancode == KEY_PAGE_UP) {
+        push_character(scancode);
+        pr_debug("Toggle(KEY_PAGE_UP)\n");
+    } else if (scancode == KEY_PAGE_DOWN) {
+        push_character(scancode);
+        pr_debug("Toggle(KEY_PAGE_DOWN)\n");
+    } else if (!(scancode & CODE_BREAK)) {
+        pr_debug("scancode : %04x\n", scancode);
+        int character = 0;
         // Parse the key.
         switch (scancode) {
-        case KEY_LEFT_SHIFT:
-            bitmask_set_assign(kflags, KBD_LEFT_SHIFT);
-            break;
-        case KEY_RIGHT_SHIFT:
-            bitmask_set_assign(kflags, KBD_RIGHT_SHIFT);
-            break;
-        case KEY_LEFT_CONTROL:
-            bitmask_set_assign(kflags, KBD_LEFT_CONTROL);
-            break;
-        case KEY_RIGHT_CONTROL:
-            bitmask_set_assign(kflags, KBD_RIGHT_CONTROL);
-            break;
-        case KEY_CAPS_LOCK:
-            bitmask_flip_assign(kflags, KBD_CAPS_LOCK);
-            keyboard_update_leds();
-            break;
-        case KEY_NUM_LOCK:
-            bitmask_flip_assign(kflags, KBD_NUM_LOCK);
-            keyboard_update_leds();
-            break;
-        case KEY_SCROLL_LOCK:
-            bitmask_flip_assign(kflags, KBD_SCROLL_LOCK);
-            keyboard_update_leds();
-            break;
-        case KEY_PAGE_UP:
-            video_shift_one_page_down();
-            break;
-        case KEY_PAGE_DOWN:
-            video_shift_one_page_up();
-            break;
         case KEY_ESCAPE:
-            break;
-        case KEY_LEFT_ALT:
-            bitmask_set_assign(kflags, KBD_LEFT_ALT);
-            push_character(scancode << 16u);
-            break;
-        case KEY_RIGHT_ALT:
-            bitmask_set_assign(kflags, KBD_RIGHT_ALT);
-            push_character(scancode << 16u);
-            break;
-        case KEY_BACKSPACE:
-            push_character('\b');
-            break;
-        case KEY_DELETE:
-            push_character(127);
-            break;
-        case KEY_KP_RETURN:
-        case KEY_ENTER:
-            push_character('\n');
             break;
         case KEY_UP_ARROW:
             push_character('\033');
@@ -191,54 +196,29 @@ void keyboard_isr(pt_regs *f)
             // Get the current keymap.
             const keymap_t *keymap = get_keymap();
 
-            if (bitmask_check(kflags, KBD_NUM_LOCK)) {
-                character = keymap->numlock[scancode];
-            }
-            if ((character <= 0) && bitmask_check(kflags, KBD_RIGHT_ALT) && (bitmask_check(kflags, KBD_LEFT_SHIFT | KBD_RIGHT_SHIFT))) {
+            if (!bitmask_check(kflags, KBD_LEFT_SHIFT | KBD_RIGHT_SHIFT) != !bitmask_check(kflags, KBD_CAPS_LOCK)) {
+                character = keymap->shift[scancode];
+            } else if ((get_keymap_type() == KEYMAP_IT) && bitmask_check(kflags, KBD_RIGHT_ALT) && (bitmask_check(kflags, KBD_LEFT_SHIFT | KBD_RIGHT_SHIFT))) {
                 if (scancode == KEY_LEFT_BRAKET) {
                     character = '{';
                 } else if (scancode == KEY_RIGHT_BRAKET) {
                     character = '}';
                 }
-            }
-            if ((character <= 0) && bitmask_check(kflags, KBD_RIGHT_ALT)) {
-                if (scancode == KEY_LEFT_BRAKET) {
-                    character = '[';
-                } else if (scancode == KEY_RIGHT_BRAKET) {
-                    character = ']';
-                } else if (scancode == 0x27) {
-                    character = '@';
-                } else if (scancode == 0x28) {
-                    character = '#';
-                }
-            }
-            if ((character <= 0) && (bitmask_check(kflags, KBD_LEFT_SHIFT | KBD_RIGHT_SHIFT))) {
-                character = keymap->shift[scancode];
-            }
-            if (character <= 0) {
+            } else if (bitmask_check(kflags, KBD_NUM_LOCK)) {
+                character = keymap->numlock[scancode];
+            } else if (bitmask_check(kflags, KBD_RIGHT_ALT)) {
+                character = keymap->alt[scancode];
+            } else {
                 character = keymap->base[scancode];
             }
             // We have failed to retrieve the character.
             if (character <= 0) {
                 break;
             }
-            // Apply caps lock modifier.
-            if (bitmask_check(kflags, KBD_CAPS_LOCK)) {
-                if (character >= 'a' && character <= 'z') {
-                    character += 'A' - 'a';
-                } else if (character >= 'A' && character <= 'Z') {
-                    character += 'a' - 'A';
-                }
-            }
             if (bitmask_check(kflags, KBD_LEFT_CONTROL | KBD_RIGHT_CONTROL)) {
                 push_character('\033');
                 push_character('^');
                 character = toupper(character);
-
-                // Qui ci arrivi quando stai tenendo premuto ctrl+<carattere>.
-                // Qui devi scatenare il SIGINT (ctrl+c).
-
-                // signal();
             }
             // Update buffer.
             push_character(character);

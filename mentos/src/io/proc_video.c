@@ -3,8 +3,16 @@
 /// @copyright (c) 2014-2021 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
+// Include the kernel log levels.
+#include "sys/kernel_levels.h"
+/// Change the header.
+#define __DEBUG_HEADER__ "[PROCV ]"
+/// Set the log level.
+#define __DEBUG_LEVEL__ LOGLEVEL_DEBUG
+
 #include "bits/termios-struct.h"
 #include "drivers/keyboard/keyboard.h"
+#include "drivers/keyboard/keymap.h"
 #include "fs/procfs.h"
 #include "bits/ioctls.h"
 #include "sys/bitops.h"
@@ -13,35 +21,39 @@
 #include "sys/errno.h"
 #include "fcntl.h"
 #include "fs/vfs.h"
-
-static termios ktermios = {
-    .c_cflag = 0,
-    .c_lflag = (ICANON | ECHO | ECHOE | ECHOK | ECHONL | ISIG),
-    .c_oflag = 0,
-    .c_iflag = 0
-};
+#include "ctype.h"
+#include "process/scheduler.h"
 
 static ssize_t procv_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyte)
 {
     if (buf == NULL) {
         return -1;
     }
+    // Get the currently running process.
+    task_struct *process = scheduler_get_current_process();
     // Read the character from the keyboard.
     int c = keyboard_getc();
-    if (c >= 0) {
+    if (c < 0)
+        return 0;
+    if (c == KEY_PAGE_UP) {
+        video_shift_one_page_down();
+        return 0;
+    } else if (c == KEY_PAGE_DOWN) {
+        video_shift_one_page_up();
+        return 0;
+    } else {
         // Return the character.
         *((char *)buf) = c;
-        if (bitmask_check(ktermios.c_lflag, ECHO)) {
+        if (bitmask_check(process->termios.c_lflag, ECHO)) {
             if ((c == '\b') &&
-                (!bitmask_check(ktermios.c_lflag, ICANON) || !bitmask_check(ktermios.c_lflag, ECHOE))) {
+                (!bitmask_check(process->termios.c_lflag, ICANON) || !bitmask_check(process->termios.c_lflag, ECHOE))) {
                 return 1;
             }
             // Echo the character to video.
             video_putc(c);
         }
-        return 1;
     }
-    return 0;
+    return 1;
 }
 
 static ssize_t procv_write(vfs_file_t *file, const void *buf, off_t offset, size_t nbyte)
@@ -59,12 +71,13 @@ static int procv_fstat(vfs_file_t *file, stat_t *stat)
 
 static int procv_ioctl(vfs_file_t *file, int request, void *data)
 {
+    task_struct *process = scheduler_get_current_process();
     switch (request) {
     case TCGETS:
-        *((termios *)data) = ktermios;
+        *((termios_t *)data) = process->termios;
         break;
     case TCSETS:
-        ktermios = *((termios *)data);
+        process->termios = *((termios_t *)data);
         break;
     default:
         break;

@@ -184,6 +184,7 @@ const char *to_human_size(unsigned long bytes)
 const char *dec_to_binary(unsigned long value, unsigned length)
 {
     static char buffer[33];
+    memset(buffer, 0, 33);
     for (int i = 0, j = 32 - min(max(0, length), 32); j < 32; ++i, ++j)
         buffer[i] = bit_check(value, 31 - j) ? '1' : '0';
     return buffer;
