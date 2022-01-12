@@ -29,8 +29,6 @@ static ssize_t procv_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyt
     if (buf == NULL) {
         return -1;
     }
-    // Get the currently running process.
-    task_struct *process = scheduler_get_current_process();
     // Read the character from the keyboard.
     int c = keyboard_getc();
     if (c < 0)
@@ -42,15 +40,17 @@ static ssize_t procv_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyt
         video_shift_one_page_up();
         return 0;
     } else {
+        // Get the currently running process.
+        task_struct *process = scheduler_get_current_process();
         // Return the character.
-        *((char *)buf) = c;
+        *((char *)buf) = c & 0x00FF;
         if (bitmask_check(process->termios.c_lflag, ECHO)) {
             if ((c == '\b') &&
                 (!bitmask_check(process->termios.c_lflag, ICANON) || !bitmask_check(process->termios.c_lflag, ECHOE))) {
                 return 1;
             }
             // Echo the character to video.
-            video_putc(c);
+            video_putc(c & 0x00FF);
         }
     }
     return 1;

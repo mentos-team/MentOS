@@ -24,6 +24,8 @@
 #include "ctype.h"
 #include "descriptor_tables/isr.h"
 #include "process/scheduler.h"
+#include "ring_buffer.h"
+#include "string.h"
 
 /// The dimension of the circular buffer used to store video history.
 #define BUFSIZE 256
@@ -32,7 +34,7 @@
 #define STEP(x) (((x) == BUFSIZE - 1) ? 0 : ((x) + 1))
 
 /// Circular Buffer where the pressed keys are stored.
-static int32_t circular_buffer[BUFSIZE] = { 0 };
+static int circular_buffer[BUFSIZE] = { 0 };
 /// Index inside the buffer...
 static long buf_r = 0;
 /// Index inside the buffer...
@@ -52,14 +54,14 @@ static uint32_t kflags = 0;
 #define KBD_LEFT_ALT      (1 << 7) ///< Flag which identifies the left alt.
 #define KBD_RIGHT_ALT     (1 << 8) ///< Flag which identifies the right alt.
 
-static inline void push_character(uint16_t c)
+static inline void push_character(int c)
 {
     // Update buffer.
     if (STEP(buf_w) == buf_r) {
         buf_r = STEP(buf_r);
     }
 
-    circular_buffer[buf_w] = c;
+    circular_buffer[buf_w] = c & 0x00FF;
 
     buf_w = STEP(buf_w);
 }
@@ -72,6 +74,31 @@ static inline int read_character()
         buf_r = STEP(buf_r);
     }
     return c;
+}
+
+static inline bool_t get_keypad_number(int scancode)
+{
+    if (scancode == KEY_KP0)
+        return 0;
+    if (scancode == KEY_KP1)
+        return 1;
+    if (scancode == KEY_KP2)
+        return 2;
+    if (scancode == KEY_KP3)
+        return 3;
+    if (scancode == KEY_KP4)
+        return 4;
+    if (scancode == KEY_KP5)
+        return 5;
+    if (scancode == KEY_KP6)
+        return 6;
+    if (scancode == KEY_KP7)
+        return 7;
+    if (scancode == KEY_KP8)
+        return 8;
+    if (scancode == KEY_KP9)
+        return 9;
+    return -1;
 }
 
 void keyboard_isr(pt_regs *f)
@@ -88,6 +115,9 @@ void keyboard_isr(pt_regs *f)
     if (scancode == 0xE0) {
         scancode = (scancode << 8U) | ps2_read();
     }
+
+    // Get the keypad number, of num-lock is disabled. Otherwise, initialize to -1;
+    int keypad_fun_number = !bitmask_check(kflags, KBD_NUM_LOCK) ? get_keypad_number(scancode) : -1;
 
     // If the key has just been released.
     if (scancode == KEY_LEFT_SHIFT) {
@@ -149,67 +179,72 @@ void keyboard_isr(pt_regs *f)
     } else if ((scancode == KEY_ENTER) || (scancode == KEY_KP_RETURN)) {
         push_character('\n');
         pr_debug("Press(KEY_ENTER)\n");
-    } else if (scancode == KEY_PAGE_UP) {
+    } else if ((scancode == KEY_PAGE_UP) || (keypad_fun_number == 9)) {
         push_character(scancode);
-        pr_debug("Toggle(KEY_PAGE_UP)\n");
-    } else if (scancode == KEY_PAGE_DOWN) {
+        pr_debug("Press(KEY_PAGE_UP)\n");
+    } else if ((scancode == KEY_PAGE_DOWN) || (keypad_fun_number == 2)) {
         push_character(scancode);
-        pr_debug("Toggle(KEY_PAGE_DOWN)\n");
+        pr_debug("Press(KEY_PAGE_DOWN)\n");
+    } else if ((scancode == KEY_UP_ARROW) || (keypad_fun_number == 8)) {
+        pr_debug("Press(KEY_UP_ARROW)\n");
+        push_character('\033');
+        push_character('[');
+        push_character('A');
+    } else if ((scancode == KEY_DOWN_ARROW) || (keypad_fun_number == 2)) {
+        pr_debug("Press(KEY_DOWN_ARROW)\n");
+        push_character('\033');
+        push_character('[');
+        push_character('B');
+    } else if ((scancode == KEY_RIGHT_ARROW) || (keypad_fun_number == 6)) {
+        pr_debug("Press(KEY_RIGHT_ARROW)\n");
+        push_character('\033');
+        push_character('[');
+        push_character('C');
+    } else if ((scancode == KEY_LEFT_ARROW) || (keypad_fun_number == 4)) {
+        pr_debug("Press(KEY_LEFT_ARROW)\n");
+        push_character('\033');
+        push_character('[');
+        push_character('D');
+    } else if ((scancode == KEY_HOME) || (keypad_fun_number == 7)) {
+        pr_debug("Press(KEY_HOME)\n");
+        push_character('\033');
+        push_character('[');
+        push_character('H');
+    } else if ((scancode == KEY_END) || (keypad_fun_number == 1)) {
+        pr_debug("Press(KEY_END)\n");
+        push_character('\033');
+        push_character('[');
+        push_character('F');
+    } else if (scancode == KEY_ESCAPE) {
+        // Nothing to do.
     } else if (!(scancode & CODE_BREAK)) {
-        pr_debug("scancode : %04x\n", scancode);
+        // Get the current keymap.
+        const keymap_t *keymap = get_keymap(scancode);
+        // Get the specific keymap.
+#if 0
+        pr_debug("%04x '%c' (%04x) '%c' (%04x) '%c' (%04x) '%c' (%04x))\n",
+                 scancode,
+                 ((0x00ff & keymap->normal) >= 32) ? keymap->normal : ' ', keymap->normal,
+                 ((0x00ff & keymap->shift) >= 32) ? keymap->shift : ' ', keymap->shift,
+                 ((0x00ff & keymap->ctrl) >= 32) ? keymap->ctrl : ' ', keymap->ctrl,
+                 ((0x00ff & keymap->alt) >= 32) ? keymap->alt : ' ', keymap->alt);
+#endif
         int character = 0;
+        if (!bitmask_check(kflags, KBD_LEFT_SHIFT | KBD_RIGHT_SHIFT) != !bitmask_check(kflags, KBD_CAPS_LOCK)) {
+            push_character(keymap->shift);
+        } else if ((get_keymap_type() == KEYMAP_IT) && bitmask_check(kflags, KBD_RIGHT_ALT) && (bitmask_check(kflags, KBD_LEFT_SHIFT | KBD_RIGHT_SHIFT))) {
+            push_character(keymap->alt);
+        } else if (bitmask_check(kflags, KBD_RIGHT_ALT)) {
+            push_character(keymap->alt);
+        } else if (get_keypad_number(scancode) && bitmask_check(kflags, KBD_NUM_LOCK)) {
+            push_character(keymap->normal);
+        } else {
+            push_character(keymap->normal);
+        }
         // Parse the key.
-        switch (scancode) {
-        case KEY_ESCAPE:
-            break;
-        case KEY_UP_ARROW:
-            push_character('\033');
-            push_character('[');
-            push_character('A');
-            break;
-        case KEY_DOWN_ARROW:
-            push_character('\033');
-            push_character('[');
-            push_character('B');
-            break;
-        case KEY_RIGHT_ARROW:
-            push_character('\033');
-            push_character('[');
-            push_character('C');
-            break;
-        case KEY_LEFT_ARROW:
-            push_character('\033');
-            push_character('[');
-            push_character('D');
-            break;
-        case KEY_HOME:
-            push_character('\033');
-            push_character('[');
-            push_character('H');
-            break;
-        case KEY_END:
-            push_character('\033');
-            push_character('[');
-            push_character('F');
-            break;
-        default: {
-            // Get the current keymap.
-            const keymap_t *keymap = get_keymap();
-
-            if (!bitmask_check(kflags, KBD_LEFT_SHIFT | KBD_RIGHT_SHIFT) != !bitmask_check(kflags, KBD_CAPS_LOCK)) {
-                character = keymap->shift[scancode];
-            } else if ((get_keymap_type() == KEYMAP_IT) && bitmask_check(kflags, KBD_RIGHT_ALT) && (bitmask_check(kflags, KBD_LEFT_SHIFT | KBD_RIGHT_SHIFT))) {
-                if (scancode == KEY_LEFT_BRAKET) {
-                    character = '{';
-                } else if (scancode == KEY_RIGHT_BRAKET) {
-                    character = '}';
-                }
-            } else if (bitmask_check(kflags, KBD_NUM_LOCK)) {
-                character = keymap->numlock[scancode];
-            } else if (bitmask_check(kflags, KBD_RIGHT_ALT)) {
+        /*
+            else if () {
                 character = keymap->alt[scancode];
-            } else {
-                character = keymap->base[scancode];
             }
             // We have failed to retrieve the character.
             if (character <= 0) {
@@ -222,8 +257,7 @@ void keyboard_isr(pt_regs *f)
             }
             // Update buffer.
             push_character(character);
-        }
-        }
+            */
     }
     pic8259_send_eoi(IRQ_KEYBOARD);
 }
