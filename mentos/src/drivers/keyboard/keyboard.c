@@ -27,22 +27,12 @@
 #include "ring_buffer.h"
 #include "string.h"
 
-/// The dimension of the circular buffer used to store video history.
-#define BUFSIZE 256
-
-/// A macro from Ivan to update buffer indexes.
-#define STEP(x) (((x) == BUFSIZE - 1) ? 0 : ((x) + 1))
-
-/// Circular Buffer where the pressed keys are stored.
-static int circular_buffer[BUFSIZE] = { 0 };
-/// Index inside the buffer...
-static long buf_r = 0;
-/// Index inside the buffer...
-static long buf_w = 0;
 /// Tracks the state of the leds.
 static uint8_t ledstate = 0;
 /// The flags concerning the keyboard.
 static uint32_t kflags = 0;
+/// Where we store the keypress.
+fs_rb_scancode_t scancodes;
 
 #define KBD_LEFT_SHIFT    (1 << 0) ///< Flag which identifies the left shift.
 #define KBD_RIGHT_SHIFT   (1 << 1) ///< Flag which identifies the right shift.
@@ -53,28 +43,6 @@ static uint32_t kflags = 0;
 #define KBD_RIGHT_CONTROL (1 << 6) ///< Flag which identifies the right control.
 #define KBD_LEFT_ALT      (1 << 7) ///< Flag which identifies the left alt.
 #define KBD_RIGHT_ALT     (1 << 8) ///< Flag which identifies the right alt.
-
-static inline void push_character(int c)
-{
-    // Update buffer.
-    if (STEP(buf_w) == buf_r) {
-        buf_r = STEP(buf_r);
-    }
-
-    circular_buffer[buf_w] = c & 0x00FF;
-
-    buf_w = STEP(buf_w);
-}
-
-static inline int read_character()
-{
-    int c = -1;
-    if (buf_r != buf_w) {
-        c     = circular_buffer[buf_r];
-        buf_r = STEP(buf_r);
-    }
-    return c;
-}
 
 static inline bool_t get_keypad_number(int scancode)
 {
@@ -134,11 +102,11 @@ void keyboard_isr(pt_regs *f)
         pr_debug("Press(KBD_RIGHT_CONTROL)\n");
     } else if (scancode == KEY_LEFT_ALT) {
         bitmask_set_assign(kflags, KBD_LEFT_ALT);
-        push_character(scancode << 16u);
+        fs_rb_scancode_push(&scancodes, scancode << 16u);
         pr_debug("Press(KBD_LEFT_ALT)\n");
     } else if (scancode == KEY_RIGHT_ALT) {
         bitmask_set_assign(kflags, KBD_RIGHT_ALT);
-        push_character(scancode << 16u);
+        fs_rb_scancode_push(&scancodes, scancode << 16u);
         pr_debug("Press(KBD_RIGHT_ALT)\n");
     } else if (scancode == (KEY_LEFT_SHIFT | CODE_BREAK)) {
         bitmask_clear_assign(kflags, KBD_LEFT_SHIFT);
@@ -171,51 +139,53 @@ void keyboard_isr(pt_regs *f)
         keyboard_update_leds();
         pr_debug("Toggle(KBD_SCROLL_LOCK)\n");
     } else if (scancode == KEY_BACKSPACE) {
-        push_character('\b');
+        fs_rb_scancode_push(&scancodes, '\b');
         pr_debug("Press(KEY_BACKSPACE)\n");
     } else if (scancode == KEY_DELETE) {
-        push_character(127);
+        fs_rb_scancode_push(&scancodes, 127);
         pr_debug("Press(KEY_DELETE)\n");
     } else if ((scancode == KEY_ENTER) || (scancode == KEY_KP_RETURN)) {
-        push_character('\n');
+        fs_rb_scancode_push(&scancodes, '\n');
         pr_debug("Press(KEY_ENTER)\n");
     } else if ((scancode == KEY_PAGE_UP) || (keypad_fun_number == 9)) {
-        push_character(scancode);
+        fs_rb_scancode_push(&scancodes, scancode);
         pr_debug("Press(KEY_PAGE_UP)\n");
     } else if ((scancode == KEY_PAGE_DOWN) || (keypad_fun_number == 2)) {
-        push_character(scancode);
+        fs_rb_scancode_push(&scancodes, scancode);
         pr_debug("Press(KEY_PAGE_DOWN)\n");
     } else if ((scancode == KEY_UP_ARROW) || (keypad_fun_number == 8)) {
         pr_debug("Press(KEY_UP_ARROW)\n");
-        push_character('\033');
-        push_character('[');
-        push_character('A');
+        fs_rb_scancode_push(&scancodes, '\033');
+        fs_rb_scancode_push(&scancodes, '[');
+        fs_rb_scancode_push(&scancodes, 'A');
     } else if ((scancode == KEY_DOWN_ARROW) || (keypad_fun_number == 2)) {
         pr_debug("Press(KEY_DOWN_ARROW)\n");
-        push_character('\033');
-        push_character('[');
-        push_character('B');
+        fs_rb_scancode_push(&scancodes, '\033');
+        fs_rb_scancode_push(&scancodes, '[');
+        fs_rb_scancode_push(&scancodes, 'B');
     } else if ((scancode == KEY_RIGHT_ARROW) || (keypad_fun_number == 6)) {
         pr_debug("Press(KEY_RIGHT_ARROW)\n");
-        push_character('\033');
-        push_character('[');
-        push_character('C');
+        fs_rb_scancode_push(&scancodes, '\033');
+        fs_rb_scancode_push(&scancodes, '[');
+        fs_rb_scancode_push(&scancodes, 'C');
     } else if ((scancode == KEY_LEFT_ARROW) || (keypad_fun_number == 4)) {
         pr_debug("Press(KEY_LEFT_ARROW)\n");
-        push_character('\033');
-        push_character('[');
-        push_character('D');
+        fs_rb_scancode_push(&scancodes, '\033');
+        fs_rb_scancode_push(&scancodes, '[');
+        fs_rb_scancode_push(&scancodes, 'D');
     } else if ((scancode == KEY_HOME) || (keypad_fun_number == 7)) {
         pr_debug("Press(KEY_HOME)\n");
-        push_character('\033');
-        push_character('[');
-        push_character('H');
+        fs_rb_scancode_push(&scancodes, '\033');
+        fs_rb_scancode_push(&scancodes, '[');
+        fs_rb_scancode_push(&scancodes, 'H');
     } else if ((scancode == KEY_END) || (keypad_fun_number == 1)) {
         pr_debug("Press(KEY_END)\n");
-        push_character('\033');
-        push_character('[');
-        push_character('F');
+        fs_rb_scancode_push(&scancodes, '\033');
+        fs_rb_scancode_push(&scancodes, '[');
+        fs_rb_scancode_push(&scancodes, 'F');
     } else if (scancode == KEY_ESCAPE) {
+        // Nothing to do.
+    } else if (keypad_fun_number == 5) {
         // Nothing to do.
     } else if (!(scancode & CODE_BREAK)) {
         // Get the current keymap.
@@ -231,33 +201,16 @@ void keyboard_isr(pt_regs *f)
 #endif
         int character = 0;
         if (!bitmask_check(kflags, KBD_LEFT_SHIFT | KBD_RIGHT_SHIFT) != !bitmask_check(kflags, KBD_CAPS_LOCK)) {
-            push_character(keymap->shift);
+            fs_rb_scancode_push(&scancodes, keymap->shift);
         } else if ((get_keymap_type() == KEYMAP_IT) && bitmask_check(kflags, KBD_RIGHT_ALT) && (bitmask_check(kflags, KBD_LEFT_SHIFT | KBD_RIGHT_SHIFT))) {
-            push_character(keymap->alt);
+            fs_rb_scancode_push(&scancodes, keymap->alt);
         } else if (bitmask_check(kflags, KBD_RIGHT_ALT)) {
-            push_character(keymap->alt);
-        } else if (get_keypad_number(scancode) && bitmask_check(kflags, KBD_NUM_LOCK)) {
-            push_character(keymap->normal);
+            fs_rb_scancode_push(&scancodes, keymap->alt);
+        } else if (bitmask_check(kflags, KBD_LEFT_CONTROL | KBD_RIGHT_CONTROL)) {
+            fs_rb_scancode_push(&scancodes, keymap->ctrl);
         } else {
-            push_character(keymap->normal);
+            fs_rb_scancode_push(&scancodes, keymap->normal);
         }
-        // Parse the key.
-        /*
-            else if () {
-                character = keymap->alt[scancode];
-            }
-            // We have failed to retrieve the character.
-            if (character <= 0) {
-                break;
-            }
-            if (bitmask_check(kflags, KBD_LEFT_CONTROL | KBD_RIGHT_CONTROL)) {
-                push_character('\033');
-                push_character('^');
-                character = toupper(character);
-            }
-            // Update buffer.
-            push_character(character);
-            */
     }
     pic8259_send_eoi(IRQ_KEYBOARD);
 }
@@ -286,11 +239,13 @@ void keyboard_disable()
 
 int keyboard_getc()
 {
-    return read_character();
+    return fs_rb_scancode_pop(&scancodes);
 }
 
 int keyboard_initialize()
 {
+    // Initialize the ring-buffer for the scancodes.
+    fs_rb_scancode_init(&scancodes);
     // Initialize the keymaps.
     init_keymaps();
     // Install the IRQ.

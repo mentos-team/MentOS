@@ -10,8 +10,10 @@
 
 #pragma once
 
+#include "ring_buffer.h"
 #include "kernel.h"
 
+DECLARE_FIXED_SIZE_RING_BUFFER(int, scancode, 256, -1)
 
 /// @brief The interrupt service routine of the keyboard.
 /// @param f The interrupt stack frame.
