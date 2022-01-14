@@ -236,6 +236,8 @@ static inline task_struct *__alloc_task(task_struct *source, task_struct *parent
         .c_oflag = 0,
         .c_iflag = 0
     };
+    // Initialize the ringbuffer.
+    fs_rb_scancode_init(&proc->keyboard_rb);
 
     return proc;
 }

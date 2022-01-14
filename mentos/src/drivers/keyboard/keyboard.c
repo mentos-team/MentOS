@@ -33,6 +33,8 @@ static uint8_t ledstate = 0;
 static uint32_t kflags = 0;
 /// Where we store the keypress.
 fs_rb_scancode_t scancodes;
+/// Spinlock to protect access to the scancode buffer.
+spinlock_t scancodes_lock;
 
 #define KBD_LEFT_SHIFT    (1 << 0) ///< Flag which identifies the left shift.
 #define KBD_RIGHT_SHIFT   (1 << 1) ///< Flag which identifies the right shift.
@@ -69,6 +71,51 @@ static inline bool_t get_keypad_number(int scancode)
     return -1;
 }
 
+static inline void keyboard_push_front(int c)
+{
+    if (c >= 0) {
+        spinlock_lock(&scancodes_lock);
+        fs_rb_scancode_push_front(&scancodes, c);
+        spinlock_unlock(&scancodes_lock);
+    }
+}
+
+int keyboard_pop_back()
+{
+    int c;
+    spinlock_lock(&scancodes_lock);
+    if (!fs_rb_scancode_empty(&scancodes))
+        c = fs_rb_scancode_pop_back(&scancodes);
+    else
+        c = -1;
+    spinlock_unlock(&scancodes_lock);
+    return c;
+}
+
+int keyboard_back()
+{
+    int c;
+    spinlock_lock(&scancodes_lock);
+    if (!fs_rb_scancode_empty(&scancodes))
+        c = fs_rb_scancode_back(&scancodes);
+    else
+        c = -1;
+    spinlock_unlock(&scancodes_lock);
+    return c;
+}
+
+int keyboard_front()
+{
+    int c = -1;
+    spinlock_lock(&scancodes_lock);
+    if (!fs_rb_scancode_empty(&scancodes))
+        c = fs_rb_scancode_front(&scancodes);
+    else
+        c = -1;
+    spinlock_unlock(&scancodes_lock);
+    return c;
+}
+
 void keyboard_isr(pt_regs *f)
 {
     unsigned int scancode;
@@ -102,11 +149,11 @@ void keyboard_isr(pt_regs *f)
         pr_debug("Press(KBD_RIGHT_CONTROL)\n");
     } else if (scancode == KEY_LEFT_ALT) {
         bitmask_set_assign(kflags, KBD_LEFT_ALT);
-        fs_rb_scancode_push(&scancodes, scancode << 16u);
+        keyboard_push_front(scancode << 16u);
         pr_debug("Press(KBD_LEFT_ALT)\n");
     } else if (scancode == KEY_RIGHT_ALT) {
         bitmask_set_assign(kflags, KBD_RIGHT_ALT);
-        fs_rb_scancode_push(&scancodes, scancode << 16u);
+        keyboard_push_front(scancode << 16u);
         pr_debug("Press(KBD_RIGHT_ALT)\n");
     } else if (scancode == (KEY_LEFT_SHIFT | CODE_BREAK)) {
         bitmask_clear_assign(kflags, KBD_LEFT_SHIFT);
@@ -139,50 +186,50 @@ void keyboard_isr(pt_regs *f)
         keyboard_update_leds();
         pr_debug("Toggle(KBD_SCROLL_LOCK)\n");
     } else if (scancode == KEY_BACKSPACE) {
-        fs_rb_scancode_push(&scancodes, '\b');
+        keyboard_push_front('\b');
         pr_debug("Press(KEY_BACKSPACE)\n");
     } else if (scancode == KEY_DELETE) {
-        fs_rb_scancode_push(&scancodes, 127);
+        keyboard_push_front(127);
         pr_debug("Press(KEY_DELETE)\n");
     } else if ((scancode == KEY_ENTER) || (scancode == KEY_KP_RETURN)) {
-        fs_rb_scancode_push(&scancodes, '\n');
+        keyboard_push_front('\n');
         pr_debug("Press(KEY_ENTER)\n");
     } else if ((scancode == KEY_PAGE_UP) || (keypad_fun_number == 9)) {
-        fs_rb_scancode_push(&scancodes, scancode);
+        keyboard_push_front(scancode);
         pr_debug("Press(KEY_PAGE_UP)\n");
     } else if ((scancode == KEY_PAGE_DOWN) || (keypad_fun_number == 2)) {
-        fs_rb_scancode_push(&scancodes, scancode);
+        keyboard_push_front(scancode);
         pr_debug("Press(KEY_PAGE_DOWN)\n");
     } else if ((scancode == KEY_UP_ARROW) || (keypad_fun_number == 8)) {
         pr_debug("Press(KEY_UP_ARROW)\n");
-        fs_rb_scancode_push(&scancodes, '\033');
-        fs_rb_scancode_push(&scancodes, '[');
-        fs_rb_scancode_push(&scancodes, 'A');
+        keyboard_push_front('\033');
+        keyboard_push_front('[');
+        keyboard_push_front('A');
     } else if ((scancode == KEY_DOWN_ARROW) || (keypad_fun_number == 2)) {
         pr_debug("Press(KEY_DOWN_ARROW)\n");
-        fs_rb_scancode_push(&scancodes, '\033');
-        fs_rb_scancode_push(&scancodes, '[');
-        fs_rb_scancode_push(&scancodes, 'B');
+        keyboard_push_front('\033');
+        keyboard_push_front('[');
+        keyboard_push_front('B');
     } else if ((scancode == KEY_RIGHT_ARROW) || (keypad_fun_number == 6)) {
         pr_debug("Press(KEY_RIGHT_ARROW)\n");
-        fs_rb_scancode_push(&scancodes, '\033');
-        fs_rb_scancode_push(&scancodes, '[');
-        fs_rb_scancode_push(&scancodes, 'C');
+        keyboard_push_front('\033');
+        keyboard_push_front('[');
+        keyboard_push_front('C');
     } else if ((scancode == KEY_LEFT_ARROW) || (keypad_fun_number == 4)) {
         pr_debug("Press(KEY_LEFT_ARROW)\n");
-        fs_rb_scancode_push(&scancodes, '\033');
-        fs_rb_scancode_push(&scancodes, '[');
-        fs_rb_scancode_push(&scancodes, 'D');
+        keyboard_push_front('\033');
+        keyboard_push_front('[');
+        keyboard_push_front('D');
     } else if ((scancode == KEY_HOME) || (keypad_fun_number == 7)) {
         pr_debug("Press(KEY_HOME)\n");
-        fs_rb_scancode_push(&scancodes, '\033');
-        fs_rb_scancode_push(&scancodes, '[');
-        fs_rb_scancode_push(&scancodes, 'H');
+        keyboard_push_front('\033');
+        keyboard_push_front('[');
+        keyboard_push_front('H');
     } else if ((scancode == KEY_END) || (keypad_fun_number == 1)) {
         pr_debug("Press(KEY_END)\n");
-        fs_rb_scancode_push(&scancodes, '\033');
-        fs_rb_scancode_push(&scancodes, '[');
-        fs_rb_scancode_push(&scancodes, 'F');
+        keyboard_push_front('\033');
+        keyboard_push_front('[');
+        keyboard_push_front('F');
     } else if (scancode == KEY_ESCAPE) {
         // Nothing to do.
     } else if (keypad_fun_number == 5) {
@@ -191,25 +238,17 @@ void keyboard_isr(pt_regs *f)
         // Get the current keymap.
         const keymap_t *keymap = get_keymap(scancode);
         // Get the specific keymap.
-#if 0
-        pr_debug("%04x '%c' (%04x) '%c' (%04x) '%c' (%04x) '%c' (%04x))\n",
-                 scancode,
-                 ((0x00ff & keymap->normal) >= 32) ? keymap->normal : ' ', keymap->normal,
-                 ((0x00ff & keymap->shift) >= 32) ? keymap->shift : ' ', keymap->shift,
-                 ((0x00ff & keymap->ctrl) >= 32) ? keymap->ctrl : ' ', keymap->ctrl,
-                 ((0x00ff & keymap->alt) >= 32) ? keymap->alt : ' ', keymap->alt);
-#endif
         int character = 0;
         if (!bitmask_check(kflags, KBD_LEFT_SHIFT | KBD_RIGHT_SHIFT) != !bitmask_check(kflags, KBD_CAPS_LOCK)) {
-            fs_rb_scancode_push(&scancodes, keymap->shift);
+            keyboard_push_front(keymap->shift);
         } else if ((get_keymap_type() == KEYMAP_IT) && bitmask_check(kflags, KBD_RIGHT_ALT) && (bitmask_check(kflags, KBD_LEFT_SHIFT | KBD_RIGHT_SHIFT))) {
-            fs_rb_scancode_push(&scancodes, keymap->alt);
+            keyboard_push_front(keymap->alt);
         } else if (bitmask_check(kflags, KBD_RIGHT_ALT)) {
-            fs_rb_scancode_push(&scancodes, keymap->alt);
+            keyboard_push_front(keymap->alt);
         } else if (bitmask_check(kflags, KBD_LEFT_CONTROL | KBD_RIGHT_CONTROL)) {
-            fs_rb_scancode_push(&scancodes, keymap->ctrl);
+            keyboard_push_front(keymap->ctrl);
         } else {
-            fs_rb_scancode_push(&scancodes, keymap->normal);
+            keyboard_push_front(keymap->normal);
         }
     }
     pic8259_send_eoi(IRQ_KEYBOARD);
@@ -237,15 +276,12 @@ void keyboard_disable()
     outportb(0x60, 0xF5);
 }
 
-int keyboard_getc()
-{
-    return fs_rb_scancode_pop(&scancodes);
-}
-
 int keyboard_initialize()
 {
     // Initialize the ring-buffer for the scancodes.
     fs_rb_scancode_init(&scancodes);
+    // Initialize the spinlock.
+    spinlock_init(&scancodes_lock);
     // Initialize the keymaps.
     init_keymaps();
     // Install the IRQ.

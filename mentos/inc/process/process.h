@@ -5,6 +5,7 @@
 
 #pragma once
 
+#include "drivers/keyboard/keyboard.h"
 #include "bits/termios-struct.h"
 #include "system/signal.h"
 #include "devices/fpu.h"
@@ -150,6 +151,8 @@ typedef struct task_struct {
 
     /// Process-wise terminal options.
     termios_t termios;
+    /// Buffer for managing inputs from keyboard.
+    fs_rb_scancode_t keyboard_rb;
 
     //==== Future work =========================================================
     // - task's attributes:

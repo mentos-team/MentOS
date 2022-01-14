@@ -24,13 +24,101 @@
 #include "ctype.h"
 #include "process/scheduler.h"
 
+void print_rb(fs_rb_scancode_t *rb)
+{
+    if (!fs_rb_scancode_empty(rb)) {
+        for (unsigned i = rb->read; (i < rb->write) && (i < rb->size); ++i) {
+            pr_debug("%c", rb->buffer[i]);
+        }
+        pr_debug("\n");
+    }
+}
+
 static ssize_t procv_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyte)
 {
-    if (buf == NULL) {
+    // Stop if the buffer is invalid.
+    if (buf == NULL)
         return -1;
+
+    // Get the currently running process.
+    task_struct *process = scheduler_get_current_process();
+    // Get a pointer to its ketboard ring-buffer.
+    fs_rb_scancode_t *rb = &process->keyboard_rb;
+
+    // If we are in canonical mode, and the last inserted element is a newline,
+    // we pop the buffer until it's empty.
+    if (bitmask_check(process->termios.c_lflag, ICANON) && (fs_rb_scancode_front(rb) == '\n')) {
+        *((char *)buf) = fs_rb_scancode_pop_back(rb) & 0x00FF;
+        return 1;
     }
+
+    // Once we have dealt with the canonical mode, get the characgter.
+    int c = keyboard_pop_back();
+    // Check that it's a valid caracter.
+    if (c < 0)
+        return 0;
+    c &= 0x00FF;
+    // Add the character to the buffer.
+    fs_rb_scancode_push_front(rb, c);
+    // If echo is activated, output the character to video.
+    if (bitmask_check(process->termios.c_lflag, ECHO)) {
+        if (iscntrl(c)) {
+            if (isalpha('A' + (c - 1)) && (c != '\n')) {
+                video_putc('^');
+                video_putc('A' + (c - 1));
+            }
+        } else {
+            video_putc(c);
+        }
+    }
+
+    if (bitmask_check(process->termios.c_lflag, ISIG)) {
+        if (iscntrl(c)) {
+            if (c == 0x03) {
+                sys_kill(process->pid, SIGTERM);
+            } else if (c == 0x1A) {
+                sys_kill(process->pid, SIGSTOP);
+            }
+        }
+    }
+
+    // If we are NOT in canonical mode, we can send the character back to user
+    // right away.
+    if (!bitmask_check(process->termios.c_lflag, ICANON)) {
+        *((char *)buf) = fs_rb_scancode_pop_back(rb) & 0x00FF;
+        return 1;
+    }
+
+#if 0
+
+    // The last inserted character.
+    int back_c = keyboard_back();
+
+    if (back_c < 0)
+        return 0;
+
+    // The first inserted character.
+    int front_c = keyboard_front();
+
+    pr_debug("'%c' (%3d %04x) [F: '%c' (%04x)]\n", back_c, back_c, back_c, front_c, front_c);
+
+    // Echo the character to video.
+    if (bitmask_check(process->termios.c_lflag, ECHO)) {
+        video_putc(back_c & 0x00FF);
+    }
+
+    // If we have the canonical input active, we should not return characters,
+    // until we receive a newline.
+    if ((bitmask_check(process->termios.c_lflag, ICANON) && (front_c == '\n')) ||
+        !bitmask_check(process->termios.c_lflag, ICANON)) {
+        *((char *)buf) = keyboard_pop_back() & 0x00FF;
+        return 1;
+    }
+#endif
+
+#if 0
     // Read the character from the keyboard.
-    int c = keyboard_getc();
+    int c = keyboard_getc(false) & 0x00FF;
     if (c < 0)
         return 0;
     if (c == KEY_PAGE_UP) {
@@ -40,19 +128,13 @@ static ssize_t procv_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyt
         video_shift_one_page_up();
         return 0;
     } else {
-        pr_debug("'%c' (0x%04x)\n", c, c);
-        // Get the currently running process.
-        task_struct *process = scheduler_get_current_process();
         // Echo the character to video.
         if (bitmask_check(process->termios.c_lflag, ECHO)) {
             video_putc(c & 0x00FF);
         }
-        // Return the character.
-        //if (!bitmask_check(process->termios.c_lflag, ICANON)) {
-        *((char *)buf) = c & 0x00FF;
-        //}
     }
-    return 1;
+#endif
+    return 0;
 }
 
 static ssize_t procv_write(vfs_file_t *file, const void *buf, off_t offset, size_t nbyte)
