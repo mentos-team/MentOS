@@ -15,6 +15,8 @@
 /// Serial port for QEMU.
 #define SERIAL_COM1 (0x03F8)
 
+#define FG_RESET "\033[0m" ///< ANSI code for resetting.
+
 void dbg_putchar(char c)
 {
     outportb(SERIAL_COM1, (uint8_t)c);
@@ -29,6 +31,7 @@ void dbg_puts(const char *s)
 static inline void __debug_print_header(const char *file, const char *fun, int line)
 {
     static char tmp_prefix[BUFSIZ], final_prefix[BUFSIZ];
+    dbg_puts(FG_RESET);
     dbg_puts("[ LB |");
     sprintf(tmp_prefix, "%s:%d", file, line);
     sprintf(final_prefix, " %-20s ", tmp_prefix);
