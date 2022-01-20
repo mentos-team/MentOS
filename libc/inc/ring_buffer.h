@@ -42,6 +42,13 @@
         }                                                                            \
         return item;                                                                 \
     }                                                                                \
+    static inline type fs_rb_##name##_pop_front(fs_rb_##name##_t *rb)                \
+    {                                                                                \
+        if (fs_rb_##name##_empty(rb))                                                \
+            return init;                                                             \
+        rb->write = (rb->write > 0) ? rb->write - 1 : rb->size - 1;                  \
+        return rb->buffer[rb->write];                                                \
+    }                                                                                \
     static inline type fs_rb_##name##_get(fs_rb_##name##_t *rb, unsigned index)      \
     {                                                                                \
         if (index < rb->size)                                                        \
@@ -50,18 +57,15 @@
     }                                                                                \
     static inline type fs_rb_##name##_back(fs_rb_##name##_t *rb)                     \
     {                                                                                \
-        if (!fs_rb_##name##_empty(rb))                                               \
-            return rb->buffer[rb->read];                                             \
-        return init;                                                                 \
+        if (fs_rb_##name##_empty(rb))                                                \
+            return init;                                                             \
+        return rb->buffer[rb->read];                                                 \
     }                                                                                \
     static inline type fs_rb_##name##_front(fs_rb_##name##_t *rb)                    \
     {                                                                                \
-        if (!fs_rb_##name##_empty(rb)) {                                             \
-            if (rb->write > 0)                                                       \
-                return rb->buffer[rb->write - 1];                                    \
-            return rb->buffer[rb->size - 1];                                         \
-        }                                                                            \
-        return init;                                                                 \
+        if (fs_rb_##name##_empty(rb))                                                \
+            return init;                                                             \
+        return rb->buffer[(rb->write > 0) ? rb->write - 1 : rb->size - 1];           \
     }
 
 #ifdef __KERNEL__

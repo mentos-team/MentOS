@@ -10,7 +10,7 @@
 /// Change the header.
 #define __DEBUG_HEADER__ "[KEYBRD]"
 /// Set the log level.
-#define __DEBUG_LEVEL__ LOGLEVEL_DEBUG
+#define __DEBUG_LEVEL__ LOGLEVEL_NOTICE
 
 #include "drivers/keyboard/keyboard.h"
 
@@ -189,7 +189,7 @@ void keyboard_isr(pt_regs *f)
         keyboard_push_front('\b');
         pr_debug("Press(KEY_BACKSPACE)\n");
     } else if (scancode == KEY_DELETE) {
-        keyboard_push_front(127);
+        keyboard_push_front(0x7F);
         pr_debug("Press(KEY_DELETE)\n");
     } else if ((scancode == KEY_ENTER) || (scancode == KEY_KP_RETURN)) {
         keyboard_push_front('\n');

@@ -44,35 +44,77 @@ static ssize_t procv_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyt
     task_struct *process = scheduler_get_current_process();
     // Get a pointer to its ketboard ring-buffer.
     fs_rb_scancode_t *rb = &process->keyboard_rb;
+    // Pre-check the flags.
+    bool_t flg_icanon = bitmask_check(process->termios.c_lflag, ICANON) == ICANON;
+    bool_t flg_echoe  = bitmask_check(process->termios.c_lflag, ECHOE) == ECHOE;
+    bool_t flg_echo   = bitmask_check(process->termios.c_lflag, ECHO) == ECHO;
+    bool_t flg_isig   = bitmask_check(process->termios.c_lflag, ISIG) == ISIG;
 
     // If we are in canonical mode, and the last inserted element is a newline,
     // we pop the buffer until it's empty.
-    if (bitmask_check(process->termios.c_lflag, ICANON) && (fs_rb_scancode_front(rb) == '\n')) {
+    if (!fs_rb_scancode_empty(rb) && (!flg_icanon || (flg_icanon && (fs_rb_scancode_front(rb) == '\n')))) {
         *((char *)buf) = fs_rb_scancode_pop_back(rb) & 0x00FF;
         return 1;
     }
 
-    // Once we have dealt with the canonical mode, get the characgter.
+    // Once we have dealt with the canonical mode, get the character.
     int c = keyboard_pop_back();
+
     // Check that it's a valid caracter.
     if (c < 0)
         return 0;
+
+    // Keep only the character not the scancode.
     c &= 0x00FF;
-    // Add the character to the buffer.
-    fs_rb_scancode_push_front(rb, c);
+
+    // We just received backspace.
+    if (c == '\b') {
+        // If !ECHOE and ECHO, We need to show the the `^?` string.
+        if (!flg_echoe && flg_echo) {
+            video_puts("^?");
+        }
+
+        // If we are in canonical mode, we pop the previous character.
+        if (flg_icanon) {
+            // Pop the previous character in buffer.
+            fs_rb_scancode_pop_front(rb);
+            // Delete the previous character on video.
+            if (flg_echoe)
+                video_putc(c);
+        } else {
+            // Add the character to the buffer.
+            fs_rb_scancode_push_front(rb, 0x7F);
+            // Return the character.
+            *((char *)buf) = fs_rb_scancode_pop_back(rb) & 0x00FF;
+            return 1;
+        }
+        return 0;
+    } else if (c == 0x7f) {
+        if (flg_echo) {
+            video_puts("^[[3~");
+        }
+        // Add the character to the buffer.
+        fs_rb_scancode_push_front(rb, '\033');
+        fs_rb_scancode_push_front(rb, '[');
+        fs_rb_scancode_push_front(rb, '3');
+        fs_rb_scancode_push_front(rb, '~');
+        return 0;
+    } else {
+        // Add the character to the buffer.
+        fs_rb_scancode_push_front(rb, c);
+    }
+
     // If echo is activated, output the character to video.
-    if (bitmask_check(process->termios.c_lflag, ECHO)) {
-        if (iscntrl(c)) {
-            if (isalpha('A' + (c - 1)) && (c != '\n')) {
-                video_putc('^');
-                video_putc('A' + (c - 1));
-            }
+    if (flg_echo) {
+        if (iscntrl(c) && (isalpha('A' + (c - 1)) && (c != '\n') && (c != '\b'))) {
+            video_putc('^');
+            video_putc('A' + (c - 1));
         } else {
             video_putc(c);
         }
     }
 
-    if (bitmask_check(process->termios.c_lflag, ISIG)) {
+    if (flg_isig) {
         if (iscntrl(c)) {
             if (c == 0x03) {
                 sys_kill(process->pid, SIGTERM);
@@ -84,7 +126,7 @@ static ssize_t procv_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyt
 
     // If we are NOT in canonical mode, we can send the character back to user
     // right away.
-    if (!bitmask_check(process->termios.c_lflag, ICANON)) {
+    if (!flg_icanon) {
         *((char *)buf) = fs_rb_scancode_pop_back(rb) & 0x00FF;
         return 1;
     }
@@ -103,14 +145,14 @@ static ssize_t procv_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyt
     pr_debug("'%c' (%3d %04x) [F: '%c' (%04x)]\n", back_c, back_c, back_c, front_c, front_c);
 
     // Echo the character to video.
-    if (bitmask_check(process->termios.c_lflag, ECHO)) {
+    if (flg_echo) {
         video_putc(back_c & 0x00FF);
     }
 
     // If we have the canonical input active, we should not return characters,
     // until we receive a newline.
-    if ((bitmask_check(process->termios.c_lflag, ICANON) && (front_c == '\n')) ||
-        !bitmask_check(process->termios.c_lflag, ICANON)) {
+    if ((flg_icanon && (front_c == '\n')) ||
+        !flg_icanon) {
         *((char *)buf) = keyboard_pop_back() & 0x00FF;
         return 1;
     }
@@ -129,7 +171,7 @@ static ssize_t procv_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyt
         return 0;
     } else {
         // Echo the character to video.
-        if (bitmask_check(process->termios.c_lflag, ECHO)) {
+        if (flg_echo) {
             video_putc(c & 0x00FF);
         }
     }
