@@ -55,7 +55,7 @@ static bool_t get_input(char *input, size_t max_len, bool_t hide)
     int c;
     bool_t result = false;
 
-    set_erase(false);
+    //set_erase(false);
     if (hide) {
         set_echo(false);
     }
@@ -100,9 +100,8 @@ static bool_t get_input(char *input, size_t max_len, bool_t hide)
             }
         } else if (c == '\b') {
             if (index > 0) {
-                if (!hide) {
+                if (!hide)
                     putchar('\b');
-                }
                 --index;
             }
         } else {
@@ -115,7 +114,7 @@ static bool_t get_input(char *input, size_t max_len, bool_t hide)
         }
     } while (index < max_len);
 
-    set_erase(true);
+    //set_erase(true);
     if (hide) {
         set_echo(true);
         putchar('\n');

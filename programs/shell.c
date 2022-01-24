@@ -429,12 +429,15 @@ static inline void __cmd_set(char *_cmd)
 }
 
 /// @brief Erases one character from the console.
-static inline void __cmd_ers()
+static inline void __cmd_ers(char c)
 {
-    if (cmd_cursor_index > 0) {
+    if ((c == '\b') && (cmd_cursor_index > 0)) {
         strcpy(cmd + cmd_cursor_index - 1, cmd + cmd_cursor_index);
         putchar('\b');
         --cmd_cursor_index;
+    } else if ((c == 0x7F) && (cmd[0] != 0) && ((cmd_cursor_index + 1) < CMD_LEN)) {
+        strcpy(cmd + cmd_cursor_index, cmd + cmd_cursor_index + 1);
+        putchar(0x7F);
     }
 }
 
@@ -526,6 +529,11 @@ static void __cmd_get()
                         // Reset the cursor position.
                         cmd_cursor_index += offset;
                     }
+                } else if (c == '3') {
+                    c = getchar(); // Get the char.
+                    if (c == '~') {
+                        __cmd_ers(0x7F);
+                    }
                 }
             } else if (c == '^') {
                 c = getchar(); // Get the char.
@@ -552,7 +560,7 @@ static void __cmd_get()
                 }
             }
         } else if (c == '\b') {
-            __cmd_ers();
+            __cmd_ers('\b');
         } else if (c == '\t') {
             // Get the lenght of the command.
             size_t cmd_len = strlen(cmd);

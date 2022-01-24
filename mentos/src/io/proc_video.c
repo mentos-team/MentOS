@@ -73,7 +73,6 @@ static ssize_t procv_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyt
         if (!flg_echoe && flg_echo) {
             video_puts("^?");
         }
-
         // If we are in canonical mode, we pop the previous character.
         if (flg_icanon) {
             // Pop the previous character in buffer.
@@ -83,7 +82,7 @@ static ssize_t procv_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyt
                 video_putc(c);
         } else {
             // Add the character to the buffer.
-            fs_rb_scancode_push_front(rb, 0x7F);
+            fs_rb_scancode_push_front(rb, c);
             // Return the character.
             *((char *)buf) = fs_rb_scancode_pop_back(rb) & 0x00FF;
             return 1;
