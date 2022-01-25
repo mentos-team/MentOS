@@ -228,7 +228,7 @@ static inline task_struct *__alloc_task(task_struct *source, task_struct *parent
 
     // Initalize real_timer for intervals
     proc->real_timer = NULL;
-    
+
     // Set the default terminal options.
     proc->termios = (termios_t){
         .c_cflag = 0,
@@ -338,47 +338,52 @@ task_struct *process_create_init(const char *path)
 
 char *sys_getcwd(char *buf, size_t size)
 {
-    task_struct *current_process = scheduler_get_current_process();
-    if ((current_process != NULL) && (buf != NULL)) {
-        strncpy(buf, current_process->cwd, size);
+    task_struct *current = scheduler_get_current_process();
+    if ((current != NULL) && (buf != NULL)) {
+        strncpy(buf, current->cwd, size);
         return buf;
     }
     return (char *)-EACCES;
 }
 
-void sys_chdir(char const *path)
+int sys_chdir(char const *path)
 {
-    task_struct *current_process = scheduler_get_current_process();
-    if ((current_process != NULL) && (path != NULL)) {
-        char absolute_path[PATH_MAX];
-        realpath(path, absolute_path);
-        // Check that the directory exists.
-        vfs_file_t *dir = vfs_open(absolute_path, O_RDONLY | O_DIRECTORY, S_IXUSR);
-        if (dir != NULL) {
-            pr_debug("Success `%s` -> `%s` -> `%s`\n", path, absolute_path, dir->name);
-            strcpy(current_process->cwd, absolute_path);
-            vfs_close(dir);
-        } else {
-            pr_debug("Failed  `%s` -> `%s` -> `NULL`\n", path, absolute_path);
-        }
+    task_struct *current = scheduler_get_current_process();
+    assert(current && "There is no running process.");
+    if (!path)
+        return -EFAULT;
+    char absolute_path[PATH_MAX];
+    realpath(path, absolute_path);
+    // Check that the directory exists.
+    vfs_file_t *dir = vfs_open(absolute_path, O_RDONLY | O_DIRECTORY, S_IXUSR);
+    if (dir) {
+        strcpy(current->cwd, absolute_path);
+        vfs_close(dir);
+        return 0;
     }
+    // Return the errno value set by either VFS or the filesystem underneath.
+    return -errno;
 }
 
-void sys_fchdir(int fd)
+int sys_fchdir(int fd)
 {
-    // Get the current task.
-    task_struct *task = scheduler_get_current_process();
-    // Check the current FD.
-    if (fd >= 0 && fd < task->max_fd) {
-        // Get the file descriptor.
-        vfs_file_descriptor_t *vfd = &task->fd_list[fd];
-        // Check the file.
-        if (vfd->file_struct != NULL) {
-            char absolute_path[PATH_MAX];
-            realpath(vfd->file_struct->name, absolute_path);
-            strcpy(task->cwd, absolute_path);
-        }
-    }
+    task_struct *current = scheduler_get_current_process();
+    assert(current && "There is no running process.");
+    // Check if it is a valid file descriptor.
+    if ((fd < 0) || (fd >= current->max_fd))
+        return -EBADF;
+    // Get the file descriptor.
+    vfs_file_descriptor_t *vfd = &current->fd_list[fd];
+    // Check if the file descriptor file is set.
+    if (vfd->file_struct == NULL)
+        return -ENOENT;
+    // Check that the path points to a directory.
+    if (!bitmask_check(vfd->file_struct->flags, DT_DIR))
+        return -ENOTDIR;
+    char absolute_path[PATH_MAX];
+    realpath(vfd->file_struct->name, absolute_path);
+    strcpy(current->cwd, absolute_path);
+    return 0;
 }
 
 pid_t sys_fork(pt_regs *f)

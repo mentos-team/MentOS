@@ -20,6 +20,7 @@
 #include "termios.h"
 #include "limits.h"
 #include "sys/utsname.h"
+#include "ctype.h"
 
 /// Maximum length of commands.
 #define CMD_LEN 32
@@ -535,29 +536,6 @@ static void __cmd_get()
                         __cmd_ers(0x7F);
                     }
                 }
-            } else if (c == '^') {
-                c = getchar(); // Get the char.
-                if (c == 'C') {
-                    // Re-set the index to the beginning.
-                    cmd_cursor_index = 0;
-                    // Go to the new line.
-                    printf("\n\n");
-                    // Sets the command.
-                    __cmd_set("\0");
-                    // Break the while loop.
-                    break;
-                } else if (c == 'U') {
-                    // Clear the current command.
-                    __cmd_clr();
-                    // Re-set the index to the beginning.
-                    cmd_cursor_index = 0;
-                    // Sets the command.
-                    __cmd_set("\0");
-                } else if (c == 'D') {
-                    // Go to the new line.
-                    printf("\n");
-                    exit(0);
-                }
             }
         } else if (c == '\b') {
             __cmd_ers('\b');
@@ -626,10 +604,34 @@ static void __cmd_get()
                 strcpy(cmd + cmd_cursor_index, cmd + cmd_cursor_index + 1);
                 putchar(127);
             }
+        } else if (iscntrl(c)) {
+            if (c == CTRL('C')) {
+                // Re-set the index to the beginning.
+                cmd_cursor_index = 0;
+                // Go to the new line.
+                printf("\n\n");
+                // Sets the command.
+                __cmd_set("\0");
+                // Break the while loop.
+                break;
+            } else if (c == CTRL('U')) {
+                // Clear the current command.
+                __cmd_clr();
+                // Re-set the index to the beginning.
+                cmd_cursor_index = 0;
+                // Sets the command.
+                __cmd_set("\0");
+            } else if (c == CTRL('D')) {
+                // Go to the new line.
+                printf("\n");
+                exit(0);
+            }
         } else if ((c > 0) && (c != '\n')) {
             if (__cmd_app(c)) {
                 putchar(c);
             }
+        } else {
+            pr_debug("Unrecognized character %02x (%c)\n", c, c);
         }
     } while (cmd_cursor_index < CMD_LEN);
 
@@ -677,6 +679,11 @@ void wait_for_child(int signum)
 int main(int argc, char *argv[])
 {
     setsid();
+
+    struct termios _termios;
+    tcgetattr(STDIN_FILENO, &_termios);
+    _termios.c_lflag &= ~ISIG;
+    tcsetattr(STDIN_FILENO, 0, &_termios);
 
     char *USER = getenv("USER");
     if (USER == NULL) {

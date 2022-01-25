@@ -113,6 +113,12 @@ int kmain(boot_info_t *boot_informations)
     initial_esp = boot_info.stack_base;
     // Dump the multiboot structure.
     dump_multiboot(boot_info.multiboot_header);
+
+    //==========================================================================
+    // First, disable the keyboard, otherwise the PS/2 initialization does not
+    // work properly.
+    keyboard_disable();
+
     //==========================================================================
     pr_notice("Initialize the video...\n");
     vga_initialize();
@@ -298,9 +304,8 @@ int kmain(boot_info_t *boot_informations)
         return 1;
     }
     print_ok();
-    
+
     //==========================================================================
-#if 1
     pr_notice("Setting up PS/2 driver...\n");
     printf("Setting up PS/2 driver...");
     if (ps2_initialize()) {
@@ -309,8 +314,7 @@ int kmain(boot_info_t *boot_informations)
         return 1;
     }
     print_ok();
-#endif
-    
+
     //==========================================================================
     pr_notice("Setting up keyboard driver...\n");
     printf("Setting up keyboard driver...");

@@ -20,7 +20,7 @@ void syscall_handler(pt_regs *f);
 
 /// @brief Returns the current interrupt stack frame.
 /// @return Pointer to the stack frame.
-pt_regs* get_current_interrupt_stack_frame();
+pt_regs *get_current_interrupt_stack_frame();
 
 /// The exit() function causes normal process termination.
 /// @param exit_code The exit code.
@@ -88,11 +88,13 @@ int sys_execve(pt_regs *f);
 
 /// @brief Changes the working directory.
 /// @param path The new working directory.
-void sys_chdir(char const *path);
+/// @return On success 0. On error -1, and errno indicates the error.
+int sys_chdir(char const *path);
 
 /// @brief Changes the working directory.
 /// @param fd File descriptor of the new working directory.
-void sys_fchdir(int fd);
+/// @return On success 0. On error -1, and errno indicates the error.
+int sys_fchdir(int fd);
 
 /// @brief Returns the process ID (PID) of the calling process.
 /// @return The process ID.
@@ -103,7 +105,7 @@ pid_t sys_getpid();
 ///        If pid != 0 return the SID corresponding to the process having identifier == pid
 ///@param pid process identifier from wich we want the SID
 ///@return On success return SID of the session
-///        Otherwise return -1 with errno set on: EPERM or ESRCH  
+///        Otherwise return -1 with errno set on: EPERM or ESRCH
 pid_t sys_getsid(pid_t pid);
 
 ///@brief creates a new session if the calling process is not a
@@ -113,7 +115,7 @@ pid_t sys_getsid(pid_t pid);
 ///       of a new process group in the session (i.e., its process group ID
 ///       is made the same as its process ID).
 ///@return On success return SID of the session just created
-///        Otherwise return -1 with errno : EPERM 
+///        Otherwise return -1 with errno : EPERM
 pid_t sys_setsid();
 
 ///@brief returns the Process Group ID (PGID) of the process specified by pid.
@@ -134,7 +136,7 @@ int sys_setpgid(pid_t pid, pid_t pgid);
 pid_t sys_getgid();
 
 ///@brief sets the effective group ID of the calling process.
-///@param pid process identifier to 
+///@param pid process identifier to
 ///@return On success, zero is returned.
 ///        Otherwise returns -1 with errno set to :EINVAL or EPERM.
 int sys_setgid(pid_t pid);
