@@ -69,87 +69,53 @@
     }
 
 #ifdef __KERNEL__
-
-#define DECLARE_RING_BUFFER(type, name, init)                                             \
-    typedef struct rb_##name##_t {                                                        \
-        const unsigned size;                                                              \
-        unsigned read, write;                                                             \
-        type *buffer;                                                                     \
-    } rb_##name##_t;                                                                      \
-    static inline rb_##name##_t alloc_rb_##name(unsigned len)                             \
-    {                                                                                     \
-        rb_##name##_t rb = { len, 0U, 0U, len > 0 ? kmalloc(sizeof(type) * len) : NULL }; \
-        memset(rb.buffer, init, sizeof(type) * len);                                      \
-        return rb;                                                                        \
-    }                                                                                     \
-    static inline void free_rb_##name(rb_##name##_t *rb)                                  \
-    {                                                                                     \
-        kfree(rb->buffer);                                                                \
-    }                                                                                     \
-    static inline unsigned step_rb_##name(rb_##name##_t *rb, unsigned index)              \
-    {                                                                                     \
-        return (index == (rb->size - 1)) ? 0 : index + 1;                                 \
-    }                                                                                     \
-    static inline void push_rb_##name(rb_##name##_t *rb, type item)                       \
-    {                                                                                     \
-        if (step_rb_##name(rb, rb->write) == rb->read)                                    \
-            rb->read = step_rb_##name(rb, rb->read);                                      \
-        rb->buffer[rb->write] = item;                                                     \
-        rb->write             = step_rb_##name(rb, rb->write);                            \
-    }                                                                                     \
-    static inline void pop_rb_##name(rb_##name##_t *rb, type *item)                       \
-    {                                                                                     \
-        *item = init;                                                                     \
-        if (rb->write != rb->read) {                                                      \
-            *item    = rb->buffer[rb->read];                                              \
-            rb->read = step_rb_##name(rb, rb->read);                                      \
-        }                                                                                 \
-    }                                                                                     \
-    static inline void get_rb_##name(rb_##name##_t *rb, unsigned index, type *item)       \
-    {                                                                                     \
-        if (index < rb->size)                                                             \
-            *item = rb->buffer[index];                                                    \
-    }
-
+#define RING_BUFFER_ALLOC kmalloc
+#define RING_BUFFER_FREE  kfree
 #else
-
-#define DECLARE_RING_BUFFER(type, name)                                                  \
-    typedef struct rb_##name##_t {                                                       \
-        const unsigned size;                                                             \
-        unsigned read, write;                                                            \
-        type *buffer;                                                                    \
-    } rb_##name##_t;                                                                     \
-    static inline rb_##name##_t alloc_rb_##name(unsigned len)                            \
-    {                                                                                    \
-        rb_##name##_t rb = { len, 0U, 0U, len > 0 ? malloc(sizeof(type) * len) : NULL }; \
-        memset(rb.buffer, 0, sizeof(type) * len);                                        \
-        return rb;                                                                       \
-    }                                                                                    \
-    static inline void free_rb_##name(rb_##name##_t *rb)                                 \
-    {                                                                                    \
-        free(rb->buffer);                                                                \
-    }                                                                                    \
-    static inline unsigned step_rb_##name(rb_##name##_t *rb, unsigned index)             \
-    {                                                                                    \
-        return (index == (rb->size - 1)) ? 0 : index + 1;                                \
-    }                                                                                    \
-    static inline void push_rb_##name(rb_##name##_t *rb, type item)                      \
-    {                                                                                    \
-        if (step_rb_##name(rb, rb->write) == rb->read)                                   \
-            rb->read = step_rb_##name(rb, rb->read);                                     \
-        rb->buffer[rb->write] = item;                                                    \
-        rb->write             = step_rb_##name(rb, rb->write);                           \
-    }                                                                                    \
-    static inline void pop_rb_##name(rb_##name##_t *rb, type *item)                      \
-    {                                                                                    \
-        if (rb->write != rb->read) {                                                     \
-            *item    = rb->buffer[rb->read];                                             \
-            rb->read = step_rb_##name(rb, rb->read);                                     \
-        }                                                                                \
-    }                                                                                    \
-    static inline void get_rb_##name(rb_##name##_t *rb, unsigned index, type *item)      \
-    {                                                                                    \
-        if (index < rb->size)                                                            \
-            *item = rb->buffer[index];                                                   \
-    }
+#define RING_BUFFER_ALLOC malloc
+#define RING_BUFFER_FREE  free
 #endif
+
+#define DECLARE_RING_BUFFER(type, name, init)                                                       \
+    typedef struct rb_##name##_t {                                                                  \
+        const unsigned size;                                                                        \
+        unsigned read, write;                                                                       \
+        type *buffer;                                                                               \
+    } rb_##name##_t;                                                                                \
+    static inline rb_##name##_t alloc_rb_##name(unsigned len)                                       \
+    {                                                                                               \
+        rb_##name##_t rb = { len, 0U, 0U, len > 0 ? RING_BUFFER_ALLOC(sizeof(type) * len) : NULL }; \
+        memset(rb.buffer, init, sizeof(type) * len);                                                \
+        return rb;                                                                                  \
+    }                                                                                               \
+    static inline void free_rb_##name(rb_##name##_t *rb)                                            \
+    {                                                                                               \
+        RING_BUFFER_FREE(rb->buffer);                                                               \
+    }                                                                                               \
+    static inline unsigned step_rb_##name(rb_##name##_t *rb, unsigned index)                        \
+    {                                                                                               \
+        return (index == (rb->size - 1)) ? 0 : index + 1;                                           \
+    }                                                                                               \
+    static inline void push_rb_##name(rb_##name##_t *rb, type item)                                 \
+    {                                                                                               \
+        if (step_rb_##name(rb, rb->write) == rb->read)                                              \
+            rb->read = step_rb_##name(rb, rb->read);                                                \
+        rb->buffer[rb->write] = item;                                                               \
+        rb->write             = step_rb_##name(rb, rb->write);                                      \
+    }                                                                                               \
+    static inline void pop_rb_##name(rb_##name##_t *rb, type *item)                                 \
+    {                                                                                               \
+        *item = init;                                                                               \
+        if (rb->write != rb->read) {                                                                \
+            *item    = rb->buffer[rb->read];                                                        \
+            rb->read = step_rb_##name(rb, rb->read);                                                \
+        }                                                                                           \
+    }                                                                                               \
+    static inline void get_rb_##name(rb_##name##_t *rb, unsigned index, type *item)                 \
+    {                                                                                               \
+        if (index < rb->size)                                                                       \
+            *item = rb->buffer[index];                                                              \
+    }
+
+#undef RING_BUFFER_ALLOC
+#undef RING_BUFFER_FREE
