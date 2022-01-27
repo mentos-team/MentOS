@@ -1,6 +1,6 @@
 /// @file boot.h
 /// @brief Bootloader structures
-/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #pragma once

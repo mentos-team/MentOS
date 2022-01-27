@@ -1,6 +1,6 @@
 /// @file namei.c
 /// @brief Implementation of functions fcntl() and open().
-/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #include "process/scheduler.h"

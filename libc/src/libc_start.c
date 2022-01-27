@@ -1,5 +1,7 @@
 /// @file libc_start.c
 /// @brief Contains the programs initialization procedure.
+/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// See LICENSE.md for details.
 
 #include "sys/unistd.h"
 #include "stdlib.h"

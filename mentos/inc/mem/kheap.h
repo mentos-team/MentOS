@@ -1,7 +1,7 @@
 /// @file kheap.h
 /// @brief  Interface for kernel heap functions, also provides a placement
 ///         malloc() for use before the heap is initialised.
-/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #pragma once

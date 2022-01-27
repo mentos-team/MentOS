@@ -36,7 +36,7 @@
 /// CPU are perceived by the rest of the system as the operations cross the
 /// interface between the CPU and rest of the system (the dotted lines).
 ///
-/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #pragma once

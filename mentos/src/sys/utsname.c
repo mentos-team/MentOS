@@ -1,6 +1,6 @@
 /// @file utsname.c
 /// @brief Functions used to provide information about the machine & OS.
-/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #include "string.h"
