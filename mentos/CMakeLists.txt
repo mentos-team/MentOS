@@ -147,7 +147,6 @@ set(KERNEL_SOURCES
     src/drivers/ps2.c
     src/drivers/keyboard/keyboard.c
     src/drivers/keyboard/keymap.c
-    src/fs/initrd.c
     src/fs/vfs.c
     src/fs/read_write.c
     src/fs/open.c

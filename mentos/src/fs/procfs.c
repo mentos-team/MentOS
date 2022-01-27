@@ -63,7 +63,7 @@ typedef struct procfs_file_t {
 } procfs_file_t;
 
 /// @brief The details regarding the filesystem.
-/// @brief Contains the number of files inside the initrd filesystem.
+/// @brief Contains the number of files inside the procfs filesystem.
 typedef struct procfs_t {
     /// Number of files.
     unsigned int nfiles;

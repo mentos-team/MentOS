@@ -9,7 +9,6 @@
 #include "mem/kheap.h"
 #include "stdio.h"
 #include "string.h"
-#include "fs/initrd.h"
 #include "limits.h"
 
 int sys_stat(const char *path, stat_t *buf)

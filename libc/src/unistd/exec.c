@@ -63,7 +63,7 @@ static inline int __find_in_path(const char *file, char *buf, size_t buf_len)
 ///        image (argument vector), allows the caller to specify
 ///        the environment of the executed program via `envp`.
 /// @return Returns -1 only if an error has occurred, and sets errno.
-_syscall3(int, execve, const char *, path, char *const *, argv, char *const *, envp);
+_syscall3(int, execve, const char *, path, char *const *, argv, char *const *, envp)
 
 int execv(const char *path, char *const argv[])
 {

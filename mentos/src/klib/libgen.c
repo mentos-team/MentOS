@@ -6,7 +6,6 @@
 #include "system/syscall.h"
 #include "libgen.h"
 #include "string.h"
-#include "fs/initrd.h"
 #include "limits.h"
 #include "assert.h"
 #include "mem/paging.h"

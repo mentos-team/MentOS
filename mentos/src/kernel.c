@@ -25,7 +25,6 @@
 #include "hardware/pic8259.h"
 #include "io/debug.h"
 #include "drivers/fdc.h"
-#include "fs/initrd.h"
 #include "fs/ext2.h"
 #include "klib/irqflags.h"
 #include "drivers/keyboard/keyboard.h"
@@ -250,22 +249,6 @@ int kmain(boot_info_t *boot_informations)
         pr_emerg("Failed to mount EXT2 filesystem...\n");
         return 1;
     }
-
-    //==========================================================================
-#if 0
-    pr_notice("    Initialize 'initrd'...\n");
-    printf("    Initialize 'initrd'...");
-    if (initrd_init_module()) {
-        print_fail();
-        pr_emerg("Failed to register `initrd`!\n");
-        return 1;
-    }
-    print_ok();
-    if (do_mount("initrd", "/", "/dev/ram0")) {
-        pr_emerg("Failed to mount root `/`!\n");
-        return 1;
-    }
-#endif
 
     //==========================================================================
     pr_notice("    Initialize 'procfs'...\n");
