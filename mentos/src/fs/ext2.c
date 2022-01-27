@@ -1635,9 +1635,12 @@ void ext2_direntry_iterator_next(ext2_direntry_iterator_t *iterator)
 
 static inline bool_t ext2_directory_is_empty(ext2_filesystem_t *fs, uint8_t *cache, ext2_inode_t *inode)
 {
-    if (ext2_read_inode_block(fs, inode, 0U, cache) == -1)
-        return true;
-    return ((ext2_dirent_t *)cache) == NULL;
+    ext2_direntry_iterator_t it = ext2_direntry_iterator_begin(fs, cache, inode);
+    for (; ext2_direntry_iterator_valid(&it); ext2_direntry_iterator_next(&it)) {
+        if (it.direntry->inode != 0)
+            return false;
+    }
+    return true;
 }
 
 // ============================================================================
