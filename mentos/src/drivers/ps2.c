@@ -8,7 +8,7 @@
 /// Change the header.
 #define __DEBUG_HEADER__ "[PS/2  ]"
 /// Set the log level.
-#define __DEBUG_LEVEL__ LOGLEVEL_DEBUG
+#define __DEBUG_LEVEL__ LOGLEVEL_NOTICE
 
 #include "drivers/ps2.h"
 #include "proc_access.h"

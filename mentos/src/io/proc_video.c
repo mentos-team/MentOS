@@ -8,7 +8,7 @@
 /// Change the header.
 #define __DEBUG_HEADER__ "[PROCV ]"
 /// Set the log level.
-#define __DEBUG_LEVEL__ LOGLEVEL_DEBUG
+#define __DEBUG_LEVEL__ LOGLEVEL_NOTICE
 
 #include "bits/termios-struct.h"
 #include "drivers/keyboard/keyboard.h"
