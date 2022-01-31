@@ -65,9 +65,13 @@ static inline void __debug_print_header(const char *file, const char *fun, int l
     sprintf(tmp_prefix, "%s:%d", file, line);
     sprintf(final_prefix, " %-20s ", tmp_prefix);
     dbg_puts(final_prefix);
+#if 0
     dbg_putchar('|');
     sprintf(final_prefix, " %-25s ]", fun);
     dbg_puts(final_prefix);
+#else
+    dbg_putchar(']');
+#endif
     dbg_putchar(' ');
     if (header) {
         dbg_puts(header);
