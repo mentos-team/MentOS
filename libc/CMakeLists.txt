@@ -10,7 +10,11 @@ project(libc C ASM)
 # Enable the assembly language.
 enable_language(ASM)
 # Find the NASM compiler.
-find_program(ASM_COMPILER NAMES nasm HINTS /usr/bin/ ${CMAKE_SOURCE_DIR}/third_party/nasm/bin)
+find_program(
+    ASM_COMPILER
+    NAMES nasm
+    HINTS /usr/bin/ /usr/local/bin/
+)
 # Check that we have found the compiler.
 if(NOT ASM_COMPILER)
     message(FATAL_ERROR "ASM compiler not found!")

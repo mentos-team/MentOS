@@ -109,7 +109,7 @@ enable_language(ASM)
 find_program(
     ASM_COMPILER
     NAMES nasm
-    HINTS /usr/bin/ ${CMAKE_SOURCE_DIR}/third_party/nasm/bin
+    HINTS /usr/bin/ /usr/local/bin/
 )
 # Check that we have found the compiler.
 if(NOT ASM_COMPILER)
