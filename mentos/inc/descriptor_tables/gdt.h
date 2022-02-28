@@ -93,7 +93,7 @@ enum gdt_bits_t {
     GDT_GRANULARITY = 128U,
     /// @brief `0b01000000U` (Size): If 0 the selector defines 16 bit protected mode. If 1 it defines 32 bit protected mode. You can have both 16 bit and 32 bit selectors at once.
     GDT_OPERAND_SIZE = 64U,
-} gdt_bits_t;
+};
 
 /// @brief Used in IDT for padding.
 #define IDT_PADDING 14U // `0b00001110U
