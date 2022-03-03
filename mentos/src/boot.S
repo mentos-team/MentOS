@@ -23,7 +23,7 @@ MULTIBOOT_VIDEO_MODE  equ 0x00000004
 
 ; This is the flag combination that we prepare for Grub
 ; to read at kernel load time.
-MULTIBOOT_HEADER_FLAGS  equ (MULTIBOOT_PAGE_ALIGN | MULTIBOOT_MEMORY_INFO | MULTIBOOT_VIDEO_MODE)
+MULTIBOOT_HEADER_FLAGS  equ (MULTIBOOT_PAGE_ALIGN | MULTIBOOT_MEMORY_INFO)
 ; Grub reads this value to make sure it loads a kernel
 ; and not just garbage.
 MULTIBOOT_CHECKSUM      equ -(MULTIBOOT_HEADER_MAGIC + MULTIBOOT_HEADER_FLAGS)

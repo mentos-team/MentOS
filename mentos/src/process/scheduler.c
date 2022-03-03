@@ -352,7 +352,7 @@ int sys_setgid(pid_t gid)
     }
 
     if (curr->gid == curr->pid)
-        pr_debug("Process %d is already a session leader.", task->pid);
+        pr_debug("Process %d is already a session leader.", curr->pid);
 
     curr->gid = curr->pid;
     return 0;
