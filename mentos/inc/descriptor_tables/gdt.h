@@ -67,7 +67,7 @@
 ///
 ///  You can have both 16 bit and 32 bit selectors at once.
 ///
-typedef enum gdt_bits_t {
+enum gdt_bits_t {
     /// @brief `0b10000000U` (Present): This must be 1 for all valid selectors.
     GDT_PRESENT = 128U,
     /// @brief `0b00000000U` (Privilege): Sets the 2 privilege bits (ring level) to 0 = highest (kernel).
@@ -92,7 +92,7 @@ typedef enum gdt_bits_t {
     GDT_GRANULARITY = 128U,
     /// @brief `0b01000000U` (Size): If 0 the selector defines 16 bit protected mode. If 1 it defines 32 bit protected mode. You can have both 16 bit and 32 bit selectors at once.
     GDT_OPERAND_SIZE = 64U,
-} gdt_bits_t;
+};
 
 /// @brief Used in IDT for padding.
 #define IDT_PADDING 14U // `0b00001110U
