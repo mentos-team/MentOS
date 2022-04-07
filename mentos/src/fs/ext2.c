@@ -1828,7 +1828,7 @@ static int ext2_find_direntry(ext2_filesystem_t *fs, ino_t ino, const char *name
         pr_err("You provided a NULL direntry.\n");
         return -1;
     }
-    pr_debug("ext2_find_direntry(ino: %d, name: \"%s\")\n", ino, name);
+    //pr_debug("ext2_find_direntry(ino: %d, name: \"%s\")\n", ino, name);
     // Get the inode associated with the file.
     ext2_inode_t inode;
     if (ext2_read_inode(fs, &inode, ino) == -1) {
@@ -1874,8 +1874,8 @@ static int ext2_find_direntry(ext2_filesystem_t *fs, ino_t ino, const char *name
     // Free the cache.
     kmem_cache_free(cache);
 
-    pr_debug("ext2_find_direntry(ino: %d, name: \"%s\") -> (ino: %d, name: \"%s\")\n",
-             ino, name, search->direntry->inode, search->direntry->name);
+    //pr_debug("ext2_find_direntry(ino: %d, name: \"%s\") -> (ino: %d, name: \"%s\")\n",
+    //         ino, name, search->direntry->inode, search->direntry->name);
     return 0;
 free_cache_return_error:
     // Free the cache.
