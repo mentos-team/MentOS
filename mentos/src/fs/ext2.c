@@ -2691,6 +2691,10 @@ static int ext2_mkdir(const char *path, mode_t permission)
         vfs_close(parent);
         return -ENOENT;
     }
+    // Increase the number of directories inside the group.
+    fs->block_groups[group_index].used_dirs_count += 1;
+    // Update the bgdt.
+    ext2_write_bgdt(fs);
     // Write the inode.
     if (ext2_write_inode(fs, &inode, inode_index) == -1) {
         pr_err("Failed to write the newly created inode.\n");
