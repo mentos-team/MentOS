@@ -2122,8 +2122,6 @@ static int ext2_create_inode(
         pr_err("Failed to read the newly created inode.\n");
         return -1;
     }
-    pr_debug("UID = %d\n", task->uid);
-    pr_debug("GID = %d\n", task->gid);
     // Set the inode mode.
     inode->mode = mode;
     // Set the user identifiers of the owners.
@@ -2160,11 +2158,6 @@ static int ext2_create_inode(
     inode->fragment_addr = 0;
     // TODO: OS dependant structure.
     memset(&inode->osd2, 0, sizeof(inode->osd2));
-    // Write the inode.
-    if (ext2_write_inode(fs, inode, inode_index) == -1) {
-        pr_err("Failed to write the newly created inode.\n");
-        return -1;
-    }
     return inode_index;
 }
 
@@ -2230,6 +2223,11 @@ static vfs_file_t *ext2_creat(const char *path, mode_t permission)
     int inode_index = ext2_create_inode(fs, &inode, mode, group_index);
     if (inode_index == -1) {
         pr_err("Failed to create a new inode inside `%s` (group index: %d).\n", parent->name, group_index);
+        goto close_parent_return_null;
+    }
+    // Write the inode.
+    if (ext2_write_inode(fs, &inode, inode_index) == -1) {
+        pr_err("Failed to write the newly created inode.\n");
         goto close_parent_return_null;
     }
     // Initialize the file.
@@ -2693,8 +2691,13 @@ static int ext2_mkdir(const char *path, mode_t permission)
         vfs_close(parent);
         return -ENOENT;
     }
-    // Initialize the file.
-    if (ext2_allocate_direntry(fs, parent, basename(path), inode_index, ext2_file_type_directory) == -1) {
+    // Write the inode.
+    if (ext2_write_inode(fs, &inode, inode_index) == -1) {
+        pr_err("Failed to write the newly created inode.\n");
+        // Close the parent directory.
+        vfs_close(parent);
+        return -ENOENT;
+    }
         pr_err("Failed to allocate a new direntry for the inode.\n");
         // Close the parent directory.
         vfs_close(parent);
