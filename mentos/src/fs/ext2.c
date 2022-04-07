@@ -1354,9 +1354,11 @@ static int ext2_allocate_inode_block(ext2_filesystem_t *fs, ext2_inode_t *inode,
     // Compute the new blocks count.
     uint32_t blocks_count = (block_index + 1) * fs->blocks_per_block_count;
     if (inode->blocks_count < blocks_count) {
+        // Set the blocks count.
         inode->blocks_count = blocks_count;
-        pr_debug("Setting the block count for inode to %d = (%d blocks)\n",
-                 blocks_count, blocks_count / fs->blocks_per_block_count);
+        // Update the size.
+        inode->size = (blocks_count / fs->blocks_per_block_count) * fs->block_size;
+        pr_debug("Setting the block count for inode `%d` to `%d` blocks.\n", inode_index, blocks_count / fs->blocks_per_block_count);
     }
     // Update the inode.
     if (ext2_write_inode(fs, inode, inode_index) == -1)
