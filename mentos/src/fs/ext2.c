@@ -2658,7 +2658,7 @@ static int ext2_getdents(vfs_file_t *file, dirent_t *dirp, off_t doff, size_t co
 
 static int ext2_mkdir(const char *path, mode_t permission)
 {
-    pr_debug("ext2_mkdir(%s, %d)\n", path, permission);
+    pr_debug("\next2_mkdir(%s, %d)\n", path, permission);
     // Get the absolute path.
     char absolute_path[PATH_MAX];
     // If the first character is not the '/' then get the absolute path.
@@ -2725,6 +2725,15 @@ static int ext2_mkdir(const char *path, mode_t permission)
         vfs_close(parent);
         return -ENOENT;
     }
+    // Create a directory entry, inside the new directory, pointing to itself.
+    if (ext2_allocate_direntry(fs, inode_index, inode_index, ".", ext2_file_type_directory) == -1) {
+        pr_err("Failed to allocate a new direntry for the inode.\n");
+        // Close the parent directory.
+        vfs_close(parent);
+        return -ENOENT;
+    }
+    // Create a directory entry, inside the new directory, pointing to its parent.
+    if (ext2_allocate_direntry(fs, inode_index, parent->ino, "..", ext2_file_type_directory) == -1) {
         pr_err("Failed to allocate a new direntry for the inode.\n");
         // Close the parent directory.
         vfs_close(parent);
