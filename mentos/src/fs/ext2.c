@@ -1674,12 +1674,6 @@ static int ext2_allocate_direntry(
     const char *name,
     uint8_t file_type)
 {
-    // Get the inode associated with the parent directory.
-    ext2_inode_t parent_inode;
-    if (ext2_read_inode(fs, &parent_inode, parent_inode_index) == -1) {
-        pr_err("Failed to read the parent inode (%d).\n", parent_inode_index);
-        return -1;
-    }
     // Get the inode associated with the new directory entry.
     ext2_inode_t inode;
     if (ext2_read_inode(fs, &inode, inode_index) == -1) {
@@ -1691,6 +1685,12 @@ static int ext2_allocate_direntry(
     // Write the inode back.
     if (ext2_write_inode(fs, &inode, inode_index) == -1) {
         pr_err("Failed to update the inode of the directory entry.\n");
+        return -1;
+    }
+    // Get the inode associated with the parent directory.
+    ext2_inode_t parent_inode;
+    if (ext2_read_inode(fs, &parent_inode, parent_inode_index) == -1) {
+        pr_err("Failed to read the parent inode (%d).\n", parent_inode_index);
         return -1;
     }
     // Check that the parent is a directory.
@@ -2155,7 +2155,7 @@ static int ext2_create_inode(
     // Set the group identifiers of the owners.
     inode->gid = task->gid;
     // Set the number of hard links.
-    inode->links_count = 1;
+    inode->links_count = 0;
     // Set the blocks count.
     inode->blocks_count = 0;
     // Set the file flags.
