@@ -613,8 +613,12 @@ static void ext2_dump_bgdt(ext2_filesystem_t *fs)
         // Get the pointer to the current group descriptor.
         ext2_group_descriptor_t *gd = &(fs->block_groups[i]);
         pr_debug("Block Group Descriptor [%d] @ %d:\n", i, fs->bgdt_start_block + i * fs->superblock.blocks_per_group);
-        pr_debug("    Free Blocks : %4d of %d\n", gd->free_blocks_count, fs->superblock.blocks_per_group);
-        pr_debug("    Free Inodes : %4d of %d\n", gd->free_inodes_count, fs->superblock.inodes_per_group);
+        pr_debug("    block_bitmap : %d\n", gd->block_bitmap);
+        pr_debug("    inode_bitmap : %d\n", gd->inode_bitmap);
+        pr_debug("    inode_table  : %d\n", gd->inode_table);
+        pr_debug("    Used Dirs    : %d\n", gd->used_dirs_count);
+        pr_debug("    Free Blocks  : %4d of %d\n", gd->free_blocks_count, fs->superblock.blocks_per_group);
+        pr_debug("    Free Inodes  : %4d of %d\n", gd->free_inodes_count, fs->superblock.inodes_per_group);
         // Dump the block bitmap.
         ext2_read_block(fs, gd->block_bitmap, cache);
         pr_debug("    Block Bitmap at %d\n", gd->block_bitmap);
