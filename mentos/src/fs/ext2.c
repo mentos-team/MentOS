@@ -1667,30 +1667,48 @@ static inline uint32_t ext2_get_rec_len_from_direntry(const ext2_dirent_t *diren
     return rec_len;
 }
 
-static int ext2_allocate_direntry(ext2_filesystem_t *fs, vfs_file_t *parent, const char *name, uint32_t inode_index, uint8_t file_type)
+static int ext2_allocate_direntry(
+    ext2_filesystem_t *fs,
+    uint32_t parent_inode_index,
+    uint32_t inode_index,
+    const char *name,
+    uint8_t file_type)
 {
-    // Get the inode associated with the file.
+    // Get the inode associated with the parent directory.
     ext2_inode_t parent_inode;
-    if (ext2_read_inode(fs, &parent_inode, parent->ino) == -1) {
-        pr_err("Failed to read the inode (%d).\n", parent->ino);
+    if (ext2_read_inode(fs, &parent_inode, parent_inode_index) == -1) {
+        pr_err("Failed to read the parent inode (%d).\n", parent_inode_index);
+        return -1;
+    }
+    // Get the inode associated with the new directory entry.
+    ext2_inode_t inode;
+    if (ext2_read_inode(fs, &inode, inode_index) == -1) {
+        pr_err("Failed to read the inode of the directory entry (%d).\n", inode_index);
+        return -1;
+    }
+    // Update the number of links to the inode.
+    inode.links_count += 1;
+    // Write the inode back.
+    if (ext2_write_inode(fs, &inode, inode_index) == -1) {
+        pr_err("Failed to update the inode of the directory entry.\n");
         return -1;
     }
     // Check that the parent is a directory.
     if (!bitmask_check(parent_inode.mode, EXT2_S_IFDIR)) {
-        pr_err("The parent inode is not a directory (ino: %d, mode: %d).\n", parent->ino, parent_inode.mode);
+        pr_err("The parent inode is not a directory (ino: %d, mode: %d).\n", parent_inode_index, parent_inode.mode);
         return -1;
     }
-    pr_debug("ext2_allocate_direntry(parent: \"%s\", name: \"%s\", inode: %d)\n", parent->name, name, inode_index);
+    pr_debug("ext2_allocate_direntry(parent: %d, name: \"%s\", inode: %d)\n", parent_inode_index, name, inode_index);
     // Compute the rec_len for the name of the new direntry. Remember, the name
     // is not actually 256 chars long as specified in EXT2_NAME_LEN, that is
     // just a maximum.
     unsigned int rec_len = ext2_get_rec_len_from_name(name);
 
-    pr_debug("Our directory entry looks like this:\n");
-    pr_debug("  inode     = %d\n", inode_index);
-    pr_debug("  rec_len   = %d\n", rec_len);
-    pr_debug("  name      = %s (%d)\n", name, strlen(name));
-    pr_debug("  file_type = %d (vfs: %d)\n", EXT2_S_IFREG, DT_REG);
+    pr_debug("    Our directory entry looks like this:\n");
+    pr_debug("        inode     = %d\n", inode_index);
+    pr_debug("        rec_len   = %d\n", rec_len);
+    pr_debug("        name      = %s (%d)\n", name, strlen(name));
+    pr_debug("        file_type = %d (vfs: %d)\n", EXT2_S_IFREG, DT_REG);
 
     // Allocate the cache.
     uint8_t *cache = kmem_cache_alloc(fs->ext2_buffer_cache, GFP_KERNEL);
@@ -1726,7 +1744,7 @@ static int ext2_allocate_direntry(ext2_filesystem_t *fs, vfs_file_t *parent, con
         }
     }
     if (it.direntry) {
-        pr_debug("We need to replace the direntry: %p\n", it.direntry);
+        pr_debug("    We need to replace the direntry: %p\n", it.direntry);
         // Clean the previous name.
         memset(it.direntry->name, 0, it.direntry->name_len);
         // Set the inode.
@@ -1738,37 +1756,30 @@ static int ext2_allocate_direntry(ext2_filesystem_t *fs, vfs_file_t *parent, con
         // Set the file type.
         it.direntry->file_type = file_type;
 
-        if (ext2_write_inode_block(fs, &parent_inode, parent->ino, it.block_index, cache) == -1) {
+        if (ext2_write_inode_block(fs, &parent_inode, parent_inode_index, it.block_index, cache) == -1) {
             pr_err("Failed to update the block of the father directory.\n");
-            // Free the cache.
-            kmem_cache_free(cache);
-            return -1;
+            goto free_cache_return_error;
         }
-        // Free the cache.
-        kmem_cache_free(cache);
-        return 0;
+        goto free_cache_return_success;
+
     } else if ((it.block_offset + rec_len) >= fs->block_size) {
-        pr_debug("We need a new direntry, and a new block (%d + %d >= %d).\n", it.block_offset, rec_len, fs->block_size);
+        pr_debug("    We need a new direntry, and a new block (%d + %d >= %d).\n", it.block_offset, rec_len, fs->block_size);
         it.block_index += 1;
-        if (ext2_allocate_inode_block(fs, &parent_inode, parent->ino, it.block_index) == -1) {
+        if (ext2_allocate_inode_block(fs, &parent_inode, parent_inode_index, it.block_index) == -1) {
             pr_err("Failed to allocate a new block for an inode.\n");
-            // Free the cache.
-            kmem_cache_free(cache);
-            return -1;
+            goto free_cache_return_error;
         }
         it.block_offset = 0;
         parent_inode.size += fs->block_size;
-        if (ext2_write_inode(fs, &parent_inode, parent->ino) == -1) {
+        if (ext2_write_inode(fs, &parent_inode, parent_inode_index) == -1) {
             pr_err("Failed to update the inode of the father directory.\n");
-            // Free the cache.
-            kmem_cache_free(cache);
-            return -1;
+            goto free_cache_return_error;
         }
     } else if (previous) {
-        pr_debug("We need a new direntry, from the same block (after \"%s\").\n", previous->name);
+        pr_debug("    We need a new direntry, from the same block (after \"%s\").\n", previous->name);
     }
-    pr_debug(" total_offset = %d\n", it.total_offset);
-    pr_debug(" block_offset = %d\n", it.block_offset);
+    pr_debug("    total_offset = %d\n", it.total_offset);
+    pr_debug("    block_offset = %d\n", it.block_offset);
 
     ext2_dirent_t *new_direntry = (ext2_dirent_t *)((uintptr_t)cache + it.block_offset);
 
@@ -1778,15 +1789,20 @@ static int ext2_allocate_direntry(ext2_filesystem_t *fs, vfs_file_t *parent, con
     new_direntry->file_type = file_type;
     memcpy(new_direntry->name, name, strlen(name));
 
-    if (ext2_write_inode_block(fs, &parent_inode, parent->ino, it.block_index, cache) == -1) {
+    if (ext2_write_inode_block(fs, &parent_inode, parent_inode_index, it.block_index, cache) == -1) {
         pr_err("Failed to update the block of the father directory.\n");
-        // Free the cache.
-        kmem_cache_free(cache);
-        return -1;
+        goto free_cache_return_error;
     }
+
+free_cache_return_success:
     // Free the cache.
     kmem_cache_free(cache);
     return 0;
+
+free_cache_return_error:
+    // Free the cache.
+    kmem_cache_free(cache);
+    return -1;
 }
 
 /// @brief Finds the entry with the given `name` inside the `directory`.
@@ -2231,7 +2247,7 @@ static vfs_file_t *ext2_creat(const char *path, mode_t permission)
         goto close_parent_return_null;
     }
     // Initialize the file.
-    if (ext2_allocate_direntry(fs, parent, file_name, inode_index, ext2_file_type_regular_file) == -1) {
+    if (ext2_allocate_direntry(fs, parent->ino, inode_index, file_name, ext2_file_type_regular_file) == -1) {
         pr_err("Failed to allocate a new direntry for the inode.\n");
         goto close_parent_return_null;
     }
@@ -2698,6 +2714,13 @@ static int ext2_mkdir(const char *path, mode_t permission)
     // Write the inode.
     if (ext2_write_inode(fs, &inode, inode_index) == -1) {
         pr_err("Failed to write the newly created inode.\n");
+        // Close the parent directory.
+        vfs_close(parent);
+        return -ENOENT;
+    }
+    // Create a directory entry for the directory.
+    if (ext2_allocate_direntry(fs, parent->ino, inode_index, basename(path), ext2_file_type_directory) == -1) {
+        pr_err("Failed to allocate a new direntry for the inode.\n");
         // Close the parent directory.
         vfs_close(parent);
         return -ENOENT;
