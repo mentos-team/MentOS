@@ -17,9 +17,9 @@
 #include "io/debug.h"
 #include "stdbool.h"
 
-#define PS2_DATA    0x60
-#define PS2_STATUS  0x64
-#define PS2_COMMAND 0x64
+#define PS2_DATA    0x60 ///< Data signal line.
+#define PS2_STATUS  0x64 ///< Status signal line.
+#define PS2_COMMAND 0x64 ///< Command signal line.
 
 #define PS2_CTRL_TEST_CONTROLLER 0xAA ///< Test PS/2 Controller. 0x55 passed, 0xFC failed.
 #define PS2_CTRL_P1_ENABLE       0xAE ///< Enable first PS/2 port. No response.
@@ -29,12 +29,12 @@
 #define PS2_CTRL_P2_DISABLE      0xA7 ///< Disable second PS/2 port. No response.
 #define PS2_CTRL_P2_TEST         0xA9 ///< Test second PS/2 port (only if 2 PS/2 ports supported).
 
-#define PS2_TEST_SUCCESS 0xAA
-#define PS2_ECHO_RES     0xEE
-#define PS2_ACK          0xFA
-#define PS2_TEST_FAIL1   0xFC
-#define PS2_TEST_FAIL2   0xFD
-#define PS2_RESEND       0xFE
+#define PS2_TEST_SUCCESS 0xAA ///< Self test passed (sent after "0xFF (reset)" command or keyboard power up).
+#define PS2_ECHO_RES     0xEE ///< Response to "0xEE (echo)" command.
+#define PS2_ACK          0xFA ///< Command acknowledged (ACK).
+#define PS2_TEST_FAIL1   0xFC ///< Self test failed (sent after "0xFF (reset)" command or keyboard power up).
+#define PS2_TEST_FAIL2   0xFD ///< Self test failed (sent after "0xFF (reset)" command or keyboard power up).
+#define PS2_RESEND       0xFE ///< Resend (keyboard wants controller to repeat last command it sent).
 
 // PS/2 Controller Configuration Byte
 // Bit | Meaning

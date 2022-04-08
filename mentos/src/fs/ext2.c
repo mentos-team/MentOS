@@ -10,7 +10,7 @@
 /// Change the header.
 #define __DEBUG_HEADER__ "[EXT2  ]"
 /// Set the log level.
-#define __DEBUG_LEVEL__ LOGLEVEL_NOTICE
+#define __DEBUG_LEVEL__ LOGLEVEL_DEBUG
 
 #include "process/scheduler.h"
 #include "process/process.h"

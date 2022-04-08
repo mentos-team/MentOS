@@ -6,13 +6,18 @@
 #pragma once
 
 #ifdef __KERNEL__
+/// Function for allocating memory for the array.
 #define ARRAY_ALLOC kmalloc
+/// Function for freeing the memory for the array.
 #define ARRAY_FREE  kfree
 #else
+/// Function for allocating memory for the array.
 #define ARRAY_ALLOC malloc
+/// Function for freeing the memory for the array.
 #define ARRAY_FREE  free
 #endif
 
+/// @brief Declares a new dynamic-size array structure.
 #define DECLARE_ARRAY(type, name)                                                     \
     typedef struct arr_##name##_t {                                                   \
         const unsigned size;                                                          \

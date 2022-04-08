@@ -42,4 +42,5 @@ typedef struct termios {
 #define ECHOKE  0x00000001 ///< If ICANON is set, KILL is echoed by erasing each character on the line.
 #define IEXTEN  0x00000400 ///< Enables implementation-defined input processing.
 
+/// @brief Mask for extracting control values.
 #define CTRL(x) (x & 037)

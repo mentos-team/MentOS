@@ -62,6 +62,11 @@ static inline int __find_in_path(const char *file, char *buf, size_t buf_len)
 /// @brief Replaces the current process image with a new process
 ///        image (argument vector), allows the caller to specify
 ///        the environment of the executed program via `envp`.
+/// @param path The absolute path to the binary file to execute.
+/// @param argv A vector of one or more pointers to null-terminated strings that represent
+///             the argument list available to the executed program.
+/// @param envp A vector of one or more pointers to null-terminated strings that represent
+///             the environment list available to the executed program.
 /// @return Returns -1 only if an error has occurred, and sets errno.
 _syscall3(int, execve, const char *, path, char *const *, argv, char *const *, envp)
 

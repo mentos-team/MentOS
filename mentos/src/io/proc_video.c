@@ -24,6 +24,8 @@
 #include "ctype.h"
 #include "process/scheduler.h"
 
+/// @brief Prints the ring-buffer.
+/// @param rb the ring-buffer to print.
 void print_rb(fs_rb_scancode_t *rb)
 {
     if (!fs_rb_scancode_empty(rb)) {

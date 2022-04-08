@@ -5,6 +5,7 @@
 
 #pragma once
 
+/// @brief Declares a fixed-size ring-buffer.
 #define DECLARE_FIXED_SIZE_RING_BUFFER(type, name, length, init)                     \
     typedef struct fs_rb_##name##_t {                                                \
         unsigned size, read, write;                                                  \
@@ -69,13 +70,18 @@
     }
 
 #ifdef __KERNEL__
+/// Function for allocating memory for the ring buffer.
 #define RING_BUFFER_ALLOC kmalloc
+/// Function for freeing the memory for the ring buffer.
 #define RING_BUFFER_FREE  kfree
 #else
+/// Function for allocating memory for the ring buffer.
 #define RING_BUFFER_ALLOC malloc
+/// Function for freeing the memory for the ring buffer.
 #define RING_BUFFER_FREE  free
 #endif
 
+/// @brief Declares a dynamic-size ring-buffer.
 #define DECLARE_RING_BUFFER(type, name, init)                                                       \
     typedef struct rb_##name##_t {                                                                  \
         const unsigned size;                                                                        \
