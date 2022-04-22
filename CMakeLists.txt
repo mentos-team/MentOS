@@ -160,3 +160,12 @@ add_custom_target(
   DEPENDS gdb_file kernel-bootloader.bin initrd)
 
 add_custom_target(all-execs-clion-embedded DEPENDS gdb_file_clion_embedded kernel-bootloader.bin initrd)
+
+add_custom_target(
+    cdrom.iso
+    COMMAND cp mentos/kernel-bootloader.bin iso/boot
+    COMMAND cp initrd iso/boot
+    COMMAND grub-mkrescue -o cdrom.iso iso
+    DEPENDS kernel-bootloader.bin
+    DEPENDS initrd
+)
