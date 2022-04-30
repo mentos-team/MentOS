@@ -68,6 +68,7 @@ set(PROGRAMS
     sleep.c
     man.c
     edit.c
+    uptime.c
 )
 foreach(PROGRAM ${PROGRAMS})
     # Prepare the program name.
