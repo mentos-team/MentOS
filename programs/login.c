@@ -154,6 +154,7 @@ int main(int argc, char **argv)
         if(read(issues_fd, buffer, sizeof(char)*256) != -1){
             printf("%s \n", buffer);
         }
+        close(issues_fd);
     }
     
     passwd_t *pwd;
