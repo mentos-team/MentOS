@@ -719,6 +719,7 @@ int main(int argc, char *argv[])
         if(read(motd_fd, buffer, sizeof(char)*256) != -1){
             printf("%s \n", buffer);
         }
+        close(motd_fd);
     }
     
     // Move inside the home directory.
