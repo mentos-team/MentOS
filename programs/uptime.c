@@ -29,6 +29,6 @@ int main(){
   int upseconds = (uptime - (updays * 86400) - (uphours * 3600) - (upmins * 60));
   
   printf("Days: %d Hours: %d Minutes: %d Seconds: %d \n", updays, uphours, upmins, upseconds);
-  
+  close(uptime_fd);
   return 0;
 }  
