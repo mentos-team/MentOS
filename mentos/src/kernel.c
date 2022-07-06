@@ -28,6 +28,7 @@
 #include "fs/ext2.h"
 #include "klib/irqflags.h"
 #include "drivers/keyboard/keyboard.h"
+#include "drivers/keyboard/keymap.h"
 #include "drivers/ps2.h"
 #include "process/scheduler.h"
 #include "hardware/timer.h"
@@ -303,6 +304,12 @@ int kmain(boot_info_t *boot_informations)
     printf("Setting up keyboard driver...");
     keyboard_initialize();
     print_ok();
+    // Set the keymap type.
+#ifdef USE_KEYMAP_US
+    set_keymap_type(KEYMAP_US);
+#else
+    set_keymap_type(KEYMAP_IT);
+#endif
 
     //==========================================================================
 #if 0

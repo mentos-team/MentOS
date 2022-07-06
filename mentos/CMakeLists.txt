@@ -1,14 +1,14 @@
 # =============================================================================
 # Set the minimum required version of cmake.
-cmake_minimum_required(VERSION 2.8)
+cmake_minimum_required(VERSION 3.1...3.22)
 # Initialize the project.
-project(mentos C ASM)
+project(kernel C ASM)
 
 # =============================================================================
 # Set the main file names.
-set(KERNEL_NAME ${PROJECT_NAME}_kernel)
-set(BOOTLOADER_NAME ${PROJECT_NAME}_bootloader)
-set(BUDDY_SYSTEM_NAME ${PROJECT_NAME}_memory)
+set(KERNEL_NAME       kernel)
+set(BOOTLOADER_NAME   kernel_bootloader)
+set(BUDDY_SYSTEM_NAME kernel_memory)
 set(BUDDY_SYSTEM_FILE ${PROJECT_SOURCE_DIR}/src/mem/libbuddysystem.a)
 
 # =============================================================================
@@ -64,6 +64,19 @@ if("${VIDEO_TYPE}" STREQUAL "VGA_TEXT_MODE"
   message(STATUS "Setting video type to ${VIDEO_TYPE}.")
 else()
   message(FATAL_ERROR "Video type ${VIDEO_TYPE} is not valid.")
+endif()
+
+# =============================================================================
+# Add the video option.
+set(KEYMAP_TYPE "KEYMAP_US" CACHE STRING "Chose the type of video: KEYMAP_US KEYMAP_IT")
+# List of video tpes.
+set_property(CACHE KEYMAP_TYPE PROPERTY STRINGS KEYMAP_US KEYMAP_IT)
+# Check which VIDEO is currently active and export the related macro.
+if("${KEYMAP_TYPE}" STREQUAL "KEYMAP_US" OR "${KEYMAP_TYPE}" STREQUAL "KEYMAP_IT")
+    add_definitions(-DUSE_${KEYMAP_TYPE})
+    message(STATUS "Setting keyboard mapping to ${KEYMAP_TYPE}.")
+else()
+    message(FATAL_ERROR "keyboard mapping ${KEYMAP_TYPE} is not valid.")
 endif()
 
 # =============================================================================
