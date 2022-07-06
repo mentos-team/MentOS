@@ -18,13 +18,13 @@
 #include "hardware/pic8259.h"
 #include "klib/spinlock.h"
 #include "process/wait.h"
+#include "system/panic.h"
 #include "devices/pci.h"
 #include "io/port_io.h"
 #include "sys/errno.h"
 #include "mem/kheap.h"
 #include "io/debug.h"
 #include "string.h"
-#include "assert.h"
 #include "fs/vfs.h"
 #include "fcntl.h"
 #include "stdio.h"
@@ -286,10 +286,8 @@ typedef struct ata_device_t {
     vfs_file_t *fs_root;
 } ata_device_t;
 
-/// The sector size.
-#define ATA_SECTOR_SIZE 512
-/// The size of the DMA area.
-#define ATA_DMA_SIZE 512
+#define ATA_SECTOR_SIZE 512 ///< The sector size.
+#define ATA_DMA_SIZE    512 ///< The size of the DMA area.
 
 static spinlock_t ata_lock;
 
@@ -398,6 +396,18 @@ static inline const char *ata_get_device_status_str(ata_device_t *dev)
     status_str[ata_status_rdy]  = bit_check(status, ata_status_rdy) ? 'r' : ' ';
     status_str[ata_status_bsy]  = bit_check(status, ata_status_bsy) ? 'b' : ' ';
     return status_str;
+}
+
+static inline const char *ata_get_device_settings_str(ata_device_t *dev)
+{
+    if (dev->io_base == 0x1F0) {
+        if (dev->slave)
+            return "Primary Slave";
+        return "Primary Master";
+    }
+    if (dev->slave)
+        return "Secondary Slave";
+    return "Secondary Master";
 }
 
 static inline const char *ata_get_device_type_str(ata_device_type_t type)
@@ -514,6 +524,7 @@ static inline bool_t ata_read_device_identity(ata_device_t *dev, ata_identity_co
 /// @param dev the device on which we perform the soft reset.
 static inline void ata_soft_reset(ata_device_t *dev)
 {
+    pr_debug("[%s] Performing ATA soft reset...\n", ata_get_device_settings_str(dev));
     // Do a "software reset" on the bus.
     outportb(dev->control_base, ata_control_srst);
     // Wait for the soft reset to complete.
@@ -524,9 +535,10 @@ static inline void ata_soft_reset(ata_device_t *dev)
 
 static inline void ata_enable_bus_mastering(ata_device_t *dev)
 {
+    pr_debug("[%s] Enabling bust mastering...\n", ata_get_device_settings_str(dev));
     uint16_t pci_cmd = pci_read_field(ata_pci, PCI_COMMAND, 4);
     if (bit_check(pci_cmd, pci_command_bus_master)) {
-        pr_warning("Bus mastering already enabled.\n");
+        pr_warning("[%s] Bus mastering already enabled.\n", ata_get_device_settings_str(dev));
     } else {
         // Set the bit for bus mastering.
         bit_set_assign(pci_cmd, pci_command_bus_master);
@@ -535,7 +547,7 @@ static inline void ata_enable_bus_mastering(ata_device_t *dev)
         // Check that the bus mastering is enabled.
         pci_cmd = pci_read_field(ata_pci, PCI_COMMAND, 4);
         if (!bit_check(pci_cmd, pci_command_bus_master)) {
-            pr_warning("Bus mastering is not correctly set.\n");
+            pr_warning("[%s] Bus mastering is not correctly set.\n", ata_get_device_settings_str(dev));
         }
     }
 }
@@ -549,11 +561,14 @@ static inline void ata_enable_bus_mastering(ata_device_t *dev)
 /// For 32-bit Memory Space BARs, you calculate (BAR[x] & 0xFFFFFFF0).
 static inline void ata_initialize_bus_mastering_address(ata_device_t *dev)
 {
+    pr_debug("[%s] Initializing bust mastering...\n", ata_get_device_settings_str(dev));
     unsigned address = pci_read_field(ata_pci, PCI_BASE_ADDRESS_4, 4);
     // To distinguish between memory space BARs and I/O space BARs, you can
     // check the value of the lowest bit. memory space BARs has always a 0,
     // while I/O space BARs has always a 1.
-    assert(bit_check(address, 0));
+    if (!bit_check(address, 0)) {
+        kernel_panic("Failed to initialize BUS Mastering.");
+    }
     /// When you want to retrieve the actual base address of a BAR, be sure to
     /// mask the lower bits, for I/O space BARs you calculate (BAR & 0xFFFFFFFC).
     address &= 0xFFFFFFFC;
@@ -572,6 +587,7 @@ static inline void ata_initialize_bus_mastering_address(ata_device_t *dev)
 /* on Primary bus: ctrl->base =0x1F0, ctrl->dev_ctl =0x3F6. REG_CYL_LO=4, REG_CYL_HI=5, REG_DEVSEL=6 */
 static inline ata_device_type_t ata_detect_device_type(ata_device_t *dev)
 {
+    pr_debug("[%s] Detecting device type...\n", ata_get_device_settings_str(dev));
     // Perform a soft reset.
     ata_soft_reset(dev);
     // Wait until master drive is ready again.
@@ -597,39 +613,28 @@ static inline ata_device_type_t ata_detect_device_type(ata_device_t *dev)
     return ata_dev_type_unknown;
 }
 
-static inline int buffer_compare(uint32_t *ptr1, uint32_t *ptr2, size_t size)
-{
-    assert(!(size % 4));
-
-    size_t i = 0;
-
-    while (i < size) {
-        if (*ptr1 != *ptr2) {
-            return 1;
-        }
-        ptr1++;
-        ptr2++;
-        i += sizeof(uint32_t);
-    }
-    return 0;
-}
-
 /// @brief Creates the DMA memory area used to write and read on the device.
 /// @param size the size of the DMA memory area.
 /// @param physical the physical address of the DMA memory area.
 /// @return the logical address of the DMA memory area.
 static inline uintptr_t malloc_dma(size_t size, uintptr_t *physical)
 {
-    uint32_t order = find_nearest_order_greater(0, sizeof(prdt_t));
-    page_t *page   = _alloc_pages(GFP_KERNEL, order);
-    *physical      = get_physical_address_from_page(page);
-    return get_lowmem_address_from_page(page);
+    // Get the page order to accomodate the size.
+    uint32_t order           = find_nearest_order_greater(0, size);
+    page_t *page             = _alloc_pages(GFP_KERNEL, order);
+    *physical                = get_physical_address_from_page(page);
+    uintptr_t lowmem_address = get_lowmem_address_from_page(page);
+    pr_debug("[DMA Malloc] Size requirement is %d, which results in an order %d\n", size, order);
+    pr_debug("[DMA Malloc] Allocated page is at       : 0x%p\n", page);
+    pr_debug("[DMA Malloc] The physical address is at : 0x%p\n", physical);
+    pr_debug("[DMA Malloc] The lowmem address is at   : 0x%p\n", lowmem_address);
+    return lowmem_address;
 }
 
 // == ATA DEVICE MANAGEMENT ===================================================
 static bool_t ata_device_init(ata_device_t *dev)
 {
-    pr_debug("Detected ATA device on bus 0x%3x\n", dev->io_reg.data);
+    pr_debug("[%s] Detected ATA device.\n", ata_get_device_settings_str(dev));
 
     // Select the ATA device.
     ata_device_select(dev);
@@ -754,8 +759,6 @@ static void ata_device_read_sector(ata_device_t *dev, uint32_t lba, uint8_t *buf
 
 static void ata_device_write_sector(ata_device_t *dev, uint32_t lba, uint8_t *buffer)
 {
-    pr_debug("ata_device_write_sector(dev: %p, lba: %d, buff: %p)\n", dev, lba, buffer);
-
     spinlock_lock(&ata_lock);
 
     // Copy the buffer over to the DMA area
@@ -861,8 +864,10 @@ static vfs_file_t *ata_open(const char *path, int flags, mode_t mode)
         dev = &ata_secondary_master;
     } else if (strcmp(path, ata_secondary_slave.path) == 0) {
         dev = &ata_secondary_slave;
+    } else {
+        return NULL;
     }
-    if (dev && dev->fs_root) {
+    if (dev->fs_root) {
         ++dev->fs_root->count;
         return dev->fs_root;
     }
@@ -875,7 +880,9 @@ static int ata_close(vfs_file_t *file)
     // Get the device from the VFS file.
     ata_device_t *dev = (ata_device_t *)file->device;
     // Check the device.
-    assert(dev && "Device not set.");
+    if (dev == NULL) {
+        kernel_panic("Device not set.");
+    }
     //
     if ((dev == &ata_primary_master) || (dev == &ata_primary_slave) ||
         (dev == &ata_secondary_master) || (dev == &ata_secondary_slave)) {
@@ -886,13 +893,15 @@ static int ata_close(vfs_file_t *file)
 
 static ssize_t ata_read(vfs_file_t *file, char *buffer, off_t offset, size_t size)
 {
-    pr_debug("ata_read(%p, %p, %d, %d)\n", file, buffer, offset, size);
+    pr_debug("ata_read(file: 0x%p, buffer: 0x%p, offest: %8d, size: %8d)\n", file, buffer, offset, size);
     // Prepare a static support buffer.
     static char support_buffer[ATA_SECTOR_SIZE];
     // Get the device from the VFS file.
     ata_device_t *dev = (ata_device_t *)file->device;
     // Check the device.
-    assert(dev && "Device not set.");
+    if (dev == NULL) {
+        kernel_panic("Device not set.");
+    }
 
     if ((dev->type == ata_dev_type_pata) || (dev->type == ata_dev_type_sata)) {
         uint32_t start_block  = offset / ATA_SECTOR_SIZE;
@@ -948,7 +957,10 @@ static ssize_t ata_write(vfs_file_t *file, const void *buffer, off_t offset, siz
     // Get the device from the VFS file.
     ata_device_t *dev = (ata_device_t *)file->device;
     // Check the device.
-    assert(dev && "Device not set.");
+    if (dev == NULL) {
+        kernel_panic("Device not set.");
+    }
+
     if ((dev->type == ata_dev_type_pata) || (dev->type == ata_dev_type_sata)) {
         uint32_t start_block  = offset / ATA_SECTOR_SIZE;
         uint32_t start_offset = offset % ATA_SECTOR_SIZE;
