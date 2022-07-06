@@ -235,6 +235,7 @@ void keyboard_isr(pt_regs *f)
     } else if (keypad_fun_number == 5) {
         // Nothing to do.
     } else if (!(scancode & CODE_BREAK)) {
+        pr_debug("scancode : %04x\n", scancode);
         // Get the current keymap.
         const keymap_t *keymap = get_keymap(scancode);
         // Get the specific keymap.
