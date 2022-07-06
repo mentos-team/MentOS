@@ -303,7 +303,7 @@ Breakpoint 2, kmain (...) at .../mentos/src/kernel.c:95
 95      {
 ```
 
-## Contributors
+## 9. Contributors
 
 Project Manager:
 
