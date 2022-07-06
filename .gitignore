@@ -114,6 +114,3 @@ src/initscp/initfscp
 
 # OS filesystem files.
 files/bin/**
-
-# Visual Studio Code files.
-.vscode

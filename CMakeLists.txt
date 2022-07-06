@@ -1,8 +1,8 @@
 # =============================================================================
 # Set the minimum required version of cmake.
-cmake_minimum_required(VERSION 3.1...3.22)
+cmake_minimum_required(VERSION 2.8)
 # Initialize the project.
-project(mentos)
+project(MentOs)
 
 # =============================================================================
 # Set the default build type to Debug.
@@ -70,7 +70,7 @@ add_subdirectory(programs)
 add_subdirectory(programs/tests)
 add_subdirectory(mentos)
 add_subdirectory(libc)
-add_subdirectory(doc)
+add_subdirectory(doc/doxygen)
 
 # =============================================================================
 # Target to generate the EXT2 filesystem.
