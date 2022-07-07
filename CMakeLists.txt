@@ -151,7 +151,7 @@ add_custom_target(
     COMMAND echo "in THIS same folder, and just type :\n"
     COMMAND printf "    cgdb -q -iex %q" "add-auto-load-safe-path ."
     COMMAND echo "\n\n"
-    COMMAND ${EMULATOR} ${EMULATOR_FLAGS} ${CMAKE_BINARY_DIR}/mentos/kernel-bootloader.bin -s -S
+    COMMAND ${EMULATOR} ${EMULATOR_FLAGS} -s -S -kernel ${CMAKE_BINARY_DIR}/mentos/kernel-bootloader.bin
     DEPENDS kernel-bootloader.bin
     DEPENDS gdb_file
 )
