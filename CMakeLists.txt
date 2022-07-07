@@ -12,6 +12,9 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 # =============================================================================
+# Options
+# =============================================================================
+
 # Add operating system specific option.
 message(STATUS "Crosscompiling : ${CMAKE_CROSSCOMPILING}")
 message(STATUS "System name    : ${CMAKE_HOST_SYSTEM_NAME}")
@@ -54,7 +57,6 @@ else()
     endif()
 endif()
 
-# =============================================================================
 # Add the debugging option.
 set(DEBUGGING_TYPE "DEBUG_STDIO" CACHE STRING "Chose the type of debugging: DEBUG_STDIO DEBUG_LOG")
 set_property(CACHE DEBUGGING_TYPE PROPERTY STRINGS DEBUG_STDIO DEBUG_LOG)
@@ -64,7 +66,11 @@ else()
     message(FATAL_ERROR "Debugging type ${DEBUGGING_TYPE} is not valid.")
 endif()
 
+
 # =============================================================================
+# Compilation directories
+# =============================================================================
+
 # Add the sub-directories.
 add_subdirectory(programs)
 add_subdirectory(programs/tests)
@@ -73,7 +79,11 @@ add_subdirectory(libc)
 add_subdirectory(doc/doxygen)
 
 # =============================================================================
-# Target to generate the EXT2 filesystem.
+# Filesystem construction
+# =============================================================================
+
+# MentOS is compatible with EXT2 fileystems. This target generates an EXT2
+# fileystem using the content of the `files` folder.
 add_custom_target(filesystem
     BYPRODUCTS ${CMAKE_BINARY_DIR}/rootfs.img
     COMMAND echo '============================================================================='
@@ -89,33 +99,9 @@ add_custom_target(filesystem
 )
 
 # =============================================================================
-# First, we need to build the ISO for the cdrom.
-add_custom_target(
-  cdrom.iso
-  COMMAND cp ${CMAKE_BINARY_DIR}/mentos/kernel-bootloader.bin ${CMAKE_SOURCE_DIR}/iso/boot
-  COMMAND grub-mkrescue -o cdrom.iso ${CMAKE_SOURCE_DIR}/iso
-  DEPENDS kernel-bootloader.bin
-)
-
+# Emulator Generic Options
 # =============================================================================
-# Update GDB symbol file.
-add_custom_target(
-    gdb_file
-    BYPRODUCTS ${CMAKE_BINARY_DIR}/.gdbinit
-    COMMAND bash ${CMAKE_SOURCE_DIR}/scripts/get_text_address.sh ${CMAKE_BINARY_DIR}/mentos/kernel.bin > ${CMAKE_BINARY_DIR}/.gdbinit
-    COMMAND bash ${CMAKE_SOURCE_DIR}/scripts/get_text_address.sh ${CMAKE_BINARY_DIR}/mentos/kernel-bootloader.bin >> ${CMAKE_BINARY_DIR}/.gdbinit
-    COMMAND bash ${CMAKE_SOURCE_DIR}/scripts/get_text_address.sh ${CMAKE_BINARY_DIR}/programs/tests/test_* >> ${CMAKE_BINARY_DIR}/.gdbinit
-    COMMAND bash ${CMAKE_SOURCE_DIR}/scripts/get_text_address.sh ${CMAKE_BINARY_DIR}/programs/prog_* >> ${CMAKE_BINARY_DIR}/.gdbinit
-    COMMAND echo "break boot.c: boot_main" >> ${CMAKE_BINARY_DIR}/.gdbinit
-    COMMAND echo "break kernel.c: kmain" >> ${CMAKE_BINARY_DIR}/.gdbinit
-    COMMAND echo "target remote localhost:1234" >> ${CMAKE_BINARY_DIR}/.gdbinit
-    DEPENDS kernel-bootloader.bin
-    DEPENDS all_programs
-    DEPENDS all_tests
-    DEPENDS libc
-)
 
-# =============================================================================
 # Set the emulator.
 set(EMULATOR qemu-system-i386)
 # Set the debug type.
@@ -132,6 +118,9 @@ set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -m 1096M)
 set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -drive file=${CMAKE_BINARY_DIR}/rootfs.img,format=raw)
 
 # =============================================================================
+# Booting with QEMU for fun
+# =============================================================================
+
 # This first target runs the emualtor passing the kernel binary file.
 add_custom_target(
     qemu
@@ -140,6 +129,27 @@ add_custom_target(
 )
 
 # =============================================================================
+# Booting with QEMU+GDB for debugging
+# =============================================================================
+
+# First, we need to generate a GDB file containing all the symbols of all our
+# executables.
+add_custom_target(
+    .gdbinit
+    BYPRODUCTS ${CMAKE_BINARY_DIR}/.gdbinit
+    COMMAND bash ${CMAKE_SOURCE_DIR}/scripts/get_text_address.sh ${CMAKE_BINARY_DIR}/mentos/kernel.bin > ${CMAKE_BINARY_DIR}/.gdbinit
+    COMMAND bash ${CMAKE_SOURCE_DIR}/scripts/get_text_address.sh ${CMAKE_BINARY_DIR}/mentos/kernel-bootloader.bin >> ${CMAKE_BINARY_DIR}/.gdbinit
+    COMMAND bash ${CMAKE_SOURCE_DIR}/scripts/get_text_address.sh ${CMAKE_BINARY_DIR}/programs/tests/test_* >> ${CMAKE_BINARY_DIR}/.gdbinit
+    COMMAND bash ${CMAKE_SOURCE_DIR}/scripts/get_text_address.sh ${CMAKE_BINARY_DIR}/programs/prog_* >> ${CMAKE_BINARY_DIR}/.gdbinit
+    COMMAND echo "break boot.c: boot_main" >> ${CMAKE_BINARY_DIR}/.gdbinit
+    COMMAND echo "break kernel.c: kmain" >> ${CMAKE_BINARY_DIR}/.gdbinit
+    COMMAND echo "target remote localhost:1234" >> ${CMAKE_BINARY_DIR}/.gdbinit
+    DEPENDS kernel-bootloader.bin
+    DEPENDS all_programs
+    DEPENDS all_tests
+    DEPENDS libc
+)
+
 # This second target runs the emualtor passing the kernel binary file, and also
 # the `-s -S` options. This basically tells the emulator to run the kernel in
 # debug mode, and pause it up until a debugger connects to it.
@@ -153,10 +163,22 @@ add_custom_target(
     COMMAND echo "\n\n"
     COMMAND ${EMULATOR} ${EMULATOR_FLAGS} -s -S -kernel ${CMAKE_BINARY_DIR}/mentos/kernel-bootloader.bin
     DEPENDS kernel-bootloader.bin
-    DEPENDS gdb_file
+    DEPENDS .gdbinit
 )
 
 # =============================================================================
+# Booting with QEMU+GRUB
+# =============================================================================
+
+# First, we need to build the ISO for the cdrom.
+add_custom_target(
+  cdrom.iso
+  COMMAND cp -rf ${CMAKE_SOURCE_DIR}/iso .
+  COMMAND cp ${CMAKE_BINARY_DIR}/mentos/kernel-bootloader.bin ${CMAKE_BINARY_DIR}/iso/boot
+  COMMAND grub-mkrescue -o ${CMAKE_BINARY_DIR}/cdrom.iso ${CMAKE_BINARY_DIR}/iso
+  DEPENDS kernel-bootloader.bin
+)
+
 # This third target runs the emualtor, but this time, the kernel binary file is
 # inside the cdrom, so we will not pass the `-kernel` option. We will pass the
 # `-cdrom` option and the `-boot d` option, all the other options will remain
