@@ -1,0 +1,63 @@
+name: Main
+on:
+  push:
+    branches-ignore:
+      - "releases/**"
+    paths-ignore:
+      - "**.md"
+      - ".gitignore"
+  pull_request:
+    paths-ignore:
+      - "**.md"
+      - ".gitignore"
+jobs:
+  doxygen:
+    name: Doxygen
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Clone repo
+        uses: actions/checkout@v2
+
+      - name: Install Doxygen
+        run: |
+          sudo apt-get update
+          sudo apt-get install doxygen
+
+      - name: Generate documentation
+        run: |
+          cmake -B build -D DOXYGEN_WARN_AS_ERROR=NO
+          cmake --build build --target doxygen_doc
+
+  test:
+    name: Build
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest, windows-latest]
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Clone repo
+        uses: actions/checkout@v2
+
+      - name: Install NASM Ubuntu
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y nasm
+
+      - name: Install NASM MacOS
+        if: matrix.os == 'macos-latest'
+        run: |
+          brew update && brew upgrade
+          brew install i386-elf-binutils i386-elf-gcc nasm
+
+      - name: Install NASM Windows
+        if: matrix.os == 'windows-latest'
+        run: |
+          winget install nasm -i
+
+      - name: Build
+        run: |
+          cmake -B build
+          cmake --build build --parallel 2
