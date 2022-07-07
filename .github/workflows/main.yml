@@ -49,7 +49,6 @@ jobs:
       - name: Install NASM MacOS
         if: matrix.os == 'macos-latest'
         run: |
-          brew tap nativeos/i386-elf-toolchain
           brew update
           brew install i386-elf-binutils i386-elf-gcc nasm
 
