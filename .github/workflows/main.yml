@@ -13,15 +13,15 @@ on:
 jobs:
   doxygen:
     name: Doxygen
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     steps:
       - name: Clone repo
         uses: actions/checkout@v2
 
-      - name: Install Doxygen
+      - name: Install Doxygen Ubuntu
         run: |
           sudo apt-get update
-          sudo apt-get install doxygen
+          sudo apt-get install -y doxygen nasm
 
       - name: Generate documentation
         run: |
@@ -33,7 +33,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, ubuntu-latest, windows-latest]
+        os: [macos-latest, ubuntu-latest]
 
     runs-on: ${{ matrix.os }}
     steps:
@@ -49,13 +49,9 @@ jobs:
       - name: Install NASM MacOS
         if: matrix.os == 'macos-latest'
         run: |
-          brew update && brew upgrade
+          brew tap nativeos/i386-elf-toolchain
+          brew update
           brew install i386-elf-binutils i386-elf-gcc nasm
-
-      - name: Install NASM Windows
-        if: matrix.os == 'windows-latest'
-        run: |
-          winget install nasm -i
 
       - name: Build
         run: |
