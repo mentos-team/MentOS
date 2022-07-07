@@ -76,18 +76,27 @@ add_subdirectory(doc/doxygen)
 # Target to generate the EXT2 filesystem.
 add_custom_target(filesystem
     BYPRODUCTS ${CMAKE_BINARY_DIR}/rootfs.img
-    COMMAND echo "---------------------------------------------"
-    COMMAND echo "Creating EXT2 filesystem..."
-    COMMAND echo "---------------------------------------------"
+    COMMAND echo '============================================================================='
+    COMMAND echo 'Creating EXT2 filesystem...'
+    COMMAND echo '============================================================================='
     COMMAND mkdir -p ${CMAKE_SOURCE_DIR}/files/proc
     COMMAND mkdir -p ${CMAKE_SOURCE_DIR}/files/dev
     COMMAND mke2fs -L 'rootfs' -N 0 -d ${CMAKE_SOURCE_DIR}/files -m 5 -r 1 -t ext2 -v -F ${CMAKE_BINARY_DIR}/rootfs.img 32M
-    COMMAND echo "---------------------------------------------"
-    COMMAND echo "Done!"
-    COMMAND echo "---------------------------------------------"
+    COMMAND echo '============================================================================='
+    COMMAND echo 'Done!'
+    COMMAND echo '============================================================================='
     DEPENDS all_programs all_tests
 )
-  
+
+# =============================================================================
+# First, we need to build the ISO for the cdrom.
+add_custom_target(
+  cdrom.iso
+  COMMAND cp ${CMAKE_BINARY_DIR}/mentos/kernel-bootloader.bin ${CMAKE_SOURCE_DIR}/iso/boot
+  COMMAND grub-mkrescue -o cdrom.iso ${CMAKE_SOURCE_DIR}/iso
+  DEPENDS kernel-bootloader.bin
+)
+
 # =============================================================================
 # Update GDB symbol file.
 add_custom_target(
@@ -107,11 +116,11 @@ add_custom_target(
 )
 
 # =============================================================================
-# Builds the code and runs qemu with the built Os.
+# Set the emulator.
 set(EMULATOR qemu-system-i386)
 # Set the debug type.
 if(${DEBUGGING_TYPE} STREQUAL DEBUG_LOG)
-    set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -serial file:serial.log)
+    set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -serial file:${CMAKE_BINARY_DIR}/serial.log)
 elseif(${DEBUGGING_TYPE} STREQUAL DEBUG_STDIO)
     set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -serial stdio)
 endif(${DEBUGGING_TYPE} STREQUAL DEBUG_LOG)
@@ -120,21 +129,20 @@ set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -vga std)
 # Set the amount of memory.
 set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -m 1096M)
 # Set the EXT2 drive.
-set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -drive file=rootfs.img,format=raw)
-# Set the kernel.
-set(EMULATOR_KERNEL -kernel mentos/kernel-bootloader.bin)
+set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -drive file=${CMAKE_BINARY_DIR}/rootfs.img,format=raw)
 
+# =============================================================================
+# This first target runs the emualtor passing the kernel binary file.
 add_custom_target(
     qemu
-    COMMAND ${EMULATOR} ${EMULATOR_FLAGS} ${EMULATOR_KERNEL}
+    COMMAND ${EMULATOR} ${EMULATOR_FLAGS} -kernel ${CMAKE_BINARY_DIR}/mentos/kernel-bootloader.bin
     DEPENDS kernel-bootloader.bin
-    DEPENDS all_programs
-    DEPENDS all_tests
-    DEPENDS libc
 )
 
 # =============================================================================
-# Builds the code and runs qemu with the built Os.
+# This second target runs the emualtor passing the kernel binary file, and also
+# the `-s -S` options. This basically tells the emulator to run the kernel in
+# debug mode, and pause it up until a debugger connects to it.
 add_custom_target(
     qemu-gdb
     COMMAND echo "\n\n"
@@ -143,17 +151,18 @@ add_custom_target(
     COMMAND echo "in THIS same folder, and just type :\n"
     COMMAND printf "    cgdb -q -iex %q" "add-auto-load-safe-path ."
     COMMAND echo "\n\n"
-    COMMAND ${EMULATOR} ${EMULATOR_FLAGS} ${EMULATOR_KERNEL} -s -S
+    COMMAND ${EMULATOR} ${EMULATOR_FLAGS} ${CMAKE_BINARY_DIR}/mentos/kernel-bootloader.bin -s -S
     DEPENDS kernel-bootloader.bin
-    DEPENDS all_programs
-    DEPENDS all_tests
-    DEPENDS libc
     DEPENDS gdb_file
 )
 
+# =============================================================================
+# This third target runs the emualtor, but this time, the kernel binary file is
+# inside the cdrom, so we will not pass the `-kernel` option. We will pass the
+# `-cdrom` option and the `-boot d` option, all the other options will remain
+# the same.
 add_custom_target(
-    cdrom.iso
-    COMMAND cp mentos/kernel-bootloader.bin ${CMAKE_SOURCE_DIR}/iso/boot
-    COMMAND grub-mkrescue -o cdrom.iso ${CMAKE_SOURCE_DIR}/iso
-    DEPENDS kernel-bootloader.bin
+    qemu-grub
+    COMMAND ${EMULATOR} ${EMULATOR_FLAGS} -boot d -cdrom ${CMAKE_BINARY_DIR}/cdrom.iso
+    DEPENDS cdrom.iso
 )
