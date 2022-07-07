@@ -145,6 +145,18 @@ static inline int setup_env(passwd_t *pwd)
 
 int main(int argc, char **argv)
 {
+    // Print /etc/issue if it exists
+    // TODO: Parsing /etc/issue for special characters (such as `\t` for time)
+    int issues_fd = open("/etc/issue", O_RDONLY, 0600);
+    if (issues_fd != -1){
+        char buffer[256];
+        
+        if(read(issues_fd, buffer, sizeof(char)*256) != -1){
+            printf("%s \n", buffer);
+        }
+        close(issues_fd);
+    }
+    
     passwd_t *pwd;
     char username[50], password[50];
     do {
