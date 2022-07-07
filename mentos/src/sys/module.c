@@ -30,7 +30,7 @@ int init_modules(multiboot_info_t *header)
         modules[i].pad       = 0;
     }
     if (!bitmask_check(header->flags, MULTIBOOT_FLAG_MODS))
-        return 0;
+        return 1;
     multiboot_module_t *mod = first_module(header);
     for (int i = 0; (mod != 0) && (i < MAX_MODULES);
          ++i, mod = next_module(header, mod)) {
