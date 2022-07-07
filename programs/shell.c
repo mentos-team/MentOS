@@ -710,6 +710,18 @@ int main(int argc, char *argv[])
     puts(BG_WHITE FG_BLACK);
     printf("Welcome " FG_RED "%s" FG_BLACK "...\n\n", USER);
     puts(BG_BLACK FG_BRIGHT_WHITE);
+    
+    // Print /etc/motd if it exists
+    int motd_fd = open("/etc/motd", O_RDONLY, 0600);
+    if (motd_fd != -1){
+        char buffer[256];
+
+        if(read(motd_fd, buffer, sizeof(char)*256) != -1){
+            printf("%s \n", buffer);
+        }
+        close(motd_fd);
+    }
+    
     // Move inside the home directory.
     __cd(0, NULL);
 
