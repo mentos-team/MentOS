@@ -102,6 +102,7 @@ foreach(PROGRAM ${PROGRAMS})
     # Add the final target that strips the debugging symbols from the program.
     add_custom_command(TARGET ${TARGET_NAME}
         BYPRODUCTS ${MENTOS_BIN_DIR}/${PROGRAM_NAME}
+        COMMAND mkdir -p  ${MENTOS_BIN_DIR}
         COMMAND strip --strip-debug ${PROJECT_BINARY_DIR}/${TARGET_NAME} -o ${MENTOS_BIN_DIR}/${PROGRAM_NAME}
         DEPENDS ${TARGET_NAME}
     )
