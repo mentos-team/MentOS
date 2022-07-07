@@ -12,118 +12,22 @@ set(BUDDY_SYSTEM_NAME kernel_memory)
 set(BUDDY_SYSTEM_FILE ${PROJECT_SOURCE_DIR}/src/mem/libbuddysystem.a)
 
 # =============================================================================
-# Set the default build type to Debug.
-if(NOT CMAKE_BUILD_TYPE)
-  message(STATUS "Setting build type to 'Debug' as none was specified.")
-  set(CMAKE_BUILD_TYPE "Debug" CACHE STRING "Choose the type of build." FORCE)
-endif()
-
+# OPTIONS
 # =============================================================================
-# Define that this code is kernel code.
-add_definitions(-D__KERNEL__)
 
-# =============================================================================
 # Add the memory option.
 option(USE_BUDDY_SYSTEM "Build using the buddysystem written by the user." OFF)
 
 # =============================================================================
-# Add the scheduling option.
-set(SCHEDULER_TYPE
-    "SCHEDULER_RR"
-    CACHE STRING "Chose the type of scheduler: SCHEDULER_RR SCHEDULER_PRIORITY SCHEDULER_CFS SCHEDULER_EDF SCHEDULER_RM SCHEDULER_AEDF")
-# List of schedulers.
-set_property(CACHE SCHEDULER_TYPE PROPERTY STRINGS SCHEDULER_RR SCHEDULER_PRIORITY SCHEDULER_CFS SCHEDULER_EDF SCHEDULER_RM)
-# Check which scheduler is currently active and export the related macro.
-if("${SCHEDULER_TYPE}" STREQUAL "SCHEDULER_RR"
-   OR "${SCHEDULER_TYPE}" STREQUAL "SCHEDULER_PRIORITY"
-   OR "${SCHEDULER_TYPE}" STREQUAL "SCHEDULER_CFS"
-   OR "${SCHEDULER_TYPE}" STREQUAL "SCHEDULER_EDF"
-   OR "${SCHEDULER_TYPE}" STREQUAL "SCHEDULER_RM"
-   OR "${SCHEDULER_TYPE}" STREQUAL "SCHEDULER_AEDF")
-  # Add the define stating which scheduler is currently active.
-  add_definitions(-D${SCHEDULER_TYPE})
-  # Notify the type of scheduler.
-  message(STATUS "Setting scheduler type to ${SCHEDULER_TYPE}.")
-else()
-  message(FATAL_ERROR "Scheduler type ${SCHEDULER_TYPE} is not valid.")
-endif()
-
+# ASSEMBLY
 # =============================================================================
-# Add the video option.
-set(VIDEO_TYPE
-    "VGA_TEXT_MODE"
-    CACHE STRING "Chose the type of video: VGA_TEXT_MODE VGA_MODE_320_200_256 VGA_MODE_640_480_16 VGA_MODE_720_480_16")
-# List of video tpes.
-set_property(CACHE VIDEO_TYPE PROPERTY STRINGS VGA_TEXT_MODE VGA_MODE_320_200_256 VGA_MODE_640_480_16 VGA_MODE_720_480_16)
-# Check which VIDEO is currently active and export the related macro.
-if("${VIDEO_TYPE}" STREQUAL "VGA_TEXT_MODE"
-   OR "${VIDEO_TYPE}" STREQUAL "VGA_MODE_320_200_256"
-   OR "${VIDEO_TYPE}" STREQUAL "VGA_MODE_640_480_16"
-   OR "${VIDEO_TYPE}" STREQUAL "VGA_MODE_720_480_16")
-  add_definitions(-D${VIDEO_TYPE})
-  message(STATUS "Setting video type to ${VIDEO_TYPE}.")
-else()
-  message(FATAL_ERROR "Video type ${VIDEO_TYPE} is not valid.")
-endif()
 
-# =============================================================================
-# Add the video option.
-set(KEYMAP_TYPE "KEYMAP_US" CACHE STRING "Chose the type of video: KEYMAP_US KEYMAP_IT")
-# List of video tpes.
-set_property(CACHE KEYMAP_TYPE PROPERTY STRINGS KEYMAP_US KEYMAP_IT)
-# Check which VIDEO is currently active and export the related macro.
-if("${KEYMAP_TYPE}" STREQUAL "KEYMAP_US" OR "${KEYMAP_TYPE}" STREQUAL "KEYMAP_IT")
-    add_definitions(-DUSE_${KEYMAP_TYPE})
-    message(STATUS "Setting keyboard mapping to ${KEYMAP_TYPE}.")
-else()
-    message(FATAL_ERROR "keyboard mapping ${KEYMAP_TYPE} is not valid.")
-endif()
-
-# =============================================================================
-# Warning flags.
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Werror")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wpedantic")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -pedantic-errors")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wshadow")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-unused-function")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-unused-variable")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-unknown-pragmas")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-unused-but-set-variable")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=gnu99")
-
-# Set the compiler options.
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -nostdlib")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -nostdinc")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fomit-frame-pointer")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-builtin")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-pic")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-stack-protector")
-if(CMAKE_C_COMPILER_VERSION VERSION_GREATER_EQUAL 10)
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fcommon")
-endif()
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -march=i686")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -m32")
-
-if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g3")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ggdb")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O0")
-    add_definitions(-DDEBUG)
-elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3")
-    add_definitions(-DRELEASE)
-endif(CMAKE_BUILD_TYPE STREQUAL "Debug")
-
-# =============================================================================
-# Enable specific compilers for ASM.
+# Enable the assembly language.
 enable_language(ASM)
 # Find the NASM compiler.
-find_program(
-    ASM_COMPILER
-    NAMES nasm
-    HINTS /usr/bin/ /usr/local/bin/
-)
+find_program(ASM_COMPILER NAMES nasm HINTS /usr/bin/ /usr/local/bin/)
+# Mark the variable ASM_COMPILER as advanced.
+mark_as_advanced(ASM_COMPILER)
 # Check that we have found the compiler.
 if(NOT ASM_COMPILER)
     message(FATAL_ERROR "ASM compiler not found!")
@@ -143,10 +47,49 @@ elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
 endif(CMAKE_BUILD_TYPE STREQUAL "Debug")
 
 # =============================================================================
-# Add the includes.
-include_directories(inc ../libc/inc)
+# C WARNINGs
+# =============================================================================
+
+# Warning flags.
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Werror")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wpedantic")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -pedantic-errors")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wshadow")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=gnu99")
+
+# Disable some specific warnings.
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-unused-function")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-unused-variable")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-unknown-pragmas")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-unused-but-set-variable")
+
+# Set the compiler options.
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -static")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -nostdlib")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -nostdinc")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-builtin")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-stack-protector")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-pic")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fomit-frame-pointer")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -m32")
+if(CMAKE_C_COMPILER_VERSION VERSION_GREATER_EQUAL 10)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fcommon")
+endif()
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -march=i686")
+
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g3")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -ggdb")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O0")
+elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O3")
+endif(CMAKE_BUILD_TYPE STREQUAL "Debug")
 
 # =============================================================================
+# SOURCES
+# =============================================================================
+
 # Define the list of files.
 set(KERNEL_SOURCES
     src/kernel.c
@@ -242,10 +185,90 @@ else(USE_BUDDY_SYSTEM)
     # Link the exercise libraries.
     target_link_libraries(${KERNEL_NAME} ${BUDDY_SYSTEM_FILE})
 endif(USE_BUDDY_SYSTEM)
+# Add the includes.
+target_include_directories(
+    ${KERNEL_NAME} PUBLIC
+    ${CMAKE_SOURCE_DIR}/mentos/inc
+    ${CMAKE_SOURCE_DIR}/libc/inc
+)
+# Define that this code is kernel code.
+target_compile_definitions(
+    ${KERNEL_NAME} PUBLIC
+    __KERNEL__
+)
+
+# =============================================================================
+# Set the list of valid scheduling options.
+set(SCHEDULER_TYPES SCHEDULER_RR SCHEDULER_PRIORITY SCHEDULER_CFS SCHEDULER_EDF SCHEDULER_RM)
+# Add the scheduling option.
+set(SCHEDULER_TYPE "SCHEDULER_RR" CACHE STRING "Chose the type of scheduler: ${SCHEDULER_TYPES}")
+# List of schedulers.
+set_property(CACHE SCHEDULER_TYPE PROPERTY STRINGS ${SCHEDULER_TYPES})
+# Check which scheduler is currently active and export the related macro.
+list(FIND SCHEDULER_TYPES ${SCHEDULER_TYPE} INDEX)
+if(index EQUAL -1)
+    message(FATAL_ERROR "Scheduler type ${SCHEDULER_TYPE} is not valid.")
+else()
+    # Add the define stating which scheduler is currently active.
+    target_compile_definitions(${KERNEL_NAME} PUBLIC ${SCHEDULER_TYPE})
+    # Notify the type of scheduler.
+    message(STATUS "Setting scheduler type to ${SCHEDULER_TYPE}.")
+endif()
+
+# =============================================================================
+# Set the list of valid video driver options.
+set(VIDEO_TYPES VGA_TEXT_MODE VGA_MODE_320_200_256 VGA_MODE_640_480_16 VGA_MODE_720_480_16)
+# Add the video driver option.
+set(VIDEO_TYPE "VGA_TEXT_MODE" CACHE STRING "Chose the type of video driver: ${VIDEO_TYPES}")
+# List of video tpes.
+set_property(CACHE VIDEO_TYPE PROPERTY STRINGS ${VIDEO_TYPES})
+# Check which video driver is currently active and export the related macro.
+list(FIND VIDEO_TYPES ${VIDEO_TYPE} INDEX)
+if(index EQUAL -1)
+    message(FATAL_ERROR "Video type ${VIDEO_TYPE} is not valid.")
+else()
+    # Add the define stating which video driver is currently active.
+    target_compile_definitions(${KERNEL_NAME} PUBLIC ${VIDEO_TYPE})
+    # Notify the type of video driver.
+    message(STATUS "Setting vide type to ${VIDEO_TYPE}.")
+endif()
+
+# =============================================================================
+# Set the list of valid keyboard mappings.
+set(KEYMAP_TYPES KEYMAP_US KEYMAP_IT)
+# Add the keyboard mapping.
+set(KEYMAP_TYPE "KEYMAP_US" CACHE STRING "Chose the type of keyboard mapping: ${KEYMAP_TYPES}")
+# List of keyboard mappings.
+set_property(CACHE KEYMAP_TYPE PROPERTY STRINGS ${KEYMAP_TYPES})
+# Check which keyboard mapping is currently active and export the related macro.
+list(FIND KEYMAP_TYPES ${KEYMAP_TYPE} INDEX)
+if(index EQUAL -1)
+    message(FATAL_ERROR "keyboard mapping ${KEYMAP_TYPE} is not valid.")
+else()
+    # Add the define stating which keyboard mapping is currently active.
+    target_compile_definitions(${KERNEL_NAME} PUBLIC USE_${KEYMAP_TYPE})
+    # Notify the type of keyboard mapping.
+    message(STATUS "Setting keyboard mapping to ${KEYMAP_TYPE}.")
+endif()
 
 # =============================================================================
 # Add bootloader library.
-add_library(${BOOTLOADER_NAME} src/boot.c src/boot.S)
+add_library(
+    ${BOOTLOADER_NAME}
+    src/boot.c
+    src/boot.S
+)
+# Add the includes.
+target_include_directories(
+    ${BOOTLOADER_NAME} PUBLIC
+    ${CMAKE_SOURCE_DIR}/mentos/inc
+    ${CMAKE_SOURCE_DIR}/libc/inc
+)
+# Define that this code is kernel code.
+target_compile_definitions(
+    ${BOOTLOADER_NAME} PUBLIC
+    __KERNEL__
+)
 
 # =============================================================================
 # Build the kernel.

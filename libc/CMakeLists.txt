@@ -7,14 +7,15 @@ cmake_minimum_required(VERSION 3.1...3.22)
 project(libc C ASM)
 
 # =============================================================================
+# ASSEMBLY
+# =============================================================================
+
 # Enable the assembly language.
 enable_language(ASM)
 # Find the NASM compiler.
-find_program(
-    ASM_COMPILER
-    NAMES nasm
-    HINTS /usr/bin/ /usr/local/bin/
-)
+find_program(ASM_COMPILER NAMES nasm HINTS /usr/bin/ /usr/local/bin/)
+# Mark the variable ASM_COMPILER as advanced.
+mark_as_advanced(ASM_COMPILER)
 # Check that we have found the compiler.
 if(NOT ASM_COMPILER)
     message(FATAL_ERROR "ASM compiler not found!")
@@ -34,25 +35,40 @@ elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
 endif(CMAKE_BUILD_TYPE STREQUAL "Debug")
 
 # =============================================================================
+# C WARNINGs
+# =============================================================================
+
 # Warning flags.
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall")
-#set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Werror")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Werror")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wpedantic")
-#set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -pedantic-errors")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -pedantic-errors")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wshadow")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=gnu99")
+
+# Disable some specific warnings.
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-unused-function")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-unused-variable")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-unknown-pragmas")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-unused-but-set-variable")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=gnu99")
-# Set the C compiler options.
+
+# Set the compiler options.
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -static")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -nostdlib")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -nostdinc")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-builtin")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-stack-protector")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-pic")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fomit-frame-pointer")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -m32")
+if(CMAKE_C_COMPILER_VERSION VERSION_GREATER_EQUAL 10)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fcommon")
+endif()
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -march=i686")
+
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -ggdb")
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g3")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -ggdb")
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O0")
 elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O3")

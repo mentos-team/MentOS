@@ -2,9 +2,12 @@
 # Set the minimum required version of cmake.
 cmake_minimum_required(VERSION 3.1...3.22)
 # Initialize the project.
-project(mentos)
+project(mentos C ASM)
 
 # =============================================================================
+# BUILD TYPE (Debug/Release)
+# =============================================================================
+
 # Set the default build type to Debug.
 if(NOT CMAKE_BUILD_TYPE)
     message(STATUS "Setting build type to 'Debug' as none was specified.")
@@ -12,7 +15,12 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 # =============================================================================
-# Options
+# DOCUMENTATION
+# =============================================================================
+add_subdirectory(doc/doxygen)
+
+# =============================================================================
+# OS-SPECIFIC COMPILERS
 # =============================================================================
 
 # Add operating system specific option.
@@ -37,12 +45,17 @@ if((${CMAKE_HOST_SYSTEM_NAME} STREQUAL "Darwin") OR APPLE)
 elseif((${CMAKE_HOST_SYSTEM_NAME} STREQUAL "Windows") OR WIN32)
   # Windows set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -sdl)
 else()
-    # Generic Unix System
-    find_program(LSB_RELEASE_EXEC lsb_release)
+    # Generic Unix System.
+    # Find the `lsb_release` program.
+    find_program(LSB_RELEASE_EXEC lsb_release HINTS /usr/bin/ /usr/local/bin/)
+    # Mark the program path as advanced, we do not want it to appear as an option.
+    mark_as_advanced(LSB_RELEASE_EXEC)
+    # Get the version.
     execute_process(
-    COMMAND "${LSB_RELEASE_EXEC}" --short --release
-    OUTPUT_VARIABLE LSB_RELEASE_VERSION_SHORT
-    OUTPUT_STRIP_TRAILING_WHITESPACE)
+        COMMAND "${LSB_RELEASE_EXEC}" --short --release
+        OUTPUT_VARIABLE LSB_RELEASE_VERSION_SHORT
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
     message(STATUS "LSB version    : ${LSB_RELEASE_VERSION_SHORT}")
     if(${LSB_RELEASE_VERSION_SHORT} MATCHES "^18")
         # Ubuntu 18 set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -sdl)
@@ -57,18 +70,8 @@ else()
     endif()
 endif()
 
-# Add the debugging option.
-set(DEBUGGING_TYPE "DEBUG_STDIO" CACHE STRING "Chose the type of debugging: DEBUG_STDIO DEBUG_LOG")
-set_property(CACHE DEBUGGING_TYPE PROPERTY STRINGS DEBUG_STDIO DEBUG_LOG)
-if("${DEBUGGING_TYPE}" STREQUAL "DEBUG_STDIO" OR "${DEBUGGING_TYPE}" STREQUAL "DEBUG_LOG")
-    message(STATUS "Setting debugging type to ${DEBUGGING_TYPE}.")
-else()
-    message(FATAL_ERROR "Debugging type ${DEBUGGING_TYPE} is not valid.")
-endif()
-
-
 # =============================================================================
-# Compilation directories
+# COMPILATION
 # =============================================================================
 
 # Add the sub-directories.
@@ -76,10 +79,9 @@ add_subdirectory(programs)
 add_subdirectory(programs/tests)
 add_subdirectory(mentos)
 add_subdirectory(libc)
-add_subdirectory(doc/doxygen)
 
 # =============================================================================
-# Filesystem construction
+# FILESYSTEM
 # =============================================================================
 
 # MentOS is compatible with EXT2 fileystems. This target generates an EXT2
@@ -99,17 +101,34 @@ add_custom_target(filesystem
 )
 
 # =============================================================================
-# Emulator Generic Options
+# EMULATION SERIAL OUTPUT OPTION
+# =============================================================================
+# Set the list of valid emulator output options.
+set(EMULATOR_OUTPUT_TYPES OUTPUT_STDIO OUTPUT_LOG)
+# Add the emulator output option.
+set(EMULATOR_OUTPUT_TYPE "OUTPUT_STDIO" CACHE STRING "Chose the type of emulator output: ${EMULATOR_OUTPUT_TYPES}")
+# List of emulator output options.
+set_property(CACHE EMULATOR_OUTPUT_TYPE PROPERTY STRINGS ${EMULATOR_OUTPUT_TYPES})
+# Check which emulator output option is currently active.
+list(FIND EMULATOR_OUTPUT_TYPES ${EMULATOR_OUTPUT_TYPE} INDEX)
+if(index EQUAL -1)
+    message(FATAL_ERROR "Emulator output type ${EMULATOR_OUTPUT_TYPE} is not valid.")
+else()
+    message(STATUS "Setting emulator output type to ${EMULATOR_OUTPUT_TYPE}.")
+endif()
+
+# =============================================================================
+# EMULATOR CONFIGURATION
 # =============================================================================
 
 # Set the emulator.
 set(EMULATOR qemu-system-i386)
 # Set the debug type.
-if(${DEBUGGING_TYPE} STREQUAL DEBUG_LOG)
+if(${EMULATOR_OUTPUT_TYPE} STREQUAL OUTPUT_LOG)
     set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -serial file:${CMAKE_BINARY_DIR}/serial.log)
-elseif(${DEBUGGING_TYPE} STREQUAL DEBUG_STDIO)
+elseif(${EMULATOR_OUTPUT_TYPE} STREQUAL OUTPUT_STDIO)
     set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -serial stdio)
-endif(${DEBUGGING_TYPE} STREQUAL DEBUG_LOG)
+endif(${EMULATOR_OUTPUT_TYPE} STREQUAL OUTPUT_LOG)
 # Set the type of video.
 set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -vga std)
 # Set the amount of memory.

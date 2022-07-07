@@ -7,38 +7,55 @@ cmake_minimum_required(VERSION 3.1...3.22)
 project(tests C)
 
 # =============================================================================
-# Set the directory where the compiled binaries will be placed.
-set(MENTOS_TESTS_DIR ${CMAKE_SOURCE_DIR}/files/bin/tests)
-
+# C WARNINGs
 # =============================================================================
+
+# We need to specify the name of the entry function.
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -u_start")
+
 # Warning flags.
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Werror")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wpedantic")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -pedantic-errors")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wshadow")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=gnu99")
+
+# Disable some specific warnings.
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-unused-function")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-unused-variable")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-unknown-pragmas")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-unused-but-set-variable")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=gnu99")
 
 # Set the compiler options.
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -u_start")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -static")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -nostdlib")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -nostdinc")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-builtin")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-stack-protector")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-pic")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fomit-frame-pointer")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -m32")
+if(CMAKE_C_COMPILER_VERSION VERSION_GREATER_EQUAL 10)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fcommon")
+endif()
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -march=i686")
+
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -ggdb")
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g3")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -ggdb")
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O0")
 elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O3")
 endif(CMAKE_BUILD_TYPE STREQUAL "Debug")
 
 # =============================================================================
+# BUILD
+# =============================================================================
+
+# Set the directory where the compiled binaries will be placed.
+set(MENTOS_TESTS_DIR ${CMAKE_SOURCE_DIR}/files/bin/tests)
+
 # Add the executables (manually).
 set(TESTS
     t_mem.c

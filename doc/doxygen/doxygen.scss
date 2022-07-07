@@ -10,12 +10,8 @@ $gutter-color: #4b5263;
 
 /* font families */
 
-$page-font-family: Roboto,
-Lucida,
-sans-serif;
-$code-font-family: Consolas,
-monospace,
-fixed;
+$page-font-family: Roboto, Lucida, sans-serif;
+$code-font-family: Consolas, monospace, fixed;
 
 /* font sizes */
 
@@ -1887,15 +1883,19 @@ tr.heading h2 {
     #top {
         display: none;
     }
+
     #side-nav {
         display: none;
     }
+
     #nav-path {
         display: none;
     }
+
     body {
         overflow: visible;
     }
+
     h1,
     h2,
     h3,
@@ -1904,12 +1904,15 @@ tr.heading h2 {
     h6 {
         page-break-after: avoid;
     }
+
     .summary {
         display: none;
     }
+
     .memitem {
         page-break-inside: avoid;
     }
+
     #doc-content {
         margin-left: 0 !important;
         height: auto !important;

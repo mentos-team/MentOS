@@ -19,19 +19,19 @@ if (DOXYGEN_FOUND)
     file(MAKE_DIRECTORY ${DOXYGEN_OUTPUT_DIR})
 
     add_custom_command(
-            OUTPUT ${DOXYGEN_INDEX_FILE}
-            COMMAND ${DOXYGEN_EXECUTABLE} ${DOXYFILE_OUT}
+        OUTPUT ${DOXYGEN_INDEX_FILE}
+        COMMAND ${DOXYGEN_EXECUTABLE} ${DOXYFILE_OUT}
 
-            MAIN_DEPENDENCY ${DOXYFILE_OUT} ${DOXYFILE_IN}
-            COMMENT "Generating docs"
+        MAIN_DEPENDENCY ${DOXYFILE_OUT} ${DOXYFILE_IN}
+        COMMENT "Generating docs"
     )
     add_custom_target(
-            doxygen_doc
-            DEPENDS
-            ${DOXYGEN_INDEX_FILE}
-            ${DOXYFILE_IN}
-            ${DOXYFILE_CSS}
-            ${DOXYFILE_HEADER}
-            ${DOXYFILE_FOOTER}
+        doxygen_doc
+        DEPENDS
+        ${DOXYGEN_INDEX_FILE}
+        ${DOXYFILE_IN}
+        ${DOXYFILE_CSS}
+        ${DOXYFILE_HEADER}
+        ${DOXYFILE_FOOTER}
     )
 endif (DOXYGEN_FOUND)
