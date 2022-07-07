@@ -54,6 +54,7 @@ jobs:
           brew install nativeos/i386-elf-toolchain/i386-elf-binutils
           brew install nativeos/i386-elf-toolchain/i386-elf-gcc
           brew install nasm
+          export PATH="/usr/local/Cellar/i386-elf-binutils/*/bin/:/usr/local/Cellar/i386-elf-gcc/*/bin/:$PATH"
 
       - name: Build
         run: |
