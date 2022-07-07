@@ -150,3 +150,10 @@ add_custom_target(
     DEPENDS libc
     DEPENDS gdb_file
 )
+
+add_custom_target(
+    cdrom.iso
+    COMMAND cp mentos/kernel-bootloader.bin ${CMAKE_SOURCE_DIR}/iso/boot
+    COMMAND grub-mkrescue -o cdrom.iso ${CMAKE_SOURCE_DIR}/iso
+    DEPENDS kernel-bootloader.bin
+)
