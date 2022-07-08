@@ -17,6 +17,11 @@ set(BUDDY_SYSTEM_FILE ${PROJECT_SOURCE_DIR}/src/mem/libbuddysystem.a)
 
 # Add the memory option.
 option(USE_BUDDY_SYSTEM "Build using the buddysystem written by the user." OFF)
+# Enables cache tracing.
+option(ENABLE_CACHE_TRACE "Enables cache tracing." OFF)
+# Enables memory allocation tracing.
+option(ENABLE_ALLOC_TRACE "Enables memory allocation tracing." OFF)
+
 
 # =============================================================================
 # ASSEMBLY
@@ -196,6 +201,18 @@ target_compile_definitions(
     ${KERNEL_NAME} PUBLIC
     __KERNEL__
 )
+
+# =============================================================================
+# Enables cache tracing.
+if(ENABLE_CACHE_TRACE)
+    target_compile_definitions(${KERNEL_NAME} PUBLIC ENABLE_CACHE_TRACE)
+endif(ENABLE_CACHE_TRACE)
+
+# =============================================================================
+# Enables memory allocation tracing.
+if(ENABLE_ALLOC_TRACE)
+    target_compile_definitions(${KERNEL_NAME} PUBLIC ENABLE_ALLOC_TRACE)
+endif(ENABLE_ALLOC_TRACE)
 
 # =============================================================================
 # Set the list of valid scheduling options.

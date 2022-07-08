@@ -9,9 +9,6 @@
 #include "stddef.h"
 #include "mem/gfp.h"
 
-//#define ENABLE_CACHE_TRACE
-//#define ENABLE_ALLOC_TRACE
-
 /// @brief Type for slab flags.
 typedef unsigned int slab_flags_t;
 
@@ -88,10 +85,6 @@ void kmem_cache_destroy(kmem_cache_t *cachep);
 
 #ifdef ENABLE_CACHE_TRACE
 
-#ifndef __FILENAME__
-#define __FILENAME__ (__builtin_strrchr(__FILE__, '/') ? __builtin_strrchr(__FILE__, '/') + 1 : __FILE__)
-#endif
-
 /// @brief Allocs a new object using the provided cache.
 /// @param file   File where the object is allocated.
 /// @param fun    Function where the object is allocated.
@@ -109,10 +102,10 @@ void *pr_kmem_cache_alloc(const char *file, const char *fun, int line, kmem_cach
 void pr_kmem_cache_free(const char *file, const char *fun, int line, void *addr);
 
 /// Wrapper that provides the filename, the function and line where the alloc is happening.
-#define kmem_cache_alloc(...) pr_kmem_cache_alloc(__FILENAME__, __func__, __LINE__, __VA_ARGS__)
+#define kmem_cache_alloc(...) pr_kmem_cache_alloc(__FILE__, __func__, __LINE__, __VA_ARGS__)
 
 /// Wrapper that provides the filename, the function and line where the free is happening.
-#define kmem_cache_free(...) pr_kmem_cache_free(__FILENAME__, __func__, __LINE__, __VA_ARGS__)
+#define kmem_cache_free(...) pr_kmem_cache_free(__FILE__, __func__, __LINE__, __VA_ARGS__)
 
 #else
 /// @brief Allocs a new object using the provided cache.
@@ -128,10 +121,6 @@ void kmem_cache_free(void *addr);
 #endif
 
 #ifdef ENABLE_ALLOC_TRACE
-
-#ifndef __FILENAME__
-#define __FILENAME__ (__builtin_strrchr(__FILE__, '/') ? __builtin_strrchr(__FILE__, '/') + 1 : __FILE__)
-#endif
 
 /// @brief Provides dynamically allocated memory in kernel space.
 /// @param file File where the object is allocated.
@@ -149,10 +138,10 @@ void *pr_kmalloc(const char *file, const char *fun, int line, unsigned int size)
 void pr_kfree(const char *file, const char *fun, int line, void *addr);
 
 /// Wrapper that provides the filename, the function and line where the alloc is happening.
-#define kmalloc(...) pr_kmalloc(__FILENAME__, __func__, __LINE__, __VA_ARGS__)
+#define kmalloc(...) pr_kmalloc(__FILE__, __func__, __LINE__, __VA_ARGS__)
 
 /// Wrapper that provides the filename, the function and line where the free is happening.
-#define kfree(...) pr_kfree(__FILENAME__, __func__, __LINE__, __VA_ARGS__)
+#define kfree(...) pr_kfree(__FILE__, __func__, __LINE__, __VA_ARGS__)
 
 #else
 
