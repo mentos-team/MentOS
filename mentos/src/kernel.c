@@ -229,27 +229,30 @@ int kmain(boot_info_t *boot_informations)
     //==========================================================================
     // Scan for ata devices.
     pr_notice("Initialize ATA devices...\n");
-    printf("Initialize ATA devices...\n");
+    printf("Initialize ATA devices...");
     if (ata_initialize()) {
         pr_emerg("Failed to initialize ATA devices!\n");
         return 1;
     }
+    print_ok();
 
     //==========================================================================
     pr_notice("Initialize EXT2 filesystem...\n");
-    printf("Initialize EXT2 filesystem...\n");
+    printf("Initialize EXT2 filesystem...");
     if (ext2_initialize()) {
         pr_emerg("Failed to initialize EXT2 filesystem!\n");
         return 1;
     }
+    print_ok();
 
     //==========================================================================
     pr_notice("Mount EXT2 filesystem...\n");
-    printf("Mount EXT2 filesystem...\n");
+    printf("Mount EXT2 filesystem...");
     if (do_mount("ext2", "/", "/dev/hda")) {
         pr_emerg("Failed to mount EXT2 filesystem...\n");
         return 1;
     }
+    print_ok();
 
     //==========================================================================
     pr_notice("    Initialize 'procfs'...\n");
@@ -268,6 +271,7 @@ int kmain(boot_info_t *boot_informations)
         pr_emerg("Failed to mount procfs at `/proc`!\n");
         return 1;
     }
+    print_ok();
 
     //==========================================================================
     pr_notice("Initialize video procfs file...\n");

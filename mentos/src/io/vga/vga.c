@@ -16,10 +16,11 @@
 #include "io/vga/vga_mode.h"
 #include "io/vga/vga_font.h"
 
+#include "hardware/timer.h"
 #include "io/port_io.h"
+#include "io/debug.h"
 #include "stdbool.h"
 #include "string.h"
-#include "io/debug.h"
 #include "math.h"
 
 /// Counts the number of elements of an array.
@@ -61,13 +62,13 @@
 /// VGA pointers for drawing operations.
 typedef struct {
     /// Writes a pixel.
-    void (*write_pixel)(unsigned int x, unsigned int y, unsigned char c);
+    void (*write_pixel)(int x, int y, unsigned char c);
     /// Reads a pixel.
-    unsigned (*read_pixel)(unsigned int x, unsigned int y);
+    unsigned (*read_pixel)(int x, int y);
     /// Draws a rectangle.
-    void (*draw_rect)(unsigned int x, unsigned int y, unsigned int wd, unsigned int ht, unsigned char c);
+    void (*draw_rect)(int x, int y, int wd, int ht, unsigned char c);
     /// Fills a rectangle.
-    void (*fill_rect)(unsigned int x, unsigned int y, unsigned int wd, unsigned int ht, unsigned char c);
+    void (*fill_rect)(int x, int y, int wd, int ht, unsigned char c);
 } vga_ops_t;
 
 /// VGA font details.
@@ -361,17 +362,42 @@ assume: chain-4 addressing already off */
     outportb(GC_DATA, gc6);
 }
 
+/// @brief Reverses the bits of the given number.
+/// @param num the number of which we want to reverse the bits.
+/// @return reversed bits.
+static inline unsigned int __reverse_bits(char num)
+{
+    unsigned int NO_OF_BITS  = sizeof(num) * 8;
+    unsigned int reverse_num = 0;
+    int i;
+    for (i = 0; i < NO_OF_BITS; i++) {
+        if ((num & (1 << i)))
+            reverse_num |= 1 << ((NO_OF_BITS - 1) - i);
+    }
+    return reverse_num;
+}
+
+/// @brief Sets the given font.
+/// @param font the new font.
+void __vga_setfont(const vga_font_t *font)
+{
+    __font->font   = font->font;
+    __font->width  = font->width;
+    __font->height = font->height;
+}
+
 // ============================================================================
-// == WRITE PIXEL FUNCTIONS ===================================================
+// = WRITE PIXEL FUNCTIONS (and support)
+// ============================================================================
 
 /// @brief Writes a pixel.
 /// @param x x coordinates.
 /// @param y y coordinates.
 /// @param c color.
-static void __write_pixel_1(unsigned int x, unsigned int y, unsigned char c)
+static inline void __write_pixel_1(int x, int y, unsigned char c)
 {
-    unsigned wd_in_bytes;
-    unsigned off, mask;
+    int wd_in_bytes;
+    int off, mask;
 
     c           = (c & 1) * 0xFF;
     wd_in_bytes = driver->width / 8;
@@ -385,10 +411,10 @@ static void __write_pixel_1(unsigned int x, unsigned int y, unsigned char c)
 /// @param x x coordinates.
 /// @param y y coordinates.
 /// @param c color.
-static void __write_pixel_2(unsigned int x, unsigned int y, unsigned char c)
+static inline void __write_pixel_2(int x, int y, unsigned char c)
 {
-    unsigned wd_in_bytes;
-    unsigned off, mask;
+    int wd_in_bytes;
+    int off, mask;
 
     c           = (c & 3) * 0x55;
     wd_in_bytes = driver->width / 4;
@@ -402,7 +428,7 @@ static void __write_pixel_2(unsigned int x, unsigned int y, unsigned char c)
 /// @param x x coordinates.
 /// @param y y coordinates.
 /// @param c color.
-static void __write_pixel_4(unsigned int x, unsigned int y, unsigned char color)
+static inline void __write_pixel_4(int x, int y, unsigned char color)
 {
     int rotation = 0;
     int16_t t;
@@ -423,7 +449,7 @@ static void __write_pixel_4(unsigned int x, unsigned int y, unsigned char color)
         break;
     }
 
-    unsigned wd_in_bytes, off, mask, p, pmask;
+    int wd_in_bytes, off, mask, p, pmask;
 
     wd_in_bytes = driver->width / 8;
     off         = wd_in_bytes * y + x / 8;
@@ -444,27 +470,16 @@ static void __write_pixel_4(unsigned int x, unsigned int y, unsigned char color)
 /// @param x x coordinates.
 /// @param y y coordinates.
 /// @param c color.
-static inline void __write_pixel_8(unsigned int x, unsigned int y, unsigned char color)
+static inline void __write_pixel_8(int x, int y, unsigned char color)
 {
     __set_plane(x);
     __write_byte(((y * driver->width) + x) / 4, color);
     // (y << 6) + (y << 4) + (x >> 2)
 }
 
-/// @brief Reverses the bits of the given number.
-/// @param num the number of which we want to reverse the bits.
-/// @return reversed bits.
-unsigned int reverseBits(char num)
-{
-    unsigned int NO_OF_BITS  = sizeof(num) * 8;
-    unsigned int reverse_num = 0;
-    int i;
-    for (i = 0; i < NO_OF_BITS; i++) {
-        if ((num & (1 << i)))
-            reverse_num |= 1 << ((NO_OF_BITS - 1) - i);
-    }
-    return reverse_num;
-}
+// ============================================================================
+// = VGA PUBLIC FUNCTIONS
+// ============================================================================
 
 int vga_is_enabled()
 {
@@ -485,15 +500,6 @@ int vga_height()
     return 0;
 }
 
-/// @brief Sets the given font.
-/// @param font the new font.
-void __vga_setfont(const vga_font_t *font)
-{
-    __font->font   = font->font;
-    __font->width  = font->width;
-    __font->height = font->height;
-}
-
 void vga_clear_screen()
 {
     for (int p = 0; p < 4; p++) {
@@ -502,7 +508,12 @@ void vga_clear_screen()
     }
 }
 
-void vga_draw_char(unsigned int x, unsigned int y, unsigned char c, unsigned char color)
+void vga_draw_pixel(int x, int y, unsigned char color)
+{
+    driver->ops->write_pixel(x, y, color);
+}
+
+void vga_draw_char(int x, int y, unsigned char c, unsigned char color)
 {
     static unsigned mask[] = {
         1u << 0u, //            1
@@ -518,7 +529,7 @@ void vga_draw_char(unsigned int x, unsigned int y, unsigned char c, unsigned cha
     unsigned char *glyph = __font->font + c * __font->height;
     for (unsigned cy = 0; cy < __font->height; ++cy) {
         for (unsigned cx = 0; cx < __font->width; ++cx) {
-            driver->ops->write_pixel(x + (__font->width - cx), y + cy, glyph[cy] & mask[cx] ? color : 0x00u);
+            vga_draw_pixel(x + (__font->width - cx), y + cy, glyph[cy] & mask[cx] ? color : 0x00u);
         }
     }
 }
@@ -533,76 +544,56 @@ void vga_draw_string(int x, int y, char *str, unsigned char color)
     }
 }
 
-void vga_draw_line(unsigned int x0, unsigned int y0, unsigned int x1, unsigned int y1, unsigned char color)
+void vga_draw_line(int x0, int y0, int x1, int y1, unsigned char color)
 {
-    bool_t steep = abs(y1 - y0) > abs(x1 - x0);
-    int tmp      = 0;
-    if (steep) {
-        tmp = x0;
-        x0  = y0;
-        y0  = tmp;
-
-        tmp = x1;
-        x1  = y1;
-        y1  = tmp;
-    }
-    if (x0 > x1) {
-        tmp = x0;
-        x0  = x1;
-        x1  = tmp;
-
-        tmp = y0;
-        y0  = y1;
-        y1  = tmp;
-    }
-    int deltax = x1 - x0;
-    int deltay = abs(y1 - y0);
-    int error  = deltax / 2;
-    int ystep;
-    int y = y0;
-    if (y0 < y1)
-        ystep = 1;
-    else
-        ystep = -1;
-    for (int x = x0; x < x1; x++) {
-        if (steep)
-            driver->ops->write_pixel(y, x, color);
-        else
-            driver->ops->write_pixel(x, y, color);
-        error = error - deltay;
-        if (error < 0) {
-            y     = y + ystep;
-            error = error + deltax;
+    int dx = abs(x1 - x0), sx = sign(x1 - x0);
+    int dy = abs(y1 - y0), sy = sign(y1 - y0);
+    int err = (dx > dy ? dx : -dy) / 2;
+    while (true) {
+        vga_draw_pixel(x0, y0, color);
+        if ((x0 == x1) && (y0 == y1))
+            break;
+        if (dx > dy) {
+            x0 += sx;
+            err -= dy;
+            if (err < 0)
+                err += dx;
+            y0 += sy;
+        } else {
+            y0 += sy;
+            err -= dx;
+            if (err < 0)
+                err += dy;
+            x0 += sx;
         }
     }
 }
 
-void vga_draw_rectangle(unsigned int sx, unsigned int sy, unsigned int ex, unsigned int ey, unsigned char fill)
+void vga_draw_rectangle(int sx, int sy, int w, int h, unsigned char color)
 {
-    vga_draw_line(sx, sy, ex, sy, fill);
-    vga_draw_line(sx, sy, sx, ey, fill);
-    vga_draw_line(sx, ey, ex, ey, fill);
-    vga_draw_line(ex, ey, ex, sy, fill);
+    vga_draw_line(sx, sy, sx + w, sy, color);
+    vga_draw_line(sx, sy, sx, sy + h, color);
+    vga_draw_line(sx, sy + h, sx + w, sy + h, color);
+    vga_draw_line(sx + w, sy, sx + w, sy + h, color);
 }
 
-void vga_draw_circle(unsigned int xc, unsigned int yc, unsigned int r, unsigned char fill)
+void vga_draw_circle(int xc, int yc, int r, unsigned char color)
 {
-    unsigned int x = 0;
-    unsigned int y = r;
-    unsigned int p = 3 - 2 * r;
+    int x = 0;
+    int y = r;
+    int p = 3 - 2 * r;
     if (!r)
         return;
-
     while (y >= x) // only formulate 1/8 of circle
     {
-        driver->ops->write_pixel(xc - x, yc - y, fill); //upper left left
-        driver->ops->write_pixel(xc - y, yc - x, fill); //upper upper left
-        driver->ops->write_pixel(xc + y, yc - x, fill); //upper upper right
-        driver->ops->write_pixel(xc + x, yc - y, fill); //upper right right
-        driver->ops->write_pixel(xc - x, yc + y, fill); //lower left left
-        driver->ops->write_pixel(xc - y, yc + x, fill); //lower lower left
-        driver->ops->write_pixel(xc + y, yc + x, fill); //lower lower right
-        driver->ops->write_pixel(xc + x, yc + y, fill); //lower right right
+        vga_draw_pixel(xc - x, yc - y, color); //upper left left
+        vga_draw_pixel(xc - y, yc - x, color); //upper upper left
+        vga_draw_pixel(xc + y, yc - x, color); //upper upper right
+        vga_draw_pixel(xc + x, yc - y, color); //upper right right
+        vga_draw_pixel(xc - x, yc + y, color); //lower left left
+        vga_draw_pixel(xc - y, yc + x, color); //lower lower left
+        vga_draw_pixel(xc + y, yc + x, color); //lower lower right
+        vga_draw_pixel(xc + x, yc + y, color); //lower right right
         if (p < 0)
             p += 4 * x++ + 6;
         else
@@ -610,21 +601,29 @@ void vga_draw_circle(unsigned int xc, unsigned int yc, unsigned int r, unsigned 
     }
 }
 
-void vga_draw_triangle(unsigned int x1, unsigned int y1, unsigned int x2, unsigned int y2, unsigned int x3, unsigned int y3, unsigned char fill)
+void vga_draw_triangle(int x1, int y1, int x2, int y2, int x3, int y3, unsigned char color)
 {
-    vga_draw_line(x1, y1, x2, y2, fill);
-    vga_draw_line(x2, y2, x3, y3, fill);
-    vga_draw_line(x3, y3, x1, y1, fill);
+    vga_draw_line(x1, y1, x2, y2, color);
+    vga_draw_line(x2, y2, x3, y3, color);
+    vga_draw_line(x3, y3, x1, y1, color);
 }
 
-static void __test_vga(void)
+void vga_run_test(void)
 {
     vga_clear_screen();
-    vga_draw_rectangle(1, 1, driver->width - 1, driver->height - 1, 3);
-    for (unsigned i = 1; i < driver->height - 1; i++) {
-        driver->ops->write_pixel((driver->width - driver->height) / 2 + i, i, 1);
-        driver->ops->write_pixel((driver->height + driver->width) / 2 - i, i, 1);
-    }
+    int w2h = (vga_width() / 2);
+    int h2h = (vga_height() / 2);
+
+    for (unsigned r = 0; r <= min(vga_width() / 2, vga_height() / 2); r += 4)
+        vga_draw_circle(vga_width() / 2, vga_height() / 2, r, 2);
+
+    for (unsigned y = 0; y < vga_height(); y += 2)
+        vga_draw_line(0, y, vga_width(), y, 3);
+
+    for (unsigned dim = 0; dim < min(vga_width(), vga_height()); dim += 4)
+      vga_draw_rectangle(w2h - (dim / 2), h2h - (dim / 2), dim, dim, 4);
+
+    vga_draw_triangle(0,  50, 50, 0, 100, 50, 2);
 }
 
 // == MODEs and DRIVERs =======================================================

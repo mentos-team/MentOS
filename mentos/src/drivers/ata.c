@@ -1137,22 +1137,18 @@ int ata_initialize()
     ata_device_type_t type;
     type = ata_device_detect(&ata_primary_master);
     if ((type != ata_dev_type_no_device) && (type != ata_dev_type_unknown)) {
-        printf("    Found %s device connected to primary master.\n", ata_get_device_type_str(type));
         pr_info("    Found %s device connected to primary master.\n", ata_get_device_type_str(type));
     }
     type = ata_device_detect(&ata_primary_slave);
     if ((type != ata_dev_type_no_device) && (type != ata_dev_type_unknown)) {
-        printf("    Found %s device connected to primary slave.\n", ata_get_device_type_str(type));
         pr_info("    Found %s device connected to primary slave.\n", ata_get_device_type_str(type));
     }
     type = ata_device_detect(&ata_secondary_master);
     if ((type != ata_dev_type_no_device) && (type != ata_dev_type_unknown)) {
-        printf("    Found %s device connected to secondary master.\n", ata_get_device_type_str(type));
         pr_info("    Found %s device connected to secondary master.\n", ata_get_device_type_str(type));
     }
     type = ata_device_detect(&ata_secondary_slave);
     if ((type != ata_dev_type_no_device) && (type != ata_dev_type_unknown)) {
-        printf("    Found %s device connected to secondary slave.\n", ata_get_device_type_str(type));
         pr_info("    Found %s device connected to secondary slave.\n", ata_get_device_type_str(type));
     }
     return 0;

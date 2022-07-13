@@ -26,12 +26,18 @@ int vga_height();
 /// @brief Clears the screen.
 void vga_clear_screen();
 
+/// @brief Draws a pixel at the given position.
+/// @param x x-axis position.
+/// @param y y-axis position.
+/// @param color color of the character.
+void vga_draw_pixel(int x, int y, unsigned char color);
+
 /// @brief Draws a character at the given position.
 /// @param x x-axis position.
 /// @param y y-axis position.
 /// @param c character to draw.
 /// @param color color of the character.
-void vga_draw_char(unsigned int x, unsigned int y, unsigned char c, unsigned char color);
+void vga_draw_char(int x, int y, unsigned char c, unsigned char color);
 
 /// @brief Draws a string at the given position.
 /// @param x x-axis position.
@@ -46,22 +52,22 @@ void vga_draw_string(int x, int y, char *str, unsigned char color);
 /// @param x1 point 2 x-axis position.
 /// @param y1 point 2 y-axis position.
 /// @param color color of the line.
-void vga_draw_line(unsigned int x0, unsigned int y0, unsigned int x1, unsigned int y1, unsigned char color);
+void vga_draw_line(int x0, int y0, int x1, int y1, unsigned char color);
 
 /// @brief Draws a rectangle provided the position of the starting corner and the ending corner.
-/// @param sx starting corner x-axis position.
-/// @param sy starting corner y-axis position.
-/// @param ex ending corner x-axis position.
-/// @param ey ending corner y-axis position.
-/// @param fill color used to fill the rectangle.
-void vga_draw_rectangle(unsigned int sx, unsigned int sy, unsigned int ex, unsigned int ey, unsigned char fill);
+/// @param sx top-left corner x-axis position.
+/// @param sy top-left corner y-axis position.
+/// @param w width.
+/// @param h height.
+/// @param color color of the rectangle.
+void vga_draw_rectangle(int sx, int sy, int w, int h, unsigned char color);
 
 /// @brief Draws a circle provided the position of the center and the radius.
 /// @param xc x-axis position.
 /// @param yc y-axis position.
 /// @param r radius.
-/// @param fill color used to fill the circle.
-void vga_draw_circle(unsigned int xc, unsigned int yc, unsigned int r, unsigned char fill);
+/// @param color used to draw the circle.
+void vga_draw_circle(int xc, int yc, int r, unsigned char color);
 
 /// @brief Draws a triangle.
 /// @param x1 1st point x-axis position.
@@ -70,5 +76,7 @@ void vga_draw_circle(unsigned int xc, unsigned int yc, unsigned int r, unsigned 
 /// @param y2 2nd point y-axis position. 
 /// @param x3 3rd point x-axis position. 
 /// @param y3 3rd point y-axis position. 
-/// @param fill color used to fill the triangle.
-void vga_draw_triangle(unsigned int x1, unsigned int y1, unsigned int x2, unsigned int y2, unsigned int x3, unsigned int y3, unsigned char fill);
+/// @param color used to draw the triangle.
+void vga_draw_triangle(int x1, int y1, int x2, int y2, int x3, int y3, unsigned char color);
+
+void vga_run_test();
