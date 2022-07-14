@@ -32,6 +32,11 @@ void vga_clear_screen();
 /// @param color color of the character.
 void vga_draw_pixel(int x, int y, unsigned char color);
 
+/// @brief Reads a pixel at the given position.
+/// @param x x-axis position.
+/// @param y y-axis position.
+unsigned int vga_read_pixel(int x, int y);
+
 /// @brief Draws a character at the given position.
 /// @param x x-axis position.
 /// @param y y-axis position.
