@@ -26,9 +26,7 @@
 #include "system/signal.h"
 #include "assert.h"
 #include "sys/errno.h"
-
-/// Number of ticks per seconds.
-#define TICKS_PER_SECOND 1193
+#include "io/vga/vga.h"
 
 /// @defgroup picregs Programmable Interval Timer Registers
 /// @brief The list of registers used to set the PIT.

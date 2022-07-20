@@ -29,6 +29,9 @@
 /// time consumed by the process.
 #define ITIMER_PROF 2
 
+/// Number of ticks per seconds.
+#define TICKS_PER_SECOND 1193
+
 /// @brief   Handles the timer.
 /// @param f The interrupt stack frame.
 /// @details
