@@ -16,9 +16,10 @@
 #include "process/scheduler.h"
 #include "hardware/pic8259.h"
 #include "io/port_io.h"
+#include "io/debug.h"
+#include "io/video.h"
 #include "stdint.h"
 #include "mem/kheap.h"
-#include "io/debug.h"
 #include "process/wait.h"
 #include "drivers/rtc.h"
 #include "descriptor_tables/isr.h"
@@ -26,7 +27,6 @@
 #include "system/signal.h"
 #include "assert.h"
 #include "sys/errno.h"
-#include "io/vga/vga.h"
 
 /// @defgroup picregs Programmable Interval Timer Registers
 /// @brief The list of registers used to set the PIT.
@@ -108,6 +108,8 @@ void timer_handler(pt_regs *reg)
     run_timer_softirq();
     // Perform the schedule.
     scheduler_run(reg);
+    // Update graphics.
+    video_update();
     // Restore fpu state.
     unswitch_fpu();
     // The ack is sent to PIC only when all handlers terminated!

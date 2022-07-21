@@ -11,6 +11,9 @@ void vga_initialize();
 /// @brief Finalizes the VGA.
 void vga_finalize();
 
+/// @brief Updates the graphic elements.
+void vga_update();
+
 /// @brief Checks if the VGA is enabled.
 /// @return 1 if enabled, 0 otherwise.
 int vga_is_enabled();
@@ -49,7 +52,7 @@ void vga_draw_char(int x, int y, unsigned char c, unsigned char color);
 /// @param y y-axis position.
 /// @param str string to draw.
 /// @param color color of the character.
-void vga_draw_string(int x, int y, char *str, unsigned char color);
+void vga_draw_string(int x, int y, const char *str, unsigned char color);
 
 /// @brief Draws a line from point 1 to point 2.
 /// @param x0 point 1 x-axis position.
@@ -83,5 +86,34 @@ void vga_draw_circle(int xc, int yc, int r, unsigned char color);
 /// @param y3 3rd point y-axis position. 
 /// @param color used to draw the triangle.
 void vga_draw_triangle(int x1, int y1, int x2, int y2, int x3, int y3, unsigned char color);
+
+/// @brief Print the given character on the screen.
+/// @param c The character to print.
+void vga_putc(int c);
+
+/// @brief Prints the given string on the screen.
+/// @param str The string to print.
+void vga_puts(const char *str);
+
+/// @brief Move the cursor at the position x, y on the screen.
+/// @param x The x coordinate.
+/// @param y The y coordinate.
+void vga_move_cursor(unsigned int x, unsigned int y);
+
+/// @brief Returns cursor's position on the screen.
+/// @param x The output x coordinate.
+/// @param y The output y coordinate.
+void vga_get_cursor_position(unsigned int * x, unsigned int * y);
+
+/// @brief Returns screen size.
+/// @param width The screen width.
+/// @param height The screen height.
+void vga_get_screen_size(unsigned int * width, unsigned int * height);
+
+/// @brief Move to the following line (the effect of \n character).
+void vga_new_line();
+
+/// @brief Change the color.
+void vga_set_color(unsigned int color);
 
 void vga_run_test();

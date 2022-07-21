@@ -19,6 +19,7 @@
 #include "hardware/timer.h"
 #include "io/port_io.h"
 #include "io/debug.h"
+#include "io/video.h"
 #include "stdbool.h"
 #include "string.h"
 #include "math.h"
@@ -73,9 +74,9 @@ typedef struct {
 
 /// VGA font details.
 typedef struct {
-    unsigned char *font; ///< Pointer to the array holding the shape of each character.
-    unsigned width;      ///< Width of the font.
-    unsigned height;     ///< Height of the font.
+    const unsigned char *font; ///< Pointer to the array holding the shape of each character.
+    unsigned width;            ///< Width of the font.
+    unsigned height;           ///< Height of the font.
 } vga_font_t;
 
 /// VGA driver details.
@@ -539,16 +540,6 @@ unsigned int vga_read_pixel(int x, int y)
     return driver->ops->read_pixel(x, y);
 }
 
-void vga_clear_screen()
-{
-    unsigned original_plane = __get_plane();
-    for (unsigned plane = 0; plane < 4; ++plane) {
-        __set_plane(plane);
-        memset(driver->address, 0, 64 * 1024);
-    }
-    __set_plane(original_plane);
-}
-
 void vga_draw_char(int x, int y, unsigned char c, unsigned char color)
 {
     static unsigned mask[] = {
@@ -562,7 +553,7 @@ void vga_draw_char(int x, int y, unsigned char c, unsigned char color)
         1u << 7u, //          128
         1u << 8u, //          256
     };
-    unsigned char *glyph = driver->font->font + c * driver->font->height;
+    const unsigned char *glyph = driver->font->font + c * driver->font->height;
     for (unsigned cy = 0; cy < driver->font->height; ++cy) {
         for (unsigned cx = 0; cx < driver->font->width; ++cx) {
             vga_draw_pixel(x + (driver->font->width - cx), y + cy, glyph[cy] & mask[cx] ? color : 0x00u);
@@ -570,7 +561,7 @@ void vga_draw_char(int x, int y, unsigned char c, unsigned char color)
     }
 }
 
-void vga_draw_string(int x, int y, char *str, unsigned char color)
+void vga_draw_string(int x, int y, const char *str, unsigned char color)
 {
     char i = 0;
     while (*str != '\0') {
@@ -689,16 +680,28 @@ static vga_ops_t ops_320_200_256 = {
     .fill_rect   = NULL,
 };
 
+static vga_font_t font_4x6 = {
+    .font   = arr_4x6_font,
+    .width  = 4,
+    .height = 6,
+};
+
+static vga_font_t font_5x6 = {
+    .font   = arr_5x6_font,
+    .width  = 5,
+    .height = 6,
+};
+
 static vga_font_t font_8x8 = {
     .font   = arr_8x8_font,
     .width  = 8,
     .height = 8,
 };
 
-static vga_font_t font_8x8_basic = {
-    .font   = arr_8x8_basic_font,
+static vga_font_t font_8x14 = {
+    .font   = arr_8x14_font,
     .width  = 8,
-    .height = 8,
+    .height = 14,
 };
 
 static vga_font_t font_8x16 = {
@@ -739,34 +742,39 @@ void vga_initialize()
     __save_palette(stored_palette, 256);
 
     // Initialize the desired mode.
-#if defined(VGA_MODE_320_200_256)
+
+#if defined(VGA_MODE_320_200_256) // 40x25
     // Write the registers.
     __set_mode(&_mode_320_200_256);
     // Initialize the mode.
     driver = &driver_320_200_256;
     // Load the color palette.
     __load_palette(ansi_256_palette, 256);
-#elif defined(VGA_MODE_640_480_16)
+    // Set the font.
+    driver->font = &font_5x6;
+#elif defined(VGA_MODE_640_480_16) // 80x60
     // Write the registers.
     __set_mode(&_mode_640_480_16);
     // Initialize the mode.
     driver = &driver_640_480_16;
     // Load the color palette.
     __load_palette(ansi_16_palette, 16);
-#elif defined(VGA_MODE_720_480_16)
+    // Set the font.
+    driver->font = &font_8x14;
+#elif defined(VGA_MODE_720_480_16) // 90x60
     // Write the registers.
     __set_mode(&_mode_720_480_16);
     // Initialize the mode.
     driver = &driver_720_480_16;
     // Load the color palette.
     __load_palette(ansi_16_palette, 16);
-#else // VGA_TEXT_MODE
+    // Set the font.
+    driver->font = &font_8x16;
+#else                              // VGA_TEXT_MODE
     return;
 #endif
     // Set the address.
     driver->address = __get_seg();
-    // Set the font.
-    driver->font = &font_8x8;
     // Save the content of the memory.
     memcpy(vidmem, driver->address, 0x4000);
     // Clears the screen.
@@ -781,4 +789,105 @@ void vga_finalize()
     __set_mode(&_mode_80_25_text);
     __load_palette(stored_palette, 256);
     vga_enable = false;
+}
+
+static int _x               = 0;
+static int _y               = 0;
+static unsigned char _color = 7;
+static int _cursor_state    = 0;
+
+inline static void __vga_clear_cursor()
+{
+    for (unsigned cy = 0; cy < driver->font->height; ++cy)
+        for (unsigned cx = 0; cx < driver->font->width; ++cx)
+            vga_draw_pixel(_x + cx, _y + cy, 0);
+}
+
+inline static void __vga_draw_cursor()
+{
+    unsigned char color = (_cursor_state = (_cursor_state == 0)) * _color;
+    for (unsigned cy = 0; cy < driver->font->height; ++cy)
+        for (unsigned cx = 0; cx < driver->font->width; ++cx)
+            vga_draw_pixel(_x + cx, _y + cy, color);
+}
+
+void vga_putc(int c)
+{
+    if (_cursor_state)
+        __vga_clear_cursor();
+    // If the character is '\n' go the new line.
+    if (c == '\n') {
+        vga_new_line();
+    } else if ((c >= 0x20) && (c <= 0x7E)) {
+        vga_draw_char(_x, _y, c, _color);
+        if ((_x += driver->font->width) >= driver->width)
+            vga_new_line();
+    } else {
+        return;
+    }
+}
+
+void vga_puts(const char *str)
+{
+    while ((*str) != 0) {
+        vga_putc((*str++));
+    }
+}
+
+void vga_move_cursor(unsigned int x, unsigned int y)
+{
+    _x = x * driver->font->width;
+    _y = y * driver->font->height;
+    __vga_draw_cursor();
+}
+
+void vga_get_cursor_position(unsigned int *x, unsigned int *y)
+{
+    if (x)
+        *x = _x / driver->font->width;
+    if (y)
+        *y = _y / driver->font->height;
+}
+
+void vga_get_screen_size(unsigned int *width, unsigned int *height)
+{
+    if (width)
+        *width = driver->width / driver->font->width;
+    if (height)
+        *height = driver->height / driver->font->height;
+}
+
+void vga_clear_screen()
+{
+    unsigned original_plane = __get_plane();
+    for (unsigned plane = 0; plane < 4; ++plane) {
+        __set_plane(plane);
+        memset(driver->address, 0, 64 * 1024);
+    }
+    __set_plane(original_plane);
+    _x = 0, _y = 0;
+}
+
+void vga_new_line()
+{
+    // Just the 5x6 font needs some space.
+    const unsigned int vertical_space = (driver->font == &font_5x6);
+    // Go back at the beginning of the line.
+    _x = 0;
+    if ((_y += driver->font->height + vertical_space) >= (driver->height - driver->font->height)) {
+        _y = 0;
+        vga_clear_screen();
+    }
+}
+
+void vga_update()
+{
+    if ((timer_get_ticks() % (TICKS_PER_SECOND / 2)) == 0) {
+        __vga_draw_cursor();
+    }
+}
+
+void vga_set_color(unsigned int color)
+{
+    _color = color;
 }

@@ -85,15 +85,21 @@ boot_info_t boot_info;
 /// @brief Prints [OK] at the current row and column 60.
 static inline void print_ok()
 {
-    video_move_cursor(75, video_get_y());
-    video_puts("[" FG_GREEN_BRIGHT "OK" FG_WHITE "]\n");
+    unsigned y, width;
+    video_get_cursor_position(NULL, &y);
+    video_get_screen_size(&width, NULL);
+    video_move_cursor(width - 5, y);
+    video_puts("[OK]\n");
 }
 
 /// @brief Prints [FAIL] at the current row and column 60.
 static inline void print_fail()
 {
-    video_move_cursor(75, video_get_y());
-    video_puts("[" FG_RED_BRIGHT "FAIL" FG_WHITE "]\n");
+    unsigned y, width;
+    video_get_cursor_position(NULL, &y);
+    video_get_screen_size(&width, NULL);
+    video_move_cursor(width - 7, y);
+    video_puts("[FAIL]\n");
 }
 
 /// @brief Entry point of the kernel.
