@@ -507,7 +507,7 @@ int vfs_init_task(task_struct *task)
         return 0;
     }
     // Create the proc entry.
-    if (proc_create_entry_pid(task)) {
+    if (procr_create_entry_pid(task)) {
         pr_err("Error while trying to create proc entry for process `%d`: %s\n", task->pid, strerror(errno));
         return 0;
     }
@@ -531,7 +531,7 @@ int vfs_dup_task(task_struct *task, task_struct *old_task)
         }
     }
     // Create the proc entry.
-    if (proc_create_entry_pid(task)) {
+    if (procr_create_entry_pid(task)) {
         pr_err("Error while trying to create proc entry for '%d': %s\n", task->pid, strerror(errno));
         return 0;
     }
@@ -558,7 +558,7 @@ int vfs_destroy_task(task_struct *task)
     // Free the memory of the list.
     kfree(task->fd_list);
     // Remove the proc entry.
-    if (proc_destroy_entry_pid(task)) {
+    if (procr_destroy_entry_pid(task)) {
         pr_err("Error while trying to remove proc entry for '%d': %s\n", task->pid, strerror(errno));
         return 0;
     }
