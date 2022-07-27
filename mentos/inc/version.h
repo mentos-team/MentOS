@@ -18,7 +18,7 @@
 #define OS_MAJOR_VERSION 0
 
 /// Minor version of the operating system.
-#define OS_MINOR_VERSION 3
+#define OS_MINOR_VERSION 4
 
 /// Micro version of the operating system.
 #define OS_MICRO_VERSION 0
