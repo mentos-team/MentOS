@@ -1,7 +1,6 @@
-///                MentOS, The Mentoring Operating system project
 /// @file readdir.c
 /// @brief Function for accessing directory entries.
-/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #include "sys/dirent.h"
@@ -11,6 +10,7 @@
 #include "sys/errno.h"
 #include "stdio.h"
 #include "fs/vfs.h"
+#include "string.h"
 
 int sys_getdents(int fd, dirent_t *dirp, unsigned int count)
 {
@@ -42,13 +42,14 @@ int sys_getdents(int fd, dirent_t *dirp, unsigned int count)
     if (file == NULL) {
         return -ENOSYS;
     }
+    // Clean the buffer.
+    memset(dirp, 0, count);
 
     // Perform the read.
     int actual_read = vfs_getdents(file, dirp, vfd->file_struct->f_pos, count);
 
     // Update the offset.
-    if (actual_read > 0) {
-        vfd->file_struct->f_pos += (actual_read / sizeof(dirent_t));
-    }
+    if (actual_read > 0)
+        vfd->file_struct->f_pos += actual_read;
     return actual_read;
 }

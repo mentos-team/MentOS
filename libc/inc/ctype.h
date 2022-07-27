@@ -1,7 +1,6 @@
-///                MentOS, The Mentoring Operating system project
 /// @file ctype.h
 /// @brief Functions related to character handling.
-/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #pragma once
@@ -15,6 +14,11 @@ int isdigit(int c);
 /// @param c The input character.
 /// @return 1 on success, 0 otherwise.
 int isalpha(int c);
+
+/// @brief Check if the given value is a control character.
+/// @param c The input character.
+/// @return 1 on success, 0 otherwise.
+int iscntrl(int c);
 
 /// @brief Check if the given value is either a letter or a digit.
 /// @param c The input character.

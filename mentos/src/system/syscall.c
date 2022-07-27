@@ -1,8 +1,14 @@
-///                MentOS, The Mentoring Operating system project
 /// @file syscall.c
 /// @brief System Call management functions.
-/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
+
+// Include the kernel log levels.
+#include "sys/kernel_levels.h"
+/// Change the header.
+#define __DEBUG_HEADER__ "[SYSCLL]"
+/// Set the log level.
+#define __DEBUG_LEVEL__ LOGLEVEL_NOTICE
 
 #include "devices/fpu.h"
 #include "mem/kheap.h"
@@ -57,14 +63,19 @@ void syscall_init()
     sys_call_table[__NR_fstat]          = (SystemCall)sys_fstat;
     sys_call_table[__NR_mkdir]          = (SystemCall)sys_mkdir;
     sys_call_table[__NR_rmdir]          = (SystemCall)sys_rmdir;
+    sys_call_table[__NR_creat]          = (SystemCall)sys_creat;
     sys_call_table[__NR_unlink]         = (SystemCall)sys_unlink;
     sys_call_table[__NR_getdents]       = (SystemCall)sys_getdents;
     sys_call_table[__NR_lseek]          = (SystemCall)sys_lseek;
     sys_call_table[__NR_getpid]         = (SystemCall)sys_getpid;
     sys_call_table[__NR_getsid]         = (SystemCall)sys_getsid;
     sys_call_table[__NR_setsid]         = (SystemCall)sys_setsid;
-    sys_call_table[__NR_getgid]         =(SystemCall)sys_getgid;
-    sys_call_table[__NR_setgid]         =(SystemCall)sys_setgid;
+    sys_call_table[__NR_getpgid]        = (SystemCall)sys_getpgid;
+    sys_call_table[__NR_setpgid]        = (SystemCall)sys_setpgid;
+    sys_call_table[__NR_getuid]         = (SystemCall)sys_getuid;
+    sys_call_table[__NR_setuid]         = (SystemCall)sys_setuid;
+    sys_call_table[__NR_getgid]         = (SystemCall)sys_getgid;
+    sys_call_table[__NR_setgid]         = (SystemCall)sys_setgid;
     sys_call_table[__NR_getppid]        = (SystemCall)sys_getppid;
     sys_call_table[__NR_sigaction]      = (SystemCall)sys_sigaction;
     sys_call_table[__NR_fork]           = (SystemCall)sys_fork;

@@ -1,77 +1,118 @@
+/// @file vga.c
+/// @brief Implementation of Video Graphics Array (VGA) drivers.
+/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// See LICENSE.md for details.
+
+// Include the kernel log levels.
+#include "sys/kernel_levels.h"
+/// Change the header.
+#define __DEBUG_HEADER__ "[VGA   ]"
+/// Set the log level.
+#define __DEBUG_LEVEL__ LOGLEVEL_NOTICE
+
 #include "io/vga/vga.h"
 
 #include "io/vga/vga_palette.h"
 #include "io/vga/vga_mode.h"
 #include "io/vga/vga_font.h"
 
+#include "hardware/timer.h"
 #include "io/port_io.h"
+#include "io/debug.h"
+#include "io/video.h"
 #include "stdbool.h"
 #include "string.h"
-#include "io/debug.h"
 #include "math.h"
 
+/// Counts the number of elements of an array.
 #define COUNT_OF(x) ((sizeof(x) / sizeof(0 [x])) / ((size_t)(!(sizeof(x) % sizeof(0 [x])))))
 
-#define AC_INDEX          0x03C0
-#define AC_WRITE          0x03C0
-#define AC_READ           0x03C1
-#define MISC_WRITE        0x03C2
-#define MISC_READ         0x03CC
-#define SC_INDEX          0x03C4 // VGA sequence controller.
-#define SC_DATA           0x03C5
-#define PALETTE_MASK      0x03C6
-#define PALETTE_READ      0x03C7
-#define PALETTE_INDEX     0x03C8 // VGA digital-to-analog converter.
-#define PALETTE_DATA      0x03C9
-#define GC_INDEX          0x03CE // VGA graphics controller.
-#define GC_DATA           0x03CF
-#define CRTC_INDEX        0x03D4 // VGA CRT controller.
-#define CRTC_DATA         0x03D5
+/// Attribute Controller index port.
+#define AC_INDEX 0x03C0
+/// Attribute Controller write port.
+#define AC_WRITE 0x03C0
+/// Attribute Controller data port.
+#define AC_READ 0x03C1
+/// Miscellaneous output register.
+#define MISC_WRITE 0x03C2
+/// Miscellaneous input register.
+#define MISC_READ 0x03CC
+/// Sequence controller index.
+#define SC_INDEX 0x03C4
+/// Sequence controller data.
+#define SC_DATA 0x03C5
+/// DAC Mask Register.
+#define PALETTE_MASK 0x03C6
+/// Controls the DAC.
+#define PALETTE_READ 0x03C7
+/// Controls the DAC index.
+#define PALETTE_INDEX 0x03C8
+/// Controls the DAC data.
+#define PALETTE_DATA 0x03C9
+/// Graphics controller index.
+#define GC_INDEX 0x03CE
+/// Graphics controller data.
+#define GC_DATA 0x03CF
+/// CRT controller index.
+#define CRTC_INDEX 0x03D4
+/// CRT controller data.
+#define CRTC_DATA 0x03D5
+/// By reading this port it'll go to the index state.
 #define INPUT_STATUS_READ 0x03DA
 
 /// VGA pointers for drawing operations.
 typedef struct {
     /// Writes a pixel.
-    void (*write_pixel)(unsigned int x, unsigned int y, unsigned char c);
+    void (*write_pixel)(int x, int y, unsigned char c);
     /// Reads a pixel.
-    unsigned (*read_pixel)(unsigned int x, unsigned int y);
+    unsigned (*read_pixel)(int x, int y);
     /// Draws a rectangle.
-    void (*draw_rect)(unsigned int x, unsigned int y, unsigned int wd, unsigned int ht, unsigned char c);
+    void (*draw_rect)(int x, int y, int wd, int ht, unsigned char c);
     /// Fills a rectangle.
-    void (*fill_rect)(unsigned int x, unsigned int y, unsigned int wd, unsigned int ht, unsigned char c);
+    void (*fill_rect)(int x, int y, int wd, int ht, unsigned char c);
 } vga_ops_t;
 
 /// VGA font details.
 typedef struct {
-    unsigned char *font; ///< Pointer to the array holding the shape of each character.
-    unsigned width;      ///< Width of the font.
-    unsigned height;     ///< Height of the font.
+    const unsigned char *font; ///< Pointer to the array holding the shape of each character.
+    unsigned width;            ///< Width of the font.
+    unsigned height;           ///< Height of the font.
 } vga_font_t;
 
 /// VGA driver details.
 typedef struct {
-    int width;      ///< Screen's width.
-    int height;     ///< Screen's height.
-    int bpp;        ///< Bits per pixel (bpp).
-    char *address;  ///< Starting address of the screen.
-    vga_ops_t *ops; ///< Writing operations.
+    int width;        ///< Screen's width.
+    int height;       ///< Screen's height.
+    int bpp;          ///< Bits per pixel (bpp).
+    char *address;    ///< Starting address of the screen.
+    vga_ops_t *ops;   ///< Writing operations.
+    vga_font_t *font; ///< The current font.
 } vga_driver_t;
 
+/// Is VGA enabled.
 static bool_t vga_enable = false;
+/// The stored palette.
 palette_entry_t stored_palette[256];
+/// A buffer for storing a copy of the video memory.
 char vidmem[262144];
-
+/// Current driver.
 static vga_driver_t *driver = NULL;
-static vga_font_t *font;
 
 // ============================================================================
 // == VGA MODEs ===============================================================
-#define MODE_NUM_SEQ_REGS  5
+/// Number of sequencer registers.
+#define MODE_NUM_SEQ_REGS 5
+/// Number of CRTC registers.
 #define MODE_NUM_CRTC_REGS 25
-#define MODE_NUM_GC_REGS   9
-#define MODE_NUM_AC_REGS   (16 + 5)
-#define MODE_NUM_REGS      (1 + MODE_NUM_SEQ_REGS + MODE_NUM_CRTC_REGS + MODE_NUM_GC_REGS + MODE_NUM_AC_REGS) // 61
+/// Number of Graphics Controller (GC) registers.
+#define MODE_NUM_GC_REGS 9
+/// Number of Attribute Controller (AC) registers.
+#define MODE_NUM_AC_REGS (16 + 5)
+/// Total number of registers.
+#define MODE_NUM_REGS (1 + MODE_NUM_SEQ_REGS + MODE_NUM_CRTC_REGS + MODE_NUM_GC_REGS + MODE_NUM_AC_REGS) // 61
 
+/// @brief Returns the video address.
+/// @return pointer to the video.
 static inline char *__get_seg(void)
 {
     unsigned int seg;
@@ -86,6 +127,11 @@ static inline char *__get_seg(void)
     return (char *)seg;
 }
 
+/// @brief Sets the color at the given index.
+/// @param index index of the palette we want to change.
+/// @param r red.
+/// @param g green.
+/// @param b blue.
 void __vga_set_color_map(unsigned int index, unsigned char r, unsigned char g, unsigned char b)
 {
     outportb(PALETTE_MASK, 0xFF);
@@ -95,6 +141,11 @@ void __vga_set_color_map(unsigned int index, unsigned char r, unsigned char g, u
     outportl(PALETTE_DATA, b);
 }
 
+/// @brief Gets the color at the given index.
+/// @param index index of the palette we want to read.
+/// @param r output value for red.
+/// @param g output value for green.
+/// @param b output value for blue.
 void __vga_get_color_map(unsigned int index, unsigned char *r, unsigned char *g, unsigned char *b)
 {
     outportb(PALETTE_MASK, 0xFF);
@@ -104,6 +155,9 @@ void __vga_get_color_map(unsigned int index, unsigned char *r, unsigned char *g,
     *b = inportl(PALETTE_DATA);
 }
 
+/// @brief Saves the current palette in p.
+/// @param p output variable where we save the palette.
+/// @param size the size of the palette.
 static void __save_palette(palette_entry_t *p, size_t size)
 {
     outportb(PALETTE_MASK, 0xFF);
@@ -115,6 +169,9 @@ static void __save_palette(palette_entry_t *p, size_t size)
     }
 }
 
+/// @brief Loads the palette p.
+/// @param p palette we are going to load.
+/// @param size the size of the palette.
 static void __load_palette(palette_entry_t *p, size_t size)
 {
     outportb(PALETTE_MASK, 0xFF);
@@ -126,29 +183,58 @@ static void __load_palette(palette_entry_t *p, size_t size)
     }
 }
 
+/// @brief Sets the current plane.
+/// @param plane the plane to set.
 static inline void __set_plane(unsigned int plane)
 {
+    static unsigned __current_plane = -1u;
     unsigned char pmask;
     plane &= 3;
+    if (__current_plane == plane)
+        return;
+    // Store the current plane.
+    __current_plane = plane;
+    // Compute the plane mask.
     pmask = 1 << plane;
+#if 0
     // Set read plane.
     outportb(GC_INDEX, 4);
     outportb(GC_DATA, plane);
     // Set write plane.
     outportb(SC_INDEX, 2);
     outportb(SC_DATA, pmask);
+#else
+    outports(GC_INDEX, (plane << 8u) | 4u);
+    outports(SC_INDEX, (pmask << 8u) | 2u);
+#endif
 }
 
+/// @brief Returns the current plane.
+/// @return the current plane.
+static inline unsigned __get_plane()
+{
+    // Set read plane.
+    outportb(GC_INDEX, 4);
+    return inportb(GC_DATA);
+}
+
+/// @brief Reads from the video memory.
+/// @param offset where we are going to read.
+/// @return the value we read.
 static unsigned char __read_byte(unsigned int offset)
 {
     return (unsigned char)(*(driver->address + offset));
 }
 
+/// @brief Writes onto the video memory.
+/// @param offset where we are going to write.
 static void __write_byte(unsigned int offset, unsigned char value)
 {
     *(char *)(driver->address + offset) = value;
 }
 
+/// @brief Sets the given mode.
+/// @param vga_mode the new mode we set.
 static void __set_mode(vga_mode_t *vga_mode)
 {
     unsigned char *ptr = &vga_mode->misc;
@@ -201,6 +287,8 @@ static void __set_mode(vga_mode_t *vga_mode)
     outportb(AC_INDEX, 0x20);
 }
 
+/// @brief Reads the VGA registers.
+/// @param vga_mode the current VGA mode.
 static void __read_registers(vga_mode_t *vga_mode)
 {
     unsigned char *ptr = &vga_mode->misc;
@@ -243,6 +331,9 @@ static void __read_registers(vga_mode_t *vga_mode)
     outportb(AC_INDEX, 0x20);
 }
 
+/// @brief Writes the font.
+/// @param buf buffer where the font resides.
+/// @param font_height the height of the font.
 static void __write_font(unsigned char *buf, unsigned font_height)
 {
     unsigned char seq2, seq4, gc4, gc5, gc6;
@@ -291,81 +382,10 @@ assume: chain-4 addressing already off */
     outportb(GC_DATA, gc6);
 }
 
-// ============================================================================
-// == WRITE PIXEL FUNCTIONS ===================================================
-
-static void __write_pixel_1(unsigned int x, unsigned int y, unsigned char c)
-{
-    unsigned wd_in_bytes;
-    unsigned off, mask;
-
-    c           = (c & 1) * 0xFF;
-    wd_in_bytes = driver->width / 8;
-    off         = wd_in_bytes * y + x / 8;
-    x           = (x & 7) * 1;
-    mask        = 0x80 >> x;
-    __write_byte(off, (__read_byte(off) & ~mask) | (c & mask));
-}
-
-static void __write_pixel_2(unsigned int x, unsigned int y, unsigned char c)
-{
-    unsigned wd_in_bytes;
-    unsigned off, mask;
-
-    c           = (c & 3) * 0x55;
-    wd_in_bytes = driver->width / 4;
-    off         = wd_in_bytes * y + x / 4;
-    x           = (x & 3) * 2;
-    mask        = 0xC0 >> x;
-    __write_byte(off, (__read_byte(off) & ~mask) | (c & mask));
-}
-
-static void __write_pixel_4(unsigned int x, unsigned int y, unsigned char color)
-{
-    int rotation = 0;
-    int16_t t;
-    switch (rotation) {
-    case 1:
-        t = x;
-        x = driver->width - 1 - y;
-        y = t;
-        break;
-    case 2:
-        x = driver->width - 1 - x;
-        y = driver->height - 1 - y;
-        break;
-    case 3:
-        t = x;
-        x = y;
-        y = driver->height - 1 - t;
-        break;
-    }
-
-    unsigned wd_in_bytes, off, mask, p, pmask;
-
-    wd_in_bytes = driver->width / 8;
-    off         = wd_in_bytes * y + x / 8;
-    x           = (x & 7) * 1;
-    mask        = 0x80 >> x;
-    pmask       = 1;
-    for (p = 0; p < 4; p++) {
-        __set_plane(p);
-        if (pmask & color)
-            __write_byte(off, __read_byte(off) | mask);
-        else
-            __write_byte(off, __read_byte(off) & ~mask);
-        pmask <<= 1;
-    }
-}
-
-static inline void __write_pixel_8(unsigned int x, unsigned int y, unsigned char color)
-{
-    __set_plane(x);
-    __write_byte(((y * driver->width) + x) / 4, color);
-    // (y << 6) + (y << 4) + (x >> 2)
-}
-
-unsigned int reverseBits(char num)
+/// @brief Reverses the bits of the given number.
+/// @param num the number of which we want to reverse the bits.
+/// @return reversed bits.
+static inline unsigned int __reverse_bits(char num)
 {
     unsigned int NO_OF_BITS  = sizeof(num) * 8;
     unsigned int reverse_num = 0;
@@ -376,6 +396,120 @@ unsigned int reverseBits(char num)
     }
     return reverse_num;
 }
+
+// ============================================================================
+// = WRITE/READ PIXEL FUNCTIONS (and support)
+// ============================================================================
+
+/// @brief Writes a pixel.
+/// @param x x coordinates.
+/// @param y y coordinates.
+/// @param c color.
+static inline void __write_pixel_1(int x, int y, unsigned char c)
+{
+    int off, mask;
+    c    = (c & 1) * 0xFF;
+    off  = (driver->width / 8) * y + x / 8;
+    x    = (x & 7) * 1;
+    mask = 0x80 >> x;
+    __write_byte(off, (__read_byte(off) & ~mask) | (c & mask));
+}
+
+/// @brief Reads a pixel.
+/// @param x x coordinates.
+/// @param y y coordinates.
+/// @return the pixel value.
+static inline unsigned __read_pixel_1(unsigned x, unsigned y)
+{
+    unsigned off, mask;
+    off  = (driver->width / 8) * y + x / 8;
+    x    = (x & 7) * 1;
+    mask = 0x80 >> x;
+    return __read_byte(off) & mask;
+}
+
+/// @brief Writes a pixel.
+/// @param x x coordinates.
+/// @param y y coordinates.
+/// @param c color.
+static inline void __write_pixel_2(int x, int y, unsigned char c)
+{
+    unsigned off, mask;
+    c    = (c & 3) * 0x55;
+    off  = (driver->width / 4) * y + x / 4;
+    x    = (x & 3) * 2;
+    mask = 0xC0 >> x;
+    __write_byte(off, (__read_byte(off) & ~mask) | (c & mask));
+}
+
+/// @brief Reads a pixel.
+/// @param x x coordinates.
+/// @param y y coordinates.
+/// @return the pixel value.
+static inline unsigned __read_pixel_2(unsigned x, unsigned y)
+{
+    unsigned off, mask;
+    off  = (driver->width / 4) * y + x / 4;
+    x    = (x & 3) * 2;
+    mask = 0xC0 >> x;
+    return __read_byte(off) & mask;
+}
+
+/// @brief Writes a pixel.
+/// @param x x coordinates.
+/// @param y y coordinates.
+/// @param c color.
+static inline void __write_pixel_4(int x, int y, unsigned char color)
+{
+    unsigned off, mask, plane, pmask;
+    off   = (driver->width / 8) * y + x / 8;
+    x     = (x & 7) * 1;
+    mask  = 0x80 >> x;
+    pmask = 1;
+    for (plane = 0; plane < 4; ++plane) {
+        __set_plane(plane);
+        if (pmask & color)
+            __write_byte(off, __read_byte(off) | mask);
+        else
+            __write_byte(off, __read_byte(off) & ~mask);
+        pmask <<= 1;
+    }
+}
+
+/// @brief Reads a pixel.
+/// @param x x coordinates.
+/// @param y y coordinates.
+/// @return the pixel value.
+static inline unsigned __read_pixel_4(int x, int y)
+{
+    int off;
+    off = (driver->width / 8) * y + x / 8;
+    return __read_byte(off);
+}
+
+/// @brief Writes a pixel.
+/// @param x x coordinates.
+/// @param y y coordinates.
+/// @param c color.
+static inline void __write_pixel_8(int x, int y, unsigned char color)
+{
+    __set_plane(x);
+    __write_byte(((y * driver->width) + x) / 4, color);
+}
+
+/// @brief Reads a pixel.
+/// @param x x coordinates.
+/// @param y y coordinates.
+/// @return the pixel value.
+static inline unsigned __read_pixel_8(int x, int y)
+{
+    __set_plane(x);
+    return __read_byte(((y * driver->width) + x) / 4);
+}
+
+// ============================================================================
+// = VGA PUBLIC FUNCTIONS
+// ============================================================================
 
 int vga_is_enabled()
 {
@@ -396,22 +530,17 @@ int vga_height()
     return 0;
 }
 
-void vga_setfont(const vga_font_t *__font)
+void vga_draw_pixel(int x, int y, unsigned char color)
 {
-    font->font   = __font->font;
-    font->width  = __font->width;
-    font->height = __font->height;
+    driver->ops->write_pixel(x, y, color);
 }
 
-void vga_clear_screen()
+unsigned int vga_read_pixel(int x, int y)
 {
-    for (int p = 0; p < 4; p++) {
-        __set_plane(p);
-        memset(driver->address, 0, 64 * 1024);
-    }
+    return driver->ops->read_pixel(x, y);
 }
 
-void vga_draw_char(unsigned int x, unsigned int y, unsigned char c, unsigned char color)
+void vga_draw_char(int x, int y, unsigned char c, unsigned char color)
 {
     static unsigned mask[] = {
         1u << 0u, //            1
@@ -424,15 +553,15 @@ void vga_draw_char(unsigned int x, unsigned int y, unsigned char c, unsigned cha
         1u << 7u, //          128
         1u << 8u, //          256
     };
-    unsigned char *glyph = font->font + c * font->height;
-    for (unsigned cy = 0; cy < font->height; ++cy) {
-        for (unsigned cx = 0; cx < font->width; ++cx) {
-            driver->ops->write_pixel(x + (font->width - cx), y + cy, glyph[cy] & mask[cx] ? color : 0x00u);
+    const unsigned char *glyph = driver->font->font + c * driver->font->height;
+    for (unsigned cy = 0; cy < driver->font->height; ++cy) {
+        for (unsigned cx = 0; cx < driver->font->width; ++cx) {
+            vga_draw_pixel(x + (driver->font->width - cx), y + cy, glyph[cy] & mask[cx] ? color : 0x00u);
         }
     }
 }
 
-void vga_draw_string(int x, int y, char *str, unsigned char color)
+void vga_draw_string(int x, int y, const char *str, unsigned char color)
 {
     char i = 0;
     while (*str != '\0') {
@@ -442,76 +571,56 @@ void vga_draw_string(int x, int y, char *str, unsigned char color)
     }
 }
 
-void vga_draw_line(unsigned int x0, unsigned int y0, unsigned int x1, unsigned int y1, unsigned char color)
+void vga_draw_line(int x0, int y0, int x1, int y1, unsigned char color)
 {
-    bool_t steep = abs(y1 - y0) > abs(x1 - x0);
-    int tmp      = 0;
-    if (steep) {
-        tmp = x0;
-        x0  = y0;
-        y0  = tmp;
-
-        tmp = x1;
-        x1  = y1;
-        y1  = tmp;
-    }
-    if (x0 > x1) {
-        tmp = x0;
-        x0  = x1;
-        x1  = tmp;
-
-        tmp = y0;
-        y0  = y1;
-        y1  = tmp;
-    }
-    int deltax = x1 - x0;
-    int deltay = abs(y1 - y0);
-    int error  = deltax / 2;
-    int ystep;
-    int y = y0;
-    if (y0 < y1)
-        ystep = 1;
-    else
-        ystep = -1;
-    for (int x = x0; x < x1; x++) {
-        if (steep)
-            driver->ops->write_pixel(y, x, color);
-        else
-            driver->ops->write_pixel(x, y, color);
-        error = error - deltay;
-        if (error < 0) {
-            y     = y + ystep;
-            error = error + deltax;
+    int dx = abs(x1 - x0), sx = sign(x1 - x0);
+    int dy = abs(y1 - y0), sy = sign(y1 - y0);
+    int err = (dx > dy ? dx : -dy) / 2;
+    while (true) {
+        vga_draw_pixel(x0, y0, color);
+        if ((x0 == x1) && (y0 == y1))
+            break;
+        if (dx > dy) {
+            x0 += sx;
+            err -= dy;
+            if (err < 0)
+                err += dx;
+            y0 += sy;
+        } else {
+            y0 += sy;
+            err -= dx;
+            if (err < 0)
+                err += dy;
+            x0 += sx;
         }
     }
 }
 
-void vga_draw_rectangle(unsigned int sx, unsigned int sy, unsigned int ex, unsigned int ey, unsigned char fill)
+void vga_draw_rectangle(int sx, int sy, int w, int h, unsigned char color)
 {
-    vga_draw_line(sx, sy, ex, sy, fill);
-    vga_draw_line(sx, sy, sx, ey, fill);
-    vga_draw_line(sx, ey, ex, ey, fill);
-    vga_draw_line(ex, ey, ex, sy, fill);
+    vga_draw_line(sx, sy, sx + w, sy, color);
+    vga_draw_line(sx, sy, sx, sy + h, color);
+    vga_draw_line(sx, sy + h, sx + w, sy + h, color);
+    vga_draw_line(sx + w, sy, sx + w, sy + h, color);
 }
 
-void vga_draw_circle(unsigned int xc, unsigned int yc, unsigned int r, unsigned char fill)
+void vga_draw_circle(int xc, int yc, int r, unsigned char color)
 {
-    unsigned int x = 0;
-    unsigned int y = r;
-    unsigned int p = 3 - 2 * r;
+    int x = 0;
+    int y = r;
+    int p = 3 - 2 * r;
     if (!r)
         return;
-
     while (y >= x) // only formulate 1/8 of circle
     {
-        driver->ops->write_pixel(xc - x, yc - y, fill); //upper left left
-        driver->ops->write_pixel(xc - y, yc - x, fill); //upper upper left
-        driver->ops->write_pixel(xc + y, yc - x, fill); //upper upper right
-        driver->ops->write_pixel(xc + x, yc - y, fill); //upper right right
-        driver->ops->write_pixel(xc - x, yc + y, fill); //lower left left
-        driver->ops->write_pixel(xc - y, yc + x, fill); //lower lower left
-        driver->ops->write_pixel(xc + y, yc + x, fill); //lower lower right
-        driver->ops->write_pixel(xc + x, yc + y, fill); //lower right right
+        vga_draw_pixel(xc - x, yc - y, color); //upper left left
+        vga_draw_pixel(xc - y, yc - x, color); //upper upper left
+        vga_draw_pixel(xc + y, yc - x, color); //upper upper right
+        vga_draw_pixel(xc + x, yc - y, color); //upper right right
+        vga_draw_pixel(xc - x, yc + y, color); //lower left left
+        vga_draw_pixel(xc - y, yc + x, color); //lower lower left
+        vga_draw_pixel(xc + y, yc + x, color); //lower lower right
+        vga_draw_pixel(xc + x, yc + y, color); //lower right right
         if (p < 0)
             p += 4 * x++ + 6;
         else
@@ -519,44 +628,68 @@ void vga_draw_circle(unsigned int xc, unsigned int yc, unsigned int r, unsigned 
     }
 }
 
-void vga_draw_triangle(unsigned int x1, unsigned int y1, unsigned int x2, unsigned int y2, unsigned int x3, unsigned int y3, unsigned char fill)
+void vga_draw_triangle(int x1, int y1, int x2, int y2, int x3, int y3, unsigned char color)
 {
-    vga_draw_line(x1, y1, x2, y2, fill);
-    vga_draw_line(x2, y2, x3, y3, fill);
-    vga_draw_line(x3, y3, x1, y1, fill);
+    vga_draw_line(x1, y1, x2, y2, color);
+    vga_draw_line(x2, y2, x3, y3, color);
+    vga_draw_line(x3, y3, x1, y1, color);
 }
 
-static void __test_vga(void)
+void vga_run_test(void)
 {
     vga_clear_screen();
-    vga_draw_rectangle(1, 1, driver->width - 1, driver->height - 1, 3);
-    for (unsigned i = 1; i < driver->height - 1; i++) {
-        driver->ops->write_pixel((driver->width - driver->height) / 2 + i, i, 1);
-        driver->ops->write_pixel((driver->height + driver->width) / 2 - i, i, 1);
-    }
+    //pr_warning("%d\n", vga_read_pixel(10, 10));
+    //vga_draw_pixel(10, 10, 2);
+    //pr_warning("%d\n", vga_read_pixel(10, 10));
+    //vga_draw_pixel(10, 10, 3);
+    //pr_warning("%d\n", vga_read_pixel(10, 10));
+    //vga_draw_pixel(10, 10, 4);
+    //pr_warning("%d\n", vga_read_pixel(10, 10));
+    //vga_draw_pixel(10, 10, 5);
+    //pr_warning("%d\n", vga_read_pixel(10, 10));
+    //for (unsigned r = 0; r <= min(vga_width() / 2, vga_height() / 2); r += 4)
+    //    vga_draw_circle(vga_width() / 2, vga_height() / 2, r, 2);
+    //for (unsigned y = 0; y < vga_height(); y += 2)
+    //    vga_draw_line(0, y, vga_width(), y, 3);
+    //for (unsigned dim = 0; dim < min(vga_width(), vga_height()); dim += 4)
+    //    vga_draw_rectangle((vga_width() / 2) - (dim / 2), (vga_height() / 2) - (dim / 2), dim, dim, 4);
+    //vga_draw_triangle(0,  50, 50, 0, 100, 50, 2);
+    //vga_draw_string(driver->font->width, driver->font->height * 2, "Hello World!", 1);
 }
 
 // == MODEs and DRIVERs =======================================================
 
 static vga_ops_t ops_720_480_16 = {
     .write_pixel = __write_pixel_4,
-    .read_pixel  = NULL,
+    .read_pixel  = __read_pixel_4,
     .draw_rect   = NULL,
     .fill_rect   = NULL,
 };
 
 static vga_ops_t ops_640_480_16 = {
     .write_pixel = __write_pixel_4,
-    .read_pixel  = NULL,
+    .read_pixel  = __read_pixel_4,
     .draw_rect   = NULL,
     .fill_rect   = NULL,
 };
 
 static vga_ops_t ops_320_200_256 = {
     .write_pixel = __write_pixel_8,
-    .read_pixel  = NULL,
+    .read_pixel  = __read_pixel_8,
     .draw_rect   = NULL,
     .fill_rect   = NULL,
+};
+
+static vga_font_t font_4x6 = {
+    .font   = arr_4x6_font,
+    .width  = 4,
+    .height = 6,
+};
+
+static vga_font_t font_5x6 = {
+    .font   = arr_5x6_font,
+    .width  = 5,
+    .height = 6,
 };
 
 static vga_font_t font_8x8 = {
@@ -565,10 +698,10 @@ static vga_font_t font_8x8 = {
     .height = 8,
 };
 
-static vga_font_t font_8x8_basic = {
-    .font   = arr_8x8_basic_font,
+static vga_font_t font_8x14 = {
+    .font   = arr_8x14_font,
     .width  = 8,
-    .height = 8,
+    .height = 14,
 };
 
 static vga_font_t font_8x16 = {
@@ -605,50 +738,47 @@ static vga_driver_t driver_320_200_256 = {
 
 void vga_initialize()
 {
-    // Initialize the desired mode.
-#if defined(VGA_MODE_320_200_256)
     // Save the current palette.
     __save_palette(stored_palette, 256);
+
+    // Initialize the desired mode.
+
+#if defined(VGA_MODE_320_200_256) // 40x25
     // Write the registers.
     __set_mode(&_mode_320_200_256);
     // Initialize the mode.
     driver = &driver_320_200_256;
     // Load the color palette.
     __load_palette(ansi_256_palette, 256);
-#elif defined(VGA_MODE_640_480_16)
-    // Save the current palette.
-    __save_palette(stored_palette, 256);
+    // Set the font.
+    driver->font = &font_5x6;
+#elif defined(VGA_MODE_640_480_16) // 80x60
     // Write the registers.
     __set_mode(&_mode_640_480_16);
     // Initialize the mode.
     driver = &driver_640_480_16;
     // Load the color palette.
     __load_palette(ansi_16_palette, 16);
-#elif defined(VGA_MODE_720_480_16)
-    // Save the current palette.
-    __save_palette(stored_palette, 256);
+    // Set the font.
+    driver->font = &font_8x14;
+#elif defined(VGA_MODE_720_480_16) // 90x60
     // Write the registers.
     __set_mode(&_mode_720_480_16);
     // Initialize the mode.
     driver = &driver_720_480_16;
     // Load the color palette.
     __load_palette(ansi_16_palette, 16);
-#else // VGA_TEXT_MODE
-    __set_mode(&_mode_80_25_text);
+    // Set the font.
+    driver->font = &font_8x16;
+#else                              // VGA_TEXT_MODE
     return;
 #endif
     // Set the address.
     driver->address = __get_seg();
-
-    // Set the font.
-    vga_setfont(&font_8x8);
-
     // Save the content of the memory.
     memcpy(vidmem, driver->address, 0x4000);
-
     // Clears the screen.
     vga_clear_screen();
-
     // Set the vga as enabled.
     vga_enable = true;
 }
@@ -659,4 +789,105 @@ void vga_finalize()
     __set_mode(&_mode_80_25_text);
     __load_palette(stored_palette, 256);
     vga_enable = false;
+}
+
+static int _x               = 0;
+static int _y               = 0;
+static unsigned char _color = 7;
+static int _cursor_state    = 0;
+
+inline static void __vga_clear_cursor()
+{
+    for (unsigned cy = 0; cy < driver->font->height; ++cy)
+        for (unsigned cx = 0; cx < driver->font->width; ++cx)
+            vga_draw_pixel(_x + cx, _y + cy, 0);
+}
+
+inline static void __vga_draw_cursor()
+{
+    unsigned char color = (_cursor_state = (_cursor_state == 0)) * _color;
+    for (unsigned cy = 0; cy < driver->font->height; ++cy)
+        for (unsigned cx = 0; cx < driver->font->width; ++cx)
+            vga_draw_pixel(_x + cx, _y + cy, color);
+}
+
+void vga_putc(int c)
+{
+    if (_cursor_state)
+        __vga_clear_cursor();
+    // If the character is '\n' go the new line.
+    if (c == '\n') {
+        vga_new_line();
+    } else if ((c >= 0x20) && (c <= 0x7E)) {
+        vga_draw_char(_x, _y, c, _color);
+        if ((_x += driver->font->width) >= driver->width)
+            vga_new_line();
+    } else {
+        return;
+    }
+}
+
+void vga_puts(const char *str)
+{
+    while ((*str) != 0) {
+        vga_putc((*str++));
+    }
+}
+
+void vga_move_cursor(unsigned int x, unsigned int y)
+{
+    _x = x * driver->font->width;
+    _y = y * driver->font->height;
+    __vga_draw_cursor();
+}
+
+void vga_get_cursor_position(unsigned int *x, unsigned int *y)
+{
+    if (x)
+        *x = _x / driver->font->width;
+    if (y)
+        *y = _y / driver->font->height;
+}
+
+void vga_get_screen_size(unsigned int *width, unsigned int *height)
+{
+    if (width)
+        *width = driver->width / driver->font->width;
+    if (height)
+        *height = driver->height / driver->font->height;
+}
+
+void vga_clear_screen()
+{
+    unsigned original_plane = __get_plane();
+    for (unsigned plane = 0; plane < 4; ++plane) {
+        __set_plane(plane);
+        memset(driver->address, 0, 64 * 1024);
+    }
+    __set_plane(original_plane);
+    _x = 0, _y = 0;
+}
+
+void vga_new_line()
+{
+    // Just the 5x6 font needs some space.
+    const unsigned int vertical_space = (driver->font == &font_5x6);
+    // Go back at the beginning of the line.
+    _x = 0;
+    if ((_y += driver->font->height + vertical_space) >= (driver->height - driver->font->height)) {
+        _y = 0;
+        vga_clear_screen();
+    }
+}
+
+void vga_update()
+{
+    if ((timer_get_ticks() % (TICKS_PER_SECOND / 2)) == 0) {
+        __vga_draw_cursor();
+    }
+}
+
+void vga_set_color(unsigned int color)
+{
+    _color = color;
 }

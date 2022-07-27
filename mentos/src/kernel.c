@@ -1,8 +1,14 @@
-///                MentOS, The Mentoring Operating system project
 /// @file   kernel.c
 /// @brief  Kernel main function.
-/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
+
+// Include the kernel log levels.
+#include "sys/kernel_levels.h"
+/// Change the header.
+#define __DEBUG_HEADER__ "[KERNEL]"
+/// Set the log level.
+#define __DEBUG_LEVEL__ LOGLEVEL_NOTICE
 
 #include "io/proc_modules.h"
 #include "mem/vmem_map.h"
@@ -19,9 +25,11 @@
 #include "hardware/pic8259.h"
 #include "io/debug.h"
 #include "drivers/fdc.h"
-#include "fs/initrd.h"
+#include "fs/ext2.h"
 #include "klib/irqflags.h"
 #include "drivers/keyboard/keyboard.h"
+#include "drivers/keyboard/keymap.h"
+#include "drivers/ps2.h"
 #include "process/scheduler.h"
 #include "hardware/timer.h"
 #include "fs/vfs.h"
@@ -32,6 +40,8 @@
 #include "stdio.h"
 #include "assert.h"
 #include "io/vga/vga.h"
+#include "string.h"
+#include "fcntl.h"
 
 /// Describe start address of grub multiboot modules.
 char *module_start[MAX_MODULES];
@@ -75,15 +85,21 @@ boot_info_t boot_info;
 /// @brief Prints [OK] at the current row and column 60.
 static inline void print_ok()
 {
-    video_move_cursor(75, video_get_y());
-    video_puts("[" FG_GREEN_BRIGHT "OK" FG_WHITE "]\n");
+    unsigned y, width;
+    video_get_cursor_position(NULL, &y);
+    video_get_screen_size(&width, NULL);
+    video_move_cursor(width - 5, y);
+    video_puts("[OK]\n");
 }
 
 /// @brief Prints [FAIL] at the current row and column 60.
 static inline void print_fail()
 {
-    video_move_cursor(75, video_get_y());
-    video_puts("[" FG_RED_BRIGHT "FAIL" FG_WHITE "]\n");
+    unsigned y, width;
+    video_get_cursor_position(NULL, &y);
+    video_get_screen_size(&width, NULL);
+    video_move_cursor(width - 7, y);
+    video_puts("[FAIL]\n");
 }
 
 /// @brief Entry point of the kernel.
@@ -103,6 +119,12 @@ int kmain(boot_info_t *boot_informations)
     initial_esp = boot_info.stack_base;
     // Dump the multiboot structure.
     dump_multiboot(boot_info.multiboot_header);
+
+    //==========================================================================
+    // First, disable the keyboard, otherwise the PS/2 initialization does not
+    // work properly.
+    keyboard_disable();
+
     //==========================================================================
     pr_notice("Initialize the video...\n");
     vga_initialize();
@@ -122,7 +144,6 @@ int kmain(boot_info_t *boot_informations)
         return 1;
     }
     print_ok();
-    pr_debug("End of modules: 0x%09p\n", get_address_after_modules());
 
     //==========================================================================
     pr_notice("Initialize physical memory manager...\n");
@@ -212,18 +233,32 @@ int kmain(boot_info_t *boot_informations)
     print_ok();
 
     //==========================================================================
-    pr_notice("    Initialize 'initrd'...\n");
-    printf("    Initialize 'initrd'...");
-    if (initrd_init_module()) {
-        print_fail();
-        pr_emerg("Failed to register `initrd`!\n");
+    // Scan for ata devices.
+    pr_notice("Initialize ATA devices...\n");
+    printf("Initialize ATA devices...");
+    if (ata_initialize()) {
+        pr_emerg("Failed to initialize ATA devices!\n");
         return 1;
     }
     print_ok();
-    if (do_mount("initrd", "/", "/dev/ram0")) {
-        pr_emerg("Failed to mount root `/`!\n");
+
+    //==========================================================================
+    pr_notice("Initialize EXT2 filesystem...\n");
+    printf("Initialize EXT2 filesystem...");
+    if (ext2_initialize()) {
+        pr_emerg("Failed to initialize EXT2 filesystem!\n");
         return 1;
     }
+    print_ok();
+
+    //==========================================================================
+    pr_notice("Mount EXT2 filesystem...\n");
+    printf("Mount EXT2 filesystem...");
+    if (do_mount("ext2", "/", "/dev/hda")) {
+        pr_emerg("Failed to mount EXT2 filesystem...\n");
+        return 1;
+    }
+    print_ok();
 
     //==========================================================================
     pr_notice("    Initialize 'procfs'...\n");
@@ -234,10 +269,15 @@ int kmain(boot_info_t *boot_informations)
         return 1;
     }
     print_ok();
+
+    //==========================================================================
+    pr_notice("    Mounting 'procfs'...\n");
+    printf("    Mounting 'procfs'...");
     if (do_mount("procfs", "/proc", NULL)) {
         pr_emerg("Failed to mount procfs at `/proc`!\n");
         return 1;
     }
+    print_ok();
 
     //==========================================================================
     pr_notice("Initialize video procfs file...\n");
@@ -260,18 +300,26 @@ int kmain(boot_info_t *boot_informations)
     print_ok();
 
     //==========================================================================
-#if 0
-     // For debugging, show the list of PCI devices.
-     pci_debug_scan();
-     // Scan for ata devices.
-     ata_initialize();
-#endif
+    pr_notice("Setting up PS/2 driver...\n");
+    printf("Setting up PS/2 driver...");
+    if (ps2_initialize()) {
+        print_fail();
+        pr_emerg("Failed to initialize proc system entries!\n");
+        return 1;
+    }
+    print_ok();
 
     //==========================================================================
     pr_notice("Setting up keyboard driver...\n");
     printf("Setting up keyboard driver...");
     keyboard_initialize();
     print_ok();
+    // Set the keymap type.
+#ifdef USE_KEYMAP_US
+    set_keymap_type(KEYMAP_US);
+#else
+    set_keymap_type(KEYMAP_IT);
+#endif
 
     //==========================================================================
 #if 0

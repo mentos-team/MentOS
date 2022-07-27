@@ -1,10 +1,16 @@
-///                MentOS, The Mentoring Operating system project
 /// @file   rtc.c
 /// @brief  Real Time Clock (RTC) driver.
-/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 /// @addtogroup rtc
 /// @{
+
+// Include the kernel log levels.
+#include "sys/kernel_levels.h"
+/// Change the header.
+#define __DEBUG_HEADER__ "[RTC   ]"
+/// Set the log level.
+#define __DEBUG_LEVEL__ LOGLEVEL_NOTICE
 
 #include "drivers/rtc.h"
 
@@ -91,12 +97,11 @@ static inline void rtc_read_datetime()
     }
 }
 
-static inline void rtc_handler_isr(pt_regs *f)
+static inline void rtc_update_datetime()
 {
     static unsigned int first_update = 1;
     // Wait until rtc is not updating.
-    while (is_updating_rtc())
-        ;
+    while (is_updating_rtc()) {}
     // Read the values.
     rtc_read_datetime();
     if (first_update) {
@@ -104,13 +109,17 @@ static inline void rtc_handler_isr(pt_regs *f)
             // Save the previous global time.
             previous_global_time = global_time;
             // Wait until rtc is not updating.
-            while (is_updating_rtc())
-                ;
+            while (is_updating_rtc()) {}
             // Read the values.
             rtc_read_datetime();
         } while (!rtc_are_different(&previous_global_time, &global_time));
         first_update = 0;
     }
+}
+
+static inline void rtc_handler_isr(pt_regs *f)
+{
+    rtc_update_datetime();
 }
 
 void gettime(tm_t *time)
@@ -137,6 +146,8 @@ int rtc_initialize()
     irq_install_handler(IRQ_REAL_TIME_CLOCK, rtc_handler_isr, "Real Time Clock (RTC)");
     // Enable the IRQ.
     pic8259_irq_enable(IRQ_REAL_TIME_CLOCK);
+    // Wait until rtc is ready.
+    rtc_update_datetime();
     return 0;
 }
 

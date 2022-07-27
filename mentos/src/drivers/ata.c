@@ -1,331 +1,813 @@
-///                MentOS, The Mentoring Operating system project
 /// @file ata.c
-/// @brief
-/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
+/// @brief Advanced Technology Attachment (ATA) and Advanced Technology Attachment Packet Interface (ATAPI) drivers.
+/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 /// @addtogroup ata
 /// @{
 
+// Include the kernel log levels.
+#include "sys/kernel_levels.h"
+/// Change the header.
+#define __DEBUG_HEADER__ "[ATA   ]"
+/// Set the log level.
+#define __DEBUG_LEVEL__ LOGLEVEL_NOTICE
+
 #include "drivers/ata.h"
 
-#include "klib/spinlock.h"
-#include "fcntl.h"
-#include "mem/vmem_map.h"
-#include "klib/list.h"
-#include "stdio.h"
 #include "descriptor_tables/isr.h"
-#include "fs/vfs.h"
-#include "devices/pci.h"
-#include "io/debug.h"
-#include "mem/kheap.h"
-#include "assert.h"
-#include "string.h"
-#include "kernel.h"
 #include "hardware/pic8259.h"
+#include "klib/spinlock.h"
+#include "process/wait.h"
+#include "system/panic.h"
+#include "devices/pci.h"
 #include "io/port_io.h"
-#include "time.h"
+#include "sys/errno.h"
+#include "mem/kheap.h"
+#include "io/debug.h"
+#include "string.h"
+#include "fs/vfs.h"
+#include "fcntl.h"
+#include "stdio.h"
 
-/// @name ATA Status registers
-/// @{
-#define ATA_STAT_BUSY  0x80 ///< Device Busy
-#define ATA_STAT_READY 0x40 ///< Device Ready
-#define ATA_STAT_FAULT 0x20 ///< Device Fault
-#define ATA_STAT_SEEK  0x10 ///< Device Seek Complete
-#define ATA_STAT_DRQ   0x08 ///< Data Request (ready)
-#define ATA_STAT_CORR  0x04 ///< Corrected Data Error
-#define ATA_STAT_INDEX 0x02 ///< Vendor specific
-#define ATA_STAT_ERR   0x01 ///< Error
-/// @}
+/// @brief ATA Error Bits
+typedef enum {
+    ata_err_amnf  = 0, ///< Address mark not found.
+    ata_err_tkznf = 1, ///< Track zero not found.
+    ata_err_abrt  = 2, ///< Aborted command.
+    ata_err_mcr   = 3, ///< Media change request.
+    ata_err_idnf  = 4, ///< ID not found.
+    ata_err_mc    = 5, ///< Media changed.
+    ata_err_unc   = 6, ///< Uncorrectable data error.
+    ata_err_bbk   = 7, ///< Bad Block detected.
+} ata_error_t;
 
-/// @name ATA Commands
-/// @{
-#define ATA_CMD_READ    0x20 ///< Read Sectors (with retries)
-#define ATA_CMD_READN   0x21 ///< Read Sectors (no  retries)
-#define ATA_CMD_WRITE   0x30 ///< Write Sectores (with retries)
-#define ATA_CMD_WRITEN  0x31 ///< Write Sectors  (no  retries)
-#define ATA_CMD_VRFY    0x40 ///< Read Verify  (with retries)
-#define ATA_CMD_VRFYN   0x41 ///< Read verify  (no  retries)
-#define ATA_CMD_SEEK    0x70 ///< Seek
-#define ATA_CMD_DIAG    0x90 ///< Execute Device Diagnostic
-#define ATA_CMD_INIT    0x91 ///< Initialize Device Parameters
-#define ATA_CMD_RD_MULT 0xC4 ///< Read Multiple
-#define ATA_CMD_WR_MULT 0xC5 ///< Write Multiple
-#define ATA_CMD_SETMULT 0xC6 ///< Set Multiple Mode
-#define ATA_CMD_RD_DMA  0xC8 ///< Read DMA (with retries)
-#define ATA_CMD_RD_DMAN 0xC9 ///< Read DMS (no  retries)
-#define ATA_CMD_WR_DMA  0xCA ///< Write DMA (with retries)
-#define ATA_CMD_WR_DMAN 0xCB ///< Write DMA (no  retires)
-#define ATA_CMD_IDENT   0xEC ///< Identify Device
-#define ATA_CMD_CH_FLSH 0xE7 ///< Cache flush.
-#define ATA_CMD_SETF    0xEF ///< Set Features
-#define ATA_CMD_CHK_PWR 0xE5 ///< Check Power Mode
-/// @}
+/// @brief ATA Status Bits
+typedef enum {
+    ata_status_err  = 0, ///< Indicates an error occurred.
+    ata_status_idx  = 1, ///< Index. Always set to zero.
+    ata_status_corr = 2, ///< Corrected data. Always set to zero.
+    ata_status_drq  = 3, ///< Set when the drive has PIO data to transfer, or is ready to accept PIO data.
+    ata_status_srv  = 4, ///< Overlapped Mode Service Request.
+    ata_status_df   = 5, ///< Drive Fault Error (does not set ERR).
+    ata_status_rdy  = 6, ///< Bit is clear when drive is spun down, or after an error. Set otherwise.
+    ata_status_bsy  = 7, ///< The drive is preparing to send/receive data (wait for it to clear).
+} ata_status_t;
 
-/// @name ATAPI Commands
-/// @{
-#define ATAPI_CMD_PACKET  0xA0 ///<
-#define ATAPI_CMD_ID_PCKT 0xA1 ///<
-/// @}
+/// @brief ATA Control Bits
+typedef enum {
+    ata_control_zero = 0x00, ///< Always set to zero.
+    ata_control_nien = 0x02, ///< Set this to stop the current device from sending interrupts.
+    ata_control_srst = 0x04, ///< Set, then clear (after 5us), this to do a "Software Reset" on all ATA drives on a bus, if one is misbehaving.
+    ata_control_hob  = 0x80, ///< Set this to read back the High Order Byte (HOB) of the last LBA48 value sent to an IO port.
+} ata_control_t;
 
-/// @name ATA Identification Space Bits
-/// @brief Definitions used to read information from the identification space.
-/// @{
-#define ATA_IDENT_DEVICETYPE   0   ///<
-#define ATA_IDENT_CYLINDERS    2   ///<
-#define ATA_IDENT_HEADS        6   ///<
-#define ATA_IDENT_SECTORS      12  ///<
-#define ATA_IDENT_SERIAL       20  ///<
-#define ATA_IDENT_MODEL        54  ///<
-#define ATA_IDENT_CAPABILITIES 98  ///<
-#define ATA_IDENT_FIELDVALID   106 ///<
-#define ATA_IDENT_MAX_LBA      120 ///<
-#define ATA_IDENT_COMMANDSETS  164 ///<
-#define ATA_IDENT_MAX_LBA_EXT  200 ///<
-/// @}
+/// @brief Types of ATA devices.
+typedef enum {
+    ata_dev_type_unknown,   ///< Device type not recognized.
+    ata_dev_type_no_device, ///< No device detected.
+    ata_dev_type_pata,      ///< Parallel ATA drive.
+    ata_dev_type_sata,      ///< Serial ATA drive.
+    ata_dev_type_patapi,    ///< Parallel ATAPI drive.
+    ata_dev_type_satapi     ///< Serial ATAPI drive.
+} ata_device_type_t;
 
-/// @name ATA Interface Type
-/// @{
-#define IDE_ATA   0x00 ///< ATA (Advanced Technology Attachment) interface.
-#define IDE_ATAPI 0x01 ///< Extended ATA with support for SCSI command set.
-/// @}
+/// @brief Values used to manage bus mastering.
+typedef enum {
+    ata_bm_stop_bus_master  = 0x00, ///< Halts bus master operations of the controller.
+    ata_bm_start_bus_master = 0x01, ///< Enables bus master operation of the controller.
+} ata_bus_mastering_command_t;
 
-/// @name ATA Interface Priority
-/// @{
-#define ATA_DEVICE_0 0x00 ///<
-#define ATA_DEVICE_1 0x01 ///<
-/// @}
+/// @brief DMA specific commands.
+typedef enum {
+    ata_dma_command_read           = 0xC8, ///< Read DMA with retries (28 bit LBA).
+    ata_dma_command_read_no_retry  = 0xC9, ///< Read DMA without retries (28 bit LBA).
+    ata_dma_command_write          = 0xCA, ///< Write DMA with retries (28 bit LBA).
+    ata_dma_command_write_no_retry = 0xCB, ///< Write DMA without retries (28 bit LBA).
+} ata_dma_command_t;
 
-/// @name ATA Command block registers
-/// @{
-#define ATA_REG_DATA       0x00 ///< Read/Write PIO data bytes.
-#define ATA_REG_ERROR      0x01 ///< Error generated by the last ATA command.
-#define ATA_REG_FEATURES   0x01 ///< Control command specific interface features.
-#define ATA_REG_SECCOUNT0  0x02 ///< Number of sectors to read/write (0 is a special value).
-#define ATA_REG_LBA0       0x03 ///< Sector Number Register.
-#define ATA_REG_LBA1       0x04 ///< Cylinder Low Register.
-#define ATA_REG_LBA2       0x05 ///< Cylinder High Register.
-#define ATA_REG_HDDEVSEL   0x06 ///< Used to select a drive and/or head.
-#define ATA_REG_COMMAND    0x07 ///< Used to send ATA commands to the device.
-#define ATA_REG_STATUS     0x07 ///< Used to read the current status.
-#define ATA_REG_SECCOUNT1  0x08 ///<
-#define ATA_REG_LBA3       0x09 ///<
-#define ATA_REG_LBA4       0x0A ///<
-#define ATA_REG_LBA5       0x0B ///<
-#define ATA_REG_CONTROL    0x0C ///<
-#define ATA_REG_ALTSTATUS  0x0C ///<
-#define ATA_REG_DEVADDRESS 0x0D ///<
-/// @}
+/// @brief ATA identity commands.
+typedef enum {
+    ata_command_pata_ident   = 0xEC, ///< Identify Device.
+    ata_command_patapi_ident = 0xA1, ///< Identify Device.
+} ata_identity_command_t;
 
-/// @name ATA Channels
-/// @{
-#define ATA_PRIMARY   0x00 ///< Primary channel.
-#define ATA_SECONDARY 0x01 ///< Secondary channel.
-/// @}
-
-/// @name ATA Directions
-/// @{
-#define ATA_READ  0x00 ///< Read direction.
-#define ATA_WRITE 0x01 ///< Write direction.
-/// @}
-
-/// @brief Stores information of a channel.
-typedef struct ide_channel_regs_t {
-    uint16_t base;  ///< I/O Base.
-    uint16_t ctrl;  ///< Control Base
-    uint16_t bmide; ///< Bus Master IDE
-    uint16_t nien;  ///< nIEN (No Interrupt);
-} ide_channel_regs_t;
-
-/// @brief Stores information of a device.
-typedef struct ide_device_t {
-    uint8_t reserved;      ///< 0 (Empty) or 1 (This Drive really exists).
-    uint8_t channel;       ///< 0 (Primary Channel) or 1 (Secondary Channel).
-    uint8_t drive;         ///< 0 (Drive 0) or 1 (Drive 1).
-    uint16_t type;         ///< 0: ATA, 1:ATAPI.
-    uint16_t signature;    ///< Drive Signature.
-    uint16_t capabilities; ///< Features.
-    uint32_t command_sets; ///< Command Sets Supported.
-    uint32_t size;         ///< Size in Sectors.
-    uint8_t model[41];     ///< Model in string.
-} ide_device_t;
-
-/// @brief
-typedef struct partition_t {
-    uint8_t status;              ///<
-    uint8_t chs_first_sector[3]; ///<
-    uint8_t type;                ///<
-    uint8_t chs_last_sector[3];  ///<
-    uint32_t lba_first_sector;   ///<
-    uint32_t sector_count;       ///<
-} partition_t;
-
+/// @brief IDENTIFY device data (response to 0xEC).
 typedef struct ata_identify_t {
-    uint16_t flags;           ///<
-    uint16_t unused1[9];      ///<
-    char serial[20];          ///<
-    uint16_t unused2[3];      ///<
-    char firmware[8];         ///<
-    char model[40];           ///<
-    uint16_t sectors_per_int; ///<
-    uint16_t unused3;         ///<
-    uint16_t capabilities[2]; ///<
-    uint16_t unused4[2];      ///<
-    uint16_t valid_ext_data;  ///<
-    uint16_t unused5[5];      ///<
-    uint16_t size_of_rw_mult; ///<
-    uint32_t sectors_28;      ///<
-    uint16_t unused6[38];     ///<
-    uint64_t sectors_48;      ///<
-    uint16_t unused7[152];    ///<
-} __attribute__((packed)) ata_identify_t;
+    /// Word      0 : General configuration.
+    struct {
+        /// Reserved.
+        uint16_t reserved1 : 1;
+        /// This member is no longer used.
+        uint16_t retired3 : 1;
+        /// Indicates that the response was incomplete.
+        uint16_t response_incomplete : 1;
+        /// This member is no longer used.
+        uint16_t retired2 : 3;
+        /// Indicates when set to 1 that the device is fixed.
+        uint16_t fixed_fevice : 1;
+        /// Indicates when set to 1 that the media is removable.
+        uint16_t removable_media : 1;
+        /// This member is no longer used.
+        uint16_t retired1 : 7;
+        /// Indicates when set to 1 that the device is an ATA device.
+        uint16_t device_type : 1;
+    } general_configuration;
+    /// Word   1-9  : Unused.
+    uint16_t unused1[9];
+    /// Word  10-19 : Contains the serial number of the device.
+    uint8_t serial_number[20];
+    /// Word  20-22 : Unused.
+    uint16_t unused2[3];
+    /// Word  23-26 : Contains the revision number of the device's firmware.
+    uint8_t firmware_revision[8];
+    /// Word  27-46 : Contains the device's model number.
+    uint8_t model_number[40];
+    /// Word     47 : Maximum number of sectors that shall be transferred per interrupt.
+    uint8_t maximum_block_transfer;
+    /// Word     48 : Unused.
+    uint8_t unused3;
+    /// Word  49-50 :
+    struct {
+        /// Unused.
+        uint8_t current_long_physical_sector_alignment : 2;
+        /// Reserved.
+        uint8_t reserved_byte49 : 6;
+        /// Indicates that the device supports DMA operations.
+        uint8_t dma_supported : 1;
+        /// Indicates that the device supports logical block addressing.
+        uint8_t lba_supported : 1;
+        /// Indicates when set to 1 that I/O channel ready is disabled for the device.
+        uint8_t io_rdy_disable : 1;
+        /// Indicates when set to 1 that I/O channel ready is supported by the device.
+        uint8_t io_rdy_supported : 1;
+        /// Reserved.
+        uint8_t reserved1 : 1;
+        /// Indicates when set to 1 that the device supports standby timers.
+        uint8_t stand_by_timer_support : 1;
+        /// Reserved.
+        uint8_t reserved2 : 2;
+        /// Reserved.
+        uint16_t reserved_word50;
+    } capabilities;
+    /// Word  51-52 : Obsolete.
+    uint16_t unused4[2];
+    /// Word     53 : Bit 0 = obsolete; Bit 1 = words 70:64 valid; bit 2 = word 88 valid.
+    uint16_t valid_ext_data;
+    /// Word  54-58 : Obsolete.
+    uint16_t unused5[5];
+    /// Word     59 : Indicates the multisector setting.
+    uint8_t current_multisector_setting;
+    /// Indicates when TRUE that the multisector setting is valid.
+    uint8_t multisector_setting_valid : 1;
+    /// Reserved.
+    uint8_t reserved_byte59 : 3;
+    /// The device supports the sanitize command.
+    uint8_t sanitize_feature_supported : 1;
+    /// The device supports cryptographic erase.
+    uint8_t crypto_scramble_ext_command_supported : 1;
+    /// The device supports block overwrite.
+    uint8_t overwrite_ext_command_supported : 1;
+    /// The device supports block erase.
+    uint8_t block_erase_ext_command_supported : 1;
+    /// Word  60-61 : Contains the total number of 28 bit LBA addressable sectors on the drive.
+    uint32_t sectors_28;
+    /// Word  62-99 : We do not care for these right now.
+    uint16_t unused6[38];
+    /// Word 100-103: Contains the total number of 48 bit addressable sectors on the drive.
+    uint64_t sectors_48;
+    /// Word 104-256: We do not care for these right now.
+    uint16_t unused7[152];
+} ata_identify_t;
 
-/// @brief Master Boot Record.
-typedef struct mbr_t {
-    uint8_t boostrap[446];     ///<
-    partition_t partitions[4]; ///<
-    uint8_t signature[2];      ///<
-} __attribute__((packed)) mbr_t;
-
-static char ata_drive_char   = 'a';
-static int cdrom_number      = 0;
-static uint32_t ata_pci      = 0x00000000;
-static int atapi_in_progress = 0;
-static list_t *atapi_waiter  = NULL;
-
-typedef union atapi_command_t {
-    uint8_t command_bytes[12];
-    uint16_t command_words[6];
-} atapi_command_t;
-
-/// @brief Physical Region Descriptor Tables (PRDT).
+/// @brief Physical Region Descriptor Table (PRDT) entry.
+/// @details
+/// The physical memory region to be transferred is described by a Physical
+/// Region Descriptor (PRD). The data transfer will proceed until all regions
+/// described by the PRDs in the table have been transferred.
+/// Each Physical Region Descriptor entry is 8 bytes in length.
+///         |    byte 3  |  byte 2  |  byte 1  |  byte 0    |
+/// Dword 0 |  Memory Region Physical Base Address [31:1] |0|
+/// Dword 1 |  EOT | reserved       | Byte Count [15:1]   |0|
 typedef struct prdt_t {
-    uintptr_t offset;
-    uint16_t bytes;
-    uint16_t last;
+    /// The first 4 bytes specify the byte address of a physical memory region.
+    unsigned int physical_address;
+    /// The next two bytes specify the count of the region in bytes (64K byte limit per region).
+    unsigned short byte_count;
+    /// Bit 7 of the last byte indicates the end of the table
+    unsigned short end_of_table;
 } prdt_t;
 
 /// @brief Stores information about an ATA device.
 typedef struct ata_device_t {
-    char name[256];
-    int io_base;
-    int control;
-    int slave;
-    int is_atapi;
+    /// Name of the device.
+    char name[NAME_MAX];
+    /// Name of the device.
+    char path[PATH_MAX];
+    /// Does the device support ATA Packet Interface (ATAPI).
+    ata_device_type_t type;
+    /// The "I/O" port base.
+    unsigned io_base;
+    /// I/O registers.
+    struct {
+        /// [R/W] Data Register. Read/Write PIO data bytes (16-bit).
+        unsigned data;
+        /// [R  ] Error Register. Read error generated by the last ATA command executed (8-bit).
+        unsigned error;
+        /// [  W] Features Register. Used to control command specific interface features (8-bit).
+        unsigned feature;
+        /// [R/W] Sector Count Register. Number of sectors to read/write (0 is a special value) (8-bit).
+        unsigned sector_count;
+        /// [R/W] Sector Number Register. This is CHS/LBA28/LBA48 specific (8-bit).
+        unsigned lba_lo;
+        /// [R/W] Cylinder Low Register. Partial Disk Sector address (8-bit).
+        unsigned lba_mid;
+        /// [R/W] Cylinder High Register. Partial Disk Sector address (8-bit).
+        unsigned lba_hi;
+        /// [R/W] Drive / Head Register. Used to select a drive and/or head. Supports extra address/flag bits (8-bit).
+        unsigned hddevsel;
+        /// [R  ] Status Register. Used to read the current status (8-bit).
+        unsigned status;
+        /// [  W] Command Register. Used to send ATA commands to the device (8-bit).
+        unsigned command;
+    } io_reg;
+    /// The "Control" port base.
+    unsigned control_base;
+    /// If the device master or slave.
+    unsigned slave;
+    /// If the device is connected to the primary bus.
+    bool_t primary;
+    /// The device identity data.
     ata_identify_t identity;
-    /// Physical Region Descriptor Table (PRDT).
+    /// Bus Master Register. The "address" of the Bus Master Register is stored
+    /// in BAR4, in the PCI Configuration Space of the disk controller. The Bus
+    /// Master Register is generally a set of 16 sequential IO ports. It can
+    /// also be a 16 byte memory mapped space.
+    struct {
+        /// The command byte has only 2 operational bits. All the rest should be
+        /// 0. Bit 0 (value = 1) is the Start/Stop bit. Setting the bit puts the
+        /// controller in DMA mode for that ATA channel, and it starts at the
+        /// beginning of the respective PRDT. Clearing the bit terminates DMA
+        /// mode for that ATA channel. If the controller was in the middle of a
+        /// transfer, the remaining data is thrown away. Also, the controller
+        /// does not remember how far it got in the PRDT. That information is
+        /// lost, if the OS does not save it. The bit must be cleared when a
+        /// transfer completes.
+        /// Bit 3 (value = 8) is the Read/Write bit. This bit is a huge problem.
+        /// The disk controller does not automatically detect whether the next
+        /// disk operation is a read or write. You have to tell it, in advance,
+        /// by setting this bit. Note that when reading from the disk, you must
+        /// set this bit to 1, and clear it when writing to the disk. You must
+        /// first stop DMA transfers (by clearing bit 0) before you can change
+        /// the Read/Write bit! Please note all the bad consequences of clearing
+        /// bit 0, above! The controller loses its place in the PRDT.
+        /// In essence, this means that each PRDT must consist exclusively of
+        /// either read or write entries. You set the Read/Write bit in advance,
+        /// then "use up" the entire PRDT -- before you can do the opposite
+        /// operation.
+        unsigned command;
+        /// The bits in the status byte are not usually useful. However, you are
+        /// required to read it after every IRQ on disk reads anyway. Reading this
+        /// byte may perform a necessary final cache flush of the DMA data to
+        /// memory.
+        unsigned status;
+        /// Physical Region Descriptor Table (PRDT). The PRDT must be uint32_t
+        /// aligned, contiguous in physical memory, and cannot cross a 64K boundary.
+        unsigned prdt;
+    } bmr;
+    /// Pointer to the first entry of the PRDT.
     prdt_t *dma_prdt;
-    /// Stores the physical address of the current PRDT in the Bus Master Register,
-    ///  of the Bus Mastering ATA Disk Controller on the PCI bus.
+    /// Physical address of the first entry of the PRDT.
     uintptr_t dma_prdt_phys;
+    /// Pointer to the DMA memory area.
     uint8_t *dma_start;
+    /// Physical address of the DMA memory area.
     uintptr_t dma_start_phys;
-    uint32_t bar4;
-    uint32_t atapi_lba;
-    uint32_t atapi_sector_size;
     /// Device root file.
     vfs_file_t *fs_root;
 } ata_device_t;
 
-ata_device_t ata_primary_master   = { .io_base = 0x1F0, .control = 0x3F6, .slave = 0 };
-ata_device_t ata_primary_slave    = { .io_base = 0x1F0, .control = 0x3F6, .slave = 1 };
-ata_device_t ata_secondary_master = { .io_base = 0x170, .control = 0x376, .slave = 0 };
-ata_device_t ata_secondary_slave  = { .io_base = 0x170, .control = 0x376, .slave = 1 };
+#define ATA_SECTOR_SIZE 512 ///< The sector size.
+#define ATA_DMA_SIZE    512 ///< The size of the DMA area.
 
-spinlock_t ata_lock;
+static spinlock_t ata_lock;
 
-// TODO: support other sector sizes.
-#define ATA_SECTOR_SIZE 512
+static char ata_drive_char = 'a';
+static int cdrom_number    = 0;
+static uint32_t ata_pci    = 0x00000000;
 
-/// @brief Waits for the
-/// @param dev
-void ata_io_wait(ata_device_t *dev)
-{
-    inportb(dev->io_base + ATA_REG_ALTSTATUS);
-    inportb(dev->io_base + ATA_REG_ALTSTATUS);
-    inportb(dev->io_base + ATA_REG_ALTSTATUS);
-    inportb(dev->io_base + ATA_REG_ALTSTATUS);
-    inportb(dev->io_base + ATA_REG_ALTSTATUS);
-}
+static ata_device_t ata_primary_master = {
+    .io_base = 0x1F0,
+    .io_reg  = {
+         .data         = 0x1F0 + 0x00,
+         .error        = 0x1F0 + 0x01,
+         .feature      = 0x1F0 + 0x01,
+         .sector_count = 0x1F0 + 0x02,
+         .lba_lo       = 0x1F0 + 0x03,
+         .lba_mid      = 0x1F0 + 0x04,
+         .lba_hi       = 0x1F0 + 0x05,
+         .hddevsel     = 0x1F0 + 0x06,
+         .status       = 0x1F0 + 0x07,
+         .command      = 0x1F0 + 0x07,
+    },
+    .control_base = 0x3F6,
+    .slave        = 0,
+    .primary      = true
+};
+
+static ata_device_t ata_primary_slave = {
+    .io_base = 0x1F0,
+    .io_reg  = {
+         .data         = 0x1F0 + 0x00,
+         .error        = 0x1F0 + 0x01,
+         .feature      = 0x1F0 + 0x01,
+         .sector_count = 0x1F0 + 0x02,
+         .lba_lo       = 0x1F0 + 0x03,
+         .lba_mid      = 0x1F0 + 0x04,
+         .lba_hi       = 0x1F0 + 0x05,
+         .hddevsel     = 0x1F0 + 0x06,
+         .status       = 0x1F0 + 0x07,
+         .command      = 0x1F0 + 0x07,
+    },
+    .control_base = 0x3F6,
+    .slave        = 1,
+    .primary      = true
+};
+
+static ata_device_t ata_secondary_master = {
+    .io_base = 0x170,
+    .io_reg  = {
+         .data         = 0x170 + 0x00,
+         .error        = 0x170 + 0x01,
+         .feature      = 0x170 + 0x01,
+         .sector_count = 0x170 + 0x02,
+         .lba_lo       = 0x170 + 0x03,
+         .lba_mid      = 0x170 + 0x04,
+         .lba_hi       = 0x170 + 0x05,
+         .hddevsel     = 0x170 + 0x06,
+         .status       = 0x170 + 0x07,
+         .command      = 0x170 + 0x07,
+    },
+    .control_base = 0x376,
+    .slave        = 0,
+    .primary      = false
+};
+
+static ata_device_t ata_secondary_slave = {
+    .io_base = 0x170,
+    .io_reg  = {
+         .data         = 0x170 + 0x00,
+         .error        = 0x170 + 0x01,
+         .feature      = 0x170 + 0x01,
+         .sector_count = 0x170 + 0x02,
+         .lba_lo       = 0x170 + 0x03,
+         .lba_mid      = 0x170 + 0x04,
+         .lba_hi       = 0x170 + 0x05,
+         .hddevsel     = 0x170 + 0x06,
+         .status       = 0x170 + 0x07,
+         .command      = 0x170 + 0x07,
+    },
+    .control_base = 0x376,
+    .slave        = 1,
+    .primary      = false
+};
 
 static void ata_device_read_sector(ata_device_t *, uint64_t, uint8_t *);
-static void ata_device_read_sector_atapi(ata_device_t *, uint64_t, uint8_t *);
-static void ata_device_write_sector_retry(ata_device_t *, uint64_t, uint8_t *);
+static void ata_device_write_sector(ata_device_t *, uint64_t, uint8_t *);
 
 static vfs_file_t *ata_open(const char *, int, mode_t);
 static int ata_close(vfs_file_t *);
 static ssize_t ata_read(vfs_file_t *, char *, off_t, size_t);
-static ssize_t atapi_read(vfs_file_t *, char *, off_t, size_t);
 static ssize_t ata_write(vfs_file_t *, const void *, off_t, size_t);
 static int ata_fstat(vfs_file_t *file, stat_t *stat);
 static int ata_stat(const char *path, stat_t *stat);
 
 // == SUPPORT FUNCTIONS =======================================================
-static uint8_t ata_status_wait(ata_device_t *dev, int timeout)
+
+static inline const char *ata_get_device_status_str(ata_device_t *dev)
+{
+    static char status_str[9]   = { 0 };
+    uint8_t status              = inportb(dev->io_reg.status);
+    status_str[ata_status_err]  = bit_check(status, ata_status_err) ? 'e' : ' ';
+    status_str[ata_status_idx]  = bit_check(status, ata_status_idx) ? 'i' : ' ';
+    status_str[ata_status_corr] = bit_check(status, ata_status_corr) ? 'c' : ' ';
+    status_str[ata_status_drq]  = bit_check(status, ata_status_drq) ? 'd' : ' ';
+    status_str[ata_status_srv]  = bit_check(status, ata_status_srv) ? 's' : ' ';
+    status_str[ata_status_df]   = bit_check(status, ata_status_df) ? 'd' : ' ';
+    status_str[ata_status_rdy]  = bit_check(status, ata_status_rdy) ? 'r' : ' ';
+    status_str[ata_status_bsy]  = bit_check(status, ata_status_bsy) ? 'b' : ' ';
+    return status_str;
+}
+
+static inline const char *ata_get_device_settings_str(ata_device_t *dev)
+{
+    if (dev->io_base == 0x1F0) {
+        if (dev->slave)
+            return "Primary Slave";
+        return "Primary Master";
+    }
+    if (dev->slave)
+        return "Secondary Slave";
+    return "Secondary Master";
+}
+
+static inline const char *ata_get_device_type_str(ata_device_type_t type)
+{
+    if (type == ata_dev_type_pata)
+        return "pata";
+    if (type == ata_dev_type_sata)
+        return "sata";
+    if (type == ata_dev_type_patapi)
+        return "patapi";
+    if (type == ata_dev_type_satapi)
+        return "satapi";
+    if (type == ata_dev_type_unknown)
+        return "unknown";
+    return "no_device";
+}
+
+/// @brief Waits for 400 nanoseconds.
+/// @param dev the device on which we wait.
+static inline void ata_io_wait(ata_device_t *dev)
+{
+    inportb(dev->control_base);
+    inportb(dev->control_base);
+    inportb(dev->control_base);
+    inportb(dev->control_base);
+}
+
+static inline uint8_t ata_status_wait(ata_device_t *dev, int timeout)
 {
     uint8_t status;
     if (timeout > 0) {
-        for (int i = 0; (status = inportb(dev->io_base + ATA_REG_STATUS)) & ATA_STAT_BUSY && (i < timeout); ++i) {}
+        while (timeout--) {
+            if (!bit_check((status = inportb(dev->io_reg.status)), ata_status_bsy))
+                break;
+        }
     } else {
-        while ((status = inportb(dev->io_base + ATA_REG_STATUS)) & ATA_STAT_BUSY) {}
+        while (bit_check((status = inportb(dev->io_reg.status)), ata_status_bsy)) {
+            cpu_relax();
+        }
     }
     return status;
 }
-static int ata_wait(ata_device_t *dev, bool_t advanced)
+
+static inline int ata_wait(ata_device_t *dev, bool_t advanced)
 {
     ata_io_wait(dev);
     ata_status_wait(dev, 0);
     if (advanced) {
-        uint8_t status = inportb(dev->io_base + ATA_REG_STATUS);
-        if (status & ATA_STAT_ERR)
+        uint8_t status = inportb(dev->io_reg.status);
+        if (bit_check(status, ata_status_err))
             return 1;
-        if (status & ATA_STAT_FAULT)
+        if (bit_check(status, ata_status_df))
             return 1;
-        if (!(status & ATA_STAT_DRQ))
+        if (!bit_check(status, ata_status_drq))
             return 1;
     }
     return 0;
 }
-static void ata_device_select(ata_device_t *dev)
+
+static inline void ata_device_select(ata_device_t *dev)
 {
     outportb(dev->io_base + 1, 1);
-    outportb(dev->control, 0);
-    outportb(dev->io_base + ATA_REG_HDDEVSEL, 0xA0 | dev->slave << 4);
+    outportb(dev->control_base, 0);
+    outportb(dev->io_reg.hddevsel, 0xA0 | (dev->slave << 4));
     ata_io_wait(dev);
 }
-static uint64_t ata_max_offset(ata_device_t *dev)
+
+static inline uint64_t ata_max_offset(ata_device_t *dev)
 {
-    uint64_t sectors = dev->identity.sectors_48;
-    if (!sectors) {
-        // Fall back to sectors_28.
-        sectors = dev->identity.sectors_28;
+    if (dev->identity.sectors_48) {
+        return dev->identity.sectors_48 * ATA_SECTOR_SIZE;
     }
-
-    return sectors * ATA_SECTOR_SIZE;
+    return dev->identity.sectors_28 * ATA_SECTOR_SIZE;
 }
-static uint64_t atapi_max_offset(ata_device_t *dev)
+
+static inline void ata_fix_string(char *str, unsigned len)
 {
-    uint64_t max_sector = dev->atapi_lba;
-    if (!max_sector) {
-        return 0;
+    char tmp;
+    for (unsigned i = 0; i < len; i += 2) {
+        tmp        = str[i + 1];
+        str[i + 1] = str[i];
+        str[i]     = tmp;
     }
-    return (max_sector + 1) * dev->atapi_sector_size;
+    str[len] = 0;
 }
-static int buffer_compare(uint32_t *ptr1, uint32_t *ptr2, size_t size)
+
+static inline bool_t ata_read_device_identity(ata_device_t *dev, ata_identity_command_t command)
 {
-    assert(!(size % 4));
+    // Request the device identity.
+    outportb(dev->io_reg.command, command);
+    // Wait 400ns for the command to work.
+    ata_io_wait(dev);
+    inportb(dev->io_reg.command);
+    ata_wait(dev, 0);
+    // Read the identity.
+    uint16_t *buffer = (uint16_t *)&dev->identity;
+    for (unsigned i = 0; i < 256; ++i) {
+        buffer[i] = inports(dev->io_reg.data);
+    }
+    // Fix the serial.
+    ata_fix_string((char *)&dev->identity.serial_number, 20 - 1);
+    // Fix the firmware.
+    ata_fix_string((char *)&dev->identity.firmware_revision, 8 - 1);
+    // Fix the model.
+    ata_fix_string((char *)&dev->identity.model_number, 40 - 1);
+    return true;
+}
 
-    size_t i = 0;
+/// @brief Performs a soft reset of the device.
+/// @details "For non-ATAPI drives, the only method a driver has of resetting a
+/// drive after a major error is to do a "software reset" on the bus. Set bit 2
+/// (SRST, value = 4) in the proper Control Register for the bus. This will
+/// reset both ATA devices on the bus."
+/// @param dev the device on which we perform the soft reset.
+static inline void ata_soft_reset(ata_device_t *dev)
+{
+    pr_debug("[%s] Performing ATA soft reset...\n", ata_get_device_settings_str(dev));
+    // Do a "software reset" on the bus.
+    outportb(dev->control_base, ata_control_srst);
+    // Wait for the soft reset to complete.
+    ata_io_wait(dev);
+    // Reset the bus to normal operation.
+    outportb(dev->control_base, ata_control_zero);
+}
 
-    while (i < size) {
-        if (*ptr1 != *ptr2) {
-            return 1;
+static inline void ata_enable_bus_mastering(ata_device_t *dev)
+{
+    pr_debug("[%s] Enabling bust mastering...\n", ata_get_device_settings_str(dev));
+    uint16_t pci_cmd = pci_read_field(ata_pci, PCI_COMMAND, 4);
+    if (bit_check(pci_cmd, pci_command_bus_master)) {
+        pr_warning("[%s] Bus mastering already enabled.\n", ata_get_device_settings_str(dev));
+    } else {
+        // Set the bit for bus mastering.
+        bit_set_assign(pci_cmd, pci_command_bus_master);
+        // Write the PCI command field.
+        pci_write_field(ata_pci, PCI_COMMAND, 4, pci_cmd);
+        // Check that the bus mastering is enabled.
+        pci_cmd = pci_read_field(ata_pci, PCI_COMMAND, 4);
+        if (!bit_check(pci_cmd, pci_command_bus_master)) {
+            pr_warning("[%s] Bus mastering is not correctly set.\n", ata_get_device_settings_str(dev));
         }
-
-        ptr1++;
-        ptr2++;
-        i += sizeof(uint32_t);
     }
+}
+
+/// @brief Initialize the bmr field of the ATA device.
+/// @param dev the device to initialize.
+/// @details
+/// When you want to retrieve the actual base address of a BAR, be sure to mask
+/// the lower bits.
+/// For 16-bit Memory Space BARs, you calculate (BAR[x] & 0xFFF0).
+/// For 32-bit Memory Space BARs, you calculate (BAR[x] & 0xFFFFFFF0).
+static inline void ata_initialize_bus_mastering_address(ata_device_t *dev)
+{
+    pr_debug("[%s] Initializing bust mastering...\n", ata_get_device_settings_str(dev));
+    unsigned address = pci_read_field(ata_pci, PCI_BASE_ADDRESS_4, 4);
+    // To distinguish between memory space BARs and I/O space BARs, you can
+    // check the value of the lowest bit. memory space BARs has always a 0,
+    // while I/O space BARs has always a 1.
+    if (!bit_check(address, 0)) {
+        kernel_panic("Failed to initialize BUS Mastering.");
+    }
+    /// When you want to retrieve the actual base address of a BAR, be sure to
+    /// mask the lower bits, for I/O space BARs you calculate (BAR & 0xFFFFFFFC).
+    address &= 0xFFFFFFFC;
+    // Differentiate between primary or secondary ATA bus.
+    if (dev->primary) {
+        dev->bmr.command = address + 0x0;
+        dev->bmr.status  = address + 0x2;
+        dev->bmr.prdt    = address + 0x4;
+    } else {
+        dev->bmr.command = address + 0x8;
+        dev->bmr.status  = address + 0xA;
+        dev->bmr.prdt    = address + 0xC;
+    }
+}
+
+/* on Primary bus: ctrl->base =0x1F0, ctrl->dev_ctl =0x3F6. REG_CYL_LO=4, REG_CYL_HI=5, REG_DEVSEL=6 */
+static inline ata_device_type_t ata_detect_device_type(ata_device_t *dev)
+{
+    pr_debug("[%s] Detecting device type...\n", ata_get_device_settings_str(dev));
+    // Perform a soft reset.
+    ata_soft_reset(dev);
+    // Wait until master drive is ready again.
+    ata_io_wait(dev);
+    // Select the drive.
+    outportb(dev->io_reg.hddevsel, 0xA0 | (dev->slave << 4));
+    // Wait for drive select to work.
+    ata_io_wait(dev);
+    // Get the "signature bytes" by reading low and high cylinder register.
+    uint8_t cyl_lo = inportb(dev->io_reg.lba_mid);
+    uint8_t cyl_hi = inportb(dev->io_reg.lba_hi);
+    // Differentiate ATA, ATAPI, SATA and SATAPI.
+    if ((cyl_lo == 0x00) && (cyl_hi == 0x00))
+        return ata_dev_type_pata;
+    if ((cyl_lo == 0x3C) && (cyl_hi == 0xC3))
+        return ata_dev_type_sata;
+    if ((cyl_lo == 0x14) && (cyl_hi == 0xEB))
+        return ata_dev_type_patapi;
+    if ((cyl_lo == 0x69) && (cyl_hi == 0x96))
+        return ata_dev_type_satapi;
+    if ((cyl_lo == 0xFF) && (cyl_hi == 0xFF))
+        return ata_dev_type_no_device;
+    return ata_dev_type_unknown;
+}
+
+/// @brief Creates the DMA memory area used to write and read on the device.
+/// @param size the size of the DMA memory area.
+/// @param physical the physical address of the DMA memory area.
+/// @return the logical address of the DMA memory area.
+static inline uintptr_t malloc_dma(size_t size, uintptr_t *physical)
+{
+    // Get the page order to accomodate the size.
+    uint32_t order           = find_nearest_order_greater(0, size);
+    page_t *page             = _alloc_pages(GFP_KERNEL, order);
+    *physical                = get_physical_address_from_page(page);
+    uintptr_t lowmem_address = get_lowmem_address_from_page(page);
+    pr_debug("[DMA Malloc] Size requirement is %d, which results in an order %d\n", size, order);
+    pr_debug("[DMA Malloc] Allocated page is at       : 0x%p\n", page);
+    pr_debug("[DMA Malloc] The physical address is at : 0x%p\n", physical);
+    pr_debug("[DMA Malloc] The lowmem address is at   : 0x%p\n", lowmem_address);
+    return lowmem_address;
+}
+
+// == ATA DEVICE MANAGEMENT ===================================================
+static bool_t ata_device_init(ata_device_t *dev)
+{
+    pr_debug("[%s] Detected ATA device.\n", ata_get_device_settings_str(dev));
+
+    // Select the ATA device.
+    ata_device_select(dev);
+
+    // Read the ATA device identity.
+    ata_read_device_identity(dev, ata_command_pata_ident);
+
+    // Allocate the memory for the Physical Region Descriptor Table (PRDT).
+    dev->dma_prdt = (prdt_t *)malloc_dma(sizeof(prdt_t), &dev->dma_prdt_phys);
+    // Allocate the memory for the Direct Memory Access (DMA).
+    dev->dma_start = (uint8_t *)malloc_dma(ATA_DMA_SIZE, &dev->dma_start_phys);
+    // Initialize the table, specifying the physical address of the DMA.
+    dev->dma_prdt->physical_address = dev->dma_start_phys;
+    // The size of the DMA.
+    dev->dma_prdt->byte_count = ATA_DMA_SIZE;
+    // Set the EOT to 1.
+    dev->dma_prdt->end_of_table = 0x8000;
+
+    // Update the filesystem entry with the length of the device.
+    dev->fs_root->length = ata_max_offset(dev);
+
+    // Enable bus mastering.
+    ata_enable_bus_mastering(dev);
+
+    // Initialize the bus mastering addresses.
+    ata_initialize_bus_mastering_address(dev);
+
+    // Print the device data.
+    pr_debug("Device name     : %s\n", dev->name);
+    pr_debug("Device status   : [%s]\n", ata_get_device_status_str(dev));
+    pr_debug("Device Serial   : %s\n", dev->identity.serial_number);
+    pr_debug("Device Firmware : %s\n", dev->identity.firmware_revision);
+    pr_debug("Device Model    : %s\n", dev->identity.model_number);
+    pr_debug("Sectors (48)    : %d\n", dev->identity.sectors_48);
+    pr_debug("Sectors (24)    : %d\n", dev->identity.sectors_28);
+    pr_debug("PCI device ID   : 0x%x\n", ata_pci);
+    pr_debug("Device PRDT     : 0x%x (Ph: 0x%x)\n", dev->dma_prdt, dev->dma_prdt_phys);
+    pr_debug("Device START    : 0x%x (Ph: 0x%x)\n", dev->dma_start, dev->dma_start_phys);
+    pr_debug("BMR Command     : 0x%x\n", dev->bmr.command);
+    pr_debug("BMR Status      : 0x%x\n", dev->bmr.status);
+    pr_debug("BMR Prdt        : 0x%x\n", dev->bmr.prdt);
     return 0;
+}
+
+// == ATA SECTOR READ/WRITE FUNCTIONS =========================================
+static void ata_device_read_sector(ata_device_t *dev, uint32_t lba, uint8_t *buffer)
+{
+    // Check if we are trying to perform the read on the correct drive type.
+    if ((dev->type != ata_dev_type_pata) && (dev->type != ata_dev_type_sata)) {
+        return;
+    }
+    //pr_debug("ata_device_read_sector(dev: %p, lba: %d, buff: %p)\n", dev, lba, buffer);
+    spinlock_lock(&ata_lock);
+
+    ata_wait(dev, 0);
+
+    // Reset bus master register's command register.
+    outportb(dev->bmr.command, 0x00);
+
+    // Set the PRDT.
+    outportl(dev->bmr.prdt, dev->dma_prdt_phys);
+
+    // Enable error, irq status.
+    outportb(dev->bmr.status, inportb(dev->bmr.status) | 0x04 | 0x02);
+
+    // Set read.
+    outportb(dev->bmr.command, 0x08);
+
+    while (1) {
+        uint8_t status = inportb(dev->io_reg.status);
+        if (!bit_check(status, ata_status_bsy))
+            break;
+    }
+
+    outportb(dev->control_base, 0x00);
+    outportb(dev->io_reg.hddevsel, 0xe0 | (dev->slave << 4));
+    ata_io_wait(dev);
+    outportb(dev->io_reg.feature, 0x00);
+
+    outportb(dev->io_reg.sector_count, 0);
+    outportb(dev->io_reg.lba_lo, (lba & 0xff000000) >> 24);
+    outportb(dev->io_reg.lba_mid, (lba & 0xff00000000) >> 32);
+    outportb(dev->io_reg.lba_hi, (lba & 0xff0000000000) >> 40);
+
+    outportb(dev->io_reg.sector_count, 1);
+    outportb(dev->io_reg.lba_lo, (lba & 0x000000ff) >> 0);
+    outportb(dev->io_reg.lba_mid, (lba & 0x0000ff00) >> 8);
+    outportb(dev->io_reg.lba_hi, (lba & 0x00ff0000) >> 16);
+
+    while (1) {
+        uint8_t status = inportb(dev->io_reg.status);
+        if (!bit_check(status, ata_status_bsy) && bit_check(status, ata_status_rdy))
+            break;
+    }
+
+    // Write the READ_DMA to the command register (0xC8)
+    outportb(dev->io_reg.command, ata_dma_command_read);
+
+    ata_io_wait(dev);
+
+    outportb(dev->bmr.command, 0x08 | 0x01);
+
+    while (1) {
+        int status  = inportb(dev->bmr.status);
+        int dstatus = inportb(dev->io_reg.status);
+        if (!(status & 0x04)) {
+            continue;
+        }
+        if (!bit_check(dstatus, ata_status_bsy)) {
+            break;
+        }
+    }
+
+    // Copy from DMA buffer to output buffer.
+    memcpy(buffer, dev->dma_start, ATA_DMA_SIZE);
+
+    // Inform device we are done.
+    outportb(dev->bmr.status, inportb(dev->bmr.status) | 0x04 | 0x02);
+
+    spinlock_unlock(&ata_lock);
+}
+
+static void ata_device_write_sector(ata_device_t *dev, uint32_t lba, uint8_t *buffer)
+{
+    spinlock_lock(&ata_lock);
+
+    // Copy the buffer over to the DMA area
+    memcpy(dev->dma_start, buffer, ATA_DMA_SIZE);
+
+    // Reset bus master register's command register
+    outportb(dev->bmr.command, 0);
+
+    // Set prdt
+    outportl(dev->bmr.prdt, dev->dma_prdt_phys);
+
+    // Enable error, irq status.
+    outportb(dev->bmr.status, inportb(dev->bmr.status) | 0x04 | 0x02);
+
+    // Select drive
+    ata_wait(dev, 0);
+    outportb(dev->io_reg.hddevsel, 0xe0 | dev->slave << 4 | (lba & 0x0f000000) >> 24);
+    ata_wait(dev, 0);
+
+    // Set sector counts and LBAs
+    outportb(dev->io_reg.feature, 0x00);
+    outportb(dev->io_reg.sector_count, 1);
+    outportb(dev->io_reg.lba_lo, (lba & 0x000000ff) >> 0);
+    outportb(dev->io_reg.lba_mid, (lba & 0x0000ff00) >> 8);
+    outportb(dev->io_reg.lba_hi, (lba & 0x00ff0000) >> 16);
+    ata_wait(dev, 0);
+
+    // Notify that we are starting DMA writing.
+    outportb(dev->io_reg.command, ata_dma_command_write);
+
+    // Start DMA Writing.
+    outportb(dev->bmr.command, 0x1);
+
+    // Wait for dma write to complete.
+    while (1) {
+        int status  = inportb(dev->bmr.status);
+        int dstatus = inportb(dev->io_reg.status);
+        if (!(status & 0x04)) {
+            continue;
+        }
+        if (!(dstatus & 0x80)) {
+            break;
+        }
+    }
+
+    // Inform device we are done.
+    outportb(dev->bmr.status, inportb(dev->bmr.status) | 0x04 | 0x02);
+
+    spinlock_unlock(&ata_lock);
 }
 
 // == VFS ENTRY GENERATION ====================================================
@@ -349,46 +831,18 @@ static vfs_file_operations_t ata_fs_operations = {
     .getdents_f = NULL
 };
 
-/// ATAPI filesystem file operations.
-static vfs_file_operations_t atapi_fs_operations = {
-    .open_f     = ata_open,
-    .unlink_f   = NULL,
-    .close_f    = ata_close,
-    .read_f     = atapi_read,
-    .write_f    = NULL,
-    .lseek_f    = NULL,
-    .stat_f     = ata_fstat,
-    .ioctl_f    = NULL,
-    .getdents_f = NULL
-};
-
-static vfs_file_t *atapi_device_create(ata_device_t *device)
+static vfs_file_t *ata_device_create(ata_device_t *dev)
 {
-    char path[PATH_MAX];
-    sprintf(path, "/dev/%s", device->name);
     // Create the file.
-    vfs_file_t *file = vfs_open(path, O_RDONLY | O_CREAT, 0);
+    vfs_file_t *file = kmem_cache_alloc(vfs_file_cache, GFP_KERNEL);
+    if (file == NULL) {
+        pr_err("Failed to create ATA device.\n");
+        return NULL;
+    }
+    // Set the device name.
+    memcpy(file->name, dev->name, NAME_MAX);
     // Set the device.
-    file->device = device;
-    // Set the length
-    file->length = atapi_max_offset(device);
-    // Re-set the flags.
-    file->flags = DT_BLK;
-    // Change the operations.
-    file->sys_operations = &ata_sys_operations;
-    file->fs_operations  = &atapi_fs_operations;
-    return file;
-}
-static vfs_file_t *ata_device_create(ata_device_t *device)
-{
-    char path[PATH_MAX];
-    sprintf(path, "/dev/%s", device->name);
-    // Create the file.
-    vfs_file_t *file = vfs_open(path, O_RDWR | O_CREAT, 0);
-    // Set the device.
-    file->device = device;
-    // Set the length
-    file->length = ata_max_offset(device);
+    file->device = dev;
     // Re-set the flags.
     file->flags = DT_BLK;
     // Change the operations.
@@ -400,168 +854,163 @@ static vfs_file_t *ata_device_create(ata_device_t *device)
 // == VFS CALLBACKS ===========================================================
 static vfs_file_t *ata_open(const char *path, int flags, mode_t mode)
 {
-    pr_default("ata_open(%s, %d, %d)\n", path, flags, mode);
-    if (ata_primary_master.fs_root && (strcmp(path, ata_primary_master.fs_root->name) == 0)) {
-        ++ata_primary_master.fs_root->count;
-        return ata_primary_master.fs_root;
+    pr_debug("ata_open(%s, %d, %d)\n", path, flags, mode);
+    ata_device_t *dev = NULL;
+    if (strcmp(path, ata_primary_master.path) == 0) {
+        dev = &ata_primary_master;
+    } else if (strcmp(path, ata_primary_slave.path) == 0) {
+        dev = &ata_primary_slave;
+    } else if (strcmp(path, ata_secondary_master.path) == 0) {
+        dev = &ata_secondary_master;
+    } else if (strcmp(path, ata_secondary_slave.path) == 0) {
+        dev = &ata_secondary_slave;
+    } else {
+        return NULL;
     }
-    if (ata_primary_slave.fs_root && (strcmp(path, ata_primary_slave.fs_root->name) == 0)) {
-        ++ata_primary_slave.fs_root->count;
-        return ata_primary_slave.fs_root;
-    }
-    if (ata_secondary_master.fs_root && (strcmp(path, ata_secondary_master.fs_root->name) == 0)) {
-        ++ata_secondary_master.fs_root->count;
-        return ata_secondary_master.fs_root;
-    }
-    if (ata_secondary_slave.fs_root && (strcmp(path, ata_secondary_slave.fs_root->name) == 0)) {
-        ++ata_secondary_slave.fs_root->count;
-        return ata_secondary_slave.fs_root;
+    if (dev->fs_root) {
+        ++dev->fs_root->count;
+        return dev->fs_root;
     }
     return NULL;
 }
+
 static int ata_close(vfs_file_t *file)
 {
-    pr_default("ata_close(%p)\n", file);
-    if (ata_primary_master.fs_root == file) {
-        --ata_primary_master.fs_root->count;
+    pr_debug("ata_close(%p)\n", file);
+    // Get the device from the VFS file.
+    ata_device_t *dev = (ata_device_t *)file->device;
+    // Check the device.
+    if (dev == NULL) {
+        kernel_panic("Device not set.");
     }
-    if (ata_primary_slave.fs_root == file) {
-        --ata_primary_slave.fs_root->count;
-    }
-    if (ata_secondary_master.fs_root == file) {
-        --ata_secondary_master.fs_root->count;
-    }
-    if (ata_secondary_slave.fs_root == file) {
-        --ata_secondary_slave.fs_root->count;
+    //
+    if ((dev == &ata_primary_master) || (dev == &ata_primary_slave) ||
+        (dev == &ata_secondary_master) || (dev == &ata_secondary_slave)) {
+        --file->count;
     }
     return 0;
 }
+
 static ssize_t ata_read(vfs_file_t *file, char *buffer, off_t offset, size_t size)
 {
-    pr_default("ata_read(%p, %p, %d, %d)\n", file, buffer, offset, size);
+    pr_debug("ata_read(file: 0x%p, buffer: 0x%p, offest: %8d, size: %8d)\n", file, buffer, offset, size);
+    // Prepare a static support buffer.
+    static char support_buffer[ATA_SECTOR_SIZE];
+    // Get the device from the VFS file.
     ata_device_t *dev = (ata_device_t *)file->device;
-    assert(dev);
-
-    unsigned int start_block = offset / ATA_SECTOR_SIZE;
-    unsigned int end_block   = (offset + size - 1) / ATA_SECTOR_SIZE;
-
-    unsigned int x_offset = 0;
-
-    if (offset > ata_max_offset(dev)) {
-        return 0;
+    // Check the device.
+    if (dev == NULL) {
+        kernel_panic("Device not set.");
     }
 
-    if (offset + size > ata_max_offset(dev)) {
-        unsigned int i = ata_max_offset(dev) - offset;
-        size           = i;
-    }
+    if ((dev->type == ata_dev_type_pata) || (dev->type == ata_dev_type_sata)) {
+        uint32_t start_block  = offset / ATA_SECTOR_SIZE;
+        uint32_t start_offset = offset % ATA_SECTOR_SIZE;
+        uint32_t end_block    = (offset + size - 1) / ATA_SECTOR_SIZE;
+        uint32_t end_offset   = (offset + size - 1) % ATA_SECTOR_SIZE;
+        uint32_t prefix_size  = (ATA_SECTOR_SIZE - start_offset);
+        uint32_t postfix_size = (offset + size) % ATA_SECTOR_SIZE;
+        uint32_t max_offset   = ata_max_offset(dev);
+        uint32_t x_offset     = 0;
 
-    if (offset % ATA_SECTOR_SIZE) {
-        unsigned int prefix_size = (ATA_SECTOR_SIZE - (offset % ATA_SECTOR_SIZE));
-        char *tmp                = kmalloc(ATA_SECTOR_SIZE);
-        ata_device_read_sector(dev, start_block, (uint8_t *)tmp);
-        memcpy(buffer, (void *)((uintptr_t)tmp + (offset % ATA_SECTOR_SIZE)), prefix_size);
-        kfree(tmp);
-        x_offset += prefix_size;
-        start_block++;
-    }
-    if ((offset + size) % ATA_SECTOR_SIZE && start_block <= end_block) {
-        unsigned int postfix_size = (offset + size) % ATA_SECTOR_SIZE;
-        char *tmp                 = kmalloc(ATA_SECTOR_SIZE);
-        ata_device_read_sector(dev, end_block, (uint8_t *)tmp);
-        memcpy((void *)((uintptr_t)buffer + size - postfix_size), tmp, postfix_size);
-        kfree(tmp);
-        end_block--;
-    }
-    while (start_block <= end_block) {
-        ata_device_read_sector(dev, start_block, (uint8_t *)((uintptr_t)buffer + x_offset));
-        x_offset += ATA_SECTOR_SIZE;
-        start_block++;
+        // Check if with the offset we are exceeding the size.
+        if (offset > max_offset) {
+            pr_warning("The offset is exceeding the disk size (%d > %d)\n", offset, max_offset);
+            return 0;
+        }
+
+        // Check if we are going to reading over the size.
+        if ((offset + size) > max_offset) {
+            size = max_offset - offset;
+        }
+
+        if (start_offset) {
+            ata_device_read_sector(dev, start_block, (uint8_t *)support_buffer);
+            memcpy(buffer, (void *)((uintptr_t)support_buffer + start_offset), prefix_size);
+            x_offset += prefix_size;
+            ++start_block;
+        }
+
+        if (postfix_size && (start_block <= end_block)) {
+            ata_device_read_sector(dev, end_block, (uint8_t *)support_buffer);
+            memcpy((void *)((uintptr_t)buffer + size - postfix_size), support_buffer, postfix_size);
+            --end_block;
+        }
+
+        while (start_block <= end_block) {
+            ata_device_read_sector(dev, start_block, (uint8_t *)((uintptr_t)buffer + x_offset));
+            x_offset += ATA_SECTOR_SIZE;
+            ++start_block;
+        }
+    } else if ((dev->type == ata_dev_type_patapi) || (dev->type == ata_dev_type_satapi)) {
+        pr_warning("ATAPI and SATAPI drives are not currently supported.\n");
+        size = -EPERM;
     }
     return size;
 }
-static ssize_t atapi_read(vfs_file_t *file, char *buffer, off_t offset, size_t size)
-{
-    pr_default("atapi_read(%p, %p, %d, %d)\n", file, buffer, offset, size);
-    ata_device_t *dev        = (ata_device_t *)file->device;
-    unsigned int start_block = offset / dev->atapi_sector_size;
-    unsigned int end_block   = (offset + size - 1) / dev->atapi_sector_size;
-    unsigned int x_offset    = 0;
-    if (offset > atapi_max_offset(dev)) {
-        return 0;
-    }
-    if (offset + size > atapi_max_offset(dev)) {
-        unsigned int i = atapi_max_offset(dev) - offset;
-        size           = i;
-    }
-    if (offset % dev->atapi_sector_size) {
-        unsigned int prefix_size = (dev->atapi_sector_size - (offset % dev->atapi_sector_size));
-        char *tmp                = kmalloc(dev->atapi_sector_size);
-        ata_device_read_sector_atapi(dev, start_block, (uint8_t *)tmp);
-        memcpy(buffer, (void *)((uintptr_t)tmp + (offset % dev->atapi_sector_size)), prefix_size);
-        kfree(tmp);
-        x_offset += prefix_size;
-        start_block++;
-    }
-    if ((offset + size) % dev->atapi_sector_size && start_block <= end_block) {
-        unsigned int postfix_size = (offset + size) % dev->atapi_sector_size;
-        char *tmp                 = kmalloc(dev->atapi_sector_size);
-        ata_device_read_sector_atapi(dev, end_block, (uint8_t *)tmp);
-        memcpy((void *)((uintptr_t)buffer + size - postfix_size), tmp, postfix_size);
-        kfree(tmp);
-        end_block--;
-    }
-    while (start_block <= end_block) {
-        ata_device_read_sector_atapi(dev, start_block, (uint8_t *)((uintptr_t)buffer + x_offset));
-        x_offset += dev->atapi_sector_size;
-        start_block++;
-    }
-    return size;
-}
+
 static ssize_t ata_write(vfs_file_t *file, const void *buffer, off_t offset, size_t size)
 {
-    ata_device_t *dev        = (ata_device_t *)file->device;
-    unsigned int start_block = offset / ATA_SECTOR_SIZE;
-    unsigned int end_block   = (offset + size - 1) / ATA_SECTOR_SIZE;
-    unsigned int x_offset    = 0;
-    if (offset > ata_max_offset(dev)) {
-        return 0;
+    pr_debug("ata_write(%p, %p, %d, %d)\n", file, buffer, offset, size);
+    // Prepare a static support buffer.
+    static char support_buffer[ATA_SECTOR_SIZE];
+    // Get the device from the VFS file.
+    ata_device_t *dev = (ata_device_t *)file->device;
+    // Check the device.
+    if (dev == NULL) {
+        kernel_panic("Device not set.");
     }
-    if (offset + size > ata_max_offset(dev)) {
-        unsigned int i = ata_max_offset(dev) - offset;
-        size           = i;
-    }
-    if (offset % ATA_SECTOR_SIZE) {
-        unsigned int prefix_size = (ATA_SECTOR_SIZE - (offset % ATA_SECTOR_SIZE));
-        char *tmp                = kmalloc(ATA_SECTOR_SIZE);
-        ata_device_read_sector(dev, start_block, (uint8_t *)tmp);
-        pr_default("Writing first block");
-        memcpy((void *)((uintptr_t)tmp + (offset % ATA_SECTOR_SIZE)), buffer, prefix_size);
-        ata_device_write_sector_retry(dev, start_block, (uint8_t *)tmp);
-        kfree(tmp);
-        x_offset += prefix_size;
-        start_block++;
-    }
-    if ((offset + size) % ATA_SECTOR_SIZE && start_block <= end_block) {
-        unsigned int postfix_size = (offset + size) % ATA_SECTOR_SIZE;
-        char *tmp                 = kmalloc(ATA_SECTOR_SIZE);
-        ata_device_read_sector(dev, end_block, (uint8_t *)tmp);
-        pr_default("Writing last block");
-        memcpy(tmp, (void *)((uintptr_t)buffer + size - postfix_size), postfix_size);
-        ata_device_write_sector_retry(dev, end_block, (uint8_t *)tmp);
-        kfree(tmp);
-        end_block--;
-    }
-    while (start_block <= end_block) {
-        ata_device_write_sector_retry(dev, start_block, (uint8_t *)((uintptr_t)buffer + x_offset));
-        x_offset += ATA_SECTOR_SIZE;
-        start_block++;
+
+    if ((dev->type == ata_dev_type_pata) || (dev->type == ata_dev_type_sata)) {
+        uint32_t start_block  = offset / ATA_SECTOR_SIZE;
+        uint32_t start_offset = offset % ATA_SECTOR_SIZE;
+        uint32_t end_block    = (offset + size - 1) / ATA_SECTOR_SIZE;
+        uint32_t end_offset   = (offset + size - 1) % ATA_SECTOR_SIZE;
+        uint32_t prefix_size  = (ATA_SECTOR_SIZE - start_offset);
+        uint32_t postfix_size = (offset + size) % ATA_SECTOR_SIZE;
+        uint32_t max_offset   = ata_max_offset(dev);
+        uint32_t x_offset     = 0;
+
+        // Check if with the offset we are exceeding the size.
+        if (offset > max_offset) {
+            return 0;
+        }
+
+        // Check if we are going to readoing over the size.
+        if (offset + size > max_offset) {
+            size = max_offset - offset;
+        }
+        if (start_offset) {
+            ata_device_read_sector(dev, start_block, (uint8_t *)support_buffer);
+            memcpy((void *)((uintptr_t)support_buffer + (start_offset)), buffer, prefix_size);
+            ata_device_write_sector(dev, start_block, (uint8_t *)support_buffer);
+            x_offset += prefix_size;
+            ++start_block;
+        }
+
+        if (postfix_size && (start_block <= end_block)) {
+            ata_device_read_sector(dev, end_block, (uint8_t *)support_buffer);
+            memcpy(support_buffer, (void *)((uintptr_t)buffer + size - postfix_size), postfix_size);
+            ata_device_write_sector(dev, end_block, (uint8_t *)support_buffer);
+            --end_block;
+        }
+
+        while (start_block <= end_block) {
+            ata_device_write_sector(dev, start_block, (uint8_t *)((uintptr_t)buffer + x_offset));
+            x_offset += ATA_SECTOR_SIZE;
+            ++start_block;
+        }
+    } else if ((dev->type == ata_dev_type_patapi) || (dev->type == ata_dev_type_satapi)) {
+        pr_warning("ATAPI and SATAPI drives are not currently supported.\n");
+        size = -EPERM;
     }
     return size;
 }
-static int _ata_stat(const ata_device_t *device, stat_t *stat)
+
+static int _ata_stat(const ata_device_t *dev, stat_t *stat)
 {
-    if (device) {
+    if (dev && dev->fs_root) {
+        pr_debug("_ata_stat(%p, %p)\n", dev, stat);
         stat->st_dev   = 0;
         stat->st_ino   = 0;
         stat->st_mode  = 0;
@@ -570,7 +1019,7 @@ static int _ata_stat(const ata_device_t *device, stat_t *stat)
         stat->st_atime = sys_time(NULL);
         stat->st_mtime = sys_time(NULL);
         stat->st_ctime = sys_time(NULL);
-        stat->st_size  = 0;
+        stat->st_size  = dev->fs_root->length;
     }
     return 0;
 }
@@ -597,540 +1046,71 @@ static int ata_stat(const char *path, stat_t *stat)
     return -1;
 }
 
-// == ATA DEVICE MANAGEMENT ===================================================
-static bool_t ata_device_init(ata_device_t *dev)
+static ata_device_type_t ata_device_detect(ata_device_t *dev)
 {
-    pr_default("Detected IDE device on bus 0x%3x\n", dev->io_base);
-    pr_default("Device name: %s\n", dev->name);
-    ata_device_select(dev);
-    outportb(dev->io_base + ATA_REG_COMMAND, ATA_CMD_IDENT);
-    ata_io_wait(dev);
-    uint8_t status = inportb(dev->io_base + ATA_REG_COMMAND);
-    pr_default("Device status: %d\n", status);
-
-    ata_wait(dev, false);
-
-    uint16_t *buf = (uint16_t *)&dev->identity;
-    for (int i = 0; i < 256; ++i) {
-        buf[i] = inports(dev->io_base);
+    // Detect the device type.
+    ata_device_type_t type = ata_detect_device_type(dev);
+    // Exit if there is no drive.
+    if (type == ata_dev_type_no_device) {
+        pr_debug("No drive(s) present\n");
+        return type;
     }
-
-    uint8_t *ptr = (uint8_t *)&dev->identity.model;
-    for (int i = 0; i < 39; i += 2) {
-        char tmp   = ptr[i + 1];
-        ptr[i + 1] = ptr[i];
-        ptr[i]     = tmp;
-    }
-    ptr[39] = 0;
-
-    pr_default("Device Model: %s\n", dev->identity.model);
-    pr_default("Sectors (48): %d\n", (uint32_t)dev->identity.sectors_48);
-    pr_default("Sectors (24): %d\n", dev->identity.sectors_28);
-
-    pr_default("Setting up DMA...\n");
-    // dev->dma_prdt = kmalloc_p(sizeof(prdt_t) * 1, &dev->dma_prdt_phys);
-    // dev->dma_start = kmalloc_p(4096, &dev->dma_start_phys);
-    // TODO: Check correctness.
-    {
-        uint32_t order     = find_nearest_order_greater(0, sizeof(prdt_t));
-        page_t *page       = _alloc_pages(GFP_KERNEL, order);
-        dev->dma_prdt      = (void *)get_lowmem_address_from_page(page);
-        dev->dma_prdt_phys = get_physical_address_from_page(page);
-    }
-    {
-        uint32_t order      = find_nearest_order_greater(0, 4096);
-        page_t *page        = _alloc_pages(GFP_KERNEL, order);
-        dev->dma_start      = (void *)get_lowmem_address_from_page(page);
-        dev->dma_start_phys = get_physical_address_from_page(page);
-    }
-    pr_default("Putting prdt    at 0x%x (0x%x phys)\n", dev->dma_prdt, dev->dma_prdt_phys);
-    pr_default("Putting prdt[0] at 0x%x (0x%x phys)\n", dev->dma_start, dev->dma_start_phys);
-
-    dev->dma_prdt[0].offset = dev->dma_start_phys;
-    dev->dma_prdt[0].bytes  = 512;
-    dev->dma_prdt[0].last   = 0x8000;
-
-    pr_default("ATA PCI device ID: 0x%x\n", ata_pci);
-
-    uint16_t command_reg = pci_read_field(ata_pci, PCI_COMMAND, 4);
-    pr_default("COMMAND register before: 0x%4x\n", command_reg);
-    if (command_reg & (1U << 2U)) {
-        pr_default("Bus mastering already enabled.\n");
-    } else {
-        // bit 2.
-        command_reg |= (1U << 2U);
-        pr_default("Enabling bus mastering...\n");
-        pci_write_field(ata_pci, PCI_COMMAND, 4, command_reg);
-        command_reg = pci_read_field(ata_pci, PCI_COMMAND, 4);
-        pr_default("COMMAND register after: 0x%4x\n", command_reg);
-    }
-
-    dev->bar4 = pci_read_field(ata_pci, PCI_BASE_ADDRESS_4, 4);
-    pr_default("BAR4: 0x%x\n", dev->bar4);
-
-    if (dev->bar4 & 0x00000001U) {
-        dev->bar4 = dev->bar4 & 0xFFFFFFFC;
-    } else {
-        pr_default("? ATA bus master registers are 'usually' I/O ports.\n");
-        // No DMA because we're not sure what to do here-
-        return 1;
-    }
-    pci_write_field(ata_pci, PCI_INTERRUPT_LINE, 1, 0xFE);
-    if (pci_read_field(ata_pci, PCI_INTERRUPT_LINE, 1) == 0xFE) {
-        // Needs assignment.
-        pci_write_field(ata_pci, PCI_INTERRUPT_LINE, 1, 14);
-    }
-    return 0;
-}
-static int atapi_device_init(ata_device_t *dev)
-{
-    pr_default("Detected ATAPI device at io-base 0x%3x, ctrl 0x%3x, slave %d\n",
-               dev->io_base, dev->control, dev->slave);
-    pr_default("Device name: %s\n", dev->name);
-    ata_device_select(dev);
-    outportb(dev->io_base + ATA_REG_COMMAND, ATAPI_CMD_ID_PCKT);
-    ata_io_wait(dev);
-    uint8_t status = inportb(dev->io_base + ATA_REG_COMMAND);
-    pr_default("Device status: %d\n", status);
-
-    ata_wait(dev, false);
-
-    uint16_t *buf = (uint16_t *)&dev->identity;
-
-    for (int i = 0; i < 256; ++i) {
-        buf[i] = inports(dev->io_base);
-    }
-
-    uint8_t *ptr = (uint8_t *)&dev->identity.model;
-    for (int i = 0; i < 39; i += 2) {
-        char tmp   = ptr[i + 1];
-        ptr[i + 1] = ptr[i];
-        ptr[i]     = tmp;
-    }
-    ptr[39] = 0;
-
-    pr_default("Device Model: %s\n", dev->identity.model);
-
-    // Detect medium.
-    atapi_command_t command;
-    command.command_bytes[0] = 0x25;
-    command.command_bytes[1] = 0;
-    command.command_bytes[2] = 0;
-    command.command_bytes[3] = 0;
-    command.command_bytes[4] = 0;
-    command.command_bytes[5] = 0;
-    command.command_bytes[6] = 0;
-    command.command_bytes[7] = 0;
-    // Bit 0 = PMI (0, last sector).
-    command.command_bytes[8] = 0;
-    // Control.
-    command.command_bytes[9]  = 0;
-    command.command_bytes[10] = 0;
-    command.command_bytes[11] = 0;
-
-    uint16_t bus = dev->io_base;
-
-    outportb(bus + ATA_REG_FEATURES, 0x00);
-    outportb(bus + ATA_REG_LBA1, 0x08);
-    outportb(bus + ATA_REG_LBA2, 0x08);
-    outportb(bus + ATA_REG_COMMAND, ATAPI_CMD_PACKET);
-
-    // Poll.
-    while (1) {
-        status = inportb(dev->io_base + ATA_REG_STATUS);
-        if ((status & ATA_STAT_ERR)) {
-            goto atapi_error;
-        }
-        if (!(status & ATA_STAT_BUSY) && (status & ATA_STAT_READY)) {
-            break;
-        }
-    }
-
-    for (int i = 0; i < 6; ++i)
-        outports(bus, command.command_words[i]);
-
-    // Poll.
-    while (1) {
-        status = inportb(dev->io_base + ATA_REG_STATUS);
-        if ((status & ATA_STAT_ERR)) {
-            goto atapi_error_read;
-        }
-        if (!(status & ATA_STAT_BUSY) && (status & ATA_STAT_READY)) {
-            break;
-        }
-        if ((status & ATA_STAT_DRQ)) {
-            break;
-        }
-    }
-
-    uint16_t data[4];
-
-    for (int i = 0; i < 4; ++i) {
-        data[i] = inports(bus);
-    }
-
-#define htonl(l)                                                        \
-    ((((l)&0xFF) << 24) | (((l)&0xFF00) << 8) | (((l)&0xFF0000) >> 8) | \
-     (((l)&0xFF000000) >> 24))
-    uint32_t lba, blocks;
-
-    memcpy(&lba, &data[0], sizeof(uint32_t));
-
-    lba = htonl(lba);
-
-    memcpy(&blocks, &data[2], sizeof(uint32_t));
-
-    blocks = htonl(blocks);
-
-    dev->atapi_lba         = lba;
-    dev->atapi_sector_size = blocks;
-
-    if (!lba) {
-        return false;
-    }
-
-    pr_default("Finished! LBA = %x; block length = %x\n", lba, blocks);
-    return true;
-
-atapi_error_read:
-    pr_default("ATAPI error; no medium?\n");
-    return false;
-
-atapi_error:
-    pr_default("ATAPI early error; unsure\n");
-    return false;
-}
-static void ata_soft_reset(ata_device_t *dev)
-{
-    outportb(dev->control, 0x04);
-    ata_io_wait(dev);
-    outportb(dev->control, 0x00);
-}
-static int ata_device_detect(ata_device_t *dev)
-{
-    ata_soft_reset(dev);
-    ata_io_wait(dev);
-    outportb(dev->io_base + ATA_REG_HDDEVSEL, 0xA0 | dev->slave << 4);
-    ata_io_wait(dev);
-    ata_status_wait(dev, 10000);
-
-    pr_default("Probing cylinder registers...\n");
-    uint8_t cl = inportb(dev->io_base + ATA_REG_LBA1);
-    uint8_t ch = inportb(dev->io_base + ATA_REG_LBA2);
-    if ((cl == 0xFF) && (ch == 0xFF)) {
-        pr_default("No drive(s) present\n");
-        return 1;
-    }
-
-    pr_default("Waiting while busy...\n");
-    uint8_t status = ata_status_wait(dev, 5000);
-    if (status & ATA_STAT_BUSY) {
-        pr_default("No drive(s) present\n");
-        return 1;
-    }
-
-    pr_default("Device detected: 0x%2x 0x%2x\n", cl, ch);
-    if ((cl == 0x00 && ch == 0x00) || (cl == 0x3C && ch == 0xC3)) {
-        // The device is not an ATAPI.
-        dev->is_atapi = false;
-        // Parallel ATA device, or emulated SATA
+    // Parallel ATA drive, or emulated SATA.
+    if ((type == ata_dev_type_pata) || (type == ata_dev_type_sata)) {
+        // Device type supported, set it.
+        dev->type = type;
+        // Set the device name.
         sprintf(dev->name, "hd%c", ata_drive_char);
-
+        // Set the device path.
+        sprintf(dev->path, "/dev/hd%c", ata_drive_char);
+        // Create the filesystem entry for the drive.
         dev->fs_root = ata_device_create(dev);
+        // Check if we failed to create the filesystem entry.
         if (!dev->fs_root) {
-            pr_default("Failed to create ata device!\n");
+            pr_crit("Failed to create ata device!\n");
             return 1;
         }
-        if (!vfs_mount(dev->fs_root->name, dev->fs_root)) {
-            pr_default("Failed to mount ata device!\n");
+        // Try to mount the drive.
+        if (!vfs_mount(dev->path, dev->fs_root)) {
+            pr_crit("Failed to mount ata device!\n");
             return 1;
         }
+        // Initialize the drive.
         if (ata_device_init(dev)) {
-            pr_default("Failed to initialize ata device!\n");
+            pr_crit("Failed to initialize ata device!\n");
             return 1;
         }
+        // Increment the drive letter.
         ++ata_drive_char;
-    } else if ((cl == 0x14 && ch == 0xEB) || (cl == 0x69 && ch == 0x96)) {
-        // The device is an ATAPI.
-        dev->is_atapi = true;
-        sprintf(dev->name, "cdrom%d", cdrom_number);
-
-        dev->fs_root = atapi_device_create(dev);
-        if (!dev->fs_root) {
-            pr_default("Failed to create atapi device!\n");
-            return 1;
-        }
-        if (!vfs_mount(dev->fs_root->name, dev->fs_root)) {
-            pr_default("Failed to mount atapi device!\n");
-            return 1;
-        }
-        if (atapi_device_init(dev)) {
-            pr_default("Failed to initialize atapi device!\n");
-            return 1;
-        }
-        ++cdrom_number;
+    } else if ((type == ata_dev_type_patapi) || (type == ata_dev_type_satapi)) {
+        pr_warning("ATAPI and SATAPI drives are not currently supported.\n");
+        return ata_dev_type_no_device;
+    } else {
+        pr_alert("Unsupported drive type.\n");
+        return ata_dev_type_unknown;
     }
-    pr_default("\n");
-    return 0;
-}
-
-// == ATA SECTOR READ/WRITE FUNCTIONS =========================================
-static void ata_device_read_sector(ata_device_t *dev, uint32_t lba, uint8_t *buffer)
-{
-    pr_default("ata_device_read_sector(%p, %d, %p)\n", dev, lba, buffer);
-
-    uint16_t bus = dev->io_base;
-
-    uint8_t slave = dev->slave;
-
-    if (dev->is_atapi) {
-        return;
-    }
-
-    spinlock_lock(&ata_lock);
-
-#if 1
-    int errors = 0;
-try_again:
-#endif
-
-    pr_default("ata_wait\n");
-    ata_wait(dev, false);
-
-    // Stop.
-    outportb(dev->bar4, 0x00);
-
-    pr_default("Set the PRDT.\n");
-    // Set the PRDT.
-    outportl(dev->bar4 + 0x04, dev->dma_prdt_phys);
-
-    pr_default("Enable error, irq status.\n");
-    // Enable error, irq status.
-    outportb(dev->bar4 + 0x2, inportb(dev->bar4 + 0x02) | 0x04 | 0x02);
-
-    // Set read.
-    outportb(dev->bar4, 0x08);
-
-    pr_default("irq_enable...\n");
-    //sti();
-
-    while (1) {
-        pr_default("Wait busy...\n");
-        uint8_t status = inportb(dev->io_base + ATA_REG_STATUS);
-        if (!(status & ATA_STAT_BUSY)) {
-            break;
-        }
-    }
-
-    pr_default("Read.\n");
-    outportb(bus + ATA_REG_CONTROL, 0x00);
-    outportb(bus + ATA_REG_HDDEVSEL, 0xe0 | slave << 4 | (lba & 0x0f000000) >> 24);
-    ata_io_wait(dev);
-    outportb(bus + ATA_REG_FEATURES, 0x00);
-    outportb(bus + ATA_REG_SECCOUNT0, 1);
-    outportb(bus + ATA_REG_LBA0, (lba & 0x000000ff) >> 0);
-    outportb(bus + ATA_REG_LBA1, (lba & 0x0000ff00) >> 8);
-    outportb(bus + ATA_REG_LBA2, (lba & 0x00ff0000) >> 16);
-    // outportb(bus + ATA_REG_COMMAND, ATA_CMD_READ);
-    while (1) {
-        uint8_t status = inportb(dev->io_base + ATA_REG_STATUS);
-        if (!(status & ATA_STAT_BUSY) && (status & ATA_STAT_READY)) {
-            break;
-        }
-    }
-    outportb(bus + ATA_REG_COMMAND, ATA_CMD_RD_DMA);
-
-    ata_io_wait(dev);
-
-    outportb(dev->bar4, 0x08 | 0x01);
-
-    while (1) {
-        int status  = inportb(dev->bar4 + 0x02);
-        int dstatus = inportb(dev->io_base + ATA_REG_STATUS);
-        if (!(status & 0x04)) {
-            continue;
-        }
-        if (!(dstatus & ATA_STAT_BUSY)) {
-            break;
-        }
-    }
-    //cli();
-
-#if 1
-    if (ata_wait(dev, true)) {
-        pr_default("Error during ATA read of lba block %d\n", lba);
-        errors++;
-        if (errors > 4) {
-            pr_default("-- Too many errors trying to read this block. Bailing.\n");
-            spinlock_unlock(&ata_lock);
-            return;
-        }
-        goto try_again;
-    }
-#endif
-
-    pr_default("Copy from DMA buffer to output buffer.\n");
-    // Copy from DMA buffer to output buffer.
-    memcpy(buffer, dev->dma_start, 512);
-
-    // Inform device we are done.
-    outportb(dev->bar4 + 0x2, inportb(dev->bar4 + 0x02) | 0x04 | 0x02);
-
-#if 0
-    int size = 256;
-    inportsm(bus,buf,size);
-    ata_wait(dev, false);
-    outportb(bus + ATA_REG_CONTROL, 0x02);
-#endif
-    spinlock_unlock(&ata_lock);
-}
-static void ata_device_read_sector_atapi(ata_device_t *dev, uint32_t lba, uint8_t *buffer)
-{
-    if (!dev->is_atapi) {
-        return;
-    }
-
-    uint16_t bus = dev->io_base;
-    spinlock_lock(&ata_lock);
-
-    outportb(dev->io_base + ATA_REG_HDDEVSEL, 0xA0 | dev->slave << 4);
-    ata_io_wait(dev);
-
-    outportb(bus + ATA_REG_FEATURES, 0x00);
-    outportb(bus + ATA_REG_LBA1, dev->atapi_sector_size & 0xFF);
-    outportb(bus + ATA_REG_LBA2, dev->atapi_sector_size >> 8);
-    outportb(bus + ATA_REG_COMMAND, ATAPI_CMD_PACKET);
-
-    // Poll.
-    while (1) {
-        uint8_t status = inportb(dev->io_base + ATA_REG_STATUS);
-        if ((status & ATA_STAT_ERR)) {
-            goto atapi_error_on_read_setup;
-        }
-        if (!(status & ATA_STAT_BUSY) && (status & ATA_STAT_DRQ)) {
-            break;
-        }
-    }
-
-    atapi_in_progress = true;
-
-    atapi_command_t command;
-    command.command_bytes[0] = 0xA8;
-    command.command_bytes[1] = 0;
-    command.command_bytes[2] = (lba >> 0x18) & 0xFF;
-    command.command_bytes[3] = (lba >> 0x10) & 0xFF;
-    command.command_bytes[4] = (lba >> 0x08) & 0xFF;
-    command.command_bytes[5] = (lba >> 0x00) & 0xFF;
-    command.command_bytes[6] = 0;
-    command.command_bytes[7] = 0;
-    // Bit 0 = PMI (0, last sector).
-    command.command_bytes[8] = 0;
-    // Control.
-    command.command_bytes[9]  = 1;
-    command.command_bytes[10] = 0;
-    command.command_bytes[11] = 0;
-
-    for (int i = 0; i < 6; ++i) {
-        outports(bus, command.command_words[i]);
-    }
-
-    // Wait.
-#ifdef COMPLETE_SCHEDULER
-    sleep_on(atapi_waiter);
-#endif
-
-    atapi_in_progress = false;
-
-    while (1) {
-        uint8_t status = inportb(dev->io_base + ATA_REG_STATUS);
-        if ((status & ATA_STAT_ERR)) {
-            goto atapi_error_on_read_setup;
-        }
-        if (!(status & ATA_STAT_BUSY) && (status & ATA_STAT_DRQ)) {
-            break;
-        }
-    }
-
-    uint16_t size_to_read = inportb(bus + ATA_REG_LBA2) << 8;
-    size_to_read          = size_to_read | inportb(bus + ATA_REG_LBA1);
-
-    inportsm(bus, buffer, size_to_read / 2);
-
-    while (1) {
-        uint8_t status = inportb(dev->io_base + ATA_REG_STATUS);
-        if ((status & ATA_STAT_ERR)) {
-            goto atapi_error_on_read_setup;
-        }
-        if (!(status & ATA_STAT_BUSY) && (status & ATA_STAT_READY)) {
-            break;
-        }
-    }
-
-atapi_error_on_read_setup:;
-    spinlock_unlock(&ata_lock);
-}
-static void ata_device_write_sector(ata_device_t *dev, uint32_t lba, uint8_t *buffer)
-{
-    uint16_t bus  = dev->io_base;
-    uint8_t slave = dev->slave;
-
-    spinlock_lock(&ata_lock);
-
-    outportb(bus + ATA_REG_CONTROL, 0x02);
-
-    ata_wait(dev, false);
-    outportb(bus + ATA_REG_HDDEVSEL, 0xe0 | slave << 4 | (lba & 0x0f000000) >> 24);
-    ata_wait(dev, false);
-
-    outportb(bus + ATA_REG_FEATURES, 0x00);
-    outportb(bus + ATA_REG_SECCOUNT0, 0x01);
-    outportb(bus + ATA_REG_LBA0, (lba & 0x000000ff) >> 0);
-    outportb(bus + ATA_REG_LBA1, (lba & 0x0000ff00) >> 8);
-    outportb(bus + ATA_REG_LBA2, (lba & 0x00ff0000) >> 16);
-    outportb(bus + ATA_REG_COMMAND, ATA_CMD_WRITE);
-    ata_wait(dev, false);
-    int size = ATA_SECTOR_SIZE / 2;
-    outportsm(bus, buffer, size);
-    outportb(bus + 0x07, ATA_CMD_CH_FLSH);
-    ata_wait(dev, false);
-    spinlock_unlock(&ata_lock);
-}
-static void ata_device_write_sector_retry(ata_device_t *dev, uint32_t lba, uint8_t *buffer)
-{
-    uint8_t *read_buf = kmalloc(ATA_SECTOR_SIZE);
-    do {
-        ata_device_write_sector(dev, lba, buffer);
-        ata_device_read_sector(dev, lba, read_buf);
-    } while (
-        buffer_compare((uint32_t *)buffer, (uint32_t *)read_buf, ATA_SECTOR_SIZE));
-    kfree(read_buf);
+    return type;
 }
 
 // == IRQ HANDLERS ============================================================
 /// @param f The interrupt stack frame.
 static void ata_irq_handler_master(pt_regs *f)
 {
-    inportb(ata_primary_master.io_base + ATA_REG_STATUS);
-
-    if (atapi_in_progress) {
-        // wakeup_queue(atapi_waiter);
-    }
-
-    // irq_ack(14);
-    pic8259_send_eoi(14);
+    pr_warning("ata_irq_handler_master\n");
+    inportb(ata_primary_master.io_reg.status);
+    inportb(ata_primary_master.bmr.status);
+    //outportb(ata_primary_master.bmr.command, ata_bm_stop_bus_master);
+    pic8259_send_eoi(IRQ_FIRST_HD);
 }
 
 /// @param f The interrupt stack frame.
 static void ata_irq_handler_slave(pt_regs *f)
 {
-    inportb(ata_secondary_master.io_base + ATA_REG_STATUS);
-
-    if (atapi_in_progress) {
-        // wakeup_queue(atapi_waiter);
-    }
-
-    // irq_ack(15);
-    pic8259_send_eoi(15);
+    pr_warning("ata_irq_handler_slave\n");
+    inportb(ata_secondary_master.io_reg.status);
+    inportb(ata_primary_master.bmr.status);
+    //outportb(ata_primary_master.bmr.command, ata_bm_stop_bus_master);
+    pic8259_send_eoi(IRQ_SECOND_HD);
 }
 
 // == PCI FUNCTIONS ===========================================================
@@ -1144,32 +1124,33 @@ static void pci_find_ata(uint32_t dev, uint16_t vid, uint16_t did, void *extra)
 // == INITIALIZE/FINALIZE ATA =================================================
 int ata_initialize()
 {
+    // Initialize the spinlock.
     spinlock_init(&ata_lock);
 
-    // Detect drives and mount them.
-    // Locate ATA device via PCI.
+    // Search for ATA devices.
     pci_scan(&pci_find_ata, -1, &ata_pci);
 
-    //irq_install_handler(14, ata_irq_handler_master, "ide master");
-    //irq_install_handler(15, ata_irq_handler_slave, "ide slave");
+    // Install the IRQ handlers.
+    irq_install_handler(IRQ_FIRST_HD, ata_irq_handler_master, "IDE Master");
+    irq_install_handler(IRQ_SECOND_HD, ata_irq_handler_slave, "IDE Slave");
 
-    //	atapi_waiter = list_create();
-
-    pr_default("Detecteing devices...\n");
-    pr_default("Detecteing Primary Master...\n");
-    ata_device_detect(&ata_primary_master);
-    pr_default("\n");
-    pr_default("Detecteing Primary Slave...\n");
-    ata_device_detect(&ata_primary_slave);
-    pr_default("\n");
-    pr_default("Detecteing Secondary Master...\n");
-    ata_device_detect(&ata_secondary_master);
-    pr_default("\n");
-    pr_default("Detecteing Secondary Slave...\n");
-    ata_device_detect(&ata_secondary_slave);
-    pr_default("\n");
-    pr_default("Done\n");
-
+    ata_device_type_t type;
+    type = ata_device_detect(&ata_primary_master);
+    if ((type != ata_dev_type_no_device) && (type != ata_dev_type_unknown)) {
+        pr_info("    Found %s device connected to primary master.\n", ata_get_device_type_str(type));
+    }
+    type = ata_device_detect(&ata_primary_slave);
+    if ((type != ata_dev_type_no_device) && (type != ata_dev_type_unknown)) {
+        pr_info("    Found %s device connected to primary slave.\n", ata_get_device_type_str(type));
+    }
+    type = ata_device_detect(&ata_secondary_master);
+    if ((type != ata_dev_type_no_device) && (type != ata_dev_type_unknown)) {
+        pr_info("    Found %s device connected to secondary master.\n", ata_get_device_type_str(type));
+    }
+    type = ata_device_detect(&ata_secondary_slave);
+    if ((type != ata_dev_type_no_device) && (type != ata_dev_type_unknown)) {
+        pr_info("    Found %s device connected to secondary slave.\n", ata_get_device_type_str(type));
+    }
     return 0;
 }
 

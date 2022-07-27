@@ -1,7 +1,6 @@
-///                MentOS, The Mentoring Operating system project
 /// @file dirent.h
 /// @brief Functions used to manage directories.
-/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #pragma once

@@ -1,7 +1,6 @@
-///                MentOS, The Mentoring Operating system project
 /// @file pwd.c
 /// @brief
-/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #include "pwd.h"
@@ -11,11 +10,12 @@
 #include "string.h"
 #include "stdio.h"
 #include "fcntl.h"
+#include "debug.h"
 
 static inline void __parse_line(passwd_t *pwd, char *buf)
 {
     assert(pwd && "Received null pwd!");
-    char *token;
+    char *token, *ch;
     // Parse the username.
     if ((token = strtok(buf, ":")) != NULL)
         pwd->pw_name = token;
@@ -35,59 +35,88 @@ static inline void __parse_line(passwd_t *pwd, char *buf)
     if ((token = strtok(NULL, ":")) != NULL)
         pwd->pw_dir = token;
     // Parse the shell.
-    if ((token = strtok(NULL, ":")) != NULL)
+    if ((token = strtok(NULL, ":")) != NULL) {
         pwd->pw_shell = token;
+        // Find carriege return.
+        if ((ch = strchr(pwd->pw_shell, '\r')))
+            *ch = 0;
+        // Find newline.
+        if ((ch = strchr(pwd->pw_shell, '\n')))
+            *ch = 0;
+    }
 }
 
-static inline char *__search_entry(int fd, char *buf, int buflen, const char *name, uid_t uid)
+/// @brief Reads a line from the file.
+/// @param fd the file descriptor.
+/// @param buffer the buffer where we place the line.
+/// @param buflen the length of the buffer.
+/// @return the amount we read.
+ssize_t __readline(int fd, char *buffer, size_t buflen)
 {
-    int ret;
-    char c;
-    int pos = 0;
-    while ((ret = read(fd, &c, 1U))) {
-        // Skip carriage return.
-        if (c == '\r')
-            continue;
-        if (pos >= buflen) {
-            errno = ERANGE;
-            return NULL;
-        }
-        // If we have found a newline or the EOF, parse the entry.
-        if ((c == '\n') || (ret == EOF)) {
-            // Close the buffer.
-            buf[pos] = 0;
-            // Check the entry.
-            if (name) {
-                if (strncmp(buf, name, strlen(name)) == 0)
-                    return buf;
-            } else {
-                int uid_start = -1, col_count = 0;
-                for (int i = 0; i < pos; ++i) {
-                    if (buf[i] == ':') {
-                        if (++col_count == 2) {
-                            uid_start = i + 1;
-                            break;
-                        }
-                    }
-                }
-                if ((uid_start != -1) && (uid_start < pos)) {
-                    // Parse the uid.
-                    int found_uid = atoi(&buf[uid_start]);
-                    // Check the uid.
-                    if (found_uid == uid)
-                        return buf;
-                }
+    memset(buffer, 0, buflen);
+    long num_read = read(fd, buffer, buflen);
+    if (num_read == 0) {
+        return 0;
+    }
+    char *newline = strchr(buffer, '\n');
+    if (newline == NULL) {
+        newline = strchr(buffer, EOF);
+        if (newline == NULL) {
+            newline = strchr(buffer, 0);
+            if (newline == NULL) {
+                return 0;
             }
-            // Reset the index.
-            pos = 0;
-            // If we have reached the EOF stop.
-            if (ret == EOF)
-                break;
-        } else {
-            buf[pos++] = c;
         }
     }
-    errno = ENOENT;
+    long newline_len = (int)(newline - buffer);
+    if (newline_len <= 0) {
+        return 0;
+    }
+    buffer[newline_len] = 0;
+    long rollback       = newline_len - num_read + 1;
+    if (rollback > 1) {
+        return 0;
+    }
+    lseek(fd, rollback, SEEK_CUR);
+    return newline_len;
+}
+
+static inline char *__search_entry(int fd, char *buffer, int buflen, const char *name, uid_t uid)
+{
+    while (__readline(fd, buffer, buflen)) {
+        if (name != NULL) {
+            char *name_end = strchr(buffer, ':');
+            if (name_end) {
+                *name_end = '\0';
+                if (strncmp(buffer, name, strlen(name)) == 0) {
+                    *name_end = ':';
+                    return buffer;
+                }
+            }
+        } else {
+            // Name
+            char *ptr = strchr(buffer, ':');
+            if (ptr == NULL)
+                continue;
+            // Password
+            ++ptr;
+            char *uid_start = strchr(ptr, ':');
+            if (uid_start == NULL)
+                continue;
+            ++uid_start;
+            ptr = strchr(uid_start, ':');
+            if (ptr == NULL)
+                continue;
+            *ptr = '\0';
+            // Parse the uid.
+            int found_uid = atoi(uid_start);
+            // Check the uid.
+            if (found_uid == uid) {
+                *ptr = ':';
+                return buffer;
+            }
+        }
+    }
     return NULL;
 }
 
@@ -119,6 +148,7 @@ int getpwnam_r(const char *name, passwd_t *pwd, char *buf, size_t buflen, passwd
         return 0;
     int fd = open("/etc/passwd", O_RDONLY, 0);
     if (fd == -1) {
+        pr_debug("Cannot open `/etc/passwd`\n");
         errno   = ENOENT;
         *result = NULL;
         return 0;
@@ -142,6 +172,7 @@ int getpwuid_r(uid_t uid, passwd_t *pwd, char *buf, size_t buflen, passwd_t **re
 {
     int fd = open("/etc/passwd", O_RDONLY, 0);
     if (fd == -1) {
+        pr_debug("Cannot open `/etc/passwd`\n");
         errno   = ENOENT;
         *result = NULL;
         return 0;

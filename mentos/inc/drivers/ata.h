@@ -1,4 +1,3 @@
-///                MentOS, The Mentoring Operating system project
 /// @file ata.h
 /// @brief Drivers for the Advanced Technology Attachment (ATA) devices.
 /// @details
@@ -8,7 +7,7 @@
 ///  can terminate at an IDE card connected to PCI.
 /// ATAPI is an extension to ATA (recently renamed to PATA) which adds support
 ///  for the SCSI command set.
-/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 /// @addtogroup drivers Device Drivers
 /// @{
@@ -17,8 +16,6 @@
 /// @{
 
 #pragma once
-
-#include "stdint.h"
 
 /// @brief Initializes the ATA drivers.
 /// @return 0 on success, 1 on error.

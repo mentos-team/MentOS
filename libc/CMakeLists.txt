@@ -2,27 +2,20 @@
 # Author: Enrico Fraccaroli
 # =============================================================================
 # Set the minimum required version of cmake.
-cmake_minimum_required(VERSION 2.8)
+cmake_minimum_required(VERSION 3.1...3.22)
 # Initialize the project.
 project(libc C ASM)
 
 # =============================================================================
-# Set the default build type to Debug.
-if(NOT CMAKE_BUILD_TYPE)
-  message(STATUS "Setting build type to 'Debug' as none was specified.")
-  set(CMAKE_BUILD_TYPE
-      "Debug"
-      CACHE STRING "Choose the type of build." FORCE)
-endif()
-
+# ASSEMBLY
 # =============================================================================
+
 # Enable the assembly language.
 enable_language(ASM)
 # Find the NASM compiler.
-find_program(ASM_COMPILER
-    NAMES nasm
-    HINTS /usr/bin/ ${CMAKE_SOURCE_DIR}/third_party/nasm/bin
-)
+find_program(ASM_COMPILER NAMES nasm HINTS /usr/bin/ /usr/local/bin/)
+# Mark the variable ASM_COMPILER as advanced.
+mark_as_advanced(ASM_COMPILER)
 # Check that we have found the compiler.
 if(NOT ASM_COMPILER)
     message(FATAL_ERROR "ASM compiler not found!")
@@ -42,25 +35,40 @@ elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
 endif(CMAKE_BUILD_TYPE STREQUAL "Debug")
 
 # =============================================================================
+# C WARNINGs
+# =============================================================================
+
 # Warning flags.
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall")
-#set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Werror")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Werror")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wpedantic")
-#set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -pedantic-errors")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -pedantic-errors")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wshadow")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=gnu99")
+
+# Disable some specific warnings.
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-unused-function")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-unused-variable")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-unknown-pragmas")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-unused-but-set-variable")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=gnu99")
-# Set the C compiler options.
+
+# Set the compiler options.
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -static")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -nostdlib")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -nostdinc")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-builtin")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-stack-protector")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-pic")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fomit-frame-pointer")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -m32")
+if(CMAKE_C_COMPILER_VERSION VERSION_GREATER_EQUAL 10)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fcommon")
+endif()
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -march=i686")
+
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -ggdb")
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g3")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -ggdb")
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O0")
 elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O3")
@@ -89,24 +97,25 @@ add_library(
     ${PROJECT_SOURCE_DIR}/src/setenv.c
     ${PROJECT_SOURCE_DIR}/src/assert.c
     ${PROJECT_SOURCE_DIR}/src/abort.c
-
     ${PROJECT_SOURCE_DIR}/src/io/mm_io.c
     ${PROJECT_SOURCE_DIR}/src/io/port_io.c
-
     ${PROJECT_SOURCE_DIR}/src/ipc/ipc.c
-
     ${PROJECT_SOURCE_DIR}/src/sys/unistd.c
     ${PROJECT_SOURCE_DIR}/src/sys/errno.c
     ${PROJECT_SOURCE_DIR}/src/sys/utsname.c
     ${PROJECT_SOURCE_DIR}/src/sys/ioctl.c
-
+    ${PROJECT_SOURCE_DIR}/src/unistd/creat.c
     ${PROJECT_SOURCE_DIR}/src/unistd/getppid.c
     ${PROJECT_SOURCE_DIR}/src/unistd/getpid.c
     ${PROJECT_SOURCE_DIR}/src/unistd/exit.c
     ${PROJECT_SOURCE_DIR}/src/unistd/setsid.c
     ${PROJECT_SOURCE_DIR}/src/unistd/getsid.c
+    ${PROJECT_SOURCE_DIR}/src/unistd/setpgid.c
+    ${PROJECT_SOURCE_DIR}/src/unistd/getpgid.c
     ${PROJECT_SOURCE_DIR}/src/unistd/setgid.c
     ${PROJECT_SOURCE_DIR}/src/unistd/getgid.c
+    ${PROJECT_SOURCE_DIR}/src/unistd/setuid.c
+    ${PROJECT_SOURCE_DIR}/src/unistd/getuid.c
     ${PROJECT_SOURCE_DIR}/src/unistd/fork.c
     ${PROJECT_SOURCE_DIR}/src/unistd/read.c
     ${PROJECT_SOURCE_DIR}/src/unistd/write.c
@@ -129,7 +138,6 @@ add_library(
     ${PROJECT_SOURCE_DIR}/src/unistd/interval.c
     ${PROJECT_SOURCE_DIR}/src/libc_start.c
     ${PROJECT_SOURCE_DIR}/src/debug.c
-
     ${PROJECT_SOURCE_DIR}/src/crt0.S
 )
 

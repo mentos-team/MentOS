@@ -1,7 +1,6 @@
-///                MentOS, The Mentoring Operating system project
 /// @file man.c
 /// @brief Shows the available commands.
-/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #include <strerror.h>
@@ -20,10 +19,13 @@ int main(int argc, char *argv[])
     dirent_t dent;
     int per_line = 0;
     while (getdents(fd, &dent, sizeof(dirent_t)) == sizeof(dirent_t)) {
-        printf("%10s ", dent.d_name);
-        if (++per_line == 6) {
-            per_line = 0;
-            putchar('\n');
+        // Shows only regular files
+        if(dent.d_type == DT_REG){
+            printf("%10s ", dent.d_name);
+            if (++per_line == 6) {
+                per_line = 0;
+                putchar('\n');
+            }
         }
     }
     putchar('\n');

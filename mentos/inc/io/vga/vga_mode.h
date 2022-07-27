@@ -1,7 +1,6 @@
-///                MentOS, The Mentoring Operating system project
-/// @file vga_model.h
+/// @file vga_mode.h
 /// @brief VGA models.
-/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #pragma once
@@ -68,6 +67,7 @@ typedef struct {
     } ac;
 } vga_mode_t;
 
+/// @brief Size 80x25, 16 colors.
 vga_mode_t _mode_80_25_text = {
     // 3C2h (W):  Miscellaneous Output Register
     //     bit   0  If set Color Emulation:
@@ -158,6 +158,7 @@ vga_mode_t _mode_80_25_text = {
     }
 };
 
+/// @brief Size 320x200, 256 colors.
 vga_mode_t _mode_320_200_256 = {
     // 3C2h (W):  Miscellaneous Output Register
     //     bit   0  If set Color Emulation:
@@ -248,7 +249,7 @@ vga_mode_t _mode_320_200_256 = {
     }
 };
 
-
+/// @brief Size 640x480, 16 colors.
 vga_mode_t _mode_640_480_16 = {
     // 3C2h (W):  Miscellaneous Output Register
     //     bit   0  If set Color Emulation:
@@ -339,6 +340,7 @@ vga_mode_t _mode_640_480_16 = {
     }
 };
 
+/// @brief Size 720x480, 16 colors.
 vga_mode_t _mode_720_480_16 = {
     // 3C2h (W):  Miscellaneous Output Register
     //     bit   0  If set Color Emulation:

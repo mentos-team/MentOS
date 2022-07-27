@@ -1,7 +1,6 @@
-///                MentOS, The Mentoring Operating system project
 /// @file ctype.c
 /// @brief Functions related to character handling.
-/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #include "ctype.h"
@@ -17,6 +16,11 @@ int isdigit(int c)
 int isalpha(int c)
 {
     return ((c >= 65 && c <= 90) || (c >= 97 && c <= 122));
+}
+
+int iscntrl(int c)
+{
+    return ((c >= 0x00 && c <= 0x1F) || (c == 0x7F));
 }
 
 int isalnum(int c)

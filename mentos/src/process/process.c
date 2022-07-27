@@ -1,14 +1,14 @@
-///                MentOS, The Mentoring Operating system project
 /// @file process.c
 /// @brief Process data structures and functions.
-/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
+// Include the kernel log levels.
 #include "sys/kernel_levels.h"
-
-//#ifndef __DEBUG_LEVEL__
-//#define __DEBUG_LEVEL__ LOGLEVEL_DEBUG
-//#endif
+/// Change the header.
+#define __DEBUG_HEADER__ "[PROC  ]"
+/// Set the log level.
+#define __DEBUG_LEVEL__ LOGLEVEL_NOTICE
 
 #include "process/process.h"
 #include "process/scheduler.h"
@@ -177,8 +177,9 @@ static inline task_struct *__alloc_task(task_struct *source, task_struct *parent
         memcpy(&proc->thread, &source->thread, sizeof(thread_struct_t));
     // Set the statistics of the process.
     proc->uid                   = 0;
-    proc->sid                   = 0;
     proc->gid                   = 0;
+    proc->sid                   = 0;
+    proc->pgid                  = 0;
     proc->se.prio               = DEFAULT_PRIO;
     proc->se.start_runtime      = timer_get_ticks();
     proc->se.exec_start         = timer_get_ticks();
@@ -227,6 +228,16 @@ static inline task_struct *__alloc_task(task_struct *source, task_struct *parent
 
     // Initalize real_timer for intervals
     proc->real_timer = NULL;
+
+    // Set the default terminal options.
+    proc->termios = (termios_t){
+        .c_cflag = 0,
+        .c_lflag = (ICANON | ECHO | ECHOE | ECHOK | ECHONL | ISIG),
+        .c_oflag = 0,
+        .c_iflag = 0
+    };
+    // Initialize the ringbuffer.
+    fs_rb_scancode_init(&proc->keyboard_rb);
 
     return proc;
 }
@@ -327,39 +338,52 @@ task_struct *process_create_init(const char *path)
 
 char *sys_getcwd(char *buf, size_t size)
 {
-    task_struct *current_process = scheduler_get_current_process();
-    if ((current_process != NULL) && (buf != NULL)) {
-        strncpy(buf, current_process->cwd, size);
+    task_struct *current = scheduler_get_current_process();
+    if ((current != NULL) && (buf != NULL)) {
+        strncpy(buf, current->cwd, size);
         return buf;
     }
     return (char *)-EACCES;
 }
 
-void sys_chdir(char const *path)
+int sys_chdir(char const *path)
 {
-    task_struct *current_process = scheduler_get_current_process();
-    if ((current_process != NULL) && (path != NULL)) {
-        char absolute_path[PATH_MAX];
-        realpath(path, absolute_path);
-        strcpy(current_process->cwd, absolute_path);
+    task_struct *current = scheduler_get_current_process();
+    assert(current && "There is no running process.");
+    if (!path)
+        return -EFAULT;
+    char absolute_path[PATH_MAX];
+    realpath(path, absolute_path);
+    // Check that the directory exists.
+    vfs_file_t *dir = vfs_open(absolute_path, O_RDONLY | O_DIRECTORY, S_IXUSR);
+    if (dir) {
+        strcpy(current->cwd, absolute_path);
+        vfs_close(dir);
+        return 0;
     }
+    // Return the errno value set by either VFS or the filesystem underneath.
+    return -errno;
 }
 
-void sys_fchdir(int fd)
+int sys_fchdir(int fd)
 {
-    // Get the current task.
-    task_struct *task = scheduler_get_current_process();
-    // Check the current FD.
-    if (fd >= 0 && fd < task->max_fd) {
-        // Get the file descriptor.
-        vfs_file_descriptor_t *vfd = &task->fd_list[fd];
-        // Check the file.
-        if (vfd->file_struct != NULL) {
-            char absolute_path[PATH_MAX];
-            realpath(vfd->file_struct->name, absolute_path);
-            strcpy(task->cwd, absolute_path);
-        }
-    }
+    task_struct *current = scheduler_get_current_process();
+    assert(current && "There is no running process.");
+    // Check if it is a valid file descriptor.
+    if ((fd < 0) || (fd >= current->max_fd))
+        return -EBADF;
+    // Get the file descriptor.
+    vfs_file_descriptor_t *vfd = &current->fd_list[fd];
+    // Check if the file descriptor file is set.
+    if (vfd->file_struct == NULL)
+        return -ENOENT;
+    // Check that the path points to a directory.
+    if (!bitmask_check(vfd->file_struct->flags, DT_DIR))
+        return -ENOTDIR;
+    char absolute_path[PATH_MAX];
+    realpath(vfd->file_struct->name, absolute_path);
+    strcpy(current->cwd, absolute_path);
+    return 0;
 }
 
 pid_t sys_fork(pt_regs *f)
@@ -383,13 +407,15 @@ pid_t sys_fork(pt_regs *f)
     proc->thread.regs.eflags = proc->thread.regs.eflags | EFLAG_IF;
 
     // Copy session and group id of the parent into the child
-    proc->sid = current->sid;
-    proc->gid = current->gid;
+    proc->sid  = current->sid;
+    proc->pgid = current->pgid;
+    proc->uid  = current->uid;
+    proc->gid  = current->gid;
 
     // Active the new process.
     scheduler_enqueue_task(proc);
 
-    pr_debug("Forked    '%s' (pid: %d, gid: %d, sid: %d)...\n", proc->name, proc->pid, proc->gid, proc->sid);
+    pr_debug("Forked    '%s' (pid: %d, gid: %d, sid: %d, pgid: %d)...\n", proc->name, proc->pid, proc->gid, proc->sid, proc->pgid);
 
     // Return PID of child process to parent.
     return proc->pid;

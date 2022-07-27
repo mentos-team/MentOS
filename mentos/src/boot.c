@@ -1,7 +1,7 @@
 ///               MentOS, The Mentoring Operating system project
 /// @file boot.c
 /// @brief Bootloader.
-/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #include "boot.h"
@@ -54,19 +54,15 @@ static inline void __outportb(uint16_t port, uint8_t data)
 /// @param c the character to send to the debug port.
 static inline void __debug_putchar(char c)
 {
-#if (defined(DEBUG_STDIO) || defined(DEBUG_LOG))
     __outportb(SERIAL_COM1, c);
-#endif
 }
 
 /// @brief Writes the given string on the debug port.
 /// @param s the string to send to the debug port.
 static inline void __debug_puts(char *s)
 {
-#if (defined(DEBUG_STDIO) || defined(DEBUG_LOG))
     while ((*s) != 0)
         __outportb(SERIAL_COM1, *s++);
-#endif
 }
 
 /// @brief Align memory address to the specified value (round up).

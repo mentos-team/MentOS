@@ -1,0 +1,52 @@
+name: Main
+on:
+  push:
+    branches-ignore:
+      - "releases/**"
+    paths-ignore:
+      - "**.md"
+      - ".gitignore"
+  pull_request:
+    paths-ignore:
+      - "**.md"
+      - ".gitignore"
+jobs:
+  doxygen:
+    name: Doxygen
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone repo
+        uses: actions/checkout@v2
+
+      - name: Install Doxygen Ubuntu
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y doxygen nasm
+
+      - name: Generate documentation
+        run: |
+          cmake -B build -D DOXYGEN_WARN_AS_ERROR=NO
+          cmake --build build --target doxygen_doc
+
+  test:
+    name: Build
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Clone repo
+        uses: actions/checkout@v2
+
+      - name: Install NASM Ubuntu
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y nasm
+
+      - name: Build
+        run: |
+          cmake -B build
+          cmake --build build --parallel 2

@@ -1,7 +1,6 @@
-///                MentOS, The Mentoring Operating system project
 /// @file stdio.h
 /// @brief Standard I/0 functions.
-/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #pragma once
@@ -23,6 +22,7 @@
 #define SEEK_CUR 1 ///< The file offset is set to its current location plus offset bytes.
 #define SEEK_END 2 ///< The file offset is set to the size of the file plus offset bytes.
 
+#ifndef __KERNEL__
 /// @brief Writes the given character to the standard output (stdout).
 /// @param character The character to send to stdout.
 void putchar(int character);
@@ -41,7 +41,6 @@ int getchar();
 /// @return The string received from standard input.
 char *gets(char *str);
 
-#ifndef __KERNEL__
 /// @brief Same as getchar but reads from the given file descriptor.
 /// @param fd The file descriptor from which it reads.
 /// @return The read character.
@@ -108,7 +107,6 @@ int vsprintf(char *str, const char *fmt, va_list args);
 /// @return On success, the function returns the number of items of the
 ///         argument list successfully filled. EOF otherwise.
 int scanf(const char *fmt, ...);
-#endif
 
 /// @brief Read formatted data from string.
 /// @param str String processed as source to retrieve the data.
@@ -118,7 +116,6 @@ int scanf(const char *fmt, ...);
 ///         argument list successfully filled. EOF otherwise.
 int sscanf(const char *str, const char *fmt, ...);
 
-#ifndef __KERNEL__
 /// @brief The same as sscanf but the source is a file.
 /// @param fd  The file descriptor associated with the file.
 /// @param fmt  Format string, following the same specifications as printf.

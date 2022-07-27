@@ -1,11 +1,14 @@
-///                MentOS, The Mentoring Operating system project
 /// @file signal.c
 /// @brief Signals definition.
-/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
+// Include the kernel log levels.
+#include "sys/kernel_levels.h"
 /// Change the header.
 #define __DEBUG_HEADER__ "[SIGNAL]"
+/// Set the log level.
+#define __DEBUG_LEVEL__ LOGLEVEL_NOTICE
 
 #include "system/signal.h"
 #include "process/wait.h"
@@ -357,7 +360,7 @@ static void __do_signal_stop(struct task_struct *current, struct pt_regs *f, int
     // the SA_NOCLDSTOP flag of SIGCHLD.
     if (!(SA_NOCLDSTOP & current->parent->sighand.action[SIGCHLD - 1].sa_flags))
         if (__notify_parent(current, SIGCHLD) != 0)
-            pr_debug("Failed to notify parent with signal: %d", signr);
+            pr_warning("Failed to notify parent with signal: %d", signr);
 
     // The state is now TASK_UNINTERRUPTABLE
     sleep_on(&stopped_queue);
@@ -407,7 +410,7 @@ int do_signal(struct pt_regs *f)
         // If its value is 0, it means that all pending signals have been
         // handled and do_signal( ) can finish.
         if (signr == 0) {
-            pr_notice("There are no more signals to handle.\n");
+            pr_debug("There are no more signals to handle.\n");
             __unlock_task_sighand(current);
             return 0;
         }
@@ -453,7 +456,7 @@ int do_signal(struct pt_regs *f)
             case SIGTSTP:
             case SIGTTIN:
             case SIGTTOU:
-                if (is_orphaned_pgrp(current->gid))
+                if (is_orphaned_pgrp(current->pgid))
                     continue;
 
             case SIGSTOP:
@@ -630,7 +633,7 @@ int sys_kill(pid_t pid, int sig)
 
 sighandler_t sys_signal(int signum, sighandler_t handler)
 {
-    pr_notice("sys_signal(%d, %p)\n", signum, handler);
+    pr_debug("sys_signal(%d, %p)\n", signum, handler);
     // Check the signal that we want to send.
     if ((signum < 0) || (signum >= NSIG)) {
         pr_err("sys_signal(%d, %p): Wrong signal number!\n", signum, handler);
@@ -642,7 +645,7 @@ sighandler_t sys_signal(int signum, sighandler_t handler)
     assert(current && "There is no running process.");
     // Skip the `init` process, always.
     if (current->pid == 1) {
-        pr_err("sys_signal(%d, %p): Cannot signal number!\n", signum, handler);
+        pr_err("sys_signal(%d, %p): Cannot signal init!\n", signum, handler);
         return SIG_ERR;
     }
     // Create a new signal action.
@@ -674,7 +677,7 @@ int sys_sigaction(int signum, const sigaction_t *act, sigaction_t *oldact)
     pr_debug("sys_sigaction(%d, %p, %p)\n", signum, act, oldact);
     // Check the signal that we want to send.
     if ((signum < 0) || (signum >= NSIG)) {
-        pr_debug("sys_sigaction(%d, %p, %p): Wrong signal number!\n", signum, act, oldact);
+        pr_err("sys_sigaction(%d, %p, %p): Wrong signal number!\n", signum, act, oldact);
         return -EINVAL;
     }
     // The do_signal() function is usually only invoked when the CPU is going
@@ -683,7 +686,7 @@ int sys_sigaction(int signum, const sigaction_t *act, sigaction_t *oldact)
     assert(current && "There is no running process.");
     // Skip the `init` process, always.
     if (current->pid == 1) {
-        pr_debug("sys_sigaction(%d, %p, %p): Cannot set signal for init!\n", signum, act, oldact);
+        pr_err("sys_sigaction(%d, %p, %p): Cannot set signal for init!\n", signum, act, oldact);
         return -EINVAL;
     }
     // Lock the signal handling for the given task.
@@ -705,7 +708,7 @@ int sys_sigaction(int signum, const sigaction_t *act, sigaction_t *oldact)
 
 int sys_sigprocmask(int how, const sigset_t *set, sigset_t *oldset)
 {
-    pr_notice("sys_sigprocmask(%d, %p, %p)\n", how, set, oldset);
+    pr_debug("sys_sigprocmask(%d, %p, %p)\n", how, set, oldset);
     if (!set && !oldset) {
         return -EFAULT;
     }
@@ -718,7 +721,7 @@ int sys_sigprocmask(int how, const sigset_t *set, sigset_t *oldset)
     assert(current && "There is no running process.");
     // Skip the `init` process, always.
     if (current->pid == 1) {
-        pr_notice("sys_sigprocmask(%d, %p, %p): Cannot set signal for init!\n", how, set, oldset);
+        pr_warning("sys_sigprocmask(%d, %p, %p): Cannot set signal for init!\n", how, set, oldset);
         return -EINVAL;
     }
     // If `oldset` is not, return the old set.

@@ -1,7 +1,6 @@
-///                MentOS, The Mentoring Operating system project
 /// @file strerror.c
 /// @brief
-/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #include "strerror.h"
@@ -15,6 +14,11 @@ char *strerror(int errnum)
     case 0:
         strcpy(error, "Success");
         break;
+#ifdef EPERM
+    case EPERM:
+        strcpy(error, "Operation not permitted");
+        break;
+#endif
 #ifdef ENOENT
     case ENOENT:
         strcpy(error, "No such file or directory");

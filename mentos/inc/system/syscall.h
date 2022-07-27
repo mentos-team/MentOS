@@ -1,7 +1,6 @@
-///                MentOS, The Mentoring Operating system project
 /// @file   syscall.h
 /// @brief  System Call handler definition.
-/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #pragma once
@@ -21,7 +20,7 @@ void syscall_handler(pt_regs *f);
 
 /// @brief Returns the current interrupt stack frame.
 /// @return Pointer to the stack frame.
-pt_regs* get_current_interrupt_stack_frame();
+pt_regs *get_current_interrupt_stack_frame();
 
 /// The exit() function causes normal process termination.
 /// @param exit_code The exit code.
@@ -89,11 +88,13 @@ int sys_execve(pt_regs *f);
 
 /// @brief Changes the working directory.
 /// @param path The new working directory.
-void sys_chdir(char const *path);
+/// @return On success 0. On error -1, and errno indicates the error.
+int sys_chdir(char const *path);
 
 /// @brief Changes the working directory.
 /// @param fd File descriptor of the new working directory.
-void sys_fchdir(int fd);
+/// @return On success 0. On error -1, and errno indicates the error.
+int sys_fchdir(int fd);
 
 /// @brief Returns the process ID (PID) of the calling process.
 /// @return The process ID.
@@ -104,7 +105,7 @@ pid_t sys_getpid();
 ///        If pid != 0 return the SID corresponding to the process having identifier == pid
 ///@param pid process identifier from wich we want the SID
 ///@return On success return SID of the session
-///        Otherwise return -1 with errno set on: EPERM or ESRCH  
+///        Otherwise return -1 with errno set on: EPERM or ESRCH
 pid_t sys_getsid(pid_t pid);
 
 ///@brief creates a new session if the calling process is not a
@@ -114,22 +115,45 @@ pid_t sys_getsid(pid_t pid);
 ///       of a new process group in the session (i.e., its process group ID
 ///       is made the same as its process ID).
 ///@return On success return SID of the session just created
-///        Otherwise return -1 with errno : EPERM 
+///        Otherwise return -1 with errno : EPERM
 pid_t sys_setsid();
+
+///@brief returns the Process Group ID (PGID) of the process specified by pid.
+/// If pid is zero, the process ID of the calling process is used.
+/// @param pid process of which we want to know the PGID.
+/// @return the PGID of the specified process.
+pid_t sys_getpgid(pid_t pid);
+
+/// @brief Sets the Process Group ID (PGID) of the process specified by pid.
+/// If pid is zero, the process ID of the calling process is used.
+/// @param pid process of which we want to set the PGID.
+/// @param pgid the PGID we want to set.
+/// @return returns zero. On error, -1 is returned, and errno is set appropriately.
+int sys_setpgid(pid_t pid, pid_t pgid);
 
 ///@brief returns the group ID of the calling process.
 ///@return GID of the current process
 pid_t sys_getgid();
 
 ///@brief sets the effective group ID of the calling process.
-///@param pid process identifier to 
+///@param pid process identifier to
 ///@return On success, zero is returned.
-///        Otherwise returns -1 with errno set to :EINVAL or EPERM  
+///        Otherwise returns -1 with errno set to :EINVAL or EPERM.
 int sys_setgid(pid_t pid);
 
 /// @brief Returns the parent process ID (PPID) of the calling process.
 /// @return The parent process ID.
 pid_t sys_getppid();
+
+/// @brief Returns the User ID (UID) of the calling process.
+/// @return The User ID.
+uid_t sys_getuid();
+
+/// @brief Tries to set the User ID (UID) of the calling process.
+/// @param uid the new User ID.
+///@return On success, zero is returned.
+///        Otherwise returns -1 with errno set to :EINVAL or EPERM.
+int sys_setuid(uid_t uid);
 
 /// @brief Adds the increment to the priority value of the task.
 /// @param increment The modifier to apply to the nice value.
@@ -184,6 +208,14 @@ int sys_mkdir(const char *path, mode_t mode);
 /// @param path The path to the directory to remove.
 /// @return Returns a negative value on failure.
 int sys_rmdir(const char *path);
+
+/// @brief Creates a new file or rewrite an existing one.
+/// @param path path to the file.
+/// @param mode mode for file creation.
+/// @return file descriptor number, -1 otherwise and errno is set to indicate the error.
+/// @details
+/// It is equivalent to: open(path, O_WRONLY|O_CREAT|O_TRUNC, mode)
+int sys_creat(const char *path, mode_t mode);
 
 /// Provide access to the directory entries.
 /// @param fd    The file descriptor of the directory for which we accessing

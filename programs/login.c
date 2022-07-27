@@ -1,7 +1,6 @@
-/////                MentOS, The Mentoring Operating system project
-/// @file login.c
+///// @file login.c
 /// @brief Functions used to manage login.
-/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 /// Maximum length of credentials.
@@ -16,6 +15,8 @@
 #include <pwd.h>
 #include <strerror.h>
 #include <stdlib.h>
+
+#include <debug.h>
 
 #define CREDENTIALS_LENGTH 50
 
@@ -54,7 +55,7 @@ static bool_t get_input(char *input, size_t max_len, bool_t hide)
     int c;
     bool_t result = false;
 
-    set_erase(false);
+    //set_erase(false);
     if (hide) {
         set_echo(false);
     }
@@ -99,9 +100,8 @@ static bool_t get_input(char *input, size_t max_len, bool_t hide)
             }
         } else if (c == '\b') {
             if (index > 0) {
-                if (!hide) {
+                if (!hide)
                     putchar('\b');
-                }
                 --index;
             }
         } else {
@@ -114,7 +114,7 @@ static bool_t get_input(char *input, size_t max_len, bool_t hide)
         }
     } while (index < max_len);
 
-    set_erase(true);
+    //set_erase(true);
     if (hide) {
         set_echo(true);
         putchar('\n');
@@ -125,20 +125,18 @@ static bool_t get_input(char *input, size_t max_len, bool_t hide)
 
 static inline int setup_env(passwd_t *pwd)
 {
-    // Set the HOME.
-    char env_buffer[BUFSIZ];
     // Set the USER.
-    if (setenv("USER", pwd->pw_name, 0) == -1) {
-        printf( "Failed to set env: `USER`\n");
+    if (setenv("USER", pwd->pw_name, 1) == -1) {
+        printf("Failed to set env: `USER`\n");
         return 0;
     }
     // Set the SHELL.
-    if (setenv("SHELL", pwd->pw_shell, 0) == -1) {
-        printf( "Failed to set env: `SHELL`\n");
+    if (setenv("SHELL", pwd->pw_shell, 1) == -1) {
+        printf("Failed to set env: `SHELL`\n");
         return 0;
     }
-    sprintf(env_buffer, "/home/%s", pwd->pw_name);
-    if (setenv("HOME", env_buffer, 0) == -1) {
+    // Set the HOME.
+    if (setenv("HOME", pwd->pw_dir, 1) == -1) {
         printf("Failed to set env: `HOME`\n");
         return 0;
     }
@@ -147,6 +145,18 @@ static inline int setup_env(passwd_t *pwd)
 
 int main(int argc, char **argv)
 {
+    // Print /etc/issue if it exists
+    // TODO: Parsing /etc/issue for special characters (such as `\t` for time)
+    int issues_fd = open("/etc/issue", O_RDONLY, 0600);
+    if (issues_fd != -1){
+        char buffer[256];
+        
+        if(read(issues_fd, buffer, sizeof(char)*256) != -1){
+            printf("%s \n", buffer);
+        }
+        close(issues_fd);
+    }
+    
     passwd_t *pwd;
     char username[50], password[50];
     do {
@@ -182,6 +192,9 @@ int main(int argc, char **argv)
         printf("%s: Failed to setup the environmental variables.\n", argv[0]);
         return 1;
     }
+
+    setgid(pwd->pw_gid);
+    setuid(pwd->pw_uid);
 
     char *_argv[] = { pwd->pw_shell, (char *)NULL };
     if (execv(pwd->pw_shell, _argv) == -1) {

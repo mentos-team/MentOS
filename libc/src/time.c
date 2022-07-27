@@ -1,7 +1,6 @@
-///                MentOS, The Mentoring Operating system project
 /// @file time.c
 /// @brief Clock functions.
-/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #include "time.h"
@@ -19,6 +18,7 @@ static const char *months[] = {
     "July", "August", "September", "October", "November", "December"
 };
 
+/// @brief Time function.
 _syscall1(time_t, time, time_t *, t)
 
 time_t difftime(time_t time1, time_t time2)
@@ -378,6 +378,7 @@ size_t strftime(char *str, size_t maxsize, const char *format, const tm_t *timep
     return ret;
 }
 
+/// @brief nanosleep function.
 _syscall2(int, nanosleep, const timespec *, req, timespec *, rem)
 
 unsigned int sleep(unsigned int seconds)

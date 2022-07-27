@@ -1,7 +1,6 @@
-///                MentOS, The Mentoring Operating system project
 /// @file elf.h
 /// @brief Function for managing the Executable and Linkable Format (ELF).
-/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #pragma once
@@ -80,21 +79,21 @@ typedef struct elf_header {
     uint32_t entry;
     /// Points to the start of the program header table.
     uint32_t phoff;
-    /// TODO: Comment.
+    /// Points to the start of the section header table.
     uint32_t shoff;
-    /// TODO: Comment.
+    /// Processor-specific flags.
     uint32_t flags;
-    /// TODO: Comment.
+    /// Size of ELF header, in bytes.
     uint16_t ehsize;
-    /// TODO: Comment.
+    /// Size of an entry in the program header table.
     uint16_t phentsize;
-    /// TODO: Comment.
+    /// Number of entries in the program header table.
     uint16_t phnum;
-    /// TODO: Comment.
+    /// Size of an entry in the section header table.
     uint16_t shentsize;
-    /// TODO: Comment.
+    /// Number of entries in the section header table.
     uint16_t shnum;
-    /// TODO: Comment.
+    /// Section header table index of sect name string table.
     uint16_t shstrndx;
 } elf_header_t;
 

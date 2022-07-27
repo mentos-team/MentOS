@@ -1,171 +1,209 @@
 # =============================================================================
 # Set the minimum required version of cmake.
-cmake_minimum_required(VERSION 2.8)
+cmake_minimum_required(VERSION 3.1...3.22)
 # Initialize the project.
-project(MentOs)
+project(mentos C ASM)
 
 # =============================================================================
+# BUILD TYPE (Debug/Release)
+# =============================================================================
+
 # Set the default build type to Debug.
 if(NOT CMAKE_BUILD_TYPE)
-  message(STATUS "Setting build type to 'Debug' as none was specified.")
-  set(CMAKE_BUILD_TYPE
-      "Debug"
-      CACHE STRING "Choose the type of build." FORCE)
+    message(STATUS "Setting build type to 'Debug' as none was specified.")
+    set(CMAKE_BUILD_TYPE "Debug" CACHE STRING "Choose the type of build." FORCE)
 endif()
 
 # =============================================================================
+# DOCUMENTATION
+# =============================================================================
+add_subdirectory(doc/doxygen)
+
+# =============================================================================
+# OS-SPECIFIC COMPILERS
+# =============================================================================
+
 # Add operating system specific option.
 message(STATUS "Crosscompiling : ${CMAKE_CROSSCOMPILING}")
 message(STATUS "System name    : ${CMAKE_HOST_SYSTEM_NAME}")
 message(STATUS "Kernel version : ${CMAKE_SYSTEM_VERSION}")
 if((${CMAKE_HOST_SYSTEM_NAME} STREQUAL "Darwin") OR APPLE)
-  # Set the Apple MacOSx compilers.
-  if(CMAKE_VERSION VERSION_LESS "3.6.0")
-    include(CMakeForceCompiler)
-    cmake_force_c_compiler(i386-elf-gcc Clang)
-    cmake_force_cxx_compiler(i386-elf-g++ Clang)
-  else()
-    set(CMAKE_C_COMPILER i386-elf-gcc)
-    set(CMAKE_CXX_COMPILER i386-elf-g++)
-    set(CMAKE_AR i386-elf-ar)
-  endif()
-  # Speicfy the linker.
-  set(CMAKE_LINKER i386-elf-ld)
-  # Specify the linker flags.
-  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -nostdlib")
-
+    # Set the Apple MacOSx compilers.
+    if(CMAKE_VERSION VERSION_LESS "3.6.0")
+        include(CMakeForceCompiler)
+        cmake_force_c_compiler(i386-elf-gcc Clang)
+        cmake_force_cxx_compiler(i386-elf-g++ Clang)
+    else()
+        set(CMAKE_C_COMPILER i386-elf-gcc)
+        set(CMAKE_CXX_COMPILER i386-elf-g++)
+        set(CMAKE_AR i386-elf-ar)
+    endif()
+    # Speicfy the linker.
+    set(CMAKE_LINKER i386-elf-ld)
+    # Specify the linker flags.
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -nostdlib")
 elseif((${CMAKE_HOST_SYSTEM_NAME} STREQUAL "Windows") OR WIN32)
   # Windows set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -sdl)
-
 else()
-  # Generic Unix System
-  find_program(LSB_RELEASE_EXEC lsb_release)
-  execute_process(
-    COMMAND "${LSB_RELEASE_EXEC}" --short --release
-    OUTPUT_VARIABLE LSB_RELEASE_VERSION_SHORT
-    OUTPUT_STRIP_TRAILING_WHITESPACE)
-  message(STATUS "LSB version    : ${LSB_RELEASE_VERSION_SHORT}")
-  if(${LSB_RELEASE_VERSION_SHORT} MATCHES "^18")
-    # Ubuntu 18 set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -sdl)
-  elseif(${LSB_RELEASE_VERSION_SHORT} MATCHES "^19")
-    # Ubuntu 19
-    set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -display gtk)
-  elseif(${LSB_RELEASE_VERSION_SHORT} MATCHES "^20")
-    # Ubuntu 20
-    set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -display gtk)
-  else()
-    # set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -sdl)
-  endif()
+    # Generic Unix System.
+    # Find the `lsb_release` program.
+    find_program(LSB_RELEASE_EXEC lsb_release HINTS /usr/bin/ /usr/local/bin/)
+    # Mark the program path as advanced, we do not want it to appear as an option.
+    mark_as_advanced(LSB_RELEASE_EXEC)
+    # Get the version.
+    execute_process(
+        COMMAND "${LSB_RELEASE_EXEC}" --short --release
+        OUTPUT_VARIABLE LSB_RELEASE_VERSION_SHORT
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+    message(STATUS "LSB version    : ${LSB_RELEASE_VERSION_SHORT}")
+    if(${LSB_RELEASE_VERSION_SHORT} MATCHES "^18")
+        # Ubuntu 18 set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -sdl)
+    elseif(${LSB_RELEASE_VERSION_SHORT} MATCHES "^19")
+        # Ubuntu 19
+        set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -display gtk)
+    elseif(${LSB_RELEASE_VERSION_SHORT} MATCHES "^20")
+        # Ubuntu 20
+        set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -display gtk)
+    else()
+        # set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -sdl)
+    endif()
 endif()
 
 # =============================================================================
-# Add the debugging option.
-set(DEBUGGING_TYPE
-    "DEBUG_STDIO"
-    CACHE STRING "Chose the type of debugging: DEBUG_STDIO DEBUG_LOG")
-set_property(CACHE DEBUGGING_TYPE PROPERTY STRINGS DEBUG_STDIO DEBUG_LOG)
-if("${DEBUGGING_TYPE}" STREQUAL "DEBUG_STDIO" OR "${DEBUGGING_TYPE}" STREQUAL "DEBUG_LOG")
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D${DEBUGGING_TYPE}")
-  message(STATUS "Setting debugging type to ${DEBUGGING_TYPE}.")
-else()
-  message(FATAL_ERROR "Debugging type ${DEBUGGING_TYPE} is not valid.")
-endif()
-
+# COMPILATION
 # =============================================================================
+
 # Add the sub-directories.
 add_subdirectory(programs)
 add_subdirectory(programs/tests)
 add_subdirectory(mentos)
-add_subdirectory(initscp)
 add_subdirectory(libc)
-add_subdirectory(doc/doxygen)
 
 # =============================================================================
-# Target to generate the initrd filesystem.
-add_custom_target(
-  initrd
-  COMMAND echo "---------------------------------------------"
-  COMMAND echo "Initializing 'initrd'..."
-  COMMAND echo "---------------------------------------------"
-  COMMAND initfscp -s ${CMAKE_SOURCE_DIR}/files -t ${CMAKE_BINARY_DIR}/initrd -m /dev
-  COMMAND echo "---------------------------------------------"
-  COMMAND echo "Done!"
-  COMMAND echo "---------------------------------------------"
-  DEPENDS initfscp
-  DEPENDS all_programs all_tests)
+# FILESYSTEM
+# =============================================================================
+
+# MentOS is compatible with EXT2 fileystems. This target generates an EXT2
+# fileystem using the content of the `files` folder.
+add_custom_target(filesystem
+    BYPRODUCTS ${CMAKE_BINARY_DIR}/rootfs.img
+    COMMAND echo '============================================================================='
+    COMMAND echo 'Creating EXT2 filesystem...'
+    COMMAND echo '============================================================================='
+    COMMAND mkdir -p ${CMAKE_SOURCE_DIR}/files/proc
+    COMMAND mkdir -p ${CMAKE_SOURCE_DIR}/files/dev
+    COMMAND mke2fs -L 'rootfs' -N 0 -d ${CMAKE_SOURCE_DIR}/files -m 5 -r 1 -t ext2 -v -F ${CMAKE_BINARY_DIR}/rootfs.img 32M
+    COMMAND echo '============================================================================='
+    COMMAND echo 'Done!'
+    COMMAND echo '============================================================================='
+    DEPENDS all_programs all_tests
+)
 
 # =============================================================================
-# Update GDB symbol file.
-add_custom_target(
-  gdb_file
-  COMMAND echo "symbol-file ${CMAKE_BINARY_DIR}/mentos/kernel-bootloader.bin" >> ${CMAKE_BINARY_DIR}/.gdbinit
-  COMMAND echo "exec-file   ${CMAKE_BINARY_DIR}/mentos/kernel-bootloader.bin" >> ${CMAKE_BINARY_DIR}/.gdbinit
-  COMMAND bash ${CMAKE_SOURCE_DIR}/scripts/get_text_address.sh ${CMAKE_BINARY_DIR}/mentos/kernel.bin > ${CMAKE_BINARY_DIR}/.gdbinit
-  COMMAND bash ${CMAKE_SOURCE_DIR}/scripts/get_text_address.sh ${CMAKE_BINARY_DIR}/mentos/kernel-bootloader.bin >> ${CMAKE_BINARY_DIR}/.gdbinit
-  COMMAND bash ${CMAKE_SOURCE_DIR}/scripts/get_text_address.sh ${CMAKE_BINARY_DIR}/programs/tests/test_* >> ${CMAKE_BINARY_DIR}/.gdbinit
-  COMMAND bash ${CMAKE_SOURCE_DIR}/scripts/get_text_address.sh ${CMAKE_BINARY_DIR}/programs/prog_* >> ${CMAKE_BINARY_DIR}/.gdbinit
-  COMMAND echo "break boot.c: boot_main" >> ${CMAKE_BINARY_DIR}/.gdbinit
-  COMMAND echo "break kernel.c: kmain" >> ${CMAKE_BINARY_DIR}/.gdbinit
-  COMMAND echo "target remote localhost:1234" >> ${CMAKE_BINARY_DIR}/.gdbinit
-  DEPENDS kernel-bootloader.bin
-  DEPENDS all_programs all_tests
-  DEPENDS libc)
+# EMULATION SERIAL OUTPUT OPTION
+# =============================================================================
+# Set the list of valid emulator output options.
+set(EMULATOR_OUTPUT_TYPES OUTPUT_STDIO OUTPUT_LOG)
+# Add the emulator output option.
+set(EMULATOR_OUTPUT_TYPE "OUTPUT_STDIO" CACHE STRING "Chose the type of emulator output: ${EMULATOR_OUTPUT_TYPES}")
+# List of emulator output options.
+set_property(CACHE EMULATOR_OUTPUT_TYPE PROPERTY STRINGS ${EMULATOR_OUTPUT_TYPES})
+# Check which emulator output option is currently active.
+list(FIND EMULATOR_OUTPUT_TYPES ${EMULATOR_OUTPUT_TYPE} INDEX)
+if(index EQUAL -1)
+    message(FATAL_ERROR "Emulator output type ${EMULATOR_OUTPUT_TYPE} is not valid.")
+else()
+    message(STATUS "Setting emulator output type to ${EMULATOR_OUTPUT_TYPE}.")
+endif()
 
 # =============================================================================
-# Update GDB symbol file.
-add_custom_target(
-  gdb_file_clion_embedded
-  COMMAND echo "symbol-file ${CMAKE_BINARY_DIR}/mentos/kernel-bootloader.bin" >> ${CMAKE_BINARY_DIR}/.gdbinit
-  COMMAND echo "exec-file   ${CMAKE_BINARY_DIR}/mentos/kernel-bootloader.bin" >> ${CMAKE_BINARY_DIR}/.gdbinit
-  COMMAND bash ${CMAKE_SOURCE_DIR}/scripts/get_text_address.sh ${CMAKE_BINARY_DIR}/mentos/kernel.bin > ${CMAKE_BINARY_DIR}/.gdbinit
-  COMMAND bash ${CMAKE_SOURCE_DIR}/scripts/get_text_address.sh ${CMAKE_BINARY_DIR}/mentos/kernel-bootloader.bin >> ${CMAKE_BINARY_DIR}/.gdbinit
-  COMMAND bash ${CMAKE_SOURCE_DIR}/scripts/get_text_address.sh ${CMAKE_BINARY_DIR}/programs/prog_* >> ${CMAKE_BINARY_DIR}/.gdbinit
-  DEPENDS kernel-bootloader.bin
-  DEPENDS all_programs all_tests
-  DEPENDS libc)
-
+# EMULATOR CONFIGURATION
 # =============================================================================
-# Set memory size.
-set(MEMORY_SIZE 1096M)
 
-# =============================================================================
-# Builds the code and runs qemu with the built Os.
+# Set the emulator.
 set(EMULATOR qemu-system-i386)
-if(${DEBUGGING_TYPE} STREQUAL DEBUG_LOG)
-  set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -serial file:serial.log)
-elseif(${DEBUGGING_TYPE} STREQUAL DEBUG_STDIO)
-  set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -serial stdio)
-endif(${DEBUGGING_TYPE} STREQUAL DEBUG_LOG)
+# Set the debug type.
+if(${EMULATOR_OUTPUT_TYPE} STREQUAL OUTPUT_LOG)
+    set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -serial file:${CMAKE_BINARY_DIR}/serial.log)
+elseif(${EMULATOR_OUTPUT_TYPE} STREQUAL OUTPUT_STDIO)
+    set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -serial stdio)
+endif(${EMULATOR_OUTPUT_TYPE} STREQUAL OUTPUT_LOG)
+# Set the type of video.
 set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -vga std)
-set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -m ${MEMORY_SIZE})
-set(EMULATOR_KERNEL -kernel mentos/kernel-bootloader.bin)
-set(EMULATOR_FS -initrd initrd)
-
-add_custom_target(
-  qemu
-  COMMAND ${EMULATOR} ${EMULATOR_FLAGS} ${EMULATOR_KERNEL} ${EMULATOR_FS}
-  DEPENDS kernel-bootloader.bin initrd all_programs all_tests libc)
+# Set the amount of memory.
+set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -m 1096M)
+# Set the EXT2 drive.
+set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -drive file=${CMAKE_BINARY_DIR}/rootfs.img,format=raw)
 
 # =============================================================================
-# Builds the code and runs qemu with the built Os.
-set(EMULATOR_FLAGS_GDB ${EMULATOR_FLAGS} -s -S)
+# Booting with QEMU for fun
+# =============================================================================
 
+# This first target runs the emualtor passing the kernel binary file.
 add_custom_target(
-  qemu-gdb
-  COMMAND ${EMULATOR} ${EMULATOR_FLAGS_GDB} ${EMULATOR_KERNEL} ${EMULATOR_FS}
-  COMMAND echo "\n\n"
-  COMMAND echo "Now, QEMU has loaded the kernel, and it is waiting that you remotely connect to it."
-  COMMAND echo "To start debugging, open a new shell in THIS same folder, and just type \"gdb\"!"
-  COMMAND echo "\n\n"
-  DEPENDS gdb_file kernel-bootloader.bin initrd)
-
-add_custom_target(all-execs-clion-embedded DEPENDS gdb_file_clion_embedded kernel-bootloader.bin initrd)
-
-add_custom_target(
-    cdrom.iso
-    COMMAND cp mentos/kernel-bootloader.bin iso/boot
-    COMMAND cp initrd iso/boot
-    COMMAND grub-mkrescue -o cdrom.iso iso
+    qemu
+    COMMAND ${EMULATOR} ${EMULATOR_FLAGS} -kernel ${CMAKE_BINARY_DIR}/mentos/kernel-bootloader.bin
     DEPENDS kernel-bootloader.bin
-    DEPENDS initrd
+)
+
+# =============================================================================
+# Booting with QEMU+GDB for debugging
+# =============================================================================
+
+# First, we need to generate a GDB file containing all the symbols of all our
+# executables.
+add_custom_target(
+    .gdbinit
+    BYPRODUCTS ${CMAKE_BINARY_DIR}/.gdbinit
+    COMMAND bash ${CMAKE_SOURCE_DIR}/scripts/get_text_address.sh ${CMAKE_BINARY_DIR}/mentos/kernel.bin > ${CMAKE_BINARY_DIR}/.gdbinit
+    COMMAND bash ${CMAKE_SOURCE_DIR}/scripts/get_text_address.sh ${CMAKE_BINARY_DIR}/mentos/kernel-bootloader.bin >> ${CMAKE_BINARY_DIR}/.gdbinit
+    COMMAND bash ${CMAKE_SOURCE_DIR}/scripts/get_text_address.sh ${CMAKE_BINARY_DIR}/programs/tests/test_* >> ${CMAKE_BINARY_DIR}/.gdbinit
+    COMMAND bash ${CMAKE_SOURCE_DIR}/scripts/get_text_address.sh ${CMAKE_BINARY_DIR}/programs/prog_* >> ${CMAKE_BINARY_DIR}/.gdbinit
+    COMMAND echo "break boot.c: boot_main" >> ${CMAKE_BINARY_DIR}/.gdbinit
+    COMMAND echo "break kernel.c: kmain" >> ${CMAKE_BINARY_DIR}/.gdbinit
+    COMMAND echo "target remote localhost:1234" >> ${CMAKE_BINARY_DIR}/.gdbinit
+    DEPENDS kernel-bootloader.bin
+    DEPENDS all_programs
+    DEPENDS all_tests
+    DEPENDS libc
+)
+
+# This second target runs the emualtor passing the kernel binary file, and also
+# the `-s -S` options. This basically tells the emulator to run the kernel in
+# debug mode, and pause it up until a debugger connects to it.
+add_custom_target(
+    qemu-gdb
+    COMMAND echo "\n\n"
+    COMMAND echo "Now, QEMU has loaded the kernel, and it is waiting that you\n"
+    COMMAND echo "remotely connect to it. To start debugging, open a new shell\n"
+    COMMAND echo "in THIS same folder, and just type :\n"
+    COMMAND printf "    cgdb -q -iex %q" "add-auto-load-safe-path ."
+    COMMAND echo "\n\n"
+    COMMAND ${EMULATOR} ${EMULATOR_FLAGS} -s -S -kernel ${CMAKE_BINARY_DIR}/mentos/kernel-bootloader.bin
+    DEPENDS kernel-bootloader.bin
+    DEPENDS .gdbinit
+)
+
+# =============================================================================
+# Booting with QEMU+GRUB
+# =============================================================================
+
+# First, we need to build the ISO for the cdrom.
+add_custom_target(
+  cdrom.iso
+  COMMAND cp -rf ${CMAKE_SOURCE_DIR}/iso .
+  COMMAND cp ${CMAKE_BINARY_DIR}/mentos/kernel-bootloader.bin ${CMAKE_BINARY_DIR}/iso/boot
+  COMMAND grub-mkrescue -o ${CMAKE_BINARY_DIR}/cdrom.iso ${CMAKE_BINARY_DIR}/iso
+  DEPENDS kernel-bootloader.bin
+)
+
+# This third target runs the emualtor, but this time, the kernel binary file is
+# inside the cdrom, so we will not pass the `-kernel` option. We will pass the
+# `-cdrom` option and the `-boot d` option, all the other options will remain
+# the same.
+add_custom_target(
+    qemu-grub
+    COMMAND ${EMULATOR} ${EMULATOR_FLAGS} -boot d -cdrom ${CMAKE_BINARY_DIR}/cdrom.iso
+    DEPENDS cdrom.iso
 )

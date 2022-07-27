@@ -1,12 +1,117 @@
-///                MentOS, The Mentoring Operating system project
 /// @file idt.c
 /// @brief Functions which manage the Interrupt Descriptor Table (IDT).
-/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
+
+// Include the kernel log levels.
+#include "sys/kernel_levels.h"
+/// Change the header.
+#define __DEBUG_HEADER__ "[IDT   ]"
+/// Set the log level.
+#define __DEBUG_LEVEL__ LOGLEVEL_NOTICE
 
 #include "descriptor_tables/idt.h"
 #include "descriptor_tables/gdt.h"
 #include "descriptor_tables/isr.h"
+
+/// @brief Interrupt Service Routine (ISR) for exception handling.
+extern void INT_0();
+/// @brief Interrupt Service Routine (ISR) for exception handling.
+extern void INT_1();
+/// @brief Interrupt Service Routine (ISR) for exception handling.
+extern void INT_2();
+/// @brief Interrupt Service Routine (ISR) for exception handling.
+extern void INT_3();
+/// @brief Interrupt Service Routine (ISR) for exception handling.
+extern void INT_4();
+/// @brief Interrupt Service Routine (ISR) for exception handling.
+extern void INT_5();
+/// @brief Interrupt Service Routine (ISR) for exception handling.
+extern void INT_6();
+/// @brief Interrupt Service Routine (ISR) for exception handling.
+extern void INT_7();
+/// @brief Interrupt Service Routine (ISR) for exception handling.
+extern void INT_8();
+/// @brief Interrupt Service Routine (ISR) for exception handling.
+extern void INT_9();
+/// @brief Interrupt Service Routine (ISR) for exception handling.
+extern void INT_10();
+/// @brief Interrupt Service Routine (ISR) for exception handling.
+extern void INT_11();
+/// @brief Interrupt Service Routine (ISR) for exception handling.
+extern void INT_12();
+/// @brief Interrupt Service Routine (ISR) for exception handling.
+extern void INT_13();
+/// @brief Interrupt Service Routine (ISR) for exception handling.
+extern void INT_14();
+/// @brief Interrupt Service Routine (ISR) for exception handling.
+extern void INT_15();
+/// @brief Interrupt Service Routine (ISR) for exception handling.
+extern void INT_16();
+/// @brief Interrupt Service Routine (ISR) for exception handling.
+extern void INT_17();
+/// @brief Interrupt Service Routine (ISR) for exception handling.
+extern void INT_18();
+/// @brief Interrupt Service Routine (ISR) for exception handling.
+extern void INT_19();
+/// @brief Interrupt Service Routine (ISR) for exception handling.
+extern void INT_20();
+/// @brief Interrupt Service Routine (ISR) for exception handling.
+extern void INT_21();
+/// @brief Interrupt Service Routine (ISR) for exception handling.
+extern void INT_22();
+/// @brief Interrupt Service Routine (ISR) for exception handling.
+extern void INT_23();
+/// @brief Interrupt Service Routine (ISR) for exception handling.
+extern void INT_24();
+/// @brief Interrupt Service Routine (ISR) for exception handling.
+extern void INT_25();
+/// @brief Interrupt Service Routine (ISR) for exception handling.
+extern void INT_26();
+/// @brief Interrupt Service Routine (ISR) for exception handling.
+extern void INT_27();
+/// @brief Interrupt Service Routine (ISR) for exception handling.
+extern void INT_28();
+/// @brief Interrupt Service Routine (ISR) for exception handling.
+extern void INT_29();
+/// @brief Interrupt Service Routine (ISR) for exception handling.
+extern void INT_30();
+/// @brief Interrupt Service Routine (ISR) for exception handling.
+extern void INT_31();
+/// @brief Interrupt Service Routine (ISR) for exception handling.
+extern void INT_80();
+/// @brief Interrupt Request (IRQ) coming from the PIC.
+extern void IRQ_0();
+/// @brief Interrupt Request (IRQ) coming from the PIC.
+extern void IRQ_1();
+/// @brief Interrupt Request (IRQ) coming from the PIC.
+extern void IRQ_2();
+/// @brief Interrupt Request (IRQ) coming from the PIC.
+extern void IRQ_3();
+/// @brief Interrupt Request (IRQ) coming from the PIC.
+extern void IRQ_4();
+/// @brief Interrupt Request (IRQ) coming from the PIC.
+extern void IRQ_5();
+/// @brief Interrupt Request (IRQ) coming from the PIC.
+extern void IRQ_6();
+/// @brief Interrupt Request (IRQ) coming from the PIC.
+extern void IRQ_7();
+/// @brief Interrupt Request (IRQ) coming from the PIC.
+extern void IRQ_8();
+/// @brief Interrupt Request (IRQ) coming from the PIC.
+extern void IRQ_9();
+/// @brief Interrupt Request (IRQ) coming from the PIC.
+extern void IRQ_10();
+/// @brief Interrupt Request (IRQ) coming from the PIC.
+extern void IRQ_11();
+/// @brief Interrupt Request (IRQ) coming from the PIC.
+extern void IRQ_12();
+/// @brief Interrupt Request (IRQ) coming from the PIC.
+extern void IRQ_13();
+/// @brief Interrupt Request (IRQ) coming from the PIC.
+extern void IRQ_14();
+/// @brief Interrupt Request (IRQ) coming from the PIC.
+extern void IRQ_15();
 
 /// @brief This function is in idt.asm.
 /// @param idt_pointer Address of the idt.
@@ -19,20 +124,18 @@ static idt_descriptor_t idt_table[IDT_SIZE];
 idt_pointer_t idt_pointer;
 
 /// @brief          Use this function to set an entry in the IDT.
-/// @param index    Indice della IDT.
-/// @param handler  Puntatore alla funzione che gestira' l'interrupt/Eccezione
-/// @param options  Le opzioni del descrittore (PRESENT,NOTPRESENT,KERNEL,USER)
-/// @param seg_sel  Il selettore del segmento della GDT.
+/// @param index    Index of the IDT entry.
+/// @param handler  Pointer to the entry handler.
+/// @param options  Descriptors options (PRESENT, NOTPRESENT, KERNEL, USER).
+/// @param seg_sel  GDT segment selector.
 static inline void __idt_set_gate(uint8_t index, interrupt_handler_t handler, uint16_t options, uint8_t seg_sel)
 {
     uintptr_t base_prt = (uintptr_t)handler;
-
     // Assign the base values.
     idt_table[index].offset_low  = (base_prt & 0xFFFFu);
     idt_table[index].offset_high = (base_prt >> 16u) & 0xFFFFu;
-
     // Set the other fields.
-    idt_table[index].null_par     = 0x00;
+    idt_table[index].reserved     = 0x00;
     idt_table[index].seg_selector = seg_sel;
     idt_table[index].options      = options | IDT_PADDING;
 }
@@ -43,7 +146,7 @@ void init_idt()
     for (uint32_t it = 0; it < IDT_SIZE; ++it) {
         idt_table[it].offset_low   = 0;
         idt_table[it].seg_selector = 0;
-        idt_table[it].null_par     = 0;
+        idt_table[it].reserved     = 0;
         idt_table[it].options      = 0;
         idt_table[it].offset_high  = 0;
     }

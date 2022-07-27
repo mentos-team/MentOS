@@ -1,7 +1,6 @@
-///                MentOS, The Mentoring Operating system project
 /// @file debug.h
 /// @brief Debugging primitives.
-/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #pragma once
@@ -36,9 +35,10 @@ void dbg_printf(const char *file, const char *fun, int line, const char *format,
 const char *to_human_size(unsigned long bytes);
 
 /// @brief Transforms the given value to a binary string.
-/// @param value The decimal value.
+/// @param value to print.
+/// @param length of the binary output.
 /// @return String representing the binary value.
-const char *dec_to_binary(unsigned long value);
+const char *dec_to_binary(unsigned long value, unsigned length);
 
 /// Prints a debugging message.
 #define pr_debug(...) dbg_printf(__FILENAME__, __func__, __LINE__, __DEBUG_HEADER__ __VA_ARGS__)

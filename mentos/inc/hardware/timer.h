@@ -1,7 +1,6 @@
-///                MentOS, The Mentoring Operating system project
 /// @file timer.h
 /// @brief Programmable Interval Timer (PIT) definitions.
-/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #pragma once
@@ -29,6 +28,9 @@
 /// This timer counts down against the total (i.e., both user and system) CPU
 /// time consumed by the process.
 #define ITIMER_PROF 2
+
+/// Number of ticks per seconds.
+#define TICKS_PER_SECOND 1193
 
 /// @brief   Handles the timer.
 /// @param f The interrupt stack frame.

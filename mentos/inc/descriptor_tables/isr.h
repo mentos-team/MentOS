@@ -1,7 +1,6 @@
-///                MentOS, The Mentoring Operating system project
 /// @file isr.h
 /// @brief Data structures concerning the Interrupt Service Routines (ISRs).
-/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 /// @addtogroup descriptor_tables Descriptor Tables
 /// @{
@@ -36,27 +35,28 @@ void irq_init();
  * for a same IRQ.
  */
 
-/// @brief Installs an ISR to handle an exception.
-/// @param i           Exception identifier.
-/// @param handler     Exception handler.
-/// @param description Exception description.
+/// @brief Installs an ISR to handle an interrupt.
+/// @param i interrupt identifier.
+/// @param handler interrupt handler.
+/// @param description interrupt description.
 /// @return 0 on success, -1 otherwise.
 int isr_install_handler(unsigned i, interrupt_handler_t handler, char *description);
 
 /// @brief Uninstall an ISR handler.
-/// @param i           Interrupt identifier.
+/// @param i interrupt identifier.
 /// @return 0 on success, -1 otherwise.
 int isr_uninstall_handler(unsigned i);
 
 /// @brief Installs an ISR to handle an interrupt.
-/// @param i           Interrupt identifier.
-/// @param handler     Interrupt handler.
-/// @param description Interrupt description.
+/// @param i interrupt identifier.
+/// @param handler interrupt handler.
+/// @param description interrupt description.
 /// @return 0 on success, -1 otherwise.
 int irq_install_handler(unsigned i, interrupt_handler_t handler, char *description);
 
 /// @brief Uninstall an IRQ handler.
-/// @param i           Interrupt identifier.
+/// @param i interrupt identifier.
+/// @param handler interrupt handler.
 /// @return 0 on success, -1 otherwise.
 int irq_uninstall_handler(unsigned i, interrupt_handler_t handler);
 
@@ -69,16 +69,16 @@ extern void irq_handler(pt_regs *f);
 extern void isq_handler(pt_regs *f);
 
 //==== List of exceptions generated internally by the CPU ======================
-#define DIVIDE_ERROR        0 ///< DE Divide Error.
-#define DEBUG_EXC           1 ///< DB Debug.
-#define NMI_INTERRUPT       2 ///< Non Mascable Interrupt.
-#define BREAKPOINT          3 ///< BP Breakpoint.
-#define OVERFLOW            4 ///< OF Overflow.
-#define BOUND_RANGE_EXCEED  5 ///< BR Bound Range Exception.
-#define INVALID_OPCODE      6 ///< UD Invalid OpCode Exception.
-#define DEV_NOT_AVL         7 ///< NM Device Not Available.
-#define DOUBLE_FAULT        8 ///< DF Double Fault.
-#define COPROC_SEG_OVERRUN  9 ///< Coprocessor Segment Overrun.
+#define DIVIDE_ERROR        0  ///< DE Divide Error.
+#define DEBUG_EXC           1  ///< DB Debug.
+#define NMI_INTERRUPT       2  ///< Non Mascable Interrupt.
+#define BREAKPOINT          3  ///< BP Breakpoint.
+#define OVERFLOW            4  ///< OF Overflow.
+#define BOUND_RANGE_EXCEED  5  ///< BR Bound Range Exception.
+#define INVALID_OPCODE      6  ///< UD Invalid OpCode Exception.
+#define DEV_NOT_AVL         7  ///< NM Device Not Available.
+#define DOUBLE_FAULT        8  ///< DF Double Fault.
+#define COPROC_SEG_OVERRUN  9  ///< Coprocessor Segment Overrun.
 #define INVALID_TSS         10 ///< TS Invalid TSS.
 #define SEGMENT_NOT_PRESENT 11 ///< NP Segment Not Present.
 #define STACK_SEGMENT_FAULT 12 ///< SS Stack Segment Fault.
@@ -94,7 +94,7 @@ extern void isq_handler(pt_regs *f);
 #define SECURITY_EXC 30 ///< Security Exception.
 #define TRIPLE_FAULT 31 ///< Triple Fault
 #define SYSTEM_CALL  80 ///< System call interrupt.
-//==============================================================================
+                        //==============================================================================
 
 /// @}
 /// @}

@@ -1,11 +1,14 @@
-///                MentOS, The Mentoring Operating system project
 /// @file elf.c
 /// @brief Function for multiboot support.
-/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
+// Include the kernel log levels.
+#include "sys/kernel_levels.h"
 /// Change the header.
 #define __DEBUG_HEADER__ "[ELF   ]"
+/// Set the log level.
+#define __DEBUG_LEVEL__ LOGLEVEL_NOTICE
 
 #include "elf/elf.h"
 
@@ -18,246 +21,314 @@
 #include "stdio.h"
 #include "mem/slab.h"
 #include "fs/vfs.h"
+#include "assert.h"
 
-/// @brief Reads the program header from file.
-/// @param file The file from which we extract the program header.
-/// @param hdr  A pointer to the ELF header.
-/// @param idx  The index of the program header.
-/// @param phdr Where we store the content we read.
-/// @return The amount of bytes we read.
-static inline ssize_t read_elf_program_header(vfs_file_t *file, elf_header_t *hdr, unsigned idx, elf_program_header_t *phdr)
+// ============================================================================
+// GET ELF TABLES
+// ============================================================================
+
+/// @brief Returns the pointer to where the section headers reside.
+/// @param header a pointer to the ELF header.
+/// @return a pointer to the section headers table.
+static inline elf_section_header_t *elf_get_section_header_table(elf_header_t *header)
 {
-    return vfs_read(file, phdr, hdr->phoff + hdr->phentsize * idx, sizeof(elf_program_header_t));
+    return (elf_section_header_t *)((uintptr_t)header + header->shoff);
 }
 
-/// @brief Reads the section header from file.
-/// @param file The file from which we extract the section header.
-/// @param hdr  A pointer to the ELF header.
+/// @brief Returns the pointer to where the program headers reside.
+/// @param header a pointer to the ELF header.
+/// @return a pointer to the program headers table.
+static inline elf_program_header_t *elf_get_program_header_table(elf_header_t *header)
+{
+    return (elf_program_header_t *)((uintptr_t)header + header->phoff);
+}
+
+// ============================================================================
+// GET ELF OBJECTS
+// ============================================================================
+
+/// @brief Returns a pointer to the desired section header.
+/// @param header a pointer to the ELF header.
 /// @param idx  The index of the section header.
 /// @param shdr Where we store the content we read.
-/// @return The amount of bytes we read.
-static inline ssize_t read_elf_section_header(vfs_file_t *file, elf_header_t *hdr, unsigned idx, elf_section_header_t *shdr)
+/// @return a pointer to the desired section header.
+static inline elf_section_header_t *elf_get_section_header(elf_header_t *header, unsigned idx)
 {
-    return vfs_read(file, shdr, hdr->shoff + hdr->shentsize * idx, sizeof(elf_program_header_t));
+    return &elf_get_section_header_table(header)[idx];
 }
 
-/// @brief Reads the symbol from file.
-/// @param file   The file from which we extract the symbol.
-/// @param shdr   A pointer to the ELF symbol table header.
-/// @param idx    The index of the symbol.
-/// @param symbol Where we store the content we read.
-/// @return The amount of bytes we read.
-static inline ssize_t read_elf_symbol(vfs_file_t *file, elf_section_header_t *shdr, unsigned idx, elf_symbol_t *symbol)
+/// @brief Returns a pointer to the desired program header.
+/// @param header a pointer to the ELF header.
+/// @param idx the index of the program header.
+/// @return a pointer to the desired section header.
+static inline elf_program_header_t *elf_get_program_header(elf_header_t *header, unsigned idx)
 {
-    // TODO: Here it should use `shdr->entsize`.
-    return vfs_read(file, symbol, shdr->offset + sizeof(elf_symbol_t) * idx, sizeof(elf_symbol_t));
+    return &elf_get_program_header_table(header)[idx];
 }
 
-/// @brief Reads the symbol from file.
-/// @param file   The file from which we extract the symbol.
-/// @param shdr   A pointer to the ELF symbol table header.
-/// @param idx    The index of the symbol.
-/// @param symbol Where we store the content we read.
-/// @return The amount of bytes we read.
-static inline ssize_t read_elf_symbol_name(vfs_file_t *file, elf_section_header_t *shdr, unsigned offset, char *name, size_t name_len)
-{
-    return vfs_read(file, name, shdr->offset + offset, name_len);
-}
+// ============================================================================
+// GET STRING TABLES
+// ============================================================================
 
-static inline int elf_find_section_header(vfs_file_t *file, elf_header_t *hdr, int type, elf_section_header_t *shdr)
+/// @brief Returns a pointer to the section header string table.
+/// @param header a pointer to the ELF header.
+/// @return a pointer to the section header string table, or NULL on failure.
+static inline const char *elf_get_section_header_string_table(elf_header_t *header)
 {
-    for (int i = 0; i < hdr->shnum; ++i) {
-        if (read_elf_section_header(file, hdr, i, shdr) == -1) {
-            pr_err("Failed to read section header at index %d.\n", i);
-            return -1;
-        }
-        if (shdr->type == type)
-            return 0;
-        memset(shdr, 0, sizeof(elf_section_header_t));
-    }
-    return -1;
-}
-
-static inline char *elf_get_strtable(vfs_file_t *file, elf_header_t *hdr, int ndx)
-{
-    if (ndx == SHT_NULL)
+    if (header->shstrndx == SHT_NULL)
         return NULL;
-    elf_section_header_t shdr;
-    if (read_elf_section_header(file, hdr, ndx, &shdr) == -1) {
-        pr_err("Failed to read section header at index %d.\n", ndx);
-        return NULL;
-    }
-    char *strtable = kmalloc(shdr.size);
-    memset(strtable, 0, shdr.size);
-    if (vfs_read(file, strtable, shdr.offset, shdr.size) == -1) {
-        pr_err("Failed to read the string table at %d.\n", shdr.offset);
-        return NULL;
-    }
-#if 0
-    dbg_putchar('{');
-    for (int i = 0; i < shdr.size; ++i) {
-        pr_debug("[%4d] `%c`", i, strtable[i]);
-        if (strtable[i] == 0)
-            pr_debug("\n");
-    }
-    dbg_putchar('}');
-    dbg_putchar('\n');
-#endif
-    return strtable;
+    return (const char *)((uintptr_t)header + elf_get_section_header(header, header->shstrndx)->offset);
 }
 
-static inline int elf_load_sigreturn(task_struct *task, vfs_file_t *file, elf_header_t *hdr)
+/// @brief Returns a pointer to the section header string table.
+/// @param header a pointer to the ELF header.
+/// @return a pointer to the section header string table, or NULL on failure.
+static inline const char *elf_get_symbol_string_table(elf_header_t *header, elf_section_header_t *section_header)
 {
-    elf_section_header_t shdr;
-    if (elf_find_section_header(file, hdr, SHT_SYMTAB, &shdr) == -1)
-        return -1;
-    char *strtable = elf_get_strtable(file, hdr, shdr.link);
-    if (strtable == NULL)
-        return -1;
-    uint32_t symtab_entries = shdr.size / sizeof(elf_symbol_t);
-    elf_symbol_t symbol;
-    for (int i = 0; i < symtab_entries; ++i) {
-        if (read_elf_symbol(file, &shdr, i, &symbol) == -1) {
-            pr_err("Failed to read the elf symbol at index %d.\n", i);
-            break;
-        }
-        if (strcmp(strtable + symbol.name, "sigreturn") == 0) {
-            task->sigreturn_eip = symbol.value;
-            pr_debug("Found `sigreturn` at index %d with EIP = %p.\n", i, symbol.value);
-            kfree(strtable);
-            return 0;
+    if (section_header->link == SHT_NULL)
+        return NULL;
+    return (const char *)((uintptr_t)header + elf_get_section_header(header, section_header->link)->offset);
+}
+
+// ============================================================================
+// GET ELF OBJECTS NAME
+// ============================================================================
+
+/// @brief Returns the name of the given entry in the section header string table.
+/// @param header a pointer to the ELF header.
+/// @param name_offset the offset where the desired name resides inside the table.
+/// @return a pointer to the name, or NULL on failure.
+static inline const char *elf_get_section_header_name(elf_header_t *header, elf_section_header_t *section_header)
+{
+    const char *strtab = elf_get_section_header_string_table(header);
+    if (strtab == NULL)
+        return NULL;
+    return strtab + section_header->name;
+}
+
+/// @brief Returns a pointer to the section header string table.
+/// @param header a pointer to the ELF header.
+/// @return a pointer to the section header string table, or NULL on failure.
+static inline const char *elf_get_symbol_name(elf_header_t *header, elf_section_header_t *section_header, elf_symbol_t *symbol)
+{
+    const char *strtab = elf_get_symbol_string_table(header, section_header);
+    if (strtab == NULL)
+        return NULL;
+    return strtab + symbol->name;
+}
+
+// ============================================================================
+// SEARCH FUNCTIONS
+// ============================================================================
+
+static inline elf_section_header_t *elf_find_section_header(elf_header_t *header, const char *name)
+{
+    for (unsigned i = 0; i < header->shnum; ++i) {
+        // Get the section header.
+        elf_section_header_t *section_header = elf_get_section_header(header, i);
+        // Get the section header name.
+        const char *section_header_name = elf_get_section_header_name(header, section_header);
+        if (section_header_name) {
+            // Check the section header name.
+            if (strcmp(section_header_name, name) == 0) {
+                return section_header;
+            }
         }
     }
-    pr_emerg("Failed to find `sigreturn`!\n");
-    kfree(strtable);
-    return -1;
+    return NULL;
+}
+
+static inline elf_symbol_t *elf_find_symbol(elf_header_t *header, const char *name)
+{
+    for (unsigned i = 0; i < header->shnum; ++i) {
+        // Get the section header.
+        elf_section_header_t *section_header = elf_get_section_header(header, i);
+        // Check if it is valid, and it is a symbol table.
+        if (section_header && (section_header->type == SHT_SYMTAB)) {
+            // Count the number of entries.
+            unsigned symtab_entries = section_header->size / section_header->entsize;
+            // Get the addresss of the symbol table.
+            elf_symbol_t *symtab = (elf_symbol_t *)((uintptr_t)header + section_header->offset);
+            // Iterate the entries.
+            for (unsigned j = 0; j < symtab_entries; ++j) {
+                // Get the symbol.
+                elf_symbol_t *symbol = &symtab[j];
+                // Get the name of the symbol.
+                const char *symbol_name = elf_get_symbol_name(header, section_header, symbol);
+                if (symbol_name) {
+                    // Check the symbol name.
+                    if (strcmp(symbol_name, name) == 0) {
+                        return symbol;
+                    }
+                }
+            }
+        }
+    }
+    return NULL;
+}
+
+// ============================================================================
+// DUMP FUNCTIONS
+// ============================================================================
+
+static inline void elf_dump_section_headers(elf_header_t *header)
+{
+    pr_debug("[Nr] Name                 Type            Addr     Off    Size   ES Flg Lk Inf Al\n");
+    for (unsigned idx = 0; idx < header->shnum; ++idx) {
+        // Get the section header.
+        elf_section_header_t *section_header = elf_get_section_header(header, idx);
+        // Get the section header name.
+        const char *section_header_name = elf_get_section_header_name(header, section_header);
+        // Dump the information.
+        pr_debug("[%2d] %-20s %-15s %08x %06x %06x %2u %3u %2u %3u %2u\n",
+                 idx, section_header_name, elf_section_header_type_to_string(section_header->type),
+                 section_header->addr, section_header->offset, section_header->size,
+                 section_header->entsize, section_header->flags, section_header->link,
+                 section_header->info, section_header->addralign);
+    }
+}
+
+static inline void elf_dump_symbol_table(elf_header_t *header)
+{
+    for (unsigned i = 0; i < header->shnum; ++i) {
+        // Get the section header.
+        elf_section_header_t *section_header = elf_get_section_header(header, i);
+        if (section_header->type != SHT_SYMTAB)
+            continue;
+        // Count the number of entries.
+        uint32_t symtab_entries = section_header->size / section_header->entsize;
+        // Get the addresss of the symbol table.
+        elf_symbol_t *symtab = (elf_symbol_t *)((uintptr_t)header + section_header->offset);
+        // Dump the table.
+        for (int j = 0; j < symtab_entries; ++j) {
+            // Get the symbol.
+            elf_symbol_t *symbol = &symtab[j];
+            // Get the name of the symbol.
+            const char *symbol_name = elf_get_symbol_name(header, section_header, symbol);
+            if (symbol_name == NULL) {
+                pr_err("Null symbol name.\n");
+                return;
+            }
+            // Dump the symbol.
+            pr_debug("[%4d] %08x %5d %-7s %-6s %-8s %3d %s\n", j, symbol->value, symbol->size,
+                     elf_symbol_type_to_string(ELF32_ST_TYPE(symbol->info)),
+                     elf_symbol_bind_to_string(ELF32_ST_BIND(symbol->info)),
+                     "-", symbol->ndx, symbol_name);
+        }
+    }
+}
+
+// ============================================================================
+// EXEC-RELATED FUNCTIONS
+// ============================================================================
+
+static inline int elf_set_sigreturn(elf_header_t *header, task_struct *task)
+{
+    elf_symbol_t *sigreturn = elf_find_symbol(header, "sigreturn");
+    if (sigreturn == NULL) {
+        pr_err("Failed to find `sigreturn`!\n");
+        return false;
+    }
+    task->sigreturn_eip = sigreturn->value;
+    return true;
 }
 
 /// @brief Loads an ELF executable.
 /// @param task The task for which we load the ELF.
 /// @param file The ELF file.
-/// @param hdr  The header of the ELF file.
+/// @param header  The header of the ELF file.
 /// @return The ELF entry.
-static inline int elf_load_exec(task_struct *task, vfs_file_t *file, elf_header_t *hdr)
+static inline int elf_load_exec(elf_header_t *header, task_struct *task)
 {
-    elf_program_header_t phdr;
     pr_debug(" Type      | Mem. Size | File Size | VADDR\n");
-    for (int idx = 0; idx < hdr->phnum; ++idx) {
+    for (unsigned i = 0; i < header->phnum; ++i) {
         // Get the header.
-        if (read_elf_program_header(file, hdr, idx, &phdr) == -1) {
-            pr_err("Failed to read program header at index %d.\n", idx);
-            return -1;
-        }
+        elf_program_header_t *program_header = elf_get_program_header(header, i);
+        // Dump the information about the header.
         pr_debug(" %-9s | %9s | %9s | 0x%08x - 0x%08x\n",
-                 elf_type_to_string(phdr.type),
-                 to_human_size(phdr.memsz),
-                 to_human_size(phdr.filesz),
-                 phdr.vaddr, phdr.vaddr + phdr.memsz);
-        if (phdr.type == PT_LOAD) {
-            uint32_t virt_addr     = create_vm_area(task->mm, phdr.vaddr, phdr.memsz, MM_USER | MM_RW | MM_COW, GFP_KERNEL);
-            virt_map_page_t *vpage = virt_map_alloc(phdr.memsz);
-            uint32_t dst_addr      = virt_map_vaddress(task->mm, vpage, virt_addr, phdr.memsz);
+                 elf_type_to_string(program_header->type),
+                 to_human_size(program_header->memsz),
+                 to_human_size(program_header->filesz),
+                 program_header->vaddr,
+                 program_header->vaddr + program_header->memsz);
+        if (program_header->type == PT_LOAD) {
+            uint32_t virt_addr     = create_vm_area(task->mm, program_header->vaddr, program_header->memsz, MM_USER | MM_RW | MM_COW, GFP_KERNEL);
+            virt_map_page_t *vpage = virt_map_alloc(program_header->memsz);
+            uint32_t dst_addr      = virt_map_vaddress(task->mm, vpage, virt_addr, program_header->memsz);
 
             // Load the memory area.
-            vfs_read(file, (void *)dst_addr, phdr.offset, phdr.filesz);
+            memcpy((void *)dst_addr, (void *)((uintptr_t)header + program_header->offset), program_header->filesz);
 
-            if (phdr.memsz > phdr.filesz) {
-                uint32_t zmem_sz = phdr.memsz - phdr.filesz;
-                memset((void *)(dst_addr + phdr.filesz), 0, zmem_sz);
+            if (program_header->memsz > program_header->filesz) {
+                uint32_t zmem_sz = program_header->memsz - program_header->filesz;
+                memset((void *)(dst_addr + program_header->filesz), 0, zmem_sz);
             }
             virt_unmap_pg(vpage);
         }
     }
-    return 0;
-}
-
-static inline void dump_elf_section_headers(vfs_file_t *file, elf_header_t *hdr)
-{
-    char *strtable = elf_get_strtable(file, hdr, hdr->shstrndx);
-    if (strtable == NULL)
-        return;
-    pr_debug("[Nr] Name                 Type            Addr     Off    Size   ES Flg Lk Inf Al\n");
-    elf_section_header_t shdr;
-    for (int i = 0; i < hdr->shnum; ++i) {
-        if (read_elf_section_header(file, hdr, i, &shdr) == -1) {
-            pr_err("Failed to read section header at index %d.\n", i);
-        }
-        pr_debug("[%2d] %-20s %-15s %08x %06x %06x %2u %3u %2u %3u %2u\n",
-                 i, strtable + shdr.name, elf_section_header_type_to_string(shdr.type),
-                 shdr.addr, shdr.offset, shdr.size,
-                 shdr.entsize, shdr.flags, shdr.link, shdr.info, shdr.addralign);
-    }
-    kfree(strtable);
-}
-
-static inline void dump_elf_symbol_table(vfs_file_t *file, elf_header_t *hdr)
-{
-    elf_section_header_t shdr;
-    if (elf_find_section_header(file, hdr, SHT_SYMTAB, &shdr) == -1)
-        return;
-
-    char *strtable = elf_get_strtable(file, hdr, shdr.link);
-    if (strtable == NULL)
-        return;
-
-    //     Count the number of entries.
-    uint32_t symtab_entries = shdr.size / sizeof(elf_symbol_t);
-    pr_debug("Symbol table '.symtab' contains %d entries (%d/%d):\n", symtab_entries, shdr.size, sizeof(elf_symbol_t));
-    pr_debug("[ Nr ]    Value  Size Type    Bind   Vis      Ndx Name\n");
-    elf_symbol_t symbol;
-    for (int i = 0; i < symtab_entries; ++i) {
-        if (read_elf_symbol(file, &shdr, i, &symbol) == -1) {
-            pr_err("Failed to read the elf symbol at index %d.\n", i);
-        }
-        pr_debug("[%4d] %08x %5d %-7s %-6s %-8s %3d %s\n", i, symbol.value, symbol.size,
-                 elf_symbol_type_to_string(ELF32_ST_TYPE(symbol.info)),
-                 elf_symbol_bind_to_string(ELF32_ST_BIND(symbol.info)),
-                 "-",
-                 symbol.ndx,
-                 strtable + symbol.name);
-    }
-    kfree(strtable);
+    return true;
 }
 
 int elf_load_file(task_struct *task, vfs_file_t *file, uint32_t *entry)
 {
     // Open the file.
-    if (file == NULL) {
-        pr_err("Cannot find executable!");
-        return 0;
+    if (file == NULL)
+        return false;
+    // Get the size of the file.
+    stat_t stat_buf;
+    if (vfs_fstat(file, &stat_buf) < 0) {
+        pr_err("Failed to stat the file `%s`.\n", file->name);
+        return false;
     }
-    elf_header_t hdr;
-    // Set the reading position at the beginning of the file.
-    vfs_lseek(file, 0, SEEK_SET);
-    // Read the header.
-    if (vfs_read(file, &hdr, 0, sizeof(elf_header_t)) != -1) {
-        if (elf_check_file_header(&hdr)) {
-            pr_debug("Version        : 0x%x\n", hdr.version);
-            pr_debug("Entry          : 0x%x\n", hdr.entry);
-            pr_debug("Headers offset : 0x%x\n", hdr.phoff);
-            pr_debug("Headers count  : %d\n", hdr.phnum);
-            //dump_elf_section_headers(file, &hdr);
-            //dump_elf_symbol_table(file, &hdr);
-            if (hdr.type == ET_EXEC) {
-                if (elf_load_sigreturn(task, file, &hdr) == -1) {
-                    return 0;
-                }
-                if (elf_load_exec(task, file, &hdr) == -1) {
-                    return 0;
-                }
-                // Set the entry.
-                (*entry) = hdr.entry;
-                return 1;
-            } else {
-                pr_err("ELF type not supported.\n");
-            }
-        } else {
-            pr_err("ELF file cannot be loaded.\n");
-        }
-    } else {
-        pr_err("Filed to read ELF header.\n");
+    // Allocate the memory for the file.
+    char *buffer = kmalloc(stat_buf.st_size);
+    if (buffer == NULL) {
+        pr_err("Failed to allocate %d bytes of memory for reading the file `%s`.\n", stat_buf.st_size, file->name);
+        return false;
     }
-    return 0;
+    // Clean the memory.
+    memset(buffer, 0, stat_buf.st_size);
+    // Read the file.
+    if (vfs_read(file, buffer, 0, stat_buf.st_size) != stat_buf.st_size) {
+        pr_err("Failed to read %d bytes from the file `%s`.\n", stat_buf.st_size, file->name);
+        goto return_error_free_buffer;
+    }
+    // The first thing inside the file is the ELF header.
+    elf_header_t *header = (elf_header_t *)buffer;
+    // Print header info.
+    pr_debug("Type           : %s\n", elf_type_to_string(header->type));
+    pr_debug("Version        : 0x%x\n", header->version);
+    pr_debug("Entry          : 0x%x\n", header->entry);
+    pr_debug("Headers offset : 0x%x\n", header->phoff);
+    pr_debug("Headers count  : %d\n", header->phnum);
+    // Check the elf header.
+    if (!elf_check_file_header(header)) {
+        pr_err("File %s is not a valid ELF file.\n", stat_buf.st_size, file->name);
+        goto return_error_free_buffer;
+    }
+    // Check if the elf file is an executable.
+    if (header->type != ET_EXEC) {
+        pr_err("Elf file is not an executable.\n");
+        goto return_error_free_buffer;
+    }
+    // Set the sigreturn of the task.
+    if (!elf_set_sigreturn(header, task)) {
+        pr_err("Failed to set `sigreturn` for the executable.\n");
+        goto return_error_free_buffer;
+    }
+    if (!elf_load_exec(header, task)) {
+        pr_err("Failed to load the executable.\n");
+        goto return_error_free_buffer;
+    }
+
+    // Set the entry.
+    (*entry) = header->entry;
+
+    kfree(buffer);
+    return true;
+return_error_free_buffer:
+    kfree(buffer);
+    return false;
 }
 
 int elf_check_file_type(vfs_file_t *file, Elf_Type type)
@@ -270,68 +341,68 @@ int elf_check_file_type(vfs_file_t *file, Elf_Type type)
     // Set the reading position at the beginning of the file.
     vfs_lseek(file, 0, SEEK_SET);
     // Prepare the elf header.
-    elf_header_t hdr;
+    elf_header_t header;
     // By default we return failure.
     int ret = 0;
     // Read the header and check the file type.
-    if (vfs_read(file, &hdr, 0, sizeof(elf_header_t)) != -1)
-        if (elf_check_file_header(&hdr))
-            ret = hdr.type == type;
+    if (vfs_read(file, &header, 0, sizeof(elf_header_t)) != -1)
+        if (elf_check_file_header(&header))
+            ret = header.type == type;
     // Set the reading position at the beginning of the file.
     vfs_lseek(file, 0, SEEK_SET);
     return ret;
 }
 
-int elf_check_file_header(elf_header_t *hdr)
+int elf_check_file_header(elf_header_t *header)
 {
-    if (!elf_check_magic_number(hdr)) {
+    if (!elf_check_magic_number(header)) {
         pr_err("Invalid ELF File.\n");
-        return 0;
+        return false;
     }
-    if (hdr->ident[EI_CLASS] != ELFCLASS32) {
+    if (header->ident[EI_CLASS] != ELFCLASS32) {
         pr_err("Unsupported ELF File Class.\n");
-        return 0;
+        return false;
     }
-    if (hdr->ident[EI_DATA] != ELFDATA2LSB) {
+    if (header->ident[EI_DATA] != ELFDATA2LSB) {
         pr_err("Unsupported ELF File byte order.\n");
-        return 0;
+        return false;
     }
-    if (hdr->machine != EM_386) {
+    if (header->machine != EM_386) {
         pr_err("Unsupported ELF File target.\n");
-        return 0;
+        return false;
     }
-    if (hdr->ident[EI_VERSION] != EV_CURRENT) {
+    if (header->ident[EI_VERSION] != EV_CURRENT) {
         pr_err("Unsupported ELF File version.\n");
-        return 0;
+        return false;
     }
-    if (hdr->type != ET_EXEC) {
+    if (header->type != ET_EXEC) {
         pr_err("Unsupported ELF File type.\n");
-        return 0;
+        return false;
     }
-    return 1;
+    return true;
 }
 
-int elf_check_magic_number(elf_header_t *hdr)
+int elf_check_magic_number(elf_header_t *header)
 {
-    if (!hdr)
-        return 0;
-    if (hdr->ident[EI_MAG0] != ELFMAG0) {
+    if (!header)
+        return false;
+    if (header->ident[EI_MAG0] != ELFMAG0) {
         pr_err("ELF Header EI_MAG0 incorrect.\n");
-        return 0;
+        return false;
     }
-    if (hdr->ident[EI_MAG1] != ELFMAG1) {
+    if (header->ident[EI_MAG1] != ELFMAG1) {
         pr_err("ELF Header EI_MAG1 incorrect.\n");
-        return 0;
+        return false;
     }
-    if (hdr->ident[EI_MAG2] != ELFMAG2) {
+    if (header->ident[EI_MAG2] != ELFMAG2) {
         pr_err("ELF Header EI_MAG2 incorrect.\n");
-        return 0;
+        return false;
     }
-    if (hdr->ident[EI_MAG3] != ELFMAG3) {
+    if (header->ident[EI_MAG3] != ELFMAG3) {
         pr_err("ELF Header EI_MAG3 incorrect.\n");
-        return 0;
+        return false;
     }
-    return 1;
+    return true;
 }
 
 const char *elf_type_to_string(int type)

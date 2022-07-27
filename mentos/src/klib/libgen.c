@@ -1,13 +1,11 @@
-///                MentOS, The Mentoring Operating system project
 /// @file libgen.c
 /// @brief String routines.
-/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #include "system/syscall.h"
 #include "libgen.h"
 #include "string.h"
-#include "fs/initrd.h"
 #include "limits.h"
 #include "assert.h"
 #include "mem/paging.h"
@@ -87,10 +85,10 @@ char *realpath(const char *path, char *resolved)
     memset(abspath, '\0', PATH_MAX);
     int remaining;
     if (path[0] != '/') {
-        // Get the current task.
+        // Get the working directory of the current task.
         sys_getcwd(abspath, PATH_MAX);
-        // Check the current task.
-        assert((strlen(abspath) > 0) && "There is no current task.");
+        // Check the absolute path.
+        assert((strlen(abspath) > 0) && "Current working directory is set.");
         // Check that the current working directory is an absolute path.
         assert((abspath[0] == '/') && "Current working directory is not an absolute path.");
         // Count the remaining space in the absolute path.

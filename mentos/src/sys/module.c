@@ -1,8 +1,14 @@
-///                MentOS, The Mentoring Operating system project
 /// @file module.c
 /// @brief
-/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
+
+// Include the kernel log levels.
+#include "sys/kernel_levels.h"
+/// Change the header.
+#define __DEBUG_HEADER__ "[MODULE]"
+/// Set the log level.
+#define __DEBUG_LEVEL__ LOGLEVEL_NOTICE
 
 #include "mem/slab.h"
 #include "sys/module.h"
@@ -24,7 +30,7 @@ int init_modules(multiboot_info_t *header)
         modules[i].pad       = 0;
     }
     if (!bitmask_check(header->flags, MULTIBOOT_FLAG_MODS))
-        return 0;
+        return 1;
     multiboot_module_t *mod = first_module(header);
     for (int i = 0; (mod != 0) && (i < MAX_MODULES);
          ++i, mod = next_module(header, mod)) {

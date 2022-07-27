@@ -1,7 +1,6 @@
-///                MentOS, The Mentoring Operating system project
 /// @file vfs_types.h
 /// @brief Virtual filesystem data types.
-/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #pragma once
@@ -23,6 +22,8 @@ typedef struct vfs_file_t vfs_file_t;
 typedef int (*vfs_mkdir_callback)(const char *, mode_t);
 /// Function used to remove a directory.
 typedef int (*vfs_rmdir_callback)(const char *);
+/// Function used to open a file (or directory).
+typedef vfs_file_t *(*vfs_creat_callback)(const char *, mode_t);
 /// Function used to read the entries of a directory.
 typedef int (*vfs_getdents_callback)(vfs_file_t *, dirent_t *, off_t, size_t);
 /// Function used to open a file (or directory).
@@ -62,6 +63,8 @@ typedef struct vfs_sys_operations_t {
     vfs_rmdir_callback rmdir_f;
     /// Stat function.
     vfs_stat_callback stat_f;
+    /// File creation function.
+    vfs_creat_callback creat_f;
 } vfs_sys_operations_t;
 
 /// @brief Set of functions used to perform operations on files.
@@ -134,6 +137,8 @@ struct vfs_file_t {
 typedef struct super_block_t {
     /// Name of the superblock.
     char name[NAME_MAX];
+    /// Path of the superblock.
+    char path[PATH_MAX];
     /// Pointer to the root file of the given filesystem.
     vfs_file_t *root;
     /// Pointer to the information regarding the filesystem.

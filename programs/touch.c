@@ -1,7 +1,6 @@
-///                MentOS, The Mentoring Operating system project
 /// @file touch.c
 /// @brief
-/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #include <sys/unistd.h>
@@ -27,7 +26,7 @@ int main(int argc, char** argv)
     }
     int fd = open(argv[1], O_RDONLY, 0);
     if (fd < 0) {
-        fd = open(argv[1], O_CREAT, 0);
+        fd = open(argv[1], O_CREAT, S_IWUSR | S_IRUSR | S_IRGRP | S_IROTH);
         if (fd >= 0) {
             close(fd);
         }

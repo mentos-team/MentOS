@@ -1,7 +1,6 @@
-///                MentOS, The Mentoring Operating system project
 /// @file procfs.h
 /// @brief Proc file system public functions and structures.
-/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #pragma once
@@ -61,9 +60,9 @@ int proc_destroy_entry(const char *name, proc_dir_entry_t *parent);
 /// @brief Create the entire procfs entry tree for the give process.
 /// @param entry Pointer to the task_struct of the process.
 /// @return 0 if succeed, or -errno in case of error.
-int proc_create_entry_pid(task_struct *entry);
+int procr_create_entry_pid(task_struct *entry);
 
 /// @brief Destroy the entire procfs entry tree for the give process.
 /// @param entry Pointer to the task_struct of the process.
 /// @return 0 if succeed, or -errno in case of error.
-int proc_destroy_entry_pid(task_struct *entry);
+int procr_destroy_entry_pid(task_struct *entry);

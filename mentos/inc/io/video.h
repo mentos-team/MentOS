@@ -1,7 +1,6 @@
-///                MentOS, The Mentoring Operating system project
 /// @file video.h
 /// @brief Video functions and costants.
-/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #pragma once
@@ -67,6 +66,9 @@
 /// @brief Initialize the video.
 void video_init();
 
+/// @brief Updates the video.
+void video_update();
+
 /// @brief Print the given character on the screen.
 /// @param c The character to print.
 void video_putc(int c);
@@ -83,6 +85,16 @@ void video_set_cursor_auto();
 /// @param y The y coordinate.
 void video_move_cursor(unsigned int x, unsigned int y);
 
+/// @brief Returns cursor's position on the screen.
+/// @param x The output x coordinate.
+/// @param y The output y coordinate.
+void video_get_cursor_position(unsigned int * x, unsigned int * y);
+
+/// @brief Returns screen size.
+/// @param width The screen width.
+/// @param height The screen height.
+void video_get_screen_size(unsigned int * width, unsigned int * height);
+
 /// @brief Clears the screen.
 void video_clear();
 
@@ -91,14 +103,6 @@ void video_new_line();
 
 /// @brief Move to the up line (the effect of \n character).
 void video_cartridge_return();
-
-/// @brief Get the current column number.
-/// @return The column number.
-uint32_t video_get_x();
-
-/// @brief Get the current row number.
-/// @return The row number.
-uint32_t video_get_y();
 
 /// @brief The whole screen is shifted up by one line. Used when the cursor
 ///        reaches the last position of the screen.

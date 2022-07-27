@@ -1,10 +1,10 @@
-///                MentOS, The Mentoring Operating system project
 /// @file mkdir.c
 /// @brief
-/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #include <stdio.h>
+#include <fcntl.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <strerror.h>
@@ -23,8 +23,8 @@ int main(int argc, char *argv[])
         printf("    %s <directory>\n", argv[0]);
         return 0;
     }
-    if (mkdir(argv[1], 0)) {
-        printf("%s: cannot create directory '%s': %s\n", argv[0], argv[1], strerror(errno));
+    if (mkdir(argv[1], S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH)) {
+        printf("mkdir: cannot create directory '%s': %s\n\n", argv[1], strerror(errno));
     }
     return 0;
 }

@@ -1,11 +1,14 @@
-///                MentOS, The Mentoring Operating system project
 /// @file mouse.h
 /// @brief  Driver for *PS2* Mouses.
-/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
+// Include the kernel log levels.
+#include "sys/kernel_levels.h"
 /// Change the header.
 #define __DEBUG_HEADER__ "[SLAB  ]"
+/// Set the log level.
+#define __DEBUG_LEVEL__ LOGLEVEL_NOTICE
 
 #include "mem/zone_allocator.h"
 #include "mem/paging.h"
@@ -260,7 +263,7 @@ void *kmem_cache_alloc(kmem_cache_t *cachep, gfp_t flags)
         list_head_add(slab_full_elem, &cachep->slabs_full);
     }
 #ifdef ENABLE_CACHE_TRACE
-    pr_notice("kmem_cache_alloc : (%-16s:%3d)[%-16s] : 0x%p\n", file, line, cachep->name, ptr);
+    pr_notice("CHACE-ALLOC 0x%p in %-20s at %s:%d\n", ptr, cachep->name, file, line);
 #endif
     return ptr;
 }
@@ -281,7 +284,7 @@ void kmem_cache_free(void *ptr)
     kmem_cache_t *cachep = slab_page->container.slab_cache;
 
 #ifdef ENABLE_CACHE_TRACE
-    pr_notice("kmem_cache_free  : (%-16s:%3d)[%-16s] : 0x%p\n", file, line, cachep->name, ptr);
+    pr_notice("CHACE-FREE  0x%p in %-20s at %s:%d\n", ptr, cachep->name, file, line);
 #endif
     if (cachep->dtor)
         cachep->dtor(ptr);
@@ -329,7 +332,7 @@ void *kmalloc(unsigned int size)
         ptr = kmem_cache_alloc(malloc_blocks[order], GFP_KERNEL);
     }
 #ifdef ENABLE_ALLOC_TRACE
-    pr_notice("kmalloc : (%-16s:%3d) : 0x%p\n", file, line, ptr);
+    pr_notice("KMALLOC 0x%p at %s:%d\n", ptr, file, line);
 #endif
     return ptr;
 }
@@ -341,7 +344,7 @@ void kfree(void *ptr)
 #endif
 {
 #ifdef ENABLE_ALLOC_TRACE
-    pr_notice("kfree   : (%-16s:%3d) : 0x%p\n", file, line, ptr);
+    pr_notice("KFREE   0x%p at %s:%d\n", ptr, file, line);
 #endif
     page_t *page = get_lowmem_page_from_address((uint32_t)ptr);
 

@@ -1,7 +1,6 @@
-///                MentOS, The Mentoring Operating system project
 /// @file shell.c
 /// @brief Implement shell functions.
-/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #include <sys/unistd.h>
@@ -21,6 +20,7 @@
 #include "termios.h"
 #include "limits.h"
 #include "sys/utsname.h"
+#include "ctype.h"
 
 /// Maximum length of commands.
 #define CMD_LEN 32
@@ -326,13 +326,13 @@ static int __cd(int argc, char *argv[])
             return 1;
         }
     }
-    int fd = open(path, O_RDONLY | O_DIRECTORY, 0);
+    int fd = open(path, O_RDONLY | O_DIRECTORY, S_IXUSR);
     if (fd == -1) {
-        printf("cd: %s: %s\n\n", argv[0], strerror(errno), path);
+        printf("cd: %s\n\n", strerror(errno), path);
         return 1;
     }
     // Set current working directory.
-    fchdir(fd);
+    chdir(path);
     close(fd);
     // Get the updated working directory.
     char cwd[PATH_MAX];
@@ -430,12 +430,15 @@ static inline void __cmd_set(char *_cmd)
 }
 
 /// @brief Erases one character from the console.
-static inline void __cmd_ers()
+static inline void __cmd_ers(char c)
 {
-    if (cmd_cursor_index > 0) {
+    if ((c == '\b') && (cmd_cursor_index > 0)) {
         strcpy(cmd + cmd_cursor_index - 1, cmd + cmd_cursor_index);
         putchar('\b');
         --cmd_cursor_index;
+    } else if ((c == 0x7F) && (cmd[0] != 0) && ((cmd_cursor_index + 1) < CMD_LEN)) {
+        strcpy(cmd + cmd_cursor_index, cmd + cmd_cursor_index + 1);
+        putchar(0x7F);
     }
 }
 
@@ -527,33 +530,15 @@ static void __cmd_get()
                         // Reset the cursor position.
                         cmd_cursor_index += offset;
                     }
-                }
-            } else if (c == '^') {
-                c = getchar(); // Get the char.
-                if (c == 'C') {
-                    // Re-set the index to the beginning.
-                    cmd_cursor_index = 0;
-                    // Go to the new line.
-                    printf("\n\n");
-                    // Sets the command.
-                    __cmd_set("\0");
-                    // Break the while loop.
-                    break;
-                } else if (c == 'U') {
-                    // Clear the current command.
-                    __cmd_clr();
-                    // Re-set the index to the beginning.
-                    cmd_cursor_index = 0;
-                    // Sets the command.
-                    __cmd_set("\0");
-                } else if (c == 'D') {
-                    // Go to the new line.
-                    printf("\n");
-                    exit(0);
+                } else if (c == '3') {
+                    c = getchar(); // Get the char.
+                    if (c == '~') {
+                        __cmd_ers(0x7F);
+                    }
                 }
             }
         } else if (c == '\b') {
-            __cmd_ers();
+            __cmd_ers('\b');
         } else if (c == '\t') {
             // Get the lenght of the command.
             size_t cmd_len = strlen(cmd);
@@ -619,10 +604,34 @@ static void __cmd_get()
                 strcpy(cmd + cmd_cursor_index, cmd + cmd_cursor_index + 1);
                 putchar(127);
             }
+        } else if (iscntrl(c)) {
+            if (c == CTRL('C')) {
+                // Re-set the index to the beginning.
+                cmd_cursor_index = 0;
+                // Go to the new line.
+                printf("\n\n");
+                // Sets the command.
+                __cmd_set("\0");
+                // Break the while loop.
+                break;
+            } else if (c == CTRL('U')) {
+                // Clear the current command.
+                __cmd_clr();
+                // Re-set the index to the beginning.
+                cmd_cursor_index = 0;
+                // Sets the command.
+                __cmd_set("\0");
+            } else if (c == CTRL('D')) {
+                // Go to the new line.
+                printf("\n");
+                exit(0);
+            }
         } else if ((c > 0) && (c != '\n')) {
             if (__cmd_app(c)) {
                 putchar(c);
             }
+        } else {
+            pr_debug("Unrecognized character %02x (%c)\n", c, c);
         }
     } while (cmd_cursor_index < CMD_LEN);
 
@@ -671,6 +680,11 @@ int main(int argc, char *argv[])
 {
     setsid();
 
+    struct termios _termios;
+    tcgetattr(STDIN_FILENO, &_termios);
+    _termios.c_lflag &= ~ISIG;
+    tcsetattr(STDIN_FILENO, 0, &_termios);
+
     char *USER = getenv("USER");
     if (USER == NULL) {
         printf("shell: There is no user set.\n");
@@ -696,6 +710,18 @@ int main(int argc, char *argv[])
     puts(BG_WHITE FG_BLACK);
     printf("Welcome " FG_RED "%s" FG_BLACK "...\n\n", USER);
     puts(BG_BLACK FG_BRIGHT_WHITE);
+    
+    // Print /etc/motd if it exists
+    int motd_fd = open("/etc/motd", O_RDONLY, 0600);
+    if (motd_fd != -1){
+        char buffer[256];
+
+        if(read(motd_fd, buffer, sizeof(char)*256) != -1){
+            printf("%s \n", buffer);
+        }
+        close(motd_fd);
+    }
+    
     // Move inside the home directory.
     __cd(0, NULL);
 
@@ -747,7 +773,7 @@ int main(int argc, char *argv[])
             if (cpid == 0) {
                 // Makes the new process a group leader
                 pid_t pid = getpid();
-                setgid(pid);
+                setpgid(cpid, pid);
 
                 if (execvp(_argv[0], _argv) == -1) {
                     printf("\nUnknown command: %s\n", _argv[0]);

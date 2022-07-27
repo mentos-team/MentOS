@@ -1,7 +1,6 @@
-///                MentOS, The Mentoring Operating system project
 /// @file prio.h
 /// @brief Defines processes priority value.
-/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 // Priority of a process goes from 0..MAX_PRIO-1, valid RT

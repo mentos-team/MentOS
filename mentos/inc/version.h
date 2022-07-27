@@ -1,7 +1,6 @@
-///                MentOS, The Mentoring Operating system project
 /// @file   version.h
 /// @brief  Version information.
-/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #pragma once
@@ -19,7 +18,7 @@
 #define OS_MAJOR_VERSION 0
 
 /// Minor version of the operating system.
-#define OS_MINOR_VERSION 3
+#define OS_MINOR_VERSION 4
 
 /// Micro version of the operating system.
 #define OS_MICRO_VERSION 0

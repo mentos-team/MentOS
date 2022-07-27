@@ -1,7 +1,6 @@
-///                MentOS, The Mentoring Operating system project
 /// @file termios.c
 /// @brief
-/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #include "termios.h"
@@ -9,7 +8,7 @@
 #include "sys/errno.h"
 #include "bits/ioctls.h"
 
-int tcgetattr(int fd, termios *termios_p)
+int tcgetattr(int fd, termios_t *termios_p)
 {
     int retval;
     __asm__ volatile("int $0x80"
@@ -23,7 +22,7 @@ int tcgetattr(int fd, termios *termios_p)
     return retval;
 }
 
-int tcsetattr(int fd, int optional_actions, const termios *termios_p)
+int tcsetattr(int fd, int optional_actions, const termios_t *termios_p)
 {
     int retval;
     __asm__ volatile("int $0x80"

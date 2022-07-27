@@ -1,11 +1,11 @@
-///                MentOS, The Mentoring Operating system project
 /// @file video.c
 /// @brief Video functions and costants.
-/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #include "io/port_io.h"
 #include "io/video.h"
+#include "io/vga/vga.h"
 #include "stdbool.h"
 #include "ctype.h"
 #include "string.h"
@@ -69,7 +69,7 @@ ansi_color_map[] = {
 /// Pointer to a position of the screen writer.
 char *pointer = ADDR;
 /// The current color.
-char color = 7;
+unsigned char color = 7;
 /// Used to write on the escape_buffer. If -1, we are not parsing an escape sequence.
 int escape_index = -1;
 /// Used to store an escape sequence.
@@ -81,9 +81,18 @@ char original_page[TOTAL_SIZE] = { 0 };
 /// Determines if the screen is currently scrolled.
 int scrolled_page = 0;
 
-void video_init()
+/// @brief Get the current column number.
+/// @return The column number.
+static inline unsigned __get_x()
 {
-    video_clear();
+    return ((pointer - ADDR) % (WIDTH * 2)) / 2;
+}
+
+/// @brief Get the current row number.
+/// @return The row number.
+static inline unsigned __get_y()
+{
+    return (pointer - ADDR) / (WIDTH * 2);
 }
 
 /// @brief Draws the given character.
@@ -161,9 +170,22 @@ static inline void __video_set_cursor(unsigned int x, unsigned int y)
     outportb(0x3D5, (uint8_t)((position >> 8U) & 0xFFU));
 }
 
+void video_init()
+{
+    video_clear();
+}
+
+void video_update()
+{
+#ifndef VGA_TEXT_MODE
+    if (vga_is_enabled())
+        vga_update();
+#endif
+}
+
 void video_putc(int c)
 {
-    // == ESCAPE SEQUENCES ========================================================================
+    // ESCAPE SEQUENCES
     if (c == '\033') {
         escape_index = 0;
         return;
@@ -190,6 +212,13 @@ void video_putc(int c)
         return;
     }
 
+#ifndef VGA_TEXT_MODE
+    if (vga_is_enabled()) {
+        vga_putc(c);
+        return;
+    }
+#endif
+
     // == NORMAL CHARACTERS =======================================================================
     // If the character is '\n' go the new line.
     if (c == '\n') {
@@ -213,6 +242,12 @@ void video_putc(int c)
 
 void video_puts(const char *str)
 {
+#ifndef VGA_TEXT_MODE
+    if (vga_is_enabled()) {
+        vga_puts(str);
+        return;
+    }
+#endif
     while ((*str) != 0) {
         video_putc((*str++));
     }
@@ -220,23 +255,73 @@ void video_puts(const char *str)
 
 void video_set_cursor_auto()
 {
+#ifndef VGA_TEXT_MODE
+    if (vga_is_enabled())
+        return;
+#endif
     __video_set_cursor(((pointer - ADDR) / 2U) / WIDTH, ((pointer - ADDR) / 2U) % WIDTH);
 }
 
 void video_move_cursor(unsigned int x, unsigned int y)
 {
+#ifndef VGA_TEXT_MODE
+    if (vga_is_enabled()) {
+        vga_move_cursor(x, y);
+        return;
+    }
+#endif
     pointer = ADDR + ((y * WIDTH * 2) + (x * 2));
     video_set_cursor_auto();
 }
 
+void video_get_cursor_position(unsigned int *x, unsigned int *y)
+{
+#ifndef VGA_TEXT_MODE
+    if (vga_is_enabled()) {
+        vga_get_cursor_position(x, y);
+        return;
+    }
+#endif
+    if (x)
+        *x = __get_x();
+    if (y)
+        *y = __get_y();
+}
+
+void video_get_screen_size(unsigned int *width, unsigned int *height)
+{
+#ifndef VGA_TEXT_MODE
+    if (vga_is_enabled()) {
+        vga_get_screen_size(width, height);
+        return;
+    }
+#endif
+    if (width)
+        *width = WIDTH;
+    if (height)
+        *height = HEIGHT;
+}
+
 void video_clear()
 {
+#ifndef VGA_TEXT_MODE
+    if (vga_is_enabled()) {
+        vga_clear_screen();
+        return;
+    }
+#endif
     memset(upper_buffer, 0, STORED_PAGES * TOTAL_SIZE);
     memset(ADDR, 0, TOTAL_SIZE);
 }
 
 void video_new_line()
 {
+#ifndef VGA_TEXT_MODE
+    if (vga_is_enabled()) {
+        vga_new_line();
+        return;
+    }
+#endif
     pointer = ADDR + ((pointer - ADDR) / W2 + 1) * W2;
     video_shift_one_line_up();
     video_set_cursor_auto();
@@ -244,20 +329,16 @@ void video_new_line()
 
 void video_cartridge_return()
 {
+#ifndef VGA_TEXT_MODE
+    if (vga_is_enabled()) {
+        vga_new_line();
+        return;
+    }
+#endif
     pointer = ADDR + ((pointer - ADDR) / W2 - 1) * W2;
     video_new_line();
     video_shift_one_line_up();
     video_set_cursor_auto();
-}
-
-uint32_t video_get_x()
-{
-    return ((pointer - ADDR) % (WIDTH * 2)) / 2;
-}
-
-uint32_t video_get_y()
-{
-    return ((pointer - ADDR) / (WIDTH * 2));
 }
 
 void video_shift_one_line_up(void)
@@ -303,6 +384,7 @@ void video_shift_one_page_down(void)
         memcpy(ADDR, upper_buffer + (page_to_load * TOTAL_SIZE), TOTAL_SIZE);
     }
 }
+
 #if 0
 void video_scroll_up()
 {

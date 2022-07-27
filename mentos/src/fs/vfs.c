@@ -1,10 +1,16 @@
-///                MentOS, The Mentoring Operating system project
 /// @file vfs.c
 /// @brief Headers for Virtual File System (VFS).
-/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #include "fs/vfs.h"
+
+// Include the kernel log levels.
+#include "sys/kernel_levels.h"
+/// Change the header.
+#define __DEBUG_HEADER__ "[VFS   ]"
+/// Set the log level.
+#define __DEBUG_LEVEL__ LOGLEVEL_NOTICE
 
 #include "process/scheduler.h"
 #include "klib/spinlock.h"
@@ -80,7 +86,9 @@ super_block_t *vfs_get_superblock(const char *absolute_path)
     list_head *it;
     list_for_each (it, &vfs_super_blocks) {
         superblock = list_entry(it, super_block_t, mounts);
+#if 0
         int len    = strlen(superblock->name);
+        pr_debug("`%s` vs `%s`\n", absolute_path, superblock->name);
         if (!strncmp(absolute_path, superblock->name, len)) {
             size_t sbl = strlen(superblock->name);
             if (sbl > last_sb_len) {
@@ -88,6 +96,15 @@ super_block_t *vfs_get_superblock(const char *absolute_path)
                 last_sb     = superblock;
             }
         }
+#else
+        int len = strlen(superblock->path);
+        if (!strncmp(absolute_path, superblock->path, len)) {
+            if (len > last_sb_len) {
+                last_sb_len = len;
+                last_sb     = superblock;
+            }
+        }
+#endif
     }
     return last_sb;
 }
@@ -125,23 +142,21 @@ vfs_file_t *vfs_open(const char *path, int flags, mode_t mode)
     // Retrieve the file.
     vfs_file_t *file = sb_root->fs_operations->open_f(absolute_path, flags, mode);
     if (file == NULL) {
-        pr_err("vfs_open(%s): Cannot find the given file (%s)!\n", path, strerror(errno));
-        errno = ENOENT;
+        pr_debug("vfs_open(%s): Filesystem open returned NULL file (errno: %d, %s)!\n", path, errno, strerror(errno));
         return NULL;
     }
     // Increment file reference counter.
-    ++file->count;
+    file->count += 1;
     // Return the file.
     return file;
 }
 
 int vfs_close(vfs_file_t *file)
 {
-    // Decrement file reference counter.
-    file->count--;
-
+    pr_debug("vfs_close(ino: %d, file: \"%s\", count: %d)\n", file->ino, file->name, file->count - 1);
+    assert(file->count > 0);
     // Close file if it's the last reference.
-    if (file->count == 0) {
+    if (--file->count == 0) {
         // Check if the filesystem has the close function.
         if (file->fs_operations->close_f == NULL) {
             return -ENOSYS;
@@ -207,7 +222,7 @@ int vfs_unlink(const char *path)
     }
     super_block_t *sb = vfs_get_superblock(absolute_path);
     if (sb == NULL) {
-        pr_err("vfs_unlink(%s): Cannot find the superblock!\n");
+        pr_err("vfs_unlink(%s): Cannot find the superblock!\n", path);
         return -ENODEV;
     }
     vfs_file_t *sb_root = sb->root;
@@ -278,6 +293,47 @@ int vfs_rmdir(const char *path)
     return sb_root->sys_operations->rmdir_f(absolute_path);
 }
 
+vfs_file_t *vfs_creat(const char *path, mode_t mode)
+{
+    // Allocate a variable for the path.
+    char absolute_path[PATH_MAX];
+    // If the first character is not the '/' then get the absolute path.
+    if (!realpath(path, absolute_path)) {
+        pr_err("vfs_creat(%s): Cannot get the absolute path.", path);
+        errno = ENODEV;
+        return NULL;
+    }
+    super_block_t *sb = vfs_get_superblock(absolute_path);
+    if (sb == NULL) {
+        pr_err("vfs_creat(%s): Cannot find the superblock!\n");
+        errno = ENODEV;
+        return NULL;
+    }
+    vfs_file_t *sb_root = sb->root;
+    if (sb_root == NULL) {
+        pr_err("vfs_creat(%s): Cannot find the superblock root.", path);
+        errno = ENOENT;
+        return NULL;
+    }
+    // Check if the function is implemented.
+    if (sb_root->sys_operations->creat_f == NULL) {
+        pr_err("vfs_creat(%s): Function not supported in current filesystem.", path);
+        errno = ENOSYS;
+        return NULL;
+    }
+    // Retrieve the file.
+    vfs_file_t *file = sb_root->sys_operations->creat_f(absolute_path, mode);
+    if (file == NULL) {
+        pr_err("vfs_open(%s): Cannot find the given file (%s)!\n", path, strerror(errno));
+        errno = ENOENT;
+        return NULL;
+    }
+    // Increment file reference counter.
+    file->count += 1;
+    // Return the file.
+    return file;
+}
+
 int vfs_stat(const char *path, stat_t *buf)
 {
     // Allocate a variable for the path.
@@ -299,7 +355,7 @@ int vfs_stat(const char *path, stat_t *buf)
     }
     // Check if the function is implemented.
     if (sb_root->sys_operations->stat_f == NULL) {
-        pr_err("vfs_rmdir(%s): Function not supported in current filesystem.", path);
+        pr_err("vfs_stat(%s): Function not supported in current filesystem.", path);
         return -ENOSYS;
     }
     // Reset the structure.
@@ -355,13 +411,15 @@ int vfs_mount(const char *path, vfs_file_t *new_fs_root)
     } else {
         // Copy the name.
         strcpy(sb->name, new_fs_root->name);
+        // Copy the path.
+        strcpy(sb->path, path);
         // Set the pointer.
         sb->root = new_fs_root;
         // Add to the list.
         list_head_add(&sb->mounts, &vfs_super_blocks);
     }
     spinlock_unlock(&vfs_spinlock);
-    pr_debug("Correctly mounted '%s' on '%s'...\n", path, new_fs_root->name);
+    pr_debug("Correctly mounted '%s' on '%s'...\n", new_fs_root->name, path);
     return 1;
 }
 
@@ -370,6 +428,10 @@ int do_mount(const char *type, const char *path, const char *args)
     file_system_type *fst = (file_system_type *)hashmap_get(vfs_filesystems, type);
     if (fst == NULL) {
         pr_err("Unknown filesystem type: %s\n", type);
+        return -ENODEV;
+    }
+    if (fst->mount == NULL) {
+        pr_err("No mount callback set: %s\n", type);
         return -ENODEV;
     }
     vfs_file_t *file = fst->mount(path, args);
@@ -445,7 +507,7 @@ int vfs_init_task(task_struct *task)
         return 0;
     }
     // Create the proc entry.
-    if (proc_create_entry_pid(task)) {
+    if (procr_create_entry_pid(task)) {
         pr_err("Error while trying to create proc entry for process `%d`: %s\n", task->pid, strerror(errno));
         return 0;
     }
@@ -469,7 +531,7 @@ int vfs_dup_task(task_struct *task, task_struct *old_task)
         }
     }
     // Create the proc entry.
-    if (proc_create_entry_pid(task)) {
+    if (procr_create_entry_pid(task)) {
         pr_err("Error while trying to create proc entry for '%d': %s\n", task->pid, strerror(errno));
         return 0;
     }
@@ -496,7 +558,7 @@ int vfs_destroy_task(task_struct *task)
     // Free the memory of the list.
     kfree(task->fd_list);
     // Remove the proc entry.
-    if (proc_destroy_entry_pid(task)) {
+    if (procr_destroy_entry_pid(task)) {
         pr_err("Error while trying to remove proc entry for '%d': %s\n", task->pid, strerror(errno));
         return 0;
     }

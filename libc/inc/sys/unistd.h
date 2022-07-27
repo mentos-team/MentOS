@@ -1,7 +1,6 @@
-///                MentOS, The Mentoring Operating system project
 /// @file unistd.h
 /// @brief Functions used to manage files.
-/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #pragma once
@@ -28,14 +27,11 @@ ssize_t read(int fd, void *buf, size_t nbytes);
 /// @return       The number of written bytes.
 ssize_t write(int fd, void *buf, size_t nbytes);
 
-/// @brief          Opens the file specified by pathname.
+/// @brief Opens the file specified by pathname.
 /// @param pathname A pathname for a file.
-/// @param flags    Used to set the file status flags and file access modes
-///                 of the open file description.
-/// @param mode     Specifies the file mode bits be applied when a new file
-///                 is created.
-/// @return         Returns a file descriptor, a small, nonnegative integer for
-///                 use in subsequent system calls.
+/// @param flags file status flags and file access modes of the open file description.
+/// @param mode the file mode bits be applied when a new file is created.
+/// @return file descriptor number, -1 otherwise and errno is set to indicate the error.
 int open(const char *pathname, int flags, mode_t mode);
 
 /// @brief Close a file descriptor.
@@ -84,6 +80,19 @@ extern pid_t getsid(pid_t pid);
 ///        Otherwise return -1 with errno : EPERM 
 extern pid_t setsid();
 
+///@brief returns the Process Group ID (PGID) of the process specified by pid.
+/// If pid is zero, the process ID of the calling process is used.
+/// @param pid process of which we want to know the PGID.
+/// @return the PGID of the specified process.
+pid_t getpgid(pid_t pid);
+
+/// @brief Sets the Process Group ID (PGID) of the process specified by pid.
+/// If pid is zero, the process ID of the calling process is used.
+/// @param pid process of which we want to set the PGID.
+/// @param pgid the PGID we want to set.
+/// @return returns zero. On error, -1 is returned, and errno is set appropriately.
+int setpgid(pid_t pid, pid_t pgid);
+
 ///@brief returns the group ID of the calling process.
 ///@return GID of the current process
 extern pid_t getgid();
@@ -93,6 +102,16 @@ extern pid_t getgid();
 ///@return On success, zero is returned.
 ///        Otherwise returns -1 with errno set to :EINVAL or EPERM  
 extern int setgid(pid_t pid);
+
+///@brief Returns the User ID of the calling process.
+///@return User ID of the current process.
+extern uid_t getuid();
+
+///@brief Sets the effective User ID of the calling process.
+///@param uid the new User ID.
+///@return On success, zero is returned.
+///        Otherwise returns -1 with errno set to :EINVAL or EPERM  
+extern int setuid(uid_t uid);
 
 /// @brief Returns the parent process ID (PPID) of the calling process.
 /// @return pid_t parent process identifier.
@@ -203,11 +222,13 @@ char *getcwd(char *buf, size_t size);
 
 /// @brief Changes the current working directory to the given path.
 /// @param path The new current working directory.
+/// @return 0 on success, -1 on failure and errno is set to indicate the error.
 int chdir(char const *path);
 
 /// @brief Is identical to chdir(), the only difference is that the
 ///        directory is given as an open file descriptor.
 /// @param fd The file descriptor of the open directory.
+/// @return 0 on success, -1 on failure and errno is set to indicate the error.
 int fchdir(int fd);
 
 /// Provide access to the directory entries.
@@ -220,4 +241,9 @@ int fchdir(int fd);
 int getdents(int fd, dirent_t *dirp, unsigned int count);
 
 /// @brief Send signal to calling thread after desired seconds.
+/// @param seconds the amount of seconds.
+/// @return If there is a previous alarm() request with time remaining, alarm()
+/// shall return a non-zero value that is the number of seconds until the
+/// previous request would have generated a SIGALRM signal. Otherwise, alarm()
+/// shall return 0.
 int alarm(int seconds);

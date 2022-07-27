@@ -1,7 +1,6 @@
-///                MentOS, The Mentoring Operating system project
 /// @file keymap.h
 /// @brief Keymap for keyboard.
-/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 /// @addtogroup drivers Device Drivers
 /// @{
@@ -19,14 +18,18 @@ typedef enum {
     KEYMAP_TYPE_MAX ///< The delimiter for the keyboard types.
 } keymap_type_t;
 
-/// @brief Defines a set of arrays used to map key to characters.
+/// @brief Defines the mapping of a single scancode towards a set of characters.
 typedef struct keymap_t {
     /// The basic mapping.
-    int32_t base[65536];
+    int normal;
     /// The mapping when shifted.
-    int32_t shift[65536];
+    int shift;
+    /// The mapping when ctrl is pressed.
+    int ctrl;
+    /// The mapping when alt is pressed.
+    int alt;
     /// The mapping when numlock is active.
-    uint32_t numlock[65536];
+    int numlock;
 } keymap_t;
 
 /// @brief Returns the current keymap type.
@@ -37,9 +40,11 @@ keymap_type_t get_keymap_type();
 /// @param type The type to set.
 void set_keymap_type(keymap_type_t type);
 
-/// @brief Returns the current keymap.
-/// @return Pointer to the current keymap.
-const keymap_t *get_keymap();
+
+/// @brief Returns the current keymap for the given scancode.
+/// @param scancode the scancode we want.
+/// @return Pointer to the keymap.
+const keymap_t *get_keymap(int scancode);
 
 /// @brief Initializes the supported keymaps.
 void init_keymaps();
@@ -49,16 +54,16 @@ void init_keymaps();
 /// @{
 
 #define KEY_ESCAPE        0x0001U ///< Escape character
-#define KEY_ONE           0x0002U ///< 1
-#define KEY_TWO           0x0003U ///< 2
-#define KEY_THREE         0x0004U ///< 3
-#define KEY_FOUR          0x0005U ///< 4
-#define KEY_FIVE          0x0006U ///< 5
-#define KEY_SIX           0x0007U ///< 6
-#define KEY_SEVEN         0x0008U ///< 7
-#define KEY_EIGHT         0x0009U ///< 8
-#define KEY_NINE          0x000AU ///< 9
-#define KEY_ZERO          0x000BU ///< 0
+#define KEY_1             0x0002U ///< 1
+#define KEY_2             0x0003U ///< 2
+#define KEY_3             0x0004U ///< 3
+#define KEY_4             0x0005U ///< 4
+#define KEY_5             0x0006U ///< 5
+#define KEY_6             0x0007U ///< 6
+#define KEY_7             0x0008U ///< 7
+#define KEY_8             0x0009U ///< 8
+#define KEY_9             0x000AU ///< 9
+#define KEY_0             0x000BU ///< 0
 #define KEY_APOSTROPHE    0x000CU ///< '
 #define KEY_I_ACC         0x000DU ///< i'
 #define KEY_BACKSPACE     0x000EU ///< Backspace
@@ -132,26 +137,27 @@ void init_keymaps();
 #define KEY_KP0           0x0052U ///< NP - Ins
 #define KEY_KP_DEC        0x0053U ///< NP - Del
 #define KEY_KP_LESS       0x0056U ///< NP - Del
-#define KEY_KP_RETURN     0xe01cU ///< NP - Enter 57372
+#define KEY_F11           0x0057U ///< F11 57431
+#define KEY_F12           0x0058U ///< F12 57432
+#define KEY_KP_RETURN     0xE01cU ///< NP - Enter 57372
 #define KEY_RIGHT_CONTROL 0xE01DU ///< Right Ctrl 57373
 #define KEY_KP_DIV        0xE035U ///< Divide 57397
-#define KEY_RIGHT_ALT     0xe038U ///< Right Alt 57400
-#define KEY_F11           0xe057U ///< F11 57431
-#define KEY_F12           0xe058U ///< F12 57432
-#define KEY_LEFT_WIN      0xe05bU ///< Left Winkey 57435
-#define KEY_RIGHT_WIN     0xe05cU ///< Right Winkey 57436
-#define KEY_INSERT        0xe052U ///< Ins 57426
-#define KEY_HOME          0xe047U ///< Home 57415
-#define KEY_UP_ARROW      0xe048U ///< Up Arrow 57416
-#define KEY_PAGE_UP       0xe049U ///< Pgup 57417
-#define KEY_LEFT_ARROW    0xe04bU ///< Left Arrow 57419
-#define KEY_DELETE        0xe053U ///< Del 57427
-#define KEY_END           0xe04fU ///< End 57423
-#define KEY_PAGE_DOWN     0xe051U ///< Pgdn 57425
-#define KEY_RIGHT_ARROW   0xe04dU ///< Right Arrow 57421
-#define KEY_DOWN_ARROW    0xe050U ///< Down Arrow 57424
+#define KEY_RIGHT_ALT     0xE038U ///< Right Alt 57400
+#define KEY_LEFT_WIN      0xE05bU ///< Left Winkey 57435
+#define KEY_RIGHT_WIN     0xE05cU ///< Right Winkey 57436
+#define KEY_INSERT        0xE052U ///< Ins 57426
+#define KEY_HOME          0xE047U ///< Home 57415
+#define KEY_UP_ARROW      0xE048U ///< Up Arrow 57416
+#define KEY_PAGE_UP       0xE049U ///< Pgup 57417
+#define KEY_LEFT_ARROW    0xE04bU ///< Left Arrow 57419
+#define KEY_DELETE        0xE053U ///< Del 57427
+#define KEY_END           0xE04fU ///< End 57423
+#define KEY_PAGE_DOWN     0xE051U ///< Pgdn 57425
+#define KEY_RIGHT_ARROW   0xE04dU ///< Right Arrow 57421
+#define KEY_DOWN_ARROW    0xE050U ///< Down Arrow 57424
 #define CODE_BREAK        0x0080U ///< Code break code
 
+#define MULTIMEDIA_SCAN_CODE 0xE0
 /// @}
 
 /// @}

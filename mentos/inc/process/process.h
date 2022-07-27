@@ -1,14 +1,15 @@
-///                MentOS, The Mentoring Operating system project
 /// @file process.h
 /// @brief Process data structures and functions.
-/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #pragma once
 
-#include "mem/paging.h"
+#include "drivers/keyboard/keyboard.h"
+#include "bits/termios-struct.h"
 #include "system/signal.h"
 #include "devices/fpu.h"
+#include "mem/paging.h"
 
 /// The maximum length of a name for a task_struct.
 #define TASK_NAME_MAX_LENGTH 100
@@ -82,9 +83,11 @@ typedef struct task_struct {
     pid_t pid;
     /// The session id of the process
     pid_t sid;
-    /// The Group Id of the process
+    /// The Process Group Id of the process
+    pid_t pgid;
+    /// The Group ID (GID) of the process
     pid_t gid;
-    /// The uid of the user owning the process.
+    /// The User ID (UID) of the user owning the process.
     pid_t uid;
     // -1 unrunnable, 0 runnable, >0 stopped.
     /// The current state of the process:
@@ -99,7 +102,7 @@ typedef struct task_struct {
     list_head run_list;
     /// List of children traced by the process.
     list_head children;
-    /// List of siblings.
+    /// List of siblings, namely processes created by parent process.
     list_head sibling;
     /// The context of the processors.
     thread_struct_t thread;
@@ -131,7 +134,7 @@ typedef struct task_struct {
     sigpending_t pending;
 
     /// Timer for alarm syscall.
-    struct timer_list* real_timer;
+    struct timer_list *real_timer;
 
     /// Next value for the real timer (ITIMER_REAL).
     unsigned long it_real_incr;
@@ -146,25 +149,17 @@ typedef struct task_struct {
     /// Current value for the profiling timer (ITIMER_PROF).
     unsigned long it_prof_value;
 
+    /// Process-wise terminal options.
+    termios_t termios;
+    /// Buffer for managing inputs from keyboard.
+    fs_rb_scancode_t keyboard_rb;
+
     //==== Future work =========================================================
     // - task's attributes:
     // struct task_struct __rcu	*real_parent;
     // int exit_state;
     // int exit_signal;
     // struct thread_info thread_info;
-    // List of sibling, namely processes created by parent process
-    // list_head sibling;
-
-    // - task's file descriptor:
-    // struct files_struct *files;
-
-    // - task's signal handlers:
-    // struct signal_struct	*signal;
-    // struct sighand_struct_t *sighand;
-    // sigset_t	blocked;
-    // sigset_t	real_blocked;
-    // sigset_t	saved_sigmask;
-    // struct sigpending pending;
     //==========================================================================
 } task_struct;
 

@@ -1,8 +1,14 @@
-///                MentOS, The Mentoring Operating system project
 /// @file interrupt.c
 /// @brief Functions which manage the Interrupt Service Routines (ISRs).
-/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
+
+// Include the kernel log levels.
+#include "sys/kernel_levels.h"
+/// Change the header.
+#define __DEBUG_HEADER__ "[IRQ   ]"
+/// Set the log level.
+#define __DEBUG_LEVEL__ LOGLEVEL_NOTICE
 
 #include "descriptor_tables/isr.h"
 

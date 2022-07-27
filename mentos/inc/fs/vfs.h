@@ -1,7 +1,6 @@
-///                MentOS, The Mentoring Operating system project
 /// @file vfs.h
 /// @brief Headers for Virtual File System (VFS).
-/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #pragma once
@@ -111,6 +110,14 @@ int vfs_mkdir(const char *path, mode_t mode);
 /// @param path The path to the directory to remove.
 /// @return Returns a negative value on failure.
 int vfs_rmdir(const char *path);
+
+/// @brief Creates a new file or rewrite an existing one.
+/// @param path path to the file.
+/// @param mode mode for file creation.
+/// @return file descriptor number, -1 otherwise and errno is set to indicate the error.
+/// @details
+/// It is equivalent to: open(path, O_WRONLY|O_CREAT|O_TRUNC, mode)
+vfs_file_t *vfs_creat(const char *path, mode_t mode);
 
 /// @brief Stat the file at the given path.
 /// @param path Path to the file for which we are retrieving the statistics.

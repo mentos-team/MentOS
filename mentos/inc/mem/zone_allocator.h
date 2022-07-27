@@ -1,7 +1,6 @@
-///                MentOS, The Mentoring Operating system project
 /// @file zone_allocator.h
 /// @brief Implementation of the Zone Allocator
-/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #pragma once
@@ -21,10 +20,11 @@
 #define page_inc(p)          atomic_inc(&(p)->count)    ///< Increments the counter for the given page.
 #define page_dec(p)          atomic_dec(&(p)->count)    ///< Decrements the counter for the given page.
 
-/// @brief Page descriptor. Use as a bitmap to understand
-/// the order of the block and if it is free or allocated.
+/// @brief Page descriptor. Use as a bitmap to understand the order of the block
+/// and if it is free or allocated.
 typedef struct page_t {
-    /// Array of flags encoding also the zone number to which the page frame belongs.
+    /// Array of flags encoding also the zone number to which the page frame
+    /// belongs.
     unsigned long flags;
     /// Page frame’s reference counter. 0 free, 1 used, 2+ copy on write
     atomic_t count;
@@ -33,15 +33,15 @@ typedef struct page_t {
     /// Contains pointers to the slabs doubly linked list of pages.
     list_head slabs;
 
-    // Slab allocator variables
-    /// Contains the total number of objects in this page, 0 if not managed by the slub
+    // Slab allocator variables / Contains the total number of objects in this
+    //page, 0 if not managed by the slub
     unsigned int slab_objcnt;
     ///  Tracks the number of free objects in the current page
     unsigned int slab_objfree;
     /// Holds the first free object (if slab_objfree is > 0)
     list_head slab_freelist;
     /// @brief This union can either contain the pointer to the slab main page
-    ///        that handles this page, or the cache that contains it.
+    /// that handles this page, or the cache that contains it.
     union {
         /// Holds the slab page used to handle this memory region (root page)
         struct page_t *slab_main_page;
@@ -52,45 +52,20 @@ typedef struct page_t {
 
 /// @brief Enumeration for zone_t.
 enum zone_type {
-    /*
-     * ZONE_DMA is used when there are devices that are not able
-     * to do DMA to all of addressable memory (ZONE_NORMAL). Then we
-     * carve out the portion of memory that is needed for these devices.
-     * The range is arch specific.
-     *
-     * Some examples
-     *
-     * Architecture		Limit
-     * ---------------------------
-     * parisc, ia64, sparc	<4G
-     * s390			<2G
-     * arm			Various
-     * alpha		Unlimited or 0-16MB.
-     *
-     * i386, x86_64 and multiple other arches
-     * 			<16M.
-     */
-
-    // /// Direct memory access.
-    //ZONE_DMA,
-
-    /*
-     * Normal addressable memory is in ZONE_NORMAL. DMA operations can be
-     * performed on pages in ZONE_NORMAL if the DMA devices support
-     * transfers to all addressable memory.
-     */
-    /// Direct mapping. Used by the kernel.
+    /// @brief Direct mapping. Used by the kernel.
+    /// @details
+    /// Normal addressable memory is in **ZONE_NORMAL**. DMA operations can be
+    /// performed on pages in **ZONE_NORMAL** if the DMA devices support
+    /// transfers to all addressable memory.
     ZONE_NORMAL,
 
-    /*
-     * A memory area that is only addressable by the kernel through
-     * mapping portions into its own address space. This is for example
-     * used by i386 to allow the kernel to address the memory beyond
-     * 900MB. The kernel will set up special mappings (page
-     * table entries on i386) for each page that the kernel needs to
-     * access.
-     */
-    /// Page tables mapping. Used by user processes.
+    /// @brief Page tables mapping. Used by user processes.
+    /// @details
+    /// A memory area that is only addressable by the kernel through mapping
+    /// portions into its own address space. This is for example used by i386 to
+    /// allow the kernel to address the memory beyond 900MB. The kernel will set
+    /// up special mappings (page table entries on i386) for each page that the
+    /// kernel needs to access.
     ZONE_HIGHMEM,
 
     /// The maximum number of zones.
@@ -113,9 +88,8 @@ typedef struct zone_t {
     unsigned long size;
 } zone_t;
 
-/// @brief Data structure to rapresent a memory node.
-///        In UMA Architecture there is only one node called
-///        contig_page_data.
+/// @brief Data structure to rapresent a memory node. In Uniform memory access
+/// (UMA) architectures there is only one node called contig_page_data.
 typedef struct pg_data_t {
     /// Zones of the node.
     zone_t node_zones[__MAX_NR_ZONES];
@@ -138,10 +112,10 @@ typedef struct pg_data_t {
 extern page_t *mem_map;
 extern pg_data_t *contig_page_data;
 
-/// @brief Find the nearest block's order of size greater than the
-///        amount of byte.
-/// @param base_addr The start address, used to handle extra page
-///                  calculation in case of not page aligned addresses.
+/// @brief Find the nearest block's order of size greater than the amount of
+/// byte.
+/// @param base_addr The start address, used to handle extra page calculation in
+/// case of not page aligned addresses.
 /// @param amount    The amount of byte which we want to calculate order.
 /// @return The block's order greater and nearest than amount.
 uint32_t find_nearest_order_greater(uint32_t base_addr, uint32_t amount);
@@ -161,7 +135,7 @@ page_t *alloc_page_cached(gfp_t gfp_mask);
 void free_page_cached(page_t *page);
 
 /// @brief Find the first free page frame, set it allocated and return the
-///        memory address of the page frame.
+/// memory address of the page frame.
 /// @param gfp_mask GFP_FLAGS to decide the zone allocation.
 /// @return Memory address of the first free block.
 uint32_t __alloc_page_lowmem(gfp_t gfp_mask);
@@ -171,14 +145,14 @@ uint32_t __alloc_page_lowmem(gfp_t gfp_mask);
 void free_page_lowmem(uint32_t addr);
 
 /// @brief Find the first free 2^order amount of page frames, set it allocated
-///        and return the memory address of the first page frame allocated.
+/// and return the memory address of the first page frame allocated.
 /// @param gfp_mask GFP_FLAGS to decide the zone allocation.
 /// @param order    The logarithm of the size of the page frame.
 /// @return Memory address of the first free page frame allocated.
 uint32_t __alloc_pages_lowmem(gfp_t gfp_mask, uint32_t order);
 
 /// @brief Find the first free 2^order amount of page frames, set it allocated
-///        and return the memory address of the first page frame allocated.
+/// and return the memory address of the first page frame allocated.
 /// @param gfp_mask GFP_FLAGS to decide the zone allocation.
 /// @param order    The logarithm of the size of the page frame.
 /// @return Memory address of the first free page frame allocated.
@@ -204,13 +178,13 @@ page_t *get_page_from_physical_address(uint32_t phy_addr);
 /// @return The page that corresponds to the address.
 page_t *get_lowmem_page_from_address(uint32_t addr);
 
-/// @brief Frees from the given page frame address up to 2^order amount
-///        of page frames.
+/// @brief Frees from the given page frame address up to 2^order amount of page
+/// frames.
 /// @param addr The page frame address.
 void free_pages_lowmem(uint32_t addr);
 
-/// @brief Frees from the given page frame address up to 2^order amount
-///        of page frames.
+/// @brief Frees from the given page frame address up to 2^order amount of page
+/// frames.
 /// @param page The page.
 void __free_pages(page_t *page);
 
@@ -229,8 +203,8 @@ unsigned long get_zone_free_space(gfp_t gfp_mask);
 /// @return Total cached space of the given zone.
 unsigned long get_zone_cached_space(gfp_t gfp_mask);
 
-/// @brief Checks if the specified address points to a page_t (or field)
-///        that belongs to lowmem.
+/// @brief Checks if the specified address points to a page_t (or field) that
+/// belongs to lowmem.
 /// @param addr The address to check.
 /// @return 1 if it belongs to lowmem, 0 otherwise.
 static inline int is_lowmem_page_struct(void *addr)

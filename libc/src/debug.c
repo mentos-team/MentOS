@@ -1,7 +1,6 @@
-///                MentOS, The Mentoring Operating system project
 /// @file   debug.c
 /// @brief  Debugging primitives.
-/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #include <debug.h>
@@ -11,35 +10,39 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/bitops.h>
+#include <math.h>
 
 /// Serial port for QEMU.
 #define SERIAL_COM1 (0x03F8)
 
+#define FG_RESET "\033[0m" ///< ANSI code for resetting.
+
 void dbg_putchar(char c)
 {
-#if (defined(DEBUG_STDIO) || defined(DEBUG_LOG))
     outportb(SERIAL_COM1, (uint8_t)c);
-#endif
 }
 
 void dbg_puts(const char *s)
 {
-#if (defined(DEBUG_STDIO) || defined(DEBUG_LOG))
     while ((*s) != 0)
         dbg_putchar(*s++);
-#endif
 }
 
 static inline void __debug_print_header(const char *file, const char *fun, int line)
 {
     static char tmp_prefix[BUFSIZ], final_prefix[BUFSIZ];
+    dbg_puts(FG_RESET);
     dbg_puts("[ LB |");
     sprintf(tmp_prefix, "%s:%d", file, line);
     sprintf(final_prefix, " %-20s ", tmp_prefix);
     dbg_puts(final_prefix);
+#if 0
     dbg_putchar('|');
-    sprintf(final_prefix, " %-25s ] ", fun);
+    sprintf(final_prefix, " %-25s ]", fun);
     dbg_puts(final_prefix);
+#else
+    dbg_putchar(']');
+#endif
 }
 
 void dbg_printf(const char *file, const char *fun, int line, const char *format, ...)
@@ -96,10 +99,10 @@ const char *to_human_size(unsigned long bytes)
     return output;
 }
 
-const char *dec_to_binary(unsigned long value)
+const char *dec_to_binary(unsigned long value, unsigned length)
 {
     static char buffer[33];
-    for (int i = 0; i < 32; ++i)
-        buffer[i] = bit_check(value, 31 - i) ? '1' : '0';
+    for (int i = 0, j = 32 - min(max(0, length), 32); j < 32; ++i, ++j)
+        buffer[i] = bit_check(value, 31 - j) ? '1' : '0';
     return buffer;
 }

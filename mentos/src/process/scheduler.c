@@ -1,11 +1,14 @@
-///                MentOS, The Mentoring Operating system project
 /// @file scheduler.c
 /// @brief Scheduler structures and functions.
-/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
+// Include the kernel log levels.
+#include "sys/kernel_levels.h"
 /// Change the header.
 #define __DEBUG_HEADER__ "[SCHED ]"
+/// Set the log level.
+#define __DEBUG_LEVEL__ LOGLEVEL_NOTICE
 
 #include "assert.h"
 #include "strerror.h"
@@ -255,7 +258,7 @@ wait_queue_entry_t *sleep_on(wait_queue_head_t *wq)
     return wait_entry;
 }
 
-int is_orphaned_pgrp(pid_t gid)
+int is_orphaned_pgrp(pid_t pgid)
 {
     pid_t sid = 0;
 
@@ -263,7 +266,7 @@ int is_orphaned_pgrp(pid_t gid)
     list_head *it;
     list_for_each (it, &runqueue.queue) {
         task_struct *task = list_entry(it, task_struct, run_list);
-        if (task->gid == gid) {
+        if (task->pgid == pgid) {
             sid = task->sid;
             break;
         }
@@ -305,11 +308,10 @@ pid_t sys_getsid(pid_t pid)
     list_head *it;
     list_for_each (it, &runqueue.queue) {
         task_struct *task = list_entry(it, task_struct, run_list);
-        if (task->pid == pid)
-        {
-            if(runqueue.curr->sid != task->sid)     
+        if (task->pid == pid) {
+            if (runqueue.curr->sid != task->sid)
                 return -EPERM;
-            
+
             return task->sid;
         }
     }
@@ -322,54 +324,83 @@ pid_t sys_setsid()
     if (task == NULL) {
         kernel_panic("There is no current process!");
     }
-    if (task->sid == task->pid)
-    {
+    if (task->sid == task->pid) {
         pr_debug("Process %d is already a session leader.", task->pid);
         return -EPERM;
     }
 
-    task->sid = task->pid;
-    task->gid = task->pid;
+    task->sid  = task->pid;
+    task->pgid = task->pid;
 
     return task->sid;
 }
 
+pid_t sys_getpgid(pid_t pid)
+{
+    task_struct *task = NULL;
+    if (pid == 0)
+        task = runqueue.curr;
+    else
+        task = scheduler_get_running_process(pid);
+    if (task)
+        return task->pgid;
+    return 0;
+}
+
+int sys_setpgid(pid_t pid, pid_t pgid)
+{
+    task_struct *task = NULL;
+    if (pid == 0)
+        task = runqueue.curr;
+    else
+        task = scheduler_get_running_process(pid);
+    if (task) {
+        if (task->pgid == task->pid)
+            pr_debug("Process %d is already a session leader.", task->pid);
+        task->pgid = pgid;
+    }
+    return 0;
+}
+
+uid_t sys_getuid()
+{
+    if (runqueue.curr)
+        return runqueue.curr->uid;
+    return -EPERM;
+}
+
+int sys_setuid(uid_t uid)
+{
+    if (runqueue.curr && (runqueue.curr->uid == 0)) {
+        runqueue.curr->uid = uid;
+        return 0;
+    }
+    return -EPERM;
+}
+
 pid_t sys_getgid()
 {
-    task_struct *curr = runqueue.curr;
-    if (curr == NULL) {
-        kernel_panic("There is no current process!");
+    if (runqueue.curr) {
+        return runqueue.curr->gid;
     }
-
-    return curr->gid;
+    return -EPERM;
 }
 
 int sys_setgid(pid_t gid)
 {
-    task_struct *curr = runqueue.curr;
-    if (curr == NULL) {
-        kernel_panic("There is no current process!");
+    if (runqueue.curr && (runqueue.curr->uid == 0)) {
+        runqueue.curr->gid = gid;
+        return 0;
     }
-
-    if (curr->gid == curr->pid)
-        pr_debug("Process %d is already a session leader.", curr->pid);
-
-    curr->gid = curr->pid;
-    return 0;
+    return -EPERM;
 }
 
 pid_t sys_getppid()
 {
     // Get the current task.
-    if (runqueue.curr == NULL) {
-        kernel_panic("There is no current process!");
-    }
-    if (runqueue.curr->parent == NULL) {
-        return 0;
-    }
-
-    // Return the parent process identifer of the process.
-    return runqueue.curr->parent->pid;
+    if (runqueue.curr && runqueue.curr->parent)
+        return runqueue.curr->parent->pid;
+    return -EPERM;
 }
 
 int sys_nice(int increment)
@@ -565,117 +596,146 @@ int sys_sched_getparam(pid_t pid, sched_param_t *param)
     return -1;
 }
 
-/// @brief Performs the response time analysis for the current list
-///        of periodic processes.
-/// @return 1 if scheduling periodic processes is feasable, 0 otherwise.
+/// @brief Performs the response time analysis for the current list of periodic
+/// processes.
+/// @return 1 if scheduling periodic processes is feasible, 0 otherwise.
 static int __response_time_analysis()
 {
     task_struct *entry, *previous;
     time_t r, previous_r = 0;
     list_for_each_decl(it, &runqueue.queue)
     {
+        // Get the curent entry in the list.
         entry = list_entry(it, task_struct, run_list);
-        if (entry->se.is_periodic) {
-            // Put r equal to worst case exec because is the first point in time that the task could possibly complete
-            r          = entry->se.worst_case_exec;
-            previous_r = 0;
-            // The analysis can be completed either missing the deadline or reaching a fixed point
-            while (r < entry->se.deadline && r != previous_r) {
-                previous_r = r;
-                r          = entry->se.worst_case_exec;
-                list_for_each_decl(it2, &runqueue.queue)
-                {
-                    previous = list_entry(it2, task_struct, run_list);
-                    // Check the interferences of higher priority processes
-                    if (previous->se.is_periodic && previous->se.period < entry->se.period) {
-                        r += (int)ceil((double)previous_r / (double)previous->se.period) * previous->se.worst_case_exec;
-                        pr_debug("%d += (%.2f / %.2f) * %d\n", r, (double)previous_r, (double)previous->se.period, previous->se.worst_case_exec);
-                        pr_debug("Response Time Analysis -> [%s]vs[%s] R = %d\n\n", entry->name, previous->name, r);
-                    }
+        // If the process is not periodic we skip it.
+        if (!entry->se.is_periodic)
+            continue;
+        // Put r equal to worst case exec because is the first point in time
+        // that the task could possibly complete.
+        r = entry->se.worst_case_exec, previous_r = 0;
+        // The analysis can be completed either missing the deadline or reaching
+        // a fixed point.
+        while ((r < entry->se.deadline) && (r != previous_r)) {
+            // Save the previous response time.
+            previous_r = r;
+            // Initialize response time.
+            r = entry->se.worst_case_exec;
+            list_for_each_decl(it2, &runqueue.queue)
+            {
+                previous = list_entry(it2, task_struct, run_list);
+                // Check the interferences of higher priority processes.
+                if (previous->se.is_periodic && (previous->se.period < entry->se.period)) {
+                    pr_debug("%d += (%.2f / %.2f) * %d\n",
+                             r,
+                             (double)previous_r,
+                             (double)previous->se.period,
+                             previous->se.worst_case_exec);
+
+                    // Update the response time.
+                    r += (int)ceil((double)previous_r / (double)previous->se.period) * previous->se.worst_case_exec;
+
+                    pr_debug("Response Time Analysis -> [%s] vs [%s] R = %d\n\n", entry->name, previous->name, r);
                 }
             }
-            // Feasibility of scheduler is guaranteed if and only if response time analysis is lower than deadline.
-            if (r > entry->se.deadline)
-                return 1;
         }
+        // Feasibility of scheduler is guaranteed if and only if response time
+        // analysis is lower than deadline.
+        if (r > entry->se.deadline)
+            return 1;
     }
     return 0;
 }
 
+/// @brief Computes the total utilization factor.
+/// @return the utilization factor.
+static inline double __compute_utilization_factor()
+{
+    task_struct *entry;
+    double U = 0;
+    list_for_each_decl(it, &runqueue.queue)
+    {
+        // Get the entry.
+        entry = list_entry(it, task_struct, run_list);
+        // Sum the utilization factor of all periodic tasks.
+        if (entry->se.is_periodic)
+            U += entry->se.utilization_factor;
+    }
+    return U;
+}
+
 int sys_waitperiod()
 {
-    if (runqueue.curr) {
-        if (runqueue.curr->se.is_periodic) {
-            // Update the Worst Case Execution Time (WCET).
-            time_t wcet = timer_get_ticks() - runqueue.curr->se.exec_start;
-            if (runqueue.curr->se.worst_case_exec < wcet)
-                runqueue.curr->se.worst_case_exec = wcet;
-            // Update thye utilization factor.
-            runqueue.curr->se.utilization_factor = ((double)runqueue.curr->se.worst_case_exec / (double)runqueue.curr->se.period);
-
-            // If the task is under analysis, we need to test if the process can be
-            //  placed with the other periodic tasks.
-            if (runqueue.curr->se.is_under_analysis) {
-                runqueue.curr->se.worst_case_exec = runqueue.curr->se.sum_exec_runtime;
-                bool_t is_not_schedulable         = false;
-#if defined(SCHEDULER_EDF)
-                double u = 0;
-                task_struct *entry;
-                list_for_each_decl(it, &runqueue.queue)
-                {
-                    entry = list_entry(it, task_struct, run_list);
-                    // Sum the utilization factor of all periodic tasks.
-                    if (entry->se.is_periodic)
-                        u += entry->se.utilization_factor;
-                }
-                if (u > 1) {
-                    is_not_schedulable = true;
-                }
-                pr_debug("utilization factor = %f\n", u);
-#elif defined(SCHEDULER_RM)
-                // Calculating least upper bound of utilization factor.
-                // For large amount of processes ulub asymptotically should reach ln(2).
-                double ulub = (runqueue.num_periodic * (pow(2, (1.0 / runqueue.num_periodic)) - 1));
-                double u    = 0;
-                task_struct *entry;
-                list_for_each_decl(it, &runqueue.queue)
-                {
-                    entry = list_entry(it, task_struct, run_list);
-                    // Sum the utilization factor of all periodic tasks.
-                    if (entry->se.is_periodic)
-                        u += entry->se.utilization_factor;
-                }
-                // If the sum of utilization factor is bounded between ulub and 1 we need to calculate
-                // the response time analysis for each process.
-                if (u > 1) {
-                    is_not_schedulable = true;
-                } else if (u <= ulub)
-                    is_not_schedulable = false;
-                else
-                    is_not_schedulable = __response_time_analysis();
-#endif
-                // If it is not schedulable, we need to tell it to the process.
-                if (is_not_schedulable)
-                    return -ENOTSCHEDULABLE;
-
-                // Otherwise, it is schedulable.
-                runqueue.curr->se.is_under_analysis = false;
-
-                // The task has been executed as non-periodic process so that his deadline is not been updated
-                // by the scheduling algorithm of periodic tasks. We need to update it manually.
-                runqueue.curr->se.next_period = timer_get_ticks();
-                runqueue.curr->se.deadline    = timer_get_ticks() + runqueue.curr->se.period;
-            }
-
-            if (timer_get_ticks() > runqueue.curr->se.deadline)
-                pr_warning("%d > %d Missing deadline...\n", timer_get_ticks(), runqueue.curr->se.deadline);
-
-            // Tell the scheduler that we have executed the periodic process.
-            runqueue.curr->se.executed = true;
-
-        } else
-            pr_warning("An aperiodic task is calling `waitperiod`, ignoring...\n");
-        return 0;
+    // Get the current process.
+    task_struct *current = scheduler_get_current_process();
+    // Check if there is actually a process running.
+    if (current == NULL) {
+        pr_emerg("There is no current process.\n");
+        return -ESRCH;
     }
-    return -ESRCH;
+    // Check if the process calling the waitperiod function is a periodic process.
+    if (!current->se.is_periodic) {
+        pr_warning("An aperiodic task is calling `waitperiod`, ignoring...\n");
+        return -EPERM;
+    }
+    // Get the current time.
+    time_t current_time = timer_get_ticks();
+
+    // Update the Worst Case Execution Time (WCET).
+    time_t wcet = current_time - current->se.exec_start;
+    if (current->se.worst_case_exec < wcet)
+        current->se.worst_case_exec = wcet;
+    // Update the utilization factor.
+    current->se.utilization_factor = ((double)current->se.worst_case_exec / (double)current->se.period);
+    // If the task is under analysis, we need to test if the process can be
+    // placed with the other periodic tasks.
+    if (current->se.is_under_analysis) {
+        // Set the WCET as the total execution time of the process.
+        current->se.worst_case_exec = current->se.sum_exec_runtime;
+        // This will keep track if the process can be scheduled.
+        bool_t is_not_schedulable = false;
+#if defined(SCHEDULER_EDF)
+        // Compute the total utilization factor.
+        double u = __compute_utilization_factor();
+        // If the utilization factor is above 1, the process cannot be placed
+        // with the other periodic processes.
+        if (u > 1) {
+            is_not_schedulable = true;
+        }
+        pr_warning("Utilization factor is : %.2f\n", u);
+#elif defined(SCHEDULER_RM)
+        // Compute the total utilization factor.
+        double u = __compute_utilization_factor();
+        // Calculating Least Upper Bound of utilization factor. For large amount
+        // of processes ulub asymptotically should reach ln(2).
+        double ulub = (runqueue.num_periodic * (pow(2, (1.0 / runqueue.num_periodic)) - 1));
+        // If the sum of utilization factor is bounded between ulub and 1 we
+        // need to calculate the response time analysis for each process.
+        if (u > 1) {
+            is_not_schedulable = true;
+        } else if (u <= ulub) {
+            is_not_schedulable = false;
+        } else {
+            is_not_schedulable = __response_time_analysis();
+        }
+        pr_warning("Utilization factor is : %.2f, Least Upper Bound: %.2f\n", u, ulub);
+#endif
+        // If it is not schedulable, we need to tell it to the process.
+        if (is_not_schedulable)
+            return -ENOTSCHEDULABLE;
+        // Otherwise, it is schedulable and thus it is not under analysis
+        // anymore.
+        current->se.is_under_analysis = false;
+        // The task has been executed as non-periodic process so that his
+        // deadline is not been updated by the scheduling algorithm of periodic
+        // tasks. We need to update it manually.
+        current->se.next_period = current_time;
+        current->se.deadline    = current_time + current->se.period;
+    }
+    // If the current time is ahead of the deadline, we need to print a warning.
+    if (current_time > current->se.deadline) {
+        pr_warning("%d > %d Missing deadline...\n", current_time, current->se.deadline);
+    }
+    // Tell the scheduler that we have executed the periodic process.
+    current->se.executed = true;
+    return 0;
 }

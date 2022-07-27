@@ -1,10 +1,9 @@
-///                MentOS, The Mentoring Operating system project
 /// @file pic8259.h
 /// @brief Data structures and functions required to manage the PIC8259.
 /// @details
 /// The Intel 8259 is a Programmable Interrupt Controller (PIC) designed
 /// for the Intel 8085 and Intel 8086 microprocessors.
-/// @copyright (c) 2014-2021 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #pragma once
