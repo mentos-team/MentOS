@@ -1,0 +1,14 @@
+NAME
+    ls - list directory contents
+
+SYNOPSIS
+    ls [OPTIONS] [FILE/FOLDER]
+
+DESCRIPTION
+    List information about the given file, or the files contained in the given
+    folder. If not argument is provided it will list information about files
+    inside the current folder.
+    
+OPTIONS
+    -a  : list all entries.
+    -l  : show the entries as a detailed list.
