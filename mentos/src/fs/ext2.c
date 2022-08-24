@@ -10,7 +10,7 @@
 /// Change the header.
 #define __DEBUG_HEADER__ "[EXT2  ]"
 /// Set the log level.
-#define __DEBUG_LEVEL__ LOGLEVEL_NOTICE
+#define __DEBUG_LEVEL__ LOGLEVEL_DEBUG
 
 #include "process/scheduler.h"
 #include "process/process.h"
@@ -430,6 +430,28 @@ static const char *uuid_to_string(uint8_t uuid[16])
     return s;
 }
 
+/// @brief Turns an ext2_file_type to string.
+/// @param ext2_type the ext2_file_type to turn to string.
+/// @return the string representing the ext2_file_type.
+static const char *ext2_file_type_to_string(ext2_file_type_t ext2_type)
+{
+    if (ext2_type == ext2_file_type_regular_file)
+        return "regular_file";
+    if (ext2_type == ext2_file_type_directory)
+        return "directory";
+    if (ext2_type == ext2_file_type_character_device)
+        return "character_device";
+    if (ext2_type == ext2_file_type_block_device)
+        return "block_device";
+    if (ext2_type == ext2_file_type_named_pipe)
+        return "named_pipe";
+    if (ext2_type == ext2_file_type_socket)
+        return "socket";
+    if (ext2_type == ext2_file_type_symbolic_link)
+        return "symbolic_link";
+    return "unknown";
+}
+
 static int ext2_file_type_to_vfs_file_type(int ext2_type)
 {
     if (ext2_type == ext2_file_type_regular_file)
@@ -502,63 +524,63 @@ static bool_t ext2_valid_permissions(int flags, mode_t mask, uid_t uid, gid_t gi
 /// @param sb the object to dump.
 static void ext2_dump_superblock(ext2_superblock_t *sb)
 {
-    pr_debug("inodes_count          : %d\n", sb->inodes_count);
-    pr_debug("blocks_count          : %d\n", sb->blocks_count);
-    pr_debug("r_blocks_count        : %d\n", sb->r_blocks_count);
-    pr_debug("free_blocks_count     : %d\n", sb->free_blocks_count);
-    pr_debug("free_inodes_count     : %d\n", sb->free_inodes_count);
-    pr_debug("first_data_block      : %d\n", sb->first_data_block);
-    pr_debug("log_block_size        : %d\n", sb->log_block_size);
-    pr_debug("log_frag_size         : %d\n", sb->log_frag_size);
-    pr_debug("blocks_per_group      : %d\n", sb->blocks_per_group);
-    pr_debug("frags_per_group       : %d\n", sb->frags_per_group);
-    pr_debug("inodes_per_group      : %d\n", sb->inodes_per_group);
+    pr_debug("inodes_count          : %u\n", sb->inodes_count);
+    pr_debug("blocks_count          : %u\n", sb->blocks_count);
+    pr_debug("r_blocks_count        : %u\n", sb->r_blocks_count);
+    pr_debug("free_blocks_count     : %u\n", sb->free_blocks_count);
+    pr_debug("free_inodes_count     : %u\n", sb->free_inodes_count);
+    pr_debug("first_data_block      : %u\n", sb->first_data_block);
+    pr_debug("log_block_size        : %u\n", sb->log_block_size);
+    pr_debug("log_frag_size         : %u\n", sb->log_frag_size);
+    pr_debug("blocks_per_group      : %u\n", sb->blocks_per_group);
+    pr_debug("frags_per_group       : %u\n", sb->frags_per_group);
+    pr_debug("inodes_per_group      : %u\n", sb->inodes_per_group);
     pr_debug("mtime                 : %s\n", time_to_string(sb->mtime));
     pr_debug("wtime                 : %s\n", time_to_string(sb->wtime));
     pr_debug("mnt_count             : %d\n", sb->mnt_count);
     pr_debug("max_mnt_count         : %d\n", sb->max_mnt_count);
-    pr_debug("magic                 : 0x%0x\n", sb->magic);
+    pr_debug("magic                 : 0x%0x (== 0x%0x)\n", sb->magic, EXT2_SUPERBLOCK_MAGIC);
     pr_debug("state                 : %d\n", sb->state);
     pr_debug("errors                : %d\n", sb->errors);
     pr_debug("minor_rev_level       : %d\n", sb->minor_rev_level);
     pr_debug("lastcheck             : %s\n", time_to_string(sb->lastcheck));
-    pr_debug("checkinterval         : %d\n", sb->checkinterval);
-    pr_debug("creator_os            : %d\n", sb->creator_os);
-    pr_debug("rev_level             : %d\n", sb->rev_level);
-    pr_debug("def_resuid            : %d\n", sb->def_resuid);
-    pr_debug("def_resgid            : %d\n", sb->def_resgid);
-    pr_debug("first_ino             : %d\n", sb->first_ino);
-    pr_debug("inode_size            : %d\n", sb->inode_size);
-    pr_debug("block_group_nr        : %d\n", sb->block_group_nr);
-    pr_debug("feature_compat        : %d\n", sb->feature_compat);
-    pr_debug("feature_incompat      : %d\n", sb->feature_incompat);
-    pr_debug("feature_ro_compat     : %d\n", sb->feature_ro_compat);
+    pr_debug("checkinterval         : %u\n", sb->checkinterval);
+    pr_debug("creator_os            : %u\n", sb->creator_os);
+    pr_debug("rev_level             : %u\n", sb->rev_level);
+    pr_debug("def_resuid            : %u\n", sb->def_resuid);
+    pr_debug("def_resgid            : %u\n", sb->def_resgid);
+    pr_debug("first_ino             : %u\n", sb->first_ino);
+    pr_debug("inode_size            : %u\n", sb->inode_size);
+    pr_debug("block_group_nr        : %u\n", sb->block_group_nr);
+    pr_debug("feature_compat        : %u\n", sb->feature_compat);
+    pr_debug("feature_incompat      : %u\n", sb->feature_incompat);
+    pr_debug("feature_ro_compat     : %u\n", sb->feature_ro_compat);
     pr_debug("uuid                  : %s\n", uuid_to_string(sb->uuid));
     pr_debug("volume_name           : %s\n", (char *)sb->volume_name);
     pr_debug("last_mounted          : %s\n", (char *)sb->last_mounted);
-    pr_debug("algo_bitmap           : %d\n", sb->algo_bitmap);
-    pr_debug("prealloc_blocks       : %d\n", sb->prealloc_blocks);
-    pr_debug("prealloc_dir_blocks   : %d\n", sb->prealloc_dir_blocks);
+    pr_debug("algo_bitmap           : %u\n", sb->algo_bitmap);
+    pr_debug("prealloc_blocks       : %u\n", sb->prealloc_blocks);
+    pr_debug("prealloc_dir_blocks   : %u\n", sb->prealloc_dir_blocks);
     pr_debug("journal_uuid          : %s\n", uuid_to_string(sb->journal_uuid));
-    pr_debug("journal_inum          : %d\n", sb->journal_inum);
-    pr_debug("jounral_dev           : %d\n", sb->jounral_dev);
-    pr_debug("last_orphan           : %d\n", sb->last_orphan);
+    pr_debug("journal_inum          : %u\n", sb->journal_inum);
+    pr_debug("jounral_dev           : %u\n", sb->jounral_dev);
+    pr_debug("last_orphan           : %u\n", sb->last_orphan);
     pr_debug("hash_seed             : %u %u %u %u\n", sb->hash_seed[0], sb->hash_seed[1], sb->hash_seed[2], sb->hash_seed[3]);
-    pr_debug("def_hash_version      : %d\n", sb->def_hash_version);
-    pr_debug("default_mount_options : %d\n", sb->default_mount_options);
-    pr_debug("first_meta_bg         : %d\n", sb->first_meta_block_group_id);
+    pr_debug("def_hash_version      : %u\n", sb->def_hash_version);
+    pr_debug("default_mount_options : %u\n", sb->default_mount_options);
+    pr_debug("first_meta_bg         : %u\n", sb->first_meta_block_group_id);
 }
 
 /// @brief Dumps on debugging output the group descriptor.
 /// @param gd the object to dump.
 static void ext2_dump_group_descriptor(ext2_group_descriptor_t *gd)
 {
-    pr_debug("block_bitmap          : %d\n", gd->block_bitmap);
-    pr_debug("inode_bitmap          : %d\n", gd->inode_bitmap);
-    pr_debug("inode_table           : %d\n", gd->inode_table);
-    pr_debug("free_blocks_count     : %d\n", gd->free_blocks_count);
-    pr_debug("free_inodes_count     : %d\n", gd->free_inodes_count);
-    pr_debug("used_dirs_count       : %d\n", gd->used_dirs_count);
+    pr_debug("block_bitmap          : %u\n", gd->block_bitmap);
+    pr_debug("inode_bitmap          : %u\n", gd->inode_bitmap);
+    pr_debug("inode_table           : %u\n", gd->inode_table);
+    pr_debug("free_blocks_count     : %u\n", gd->free_blocks_count);
+    pr_debug("free_inodes_count     : %u\n", gd->free_inodes_count);
+    pr_debug("used_dirs_count       : %u\n", gd->used_dirs_count);
 }
 
 /// @brief Dumps on debugging output the inode.
@@ -601,6 +623,14 @@ static void ext2_dump_inode(ext2_inode_t *inode)
              inode->generation, inode->file_acl, inode->dir_acl);
 }
 
+/// @brief Dumps on debugging output the dirent.
+/// @param dirent the object to dump.
+static void ext2_dump_dirent(ext2_dirent_t *dirent)
+{
+    pr_debug(" Inode : %6u Rec. Len. : %4u Name Len. : %4u Type: %s\n", dirent->inode, dirent->rec_len, dirent->name_len, ext2_file_type_to_string(dirent->file_type));
+    pr_debug(" Name : %s\n", dirent->name);
+}
+
 /// @brief Dumps on debugging output the BGDT.
 /// @param fs the filesystem of which we print the BGDT.
 static void ext2_dump_bgdt(ext2_filesystem_t *fs)
@@ -612,21 +642,21 @@ static void ext2_dump_bgdt(ext2_filesystem_t *fs)
     for (uint32_t i = 0; i < fs->block_groups_count; ++i) {
         // Get the pointer to the current group descriptor.
         ext2_group_descriptor_t *gd = &(fs->block_groups[i]);
-        pr_debug("Block Group Descriptor [%d] @ %d:\n", i, fs->bgdt_start_block + i * fs->superblock.blocks_per_group);
-        pr_debug("    block_bitmap : %d\n", gd->block_bitmap);
-        pr_debug("    inode_bitmap : %d\n", gd->inode_bitmap);
-        pr_debug("    inode_table  : %d\n", gd->inode_table);
-        pr_debug("    Used Dirs    : %d\n", gd->used_dirs_count);
-        pr_debug("    Free Blocks  : %4d of %d\n", gd->free_blocks_count, fs->superblock.blocks_per_group);
-        pr_debug("    Free Inodes  : %4d of %d\n", gd->free_inodes_count, fs->superblock.inodes_per_group);
+        pr_debug("Block Group Descriptor [%u] @ %u:\n", i, fs->bgdt_start_block + i * fs->superblock.blocks_per_group);
+        pr_debug("    block_bitmap : %u\n", gd->block_bitmap);
+        pr_debug("    inode_bitmap : %u\n", gd->inode_bitmap);
+        pr_debug("    inode_table  : %u\n", gd->inode_table);
+        pr_debug("    Used Dirs    : %u\n", gd->used_dirs_count);
+        pr_debug("    Free Blocks  : %4u of %u\n", gd->free_blocks_count, fs->superblock.blocks_per_group);
+        pr_debug("    Free Inodes  : %4u of %u\n", gd->free_inodes_count, fs->superblock.inodes_per_group);
         // Dump the block bitmap.
         ext2_read_block(fs, gd->block_bitmap, cache);
-        pr_debug("    Block Bitmap at %d\n", gd->block_bitmap);
+        pr_debug("    Block Bitmap at %u\n", gd->block_bitmap);
         for (uint32_t j = 0; j < fs->block_size; ++j) {
             if ((j % 8) == 0)
-                pr_debug("        Block index: %4d, Bitmap: %s\n", j / 8, dec_to_binary(cache[j / 8], 8));
+                pr_debug("        Block index: %4u, Bitmap: %s\n", j / 8, dec_to_binary(cache[j / 8], 8));
             if (!ext2_check_bitmap_bit(cache, j)) {
-                pr_debug("    First free block in group is in block %d, the linear index is %d\n", j / 8, j);
+                pr_debug("    First free block in group is in block %u, the linear index is %u\n", j / 8, j);
                 break;
             }
         }
@@ -943,7 +973,7 @@ static int ext2_read_inode(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t 
     // Read the block containing the inode table.
     ext2_read_block(fs, fs->block_groups[group_index].inode_table + block, cache);
     // Save the inode content.
-    memcpy(inode, (ext2_inode_t *)((uintptr_t)cache + (offset * fs->superblock.inode_size)), fs->superblock.inode_size);
+    memcpy(inode, (ext2_inode_t *)((uintptr_t)cache + (offset * fs->superblock.inode_size)), sizeof(ext2_inode_t));
     // Free the cache.
     kmem_cache_free(cache);
     return 0;
@@ -979,7 +1009,7 @@ static int ext2_write_inode(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t
     // Read the block containing the inode table.
     ext2_read_block(fs, fs->block_groups[group_index].inode_table + block, cache);
     // Write the inode.
-    memcpy((ext2_inode_t *)((uintptr_t)cache + (offset * fs->superblock.inode_size)), inode, fs->superblock.inode_size);
+    memcpy((ext2_inode_t *)((uintptr_t)cache + (offset * fs->superblock.inode_size)), inode, sizeof(ext2_inode_t));
     // Write back the block.
     ext2_write_block(fs, fs->block_groups[group_index].inode_table + block, cache);
     // Free the cache.
