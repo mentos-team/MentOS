@@ -143,7 +143,7 @@ set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -drive file=${CMAKE_BINARY_DIR}/rootfs.img,
 # This first target runs the emualtor passing the kernel binary file.
 add_custom_target(
     qemu
-    COMMAND test -e ${CMAKE_BINARY_DIR}/rootfs.img || ${CMAKE_COMMAND} -E cmake_echo_color --red "No filesystem file detected, you need to run: make filesystem" && exit 1
+    COMMAND test -e ${CMAKE_BINARY_DIR}/rootfs.img || ${CMAKE_COMMAND} -E cmake_echo_color --red "No filesystem file detected, you need to run: make filesystem"
     COMMAND ${EMULATOR} ${EMULATOR_FLAGS} -kernel ${CMAKE_BINARY_DIR}/mentos/kernel-bootloader.bin
     DEPENDS kernel-bootloader.bin
 )
@@ -175,7 +175,7 @@ add_custom_target(
 # debug mode, and pause it up until a debugger connects to it.
 add_custom_target(
     qemu-gdb
-    COMMAND test -e ${CMAKE_BINARY_DIR}/rootfs.img || ${CMAKE_COMMAND} -E cmake_echo_color --red "No filesystem file detected, you need to run: make filesystem" && exit 1
+    COMMAND test -e ${CMAKE_BINARY_DIR}/rootfs.img || ${CMAKE_COMMAND} -E cmake_echo_color --red "No filesystem file detected, you need to run: make filesystem"
     COMMAND echo "\n\n"
     COMMAND echo "Now, QEMU has loaded the kernel, and it is waiting that you\n"
     COMMAND echo "remotely connect to it. To start debugging, open a new shell\n"

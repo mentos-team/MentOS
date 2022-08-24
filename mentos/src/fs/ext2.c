@@ -436,20 +436,20 @@ static const char *uuid_to_string(uint8_t uuid[16])
 static const char *ext2_file_type_to_string(ext2_file_type_t ext2_type)
 {
     if (ext2_type == ext2_file_type_regular_file)
-        return "regular_file";
+        return "REG";
     if (ext2_type == ext2_file_type_directory)
-        return "directory";
+        return "DIR";
     if (ext2_type == ext2_file_type_character_device)
-        return "character_device";
+        return "CHR";
     if (ext2_type == ext2_file_type_block_device)
-        return "block_device";
+        return "BLK";
     if (ext2_type == ext2_file_type_named_pipe)
-        return "named_pipe";
+        return "FIFO";
     if (ext2_type == ext2_file_type_socket)
-        return "socket";
+        return "SOCK";
     if (ext2_type == ext2_file_type_symbolic_link)
-        return "symbolic_link";
-    return "unknown";
+        return "LNK";
+    return "UNK";
 }
 
 static int ext2_file_type_to_vfs_file_type(int ext2_type)
@@ -627,8 +627,7 @@ static void ext2_dump_inode(ext2_inode_t *inode)
 /// @param dirent the object to dump.
 static void ext2_dump_dirent(ext2_dirent_t *dirent)
 {
-    pr_debug(" Inode : %6u Rec. Len. : %4u Name Len. : %4u Type: %s\n", dirent->inode, dirent->rec_len, dirent->name_len, ext2_file_type_to_string(dirent->file_type));
-    pr_debug(" Name : %s\n", dirent->name);
+    pr_debug("Inode: %4u Rec. Len.: %4u Name Len.: %4u Type:%4s Name: %s\n", dirent->inode, dirent->rec_len, dirent->name_len, ext2_file_type_to_string(dirent->file_type), dirent->name);
 }
 
 /// @brief Dumps on debugging output the BGDT.
@@ -2954,7 +2953,7 @@ static vfs_file_t *ext2_mount(vfs_file_t *block_device, const char *path)
         NULL,
         NULL);
     // Compute the maximum number of inodes per block.
-    fs->inodes_per_block_count = fs->block_size / sizeof(ext2_inode_t);
+    fs->inodes_per_block_count = fs->block_size / fs->superblock.inode_size;
     // Compute the number of blocks per block. This value is mostly used for
     // inodes.
     // If you check inside the inode structure you will find the `blocks_count`
