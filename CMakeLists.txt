@@ -143,6 +143,7 @@ set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -drive file=${CMAKE_BINARY_DIR}/rootfs.img,
 # This first target runs the emualtor passing the kernel binary file.
 add_custom_target(
     qemu
+    COMMAND test -e ${CMAKE_BINARY_DIR}/rootfs.img || ${CMAKE_COMMAND} -E cmake_echo_color --red "No filesystem file detected, you need to run: make filesystem" && exit 1
     COMMAND ${EMULATOR} ${EMULATOR_FLAGS} -kernel ${CMAKE_BINARY_DIR}/mentos/kernel-bootloader.bin
     DEPENDS kernel-bootloader.bin
 )
