@@ -26,25 +26,14 @@
 #define BG_WHITE "\033[47m"
 #define BG_BLACK "\033[40m"
 
-void set_echo(bool_t active)
+void set(unsigned flag, bool_t active)
 {
     struct termios _termios;
     tcgetattr(STDIN_FILENO, &_termios);
     if (active)
-        _termios.c_lflag |= (ICANON | ECHO);
+        _termios.c_lflag |= flag;
     else
-        _termios.c_lflag &= ~(ICANON | ECHO);
-    tcsetattr(STDIN_FILENO, 0, &_termios);
-}
-
-void set_erase(bool_t active)
-{
-    struct termios _termios;
-    tcgetattr(STDIN_FILENO, &_termios);
-    if (active)
-        _termios.c_lflag |= ECHOE;
-    else
-        _termios.c_lflag &= ~ECHOE;
+        _termios.c_lflag &= ~flag;
     tcsetattr(STDIN_FILENO, 0, &_termios);
 }
 
@@ -55,10 +44,9 @@ static bool_t get_input(char *input, size_t max_len, bool_t hide)
     int c;
     bool_t result = false;
 
-    //set_erase(false);
-    if (hide) {
-        set_echo(false);
-    }
+    set(ICANON, false);
+    if (hide)
+        set(ECHO, false);
 
     memset(input, 0, max_len);
     do {
@@ -104,6 +92,8 @@ static bool_t get_input(char *input, size_t max_len, bool_t hide)
                     putchar('\b');
                 --index;
             }
+        } else if (c == 0) {
+            // Do nothing.
         } else {
             input[index++] = c;
             if (index == (max_len - 1)) {
@@ -114,11 +104,11 @@ static bool_t get_input(char *input, size_t max_len, bool_t hide)
         }
     } while (index < max_len);
 
-    //set_erase(true);
     if (hide) {
-        set_echo(true);
+        set(ECHO, true);
         putchar('\n');
     }
+    set(ICANON, true);
 
     return result;
 }
