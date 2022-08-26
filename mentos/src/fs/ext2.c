@@ -386,7 +386,6 @@ static int ext2_mkdir(const char *path, mode_t mode);
 static int ext2_rmdir(const char *path);
 static int ext2_stat(const char *path, stat_t *stat);
 static vfs_file_t *ext2_creat(const char *path, mode_t permission);
-
 static vfs_file_t *ext2_mount(vfs_file_t *block_device, const char *path);
 
 // ============================================================================
@@ -703,6 +702,7 @@ static void ext2_dump_filesystem(ext2_filesystem_t *fs)
 /// @details Remember that inode addressing starts from 1.
 static uint32_t ext2_get_group_index_from_inode(ext2_filesystem_t *fs, uint32_t inode_index)
 {
+    assert(inode_index != 0 && "Your are trying to access inode 0.");
     return (inode_index - 1) / fs->superblock.inodes_per_group;
 }
 
@@ -713,6 +713,7 @@ static uint32_t ext2_get_group_index_from_inode(ext2_filesystem_t *fs, uint32_t 
 /// @details Remember that inode addressing starts from 1.
 static uint32_t ext2_get_inode_offest_in_group(ext2_filesystem_t *fs, uint32_t inode_index)
 {
+    assert(inode_index != 0 && "Your are trying to access inode 0.");
     return (inode_index - 1) % fs->superblock.inodes_per_group;
 }
 
@@ -881,7 +882,6 @@ static int ext2_write_superblock(ext2_filesystem_t *fs)
 /// @return the amount of data we read, or negative value for an error.
 static int ext2_read_block(ext2_filesystem_t *fs, uint32_t block_index, uint8_t *buffer)
 {
-    //pr_debug("Read block %4d for EXT2 filesystem (0x%x)\n", block_index, fs);
     if (block_index == 0) {
         pr_err("You are trying to read an invalid block index (%d).\n", block_index);
         return -1;
@@ -900,7 +900,6 @@ static int ext2_read_block(ext2_filesystem_t *fs, uint32_t block_index, uint8_t 
 /// @return the amount of data we wrote, or negative value for an error.
 static int ext2_write_block(ext2_filesystem_t *fs, uint32_t block_index, uint8_t *buffer)
 {
-    //pr_debug("Write block %4d for EXT2 filesystem (0x%x)\n", block_index, fs);
     if (block_index == 0) {
         pr_err("You are trying to write on an invalid block index (%d).\n", block_index);
         return -1;
@@ -949,30 +948,33 @@ static int ext2_write_bgdt(ext2_filesystem_t *fs)
 /// @return 0 on success, -1 on failure.
 static int ext2_read_inode(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t inode_index)
 {
+    uint32_t group_index, block_index, inode_offset;
     if (inode_index == 0) {
         pr_err("You are trying to read an invalid inode index (%d).\n", inode_index);
         return -1;
     }
     // Retrieve the group index.
-    uint32_t group_index = ext2_get_group_index_from_inode(fs, inode_index);
+    group_index = ext2_get_group_index_from_inode(fs, inode_index);
     if (group_index > fs->block_groups_count) {
         pr_err("Invalid group index computed from inode index `%d`.\n", inode_index);
         return -1;
     }
     // Get the index of the inode inside the group.
-    uint32_t offset = ext2_get_inode_offest_in_group(fs, inode_index);
+    inode_offset = ext2_get_inode_offest_in_group(fs, inode_index);
     // Get the block offest.
-    uint32_t block = ext2_get_block_index_from_inode_offset(fs, offset);
+    block_index = ext2_get_block_index_from_inode_offset(fs, inode_offset);
     // Get the real inode offset inside the block.
-    offset %= fs->inodes_per_block_count;
+    inode_offset %= fs->inodes_per_block_count;
+    // Log the address to the inode.
+    pr_debug("Read inode  (inode:%4u block:%4u offset:%4u)\n", inode_index, block_index, inode_offset);
     // Allocate the cache.
     uint8_t *cache = kmem_cache_alloc(fs->ext2_buffer_cache, GFP_KERNEL);
     // Clean the cache.
     memset(cache, 0, fs->block_size);
     // Read the block containing the inode table.
-    ext2_read_block(fs, fs->block_groups[group_index].inode_table + block, cache);
+    ext2_read_block(fs, fs->block_groups[group_index].inode_table + block_index, cache);
     // Save the inode content.
-    memcpy(inode, (ext2_inode_t *)((uintptr_t)cache + (offset * fs->superblock.inode_size)), sizeof(ext2_inode_t));
+    memcpy(inode, (ext2_inode_t *)((uintptr_t)cache + (inode_offset * fs->superblock.inode_size)), sizeof(ext2_inode_t));
     // Free the cache.
     kmem_cache_free(cache);
     return 0;
@@ -985,32 +987,35 @@ static int ext2_read_inode(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t 
 /// @return 0 on success, -1 on failure.
 static int ext2_write_inode(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t inode_index)
 {
+    uint32_t group_index, block_index, inode_offset;
     if (inode_index == 0) {
         pr_err("You are trying to read an invalid inode index (%d).\n", inode_index);
         return -1;
     }
     // Retrieve the group index.
-    uint32_t group_index = ext2_get_group_index_from_inode(fs, inode_index);
+    group_index = ext2_get_group_index_from_inode(fs, inode_index);
     if (group_index > fs->block_groups_count) {
         pr_err("Invalid group index computed from inode index `%d`.\n", inode_index);
         return -1;
     }
     // Get the offset of the inode inside the group.
-    uint32_t offset = ext2_get_inode_offest_in_group(fs, inode_index);
+    inode_offset = ext2_get_inode_offest_in_group(fs, inode_index);
     // Get the block offest.
-    uint32_t block = ext2_get_block_index_from_inode_offset(fs, offset);
+    block_index = ext2_get_block_index_from_inode_offset(fs, inode_offset);
     // Get the real inode offset inside the block.
-    offset %= fs->inodes_per_block_count;
+    inode_offset %= fs->inodes_per_block_count;
+    // Log the address to the inode.
+    pr_debug("Write inode (inode:%4u block:%4u offset:%4u)\n", inode_index, block_index, inode_offset);
     // Allocate the cache.
     uint8_t *cache = kmem_cache_alloc(fs->ext2_buffer_cache, GFP_KERNEL);
     // Clean the cache.
     memset(cache, 0, fs->block_size);
     // Read the block containing the inode table.
-    ext2_read_block(fs, fs->block_groups[group_index].inode_table + block, cache);
+    ext2_read_block(fs, fs->block_groups[group_index].inode_table + block_index, cache);
     // Write the inode.
-    memcpy((ext2_inode_t *)((uintptr_t)cache + (offset * fs->superblock.inode_size)), inode, sizeof(ext2_inode_t));
+    memcpy((ext2_inode_t *)((uintptr_t)cache + (inode_offset * fs->superblock.inode_size)), inode, sizeof(ext2_inode_t));
     // Write back the block.
-    ext2_write_block(fs, fs->block_groups[group_index].inode_table + block, cache);
+    ext2_write_block(fs, fs->block_groups[group_index].inode_table + block_index, cache);
     // Free the cache.
     kmem_cache_free(cache);
     return 0;
@@ -1409,6 +1414,8 @@ static ssize_t ext2_read_inode_block(ext2_filesystem_t *fs, ext2_inode_t *inode,
     uint32_t real_index = ext2_get_real_block_index(fs, inode, block_index);
     if (real_index == 0)
         return -1;
+    // Log the address to the inode block.
+    pr_debug("Read inode block  (block:%4u real:%4u)\n", block_index, real_index);
     // Read the block.
     return ext2_read_block(fs, real_index, buffer);
 }
@@ -1430,6 +1437,8 @@ static ssize_t ext2_write_inode_block(ext2_filesystem_t *fs, ext2_inode_t *inode
     uint32_t real_index = ext2_get_real_block_index(fs, inode, block_index);
     if (real_index == 0)
         return -1;
+    // Log the address to the inode block.
+    pr_debug("Write inode block (block:%4u real:%4u inode:%4u)\n", block_index, real_index, inode_index);
     // Write the block.
     return ext2_write_block(fs, real_index, buffer);
 }
@@ -1948,7 +1957,6 @@ static int ext2_resolve_path(vfs_file_t *directory, char *path, ext2_direntry_se
         pr_err("You provided a NULL direntry.\n");
         return -1;
     }
-    pr_debug("ext2_resolve_path(directory: \"%s\", path: \"%s\")\n", directory->name, path);
     // Get the filesystem.
     ext2_filesystem_t *fs = (ext2_filesystem_t *)directory->device;
     if (fs == NULL) {
@@ -1972,8 +1980,6 @@ static int ext2_resolve_path(vfs_file_t *directory, char *path, ext2_direntry_se
         token = strtok(NULL, "/");
     }
     kfree(tmp_path);
-    pr_debug("ext2_resolve_path(directory: \"%s\", path: \"%s\") -> (ino: %d, name: \"%s\")\n",
-             directory->name, path, search->direntry->inode, search->direntry->name);
     return 0;
 }
 
@@ -1984,7 +1990,6 @@ static int ext2_resolve_path(vfs_file_t *directory, char *path, ext2_direntry_se
 /// @return 0 on success, -1 on failure.
 static int ext2_resolve_path_direntry(vfs_file_t *directory, char *path, ext2_dirent_t *direntry)
 {
-    pr_debug("ext2_resolve_path_direntry(%s, %s, %p)\n", directory->name, path, direntry);
     // Check the pointers.
     if (directory == NULL) {
         pr_err("You provided a NULL directory.\n");
@@ -2014,7 +2019,6 @@ static int ext2_resolve_path_direntry(vfs_file_t *directory, char *path, ext2_di
 /// @return a pointer to the EXT2 filesystem, NULL otherwise.
 static ext2_filesystem_t *get_ext2_filesystem(const char *absolute_path)
 {
-    pr_debug("get_ext2_filesystem(%s)\n", absolute_path);
     if (absolute_path == NULL) {
         pr_err("We received a NULL absolute path.\n");
         return NULL;
