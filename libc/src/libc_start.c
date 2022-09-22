@@ -35,8 +35,3 @@ int __libc_start_main(int (*main)(int, char **, char **), int argc, char *argv[]
     //dbg_print("== END   %-30s =======================================\n", argv[0]);
     return result;
 }
-
-// WARNING: This declaration must be here, because libc_start is compiled
-// with all the programs, and all the programs NEED to have the `sigreturn`
-// symbol. It must be this way, period.
-_syscall0(int, sigreturn)

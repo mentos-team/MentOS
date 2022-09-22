@@ -269,14 +269,14 @@ int sys_kill(pid_t pid, int sig);
 /// @param signum  The signal number.
 /// @param handler The handler for the signal.
 /// @return The previous value of the signal handler, or SIG_ERR on error.
-sighandler_t sys_signal(int signum, sighandler_t handler);
+sighandler_t sys_signal(int signum, sighandler_t handler, uint32_t sigreturn_addr);
 
 /// @brief Examine and change a signal action.
 /// @param signum Specifies the signal and can be any valid signal except SIGKILL and SIGSTOP.
 /// @param act    If non-NULL, the new action for signal signum is installed from act.
 /// @param oldact If non-NULL, the previous action is saved in oldact.
 /// @return returns 0 on success; on error, -1 is returned, and errno is set to indicate the error.
-int sys_sigaction(int signum, const sigaction_t *act, sigaction_t *oldact);
+int sys_sigaction(int signum, const sigaction_t *act, sigaction_t *oldact, uint32_t sigreturn_addr);
 
 /// @brief Examine and change blocked signals.
 /// @param how    Determines the behavior of the call.

@@ -10,6 +10,10 @@
 #include "signal.h"
 #include "sys/bitops.h"
 
+_syscall0(int, sigreturn)
+
+_syscall3(int, sigprocmask, int, how, const sigset_t *, set, sigset_t *, oldset)
+
 static const char *sys_siglist[] = {
     "HUP",
     "INT",
@@ -45,11 +49,19 @@ static const char *sys_siglist[] = {
     NULL,
 };
 
-_syscall2(sighandler_t, signal, int, signum, sighandler_t, handler)
+sighandler_t signal(int signum, sighandler_t handler)
+{
+    long __res;
+    __inline_syscall3(__res, signal, signum, handler, (unsigned int)sigreturn);
+    __syscall_return(sighandler_t, __res);
+}
 
-_syscall3(int, sigaction, int, signum, const sigaction_t *, act, sigaction_t *, oldact)
-
-_syscall3(int, sigprocmask, int, how, const sigset_t *, set, sigset_t *, oldset)
+int sigaction(int signum, const sigaction_t *act, sigaction_t *oldact)
+{
+    long __res;
+    __inline_syscall4(__res, sigaction, signum, act, oldact, (unsigned int)sigreturn);
+    __syscall_return(int, __res);
+}
 
 const char *strsignal(int sig)
 {

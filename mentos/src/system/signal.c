@@ -300,7 +300,7 @@ static inline int __handle_signal(int signr, siginfo_t *info, sigaction_t *ka, s
     PUSH_VALUE_ON_STACK(regs->useresp, signr);
 
     // Push on the stack the function required to handle the signal return.
-    PUSH_VALUE_ON_STACK(regs->useresp, current->sigreturn_eip);
+    PUSH_VALUE_ON_STACK(regs->useresp, current->sigreturn_addr);
 
     return 1;
 }
@@ -631,9 +631,9 @@ int sys_kill(pid_t pid, int sig)
     return __send_sig_info(sig, &info, current);
 }
 
-sighandler_t sys_signal(int signum, sighandler_t handler)
+sighandler_t sys_signal(int signum, sighandler_t handler, uint32_t sigreturn_addr)
 {
-    pr_debug("sys_signal(%d, %p)\n", signum, handler);
+    pr_debug("sys_signal(%d, %p, %p)\n", signum, handler, sigreturn_ptr);
     // Check the signal that we want to send.
     if ((signum < 0) || (signum >= NSIG)) {
         pr_err("sys_signal(%d, %p): Wrong signal number!\n", signum, handler);
@@ -658,6 +658,8 @@ sighandler_t sys_signal(int signum, sighandler_t handler)
     sigemptyset(&new_sigaction.sa_mask);
     // Lock the signal handling for the given task.
     __lock_task_sighand(current);
+    // Set the address of the sigreturn.
+    current->sigreturn_addr = sigreturn_addr;
     // Get the old sigaction.
     sigaction_t *old_sigaction = &current->sighand.action[signum - 1];
     pr_err("sys_signal(%d, %p): Signal action ptr %p\n", signum, handler, old_sigaction);
@@ -672,9 +674,9 @@ sighandler_t sys_signal(int signum, sighandler_t handler)
     return old_handler;
 }
 
-int sys_sigaction(int signum, const sigaction_t *act, sigaction_t *oldact)
+int sys_sigaction(int signum, const sigaction_t *act, sigaction_t *oldact, uint32_t sigreturn_addr)
 {
-    pr_debug("sys_sigaction(%d, %p, %p)\n", signum, act, oldact);
+    pr_debug("sys_sigaction(%d, %p, %p, %p)\n", signum, act, oldact, sigreturn_ptr);
     // Check the signal that we want to send.
     if ((signum < 0) || (signum >= NSIG)) {
         pr_err("sys_sigaction(%d, %p, %p): Wrong signal number!\n", signum, act, oldact);
@@ -691,6 +693,8 @@ int sys_sigaction(int signum, const sigaction_t *act, sigaction_t *oldact)
     }
     // Lock the signal handling for the given task.
     __lock_task_sighand(current);
+    // Set the address of the sigreturn.
+    current->sigreturn_addr = sigreturn_addr;
     // Get a pointer to the entry in the sighand.action array.
     sigaction_t *current_sigaction = &current->sighand.action[signum - 1];
     pr_debug("sys_sigaction(%d, %p, %p): : Signal old action ptr %p\n", signum, act, oldact, current_sigaction);
