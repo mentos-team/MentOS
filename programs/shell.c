@@ -21,45 +21,12 @@
 #include "limits.h"
 #include "sys/utsname.h"
 #include "ctype.h"
+#include "ansi_colors.h"
 
 /// Maximum length of commands.
 #define CMD_LEN 32
 /// Maximum lenght of the history.
 #define HISTORY_MAX 10
-
-/// @brief A set of colors.
-#define FG_BLACK          "\033[30m"
-#define FG_RED            "\033[31m"
-#define FG_GREEN          "\033[32m"
-#define FG_YELLOW         "\033[33m"
-#define FG_BLUE           "\033[34m"
-#define FG_MAGENTA        "\033[35m"
-#define FG_CYAN           "\033[36m"
-#define FG_WHITE          "\033[37m"
-#define FG_BRIGHT_BLACK   "\033[90m"
-#define FG_BRIGHT_RED     "\033[91m"
-#define FG_BRIGHT_GREEN   "\033[92m"
-#define FG_BRIGHT_YELLOW  "\033[93m"
-#define FG_BRIGHT_BLUE    "\033[94m"
-#define FG_BRIGHT_MAGENTA "\033[95m"
-#define FG_BRIGHT_CYAN    "\033[96m"
-#define FG_BRIGHT_WHITE   "\033[97m"
-#define BG_BLACK          "\033[40m"
-#define BG_RED            "\033[41m"
-#define BG_GREEN          "\033[42m"
-#define BG_YELLOW         "\033[43m"
-#define BG_BLUE           "\033[44m"
-#define BG_MAGENTA        "\033[45m"
-#define BG_CYAN           "\033[46m"
-#define BG_WHITE          "\033[47m"
-#define BG_BRIGHT_BLACK   "\033[100m"
-#define BG_BRIGHT_RED     "\033[101m"
-#define BG_BRIGHT_GREEN   "\033[102m"
-#define BG_BRIGHT_YELLOW  "\033[103m"
-#define BG_BRIGHT_BLUE    "\033[104m"
-#define BG_BRIGHT_MAGENTA "\033[105m"
-#define BG_BRIGHT_CYAN    "\033[106m"
-#define BG_BRIGHT_WHITE   "\033[107m"
 
 // Required by `export`
 #define ENV_NORM 1
@@ -188,7 +155,7 @@ static inline void __prompt_print()
     } else {
         HOSTNAME = buffer.nodename;
     }
-    printf(FG_GREEN "%s" FG_WHITE "@" FG_CYAN "%s " FG_BRIGHT_BLUE "[%02d:%02d:%02d]" FG_WHITE " [%s] " FG_BRIGHT_WHITE "%% ",
+    printf(FG_GREEN "%s" FG_WHITE "@" FG_CYAN "%s " FG_BLUE_BRIGHT "[%02d:%02d:%02d]" FG_WHITE " [%s] " FG_WHITE_BRIGHT "%% ",
            USER, HOSTNAME, timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec, CWD);
 }
 
@@ -703,23 +670,6 @@ int main(int argc, char *argv[])
     if (sigaction(SIGCHLD, &action, NULL) == -1) {
         printf("Failed to set signal handler (%s).\n", SIGCHLD, strerror(errno));
         return 1;
-    }
-    // Clear the screen.
-    puts("\033[J");
-    // Welcome the user.
-    puts(BG_WHITE FG_BLACK);
-    printf("Welcome " FG_RED "%s" FG_BLACK "...\n\n", USER);
-    puts(BG_BLACK FG_BRIGHT_WHITE);
-    
-    // Print /etc/motd if it exists
-    int motd_fd = open("/etc/motd", O_RDONLY, 0600);
-    if (motd_fd != -1){
-        char buffer[256];
-
-        if(read(motd_fd, buffer, sizeof(char)*256) != -1){
-            printf("%s \n", buffer);
-        }
-        close(motd_fd);
     }
     
     // Move inside the home directory.

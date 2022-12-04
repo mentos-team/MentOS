@@ -374,8 +374,6 @@ int kmain(boot_info_t *boot_informations)
 
     // We have completed the booting procedure.
     pr_notice("Booting done, jumping into init process.\n");
-    // Print the welcome message.
-    printf("\n                .: Welcome to MentOS :.\n\n");
     // Switch to the page directory of init.
     paging_switch_directory_va(init_p->mm->pgd);
     // Jump into init process.

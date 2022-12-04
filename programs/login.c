@@ -3,7 +3,6 @@
 /// @copyright (c) 2014-2022 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-/// Maximum length of credentials.
 #include <string.h>
 #include <stdbool.h>
 #include <sys/unistd.h>
@@ -15,50 +14,74 @@
 #include <pwd.h>
 #include <strerror.h>
 #include <stdlib.h>
-
 #include <debug.h>
 
+#include "ansi_colors.h"
+
+/// Maximum length of credentials.
 #define CREDENTIALS_LENGTH 50
 
-#define FG_BLACK "\033[30m"
-#define FG_WHITE "\033[37m"
-#define FG_RED   "\033[31m"
-#define BG_WHITE "\033[47m"
-#define BG_BLACK "\033[40m"
+static inline int __setup_env(passwd_t *pwd)
+{
+    // Set the USER.
+    if (setenv("USER", pwd->pw_name, 1) == -1) {
+        printf("Failed to set env: `USER`\n");
+        return 0;
+    }
+    // Set the SHELL.
+    if (setenv("SHELL", pwd->pw_shell, 1) == -1) {
+        printf("Failed to set env: `SHELL`\n");
+        return 0;
+    }
+    // Set the HOME.
+    if (setenv("HOME", pwd->pw_dir, 1) == -1) {
+        printf("Failed to set env: `HOME`\n");
+        return 0;
+    }
+    return 1;
+}
 
-void set_echo(bool_t active)
+static inline void __set_io_flags(unsigned flag, bool_t active)
 {
     struct termios _termios;
     tcgetattr(STDIN_FILENO, &_termios);
     if (active)
-        _termios.c_lflag |= (ICANON | ECHO);
+        _termios.c_lflag |= flag;
     else
-        _termios.c_lflag &= ~(ICANON | ECHO);
+        _termios.c_lflag &= ~flag;
     tcsetattr(STDIN_FILENO, 0, &_termios);
 }
 
-void set_erase(bool_t active)
+static inline void __print_message_file(const char * file)
 {
-    struct termios _termios;
-    tcgetattr(STDIN_FILENO, &_termios);
-    if (active)
-        _termios.c_lflag |= ECHOE;
-    else
-        _termios.c_lflag &= ~ECHOE;
-    tcsetattr(STDIN_FILENO, 0, &_termios);
+    char buffer[256];
+    ssize_t nbytes, total = 0;
+    int fd;
+
+    // Try to open the file.
+    if ((fd = open(file, O_RDONLY, 0600)) == -1)
+        return;
+    // Read the lines of the file.
+    while ((nbytes = read(fd, buffer, sizeof(char) * 256)) > 0) {
+        // TODO: Parsing message files for special characters (such as `\t` for time).
+        printf("%s\n", buffer);
+        total += nbytes;
+    }
+    close(fd);
+    if (total > 0)
+        printf("\n");
 }
 
 /// @brief Gets the inserted command.
-static bool_t get_input(char *input, size_t max_len, bool_t hide)
+static inline bool_t __get_input(char *input, size_t max_len, bool_t hide)
 {
     size_t index = 0;
     int c;
     bool_t result = false;
 
-    //set_erase(false);
-    if (hide) {
-        set_echo(false);
-    }
+    __set_io_flags(ICANON, false);
+    if (hide)
+        __set_io_flags(ECHO, false);
 
     memset(input, 0, max_len);
     do {
@@ -104,6 +127,8 @@ static bool_t get_input(char *input, size_t max_len, bool_t hide)
                     putchar('\b');
                 --index;
             }
+        } else if (c == 0) {
+            // Do nothing.
         } else {
             input[index++] = c;
             if (index == (max_len - 1)) {
@@ -114,59 +139,34 @@ static bool_t get_input(char *input, size_t max_len, bool_t hide)
         }
     } while (index < max_len);
 
-    //set_erase(true);
     if (hide) {
-        set_echo(true);
+        __set_io_flags(ECHO, true);
         putchar('\n');
     }
+    __set_io_flags(ICANON, true);
 
     return result;
 }
 
-static inline int setup_env(passwd_t *pwd)
-{
-    // Set the USER.
-    if (setenv("USER", pwd->pw_name, 1) == -1) {
-        printf("Failed to set env: `USER`\n");
-        return 0;
-    }
-    // Set the SHELL.
-    if (setenv("SHELL", pwd->pw_shell, 1) == -1) {
-        printf("Failed to set env: `SHELL`\n");
-        return 0;
-    }
-    // Set the HOME.
-    if (setenv("HOME", pwd->pw_dir, 1) == -1) {
-        printf("Failed to set env: `HOME`\n");
-        return 0;
-    }
-    return 1;
-}
-
 int main(int argc, char **argv)
 {
-    // Print /etc/issue if it exists
-    // TODO: Parsing /etc/issue for special characters (such as `\t` for time)
-    int issues_fd = open("/etc/issue", O_RDONLY, 0600);
-    if (issues_fd != -1){
-        char buffer[256];
-        
-        if(read(issues_fd, buffer, sizeof(char)*256) != -1){
-            printf("%s \n", buffer);
-        }
-        close(issues_fd);
-    }
-    
+    // Print /etc/issue if it exists.
+    __print_message_file("/etc/issue");
+
     passwd_t *pwd;
-    char username[50], password[50];
+    char username[CREDENTIALS_LENGTH], password[CREDENTIALS_LENGTH];
     do {
         // Get the username.
         do {
             printf("Username :");
-        } while (!get_input(username, 50, false));
+        } while (!__get_input(username, CREDENTIALS_LENGTH, false));
+
+        // Get the password.
         do {
             printf("Password :");
-        } while (!get_input(password, 50, true));
+        } while (!__get_input(password, CREDENTIALS_LENGTH, true));
+
+        // Check if we can find the user.
         if ((pwd = getpwnam(username)) == NULL) {
             if (errno == ENOENT) {
                 printf("The given name was not found.\n");
@@ -177,29 +177,47 @@ int main(int argc, char **argv)
             }
             continue;
         }
+
+        // Check if the password is correct.
         if (strcmp(pwd->pw_passwd, password) != 0) {
             printf("Wrong password.\n");
             continue;
         }
+
         break;
     } while (true);
+
+    // If there is not shell set for the user, should we rollback to standard shell?
     if (pwd->pw_shell == NULL) {
-        printf("%s: There is no shell set for the user `%s`.\n", argv[0], pwd->pw_name);
+        printf("login: There is no shell set for the user `%s`.\n", pwd->pw_name);
         return 1;
     }
 
-    if (!setup_env(pwd)) {
-        printf("%s: Failed to setup the environmental variables.\n", argv[0]);
+    // Set the standard environmental variables.
+    if (!__setup_env(pwd)) {
+        printf("login: Failed to setup the environmental variables.\n");
         return 1;
     }
 
+    // Set the group id.
     setgid(pwd->pw_gid);
+
+    // Set the user id.
     setuid(pwd->pw_uid);
 
+    // Print /etc/motd if it exists.
+    __print_message_file("/etc/motd");
+
+    // Welcome the user.
+    puts(BG_WHITE FG_BLACK);
+    printf("Welcome " FG_RED "%s" FG_BLACK "...\n", pwd->pw_name);
+    puts(BG_BLACK FG_WHITE_BRIGHT);
+
+    // Call the shell.
     char *_argv[] = { pwd->pw_shell, (char *)NULL };
     if (execv(pwd->pw_shell, _argv) == -1) {
-        printf("%s: Failed to execute the shell.\n", argv[0]);
-        printf("%s: %s.\n", argv[0], strerror(errno));
+        printf("login: Failed to execute the shell.\n");
+        printf("login: %s.\n", strerror(errno));
         return 1;
     }
     return 0;

@@ -222,17 +222,6 @@ static inline void elf_dump_symbol_table(elf_header_t *header)
 // EXEC-RELATED FUNCTIONS
 // ============================================================================
 
-static inline int elf_set_sigreturn(elf_header_t *header, task_struct *task)
-{
-    elf_symbol_t *sigreturn = elf_find_symbol(header, "sigreturn");
-    if (sigreturn == NULL) {
-        pr_err("Failed to find `sigreturn`!\n");
-        return false;
-    }
-    task->sigreturn_eip = sigreturn->value;
-    return true;
-}
-
 /// @brief Loads an ELF executable.
 /// @param task The task for which we load the ELF.
 /// @param file The ELF file.
@@ -309,11 +298,6 @@ int elf_load_file(task_struct *task, vfs_file_t *file, uint32_t *entry)
     // Check if the elf file is an executable.
     if (header->type != ET_EXEC) {
         pr_err("Elf file is not an executable.\n");
-        goto return_error_free_buffer;
-    }
-    // Set the sigreturn of the task.
-    if (!elf_set_sigreturn(header, task)) {
-        pr_err("Failed to set `sigreturn` for the executable.\n");
         goto return_error_free_buffer;
     }
     if (!elf_load_exec(header, task)) {

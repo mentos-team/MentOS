@@ -119,9 +119,8 @@ typedef struct task_struct {
     /// The current working directory.
     char cwd[PATH_MAX];
 
-    // struct signal_struct	*signal;
-    /// Instruction Pointer of the LIBC Signal Handler.
-    uint32_t sigreturn_eip;
+    /// Address of the LIBC sigreturn function.
+    uint32_t sigreturn_addr;
     /// Pointer to the process’s signal handler descriptor
     sighand_t sighand;
     /// Mask of blocked signals.

@@ -162,6 +162,7 @@ int getpwnam_r(const char *name, passwd_t *pwd, char *buf, size_t buflen, passwd
         // Return success.
         return 1;
     }
+    errno = ENOENT;
     // Close the file.
     close(fd);
     // Return fail.

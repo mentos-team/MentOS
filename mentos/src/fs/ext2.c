@@ -386,7 +386,6 @@ static int ext2_mkdir(const char *path, mode_t mode);
 static int ext2_rmdir(const char *path);
 static int ext2_stat(const char *path, stat_t *stat);
 static vfs_file_t *ext2_creat(const char *path, mode_t permission);
-
 static vfs_file_t *ext2_mount(vfs_file_t *block_device, const char *path);
 
 // ============================================================================
@@ -428,6 +427,28 @@ static const char *uuid_to_string(uint8_t uuid[16])
             uuid[0], uuid[1], uuid[2], uuid[3], uuid[4], uuid[5], uuid[6], uuid[7],
             uuid[8], uuid[9], uuid[10], uuid[11], uuid[12], uuid[13], uuid[14], uuid[15]);
     return s;
+}
+
+/// @brief Turns an ext2_file_type to string.
+/// @param ext2_type the ext2_file_type to turn to string.
+/// @return the string representing the ext2_file_type.
+static const char *ext2_file_type_to_string(ext2_file_type_t ext2_type)
+{
+    if (ext2_type == ext2_file_type_regular_file)
+        return "REG";
+    if (ext2_type == ext2_file_type_directory)
+        return "DIR";
+    if (ext2_type == ext2_file_type_character_device)
+        return "CHR";
+    if (ext2_type == ext2_file_type_block_device)
+        return "BLK";
+    if (ext2_type == ext2_file_type_named_pipe)
+        return "FIFO";
+    if (ext2_type == ext2_file_type_socket)
+        return "SOCK";
+    if (ext2_type == ext2_file_type_symbolic_link)
+        return "LNK";
+    return "UNK";
 }
 
 static int ext2_file_type_to_vfs_file_type(int ext2_type)
@@ -502,63 +523,63 @@ static bool_t ext2_valid_permissions(int flags, mode_t mask, uid_t uid, gid_t gi
 /// @param sb the object to dump.
 static void ext2_dump_superblock(ext2_superblock_t *sb)
 {
-    pr_debug("inodes_count          : %d\n", sb->inodes_count);
-    pr_debug("blocks_count          : %d\n", sb->blocks_count);
-    pr_debug("r_blocks_count        : %d\n", sb->r_blocks_count);
-    pr_debug("free_blocks_count     : %d\n", sb->free_blocks_count);
-    pr_debug("free_inodes_count     : %d\n", sb->free_inodes_count);
-    pr_debug("first_data_block      : %d\n", sb->first_data_block);
-    pr_debug("log_block_size        : %d\n", sb->log_block_size);
-    pr_debug("log_frag_size         : %d\n", sb->log_frag_size);
-    pr_debug("blocks_per_group      : %d\n", sb->blocks_per_group);
-    pr_debug("frags_per_group       : %d\n", sb->frags_per_group);
-    pr_debug("inodes_per_group      : %d\n", sb->inodes_per_group);
+    pr_debug("inodes_count          : %u\n", sb->inodes_count);
+    pr_debug("blocks_count          : %u\n", sb->blocks_count);
+    pr_debug("r_blocks_count        : %u\n", sb->r_blocks_count);
+    pr_debug("free_blocks_count     : %u\n", sb->free_blocks_count);
+    pr_debug("free_inodes_count     : %u\n", sb->free_inodes_count);
+    pr_debug("first_data_block      : %u\n", sb->first_data_block);
+    pr_debug("log_block_size        : %u\n", sb->log_block_size);
+    pr_debug("log_frag_size         : %u\n", sb->log_frag_size);
+    pr_debug("blocks_per_group      : %u\n", sb->blocks_per_group);
+    pr_debug("frags_per_group       : %u\n", sb->frags_per_group);
+    pr_debug("inodes_per_group      : %u\n", sb->inodes_per_group);
     pr_debug("mtime                 : %s\n", time_to_string(sb->mtime));
     pr_debug("wtime                 : %s\n", time_to_string(sb->wtime));
     pr_debug("mnt_count             : %d\n", sb->mnt_count);
     pr_debug("max_mnt_count         : %d\n", sb->max_mnt_count);
-    pr_debug("magic                 : 0x%0x\n", sb->magic);
+    pr_debug("magic                 : 0x%0x (== 0x%0x)\n", sb->magic, EXT2_SUPERBLOCK_MAGIC);
     pr_debug("state                 : %d\n", sb->state);
     pr_debug("errors                : %d\n", sb->errors);
     pr_debug("minor_rev_level       : %d\n", sb->minor_rev_level);
     pr_debug("lastcheck             : %s\n", time_to_string(sb->lastcheck));
-    pr_debug("checkinterval         : %d\n", sb->checkinterval);
-    pr_debug("creator_os            : %d\n", sb->creator_os);
-    pr_debug("rev_level             : %d\n", sb->rev_level);
-    pr_debug("def_resuid            : %d\n", sb->def_resuid);
-    pr_debug("def_resgid            : %d\n", sb->def_resgid);
-    pr_debug("first_ino             : %d\n", sb->first_ino);
-    pr_debug("inode_size            : %d\n", sb->inode_size);
-    pr_debug("block_group_nr        : %d\n", sb->block_group_nr);
-    pr_debug("feature_compat        : %d\n", sb->feature_compat);
-    pr_debug("feature_incompat      : %d\n", sb->feature_incompat);
-    pr_debug("feature_ro_compat     : %d\n", sb->feature_ro_compat);
+    pr_debug("checkinterval         : %u\n", sb->checkinterval);
+    pr_debug("creator_os            : %u\n", sb->creator_os);
+    pr_debug("rev_level             : %u\n", sb->rev_level);
+    pr_debug("def_resuid            : %u\n", sb->def_resuid);
+    pr_debug("def_resgid            : %u\n", sb->def_resgid);
+    pr_debug("first_ino             : %u\n", sb->first_ino);
+    pr_debug("inode_size            : %u\n", sb->inode_size);
+    pr_debug("block_group_nr        : %u\n", sb->block_group_nr);
+    pr_debug("feature_compat        : %u\n", sb->feature_compat);
+    pr_debug("feature_incompat      : %u\n", sb->feature_incompat);
+    pr_debug("feature_ro_compat     : %u\n", sb->feature_ro_compat);
     pr_debug("uuid                  : %s\n", uuid_to_string(sb->uuid));
     pr_debug("volume_name           : %s\n", (char *)sb->volume_name);
     pr_debug("last_mounted          : %s\n", (char *)sb->last_mounted);
-    pr_debug("algo_bitmap           : %d\n", sb->algo_bitmap);
-    pr_debug("prealloc_blocks       : %d\n", sb->prealloc_blocks);
-    pr_debug("prealloc_dir_blocks   : %d\n", sb->prealloc_dir_blocks);
+    pr_debug("algo_bitmap           : %u\n", sb->algo_bitmap);
+    pr_debug("prealloc_blocks       : %u\n", sb->prealloc_blocks);
+    pr_debug("prealloc_dir_blocks   : %u\n", sb->prealloc_dir_blocks);
     pr_debug("journal_uuid          : %s\n", uuid_to_string(sb->journal_uuid));
-    pr_debug("journal_inum          : %d\n", sb->journal_inum);
-    pr_debug("jounral_dev           : %d\n", sb->jounral_dev);
-    pr_debug("last_orphan           : %d\n", sb->last_orphan);
+    pr_debug("journal_inum          : %u\n", sb->journal_inum);
+    pr_debug("jounral_dev           : %u\n", sb->jounral_dev);
+    pr_debug("last_orphan           : %u\n", sb->last_orphan);
     pr_debug("hash_seed             : %u %u %u %u\n", sb->hash_seed[0], sb->hash_seed[1], sb->hash_seed[2], sb->hash_seed[3]);
-    pr_debug("def_hash_version      : %d\n", sb->def_hash_version);
-    pr_debug("default_mount_options : %d\n", sb->default_mount_options);
-    pr_debug("first_meta_bg         : %d\n", sb->first_meta_block_group_id);
+    pr_debug("def_hash_version      : %u\n", sb->def_hash_version);
+    pr_debug("default_mount_options : %u\n", sb->default_mount_options);
+    pr_debug("first_meta_bg         : %u\n", sb->first_meta_block_group_id);
 }
 
 /// @brief Dumps on debugging output the group descriptor.
 /// @param gd the object to dump.
 static void ext2_dump_group_descriptor(ext2_group_descriptor_t *gd)
 {
-    pr_debug("block_bitmap          : %d\n", gd->block_bitmap);
-    pr_debug("inode_bitmap          : %d\n", gd->inode_bitmap);
-    pr_debug("inode_table           : %d\n", gd->inode_table);
-    pr_debug("free_blocks_count     : %d\n", gd->free_blocks_count);
-    pr_debug("free_inodes_count     : %d\n", gd->free_inodes_count);
-    pr_debug("used_dirs_count       : %d\n", gd->used_dirs_count);
+    pr_debug("block_bitmap          : %u\n", gd->block_bitmap);
+    pr_debug("inode_bitmap          : %u\n", gd->inode_bitmap);
+    pr_debug("inode_table           : %u\n", gd->inode_table);
+    pr_debug("free_blocks_count     : %u\n", gd->free_blocks_count);
+    pr_debug("free_inodes_count     : %u\n", gd->free_inodes_count);
+    pr_debug("used_dirs_count       : %u\n", gd->used_dirs_count);
 }
 
 /// @brief Dumps on debugging output the inode.
@@ -601,6 +622,13 @@ static void ext2_dump_inode(ext2_inode_t *inode)
              inode->generation, inode->file_acl, inode->dir_acl);
 }
 
+/// @brief Dumps on debugging output the dirent.
+/// @param dirent the object to dump.
+static void ext2_dump_dirent(ext2_dirent_t *dirent)
+{
+    pr_debug("Inode: %4u Rec. Len.: %4u Name Len.: %4u Type:%4s Name: %s\n", dirent->inode, dirent->rec_len, dirent->name_len, ext2_file_type_to_string(dirent->file_type), dirent->name);
+}
+
 /// @brief Dumps on debugging output the BGDT.
 /// @param fs the filesystem of which we print the BGDT.
 static void ext2_dump_bgdt(ext2_filesystem_t *fs)
@@ -612,21 +640,21 @@ static void ext2_dump_bgdt(ext2_filesystem_t *fs)
     for (uint32_t i = 0; i < fs->block_groups_count; ++i) {
         // Get the pointer to the current group descriptor.
         ext2_group_descriptor_t *gd = &(fs->block_groups[i]);
-        pr_debug("Block Group Descriptor [%d] @ %d:\n", i, fs->bgdt_start_block + i * fs->superblock.blocks_per_group);
-        pr_debug("    block_bitmap : %d\n", gd->block_bitmap);
-        pr_debug("    inode_bitmap : %d\n", gd->inode_bitmap);
-        pr_debug("    inode_table  : %d\n", gd->inode_table);
-        pr_debug("    Used Dirs    : %d\n", gd->used_dirs_count);
-        pr_debug("    Free Blocks  : %4d of %d\n", gd->free_blocks_count, fs->superblock.blocks_per_group);
-        pr_debug("    Free Inodes  : %4d of %d\n", gd->free_inodes_count, fs->superblock.inodes_per_group);
+        pr_debug("Block Group Descriptor [%u] @ %u:\n", i, fs->bgdt_start_block + i * fs->superblock.blocks_per_group);
+        pr_debug("    block_bitmap : %u\n", gd->block_bitmap);
+        pr_debug("    inode_bitmap : %u\n", gd->inode_bitmap);
+        pr_debug("    inode_table  : %u\n", gd->inode_table);
+        pr_debug("    Used Dirs    : %u\n", gd->used_dirs_count);
+        pr_debug("    Free Blocks  : %4u of %u\n", gd->free_blocks_count, fs->superblock.blocks_per_group);
+        pr_debug("    Free Inodes  : %4u of %u\n", gd->free_inodes_count, fs->superblock.inodes_per_group);
         // Dump the block bitmap.
         ext2_read_block(fs, gd->block_bitmap, cache);
-        pr_debug("    Block Bitmap at %d\n", gd->block_bitmap);
+        pr_debug("    Block Bitmap at %u\n", gd->block_bitmap);
         for (uint32_t j = 0; j < fs->block_size; ++j) {
             if ((j % 8) == 0)
-                pr_debug("        Block index: %4d, Bitmap: %s\n", j / 8, dec_to_binary(cache[j / 8], 8));
+                pr_debug("        Block index: %4u, Bitmap: %s\n", j / 8, dec_to_binary(cache[j / 8], 8));
             if (!ext2_check_bitmap_bit(cache, j)) {
-                pr_debug("    First free block in group is in block %d, the linear index is %d\n", j / 8, j);
+                pr_debug("    First free block in group is in block %u, the linear index is %u\n", j / 8, j);
                 break;
             }
         }
@@ -674,6 +702,7 @@ static void ext2_dump_filesystem(ext2_filesystem_t *fs)
 /// @details Remember that inode addressing starts from 1.
 static uint32_t ext2_get_group_index_from_inode(ext2_filesystem_t *fs, uint32_t inode_index)
 {
+    assert(inode_index != 0 && "Your are trying to access inode 0.");
     return (inode_index - 1) / fs->superblock.inodes_per_group;
 }
 
@@ -684,6 +713,7 @@ static uint32_t ext2_get_group_index_from_inode(ext2_filesystem_t *fs, uint32_t 
 /// @details Remember that inode addressing starts from 1.
 static uint32_t ext2_get_inode_offest_in_group(ext2_filesystem_t *fs, uint32_t inode_index)
 {
+    assert(inode_index != 0 && "Your are trying to access inode 0.");
     return (inode_index - 1) % fs->superblock.inodes_per_group;
 }
 
@@ -852,7 +882,6 @@ static int ext2_write_superblock(ext2_filesystem_t *fs)
 /// @return the amount of data we read, or negative value for an error.
 static int ext2_read_block(ext2_filesystem_t *fs, uint32_t block_index, uint8_t *buffer)
 {
-    //pr_debug("Read block %4d for EXT2 filesystem (0x%x)\n", block_index, fs);
     if (block_index == 0) {
         pr_err("You are trying to read an invalid block index (%d).\n", block_index);
         return -1;
@@ -871,7 +900,6 @@ static int ext2_read_block(ext2_filesystem_t *fs, uint32_t block_index, uint8_t 
 /// @return the amount of data we wrote, or negative value for an error.
 static int ext2_write_block(ext2_filesystem_t *fs, uint32_t block_index, uint8_t *buffer)
 {
-    //pr_debug("Write block %4d for EXT2 filesystem (0x%x)\n", block_index, fs);
     if (block_index == 0) {
         pr_err("You are trying to write on an invalid block index (%d).\n", block_index);
         return -1;
@@ -920,30 +948,33 @@ static int ext2_write_bgdt(ext2_filesystem_t *fs)
 /// @return 0 on success, -1 on failure.
 static int ext2_read_inode(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t inode_index)
 {
+    uint32_t group_index, block_index, inode_offset;
     if (inode_index == 0) {
         pr_err("You are trying to read an invalid inode index (%d).\n", inode_index);
         return -1;
     }
     // Retrieve the group index.
-    uint32_t group_index = ext2_get_group_index_from_inode(fs, inode_index);
+    group_index = ext2_get_group_index_from_inode(fs, inode_index);
     if (group_index > fs->block_groups_count) {
         pr_err("Invalid group index computed from inode index `%d`.\n", inode_index);
         return -1;
     }
     // Get the index of the inode inside the group.
-    uint32_t offset = ext2_get_inode_offest_in_group(fs, inode_index);
+    inode_offset = ext2_get_inode_offest_in_group(fs, inode_index);
     // Get the block offest.
-    uint32_t block = ext2_get_block_index_from_inode_offset(fs, offset);
+    block_index = ext2_get_block_index_from_inode_offset(fs, inode_offset);
     // Get the real inode offset inside the block.
-    offset %= fs->inodes_per_block_count;
+    inode_offset %= fs->inodes_per_block_count;
+    // Log the address to the inode.
+    pr_debug("Read inode  (inode:%4u block:%4u offset:%4u)\n", inode_index, block_index, inode_offset);
     // Allocate the cache.
     uint8_t *cache = kmem_cache_alloc(fs->ext2_buffer_cache, GFP_KERNEL);
     // Clean the cache.
     memset(cache, 0, fs->block_size);
     // Read the block containing the inode table.
-    ext2_read_block(fs, fs->block_groups[group_index].inode_table + block, cache);
+    ext2_read_block(fs, fs->block_groups[group_index].inode_table + block_index, cache);
     // Save the inode content.
-    memcpy(inode, (ext2_inode_t *)((uintptr_t)cache + (offset * fs->superblock.inode_size)), fs->superblock.inode_size);
+    memcpy(inode, (ext2_inode_t *)((uintptr_t)cache + (inode_offset * fs->superblock.inode_size)), sizeof(ext2_inode_t));
     // Free the cache.
     kmem_cache_free(cache);
     return 0;
@@ -956,32 +987,35 @@ static int ext2_read_inode(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t 
 /// @return 0 on success, -1 on failure.
 static int ext2_write_inode(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t inode_index)
 {
+    uint32_t group_index, block_index, inode_offset;
     if (inode_index == 0) {
         pr_err("You are trying to read an invalid inode index (%d).\n", inode_index);
         return -1;
     }
     // Retrieve the group index.
-    uint32_t group_index = ext2_get_group_index_from_inode(fs, inode_index);
+    group_index = ext2_get_group_index_from_inode(fs, inode_index);
     if (group_index > fs->block_groups_count) {
         pr_err("Invalid group index computed from inode index `%d`.\n", inode_index);
         return -1;
     }
     // Get the offset of the inode inside the group.
-    uint32_t offset = ext2_get_inode_offest_in_group(fs, inode_index);
+    inode_offset = ext2_get_inode_offest_in_group(fs, inode_index);
     // Get the block offest.
-    uint32_t block = ext2_get_block_index_from_inode_offset(fs, offset);
+    block_index = ext2_get_block_index_from_inode_offset(fs, inode_offset);
     // Get the real inode offset inside the block.
-    offset %= fs->inodes_per_block_count;
+    inode_offset %= fs->inodes_per_block_count;
+    // Log the address to the inode.
+    pr_debug("Write inode (inode:%4u block:%4u offset:%4u)\n", inode_index, block_index, inode_offset);
     // Allocate the cache.
     uint8_t *cache = kmem_cache_alloc(fs->ext2_buffer_cache, GFP_KERNEL);
     // Clean the cache.
     memset(cache, 0, fs->block_size);
     // Read the block containing the inode table.
-    ext2_read_block(fs, fs->block_groups[group_index].inode_table + block, cache);
+    ext2_read_block(fs, fs->block_groups[group_index].inode_table + block_index, cache);
     // Write the inode.
-    memcpy((ext2_inode_t *)((uintptr_t)cache + (offset * fs->superblock.inode_size)), inode, fs->superblock.inode_size);
+    memcpy((ext2_inode_t *)((uintptr_t)cache + (inode_offset * fs->superblock.inode_size)), inode, sizeof(ext2_inode_t));
     // Write back the block.
-    ext2_write_block(fs, fs->block_groups[group_index].inode_table + block, cache);
+    ext2_write_block(fs, fs->block_groups[group_index].inode_table + block_index, cache);
     // Free the cache.
     kmem_cache_free(cache);
     return 0;
@@ -1380,6 +1414,8 @@ static ssize_t ext2_read_inode_block(ext2_filesystem_t *fs, ext2_inode_t *inode,
     uint32_t real_index = ext2_get_real_block_index(fs, inode, block_index);
     if (real_index == 0)
         return -1;
+    // Log the address to the inode block.
+    pr_debug("Read inode block  (block:%4u real:%4u)\n", block_index, real_index);
     // Read the block.
     return ext2_read_block(fs, real_index, buffer);
 }
@@ -1401,6 +1437,8 @@ static ssize_t ext2_write_inode_block(ext2_filesystem_t *fs, ext2_inode_t *inode
     uint32_t real_index = ext2_get_real_block_index(fs, inode, block_index);
     if (real_index == 0)
         return -1;
+    // Log the address to the inode block.
+    pr_debug("Write inode block (block:%4u real:%4u inode:%4u)\n", block_index, real_index, inode_index);
     // Write the block.
     return ext2_write_block(fs, real_index, buffer);
 }
@@ -1919,7 +1957,6 @@ static int ext2_resolve_path(vfs_file_t *directory, char *path, ext2_direntry_se
         pr_err("You provided a NULL direntry.\n");
         return -1;
     }
-    pr_debug("ext2_resolve_path(directory: \"%s\", path: \"%s\")\n", directory->name, path);
     // Get the filesystem.
     ext2_filesystem_t *fs = (ext2_filesystem_t *)directory->device;
     if (fs == NULL) {
@@ -1943,8 +1980,6 @@ static int ext2_resolve_path(vfs_file_t *directory, char *path, ext2_direntry_se
         token = strtok(NULL, "/");
     }
     kfree(tmp_path);
-    pr_debug("ext2_resolve_path(directory: \"%s\", path: \"%s\") -> (ino: %d, name: \"%s\")\n",
-             directory->name, path, search->direntry->inode, search->direntry->name);
     return 0;
 }
 
@@ -1955,7 +1990,6 @@ static int ext2_resolve_path(vfs_file_t *directory, char *path, ext2_direntry_se
 /// @return 0 on success, -1 on failure.
 static int ext2_resolve_path_direntry(vfs_file_t *directory, char *path, ext2_dirent_t *direntry)
 {
-    pr_debug("ext2_resolve_path_direntry(%s, %s, %p)\n", directory->name, path, direntry);
     // Check the pointers.
     if (directory == NULL) {
         pr_err("You provided a NULL directory.\n");
@@ -1985,7 +2019,6 @@ static int ext2_resolve_path_direntry(vfs_file_t *directory, char *path, ext2_di
 /// @return a pointer to the EXT2 filesystem, NULL otherwise.
 static ext2_filesystem_t *get_ext2_filesystem(const char *absolute_path)
 {
-    pr_debug("get_ext2_filesystem(%s)\n", absolute_path);
     if (absolute_path == NULL) {
         pr_err("We received a NULL absolute path.\n");
         return NULL;
@@ -2924,7 +2957,7 @@ static vfs_file_t *ext2_mount(vfs_file_t *block_device, const char *path)
         NULL,
         NULL);
     // Compute the maximum number of inodes per block.
-    fs->inodes_per_block_count = fs->block_size / sizeof(ext2_inode_t);
+    fs->inodes_per_block_count = fs->block_size / fs->superblock.inode_size;
     // Compute the number of blocks per block. This value is mostly used for
     // inodes.
     // If you check inside the inode structure you will find the `blocks_count`
