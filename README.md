@@ -105,9 +105,10 @@ Under **Ubuntu**, you can type the following commands:
 
 ```bash
 sudo apt-get update && sudo apt-get upgrade -y
-sudo apt-get install -y build-essential git cmake qemu-system-i386 e2fsprogs
+sudo apt-get install -y build-essential git cmake qemu-system-x86 nasm e2fsprogs
 sudo apt-get install -y gdb cgdb
 ```
+Note: Older versions might have `qemu-system-i386` instead of `qemu-system-x86`.
 
 Under **MacOS** you also need to install the i386-elf cross-compiler. The
 simplest installation method is through Homebrew package manager.
