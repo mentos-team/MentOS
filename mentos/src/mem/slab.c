@@ -71,11 +71,11 @@ static int __alloc_slab_page(kmem_cache_t *cachep, gfp_t flags)
     // Build the objects structures
     for (unsigned int i = 0; i < page->slab_objcnt; i++) {
         kmem_obj *obj = KMEM_OBJ(cachep, pg_addr + cachep->size * i);
-        list_head_add(&obj->objlist, &page->slab_freelist);
+        list_head_insert_after(&obj->objlist, &page->slab_freelist);
     }
 
     // Add the page to the slab list and update the counters
-    list_head_add(&page->slabs, &cachep->slabs_free);
+    list_head_insert_after(&page->slabs, &cachep->slabs_free);
     cachep->total_num += page->slab_objcnt;
     cachep->free_num += page->slab_objcnt;
 
@@ -132,7 +132,7 @@ static void __kmem_cache_create(kmem_cache_t *cachep, const char *name, unsigned
 
     __kmem_cache_refill(cachep, start_count, flags);
 
-    list_head_add(&cachep->cache_list, &kmem_caches_list);
+    list_head_insert_after(&cachep->cache_list, &kmem_caches_list);
 }
 
 static inline void *__kmem_cache_alloc_slab(kmem_cache_t *cachep, page_t *slab_page)
@@ -161,7 +161,7 @@ static inline void __kmem_cache_free_slab(kmem_cache_t *cachep, page_t *slab_pag
     cachep->free_num -= slab_page->slab_objfree;
     cachep->total_num -= slab_page->slab_objcnt;
     // Clear objcnt, used as a flag to check if the page belongs to the slab
-    slab_page->slab_objcnt    = 0;
+    slab_page->slab_objcnt              = 0;
     slab_page->container.slab_main_page = NULL;
 
     // Reset all non-root slab pages
@@ -225,7 +225,7 @@ void kmem_cache_destroy(kmem_cache_t *cachep)
     }
 
     kmem_cache_free(cachep);
-    list_head_del(&cachep->cache_list);
+    list_head_remove(&cachep->cache_list);
 }
 
 #ifdef ENABLE_CACHE_TRACE
@@ -251,16 +251,16 @@ void *kmem_cache_alloc(kmem_cache_t *cachep, gfp_t flags)
         // Add a free slab to partial list because in any case an element will
         // be removed before the function returns
         list_head *free_slab = list_head_pop(&cachep->slabs_free);
-        list_head_add(free_slab, &cachep->slabs_partial);
+        list_head_insert_after(free_slab, &cachep->slabs_partial);
     }
 
-    page_t *slab_page = list_entry(list_head_front(&cachep->slabs_partial), page_t, slabs);
+    page_t *slab_page = list_entry(cachep->slabs_partial.next, page_t, slabs);
     void *ptr         = __kmem_cache_alloc_slab(cachep, slab_page);
 
     // If the slab is now full, add it to the full slabs list
     if (slab_page->slab_objfree == 0) {
         list_head *slab_full_elem = list_head_pop(&cachep->slabs_partial);
-        list_head_add(slab_full_elem, &cachep->slabs_full);
+        list_head_insert_after(slab_full_elem, &cachep->slabs_full);
     }
 #ifdef ENABLE_CACHE_TRACE
     pr_notice("CHACE-ALLOC 0x%p in %-20s at %s:%d\n", ptr, cachep->name, file, line);
@@ -292,23 +292,23 @@ void kmem_cache_free(void *ptr)
     kmem_obj *obj = KMEM_OBJ(cachep, ptr);
 
     // Add object to the free list
-    list_head_add(&obj->objlist, &slab_page->slab_freelist);
+    list_head_insert_after(&obj->objlist, &slab_page->slab_freelist);
     slab_page->slab_objfree++;
     cachep->free_num++;
 
     // Now page is completely free
     if (slab_page->slab_objfree == slab_page->slab_objcnt) {
         // Remove page from partial list
-        list_head_del(&slab_page->slabs);
+        list_head_remove(&slab_page->slabs);
         // Add page to free list
-        list_head_add(&slab_page->slabs, &cachep->slabs_free);
+        list_head_insert_after(&slab_page->slabs, &cachep->slabs_free);
     }
     // Now page is not full, so change its list
     else if (slab_page->slab_objfree == 1) {
         // Remove page from full list
-        list_head_del(&slab_page->slabs);
+        list_head_remove(&slab_page->slabs);
         // Add page to partial list
-        list_head_add(&slab_page->slabs, &cachep->slabs_partial);
+        list_head_insert_after(&slab_page->slabs, &cachep->slabs_partial);
     }
 }
 

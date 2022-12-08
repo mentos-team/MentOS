@@ -14,12 +14,12 @@
 
 static inline void __add_wait_queue(wait_queue_head_t *head, wait_queue_entry_t *wq)
 {
-    list_head_add_tail(&wq->task_list, &head->task_list);
+    list_head_insert_before(&wq->task_list, &head->task_list);
 }
 
 static inline void __remove_wait_queue(wait_queue_head_t *head, wait_queue_entry_t *wq)
 {
-    list_head_del(&wq->task_list);
+    list_head_remove(&wq->task_list);
 }
 
 void init_waitqueue_entry(wait_queue_entry_t *wq, struct task_struct *task)

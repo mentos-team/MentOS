@@ -2259,7 +2259,7 @@ static vfs_file_t *ext2_creat(const char *path, mode_t permission)
                 goto close_parent_return_null;
             }
             // Add the vfs_file to the list of associated files.
-            list_head_add_tail(&file->siblings, &fs->opened_files);
+            list_head_insert_before(&file->siblings, &fs->opened_files);
         }
         return file;
     }
@@ -2378,7 +2378,7 @@ static vfs_file_t *ext2_open(const char *path, int flags, mode_t mode)
             return NULL;
         }
         // Add the vfs_file to the list of associated files.
-        list_head_add_tail(&file->siblings, &fs->opened_files);
+        list_head_insert_before(&file->siblings, &fs->opened_files);
     }
     return file;
 }
@@ -2487,7 +2487,7 @@ static int ext2_close(vfs_file_t *file)
     }
     pr_debug("ext2_close(ino: %d, file: \"%s\")\n", file->ino, file->name);
     // Remove the file from the list of opened files.
-    list_head_del(&file->siblings);
+    list_head_remove(&file->siblings);
     // Free the cache.
     kmem_cache_free(file);
     return 0;
@@ -3040,7 +3040,7 @@ static vfs_file_t *ext2_mount(vfs_file_t *block_device, const char *path)
         goto free_all;
     }
     // Add the root to the list of opened files.
-    list_head_add_tail(&fs->root->siblings, &fs->opened_files);
+    list_head_insert_before(&fs->root->siblings, &fs->opened_files);
 
     // Dump the filesystem details for debugging.
     ext2_dump_filesystem(fs);

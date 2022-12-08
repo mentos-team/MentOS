@@ -253,7 +253,7 @@ static inline procfs_file_t *procfs_create_file(const char *path, unsigned flags
     // List of all the PROCFS files.
     list_head_init(&procfs_file->siblings);
     // Add the file to the list of opened files.
-    list_head_add_tail(&procfs_file->siblings, &fs.files);
+    list_head_insert_before(&procfs_file->siblings, &fs.files);
     // Time of last access.
     procfs_file->atime = sys_time(NULL);
     // Time of last data modification.
@@ -282,7 +282,7 @@ static inline int procfs_destroy_file(procfs_file_t *procfs_file)
     }
     pr_debug("procfs_destroy_file(%p) `%s`\n", procfs_file, procfs_file->name);
     // Remove the file from the list of opened files.
-    list_head_del(&procfs_file->siblings);
+    list_head_remove(&procfs_file->siblings);
     // Free the cache.
     kmem_cache_free(procfs_file);
     // Decrease the number of files.
@@ -467,7 +467,7 @@ static vfs_file_t *procfs_open(const char *path, int flags, mode_t mode)
             // Update file access.
             procfs_file->atime = sys_time(NULL);
             // Add the vfs_file to the list of associated files.
-            list_head_add_tail(&vfs_file->siblings, &procfs_file->files);
+            list_head_insert_before(&vfs_file->siblings, &procfs_file->files);
             return vfs_file;
         }
         // Check if the user did not want to open a directory, but it is.
@@ -486,7 +486,7 @@ static vfs_file_t *procfs_open(const char *path, int flags, mode_t mode)
         // Update file access.
         procfs_file->atime = sys_time(NULL);
         // Add the vfs_file to the list of associated files.
-        list_head_add_tail(&vfs_file->siblings, &procfs_file->files);
+        list_head_insert_before(&vfs_file->siblings, &procfs_file->files);
         return vfs_file;
     }
     //  When both O_CREAT and O_DIRECTORY are specified in flags and the file
@@ -508,7 +508,7 @@ static vfs_file_t *procfs_open(const char *path, int flags, mode_t mode)
             return NULL;
         }
         // Add the vfs_file to the list of associated files.
-        list_head_add_tail(&vfs_file->siblings, &procfs_file->files);
+        list_head_insert_before(&vfs_file->siblings, &procfs_file->files);
         pr_debug("Created file `%s`.\n", path);
         return vfs_file;
     }
@@ -523,7 +523,7 @@ static int procfs_close(vfs_file_t *file)
     assert(file && "Received null file.");
     //pr_debug("procfs_close(%p): VFS file : %p\n", file, file);
     // Remove the file from the list of `files` inside its corresponding `procfs_file_t`.
-    list_head_del(&file->siblings);
+    list_head_remove(&file->siblings);
     // Free the memory of the file.
     kmem_cache_free(file);
     return 0;
@@ -778,7 +778,7 @@ static vfs_file_t *procfs_mount_callback(const char *path, const char *device)
     vfs_file_t *vfs_file = procfs_create_file_struct(procfs_file);
     assert(vfs_file && "Failed to create vfs_file.");
     // Add the vfs_file to the list of associated files.
-    list_head_add_tail(&vfs_file->siblings, &procfs_file->files);
+    list_head_insert_before(&vfs_file->siblings, &procfs_file->files);
     // Initialize the proc_root.
     return vfs_file;
 }
