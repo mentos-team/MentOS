@@ -157,7 +157,7 @@ static int __send_signal(int sig, siginfo_t *info, struct task_struct *t)
         __unlock_task_sighand(t);
         return -EAGAIN;
     }
-    list_head_add_tail(&q->list, &t->pending.list);
+    list_head_insert_before(&q->list, &t->pending.list);
     if (info != SEND_SIG_NOINFO)
         memcpy(&q->info, info, sizeof(siginfo_t));
     // Set that there is a signal pending.
@@ -219,7 +219,7 @@ static inline void __collect_signal(int sig, sigpending_t *list, siginfo_t *info
     if (queue_entry) {
         pr_debug("__collect_signal(%d, %p, %p) : Remove and delete sigqueue entry : %p.\n", sig, list, info, queue_entry);
         // Remove the entry from the queue.
-        list_head_del(&queue_entry->list);
+        list_head_remove(&queue_entry->list);
         // Copy the details about the entry inside the info structure.
         __copy_siginfo(info, &queue_entry->info);
         // Free the memory for the queue entry.
@@ -346,7 +346,7 @@ static void __rm_from_queue(sigset_t *mask, sigpending_t *q)
         int sig                  = entry->info.si_signo;
 
         if (sigismember(mask, sig)) {
-            list_head_del(it);
+            list_head_remove(it);
             kfree(entry);
         }
     }

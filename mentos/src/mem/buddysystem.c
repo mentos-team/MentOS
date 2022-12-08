@@ -148,7 +148,7 @@ block_found:
     page = list_entry(/* ... */, /* ... */, /* ... */);
 
     // Remove the descriptor of its first page frame.
-    list_head_del(&/* ... */);
+    list_head_remove(&/* ... */);
 
     // Set the page as allocated, thus, remove the flag FREE_PAGE.
     __bb_clear_flag(/* ... */, /* ... */);
@@ -182,7 +182,7 @@ block_found:
         assert(/* ... */ &&!/* ... */);
 
         // Insert buddy as first element in the list of available blocks (free_list).
-        list_head_add(&/* ... */.siblings, &/* ... */);
+        list_head_insert_after(&/* ... */.siblings, &/* ... */);
 
         // Increase the number of free block of the free_area_t.
         /* ... */ += 1;
@@ -277,7 +277,7 @@ void bb_free_pages(bb_instance_t *instance, bb_page_t *page)
     /* ... */;
 
     // Insert coalesced as first element in the free list.
-    list_head_add(&/* ... */, &/* ... */);
+    list_head_insert_after(&/* ... */, &/* ... */);
 
     // Increase the number of free block of the free_area_t.
     /* ... */;
@@ -342,7 +342,7 @@ void buddy_system_init(bb_instance_t *instance,
         // Set the page as root.
         __bb_set_flag(page, ROOT_PAGE);
         // Insert the page inside the list of free pages of the area.
-        list_head_add_tail(&page->location.siblings, &area->free_list);
+        list_head_insert_before(&page->location.siblings, &area->free_list);
         // Increase the number of free block of the area.
         area->nr_free++;
         // Move to the next page.
@@ -388,7 +388,7 @@ static void __cache_extend(bb_instance_t *instance, int count)
 {
     for (int i = 0; i < count; i++) {
         bb_page_t *page = bb_alloc_pages(instance, 0);
-        list_head_add(&page->location.cache, &instance->free_pages_cache_list);
+        list_head_insert_after(&page->location.cache, &instance->free_pages_cache_list);
         instance->free_pages_cache_size++;
     }
 }
@@ -417,7 +417,7 @@ static bb_page_t *__cached_alloc(bb_instance_t *instance)
 
 static void __cached_free(bb_instance_t *instance, bb_page_t *page)
 {
-    list_head_add(&page->location.cache, &instance->free_pages_cache_list);
+    list_head_insert_after(&page->location.cache, &instance->free_pages_cache_list);
 
     if (instance->free_pages_cache_size > HIGH_WATERMARK_LEVEL) {
         // Free pages to the buddy system

@@ -112,7 +112,7 @@ ndtree_node_t *ndtree_get_root(ndtree_t *tree)
 void ndtree_add_child_to_node(ndtree_t *tree, ndtree_node_t *parent, ndtree_node_t *child)
 {
     child->parent = parent;
-    list_head_add(&child->siblings, &parent->children);
+    list_head_insert_after(&child->siblings, &parent->children);
     ++tree->size;
 }
 
@@ -172,7 +172,7 @@ static void __ndtree_tree_dealloc_rec(ndtree_t *tree, ndtree_node_t *node, ndtre
             {
                 ndtree_node_t *entry = list_entry(it, ndtree_node_t, siblings);
                 it_save              = it->prev;
-                list_head_del(it);
+                list_head_remove(it);
                 it = it_save;
                 __ndtree_tree_dealloc_rec(tree, entry, node_cb);
             }
@@ -249,7 +249,7 @@ int ndtree_tree_remove_node_with_cb(ndtree_t *tree, ndtree_node_t *node, ndtree_
 {
     if (tree && node) {
         // Remove the node from the parent list.
-        list_head_del(&node->siblings);
+        list_head_remove(&node->siblings);
         // If the node has children, we need to migrate them.
         if (!list_head_empty(&node->children)) {
             // The new parent, by default it is NULL.
@@ -269,7 +269,7 @@ int ndtree_tree_remove_node_with_cb(ndtree_t *tree, ndtree_node_t *node, ndtree_
                 child->parent        = new_parent;
             }
             // Merge the lists.
-            list_head_merge(new_list, &node->children);
+            list_head_append(new_list, &node->children);
         }
         if (node_cb)
             node_cb(tree, node);

@@ -171,7 +171,7 @@ static inline task_struct *__alloc_task(task_struct *source, task_struct *parent
     // If we have a parent, set the sibling child relation.
     if (parent) {
         // Set the new_process as child of current.
-        list_head_add_tail(&proc->sibling, &parent->children);
+        list_head_insert_before(&proc->sibling, &parent->children);
     }
     if (source)
         memcpy(&proc->thread, &source->thread, sizeof(thread_struct_t));

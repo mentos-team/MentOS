@@ -108,7 +108,7 @@ void scheduler_enqueue_task(task_struct *process)
         runqueue.curr = process;
     }
     // Add the new process at the end.
-    list_head_add_tail(&process->run_list, &runqueue.queue);
+    list_head_insert_before(&process->run_list, &runqueue.queue);
     // Increment the number of active processes.
     ++runqueue.num_active;
 }
@@ -116,7 +116,7 @@ void scheduler_enqueue_task(task_struct *process)
 void scheduler_dequeue_task(task_struct *process)
 {
     // Delete the process from the list of running processes.
-    list_head_del(&process->run_list);
+    list_head_remove(&process->run_list);
     // Decrement the number of active processes.
     --runqueue.num_active;
     if (process->se.is_periodic)
@@ -484,7 +484,7 @@ pid_t sys_waitpid(pid_t pid, int *status, int options)
         // Finalize the VFS structures.
         vfs_destroy_task(entry);
         // Remove entry from children of parent.
-        list_head_del(&entry->sibling);
+        list_head_remove(&entry->sibling);
         // Remove entry from the scheduling queue.
         scheduler_dequeue_task(entry);
         // Delete the task_struct.
@@ -535,7 +535,7 @@ void sys_exit(int exit_code)
         }
         pr_debug("}\n");
         // Plug the list of children.
-        list_head_merge(&init_proc->children, &runqueue.curr->children);
+        list_head_append(&init_proc->children, &runqueue.curr->children);
         // Print the list of children.
         pr_debug("New list of init children (%d): {\n", init_proc->pid);
         list_for_each_decl(it, &init_proc->children)

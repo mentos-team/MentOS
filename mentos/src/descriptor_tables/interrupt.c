@@ -51,7 +51,7 @@ static inline irq_struct_t *__irq_struct_alloc()
 /// @brief Destroys an irq struct.
 static inline void __irq_struct_dealloc(irq_struct_t *irq_struct)
 {
-    list_head_del(&irq_struct->siblings);
+    list_head_remove(&irq_struct->siblings);
     kmem_cache_free(irq_struct);
 }
 
@@ -81,7 +81,7 @@ int irq_install_handler(unsigned i, interrupt_handler_t handler, char *descripti
     irq_struct->description = description;
     irq_struct->handler     = handler;
     // Add the handler to the list of his siblings.
-    list_head_add_tail(&irq_struct->siblings, &shared_interrupt_handlers[i]);
+    list_head_insert_before(&irq_struct->siblings, &shared_interrupt_handlers[i]);
     return 0;
 }
 
@@ -102,7 +102,7 @@ int irq_uninstall_handler(unsigned i, interrupt_handler_t handler)
         irq_struct_t *irq_struct = list_entry(it, irq_struct_t, siblings);
         assert(irq_struct && "Something went wrong.");
         if (irq_struct->handler == handler) {
-            list_head_del(&irq_struct->siblings);
+            list_head_remove(&irq_struct->siblings);
         }
         __irq_struct_dealloc(irq_struct);
     }

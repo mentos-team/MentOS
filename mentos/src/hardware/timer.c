@@ -314,7 +314,7 @@ static void __add_timer_tvec_base(tvec_base_t *base, struct timer_list *timer)
     }
 
     pr_debug("Adding timer at time_index: %d in tv%d\n", index, tv_index);
-    list_head_add_tail(&timer->entry, vec);
+    list_head_insert_before(&timer->entry, vec);
 
 #ifdef ENABLE_REAL_TIMER_SYSTEM_DUMP
     __dump_all_tvec_slots(base);
@@ -347,7 +347,7 @@ static void __rem_timer_tvec_base(tvec_base_t *base, struct timer_list *timer)
     }
 
     pr_debug("Removing timer at time_index: %d in tv%d\n", index, tv_index);
-    list_head_del(&timer->entry);
+    list_head_remove(&timer->entry);
 
 #ifdef ENABLE_REAL_TIMER_SYSTEM_DUMP
     __dump_all_tvec_slots(base);
@@ -364,7 +364,7 @@ static int cascate(tvec_base_t *base, timer_vec *tv, int time_index, int tv_inde
         struct list_head *it, *tmp;
         list_for_each_safe (it, tmp, tv->vec + time_index) {
             struct timer_list *timer = list_entry(it, struct timer_list, entry);
-            list_head_del(it);
+            list_head_remove(it);
 
             __add_timer_tvec_base(base, timer);
         }
@@ -425,7 +425,7 @@ void run_timer_softirq()
                 spinlock_lock(&base->lock);
 
                 // Removes timer from list
-                list_head_del(it);
+                list_head_remove(it);
                 kfree(timer);
             }
         }
@@ -453,7 +453,7 @@ void run_timer_softirq()
 
             // Removes timer from list
             pr_debug("Removing dynamic timer...\n");
-            list_head_del(it);
+            list_head_remove(it);
             kfree(timer);
         }
     }
@@ -479,7 +479,7 @@ void add_timer(struct timer_list *timer)
 #ifdef ENABLE_REAL_TIMER_SYSTEM
     __add_timer_tvec_base(base, timer);
 #else
-    list_head_add_tail(&timer->entry, &base->list);
+    list_head_insert_before(&timer->entry, &base->list);
 #endif
 }
 
@@ -491,7 +491,7 @@ void del_timer(struct timer_list *timer)
 #ifdef ENABLE_REAL_TIMER_SYSTEM
     __rem_timer_tvec_base(base, timer);
 #else
-    list_head_del(&timer->entry);
+    list_head_remove(&timer->entry);
 #endif
 }
 

@@ -416,7 +416,7 @@ int vfs_mount(const char *path, vfs_file_t *new_fs_root)
         // Set the pointer.
         sb->root = new_fs_root;
         // Add to the list.
-        list_head_add(&sb->mounts, &vfs_super_blocks);
+        list_head_insert_after(&sb->mounts, &vfs_super_blocks);
     }
     spinlock_unlock(&vfs_spinlock);
     pr_debug("Correctly mounted '%s' on '%s'...\n", new_fs_root->name, path);

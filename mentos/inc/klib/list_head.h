@@ -19,8 +19,7 @@ typedef struct list_head {
 /// @param ptr    The &list_head pointer.
 /// @param type   The type of the struct this is embedded in.
 /// @param member The name of the list_head within the struct.
-#define list_entry(ptr, type, member) \
-    container_of(ptr, type, member)
+#define list_entry(ptr, type, member) container_of(ptr, type, member)
 
 /// @brief Iterates over a list.
 /// @param pos    The &list_head to use as a loop cursor.
@@ -49,124 +48,115 @@ typedef struct list_head {
     for (list_head * (pos) = (head)->next; (pos) != (head); (pos) = (pos)->next)
 
 /// @brief Initializes the list_head.
-/// @param head The head for your list.
-#define list_head_init(head) (head)->next = (head)->prev = (head)
-
-/// @brief Initializes the list_head.
-/// @param head The head for your list.
-#define list_head_size(head)                                \
-    ({                                                      \
-        unsigned __list_head_size = 0;                      \
-        list_for_each_decl(it, head) __list_head_size += 1; \
-        __list_head_size;                                   \
-    })
-
-/// @brief Insert element l2 after l1.
-static inline void list_head_insert_after(list_head *l1, list_head *l2)
+/// @param head The head of your list.
+static inline void list_head_init(list_head *head)
 {
-    // [La]->l1  La<-[l1]->Lb    <-[l2]->    l1<-[Lb]
-
-    list_head *l1_next = l1->next;
-    // [La]->l1  La<-[l1]->l2    <-[l2]->    l1<-[Lb]
-    l1->next = l2;
-    // [La]->l1  La<-[l1]->l2  l1<-[l2]->    l1<-[Lb]
-    l2->prev = l1;
-    // [La]->l1  La<-[l1]->l2  l1<-[l2]->Lb  l1<-[Lb]
-    l2->next = l1_next;
-    // [La]->l1  La<-[l1]->l2  l1<-[l2]->Lb  l2<-[Lb]
-    l1_next->prev = l2;
-}
-
-/// @brief Insert element l2 before l1.
-static inline void list_head_insert_before(list_head *l1, list_head *l2)
-{
-    // [La]->l1      [l2]      La<-[l1]->Lb  l1<-[Lb]
-
-    list_head *l1_prev = l1->prev;
-    // [La]->l2      [l2]      La<-[l1]->Lb  l1<-[Lb]
-    l1_prev->next = l2;
-    // [La]->l2  La<-[l2]      La<-[l1]->Lb  l1<-[Lb]
-    l2->prev = l1_prev;
-    // [La]->l2  La<-[l2]->l1  La<-[l1]->Lb  l1<-[Lb]
-    l2->next = l1;
-    // [La]->l2  La<-[l2]->l1  l2<-[l1]->Lb  l1<-[Lb]
-    l1->prev = l2;
-}
-
-/// @brief Remove l from the list.
-/// @param l The element to remove.
-static inline void list_head_del(list_head *l)
-{
-    // [La]->l   La<-[l]->Lb  l<-[Lb]
-
-    // [La]->Lb  La<-[l]->Lb  l<-[Lb]
-    l->prev->next = l->next;
-    // [La]->Lb  La<-[l]->Lb La<-[Lb]
-    l->next->prev = l->prev;
-    // [La]->Lb   l<-[l]->l  La<-[Lb]
-    l->next = l->prev = l;
+    head->next = head->prev = head;
 }
 
 /// @brief Tests whether the given list is empty.
 /// @param head The list to check.
 /// @return 1 if empty, 0 otherwise.
-static inline int list_head_empty(list_head const *head)
+static inline int list_head_empty(const list_head *head)
 {
     return head->next == head;
 }
 
-/// Insert a new entry between two known consecutive entries.
-static inline void __list_add(list_head *new, list_head *prev, list_head *next)
+/// @brief Initializes the list_head.
+/// @param head The head for your list.
+static inline unsigned list_head_size(const list_head *head)
 {
-    // [prev]->        <-[new]->        <-[next]
-
-    // [prev]->        <-[new]->     new<-[next]
-    next->prev = new;
-    // [prev]->        <-[new]->next new<-[next]
-    new->next = next;
-    // [prev]->    prev<-[new]->next new<-[next]
-    new->prev = prev;
-    // [prev]->new prev<-[new]->next new<-[next]
-    prev->next = new;
+    unsigned size = 0;
+    if (!list_head_empty(head))
+        list_for_each_decl(it, head) size += 1;
+    return size;
 }
 
-/// @brief Insert element l2 before l1.
-static inline void list_head_add(list_head *new, list_head *head)
+/// @brief Insert the new entry after the given location.
+/// @param new_entry the new element we want to insert.
+/// @param location the element after which we insert.
+static inline void list_head_insert_after(list_head *new_entry, list_head *location)
 {
-    __list_add(new, head, head->next);
+    // We store the old `next` element.
+    list_head *old_next = location->next;
+    // We insert our element.
+    location->next = new_entry;
+    // We update the `previous` link of our new entry.
+    new_entry->prev = location;
+    // We update the `next` link of our new entry.
+    new_entry->next = old_next;
+    // We link the previously `next` element to our new entry.
+    old_next->prev = new_entry;
 }
 
-/// @brief Insert element l2 before l1.
-static inline void list_head_add_tail(list_head *new, list_head *head)
+/// @brief Insert the new entry before the given location.
+/// @param new_entry the new element we want to insert.
+/// @param location the element after which we insert.
+static inline void list_head_insert_before(list_head *new_entry, list_head *location)
 {
-    __list_add(new, head->prev, head);
+    // We store the old `previous` element.
+    list_head *old_prev = location->prev;
+    // We link the old `previous` element to our new entry.
+    old_prev->next = new_entry;
+    // We update the `previous` link of our new entry.
+    new_entry->prev = old_prev;
+    // We update the `next` link of our new entry.
+    new_entry->next = location;
+    // Finally, we close the link with the old insertion location element.
+    location->prev = new_entry;
 }
 
-/// @brief Removes an element from the list pointer, it's used when we have a possibly
-/// null list pointer and want to pop an element from it
-static inline list_head *list_head_pop(list_head *listp)
+/// @brief Removes the given entry from the list it is contained in.
+/// @param entry the entry we want to remove.
+static inline void list_head_remove(list_head *entry)
 {
-    if (list_head_empty(listp))
-        return NULL;
-
-    list_head *value = listp->next;
-    list_head_del(listp->next);
-
-    return value;
+    // Check if the element is actually in a list.
+    if (!list_head_empty(entry)) {
+        // We link the `previous` element to the `next` one.
+        entry->prev->next = entry->next;
+        // We link the `next` element to the `previous` one.
+        entry->next->prev = entry->prev;
+        // We initialize the entry again.
+        list_head_init(entry);
+    }
 }
 
-static inline list_head *list_head_front(list_head *listp)
+/// @brief Removes an element from the list, it's used when we have a possibly
+/// null list pointer and want to pop an element from it.
+/// @param head the head of the list.
+/// @return a list_head pointing to the element we removed, NULL on failure.
+static inline list_head *list_head_pop(list_head *head)
 {
-    return listp->next;
+    // Check if the list is not empty.
+    if (!list_head_empty(head)) {
+        // Store the pointer.
+        list_head *value = head->next;
+        // Remove the element from the list.
+        list_head_remove(head->next);
+        // Return the pointer to the element.
+        return value;
+    }
+    return NULL;
 }
 
-/// Merges the elements of l2, into the elements of l1.
-static inline void list_head_merge(list_head *l1, list_head *l2)
+/// @brief Append the `secondary` list at the end of the `main` list.
+/// @param main the main list where we append the secondary list.
+/// @param secondary the secondary list, which gets appended, and re-initialized as empty.
+static inline void list_head_append(list_head *main, list_head *secondary)
 {
-    l1->prev->next = l2->next;
-    l2->next->prev = l1->prev;
-    l2->prev->next = l1;
-    l1->prev       = l2->prev;
-    // Initialize the second list.
-    list_head_init(l2);
+    // Check that both lists are actually filled with entries.
+    if (!list_head_empty(main) && !list_head_empty(secondary)) {
+        // Connect the last element of the main list to the first one of the secondary list.
+        main->prev->next = secondary->next;
+        // Connect the first element of the secondary list to the last one of the main list.
+        secondary->next->prev = main->prev;
+
+        // Connect the last element of the secondary list to our main.
+        secondary->prev->next = main;
+        // Connect our main to the last element of the secondary list.
+        main->prev = secondary->prev;
+
+        // Re-initialize the secondary list.
+        list_head_init(secondary);
+    }
 }

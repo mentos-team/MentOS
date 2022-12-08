@@ -205,6 +205,8 @@ int main(int argc, char **argv)
     // Set the user id.
     setuid(pwd->pw_uid);
 
+    printf("\n");
+
     // Print /etc/motd if it exists.
     __print_message_file("/etc/motd");
 

@@ -104,7 +104,7 @@ uint32_t create_vm_area(mm_struct_t *mm,
     new_segment->vm_mm    = mm;
 
     // Update memory descriptor list of vm_area_struct.
-    list_head_add(&new_segment->vm_list, &mm->mmap_list);
+    list_head_insert_after(&new_segment->vm_list, &mm->mmap_list);
     mm->mmap_cache = new_segment;
 
     // Update memory descriptor info.
@@ -152,7 +152,7 @@ uint32_t clone_vm_area(mm_struct_t *mm, vm_area_struct_t *area, int cow, uint32_
     }
 
     // Update memory descriptor list of vm_area_struct.
-    list_head_add(&new_segment->vm_list, &mm->mmap_list);
+    list_head_insert_after(&new_segment->vm_list, &mm->mmap_list);
     mm->mmap_cache = new_segment;
 
     // Update memory descriptor info.
@@ -607,7 +607,7 @@ void destroy_process_image(mm_struct_t *mm)
 
         // Delete segment from the mmap
         it = segment->vm_list.next;
-        list_head_del(&segment->vm_list);
+        list_head_remove(&segment->vm_list);
         --mm->map_count;
 
         kmem_cache_free(segment);
