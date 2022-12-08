@@ -264,15 +264,16 @@ cmake ..
 make
 ```
 
-Then, you need to generate a file called `.gdbinit` placed inside the `build` directory, which will tell **gdb** which *object* file he needs to read in order to allow proper debugging.
+Then, you need to generate a file called `.gdbinit` placed inside the `build` directory, which will tell **gdb** which *object* file he needs to read in order to allow proper debugging. To generate the file, just execute:
 ```bash
-make gdb_file
+make gdbinit
 ```
 
 Finally, you run qemu in debugging mode with:
 ```bash
 make qemu-gdb
 ```
+
 If you did everything correctly, you should see an empty QEMU window. Basically, QEMU is waiting for you to connect *remotely* with gdb. Anyway, running `make qemu-gdb` will make your current shell busy, you cannot call `gdb` in it. You need to open a new shell inside the `build` folder and do a:
 ```bash
 cgdb -q -iex 'add-auto-load-safe-path .'

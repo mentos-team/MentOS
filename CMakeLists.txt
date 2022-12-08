@@ -155,7 +155,7 @@ add_custom_target(
 # First, we need to generate a GDB file containing all the symbols of all our
 # executables.
 add_custom_target(
-    .gdbinit
+    gdbinit
     BYPRODUCTS ${CMAKE_BINARY_DIR}/.gdbinit
     COMMAND bash ${CMAKE_SOURCE_DIR}/scripts/get_text_address.sh ${CMAKE_BINARY_DIR}/mentos/kernel.bin > ${CMAKE_BINARY_DIR}/.gdbinit
     COMMAND bash ${CMAKE_SOURCE_DIR}/scripts/get_text_address.sh ${CMAKE_BINARY_DIR}/mentos/kernel-bootloader.bin >> ${CMAKE_BINARY_DIR}/.gdbinit
