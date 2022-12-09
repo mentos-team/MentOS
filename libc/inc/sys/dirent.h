@@ -21,22 +21,23 @@ enum {
     DT_WHT     = 14
 };
 
+/// @brief Characters describing the direactory entry.
 static const char dt_char_array[] = {
     '?', // DT_UNKNOWN = 0,
-    'p', //DT_FIFO = 1,
-    'c', //DT_CHR  = 2,
+    'p', // DT_FIFO = 1,
+    'c', // DT_CHR  = 2,
     '*',
-    'd', //DT_DIR  = 4,
+    'd', // DT_DIR  = 4,
     '*',
-    'b', //DT_BLK  = 6,
+    'b', // DT_BLK  = 6,
     '*',
-    '-', //DT_REG  = 8,
+    '-', // DT_REG  = 8,
     '*',
-    'l', //DT_LNK  = 10,
+    'l', // DT_LNK  = 10,
     '*',
-    's', //DT_SOCK = 12,
+    's', // DT_SOCK = 12,
     '*',
-    '?', //DT_WHT  = 14
+    '?', // DT_WHT  = 14
 };
 
 /// Directory entry.

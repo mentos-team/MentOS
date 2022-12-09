@@ -22,6 +22,8 @@
 #define bitmask_check(V, M)        ((V) & (M))   ///< Checks if the bits identified by the mask are all 1.
 
 /// @brief Finds the first bit at zero, starting from the less significative bit.
+/// @param value the value we need to analyze.
+/// @return the position of the first zero bit.
 static inline int find_first_zero(unsigned long value)
 {
     for (int i = 0; i < 32; ++i)
@@ -31,6 +33,8 @@ static inline int find_first_zero(unsigned long value)
 }
 
 /// @brief Finds the first bit not zero, starting from the less significative bit.
+/// @param value the value we need to analyze.
+/// @return the position of the first non-zero bit.
 static inline int find_first_non_zero(unsigned long value)
 {
     for (int i = 0; i < 32; ++i)

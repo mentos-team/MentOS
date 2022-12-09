@@ -12,6 +12,9 @@
 /// malloc(), calloc() or realloc().
 #define MALLOC_MAGIC_NUMBER 0x600DC0DE
 
+/// @brief Checks if the pointer is a valid malloc entry.
+/// @param ptr the pointer we are checking.
+/// @return 1 of success, 0 on failure.
 static inline int __malloc_is_valid_ptr(void *ptr)
 {
     return (ptr && (((size_t *)ptr)[-1] == MALLOC_MAGIC_NUMBER));

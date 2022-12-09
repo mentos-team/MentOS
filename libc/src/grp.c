@@ -14,6 +14,10 @@
 
 static int __fd = -1;
 
+/// @brief It parses the line (as string) and saves its content inside the
+/// group_t structure.
+/// @param grp the struct where we store the information.
+/// @param buf the buffer from which we extract the information.
 static inline void __parse_line(group_t *grp, char *buf)
 {
     assert(grp && "Received null grp!");

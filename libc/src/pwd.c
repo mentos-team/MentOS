@@ -81,6 +81,13 @@ ssize_t __readline(int fd, char *buffer, size_t buflen)
     return newline_len;
 }
 
+/// @brief Searches for the given entry inside the buffer.
+/// @param fd the file descriptor of the file.
+/// @param buffer the support buffer we use to read the file.
+/// @param buflen the length of the support buffer.
+/// @param name the username we are looking for.
+/// @param uid the user-id of the user we are looking for.
+/// @return the buffer itself if we have found the entry, NULL otherwise.
 static inline char *__search_entry(int fd, char *buffer, int buflen, const char *name, uid_t uid)
 {
     while (__readline(fd, buffer, buflen)) {

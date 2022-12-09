@@ -13,6 +13,10 @@ char **environ;
 static char **__environ      = NULL;
 static size_t __environ_size = 0;
 
+/// @brief Finds the entry in the environ.
+/// @param name the name of the entry we are looking for.
+/// @param name_len the length of the name we received.
+/// @return the index of the entry, or -1 if we did not find it.
 static inline int __find_entry(const char *name, const size_t name_len)
 {
     if (environ) {
@@ -24,6 +28,7 @@ static inline int __find_entry(const char *name, const size_t name_len)
     return -1;
 }
 
+/// @brief Makes a clone of the current environ.
 static void __clone_environ()
 {
     if (environ) {

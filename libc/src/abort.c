@@ -8,8 +8,8 @@
 #include "signal.h"
 #include "stdio.h"
 
-// Since there could be signal handlers listening for the abort, we
-//  need to keep track at which stage of the abort we are.
+/// @brief Since there could be signal handlers listening for the abort, we need
+/// to keep track at which stage of the abort we are.
 static int stage = 0;
 
 void abort(void)
