@@ -202,27 +202,40 @@ This example sets the `__DEBUG_LEVEL__`, so that all the messages from `INFO` an
 
 ## 7. Change the scheduling algorithm
 
-MentOS provides three different scheduling algorithms:
+MentOS supports scheduling algorithms for aperiodic:
 
- - Round-Robin
- - Priority
- - Completely Fair Scheduling
+ - Round-Robin (RR)
+ - Highest Priority
+ - Completely Fair Scheduling (CFS)
+ - Aperiodic Earliest Deadline First (AEDF)
 
-If you want to change the scheduling algorithm:
+It also supports periodic algorithms:
+
+ - Earliest Deadline First (EDF)
+ - Rate Monotonic (RM)
+
+If you want to change the scheduling algorithm, to Round-Robin (RR) for instance:
 
 ```bash
-
 cd build
-
-# Round Robin scheduling algorithm
 cmake -DSCHEDULER_TYPE=SCHEDULER_RR ..
-# Priority scheduling algorithm
-cmake -DSCHEDULER_TYPE=SCHEDULER_PRIORITY ..
-# Completely Fair Scheduling algorithm
-cmake -DSCHEDULER_TYPE=SCHEDULER_CFS ..
-
 make
 make qemu
+```
+
+or you can activate one of the others:
+
+```bash
+# Highest Priority
+cmake -DSCHEDULER_TYPE=SCHEDULER_PRIORITY ..
+# Completely Fair Scheduling (CFS)
+cmake -DSCHEDULER_TYPE=SCHEDULER_CFS      ..
+# Earliest Deadline First (EDF)
+cmake -DSCHEDULER_TYPE=SCHEDULER_EDF      ..
+# Rate Monotonic (RM)
+cmake -DSCHEDULER_TYPE=SCHEDULER_RM       ..
+# Aperiodic Earliest Deadline First (AEDF)
+cmake -DSCHEDULER_TYPE=SCHEDULER_AEDF     ..
 ```
 
 Otherwise you can use `ccmake`:
@@ -244,8 +257,7 @@ ENABLE_BUDDY_SYSTEM              OFF
 SCHEDULER_TYPE                   SCHEDULER_RR
 ```
 
-Select SCHEDULER_TYPE, and type Enter to scroll the three available algorithms
-(SCHEDULER_RR, SCHEDULER_PRIORITY, SCHEDULER_CFS). Afterwards,
+Select SCHEDULER_TYPE, and type Enter to scroll the three available algorithms (SCHEDULER_RR, SCHEDULER_PRIORITY, SCHEDULER_CFS, SCHEDULER_EDF, SCHEDULER_RM, SCHEDULER_AEDF). Afterwards, you need to
 
 ```bash
 <press c>

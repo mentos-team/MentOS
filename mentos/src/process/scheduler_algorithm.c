@@ -75,7 +75,37 @@ static inline task_struct *__scheduler_rr(runqueue_t *runqueue, bool_t skip_peri
 /// @return the next task on success, NULL on failure.
 static inline task_struct *__scheduler_priority(runqueue_t *runqueue, bool_t skip_periodic)
 {
+#ifdef SCHEDULER_PRIORITY
+    // Get the first element of the list.
+    task_struct *next = list_entry(runqueue->curr, task_struct, run_list);
+
+    // Get its static priority.
+    time_t min = /*...*/;
+
+    // Search for the task with the smallest static priority.
+    list_for_each_decl(it, &runqueue->curr->run_list)
+    {
+        // Check if we reached the head of list_head, and skip it.
+        if (it == &runqueue->queue)
+            continue;
+        // Get the current entry.
+        task_struct *entry = list_entry(it, task_struct, run_list);
+        // We consider only runnable processes
+        if (entry->state != TASK_RUNNING)
+            continue;
+        // If entry is a periodic task, and we were asked to skip periodic tasks, skip it.
+        if (__is_periodic_task(entry) && skip_periodic)
+            continue;
+        // Check if the entry has a lower priority.
+        if (/*...*/) {
+            // Chose the `entry` as the `next` task.
+            /*...*/
+        }
+    }
+    return next;
+#else
     return __scheduler_rr(runqueue, skip_periodic);
+#endif
 }
 
 /// @brief It aims at giving a fair share of CPU time to processes, and achieves
@@ -89,7 +119,35 @@ static inline task_struct *__scheduler_priority(runqueue_t *runqueue, bool_t ski
 /// @return the next task on success, NULL on failure.
 static inline task_struct *__scheduler_cfs(runqueue_t *runqueue, bool_t skip_periodic)
 {
+#ifdef SCHEDULER_CFS
+    // Get the first element of the list.
+    task_struct *next = list_entry(runqueue->curr, task_struct, run_list);
+
+    // Get its virtual runtime.
+    time_t min = /* ... */;
+
+    // Search for the task with the smallest vruntime value.
+    list_for_each_decl(it, &runqueue->curr->run_list)
+    {
+        // Check if we reached the head of list_head, and skip it.
+        if (it == &runqueue->queue)
+            continue;
+        // Get the current entry.
+        task_struct *entry = list_entry(it, task_struct, run_list);
+        // We consider only runnable processes
+        if (entry->state != TASK_RUNNING)
+            continue;
+        // If entry is a periodic task, and we were asked to skip periodic tasks, skip it.
+        if (__is_periodic_task(entry) && skip_periodic)
+            continue;
+
+        // Check if the element in the list has a smaller vruntime value.
+        /* ... */
+    }
+    return next;
+#else
     return __scheduler_rr(runqueue, skip_periodic);
+#endif
 }
 
 /// @brief Executes the task with the earliest absolute deadline among all the
@@ -157,6 +215,8 @@ task_struct *scheduler_pick_next_task(runqueue_t *runqueue)
 
 static void __update_task_statistics(task_struct *task)
 {
+    // See `prio.h` for more support functions.
+#if defined(SCHEDULER_CFS) || defined(SCHEDULER_EDF) || defined(SCHEDULER_RM) || defined(SCHEDULER_AEDF)
     assert(task && "Current task is not valid.");
 
     // While periodic task is under analysis is executed with aperiodic
@@ -165,6 +225,8 @@ static void __update_task_statistics(task_struct *task)
     // if is a more pessimistic evaluation.
     // Update the delta exec.
     task->se.exec_runtime = timer_get_ticks() - task->se.exec_start;
+
+    // Perform timer-related checks.
     update_process_profiling_timer(task);
 
     // Set the sum_exec_runtime.
@@ -173,15 +235,16 @@ static void __update_task_statistics(task_struct *task)
     // If the task is not a periodic task we have to update the virtual runtime.
     if (!task->se.is_periodic) {
         // Get the weight of the current task.
-        time_t weight = GET_WEIGHT(task->se.prio);
+        time_t weight = /* ... */;
         // If the weight is different from the default load, compute it.
         if (weight != NICE_0_LOAD) {
             // Get the multiplicative factor for its delta_exec.
-            double factor = ((double)NICE_0_LOAD) / ((double)weight);
+            double factor = /* ... */;
             // Weight the delta_exec with the multiplicative factor.
-            task->se.exec_runtime = (int)(((double)task->se.exec_runtime) * factor);
+            task->se.exec_runtime = /* ... */;
         }
         // Update vruntime of the current task.
-        task->se.vruntime += task->se.exec_runtime;
+        task->se.vruntime += /* ... */;
     }
+#endif
 }
