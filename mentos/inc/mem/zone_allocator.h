@@ -23,29 +23,30 @@
 /// @brief Page descriptor. Use as a bitmap to understand the order of the block
 /// and if it is free or allocated.
 typedef struct page_t {
-    /// Array of flags encoding also the zone number to which the page frame
-    /// belongs.
+    /// @brief Array of flags encoding also the zone number to which the page
+    /// frame belongs.
     unsigned long flags;
-    /// Page frame’s reference counter. 0 free, 1 used, 2+ copy on write
+    /// @brief Page frame’s reference counter. 0 free, 1 used, 2+ copy on write
     atomic_t count;
-    /// Buddy system page definition
+    /// @brief Buddy system page definition
     bb_page_t bbpage;
-    /// Contains pointers to the slabs doubly linked list of pages.
+    /// @brief Contains pointers to the slabs doubly linked list of pages.
     list_head slabs;
 
-    // Slab allocator variables / Contains the total number of objects in this
-    //page, 0 if not managed by the slub
+    /// @brief Slab allocator variables / Contains the total number of objects
+    /// in this page, 0 if not managed by the slub.
     unsigned int slab_objcnt;
-    ///  Tracks the number of free objects in the current page
+    /// @brief Tracks the number of free objects in the current page
     unsigned int slab_objfree;
-    /// Holds the first free object (if slab_objfree is > 0)
+    /// @brief Holds the first free object (if slab_objfree is > 0)
     list_head slab_freelist;
     /// @brief This union can either contain the pointer to the slab main page
     /// that handles this page, or the cache that contains it.
     union {
-        /// Holds the slab page used to handle this memory region (root page)
+        /// @brief Holds the slab page used to handle this memory region (root
+        /// page).
         struct page_t *slab_main_page;
-        /// Holds the slab cache pointer on the main page
+        /// @brief Holds the slab cache pointer on the main page.
         kmem_cache_t *slab_cache;
     } container;
 } page_t;
