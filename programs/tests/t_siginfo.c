@@ -47,4 +47,5 @@ int main(int argc, char *argv[])
         d /= e;
         e -= 1;
     }
+    printf("d: %d, e: %d\n", d, e);
 }

@@ -620,6 +620,7 @@ static void ext2_dump_inode(ext2_inode_t *inode)
     pr_debug("Symlink : %s\n", inode->data.symlink);
     pr_debug("Generation : %u file_acl : %u dir_acl : %u\n",
              inode->generation, inode->file_acl, inode->dir_acl);
+    (void)timeinfo;
 }
 
 /// @brief Dumps on debugging output the dirent.

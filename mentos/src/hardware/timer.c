@@ -327,6 +327,7 @@ static void __rem_timer_tvec_base(tvec_base_t *base, struct timer_list *timer)
     int index = 0, tv_index = 0;
     __find_tvec(base, timer, &index, &tv_index);
 
+    // TODO: Check why we do not use vec.
     struct list_head *vec;
     switch (tv_index) {
     case 1:
@@ -352,6 +353,7 @@ static void __rem_timer_tvec_base(tvec_base_t *base, struct timer_list *timer)
 #ifdef ENABLE_REAL_TIMER_SYSTEM_DUMP
     __dump_all_tvec_slots(base);
 #endif
+    (void)vec;
 }
 
 /// Move all timers from tv up one level

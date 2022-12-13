@@ -393,11 +393,10 @@ static inline ssize_t __procr_read(vfs_file_t *file, char *buffer, off_t offset,
     char support[BUFSIZ];
     memset(support, 0, BUFSIZ);
     // Call the specific function.
-    int ret = 0;
     if (strcmp(entry->name, "cmdline") == 0)
-        ret = __procr_do_cmdline(support, BUFSIZ, task);
+        __procr_do_cmdline(support, BUFSIZ, task);
     else if (strcmp(entry->name, "stat") == 0)
-        ret = __procr_do_stat(support, BUFSIZ, task);
+        __procr_do_stat(support, BUFSIZ, task);
     // Copmute the amounts of bytes we want (and can) read.
     ssize_t bytes_to_read = max(0, min(strlen(support) - offset, nbyte));
     // Perform the read.

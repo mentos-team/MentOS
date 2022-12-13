@@ -846,7 +846,6 @@ void kheap_dump()
                  (char *)it + OVERHEAD + blkmngr_get_real_size(it->size));
         total += blkmngr_get_real_size(it->size);
         total_overhead += OVERHEAD;
-
         it = it->next;
     }
     pr_debug("\nTotal usable bytes   : %d", total);
@@ -857,4 +856,5 @@ void kheap_dump()
         pr_debug("(%p)->", it);
     }
     pr_debug("\n\n");
+    (void) total, (void) total_overhead;
 }
