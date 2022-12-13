@@ -68,6 +68,8 @@ else()
     else()
         # set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -sdl)
     endif()
+    # Speicfy the linker.
+    set(CMAKE_LINKER ld)
 endif()
 
 # =============================================================================

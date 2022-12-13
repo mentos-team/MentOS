@@ -1,9 +1,6 @@
-OUTPUT_FORMAT("elf")
-OUTPUT_ARCH(i386)
+OUTPUT_FORMAT("elf32-i386")
 
 ENTRY(boot_entry)
-
-BOOTLOADER_PHYSICAL_ADDRESS = 0x00100000;
 
 MEMORY {
 	BOOTLOADER_MEM : ORIGIN = 0x00000000, LENGTH = 128M
@@ -11,7 +8,7 @@ MEMORY {
 
 SECTIONS
 {
-	. = BOOTLOADER_PHYSICAL_ADDRESS;
+	. = 0x00100000;
 	_bootloader_start = .;
 	.multiboot . : AT(ADDR(.multiboot))
 	{
