@@ -26,7 +26,7 @@ jobs:
       - name: Generate documentation
         run: |
           cmake -B build -D DOXYGEN_WARN_AS_ERROR=NO
-          cmake --build build --target doxygen_doc
+          cmake --build build --target mentos_documentation
 
   test:
     name: Build
