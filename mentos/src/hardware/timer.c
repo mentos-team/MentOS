@@ -229,6 +229,7 @@ static void __print_tvec_slots(tvec_base_t *base, int tv_index)
     }
 
     pr_debug("base->tv%d.vec:\n\t%s\n", tv_index, result);
+    (void) result;
 }
 
 /// Dump all timer vector in base
