@@ -221,7 +221,7 @@ static inline void __set_pg_table_flags(page_table_entry_t *table, uint32_t flag
 /// @param addr The faulting address.
 static void __page_fault_panic(pt_regs *f, uint32_t addr)
 {
-    asm volatile("cli");
+    __asm__ __volatile__("cli");
 
     // Gather fault info and print to screen
     pr_err("Faulting address (cr2): 0x%p\n", addr);
@@ -250,7 +250,7 @@ static void __page_fault_panic(pt_regs *f, uint32_t addr)
     //    main_mm->pgd->entries[addr/(1024*4096)].user = 1;
     //    main_directory->entries[addr/(1024*4096)]. = 1;
 
-    asm volatile("cli");
+    __asm__ __volatile__("cli");
 }
 
 static void __page_handle_cow(page_table_entry_t *entry)
@@ -327,7 +327,7 @@ void page_fault_handler(pt_regs *f)
     // When the exception occurs, the CPU control unit stores that
     // value in the cr2 control register.
     uint32_t faulting_addr;
-    asm volatile("mov %%cr2, %0"
+    __asm__ __volatile__("mov %%cr2, %0"
                  : "=r"(faulting_addr));
     // Get the physical address of the current page directory.
     uint32_t phy_dir = (uint32_t)paging_get_current_directory();

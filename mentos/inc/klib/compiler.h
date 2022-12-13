@@ -41,9 +41,8 @@
 
 #pragma once
 
-
 /// @brief Assign the value to the given variable.
-#define WRITE_ONCE(var, val) (*((volatile typeof(val) *)(&(var))) = (val))
+#define WRITE_ONCE(var, val) (*((__volatile__ __typeof__(val) *)(&(var))) = (val))
 
 /// @brief Read the value from the given variable.
-#define READ_ONCE(var) (*((volatile typeof(var) *)(&(var))))
+#define READ_ONCE(var) (*((__volatile__ __typeof__(var) *)(&(var))))

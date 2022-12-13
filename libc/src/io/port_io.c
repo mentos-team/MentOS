@@ -33,7 +33,6 @@ inline uint32_t inportl(uint16_t port)
 {
     uint32_t rv;
     __asm__ __volatile__("inl %%dx, %%eax" : "=a"(rv) : "dN"(port));
-
     return rv;
 }
 
@@ -49,7 +48,7 @@ inline void outports(uint16_t port, uint16_t data)
 
 void outportsm(uint16_t port, uint8_t *data, uint16_t size)
 {
-    asm volatile("rep outsw" : "+S"(data), "+c"(size) : "d"(port));
+    __asm__ __volatile__("rep outsw" : "+S"(data), "+c"(size) : "d"(port));
 }
 
 inline void outportl(uint16_t port, uint32_t data)

@@ -11,7 +11,7 @@
 #include <strerror.h>
 #include <sys/wait.h>
 
-#define cpu_relax() asm volatile("pause\n" \
+#define cpu_relax() __asm__ __volatile__("pause\n" \
                                  :         \
                                  :         \
                                  : "memory")

@@ -10,6 +10,6 @@ void kernel_panic(const char *msg)
 {
     pr_emerg("\nPANIC:\n%s\n\nWelcome to Kernel Debugging Land...\n\n", msg);
     pr_emerg("\n");
-    asm("cli"); // Disable interrupts
-    for (;;) asm("hlt"); // Decrease power consumption with hlt
+    __asm__ __volatile__("cli"); // Disable interrupts
+    for (;;) __asm__ __volatile__("hlt"); // Decrease power consumption with hlt
 }

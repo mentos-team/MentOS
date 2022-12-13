@@ -29,23 +29,23 @@ uint8_t saves[512] __attribute__((aligned(16)));
 /// @param cw What to set the control word to.
 static inline void __set_fpu_cw(const uint16_t cw)
 {
-    asm volatile("fldcw %0" ::"m"(cw));
+    __asm__ __volatile__("fldcw %0" ::"m"(cw));
 }
 
 /// @brief Enable the FPU and SSE.
 static inline void __enable_fpu()
 {
-    asm volatile("clts");
+    __asm__ __volatile__("clts");
     size_t t;
-    asm volatile("mov %%cr0, %0"
+    __asm__ __volatile__("mov %%cr0, %0"
                  : "=r"(t));
     t &= ~(1U << 2U);
     t |= (1U << 1U);
-    asm volatile("mov %0, %%cr0" ::"r"(t));
-    asm volatile("mov %%cr4, %0"
+    __asm__ __volatile__("mov %0, %%cr0" ::"r"(t));
+    __asm__ __volatile__("mov %%cr4, %0"
                  : "=r"(t));
     t |= 3U << 9U;
-    asm volatile("mov %0, %%cr4" ::"r"(t));
+    __asm__ __volatile__("mov %0, %%cr4" ::"r"(t));
 }
 
 /// Disable FPU and SSE so it traps to the kernel.
@@ -53,12 +53,12 @@ static inline void __disable_fpu()
 {
     size_t t;
 
-    asm volatile("mov %%cr0, %0"
+    __asm__ __volatile__("mov %%cr0, %0"
                  : "=r"(t));
 
     t |= 1U << 3U;
 
-    asm volatile("mov %0, %%cr0" ::"r"(t));
+    __asm__ __volatile__("mov %0, %%cr0" ::"r"(t));
 }
 
 /// @brief Restore the FPU for a process.
@@ -68,7 +68,7 @@ static inline void __restore_fpu(task_struct *proc)
 
     memcpy(&saves, (uint8_t *)&proc->thread.fpu_register, 512);
 
-    asm volatile("fxrstor (%0)" ::"r"(saves));
+    __asm__ __volatile__("fxrstor (%0)" ::"r"(saves));
 }
 
 /// Save the FPU for a process.
@@ -76,7 +76,7 @@ static inline void __save_fpu(task_struct *proc)
 {
     assert(proc && "Trying to save FPU of NULL process.");
 
-    asm volatile("fxsave (%0)" ::"r"(saves));
+    __asm__ __volatile__("fxsave (%0)" ::"r"(saves));
 
     memcpy((uint8_t *)&proc->thread.fpu_register, &saves, 512);
 }
@@ -84,7 +84,7 @@ static inline void __save_fpu(task_struct *proc)
 /// Initialize the FPU.
 static inline void __init_fpu()
 {
-    asm volatile("fninit");
+    __asm__ __volatile__("fninit");
 }
 
 /// Kernel trap for FPU usage when FPU is disabled.

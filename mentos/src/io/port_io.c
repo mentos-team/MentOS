@@ -57,7 +57,7 @@ inline void outports(uint16_t port, uint16_t data)
 
 void outportsm(uint16_t port, uint8_t *data, uint16_t size)
 {
-    asm volatile("rep outsw"
+    __asm__ __volatile__("rep outsw"
                  : "+S"(data), "+c"(size)
                  : "d"(port));
 }
