@@ -1,52 +1,90 @@
 name: Main
 on:
-  push:
-    branches-ignore:
-      - "releases/**"
-    paths-ignore:
-      - "**.md"
-      - ".gitignore"
-  pull_request:
-    paths-ignore:
-      - "**.md"
-      - ".gitignore"
+    push:
+        branches-ignore:
+            - "releases/**"
+        paths-ignore:
+            - "**.md"
+            - ".gitignore"
+    pull_request:
+        paths-ignore:
+            - "**.md"
+            - ".gitignore"
 jobs:
-  doxygen:
-    name: Doxygen
-    runs-on: ubuntu-latest
-    steps:
-      - name: Clone repo
-        uses: actions/checkout@v2
+    doxygen:
+        name: Doxygen
+        runs-on: ubuntu-latest
+        steps:
+            - name: Clone repo
+              uses: actions/checkout@v3
 
-      - name: Install Doxygen Ubuntu
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y doxygen nasm
+            - name: Install Doxygen Ubuntu
+              run: |
+                  sudo apt-get update
+                  sudo apt-get install -y doxygen nasm
 
-      - name: Generate documentation
-        run: |
-          cmake -B build -D DOXYGEN_WARN_AS_ERROR=NO
-          cmake --build build --target mentos_documentation
+            - name: Generate documentation
+              run: |
+                  cmake -B build -D DOXYGEN_WARN_AS_ERROR=NO
+                  cmake --build build --target mentos_documentation
 
-  test:
-    name: Build
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest]
+    test:
+        name: Build
+        strategy:
+            fail-fast: false
+            matrix:
+                include: [
+                    # You can access the following values via ${{ matrix.??? }}
+                    #
+                    #   pkgs         : apt-get package names.  It can include multiple package names which are delimited by space.
+                    #   cc           : C compiler executable.
+                    #   cxx          : C++ compiler executable for `make ctocpptest`.
+                    #   x32          : Set 'true' if compiler supports x32.  Otherwise, set 'false'.
+                    #                  Set 'fail' if it supports x32 but fails for now.  'fail' cases must be removed.
+                    #   x86          : Set 'true' if compiler supports x86 (-m32).  Otherwise, set 'false'.
+                    #                  Set 'fail' if it supports x86 but fails for now.  'fail' cases must be removed.
+                    #   cxxtest      : Set 'true' if it can be compiled as C++ code.  Otherwise, set 'false'.
+                    #   freestanding : Set 'true' if it can be compiled and execute freestanding code.  Otherwise, set 'false'.
+                    #                  Usually, it requires Linux, x86_64 and gcc/g++.
+                    #   os           : GitHub Actions YAML workflow label.  See https://github.com/actions/virtual-environments#available-environments
+                    # gcc
+                    { pkgs: 'nasm',                 cc: gcc,     cxx: g++,     os: ubuntu-latest, },
+                    { pkgs: 'gcc-12 g++-12 nasm',   cc: gcc-12,  cxx: g++-12,  os: ubuntu-22.04,  },
+                    { pkgs: 'gcc-11 g++-11 nasm',   cc: gcc-11,  cxx: g++-11,  os: ubuntu-22.04,  },
+                    { pkgs: 'gcc-10 g++-10 nasm',   cc: gcc-10,  cxx: g++-10,  os: ubuntu-22.04,  },
+                    { pkgs: 'gcc-9 g++-9 nasm',     cc: gcc-9,   cxx: g++-9,   os: ubuntu-22.04,  },
+                    { pkgs: 'gcc-8 g++-8 nasm',     cc: gcc-8,   cxx: g++-8,   os: ubuntu-20.04,  },
+                    { pkgs: 'gcc-7 g++-7 nasm',     cc: gcc-7,   cxx: g++-7,   os: ubuntu-20.04,  },
+                    # clang
+                    { pkgs: 'nasm',           cc: clang,     cxx: clang++,     os: ubuntu-latest, },
+                    { pkgs: 'clang-14  nasm', cc: clang-14,  cxx: clang++-14,  os: ubuntu-22.04,  },
+                    { pkgs: 'clang-13  nasm', cc: clang-13,  cxx: clang++-13,  os: ubuntu-22.04,  },
+                    { pkgs: 'clang-12  nasm', cc: clang-12,  cxx: clang++-12,  os: ubuntu-22.04,  },
+                    { pkgs: 'clang-11  nasm', cc: clang-11,  cxx: clang++-11,  os: ubuntu-22.04,  },
+                    { pkgs: 'clang-10  nasm', cc: clang-10,  cxx: clang++-10,  os: ubuntu-20.04,  },
+                    { pkgs: 'clang-9   nasm', cc: clang-9,   cxx: clang++-9,   os: ubuntu-20.04,  },
+                    { pkgs: 'clang-8   nasm', cc: clang-8,   cxx: clang++-8,   os: ubuntu-20.04,  },
+                    { pkgs: 'clang-7   nasm', cc: clang-7,   cxx: clang++-7,   os: ubuntu-20.04,  },
+                ]
 
-    runs-on: ${{ matrix.os }}
-    steps:
-      - name: Clone repo
-        uses: actions/checkout@v2
+        runs-on: ${{ matrix.os }}
 
-      - name: Install NASM Ubuntu
-        if: matrix.os == 'ubuntu-latest'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y nasm
+        # Set environment variables
+        env:
+            # We globally set CC and CXX to improve compatibility with .travis.yml
+            CC: ${{ matrix.cc }}
+            CXX: ${{ matrix.cxx }}
 
-      - name: Build
-        run: |
-          cmake -B build
-          cmake --build build --parallel 2
+        steps:
+            - name: Clone repo
+              uses: actions/checkout@v3
+
+            - name: Install dependencies
+              run: |
+                  sudo apt-get update
+                  sudo apt-get install -y ${{ matrix.pkgs }}
+
+            - name: Build
+              run: |
+                  cmake -B build
+                  cmake --build build --parallel 2
