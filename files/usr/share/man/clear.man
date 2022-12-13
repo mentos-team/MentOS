@@ -1,0 +1,5 @@
+SYNOPSIS
+    clear
+
+DESCRIPTION
+    Clears the screen.

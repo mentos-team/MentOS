@@ -276,7 +276,7 @@ cmake ..
 make
 ```
 
-Then, you need to generate a file called `.gdbinit` placed inside the `build` directory, which will tell **gdb** which *object* file he needs to read in order to allow proper debugging. To generate the file, just execute:
+Then, you need to generate a file called `.gdbinit` placed inside the `build` directory, which will tell **gdb** which *object* file he needs to read in order to allow proper debugging. Basically, it provides for each binary file, the location of their `.text` section. To generate the file, just execute:
 ```bash
 make gdbinit
 ```
@@ -291,19 +291,19 @@ If you did everything correctly, you should see an empty QEMU window. Basically,
 cgdb -q -iex 'add-auto-load-safe-path .'
 ```
 
-Now you will have:
-1. the QEMU window waiting for you,
-2. the shell where you ran `make qemu-gdb` also waiting for you,
-3. the debugger that loaded a series of symbol files and the location of their `.text` section.
+Now you should have in front of you:
+ 1. the QEMU window waiting for you;
+ 2. the **first** shell where you ran `make qemu-gdb`, which is also waiting for you;
+ 3. the **second** shell where `gdb` is runnign and, you guessed it, is waiting for you.
 
-By default I placed a breakpoint at the begginning of 1) the bootloader, 2) the `kmain` function of the kernel.
+By default I placed a breakpoint at the begginning of (1) the *bootloader* and (2) the *kernel* itself.
 
 So, when gdb starts you need to first give a continue:
 ```bash
 (gdb) continue
 ```
 
-This will make the kernel run, and stop at the first breakpoint which is inside the *bootloader*:
+This will make the kernel run, and stop at the **first** breakpoint which is inside the *bootloader*:
 ```bash
 Breakpoint 1, boot_main (...) at .../mentos/src/boot.c:220
 220     {
@@ -311,7 +311,7 @@ Breakpoint 1, boot_main (...) at .../mentos/src/boot.c:220
 
 giving a second `continue` will get you to the start of the operating system:
 
-This will make the kernel run, and stop at the first breakpoint which is inside the *bootloader*:
+This will make the kernel run, and stop at the **second** breakpoint which is inside the *kernel*:
 ```bash
 Breakpoint 2, kmain (...) at .../mentos/src/kernel.c:95
 95      {

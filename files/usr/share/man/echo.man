@@ -1,0 +1,6 @@
+SYNOPSIS
+    echo [STRING]
+
+DESCRIPTION
+    Displays a line of text.
+    

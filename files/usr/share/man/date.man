@@ -1,0 +1,5 @@
+SYNOPSIS
+    date
+
+DESCRIPTION
+    Shows the current date.

@@ -1,0 +1,8 @@
+SYNOPSIS
+    cat [FILE]
+
+DESCRIPTION
+    Prints the content of the given file.
+
+OPTIONS
+    -h --help : shows command help.

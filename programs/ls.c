@@ -122,18 +122,16 @@ int main(int argc, char *argv[])
     uint32_t flags = 0;
     // Check the number of arguments.
     for (int i = 1; i < argc; ++i) {
-        if (strcmp(argv[i], "--help") == 0) {
+        if ((strcmp(argv[i], "--help") == 0) || (strcmp(argv[i], "-h") == 0)) {
             printf("List information about files inside a given directory.\n");
             printf("Usage:\n");
             printf("    ls [options] [directory]\n\n");
             return 0;
         } else if (argv[i][0] == '-') {
-            for (int j = 0; j < strlen(argv[i]); ++j) {
-                if (argv[i][j] == 'l')
-                    bitmask_set_assign(flags, FLAG_L);
-                else if (argv[i][j] == 'a')
-                    bitmask_set_assign(flags, FLAG_A);
-            }
+            if ((strcmp(argv[i], "-l") == 0) || (strcmp(argv[i], "--long") == 0))
+                bitmask_set_assign(flags, FLAG_L);
+            else if ((strcmp(argv[i], "-a") == 0) || (strcmp(argv[i], "--all") == 0))
+                bitmask_set_assign(flags, FLAG_A);
         }
     }
 

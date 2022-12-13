@@ -12,24 +12,15 @@
 #define CTRL_KEY(k) ((k)&0x1f)
 #define BUFFER_SIZE 4096
 
-static struct termios _original_termios, _termios;
-
-static inline void die(const char *s)
+static inline void __set_echo(bool_t active)
 {
-    printf("error: %s\n", s);
-    exit(1);
-}
-
-static inline void disable_raw_mode()
-{
-    tcsetattr(STDIN_FILENO, 0, &_original_termios);
-}
-
-static inline void enable_raw_mode()
-{
-    tcgetattr(STDIN_FILENO, &_original_termios);
-    _termios = _original_termios;
-    _termios.c_lflag &= ~(ICANON | ECHO | IEXTEN | ISIG);
+    struct termios _termios;
+    tcgetattr(STDIN_FILENO, &_termios);
+    if (active) {
+        _termios.c_lflag |= (ICANON | ECHO);
+    } else {
+        _termios.c_lflag &= ~(ICANON | ECHO);
+    }
     tcsetattr(STDIN_FILENO, 0, &_termios);
 }
 
@@ -72,33 +63,61 @@ int main(int argc, char *argv[])
     // Close the file descriptor.
     close(fd);
 
-    enable_raw_mode();
+    struct termios _termios;
+    tcgetattr(STDIN_FILENO, &_termios);
+    _termios.c_lflag &= ~ISIG;
+    tcsetattr(STDIN_FILENO, 0, &_termios);
 
-    int c;
+    __set_echo(false);
+
     do {
-        c = getchar();
+        int c = getchar();
         // Return Key
         if (c == '\n') {
             putchar('\n');
+            // Break the while loop.
+            continue;
         } else if (c == '\033') {
             c = getchar();
             if (c == '[') {
-                c = getchar();
-                if (c == 'D') {
-                    puts("\033[1D");
+                c = getchar(); // Get the char.
+                if ((c == 'A') || (c == 'B')) {
+                    pr_debug("UP\n");
+                } else if (c == 'D') {
+                    pr_debug("RIGHT\n");
                 } else if (c == 'C') {
-                    puts("\033[1C");
+                    pr_debug("LEFT\n");
                 } else if (c == 'H') {
-                    printf("\033[%dD", 0);
+                    pr_debug("HOME\n");
                 } else if (c == 'F') {
-                    printf("\033[%dC", 60);
+                    pr_debug("END\n");
+                } else if (c == '3') {
+                    pr_debug("NO-IDEA\n");
                 }
             }
-        } else {
+        } else if (c == '\b') {
+            putchar('\b');
+        } else if (c == '\t') {
+            pr_debug("TAB\n");
+        } else if (c == 127) {
+            pr_debug("127\n");
+            putchar(127);
+        } else if (iscntrl(c)) {
+            if (c == CTRL('C')) {
+                pr_debug("CTRL(C)\n");
+                break;
+            } else if (c == CTRL('U')) {
+                pr_debug("CTRL(U)\n");
+            } else if (c == CTRL('D')) {
+                pr_debug("CTRL(D)\n");
+            }
+        } else if ((c > 0) && (c != '\n')) {
             putchar(c);
+        } else {
+            pr_debug("Unrecognized character %02x (%c)\n", c, c);
         }
-    } while (c != 'q');
+    } while (true);
 
-    disable_raw_mode();
+    __set_echo(true);
     return 0;
 }

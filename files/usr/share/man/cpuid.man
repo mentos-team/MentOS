@@ -1,0 +1,5 @@
+SYNOPSIS
+    cpuid
+
+DESCRIPTION
+    Not currently implemented.

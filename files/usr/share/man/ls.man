@@ -1,6 +1,3 @@
-NAME
-    ls - list directory contents
-
 SYNOPSIS
     ls [OPTIONS] [FILE/FOLDER]
 
@@ -10,5 +7,6 @@ DESCRIPTION
     inside the current folder.
     
 OPTIONS
-    -a  : list all entries.
-    -l  : show the entries as a detailed list.
+    -h --help : shows command help.
+    -a --all  : list all entries.
+    -l --long : show the entries as a detailed long list.
