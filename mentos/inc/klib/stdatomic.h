@@ -162,4 +162,3 @@ static inline int test_bit(int offset, volatile unsigned long *base)
 // is discouraged by many C/C++ groups.
 
 // == xchg/xchgl ==============================================================
-//
