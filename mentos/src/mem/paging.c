@@ -165,12 +165,12 @@ uint32_t clone_vm_area(mm_struct_t *mm, vm_area_struct_t *area, int cow, uint32_
 
 static void __init_pagedir(page_directory_t *pdir)
 {
-    *pdir = (page_directory_t){ 0 };
+    *pdir = (page_directory_t){ {0} };
 }
 
 static void __init_pagetable(page_table_t *ptable)
 {
-    *ptable = (page_table_t){ 0 };
+    *ptable = (page_table_t){ {0} };
 }
 
 void paging_init(boot_info_t *info)
@@ -328,7 +328,7 @@ void page_fault_handler(pt_regs *f)
     // value in the cr2 control register.
     uint32_t faulting_addr;
     __asm__ __volatile__("mov %%cr2, %0"
-                 : "=r"(faulting_addr));
+                         : "=r"(faulting_addr));
     // Get the physical address of the current page directory.
     uint32_t phy_dir = (uint32_t)paging_get_current_directory();
     // Get the page directory.
