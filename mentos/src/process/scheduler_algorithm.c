@@ -77,7 +77,7 @@ static inline task_struct *__scheduler_priority(runqueue_t *runqueue, bool_t ski
 {
 #ifdef SCHEDULER_PRIORITY
     // Get the first element of the list.
-    task_struct *next = list_entry(runqueue->curr, task_struct, run_list);
+    task_struct *next = list_entry(runqueue->queue.next, struct task_struct, run_list);
 
     // Get its static priority.
     time_t min = /*...*/;
@@ -121,7 +121,7 @@ static inline task_struct *__scheduler_cfs(runqueue_t *runqueue, bool_t skip_per
 {
 #ifdef SCHEDULER_CFS
     // Get the first element of the list.
-    task_struct *next = list_entry(runqueue->curr, task_struct, run_list);
+    task_struct *next = list_entry(runqueue->queue.next, struct task_struct, run_list);
 
     // Get its virtual runtime.
     time_t min = /* ... */;
