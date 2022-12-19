@@ -85,8 +85,11 @@ static inline task_struct *__scheduler_rr(runqueue_t *runqueue, bool_t skip_peri
 /// If you pick the first task every time (i.e., init), and use its prio (i.e.,
 /// 120), what would happen if inside the for-loop when you check "if the entry
 /// has a lower priority", you use a lesser-than sign?
-///
-
+/// First, it will check against init itself, so 120 < 120 is false. 
+/// Then, it will check against shell, again, 120 < 120 is false.
+/// As such, shell or the other processes will never be selected. There are
+/// different ways of solving this problem, each of which requires changes only
+/// inside this same function. Good luck.
 static inline task_struct *__scheduler_priority(runqueue_t *runqueue, bool_t skip_periodic)
 {
 #ifdef SCHEDULER_PRIORITY
