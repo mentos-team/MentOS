@@ -73,6 +73,20 @@ static inline task_struct *__scheduler_rr(runqueue_t *runqueue, bool_t skip_peri
 /// @param skip_periodic tells the algorithm if there are periodic processes in
 /// the list, and in that case it needs to skip them.
 /// @return the next task on success, NULL on failure.
+/// @details
+/// When implementing this algorithm, beware of the following pitfal. If you
+/// have the following runqueue (reports task position in the runqueue, priority
+/// and name):
+///      Position | Priority | Name
+///          1    |    120   | init
+///          2    |    120   | shell
+///          3    |    122   | echo
+///          4    |    128   | ps
+/// If you pick the first task every time (i.e., init), and use its prio (i.e.,
+/// 120), what would happen if inside the for-loop when you check "if the entry
+/// has a lower priority", you use a lesser-than sign?
+///
+
 static inline task_struct *__scheduler_priority(runqueue_t *runqueue, bool_t skip_periodic)
 {
 #ifdef SCHEDULER_PRIORITY
@@ -83,7 +97,7 @@ static inline task_struct *__scheduler_priority(runqueue_t *runqueue, bool_t ski
     time_t min = /*...*/;
 
     // Search for the task with the smallest static priority.
-    list_for_each_decl(it, &runqueue->curr->run_list)
+    list_for_each_decl(it, &runqueue->queue)
     {
         // Check if we reached the head of list_head, and skip it.
         if (it == &runqueue->queue)
@@ -127,7 +141,7 @@ static inline task_struct *__scheduler_cfs(runqueue_t *runqueue, bool_t skip_per
     time_t min = /* ... */;
 
     // Search for the task with the smallest vruntime value.
-    list_for_each_decl(it, &runqueue->curr->run_list)
+    list_for_each_decl(it, &runqueue->queue)
     {
         // Check if we reached the head of list_head, and skip it.
         if (it == &runqueue->queue)
