@@ -15,10 +15,10 @@ jobs:
         name: Doxygen
         runs-on: ubuntu-latest
         steps:
-            - name: Clone repo
+            - name: Clone repository
               uses: actions/checkout@v3
 
-            - name: Install Doxygen Ubuntu
+            - name: Install dependencies
               run: |
                   sudo apt-get update
                   sudo apt-get install -y doxygen nasm
@@ -28,7 +28,7 @@ jobs:
                   cmake -B build -D DOXYGEN_WARN_AS_ERROR=NO
                   cmake --build build --target mentos_documentation
 
-    test:
+    build:
         name: Build
         strategy:
             fail-fast: false
@@ -76,7 +76,7 @@ jobs:
             CXX: ${{ matrix.cxx }}
 
         steps:
-            - name: Clone repo
+            - name: Clone repository
               uses: actions/checkout@v3
 
             - name: Install dependencies
