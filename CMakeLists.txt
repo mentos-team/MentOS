@@ -28,18 +28,6 @@ message(STATUS "Crosscompiling : ${CMAKE_CROSSCOMPILING}")
 message(STATUS "System name    : ${CMAKE_HOST_SYSTEM_NAME}")
 message(STATUS "Kernel version : ${CMAKE_SYSTEM_VERSION}")
 if((${CMAKE_HOST_SYSTEM_NAME} STREQUAL "Darwin") OR APPLE)
-    # Set the Apple MacOSx compilers.
-    if(CMAKE_VERSION VERSION_LESS "3.6.0")
-        include(CMakeForceCompiler)
-        cmake_force_c_compiler(x86_64-elf-gcc Clang)
-        cmake_force_cxx_compiler(x86_64-elf-g++ Clang)
-    else()
-        set(CMAKE_C_COMPILER x86_64-elf-gcc)
-        set(CMAKE_CXX_COMPILER x86_64-elf-g++)
-        set(CMAKE_AR x86_64-elf-ar)
-    endif()
-    # Speicfy the linker.
-    set(CMAKE_LINKER x86_64-elf-ld)
     # Specify the linker flags.
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -nostdlib")
 elseif((${CMAKE_HOST_SYSTEM_NAME} STREQUAL "Windows") OR WIN32)

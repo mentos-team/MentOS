@@ -33,6 +33,11 @@ jobs:
   build:
     name: Build
     runs-on: macos-latest
+    # Set environment variables
+    env:
+      # We globally set CC and CXX to improve compatibility with .travis.yml
+      CC: x86_64-elf-gcc
+      CXX: x86_64-elf-g++
     steps:
       - name: Clone repository
         uses: actions/checkout@v3
