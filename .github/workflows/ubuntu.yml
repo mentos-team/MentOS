@@ -73,7 +73,7 @@ jobs:
 
         # Set environment variables
         env:
-            # We globally set CC and CXX to improve compatibility with .travis.yml
+            # We globally set CC and CXX.
             CC: ${{ matrix.cc }}
             CXX: ${{ matrix.cxx }}
 

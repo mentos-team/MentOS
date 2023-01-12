@@ -1,6 +1,8 @@
 # =============================================================================
 # Set the minimum required version of cmake.
 cmake_minimum_required(VERSION 3.1...3.22)
+# 
+set(HAVE_FLAG_SEARCH_PATHS_FIRST 0)
 # Initialize the project.
 project(mentos C ASM)
 
