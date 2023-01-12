@@ -4,6 +4,8 @@
 [![forthebadge](https://forthebadge.com/images/badges/made-with-c.svg)](https://forthebadge.com)
 [![forthebadge](https://forthebadge.com/images/badges/for-you.svg)](https://forthebadge.com)
 
+[![Main](https://github.com/mentos-team/MentOS/actions/workflows/main.yml/badge.svg)](https://github.com/mentos-team/MentOS/actions/workflows/main.yml)
+
 ## Table of Contents
 
  1. [What is MentOS](#1-what-is-mentos)
