@@ -1,4 +1,4 @@
-name: Ubuntu
+name: MacOS
 on:
     push:
         branches-ignore:
