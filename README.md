@@ -1,8 +1,21 @@
-# MentOS
+# MentOS (Mentoring Operating System)
 
 [![forthebadge](https://forthebadge.com/images/badges/built-with-love.svg)](https://forthebadge.com)
 [![forthebadge](https://forthebadge.com/images/badges/made-with-c.svg)](https://forthebadge.com)
 [![forthebadge](https://forthebadge.com/images/badges/for-you.svg)](https://forthebadge.com)
+
+## Table of Contents
+
+ 1. [What is MentOS](#1-what-is-mentos)
+ 2. [Implemented features](#2-implemented-features)
+ 3. [Prerequisites](#3-prerequisites)
+ 4. [Compiling MentOS](#4-compiling-mentos)
+ 5. [Generating the EXT2 filesystem](#5-generating-the-ext2-filesystem)
+ 6. [Running MentOS](#6-running-mentos)
+ 7. [Kernel logging](#7-kernel-logging)
+ 8. [Change the scheduling algorithm](#8-change-the-scheduling-algorithm)
+ 9. [Debugging the kernel](#9-debugging-the-kernel)
+ 10. [Contributors](#10-contributors)
 
 ## 1. What is MentOS
 
@@ -25,6 +38,8 @@ right operating system to start with.
 Parts of MentOS are inherited or inspired by a similar educational operating 
 system called [DreamOs](https://github.com/dreamos82/DreamOs) written by Ivan
 Gualandri.
+
+*[Back to the Table of Contents](#table-of-contents)*
 
 ## 2. Implemented features
 Follows the list of implemented features:
@@ -62,6 +77,8 @@ Follows the list of implemented features:
  - [ ] VGA drivers;
 
 I will try to keep it updated...
+
+*[Back to the Table of Contents](#table-of-contents)*
 
 ## 3. Prerequisites
 
@@ -121,7 +138,9 @@ brew install i386-elf-binutils i386-elf-gcc git cmake qemu nasm e2fsprogs
 brew install gdb cgdb #<- for debug only
 ```
 
-## 4. Compiling MentOS and generating the EXT2 filesystem
+*[Back to the Table of Contents](#table-of-contents)*
+
+## 4. Compiling MentOS
 
 Compile MentOS with:
 
@@ -133,14 +152,20 @@ cmake ..
 make
 ```
 
-Then, generate the EXT2 filesystem with:
+*[Back to the Table of Contents](#table-of-contents)*
+
+## 5. Generating the EXT2 filesystem
+
+Generate the EXT2 filesystem with:
 
 ```bash
 make filesystem
 ```
 you just need to generate the filesystem once. If you change a `program` you need to re-generate the entire filesystem with `make filesystem`, but this will override any changes you made to the files inside the `rootfs.img`. In the future I will find a way to update just the `/usr/bin` directory and the programs.
 
-## 5. Running MentOS
+*[Back to the Table of Contents](#table-of-contents)*
+
+## 6. Running MentOS
 
 Boot MentOS with qemu:
 
@@ -150,7 +175,9 @@ make qemu
 
 To login, use one of the usernames listed in `files/etc/passwd`.
 
-## 6. Kernel logging
+*[Back to the Table of Contents](#table-of-contents)*
+
+## 7. Kernel logging
 The kernel provides ways of printing logging messages *from* inside the kernel code *to* the bash where you executed the `make qemu`.
 
 These *logging* functions are:
@@ -200,7 +227,9 @@ You can change the logging level by including the following lines at the beginni
 ```
 This example sets the `__DEBUG_LEVEL__`, so that all the messages from `INFO` and below are shown. While `__DEBUG_HEADER__` is just a string that is automatically prepended to your message, helping you identifying from which code the message is coming from.
 
-## 7. Change the scheduling algorithm
+*[Back to the Table of Contents](#table-of-contents)*
+
+## 8. Change the scheduling algorithm
 
 MentOS supports scheduling algorithms for aperiodic:
 
@@ -266,7 +295,9 @@ make
 make qemu
 ```
 
-## 8. Use Debugger
+*[Back to the Table of Contents](#table-of-contents)*
+
+## 9. Debugging the kernel
 
 If you want to use GDB to debug MentOS, first you need to compile everything:
 
@@ -317,7 +348,9 @@ Breakpoint 2, kmain (...) at .../mentos/src/kernel.c:95
 95      {
 ```
 
-## 9. Contributors
+*[Back to the Table of Contents](#table-of-contents)*
+
+## 10. Contributors
 
 Project Manager:
 
@@ -339,3 +372,5 @@ Developers:
     - Soft IRQs
     - Timer
     - Signals
+
+*[Back to the Table of Contents](#table-of-contents)*
