@@ -1,4 +1,4 @@
-name: Main
+name: Ubuntu
 on:
     push:
         branches-ignore:
