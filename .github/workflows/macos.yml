@@ -1,46 +1,48 @@
 name: MacOS
 on:
-    push:
-        branches-ignore:
-            - "releases/**"
-        paths-ignore:
-            - "**.md"
-            - ".gitignore"
-    pull_request:
-        paths-ignore:
-            - "**.md"
-            - ".gitignore"
+  push:
+    branches-ignore:
+      - "releases/**"
+    paths-ignore:
+      - "**.md"
+      - ".gitignore"
+      - "ubuntu.yml"
+  pull_request:
+    paths-ignore:
+      - "**.md"
+      - ".gitignore"
+      - "ubuntu.yml"
 jobs:
-    doxygen:
-        name: Doxygen
-        runs-on: macos-latest
-        steps:
-            - name: Clone repository
-              uses: actions/checkout@v3
+  doxygen:
+    name: Doxygen
+    runs-on: macos-latest
+    steps:
+      - name: Clone repository
+        uses: actions/checkout@v3
 
-            - name: Install dependencies
-              run: |
-                    brew update
-                    brew install doxygen
+      - name: Install dependencies
+        run: |
+          brew update
+          brew install x86_64-elf-binutils x86_64-elf-gcc git cmake qemu nasm e2fsprogs doxygen
 
-            - name: Generate documentation
-              run: |
-                  cmake -B build -D DOXYGEN_WARN_AS_ERROR=NO
-                  cmake --build build --target mentos_documentation
+      - name: Generate documentation
+        run: |
+          cmake -B build -D DOXYGEN_WARN_AS_ERROR=NO
+          cmake --build build --target mentos_documentation
 
-    build:
-        name: Build
-        runs-on: macos-latest
-        steps:
-            - name: Clone repository
-              uses: actions/checkout@v3
+  build:
+    name: Build
+    runs-on: macos-latest
+    steps:
+      - name: Clone repository
+        uses: actions/checkout@v3
 
-            - name: Install dependencies
-              run: |
-                  brew update
-                  brew install i386-elf-binutils i386-elf-gcc git cmake qemu nasm e2fsprogs
-              
-            - name: Build
-              run: |
-                  cmake -B build
-                  cmake --build build --parallel 2
+      - name: Install dependencies
+        run: |
+          brew update
+          brew install x86_64-elf-binutils x86_64-elf-gcc git cmake qemu nasm e2fsprogs
+
+      - name: Build
+        run: |
+          cmake -B build
+          cmake --build build --parallel 2

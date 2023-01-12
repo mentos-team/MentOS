@@ -6,10 +6,12 @@ on:
         paths-ignore:
             - "**.md"
             - ".gitignore"
+            - "macos.yml"
     pull_request:
         paths-ignore:
             - "**.md"
             - ".gitignore"
+            - "macos.yml"
 jobs:
     doxygen:
         name: Doxygen
