@@ -43,4 +43,4 @@ jobs:
             - name: Build
               run: |
                   cmake -B build
-                  cmake --build build --parallel 2 --verbose
+                  cmake --build build --parallel 2
