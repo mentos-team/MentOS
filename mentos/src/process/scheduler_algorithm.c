@@ -222,10 +222,10 @@ static inline task_struct *__scheduler_aedf(runqueue_t *runqueue)
                  /*...*/);
         return next;
     }
-    // If there are no tasks with deadline != 0 to execute, just pick another
-    // task by using CFS.
 #endif
-    return __scheduler_cfs(runqueue, false);
+    // If there are no tasks with deadline != 0 to execute, just pick another
+    // task by using Round-Robin.
+    return __scheduler_rr(runqueue, false);
 }
 
 /// @brief Executes the task with the earliest absolute DEADLINE among all the
@@ -287,9 +287,9 @@ static inline task_struct *__scheduler_edf(runqueue_t *runqueue)
     }
     if (next)
         return next;
-        // If there are no periodic task to execute, just pick an aperiodic task by
-        // using CFS.
 #endif
+    // If there are no periodic task to execute, just pick an aperiodic task by
+    // using Round-Robin.
     return __scheduler_rr(runqueue, false);
 }
 
@@ -353,9 +353,9 @@ static inline task_struct *__scheduler_rm(runqueue_t *runqueue)
     }
     if (next)
         return next;
-        // If there are no periodic task to execute, just pick an aperiodic task by
-        // using CFS.
 #endif
+    // If there are no periodic task to execute, just pick an aperiodic task by
+    // using Round-Robin.
     return __scheduler_rr(runqueue, false);
 }
 
