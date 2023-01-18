@@ -8,7 +8,13 @@
 #include <stdio.h>
 #include <sys/unistd.h>
 
-static int vsscanf(const char *buf, const char *s, va_list ap)
+/// @brief Read formatted data from string.
+/// @param buf String processed as source to retrieve the data.
+/// @param s Format string, following the same specifications as printf.
+/// @param ap The list of arguments where the values are stored.
+/// @return On success, the function returns the number of items of the
+///         argument list successfully filled. EOF otherwise.
+static int __vsscanf(const char *buf, const char *s, va_list ap)
 {
     int count = 0, noassign = 0, width = 0, base = 0;
     const char *tc;
@@ -92,14 +98,20 @@ static int vsscanf(const char *buf, const char *s, va_list ap)
     return (count);
 }
 
-static int vfscanf(int fd, const char *fmt, va_list ap)
+/// @brief Read formatted data from file.
+/// @param fd the file descriptor associated with the file.
+/// @param fmt format string, following the same specifications as printf.
+/// @param ap the list of arguments where the values are stored.
+/// @return On success, the function returns the number of items of the
+///         argument list successfully filled. EOF otherwise.
+static int __vfscanf(int fd, const char *fmt, va_list ap)
 {
     int count;
     char buf[BUFSIZ + 1];
 
     if (fgets(buf, BUFSIZ, fd) == 0)
         return (-1);
-    count = vsscanf(buf, fmt, ap);
+    count = __vsscanf(buf, fmt, ap);
     return (count);
 }
 
@@ -109,7 +121,7 @@ int scanf(const char *fmt, ...)
     va_list ap;
 
     va_start(ap, fmt);
-    count = vfscanf(STDIN_FILENO, fmt, ap);
+    count = __vfscanf(STDIN_FILENO, fmt, ap);
     va_end(ap);
     return (count);
 }
@@ -120,7 +132,7 @@ int fscanf(int fd, const char *fmt, ...)
     va_list ap;
 
     va_start(ap, fmt);
-    count = vfscanf(fd, fmt, ap);
+    count = __vfscanf(fd, fmt, ap);
     va_end(ap);
     return (count);
 }
@@ -131,7 +143,7 @@ int sscanf(const char *buf, const char *fmt, ...)
     va_list ap;
 
     va_start(ap, fmt);
-    count = vsscanf(buf, fmt, ap);
+    count = __vsscanf(buf, fmt, ap);
     va_end(ap);
     return (count);
 }

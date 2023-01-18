@@ -6,12 +6,13 @@
 #include "grp.h"
 #include "sys/unistd.h"
 #include "sys/errno.h"
+#include "io/debug.h"
 #include "assert.h"
 #include "string.h"
 #include "stdio.h"
-#include "debug.h"
 #include "fcntl.h"
 
+/// Holds the file descriptor while we are working with `/etc/group`.
 static int __fd = -1;
 
 /// @brief It parses the line (as string) and saves its content inside the
@@ -42,6 +43,13 @@ static inline void __parse_line(group_t *grp, char *buf)
     grp->gr_mem[found_users] = "\0";
 }
 
+/// @brief Searches an entry in `/etc/group`.
+/// @param fd the file descriptor pointing to `/etc/group`.
+/// @param buf the buffer we are going to use to search the entry.
+/// @param buflen the length of the buffer.
+/// @param name the name we are looking for.
+/// @param gid the group id we must match.
+/// @return a pointer to the filled input buffer on success, NULL on failure.
 static inline char *__search_entry(int fd, char *buf, int buflen, const char *name, gid_t gid)
 {
     int ret;

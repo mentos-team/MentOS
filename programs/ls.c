@@ -14,7 +14,7 @@
 #include <sys/stat.h>
 #include <libgen.h>
 #include <sys/bitops.h>
-#include <debug.h>
+#include <io/debug.h>
 
 #define FLAG_L (1U << 0U)
 #define FLAG_A (1U << 1U)

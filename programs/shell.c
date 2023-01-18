@@ -9,7 +9,7 @@
 #include <libgen.h>
 #include <sys/stat.h>
 #include <signal.h>
-#include <debug.h>
+#include <io/debug.h>
 #include <sys/bitops.h>
 #include "stdbool.h"
 #include "stddef.h"

@@ -10,10 +10,13 @@
 #include "signal.h"
 #include "sys/bitops.h"
 
+/// @brief Implement the sigreturn function.
 _syscall0(int, sigreturn)
 
+/// @brief Implement the sigprocmask function.
 _syscall3(int, sigprocmask, int, how, const sigset_t *, set, sigset_t *, oldset)
 
+/// @brief List of signals names.
 static const char *sys_siglist[] = {
     "HUP",
     "INT",

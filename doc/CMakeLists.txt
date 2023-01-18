@@ -20,6 +20,14 @@ if (DOXYGEN_FOUND)
     set(DOXYGEN_SHOW_INCLUDE_FILES NO)
     set(DOXYGEN_GENERATE_TREEVIEW NO)
     set(DOXYGEN_WARN_NO_PARAMDOC YES)
+
+    set(DOXYGEN_ENABLE_PREPROCESSING YES)
+    set(DOXYGEN_EXTRACT_STATIC YES)
+    set(DOXYGEN_MACRO_EXPANSION YES)
+    set(DOXYGEN_EXPAND_ONLY_PREDEF YES)
+    set(DOXYGEN_PREDEFINED "__attribute__((x))= _syscall0= _syscall0(x)= _syscall1(x)= _syscall2(x)= _syscall3(x)=")
+
+    set(DOXYGEN_WARN_FORMAT "$file($line): $text")
     set(DOXYGEN_HTML_STYLESHEET ${PROJECT_SOURCE_DIR}/doc/doxygen.css)
     doxygen_add_docs(
         ${PROJECT_NAME}_documentation
@@ -164,8 +172,6 @@ if (DOXYGEN_FOUND)
         ${PROJECT_SOURCE_DIR}/mentos/inc/hardware/pic8259.h
         ${PROJECT_SOURCE_DIR}/mentos/inc/hardware/timer.h
         ${PROJECT_SOURCE_DIR}/mentos/inc/io/debug.h
-        ${PROJECT_SOURCE_DIR}/mentos/inc/io/mm_io.h
-        ${PROJECT_SOURCE_DIR}/mentos/inc/io/port_io.h
         ${PROJECT_SOURCE_DIR}/mentos/inc/io/proc_modules.h
         ${PROJECT_SOURCE_DIR}/mentos/inc/io/vga/vga.h
         ${PROJECT_SOURCE_DIR}/mentos/inc/io/vga/vga_font.h

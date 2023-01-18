@@ -10,7 +10,9 @@
 
 char **environ;
 
-static char **__environ      = NULL;
+/// @brief Global environ list.
+static char **__environ = NULL;
+/// @brief Size of the global environ list.
 static size_t __environ_size = 0;
 
 /// @brief Finds the entry in the environ.

@@ -9,10 +9,12 @@
 #include "string.h"
 #include "stdio.h"
 
+/// @brief List of week days name.
 static const char *weekdays[] = {
     "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"
 };
 
+/// @brief List of months name.
 static const char *months[] = {
     "January", "February", "March", "April", "May", "June",
     "July", "August", "September", "October", "November", "December"

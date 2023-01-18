@@ -7,10 +7,8 @@
 
 #include "sys/kernel_levels.h"
 
-struct pt_regs;
-
 #ifndef __DEBUG_LEVEL__
-/// Defines the debug level.
+/// Defines the debug level, by default we set it to notice.
 #define __DEBUG_LEVEL__ LOGLEVEL_NOTICE
 #endif
 
@@ -39,17 +37,14 @@ void dbg_putchar(char c);
 void dbg_puts(const char *s);
 
 /// @brief Prints the given string to the debug output.
-/// @param file   The name of the file.
-/// @param fun    The name of the function.
-/// @param line   The line inside the file.
-/// @param header The header to print.
-/// @param format The format to used, see printf.
-/// @param ...    The list of arguments.
-void dbg_printf(const char *file, const char *fun, int line, char *header, const char *format, ...);
-
-/// @brief Prints the registers on debug output.
-/// @param frame Pointer to the register.
-void dbg_print_regs(struct pt_regs *frame);
+/// @param file the name of the file.
+/// @param fun the name of the function.
+/// @param line the line inside the file.
+/// @param header the header to print.
+/// @param log_level the log level.
+/// @param format the format to used, see printf.
+/// @param ... the list of arguments.
+void dbg_printf(const char *file, const char *fun, int line, char *header, short log_level, const char *format, ...);
 
 /// @brief Transforms the given amount of bytes to a readable string.
 /// @param bytes The bytes to turn to string.
@@ -62,53 +57,71 @@ const char *to_human_size(unsigned long bytes);
 /// @return String representing the binary value.
 const char *dec_to_binary(unsigned long value, unsigned length);
 
-/// Prints a KERN_DEFAULT.
-#define pr_default(...) dbg_printf(__FILENAME__, __func__, __LINE__, __DEBUG_HEADER__, KERN_DEFAULT __VA_ARGS__)
-/// Prints a KERN_EMERG.
+/// Prints a default message, which is always shown.
+#define pr_default(...) dbg_printf(__FILENAME__, __func__, __LINE__, __DEBUG_HEADER__, LOGLEVEL_DEFAULT, __VA_ARGS__)
+
+/// Prints an emergency message.
 #if __DEBUG_LEVEL__ >= LOGLEVEL_EMERG
-#define pr_emerg(...) dbg_printf(__FILENAME__, __func__, __LINE__, __DEBUG_HEADER__, KERN_EMERG __VA_ARGS__)
+#define pr_emerg(...) dbg_printf(__FILENAME__, __func__, __LINE__, __DEBUG_HEADER__, LOGLEVEL_EMERG, __VA_ARGS__)
 #else
 #define pr_emerg(...)
 #endif
-/// Prints a KERN_ALERT.
+
+/// Prints an alert message.
 #if __DEBUG_LEVEL__ >= LOGLEVEL_ALERT
-#define pr_alert(...) dbg_printf(__FILENAME__, __func__, __LINE__, __DEBUG_HEADER__, KERN_ALERT __VA_ARGS__)
+#define pr_alert(...) dbg_printf(__FILENAME__, __func__, __LINE__, __DEBUG_HEADER__, LOGLEVEL_ALERT, __VA_ARGS__)
 #else
 #define pr_alert(...)
 #endif
-/// Prints a KERN_CRIT.
+
+/// Prints a critical message.
 #if __DEBUG_LEVEL__ >= LOGLEVEL_CRIT
-#define pr_crit(...) dbg_printf(__FILENAME__, __func__, __LINE__, __DEBUG_HEADER__, KERN_CRIT __VA_ARGS__)
+#define pr_crit(...) dbg_printf(__FILENAME__, __func__, __LINE__, __DEBUG_HEADER__, LOGLEVEL_CRIT, __VA_ARGS__)
 #else
 #define pr_crit(...)
 #endif
-/// Prints a KERN_ERR.
+
+/// Prints an error message.
 #if __DEBUG_LEVEL__ >= LOGLEVEL_ERR
-#define pr_err(...) dbg_printf(__FILENAME__, __func__, __LINE__, __DEBUG_HEADER__, KERN_ERR __VA_ARGS__)
+#define pr_err(...) dbg_printf(__FILENAME__, __func__, __LINE__, __DEBUG_HEADER__, LOGLEVEL_ERR, __VA_ARGS__)
 #else
 #define pr_err(...)
 #endif
-/// Prints a KERN_WARNING.
+
+/// Prints a warning message.
 #if __DEBUG_LEVEL__ >= LOGLEVEL_WARNING
-#define pr_warning(...) dbg_printf(__FILENAME__, __func__, __LINE__, __DEBUG_HEADER__, KERN_WARNING __VA_ARGS__)
+#define pr_warning(...) dbg_printf(__FILENAME__, __func__, __LINE__, __DEBUG_HEADER__, LOGLEVEL_WARNING, __VA_ARGS__)
 #else
 #define pr_warning(...)
 #endif
-/// Prints a KERN_NOTICE.
+
+/// Prints a notice message.
 #if __DEBUG_LEVEL__ >= LOGLEVEL_NOTICE
-#define pr_notice(...) dbg_printf(__FILENAME__, __func__, __LINE__, __DEBUG_HEADER__, KERN_NOTICE __VA_ARGS__)
+#define pr_notice(...) dbg_printf(__FILENAME__, __func__, __LINE__, __DEBUG_HEADER__, LOGLEVEL_NOTICE, __VA_ARGS__)
 #else
 #define pr_notice(...)
 #endif
-/// Prints a KERN_INFO.
+
+/// Prints a info message.
 #if __DEBUG_LEVEL__ >= LOGLEVEL_INFO
-#define pr_info(...) dbg_printf(__FILENAME__, __func__, __LINE__, __DEBUG_HEADER__, KERN_INFO __VA_ARGS__)
+#define pr_info(...) dbg_printf(__FILENAME__, __func__, __LINE__, __DEBUG_HEADER__, LOGLEVEL_INFO, __VA_ARGS__)
 #else
 #define pr_info(...)
 #endif
-/// Prints a KERN_DEBUG.
+
+/// Prints a debug message.
 #if __DEBUG_LEVEL__ >= LOGLEVEL_DEBUG
-#define pr_debug(...) dbg_printf(__FILENAME__, __func__, __LINE__, __DEBUG_HEADER__, KERN_DEBUG __VA_ARGS__)
+#define pr_debug(...) dbg_printf(__FILENAME__, __func__, __LINE__, __DEBUG_HEADER__, LOGLEVEL_DEBUG, __VA_ARGS__)
 #else
 #define pr_debug(...)
+#endif
+
+#ifdef __KERNEL__
+
+struct pt_regs;
+
+/// @brief Prints the registers on debug output.
+/// @param frame Pointer to the register.
+void dbg_print_regs(struct pt_regs *frame);
+
 #endif

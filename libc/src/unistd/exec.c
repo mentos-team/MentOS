@@ -3,12 +3,11 @@
 /// @copyright (c) 2014-2022 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include <debug.h>
 #include "sys/unistd.h"
 #include "system/syscall_types.h"
 #include "sys/errno.h"
-
 #include "sys/stat.h"
+#include "io/debug.h"
 #include "stdlib.h"
 #include "string.h"
 #include "stdarg.h"
@@ -59,16 +58,12 @@ static inline int __find_in_path(const char *file, char *buf, size_t buf_len)
     return -1;
 }
 
-/// @brief Replaces the current process image with a new process
-///        image (argument vector), allows the caller to specify
-///        the environment of the executed program via `envp`.
-/// @param path The absolute path to the binary file to execute.
-/// @param argv A vector of one or more pointers to null-terminated strings that represent
-///             the argument list available to the executed program.
-/// @param envp A vector of one or more pointers to null-terminated strings that represent
-///             the environment list available to the executed program.
-/// @return Returns -1 only if an error has occurred, and sets errno.
-_syscall3(int, execve, const char *, path, char *const *, argv, char *const *, envp)
+int execve(const char *path, char *const argv[], char *const envp[])
+{
+    long __res;
+    __inline_syscall3(__res, execve, path, argv, envp);
+    __syscall_return(int, __res);
+}
 
 int execv(const char *path, char *const argv[])
 {

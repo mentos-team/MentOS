@@ -14,7 +14,7 @@
 #include <pwd.h>
 #include <strerror.h>
 #include <stdlib.h>
-#include <debug.h>
+#include <io/debug.h>
 
 #include "ansi_colors.h"
 

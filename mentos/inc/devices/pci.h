@@ -233,24 +233,33 @@ typedef enum {
 typedef void (*pci_scan_func_t)(uint32_t device, uint16_t vendor_id, uint16_t device_id, void *extra);
 
 /// @brief Extract the `bus` from the device.
+/// @param device the device details.
+/// @return the `bus` value.
 static inline int pci_extract_bus(uint32_t device)
 {
     return (uint8_t)((device >> 16));
 }
 
 /// @brief Extract the `slot` from the device.
+/// @param device the device details.
+/// @return the `slot` value.
 static inline int pci_extract_slot(uint32_t device)
 {
     return (uint8_t)((device >> 8));
 }
 
 /// @brief Extract the `func` from the device.
+/// @param device the device details.
+/// @return the `func` value.
 static inline int pci_extract_func(uint32_t device)
 {
     return (uint8_t)(device);
 }
 
-/// @brief TODO: doxygen comment.
+/// @brief TODO: Comment.
+/// @param device 
+/// @param field 
+/// @return 
 static inline uint32_t pci_get_addr(uint32_t device, int field)
 {
     return 0x80000000 | (pci_extract_bus(device) << 16) |

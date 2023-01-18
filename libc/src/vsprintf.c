@@ -3,7 +3,7 @@
 /// @copyright (c) 2014-2022 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include <sys/bitops.h>
+#include "sys/bitops.h"
 #include "fcvt.h"
 #include "ctype.h"
 #include "string.h"
@@ -30,6 +30,8 @@ static char *_digits = "0123456789abcdefghijklmnopqrstuvwxyz";
 static char *_upper_digits = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
 /// @brief Returns the index of the first non-integer character.
+/// @param s the string we need to analyze.
+/// @return the index of the first non-integer character.
 static inline int skip_atoi(const char **s)
 {
     int i = 0;
@@ -38,6 +40,14 @@ static inline int skip_atoi(const char **s)
     return i;
 }
 
+/// @brief Transforms the number into a string.
+/// @param str the output string.
+/// @param num the number to transform to string.
+/// @param base the base to use for number transformation.
+/// @param size the size of the output string.
+/// @param precision the precision for floating point numbers.
+/// @param flags control flags.
+/// @return the number turned into a string.
 static char *number(char *str, long num, int base, int size, int32_t precision, unsigned flags)
 {
     char c, tmp[66] = { 0 };

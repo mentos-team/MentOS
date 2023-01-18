@@ -10,9 +10,10 @@
 #include "stdint.h"
 
 /// @brief   Enable IRQs (nested).
-/// @details If called after calling irq_nested_disable, this function will
-///          not activate IRQs if they were not active before.
-inline static void irq_nested_enable(uint8_t flags)
+/// @details If called after calling irq_disable, this function will not
+/// activate IRQs if they were not active before.
+/// @param flags the flags to control this behaviour.
+inline static void irq_enable(uint8_t flags)
 {
     if (flags) {
         sti();
@@ -20,32 +21,32 @@ inline static void irq_nested_enable(uint8_t flags)
 }
 
 /// @brief   Disable IRQs (nested).
-/// @details Disable IRQs when unsure if IRQs were enabled at all.
-///          This function together with irq_nested_enable can be used in
-///          situations when interrupts shouldn't be activated if they were not
-///          activated before calling this function.
-inline static uint8_t irq_nested_disable()
+/// @details Disable IRQs when unsure if IRQs were enabled at all. This function
+/// together with irq_enable can be used in situations when interrupts
+/// shouldn't be activated if they were not activated before calling this
+/// function.
+/// @return 1 if the IRQ is enable for the CPU.
+inline static uint8_t irq_disable()
 {
     size_t flags;
-    __asm__ __volatile__("pushf; cli; pop %0"
+    // We are pushing the entire contents of the EFLAGS register onto the stack,
+    // clearing the interrupt line, and with the pop, getting the current status
+    // of the flags.
+    __asm__ __volatile__("pushf; cli; pop %0;"
                          : "=r"(flags)
                          :
                          : "memory");
-    if (flags & (1 << 9))
-        return 1;
-    return 0;
+    return flags & (1 << 9);
 }
 
 /// @brief Determines, if the interrupt flags (IF) is set.
+/// @return 1 if the IRQ is enable for the CPU.
 inline static uint8_t is_irq_enabled()
 {
     size_t flags;
-    __asm__ __volatile__("pushf; pop %0"
+    __asm__ __volatile__("pushf; pop %0;"
                          : "=r"(flags)
                          :
                          : "memory");
-    if (flags & (1 << 9)) {
-        return 1;
-    }
-    return 0;
+    return flags & (1 << 9);
 }

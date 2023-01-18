@@ -7,7 +7,6 @@
 #include "io/port_io.h"
 #include "io/ansi_colors.h"
 #include "sys/bitops.h"
-#include "kernel.h"
 #include "string.h"
 #include "stdio.h"
 #include "math.h"
@@ -149,6 +148,10 @@ const char *dec_to_binary(unsigned long value, unsigned length)
     return buffer;
 }
 
+#ifdef __KERNEL__
+
+#include "kernel.h"
+
 void dbg_print_regs(pt_regs *frame)
 {
     pr_debug("Interrupt stack frame:\n");
@@ -172,3 +175,5 @@ void dbg_print_regs(pt_regs *frame)
     pr_debug("UESP   = 0x%-09x\n", frame->useresp);
     pr_debug("SS     = 0x%-04x\n", frame->ss);
 }
+
+#endif

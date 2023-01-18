@@ -4,7 +4,7 @@
 #include <termios.h>
 #include <stdbool.h>
 #include <string.h>
-#include <debug.h>
+#include <io/debug.h>
 #include <stdio.h>
 #include <ctype.h>
 #include <fcntl.h>
