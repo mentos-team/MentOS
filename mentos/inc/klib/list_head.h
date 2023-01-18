@@ -62,8 +62,9 @@ static inline int list_head_empty(const list_head *head)
     return head->next == head;
 }
 
-/// @brief Initializes the list_head.
-/// @param head The head for your list.
+/// @brief Computes the size of the list.
+/// @param head The head of the list.
+/// @return the size of the list.
 static inline unsigned list_head_size(const list_head *head)
 {
     unsigned size = 0;

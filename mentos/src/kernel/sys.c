@@ -11,7 +11,7 @@
 
 static void machine_power_off()
 {
-    while (true) {
+    while (1) {
         cpu_relax();
     }
 }

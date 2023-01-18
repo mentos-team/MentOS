@@ -32,122 +32,10 @@ if (DOXYGEN_FOUND)
     doxygen_add_docs(
         ${PROJECT_NAME}_documentation
         ${PROJECT_SOURCE_DIR}/README.md
-        ${PROJECT_SOURCE_DIR}/CODING_STYLE.md
         ${PROJECT_SOURCE_DIR}/LICENSE.md
-        ${PROJECT_SOURCE_DIR}/TODO.md
         ${PROJECT_SOURCE_DIR}/doc/signal.md
         ${PROJECT_SOURCE_DIR}/doc/syscall.md
-        ${PROJECT_SOURCE_DIR}/libc/src/crt0.S
-        ${PROJECT_SOURCE_DIR}/libc/inc/array.h
-        ${PROJECT_SOURCE_DIR}/libc/inc/assert.h
-        ${PROJECT_SOURCE_DIR}/libc/inc/bits/ioctls.h
-        ${PROJECT_SOURCE_DIR}/libc/inc/bits/stat.h
-        ${PROJECT_SOURCE_DIR}/libc/inc/bits/termios-struct.h
-        ${PROJECT_SOURCE_DIR}/libc/inc/ctype.h
-        ${PROJECT_SOURCE_DIR}/libc/inc/debug.h
-        ${PROJECT_SOURCE_DIR}/libc/inc/fcntl.h
-        ${PROJECT_SOURCE_DIR}/libc/inc/fcvt.h
-        ${PROJECT_SOURCE_DIR}/libc/inc/grp.h
-        ${PROJECT_SOURCE_DIR}/libc/inc/io/mm_io.h
-        ${PROJECT_SOURCE_DIR}/libc/inc/io/port_io.h
-        ${PROJECT_SOURCE_DIR}/libc/inc/ipc/ipc.h
-        ${PROJECT_SOURCE_DIR}/libc/inc/ipc/msg.h
-        ${PROJECT_SOURCE_DIR}/libc/inc/ipc/sem.h
-        ${PROJECT_SOURCE_DIR}/libc/inc/ipc/shm.h
-        ${PROJECT_SOURCE_DIR}/libc/inc/libgen.h
-        ${PROJECT_SOURCE_DIR}/libc/inc/limits.h
-        ${PROJECT_SOURCE_DIR}/libc/inc/math.h
-        ${PROJECT_SOURCE_DIR}/libc/inc/pwd.h
-        ${PROJECT_SOURCE_DIR}/libc/inc/ring_buffer.h
-        ${PROJECT_SOURCE_DIR}/libc/inc/sched.h
-        ${PROJECT_SOURCE_DIR}/libc/inc/signal.h
-        ${PROJECT_SOURCE_DIR}/libc/inc/stdarg.h
-        ${PROJECT_SOURCE_DIR}/libc/inc/stdbool.h
-        ${PROJECT_SOURCE_DIR}/libc/inc/stddef.h
-        ${PROJECT_SOURCE_DIR}/libc/inc/stdint.h
-        ${PROJECT_SOURCE_DIR}/libc/inc/stdio.h
-        ${PROJECT_SOURCE_DIR}/libc/inc/stdlib.h
-        ${PROJECT_SOURCE_DIR}/libc/inc/strerror.h
-        ${PROJECT_SOURCE_DIR}/libc/inc/string.h
-        ${PROJECT_SOURCE_DIR}/libc/inc/sys/bitops.h
-        ${PROJECT_SOURCE_DIR}/libc/inc/sys/dirent.h
-        ${PROJECT_SOURCE_DIR}/libc/inc/sys/errno.h
-        ${PROJECT_SOURCE_DIR}/libc/inc/sys/ioctl.h
-        ${PROJECT_SOURCE_DIR}/libc/inc/sys/reboot.h
-        ${PROJECT_SOURCE_DIR}/libc/inc/sys/stat.h
-        ${PROJECT_SOURCE_DIR}/libc/inc/sys/types.h
-        ${PROJECT_SOURCE_DIR}/libc/inc/sys/unistd.h
-        ${PROJECT_SOURCE_DIR}/libc/inc/sys/utsname.h
-        ${PROJECT_SOURCE_DIR}/libc/inc/sys/wait.h
-        ${PROJECT_SOURCE_DIR}/libc/inc/system/syscall_types.h
-        ${PROJECT_SOURCE_DIR}/libc/inc/termios.h
-        ${PROJECT_SOURCE_DIR}/libc/inc/time.h
-        ${PROJECT_SOURCE_DIR}/libc/src/abort.c
-        ${PROJECT_SOURCE_DIR}/libc/src/assert.c
-        ${PROJECT_SOURCE_DIR}/libc/src/ctype.c
-        ${PROJECT_SOURCE_DIR}/libc/src/debug.c
-        ${PROJECT_SOURCE_DIR}/libc/src/fcvt.c
-        ${PROJECT_SOURCE_DIR}/libc/src/grp.c
-        ${PROJECT_SOURCE_DIR}/libc/src/io/mm_io.c
-        ${PROJECT_SOURCE_DIR}/libc/src/io/port_io.c
-        ${PROJECT_SOURCE_DIR}/libc/src/ipc/ipc.c
-        ${PROJECT_SOURCE_DIR}/libc/src/libc_start.c
-        ${PROJECT_SOURCE_DIR}/libc/src/libgen.c
-        ${PROJECT_SOURCE_DIR}/libc/src/math.c
-        ${PROJECT_SOURCE_DIR}/libc/src/pwd.c
-        ${PROJECT_SOURCE_DIR}/libc/src/sched.c
-        ${PROJECT_SOURCE_DIR}/libc/src/setenv.c
-        ${PROJECT_SOURCE_DIR}/libc/src/stdio.c
-        ${PROJECT_SOURCE_DIR}/libc/src/stdlib.c
-        ${PROJECT_SOURCE_DIR}/libc/src/strerror.c
-        ${PROJECT_SOURCE_DIR}/libc/src/string.c
-        ${PROJECT_SOURCE_DIR}/libc/src/sys/errno.c
-        ${PROJECT_SOURCE_DIR}/libc/src/sys/ioctl.c
-        ${PROJECT_SOURCE_DIR}/libc/src/sys/unistd.c
-        ${PROJECT_SOURCE_DIR}/libc/src/sys/utsname.c
-        ${PROJECT_SOURCE_DIR}/libc/src/termios.c
-        ${PROJECT_SOURCE_DIR}/libc/src/time.c
-        ${PROJECT_SOURCE_DIR}/libc/src/unistd/chdir.c
-        ${PROJECT_SOURCE_DIR}/libc/src/unistd/close.c
-        ${PROJECT_SOURCE_DIR}/libc/src/unistd/creat.c
-        ${PROJECT_SOURCE_DIR}/libc/src/unistd/exec.c
-        ${PROJECT_SOURCE_DIR}/libc/src/unistd/exit.c
-        ${PROJECT_SOURCE_DIR}/libc/src/unistd/fork.c
-        ${PROJECT_SOURCE_DIR}/libc/src/unistd/getcwd.c
-        ${PROJECT_SOURCE_DIR}/libc/src/unistd/getdents.c
-        ${PROJECT_SOURCE_DIR}/libc/src/unistd/getgid.c
-        ${PROJECT_SOURCE_DIR}/libc/src/unistd/getpgid.c
-        ${PROJECT_SOURCE_DIR}/libc/src/unistd/getpid.c
-        ${PROJECT_SOURCE_DIR}/libc/src/unistd/getppid.c
-        ${PROJECT_SOURCE_DIR}/libc/src/unistd/getsid.c
-        ${PROJECT_SOURCE_DIR}/libc/src/unistd/getuid.c
-        ${PROJECT_SOURCE_DIR}/libc/src/unistd/interval.c
-        ${PROJECT_SOURCE_DIR}/libc/src/unistd/kill.c
-        ${PROJECT_SOURCE_DIR}/libc/src/unistd/lseek.c
-        ${PROJECT_SOURCE_DIR}/libc/src/unistd/mkdir.c
-        ${PROJECT_SOURCE_DIR}/libc/src/unistd/nice.c
-        ${PROJECT_SOURCE_DIR}/libc/src/unistd/open.c
-        ${PROJECT_SOURCE_DIR}/libc/src/unistd/read.c
-        ${PROJECT_SOURCE_DIR}/libc/src/unistd/reboot.c
-        ${PROJECT_SOURCE_DIR}/libc/src/unistd/rmdir.c
-        ${PROJECT_SOURCE_DIR}/libc/src/unistd/setgid.c
-        ${PROJECT_SOURCE_DIR}/libc/src/unistd/setpgid.c
-        ${PROJECT_SOURCE_DIR}/libc/src/unistd/setsid.c
-        ${PROJECT_SOURCE_DIR}/libc/src/unistd/setuid.c
-        ${PROJECT_SOURCE_DIR}/libc/src/unistd/signal.c
-        ${PROJECT_SOURCE_DIR}/libc/src/unistd/stat.c
-        ${PROJECT_SOURCE_DIR}/libc/src/unistd/unlink.c
-        ${PROJECT_SOURCE_DIR}/libc/src/unistd/waitpid.c
-        ${PROJECT_SOURCE_DIR}/libc/src/unistd/write.c
-        ${PROJECT_SOURCE_DIR}/libc/src/vscanf.c
-        ${PROJECT_SOURCE_DIR}/libc/src/vsprintf.c
-        ${PROJECT_SOURCE_DIR}/mentos/src/boot.S
-        ${PROJECT_SOURCE_DIR}/mentos/src/descriptor_tables/exception.S
-        ${PROJECT_SOURCE_DIR}/mentos/src/descriptor_tables/gdt.S
-        ${PROJECT_SOURCE_DIR}/mentos/src/descriptor_tables/idt.S
-        ${PROJECT_SOURCE_DIR}/mentos/src/descriptor_tables/interrupt.S
-        ${PROJECT_SOURCE_DIR}/mentos/src/descriptor_tables/tss.S
-        ${PROJECT_SOURCE_DIR}/mentos/src/process/user.S
+        
         ${PROJECT_SOURCE_DIR}/mentos/inc/boot.h
         ${PROJECT_SOURCE_DIR}/mentos/inc/descriptor_tables/gdt.h
         ${PROJECT_SOURCE_DIR}/mentos/inc/descriptor_tables/idt.h
@@ -171,7 +59,6 @@ if (DOXYGEN_FOUND)
         ${PROJECT_SOURCE_DIR}/mentos/inc/hardware/cpuid.h
         ${PROJECT_SOURCE_DIR}/mentos/inc/hardware/pic8259.h
         ${PROJECT_SOURCE_DIR}/mentos/inc/hardware/timer.h
-        ${PROJECT_SOURCE_DIR}/mentos/inc/io/debug.h
         ${PROJECT_SOURCE_DIR}/mentos/inc/io/proc_modules.h
         ${PROJECT_SOURCE_DIR}/mentos/inc/io/vga/vga.h
         ${PROJECT_SOURCE_DIR}/mentos/inc/io/vga/vga_font.h
@@ -206,7 +93,6 @@ if (DOXYGEN_FOUND)
         ${PROJECT_SOURCE_DIR}/mentos/inc/proc_access.h
         ${PROJECT_SOURCE_DIR}/mentos/inc/sys/errno.h
         ${PROJECT_SOURCE_DIR}/mentos/inc/sys/ipc.h
-        ${PROJECT_SOURCE_DIR}/mentos/inc/sys/kernel_levels.h
         ${PROJECT_SOURCE_DIR}/mentos/inc/sys/module.h
         ${PROJECT_SOURCE_DIR}/mentos/inc/sys/reboot.h
         ${PROJECT_SOURCE_DIR}/mentos/inc/sys/types.h
@@ -216,6 +102,7 @@ if (DOXYGEN_FOUND)
         ${PROJECT_SOURCE_DIR}/mentos/inc/system/signal.h
         ${PROJECT_SOURCE_DIR}/mentos/inc/system/syscall.h
         ${PROJECT_SOURCE_DIR}/mentos/inc/version.h
+
         ${PROJECT_SOURCE_DIR}/mentos/src/boot.c
         ${PROJECT_SOURCE_DIR}/mentos/src/descriptor_tables/exception.c
         ${PROJECT_SOURCE_DIR}/mentos/src/descriptor_tables/gdt.c
@@ -292,5 +179,122 @@ if (DOXYGEN_FOUND)
         ${PROJECT_SOURCE_DIR}/mentos/src/system/printk.c
         ${PROJECT_SOURCE_DIR}/mentos/src/system/signal.c
         ${PROJECT_SOURCE_DIR}/mentos/src/system/syscall.c
+
+        ${PROJECT_SOURCE_DIR}/mentos/src/boot.S
+        ${PROJECT_SOURCE_DIR}/mentos/src/descriptor_tables/exception.S
+        ${PROJECT_SOURCE_DIR}/mentos/src/descriptor_tables/gdt.S
+        ${PROJECT_SOURCE_DIR}/mentos/src/descriptor_tables/idt.S
+        ${PROJECT_SOURCE_DIR}/mentos/src/descriptor_tables/interrupt.S
+        ${PROJECT_SOURCE_DIR}/mentos/src/descriptor_tables/tss.S
+        ${PROJECT_SOURCE_DIR}/mentos/src/process/user.S
+
+        ${PROJECT_SOURCE_DIR}/libc/inc/array.h
+        ${PROJECT_SOURCE_DIR}/libc/inc/assert.h
+        ${PROJECT_SOURCE_DIR}/libc/inc/bits/ioctls.h
+        ${PROJECT_SOURCE_DIR}/libc/inc/bits/stat.h
+        ${PROJECT_SOURCE_DIR}/libc/inc/bits/termios-struct.h
+        ${PROJECT_SOURCE_DIR}/libc/inc/ctype.h
+        ${PROJECT_SOURCE_DIR}/libc/inc/fcntl.h
+        ${PROJECT_SOURCE_DIR}/libc/inc/fcvt.h
+        ${PROJECT_SOURCE_DIR}/libc/inc/grp.h
+        ${PROJECT_SOURCE_DIR}/libc/inc/io/ansi_colors.h
+        ${PROJECT_SOURCE_DIR}/libc/inc/io/debug.h
+        ${PROJECT_SOURCE_DIR}/libc/inc/io/mm_io.h
+        ${PROJECT_SOURCE_DIR}/libc/inc/io/port_io.h
+        ${PROJECT_SOURCE_DIR}/libc/inc/ipc/ipc.h
+        ${PROJECT_SOURCE_DIR}/libc/inc/ipc/msg.h
+        ${PROJECT_SOURCE_DIR}/libc/inc/ipc/sem.h
+        ${PROJECT_SOURCE_DIR}/libc/inc/ipc/shm.h
+        ${PROJECT_SOURCE_DIR}/libc/inc/libgen.h
+        ${PROJECT_SOURCE_DIR}/libc/inc/limits.h
+        ${PROJECT_SOURCE_DIR}/libc/inc/math.h
+        ${PROJECT_SOURCE_DIR}/libc/inc/pwd.h
+        ${PROJECT_SOURCE_DIR}/libc/inc/ring_buffer.h
+        ${PROJECT_SOURCE_DIR}/libc/inc/sched.h
+        ${PROJECT_SOURCE_DIR}/libc/inc/signal.h
+        ${PROJECT_SOURCE_DIR}/libc/inc/stdarg.h
+        ${PROJECT_SOURCE_DIR}/libc/inc/stdbool.h
+        ${PROJECT_SOURCE_DIR}/libc/inc/stddef.h
+        ${PROJECT_SOURCE_DIR}/libc/inc/stdint.h
+        ${PROJECT_SOURCE_DIR}/libc/inc/stdio.h
+        ${PROJECT_SOURCE_DIR}/libc/inc/stdlib.h
+        ${PROJECT_SOURCE_DIR}/libc/inc/strerror.h
+        ${PROJECT_SOURCE_DIR}/libc/inc/string.h
+        ${PROJECT_SOURCE_DIR}/libc/inc/sys/bitops.h
+        ${PROJECT_SOURCE_DIR}/libc/inc/sys/dirent.h
+        ${PROJECT_SOURCE_DIR}/libc/inc/sys/errno.h
+        ${PROJECT_SOURCE_DIR}/libc/inc/sys/ioctl.h
+        ${PROJECT_SOURCE_DIR}/libc/inc/sys/kernel_levels.h
+        ${PROJECT_SOURCE_DIR}/libc/inc/sys/reboot.h
+        ${PROJECT_SOURCE_DIR}/libc/inc/sys/stat.h
+        ${PROJECT_SOURCE_DIR}/libc/inc/sys/types.h
+        ${PROJECT_SOURCE_DIR}/libc/inc/sys/unistd.h
+        ${PROJECT_SOURCE_DIR}/libc/inc/sys/utsname.h
+        ${PROJECT_SOURCE_DIR}/libc/inc/sys/wait.h
+        ${PROJECT_SOURCE_DIR}/libc/inc/system/syscall_types.h
+        ${PROJECT_SOURCE_DIR}/libc/inc/termios.h
+        ${PROJECT_SOURCE_DIR}/libc/inc/time.h
+
+        ${PROJECT_SOURCE_DIR}/libc/src/abort.c
+        ${PROJECT_SOURCE_DIR}/libc/src/assert.c
+        ${PROJECT_SOURCE_DIR}/libc/src/ctype.c
+        ${PROJECT_SOURCE_DIR}/libc/src/fcvt.c
+        ${PROJECT_SOURCE_DIR}/libc/src/grp.c
+        ${PROJECT_SOURCE_DIR}/libc/src/io/debug.c
+        ${PROJECT_SOURCE_DIR}/libc/src/io/mm_io.c
+        ${PROJECT_SOURCE_DIR}/libc/src/io/port_io.c
+        ${PROJECT_SOURCE_DIR}/libc/src/ipc/ipc.c
+        ${PROJECT_SOURCE_DIR}/libc/src/libc_start.c
+        ${PROJECT_SOURCE_DIR}/libc/src/libgen.c
+        ${PROJECT_SOURCE_DIR}/libc/src/math.c
+        ${PROJECT_SOURCE_DIR}/libc/src/pwd.c
+        ${PROJECT_SOURCE_DIR}/libc/src/sched.c
+        ${PROJECT_SOURCE_DIR}/libc/src/setenv.c
+        ${PROJECT_SOURCE_DIR}/libc/src/stdio.c
+        ${PROJECT_SOURCE_DIR}/libc/src/stdlib.c
+        ${PROJECT_SOURCE_DIR}/libc/src/strerror.c
+        ${PROJECT_SOURCE_DIR}/libc/src/string.c
+        ${PROJECT_SOURCE_DIR}/libc/src/sys/errno.c
+        ${PROJECT_SOURCE_DIR}/libc/src/sys/ioctl.c
+        ${PROJECT_SOURCE_DIR}/libc/src/sys/unistd.c
+        ${PROJECT_SOURCE_DIR}/libc/src/sys/utsname.c
+        ${PROJECT_SOURCE_DIR}/libc/src/termios.c
+        ${PROJECT_SOURCE_DIR}/libc/src/time.c
+        ${PROJECT_SOURCE_DIR}/libc/src/unistd/chdir.c
+        ${PROJECT_SOURCE_DIR}/libc/src/unistd/close.c
+        ${PROJECT_SOURCE_DIR}/libc/src/unistd/creat.c
+        ${PROJECT_SOURCE_DIR}/libc/src/unistd/exec.c
+        ${PROJECT_SOURCE_DIR}/libc/src/unistd/exit.c
+        ${PROJECT_SOURCE_DIR}/libc/src/unistd/fork.c
+        ${PROJECT_SOURCE_DIR}/libc/src/unistd/getcwd.c
+        ${PROJECT_SOURCE_DIR}/libc/src/unistd/getdents.c
+        ${PROJECT_SOURCE_DIR}/libc/src/unistd/getgid.c
+        ${PROJECT_SOURCE_DIR}/libc/src/unistd/getpgid.c
+        ${PROJECT_SOURCE_DIR}/libc/src/unistd/getpid.c
+        ${PROJECT_SOURCE_DIR}/libc/src/unistd/getppid.c
+        ${PROJECT_SOURCE_DIR}/libc/src/unistd/getsid.c
+        ${PROJECT_SOURCE_DIR}/libc/src/unistd/getuid.c
+        ${PROJECT_SOURCE_DIR}/libc/src/unistd/interval.c
+        ${PROJECT_SOURCE_DIR}/libc/src/unistd/kill.c
+        ${PROJECT_SOURCE_DIR}/libc/src/unistd/lseek.c
+        ${PROJECT_SOURCE_DIR}/libc/src/unistd/mkdir.c
+        ${PROJECT_SOURCE_DIR}/libc/src/unistd/nice.c
+        ${PROJECT_SOURCE_DIR}/libc/src/unistd/open.c
+        ${PROJECT_SOURCE_DIR}/libc/src/unistd/read.c
+        ${PROJECT_SOURCE_DIR}/libc/src/unistd/reboot.c
+        ${PROJECT_SOURCE_DIR}/libc/src/unistd/rmdir.c
+        ${PROJECT_SOURCE_DIR}/libc/src/unistd/setgid.c
+        ${PROJECT_SOURCE_DIR}/libc/src/unistd/setpgid.c
+        ${PROJECT_SOURCE_DIR}/libc/src/unistd/setsid.c
+        ${PROJECT_SOURCE_DIR}/libc/src/unistd/setuid.c
+        ${PROJECT_SOURCE_DIR}/libc/src/unistd/signal.c
+        ${PROJECT_SOURCE_DIR}/libc/src/unistd/stat.c
+        ${PROJECT_SOURCE_DIR}/libc/src/unistd/unlink.c
+        ${PROJECT_SOURCE_DIR}/libc/src/unistd/waitpid.c
+        ${PROJECT_SOURCE_DIR}/libc/src/unistd/write.c
+        ${PROJECT_SOURCE_DIR}/libc/src/vscanf.c
+        ${PROJECT_SOURCE_DIR}/libc/src/vsprintf.c
+
+        ${PROJECT_SOURCE_DIR}/libc/src/crt0.S
     )
 endif (DOXYGEN_FOUND)
