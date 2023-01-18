@@ -168,15 +168,15 @@ add_custom_target(
 add_custom_target(
     qemu-gdb
     COMMAND test -e ${CMAKE_BINARY_DIR}/rootfs.img || ${CMAKE_COMMAND} -E cmake_echo_color --red "No filesystem file detected, you need to run: make filesystem"
-    COMMAND echo "\n\n"
-    COMMAND echo "Now, QEMU has loaded the kernel, and it is waiting that you\n"
-    COMMAND echo "remotely connect to it. To start debugging, open a new shell\n"
-    COMMAND echo "in THIS same folder, and just type :\n"
+    COMMAND echo ""
+    COMMAND echo "Now, QEMU has loaded the kernel, and it is waiting that you"
+    COMMAND echo "remotely connect to it. To start debugging, open a new shell"
+    COMMAND echo "in THIS same folder, and just type :"
     COMMAND printf "    cgdb -q -iex %q" "add-auto-load-safe-path ."
-    COMMAND echo "\n\n"
+    COMMAND echo ""
     COMMAND ${EMULATOR} ${EMULATOR_FLAGS} -s -S -kernel ${CMAKE_BINARY_DIR}/mentos/kernel-bootloader.bin
     DEPENDS kernel-bootloader.bin
-    DEPENDS .gdbinit
+    DEPENDS gdbinit
 )
 
 # =============================================================================
