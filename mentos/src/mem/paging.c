@@ -68,8 +68,8 @@ void paging_switch_directory_va(page_directory_t *dir)
 
 void paging_flush_tlb_single(unsigned long addr)
 {
-    ASM("invlpg (%0)" ::"r"(addr)
-        : "memory");
+    __asm__ __volatile__("invlpg (%0)" ::"r"(addr)
+                         : "memory");
 }
 
 uint32_t create_vm_area(mm_struct_t *mm,
@@ -165,12 +165,12 @@ uint32_t clone_vm_area(mm_struct_t *mm, vm_area_struct_t *area, int cow, uint32_
 
 static void __init_pagedir(page_directory_t *pdir)
 {
-    *pdir = (page_directory_t){ {0} };
+    *pdir = (page_directory_t){ { 0 } };
 }
 
 static void __init_pagetable(page_table_t *ptable)
 {
-    *ptable = (page_table_t){ {0} };
+    *ptable = (page_table_t){ { 0 } };
 }
 
 void paging_init(boot_info_t *info)

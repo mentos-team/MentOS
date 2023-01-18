@@ -5,9 +5,9 @@
 
 #pragma once
 
-/// @brief     Prints the given message and then safely stop the execution of
-///            the kernel.
+/// @brief Prints the given message and safely stop the execution of the kernel.
 /// @param msg The message that has to be shown.
 void kernel_panic(const char *msg);
 
+/// @brief Sends a kernel panic with the given message.
 #define TODO(msg) kernel_panic(#msg);
