@@ -3,22 +3,20 @@
 /// @copyright (c) 2014-2022 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-// Include the kernel log levels.
-#include "sys/kernel_levels.h"
-/// Change the header.
-#define __DEBUG_HEADER__ "[PAGING]"
-/// Set the log level.
-#define __DEBUG_LEVEL__ LOGLEVEL_NOTICE
+// Setup the logging for this file (do this before any other include).
+#include "sys/kernel_levels.h"           // Include kernel log levels.
+#define __DEBUG_HEADER__ "[PAGING]"      ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
+#include "io/debug.h"                    // Include debugging functions.
 
 #include "mem/paging.h"
-#include "descriptor_tables/isr.h"
 #include "mem/vmem_map.h"
 #include "mem/zone_allocator.h"
 #include "mem/kheap.h"
-#include "io/debug.h"
+#include "descriptor_tables/isr.h"
+#include "system/panic.h"
 #include "assert.h"
 #include "string.h"
-#include "system/panic.h"
 
 /// Cache for storing mm_struct.
 kmem_cache_t *mm_cache;
