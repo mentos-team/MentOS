@@ -5,15 +5,13 @@
 /// @addtogroup ata
 /// @{
 
-// Include the kernel log levels.
-#include "sys/kernel_levels.h"
-/// Change the header.
-#define __DEBUG_HEADER__ "[ATA   ]"
-/// Set the log level.
-#define __DEBUG_LEVEL__ LOGLEVEL_NOTICE
+// Setup the logging for this file (do this before any other include).
+#include "sys/kernel_levels.h"           // Include kernel log levels.
+#define __DEBUG_HEADER__ "[ATA   ]"      ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
+#include "io/debug.h"                    // Include debugging functions.
 
 #include "drivers/ata.h"
-
 #include "descriptor_tables/isr.h"
 #include "hardware/pic8259.h"
 #include "klib/spinlock.h"
@@ -23,7 +21,6 @@
 #include "io/port_io.h"
 #include "sys/errno.h"
 #include "mem/kheap.h"
-#include "io/debug.h"
 #include "string.h"
 #include "fs/vfs.h"
 #include "fcntl.h"
