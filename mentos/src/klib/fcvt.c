@@ -1,6 +1,6 @@
 /// @file fcvt.c
 /// @brief Define the functions required to turn double values into a string.
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2023 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #include "fcvt.h"

@@ -1,6 +1,6 @@
 /// @file fcntl.h
 /// @brief Headers of functions fcntl() and open().
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2023 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #pragma once

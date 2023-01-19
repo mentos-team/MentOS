@@ -1,6 +1,6 @@
 /// @file syscall.c
 /// @brief System Call management functions.
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2023 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 // Setup the logging for this file (do this before any other include).
