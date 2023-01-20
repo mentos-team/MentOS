@@ -34,5 +34,5 @@
         ARRAY_FREE(arr->buffer);                                                      \
     }
 
-#undef ARRAY_ALLOC malloc
-#undef ARRAY_FREE free
+#undef ARRAY_ALLOC
+#undef ARRAY_FREE
