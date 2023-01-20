@@ -1,5 +1,4 @@
 /// @file ansi_colors.h
-/// @author Enrico Fraccaroli (enry.frak@gmail.com)
 /// @brief List of ANSI colors.
 /// @copyright (c) 2014-2023 This file is distributed under the MIT License.
 /// See LICENSE.md for details.

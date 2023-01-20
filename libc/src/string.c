@@ -384,18 +384,15 @@ char *strtok_r(char *str, const char *delim, char **saveptr)
  * #pragma function(strset)
  */
 
-void *memset(void *ptr, int value, size_t num)
+void *memset(void *ptr, int c, size_t n)
 {
-    // Truncate c to 8 bits.
-    value = (value & 0xFF);
-
-    char *dst = (char *)ptr;
-
-    // Initialize the rest of the size.
-    while (num--) {
-        *dst++ = (char)value;
-    }
-
+    // Turn the pointer into a char * pointer. Here, we use the volatile keyword
+    // to prevent the compiler from optimizing away the operations involving the
+    // pointer.
+    unsigned char volatile *dst = (unsigned char volatile *)ptr;
+    // Initialize the content of the memory.
+    while (n--) *dst++ = (unsigned char)c;
+    // Return the pointer.
     return ptr;
 }
 

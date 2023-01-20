@@ -10,18 +10,18 @@
 #include <sys/stat.h>
 #include <signal.h>
 #include <io/debug.h>
+#include <io/ansi_colors.h>
 #include <sys/bitops.h>
-#include "stdbool.h"
-#include "stddef.h"
-#include "string.h"
-#include "stdio.h"
-#include "stdlib.h"
-#include "strerror.h"
-#include "termios.h"
-#include "limits.h"
-#include "sys/utsname.h"
-#include "ctype.h"
-#include "ansi_colors.h"
+#include <stdbool.h>
+#include <stddef.h>
+#include <string.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <strerror.h>
+#include <termios.h>
+#include <limits.h>
+#include <sys/utsname.h>
+#include <ctype.h>
 
 /// Maximum length of commands.
 #define CMD_LEN 32

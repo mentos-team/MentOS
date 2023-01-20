@@ -15,8 +15,7 @@
 #include <strerror.h>
 #include <stdlib.h>
 #include <io/debug.h>
-
-#include "ansi_colors.h"
+#include <io/ansi_colors.h>
 
 /// Maximum length of credentials.
 #define CREDENTIALS_LENGTH 50
@@ -52,7 +51,7 @@ static inline void __set_io_flags(unsigned flag, bool_t active)
     tcsetattr(STDIN_FILENO, 0, &_termios);
 }
 
-static inline void __print_message_file(const char * file)
+static inline void __print_message_file(const char *file)
 {
     char buffer[256];
     ssize_t nbytes, total = 0;
@@ -159,12 +158,12 @@ int main(int argc, char **argv)
         // Get the username.
         do {
             printf("Username :");
-        } while (!__get_input(username, CREDENTIALS_LENGTH, false));
+        } while (!__get_input(username, sizeof(username), false));
 
         // Get the password.
         do {
             printf("Password :");
-        } while (!__get_input(password, CREDENTIALS_LENGTH, true));
+        } while (!__get_input(password, sizeof(password), true));
 
         // Check if we can find the user.
         if ((pwd = getpwnam(username)) == NULL) {
