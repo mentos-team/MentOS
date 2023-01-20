@@ -93,7 +93,7 @@ static inline bool_t __get_input(char *input, size_t max_len, bool_t hide)
         } else if (c == '\033') {
             c = getchar();
             if (c == '[') {
-                c = getchar(); // Get the char, and ignore it.
+                getchar(); // Get the char, and ignore it.
             } else if (c == '^') {
                 c = getchar(); // Get the char.
                 if (c == 'C') {
@@ -199,10 +199,16 @@ int main(int argc, char **argv)
     }
 
     // Set the group id.
-    setgid(pwd->pw_gid);
+    if (setgid(pwd->pw_gid) < 0) {
+        printf("login: Failed to change group id: %s\n", strerror(errno));
+        return 1;
+    }
 
     // Set the user id.
-    setuid(pwd->pw_uid);
+    if (setuid(pwd->pw_uid) < 0) {
+        printf("login: Failed to change user id: %s\n", strerror(errno));
+        return 1;
+    }
 
     printf("\n");
 
