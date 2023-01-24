@@ -3,25 +3,34 @@
 /// @copyright (c) 2014-2023 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "mem/kheap.h"
-#include "stdio.h"
-#include "fcntl.h"
 #include "string.h"
 #include "ctype.h"
+#include "stdio.h"
+#include "stdlib.h"
+#include "fcntl.h"
+
+#ifdef __KERNEL__
+#include "mem/kheap.h"
+#endif
 
 char *strncpy(char *destination, const char *source, size_t num)
 {
-    char *start = destination;
-    while (num && (*destination++ = *source++)) {
-        num--;
-    }
+    // Check if we have a valid number.
     if (num) {
-        while (--num) {
-            *destination++ = '\0';
+        // Copies the first num characters of source to destination.
+        while (num && (*destination++ = *source++)) {
+            num--;
+        }
+        // If the end of the source C string (which is signaled by a null-character)
+        // is found before num characters have been copied, destination is padded
+        // with zeros until a total of num characters have been written to it.
+        if (num) {
+            while (--num)
+                *destination++ = '\0';
         }
     }
-
-    return start;
+    // Pointer to destination is returned.
+    return destination;
 }
 
 int strncmp(const char *s1, const char *s2, size_t n)
@@ -389,16 +398,13 @@ char *strtok_r(char *str, const char *delim, char **saveptr)
 
 void *memset(void *ptr, int value, size_t num)
 {
-    // Truncate c to 8 bits.
-    value = (value & 0xFF);
-
-    char *dst = (char *)ptr;
-
-    // Initialize the rest of the size.
-    while (num--) {
-        *dst++ = (char)value;
-    }
-
+    // Turn the pointer into a char * pointer. Here, we use the volatile keyword
+    // to prevent the compiler from optimizing away the operations involving the
+    // pointer.
+    unsigned char volatile *dst = (unsigned char volatile *)ptr;
+    // Initialize the content of the memory.
+    while (num--) *dst++ = (unsigned char)value;
+    // Return the pointer.
     return ptr;
 }
 
@@ -418,14 +424,15 @@ int memcmp(const void *dst, const void *src, size_t n)
 
 void *memcpy(void *dst, const void *src, size_t num)
 {
-    char *_dst       = dst;
-    const char *_src = src;
-
-    while (num--) {
-        *_dst++ = *_src++;
-    }
-
-    return dst;
+    // Turn the pointer into a char * pointer. Here, we use the volatile keyword
+    // to prevent the compiler from optimizing away the operations involving the
+    // pointer.
+    unsigned char volatile *_dst       = (unsigned char volatile *)dst;
+    const unsigned char volatile *_src = (const unsigned char volatile *)src;
+    // Initialize the content of the memory.
+    while (num--) *_dst++ = *_src++;
+    // Return the pointer.
+    return (void *)dst;
 }
 
 void *memccpy(void *dst, const void *src, int c, size_t n)
@@ -592,7 +599,11 @@ char *trim(char *str)
 char *strdup(const char *s)
 {
     size_t len = strlen(s) + 1;
-    char *new  = kmalloc(len);
+#ifdef __KERNEL__
+    char *new = kmalloc(len);
+#else
+    char *new = malloc(len);
+#endif
     if (new == NULL)
         return NULL;
     new[len] = '\0';
@@ -602,7 +613,11 @@ char *strdup(const char *s)
 char *strndup(const char *s, size_t n)
 {
     size_t len = strnlen(s, n);
-    char *new  = kmalloc(len);
+#ifdef __KERNEL__
+    char *new = kmalloc(len);
+#else
+    char *new = malloc(len);
+#endif
     if (new == NULL)
         return NULL;
     new[len] = '\0';
