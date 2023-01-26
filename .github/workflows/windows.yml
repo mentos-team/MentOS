@@ -25,6 +25,11 @@ jobs:
               run: |
                   choco install nasm
                   echo "C:\Program Files\NASM" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+            - name: Set up GCC
+              uses: egor-tensin/setup-gcc@v1
+              with:
+                  version: latest
+                  platform: x32
             - name: Build
               run: |
                   cmake -B build
