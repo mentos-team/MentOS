@@ -6,14 +6,14 @@ on:
         paths-ignore:
             - "**.md"
             - ".gitignore"
-            - "macos.yml"
-            - "ubuntu.yml"
+            - "**/macos.yml"
+            - "**/ubuntu.yml"
     pull_request:
         paths-ignore:
             - "**.md"
             - ".gitignore"
-            - "macos.yml"
-            - "ubuntu.yml"
+            - "**/macos.yml"
+            - "**/ubuntu.yml"
 jobs:
     test:
         name: Build
