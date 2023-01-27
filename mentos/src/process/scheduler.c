@@ -465,7 +465,7 @@ pid_t sys_waitpid(pid_t pid, int *status, int options)
     list_for_each_decl(it, &current_process->children)
     {
         // Get the entry.
-        task_struct *entry = list_entry(it, task_struct, sibling);
+        entry = list_entry(it, task_struct, sibling);
         // Check the entry.
         if (entry == NULL) {
             continue;
