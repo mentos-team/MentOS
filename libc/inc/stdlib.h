@@ -7,6 +7,9 @@
 
 #include "stddef.h"
 
+#define EXIT_SUCCESS 0 ///< Successful execution of a program.
+#define EXIT_FAILURE 1 ///< Unsuccessful execution of a program.
+
 /// @brief Returns the number of usable bytes in the block pointed to by ptr.
 /// @param ptr The pointer for which we want to retrieve the usable size.
 /// @return The number of usable bytes in the block of allocated memory

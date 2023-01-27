@@ -25,7 +25,7 @@ ssize_t read(int fd, void *buf, size_t nbytes);
 /// @param buf    The buffer collecting data to written.
 /// @param nbytes The number of bytes to write.
 /// @return       The number of written bytes.
-ssize_t write(int fd, void *buf, size_t nbytes);
+ssize_t write(int fd, const void *buf, size_t nbytes);
 
 /// @brief Opens the file specified by pathname.
 /// @param pathname A pathname for a file.
@@ -238,7 +238,7 @@ int fchdir(int fd);
 /// @return On success, the number of bytes read is returned.  On end of
 ///         directory, 0 is returned.  On error, -1 is returned, and errno is set
 ///         appropriately.
-int getdents(int fd, dirent_t *dirp, unsigned int count);
+ssize_t getdents(int fd, dirent_t *dirp, unsigned int count);
 
 /// @brief Send signal to calling thread after desired seconds.
 /// @param seconds the amount of seconds.

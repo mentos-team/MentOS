@@ -90,7 +90,7 @@ static ssize_t procfs_write(vfs_file_t *file, const void *buffer, off_t offset, 
 static off_t procfs_lseek(vfs_file_t *file, off_t offset, int whence);
 static int procfs_fstat(vfs_file_t *file, stat_t *stat);
 static int procfs_ioctl(vfs_file_t *file, int request, void *data);
-static int procfs_getdents(vfs_file_t *file, dirent_t *dirp, off_t doff, size_t count);
+static ssize_t procfs_getdents(vfs_file_t *file, dirent_t *dirp, off_t doff, size_t count);
 
 // ============================================================================
 // Virtual FileSystem (VFS) Operaions
@@ -691,63 +691,71 @@ static int procfs_ioctl(vfs_file_t *file, int request, void *data)
 /// @param doff  The offset inside the buffer where the data should be written.
 /// @param count The maximum length of the buffer.
 /// @return The number of written bytes in the buffer.
-static inline int procfs_getdents(vfs_file_t *file, dirent_t *dirp, off_t doff, size_t count)
+static inline ssize_t procfs_getdents(vfs_file_t *file, dirent_t *dirp, off_t doff, size_t count)
 {
     if (!file || !dirp)
         return -1;
+    // Check if the size of the buffer is big enough to hold the data about the
+    // directory entry.
+    if (count < sizeof(dirent_t))
+        return -1;
+    // If there are no file, stop right here.
+    if (list_head_empty(&fs.files))
+        return 0;
+    // Find the directory entry.
     procfs_file_t *direntry = procfs_find_entry_inode(file->ino);
     if (direntry == NULL) {
         return -ENOENT;
     }
+    // Check if it is a directory.
     if ((direntry->flags & DT_DIR) == 0)
         return -ENOTDIR;
+    // Clear the buffer.
     memset(dirp, 0, count);
+    // Initialize, the length of the directory name.
     int len        = strlen(direntry->name);
-    size_t written = 0;
-    off_t current  = 0;
+    ssize_t written_size = 0;
+    off_t iterated_size  = 0;
     char *parent   = NULL;
-    procfs_file_t *entry;
-    if (!list_head_empty(&fs.files)) {
-        list_for_each_decl(it, &fs.files)
-        {
-            // Get the file structure.
-            entry = procfs_get_file(it);
-            // Check if it a valid procfs file.
-            if (!entry)
-                continue;
-
-            // If the entry is the directory itself, skip.
-            if (strcmp(direntry->name, entry->name) == 0) {
-                continue;
-            }
-            // Get the parent directory.
-            parent = dirname(entry->name);
-            // Check if the entry is inside the directory.
-            if (strcmp(direntry->name, parent) != 0) {
-                continue;
-            }
-            // Skip if already provided.
-            if (current++ < doff) {
-                continue;
-            }
-            if (*(entry->name + len) == '/')
-                ++len;
-            // Write on current dirp.
-            dirp->d_ino  = entry->inode;
-            dirp->d_type = entry->flags;
-            strcpy(dirp->d_name, entry->name + len);
-            dirp->d_off    = sizeof(dirent_t);
-            dirp->d_reclen = sizeof(dirent_t);
-            // Increment the written counter.
-            written += sizeof(dirent_t);
-            // Move to next writing position.
-            dirp += 1;
-
-            if (written >= count)
-                break;
+    // Iterate the filesystem files.
+    list_for_each_decl(it, &fs.files)
+    {
+        // Get the file structure.
+        procfs_file_t *entry = procfs_get_file(it);
+        // Check if it a valid procfs file.
+        if (!entry)
+            continue;
+        // If the entry is the directory itself, skip.
+        if (!strcmp(direntry->name, entry->name))
+            continue;
+        // Get the parent directory.
+        parent = dirname(entry->name);
+        // Check if the parent of the entry is the directory we are iterating.
+        if (strcmp(direntry->name, parent))
+            continue;
+        // Advance the size we just iterated.
+        iterated_size += sizeof(dirent_t);
+        // Check if the iterated size is still below the offset.
+        if (iterated_size < doff) {
+            continue;
         }
+        // Check if the last character of the entry is a slash.
+        if (*(entry->name + len) == '/')
+            ++len;
+        // Write on current dirp.
+        dirp->d_ino  = entry->inode;
+        dirp->d_type = entry->flags;
+        strcpy(dirp->d_name, entry->name + len);
+        dirp->d_off    = sizeof(dirent_t);
+        dirp->d_reclen = sizeof(dirent_t);
+        // Increment the written counter.
+        written_size += sizeof(dirent_t);
+        // Move to next writing position.
+        ++dirp;
+        if (written_size >= count)
+            break;
     }
-    return written;
+    return written_size;
 }
 
 /// @brief Mounts the block device as an EXT2 filesystem.

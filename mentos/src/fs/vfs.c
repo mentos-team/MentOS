@@ -172,7 +172,7 @@ ssize_t vfs_read(vfs_file_t *file, void *buf, size_t offset, size_t nbytes)
     return file->fs_operations->read_f(file, buf, offset, nbytes);
 }
 
-ssize_t vfs_write(vfs_file_t *file, void *buf, size_t offset, size_t nbytes)
+ssize_t vfs_write(vfs_file_t *file, const void *buf, size_t offset, size_t nbytes)
 {
     if (file->fs_operations->write_f == NULL) {
         pr_err("No WRITE function found for the current filesystem.\n");
@@ -190,7 +190,7 @@ off_t vfs_lseek(vfs_file_t *file, off_t offset, int whence)
     return file->fs_operations->lseek_f(file, offset, whence);
 }
 
-int vfs_getdents(vfs_file_t *file, dirent_t *dirp, off_t off, size_t count)
+ssize_t vfs_getdents(vfs_file_t *file, dirent_t *dirp, off_t off, size_t count)
 {
     if (file->fs_operations->getdents_f == NULL) {
         pr_err("No GETDENTS function found for the current filesystem.\n");

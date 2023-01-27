@@ -8,4 +8,4 @@
 #include "sys/errno.h"
 
 
-_syscall3(int, getdents, int, fd, dirent_t *, dirp, unsigned int, count)
+_syscall3(ssize_t, getdents, int, fd, dirent_t *, dirp, unsigned int, count)

@@ -46,7 +46,7 @@ ssize_t sys_read(int fd, void *buf, size_t nbytes)
     return read;
 }
 
-ssize_t sys_write(int fd, void *buf, size_t nbytes)
+ssize_t sys_write(int fd, const void *buf, size_t nbytes)
 {
     // Get the current task.
     task_struct *task = scheduler_get_current_process();

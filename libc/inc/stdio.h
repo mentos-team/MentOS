@@ -30,7 +30,7 @@ void putchar(int character);
 /// @brief Writes the string pointed by str to the standard output (stdout)
 ///        and appends a newline character.
 /// @param str The string to send to stdout.
-void puts(char *str);
+void puts(const char *str);
 
 /// @brief Returns the next character from the standard input (stdin).
 /// @return The character received from stdin.
@@ -124,3 +124,7 @@ int sscanf(const char *str, const char *fmt, ...);
 ///         argument list successfully filled. EOF otherwise.
 int fscanf(int fd, const char *fmt, ...);
 #endif
+
+/// @brief Prints a system error message.
+/// @param s the message we prepend to the actual error message.
+void perror(const char *s);
