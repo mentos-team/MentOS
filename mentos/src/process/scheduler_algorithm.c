@@ -18,8 +18,6 @@
 #include "process/wait.h"
 #include "process/scheduler.h"
 
-int flag = 0;
-
 /// @brief Updates task execution statistics.
 /// @param task the task to update.
 static void __update_task_statistics(task_struct *task);
