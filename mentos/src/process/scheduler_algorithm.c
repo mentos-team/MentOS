@@ -18,6 +18,8 @@
 #include "process/wait.h"
 #include "process/scheduler.h"
 
+int flag = 0;
+
 /// @brief Updates task execution statistics.
 /// @param task the task to update.
 static void __update_task_statistics(task_struct *task);
@@ -97,7 +99,7 @@ static inline task_struct *__scheduler_priority(runqueue_t *runqueue, bool_t ski
     task_struct *next = list_entry(runqueue->queue.next, struct task_struct, run_list);
 
     // Get its static priority.
-    time_t min = /*...*/;
+    time_t min = (next->se).prio;
 
     // Search for the task with the smallest static priority.
     list_for_each_decl(it, &runqueue->queue)
@@ -106,7 +108,7 @@ static inline task_struct *__scheduler_priority(runqueue_t *runqueue, bool_t ski
         if (it == &runqueue->queue)
             continue;
         // Get the current entry.
-        task_struct *entry = list_entry(it, task_struct, run_list);
+        task_struct *entry = list_entry(it, struct task_struct, run_list);
         // We consider only runnable processes
         if (entry->state != TASK_RUNNING)
             continue;
@@ -114,9 +116,9 @@ static inline task_struct *__scheduler_priority(runqueue_t *runqueue, bool_t ski
         if (__is_periodic_task(entry) && skip_periodic)
             continue;
         // Check if the entry has a lower priority.
-        if (/*...*/) {
-            // Chose the `entry` as the `next` task.
-            /*...*/
+        if ((entry->se).prio <= min) {
+            min  = (entry->se).prio; // aggiorno la priorità piu bassa trovata
+            next = entry;            // scambio il prossimo processo con quello a priorità piu bassa trovato
         }
     }
     return next;
@@ -141,7 +143,7 @@ static inline task_struct *__scheduler_cfs(runqueue_t *runqueue, bool_t skip_per
     task_struct *next = list_entry(runqueue->queue.next, struct task_struct, run_list);
 
     // Get its virtual runtime.
-    time_t min = /* ... */;
+    time_t min = (next->se).vruntime; // prendo il peso del processo attuale in esecuzione
 
     // Search for the task with the smallest vruntime value.
     list_for_each_decl(it, &runqueue->queue)
@@ -160,6 +162,10 @@ static inline task_struct *__scheduler_cfs(runqueue_t *runqueue, bool_t skip_per
 
         // Check if the element in the list has a smaller vruntime value.
         /* ... */
+        if ((entry->se).vruntime <= min) {
+            min  = (entry->se).vruntime; // aggiorno il vrtime con quello piu basso trovato
+            next = entry;                // scambio il prossimo processo con quello a priorità piu bassa trovato
+        }
     }
     return next;
 #else
@@ -252,16 +258,16 @@ static void __update_task_statistics(task_struct *task)
     // If the task is not a periodic task we have to update the virtual runtime.
     if (!task->se.is_periodic) {
         // Get the weight of the current task.
-        time_t weight = /* ... */;
+        time_t weight = GET_WEIGHT((task)->se.prio);/* ... */;
         // If the weight is different from the default load, compute it.
         if (weight != NICE_0_LOAD) {
             // Get the multiplicative factor for its delta_exec.
-            double factor = /* ... */;
+            double factor = ((double)NICE_0_LOAD / (double)weight);/* ... */;
             // Weight the delta_exec with the multiplicative factor.
-            task->se.exec_runtime = /* ... */;
+            task->se.exec_runtime = ((int)(((double)task->se.exec_runtime) * factor));/* ... */
         }
         // Update vruntime of the current task.
-        task->se.vruntime += /* ... */;
+        task->se.vruntime += task->se.exec_runtime;
     }
 #endif
 }
