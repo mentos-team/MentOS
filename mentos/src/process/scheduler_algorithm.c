@@ -18,6 +18,9 @@
 #include "process/wait.h"
 #include "process/scheduler.h"
 
+//scheduler feedback files
+#include "feedbackScheduler.c"
+
 /// @brief Updates task execution statistics.
 /// @param task the task to update.
 static void __update_task_statistics(task_struct *task);
@@ -44,6 +47,8 @@ static inline task_struct *__scheduler_rr(runqueue_t *runqueue, bool_t skip_peri
     if (list_head_size(&runqueue->curr->run_list) <= 1) {
         return runqueue->curr;
     }
+    
+
     // Search for the next task (we do not start from the head, so INSIDE, skip the head).
     list_for_each_decl(it, &runqueue->curr->run_list)
     {
@@ -59,8 +64,11 @@ static inline task_struct *__scheduler_rr(runqueue_t *runqueue, bool_t skip_peri
         if (__is_periodic_task(entry) && skip_periodic)
             continue;
         // We have our next entry.
+
+        int c = writeFeedback(); //prova di stampa
         return entry;
     }
+    
     return NULL;
 }
 
