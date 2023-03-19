@@ -85,6 +85,7 @@ set(TESTS
     t_kill.c
     t_itimer.c
     t_gid.c
+    t_semget.c
 )
 
 foreach(TEST ${TESTS})

@@ -9,13 +9,16 @@
 #define __DEBUG_HEADER__ "[IPCsem]"      ///< Change header.
 #define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
 #include "io/debug.h"                    // Include debugging functions.
-
-#include "ipc/sem.h"
+#include <stdio.h> //test
+#include "ipc/sem.h" //test
 #include "system/panic.h"
 
+
+//test
 long sys_semget(key_t key, int nsems, int semflg)
 {
-    TODO("Not implemented");
+    printf("qui");
+    //TODO("Not implemented");
     return 0;
 }
 

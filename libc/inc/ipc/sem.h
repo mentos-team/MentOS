@@ -10,6 +10,42 @@
 #include "time.h"
 #include "ipc.h"
 
+
+
+/// @brief flags for semop
+#define SEM_UNDO	0x1000		/* undo the operation on exit */
+
+
+/// #brief Commands for semctl
+#define GETPID		11		/* get sempid */
+#define GETVAL		12		/* get semval */
+#define GETALL		13		/* get all semval's */
+#define GETNCNT		14		/* get semncnt */
+#define GETZCNT		15		/* get semzcnt */
+#define SETVAL		16		/* set semval */
+#define SETALL		17		/* set all semval's */
+
+
+
+
+
+/// @brief Optional argument for semctl() function
+union semun {
+    int val;                /* value for SETVAL */
+    struct semid_ds *buf;   /* buffer for IPC_STAT & IPC_SET */
+    unsigned short *array;  /* array for GETALL & SETALL */
+    struct seminfo *__buf;  /* buffer for IPC_INFO */
+};
+
+/// @brief Semaphore set
+struct semid_ds {
+    struct ipc_perm sem_perm;  /* Ownership and permissions */
+    time_t          sem_otime; /* Last semop time */
+    time_t          sem_ctime; /* Last change time */
+    unsigned long   sem_nsems; /* No. of semaphores in set */
+};
+
+
 /// @brief Buffer to use with the semaphore IPC.
 struct sembuf {
     /// Semaphore index in array.
@@ -19,6 +55,10 @@ struct sembuf {
     /// Operation flags.
     short sem_flg;
 };
+
+
+
+
 
 #ifdef __KERNEL__
 
