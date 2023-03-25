@@ -64,8 +64,10 @@ static inline task_struct *__scheduler_rr(runqueue_t *runqueue, bool_t skip_peri
         if (__is_periodic_task(entry) && skip_periodic)
             continue;
         // We have our next entry.
-
-        int c = writeFeedback(); //prova di stampa
+        
+        //function to track the scheduler algorithm
+        writeFeedback(entry->pid, entry->name); 
+        
         return entry;
     }
     
