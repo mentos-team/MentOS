@@ -69,6 +69,11 @@ set(PROGRAMS
     poweroff.c
     rm.c
     shell.c
+
+
+    start.c
+
+    
     uname.c
     cat.c
     echo.c
