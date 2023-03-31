@@ -36,7 +36,7 @@ Istruzioni relative ai parametri della funzione start (che sono work in progress
 int count                     = 0;
 pid_t PID_BUFFER[MAX_STORAGE] = { 0 };
 char PID_NAME[MAX_STORAGE][MAX_SIZE_NAME];
-
+pid_t oldPid                  = -1; 
 int countChar(char[]);
 
 /*
@@ -49,19 +49,26 @@ Funzione che viene chiamata da scheduler_algorithm dopo aver scelto il prossimo 
 */
 void writeFeedback(pid_t pid, char name[])
 {
+    
     int brake = 0;
-
     char start[] = "start";
+        
 
     //analizzo se nome del PID passato come argomento corrisponde al comando START
     for (int i = 0; i < countChar(name) && brake == 0; i++) {
-        if (start[i] != name[i]) {
+        if ((start[i] != name[i]) || oldPid==pid ) { //brake a 0 anche se viene rilevata una start che non è stata lanciata da terminale ma è in esecuzione de un po
             brake = 1;
         }
     }
 
-    //Entra solo una volta, dopo aver finito la sessione (riempito il buffer)
-    if (brake == 0 && count == MAX_STORAGE - 1) {
+    //questo ci serve per andare a salvare il pid di una nuova start lanciata da terminale
+    //il primissimo start viene detectato OR detecta uno start con un pid nuovo
+    if((oldPid==-1 && brake == 0) || (oldPid!=-1 && brake == 0 && oldPid!=pid) )
+        oldPid = pid;
+    
+    //Entra solo una volta, dopo aver finito la sessione (riempito il buffer) e richiesta una nuova
+    if (brake == 0 && count == MAX_STORAGE) {
+        
         //RESET BUFFER
         for (int i = 0; i < MAX_STORAGE; i++) {
             PID_BUFFER[i] = 0;
@@ -69,10 +76,12 @@ void writeFeedback(pid_t pid, char name[])
         count = 0;
     }
 
+    
+
     //Se prima volta e' start bene, proseguiamo siccome brake e' zero,
     //le successive brake NON zero ma count > 0 poiche start passato in precedenza
     //Opportuno controllo per non sforare il MAX_STORAGE della struttura dati che utilizziamo
-    if (count != MAX_STORAGE - 1 && (count != 0 || brake == 0)) {
+    if (count != MAX_STORAGE && (count != 0 || brake == 0)) {
         //REGISTRAZIONE PID IN BUFFER
         PID_BUFFER[count] = pid;
         strcpy(PID_NAME[count], name);
@@ -81,7 +90,7 @@ void writeFeedback(pid_t pid, char name[])
 
     //QUI SE BUFFER PIENO SCRIVO SU FILE
 
-    if (count == MAX_STORAGE - 1) {
+    if (count == MAX_STORAGE) {
         mode_t mode = 000777;
         char buffer[BUFFER_SIZE];
         const char *namef = "/home/user/feedback.txt";
