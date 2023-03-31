@@ -17,9 +17,7 @@
 #include "klib/list_head.h"
 #include "process/wait.h"
 #include "process/scheduler.h"
-
-//scheduler feedback files
-#include "feedbackScheduler.c"
+#include "process/scheduler_feedback.h"
 
 /// @brief Updates task execution statistics.
 /// @param task the task to update.

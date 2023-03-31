@@ -127,6 +127,7 @@ set(KERNEL_SOURCES
     src/io/debug.c
     src/io/proc_video.c
     src/io/proc_running.c
+    src/io/proc_feedback.c
     src/io/proc_system.c
     src/io/vga/vga.c
     src/ipc/msg.c
@@ -166,6 +167,7 @@ set(KERNEL_SOURCES
     src/descriptor_tables/tss.c
     src/descriptor_tables/tss.S
     src/process/scheduler_algorithm.c
+    src/process/scheduler_feedback.c
     src/process/scheduler.c
     src/process/process.c
     src/process/wait.c
