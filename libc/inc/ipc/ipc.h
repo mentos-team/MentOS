@@ -5,6 +5,8 @@
 
 #pragma once
 
+
+
 /// @brief Permission details of an IPC object.
 struct ipc_perm {
     /// Key supplied to msgget(2).
@@ -22,3 +24,11 @@ struct ipc_perm {
     /// Sequence number.
     unsigned short __seq;
 };
+
+
+/// @brief Returns a possible key
+/// @param path file path
+/// @param id integer
+/// @return IPC key
+key_t ftok( char *path, int id);
+

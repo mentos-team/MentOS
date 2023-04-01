@@ -10,6 +10,11 @@
 #include "ipc/sem.h"
 #include "ipc/shm.h"
 #include "ipc/msg.h"
+//#include "fs/vfs_types.h"
+//#include "fs/vfs.h"
+#include "fcntl.h"
+#include "sys/stat.h"
+#include "stdio.h"
 
 _syscall3(void *, shmat, int, shmid, const void *, shmaddr, int, shmflg)
 
@@ -32,4 +37,32 @@ _syscall4(long, msgsnd, int, msqid, struct msgbuf *, msgp, size_t, msgsz, int, m
 _syscall5(long, msgrcv, int, msqid, struct msgbuf *, msgp, size_t, msgsz, long, msgtyp, int, msgflg)
 
 _syscall3(long, msgctl, int, msqid, int, cmd, struct msqid_ds *, buf)
+
+key_t ftok(char *path, int id){
+
+
+    /*int fd;
+
+    fd=open(path, O_RDONLY, 0777);*/
+    
+    /*
+        if (() == -1){
+        errno = ENOENT;
+        return -1;
+    }
+    */
+    struct stat_t st;   //struct containing the serial number and the device number of the file 
+    if (stat(path, &st)<0){
+        errno = ENOENT;
+        //printf("Error finding the serial number, check Errno...\n");
+        return -1;   
+    }
+    //printf("Serial number: %d\n", st.st_ino);
+
+
+    //taking the upper 8 bits from the lower 8 bits of id, the second upper 8 bits from the lower 8 bits of the device number of the provided pathname, and the lower 16 bits from the lower 16 bits of the inode number of the provided pathname
+
+    return ((st.st_ino & 0xffff) | ((st.st_dev & 0xff) << 16) | ((id & 0xffu) << 24));
+
+}
 
