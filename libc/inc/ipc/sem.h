@@ -12,6 +12,9 @@
 
 
 
+
+
+
 /// @brief flags for semop
 #define SEM_UNDO	0x1000		/* undo the operation on exit */
 
@@ -29,6 +32,7 @@
 
 
 
+
 /// @brief Optional argument for semctl() function
 union semun {
     int val;                /* value for SETVAL */
@@ -37,13 +41,26 @@ union semun {
     struct seminfo *__buf;  /* buffer for IPC_INFO */
 };
 
+/// @brief Single Semaphore
+struct sem{
+    unsigned short  sem_val; /*Semaphore Value*/
+    pid_t           sem_pid; /*Process ID of the last operation*/   
+    //unsigned short  semncnt; /*Number of processes waiting of semaphore*/   
+    unsigned short  sem_zcnt; /*Number of processes waiting for the value to become 0*/
+};
+
 /// @brief Semaphore set
 struct semid_ds {
-    struct ipc_perm sem_perm;  /* Ownership and permissions */
+    pid_t           owner;  /* Ownership and permissions */
+    key_t           key; /*IPC_KEY associated to the semaphore set*/
+    int             semid; /*semid associated to the semaphore set*/
     time_t          sem_otime; /* Last semop time */
     time_t          sem_ctime; /* Last change time */
     unsigned long   sem_nsems; /* No. of semaphores in set */
+    struct sem      *sems; /*all the semaphores*/
 };
+
+
 
 
 /// @brief Buffer to use with the semaphore IPC.
