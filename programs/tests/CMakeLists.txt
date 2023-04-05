@@ -85,6 +85,9 @@ set(TESTS
     t_kill.c
     t_itimer.c
     t_gid.c
+    
+    # Testing my program
+    myProg.c
 )
 
 foreach(TEST ${TESTS})

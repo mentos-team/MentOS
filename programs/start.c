@@ -9,6 +9,7 @@
 #include <sys/unistd.h>
 #include <sys/wait.h>
 #include <string.h>
+#include <fcntl.h>
 
 /*
 Start, funzionamento: L'utente scrivendo start da shell (interna a MentOS) avviera' la registrazione di un numero
@@ -25,39 +26,86 @@ Tre tipologie di parametri/flag accettati dalla start:
 
 int main(int argc, char *argv[])
 {
-    //N.B va implementato il reset della struttura che alloca i dati(PID)
-   
-    //aka utente ha inserito un comando start con flag errati
-    if(argc > 1 && (strcmp(argv[1],"-p") || strcmp(argv[1],"-f"))){ 
-        printf("start has no command '%s'\n\n", argv[1]);
-        execl("../../bin/startERR","error", NULL, NULL);
-        return -1;
+    int flag = 0;
+    
+    if(argc == 1){
+        printf("Start Recording\n");
+        printf("End Recording\n");
+        return 0;
     }
+    else if(argc == 2 && !(strcmp(argv[1],"-p"))){
 
-    printf("Start Recording\n");
+        printf("Start Recording\n");
 
-    if(argc == 2){
+        for(int i = 0; i < 5; i++){
 
-        if(!(strcmp(argv[1],"-p"))){
-
-            for(int i = 0; i < 5; i++){
-
-                if(fork()==0){
-                    
-                    //volendo no fork qua, ma solo chiamata a t_fork 5 con una exec
-                    //execl("../../bin/start0", "figlio", NULL, NULL);
-                    exit(1);
-
-                }
-
-            }
-
-            for(int i = 0; i < 5; i++){
-                wait(NULL);
+            if(fork()==0){
+                exit(1);
             }
 
         }
+
+        for(int i = 0; i < 5; i++){
+            wait(NULL);
+        }   
+
+        printf("End Recording\n");
+        return 0;
+
+    } 
+    else if( argc==3 && !strcmp(argv[1],"-f") ){
+
+            char destination[] = "../../bin/tests/";
+            strcat(destination,argv[2]);
+            if(fork()==0){
+                flag = execl(destination, "customProgram", NULL, NULL);
+                if(flag == -1){
+                    execl("../../bin/startERR","error", NULL, NULL);
+                }
+            }
+            wait(NULL);
+
+            /*
+            if(flag != -1)
+            {
+                printf("Start Recording\n");
+                printf("End Recording\n");
+            }*/
+            
+            int fd;
+            mode_t flag1 = 000111;
+            char destination1[] = "../../bin/tests/";
+            strcat(destination1,argv[2]);
+            fd = open(destination1, S_IRUSR, flag1);
+                if( fd != -1 ){
+                    printf("Start Recording\n");
+                    printf("End Recording\n");
+                    close(fd);
+                }
+                else{
+                    printf("start: file '%s' not found!\n\n", destination1);
+                }
+
+
+            return 0;
     }
-    printf("End Recording\n");
-    return 0;
+    
+    if(argc != 1){
+        //se arriviamo qui, significa che sono stati passati parametri errati
+        if(strcmp(argv[1],"-f")){
+            printf("start: start has no command '%s'\n\n", argv[1]);
+            execl("../../bin/startERR","error", NULL, NULL);
+        }
+        else{
+            printf("start: missing FILE for OPTION '%s'\n\n", argv[1]);
+            execl("../../bin/startERR","error", NULL, NULL);
+        }
+    }
+
+
+    /*
+    if(argc > 1 && (strcmp(argv[1],"-p") && strcmp(argv[1],"-f"))){  //da rafforzare
+        
+    }*/
+
 }

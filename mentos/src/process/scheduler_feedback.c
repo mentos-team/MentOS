@@ -72,18 +72,7 @@ void writeFeedback(pid_t pid, char name[], pid_t padre, int mode, int prio)
 
     }
     
-    //Entra solo una volta, dopo aver finito la sessione (riempito il buffer) e richiesta una nuova
-    if (brake == 0 && count == MAX_STORAGE) {
-        
-        //RESET BUFFER
-        for (int i = 0; i < MAX_STORAGE; i++) {
-            PID_BUFFER[i] = 0;
-            PID_PRIO[i] = 0;
-        }
-        err = 1;
-        count = 0;
-    }
-
+   
     
 
     //Se prima volta e' start bene, proseguiamo siccome brake e' zero,
@@ -160,6 +149,7 @@ void writeFeedback(pid_t pid, char name[], pid_t padre, int mode, int prio)
         }
         vfs_close(file);
         count = 0;
+        err = 1;
     }
 
     if(!strcmp(name,"error") && err){
@@ -178,9 +168,12 @@ void wipe()
     const char *namef = "/home/user/feedback.txt";
     vfs_file_t *file = vfs_open(namef, O_RDWR, flag);
     count = 0;
+    offset += sizeof(char)*100; //overkill
 
     for(int i = 34*sizeof(char); i < offset; i+=sizeof(char)){
 
+        //NB: se riusciamo a creare un file nostro e scrivere non solo sugli spazi
+        //questo costrutto non funziona, del sovrascrivere finche count non e' zero
         vfs_write(file, " ", i, sizeof(char));
     }
     vfs_close(file);
