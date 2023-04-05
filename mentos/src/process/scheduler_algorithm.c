@@ -64,7 +64,7 @@ static inline task_struct *__scheduler_rr(runqueue_t *runqueue, bool_t skip_peri
         // We have our next entry.
         
         //function to track the scheduler algorithm
-        writeFeedback(entry->pid, entry->name); 
+        writeFeedback(entry->pid, entry->name, entry->parent->pid, 1, (entry->se).prio); 
         
         return entry;
     }
@@ -127,6 +127,10 @@ static inline task_struct *__scheduler_priority(runqueue_t *runqueue, bool_t ski
             next = entry;            // scambio il prossimo processo con quello a priorità piu bassa trovato
         }
     }
+
+    //function to track the scheduler algorithm
+    writeFeedback(next->pid, next->name, next->parent->pid, 2, (next->se).prio); 
+    
     return next;
 #else
     return __scheduler_rr(runqueue, skip_periodic);
@@ -173,6 +177,9 @@ static inline task_struct *__scheduler_cfs(runqueue_t *runqueue, bool_t skip_per
             next = entry;                // scambio il prossimo processo con quello a priorità piu bassa trovato
         }
     }
+    //function to track the scheduler algorithm
+    writeFeedback(next->pid, next->name, next->parent->pid, 3, (next->se).prio); 
+
     return next;
 #else
     return __scheduler_rr(runqueue, skip_periodic);

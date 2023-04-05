@@ -6,6 +6,9 @@
 #include <stdio.h>
 #include <time.h>
 
+#include <sys/unistd.h>
+#include <sys/wait.h>
+#include <string.h>
 
 /*
 Start, funzionamento: L'utente scrivendo start da shell (interna a MentOS) avviera' la registrazione di un numero
@@ -18,9 +21,43 @@ Tre tipologie di parametri/flag accettati dalla start:
     
 */
 
-int main()
+//int clonaccio(int, char *);
+
+int main(int argc, char *argv[])
 {
     //N.B va implementato il reset della struttura che alloca i dati(PID)
-    printf("Avvio Recording\n");
+   
+    //aka utente ha inserito un comando start con flag errati
+    if(argc > 1 && (strcmp(argv[1],"-p") || strcmp(argv[1],"-f"))){ 
+        printf("start has no command '%s'\n\n", argv[1]);
+        execl("../../bin/startERR","error", NULL, NULL);
+        return -1;
+    }
+
+    printf("Start Recording\n");
+
+    if(argc == 2){
+
+        if(!(strcmp(argv[1],"-p"))){
+
+            for(int i = 0; i < 5; i++){
+
+                if(fork()==0){
+                    
+                    //volendo no fork qua, ma solo chiamata a t_fork 5 con una exec
+                    //execl("../../bin/start0", "figlio", NULL, NULL);
+                    exit(1);
+
+                }
+
+            }
+
+            for(int i = 0; i < 5; i++){
+                wait(NULL);
+            }
+
+        }
+    }
+    printf("End Recording\n");
     return 0;
 }

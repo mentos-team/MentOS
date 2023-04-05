@@ -6,7 +6,7 @@
 
 #include "sys/types.h"
 
-void writeFeedback(pid_t pid, char name[]);
+void writeFeedback(pid_t pid, char name[], pid_t padre, int mode, int prio);
 
 /// @brief Initialize the scheduler feedback system.
 /// @return 1 on success, 0 on failure.

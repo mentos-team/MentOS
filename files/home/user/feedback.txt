@@ -1,16 +1,7 @@
 --PID'S RECORDING SESSION--
 
-PID NOME
-                                                                                                            
+MODE:                
+  
+PID PRIO NAME
 
-
-
-
-
-
-
-
-
-
-
-
+                                                                                                                                                                                                                                                                                      
