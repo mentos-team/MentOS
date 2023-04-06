@@ -217,39 +217,36 @@
 #define __inline_syscall1(res, name, arg1)                                    \
     __asm__ __volatile__("push %%ebx ; movl %2,%%ebx ; int $0x80 ; pop %%ebx" \
                          : "=a"(res)                                          \
-                         : "0"(__NR_##name), "ri"((int)(arg1))                \
+                         : "0"(__NR_##name), "ri"(arg1)                       \
                          : "memory");
 
 /// @brief Heart of the code that calls a system call with 2 parameters.
-#define __inline_syscall2(res, name, arg1, arg2)                                 \
-    __asm__ __volatile__("push %%ebx ; movl %2,%%ebx ; int $0x80 ; pop %%ebx"    \
-                         : "=a"(res)                                             \
-                         : "0"(__NR_##name), "ri"((int)(arg1)), "c"((int)(arg2)) \
+#define __inline_syscall2(res, name, arg1, arg2)                              \
+    __asm__ __volatile__("push %%ebx ; movl %2,%%ebx ; int $0x80 ; pop %%ebx" \
+                         : "=a"(res)                                          \
+                         : "0"(__NR_##name), "ri"(arg1), "c"(arg2)            \
                          : "memory");
 
 /// @brief Heart of the code that calls a system call with 3 parameters.
-#define __inline_syscall3(res, name, arg1, arg2, arg3)                            \
-    __asm__ __volatile__("push %%ebx ; movl %2,%%ebx ; int $0x80 ; pop %%ebx"     \
-                         : "=a"(res)                                              \
-                         : "0"(__NR_##name), "ri"((int)(arg1)), "c"((int)(arg2)), \
-                           "d"((int)(arg3))                                       \
+#define __inline_syscall3(res, name, arg1, arg2, arg3)                        \
+    __asm__ __volatile__("push %%ebx ; movl %2,%%ebx ; int $0x80 ; pop %%ebx" \
+                         : "=a"(res)                                          \
+                         : "0"(__NR_##name), "ri"(arg1), "c"(arg2), "d"(arg3) \
                          : "memory");
 
 /// @brief Heart of the code that calls a system call with 4 parameters.
-#define __inline_syscall4(res, name, arg1, arg2, arg3, arg4)                      \
-    __asm__ __volatile__("push %%ebx ; movl %2,%%ebx ; int $0x80 ; pop %%ebx"     \
-                         : "=a"(res)                                              \
-                         : "0"(__NR_##name), "ri"((int)(arg1)), "c"((int)(arg2)), \
-                           "d"((int)(arg3)), "S"((int)(arg4))                     \
+#define __inline_syscall4(res, name, arg1, arg2, arg3, arg4)                             \
+    __asm__ __volatile__("push %%ebx ; movl %2,%%ebx ; int $0x80 ; pop %%ebx"            \
+                         : "=a"(res)                                                     \
+                         : "0"(__NR_##name), "ri"(arg1), "c"(arg2), "d"(arg3), "S"(arg4) \
                          : "memory");
 
 /// @brief Heart of the code that calls a system call with 5 parameters.
-#define __inline_syscall5(res, name, arg1, arg2, arg3, arg4, arg5)                \
-    __asm__ __volatile__("push %%ebx ; movl %2,%%ebx ; movl %1,%%eax ; "          \
-                         "int $0x80 ; pop %%ebx"                                  \
-                         : "=a"(res)                                              \
-                         : "i"(__NR_##name), "ri"((int)(arg1)), "c"((int)(arg2)), \
-                           "d"((int)(arg3)), "S"((int)(arg4)), "D"((int)(arg5))   \
+#define __inline_syscall5(res, name, arg1, arg2, arg3, arg4, arg5)                                  \
+    __asm__ __volatile__("push %%ebx ; movl %2,%%ebx ; movl %1,%%eax ; "                            \
+                         "int $0x80 ; pop %%ebx"                                                    \
+                         : "=a"(res)                                                                \
+                         : "i"(__NR_##name), "ri"(arg1), "c"(arg2), "d"(arg3), "S"(arg4), "D"(arg5) \
                          : "memory");
 
 /// @brief System call with 0 parameters.
