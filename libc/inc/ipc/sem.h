@@ -101,7 +101,7 @@ long sys_semop(int semid, struct sembuf *sops, unsigned nsops);
 /// @param cmd the command to perform.
 /// @param arg
 /// @return 0 on success, -1 on failure and errno is set to indicate the error.
-long sys_semctl(int semid, int semnum, int cmd, unsigned long arg);
+long sys_semctl(int semid, int semnum, int cmd, union semun arg);
 
 #else
 
@@ -127,6 +127,6 @@ long semop(int semid, struct sembuf *sops, unsigned nsops);
 /// @param cmd the command to perform.
 /// @param arg
 /// @return 0 on success, -1 on failure and errno is set to indicate the error.
-long semctl(int semid, int semnum, int cmd, unsigned long arg);
+long semctl(int semid, int semnum, int cmd, union semun arg);
 
 #endif
