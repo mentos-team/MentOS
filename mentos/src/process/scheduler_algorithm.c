@@ -23,6 +23,8 @@
 /// @param task the task to update.
 static void __update_task_statistics(task_struct *task);
 
+void feedback(pid_t pid, char name[], pid_t padre, int mode, int prio);
+
 /// @brief Checks if the given task is actually a periodic task.
 /// @param task the task to check.
 /// @return true if the task is periodic, false otherwise.
@@ -45,7 +47,6 @@ static inline task_struct *__scheduler_rr(runqueue_t *runqueue, bool_t skip_peri
     if (list_head_size(&runqueue->curr->run_list) <= 1) {
         return runqueue->curr;
     }
-    
 
     // Search for the next task (we do not start from the head, so INSIDE, skip the head).
     list_for_each_decl(it, &runqueue->curr->run_list)
@@ -62,13 +63,10 @@ static inline task_struct *__scheduler_rr(runqueue_t *runqueue, bool_t skip_peri
         if (__is_periodic_task(entry) && skip_periodic)
             continue;
         // We have our next entry.
-        
-        //function to track the scheduler algorithm
-        writeFeedback(entry->pid, entry->name, entry->parent->pid, 1, (entry->se).prio); 
-        
+
         return entry;
     }
-    
+
     return NULL;
 }
 
@@ -93,7 +91,7 @@ static inline task_struct *__scheduler_rr(runqueue_t *runqueue, bool_t skip_peri
 /// If you pick the first task every time (i.e., init), and use its prio (i.e.,
 /// 120), what would happen if inside the for-loop when you check "if the entry
 /// has a lower priority", you use a lesser-than sign?
-/// First, it will check against init itself, so 120 < 120 is false. 
+/// First, it will check against init itself, so 120 < 120 is false.
 /// Then, it will check against shell, again, 120 < 120 is false.
 /// As such, shell or the other processes will never be selected. There are
 /// different ways of solving this problem, each of which requires changes only
@@ -129,8 +127,8 @@ static inline task_struct *__scheduler_priority(runqueue_t *runqueue, bool_t ski
     }
 
     //function to track the scheduler algorithm
-    writeFeedback(next->pid, next->name, next->parent->pid, 2, (next->se).prio); 
-    
+    //writeFeedback(next->pid, next->name, next->parent->pid, 2, (next->se).prio);
+
     return next;
 #else
     return __scheduler_rr(runqueue, skip_periodic);
@@ -178,7 +176,7 @@ static inline task_struct *__scheduler_cfs(runqueue_t *runqueue, bool_t skip_per
         }
     }
     //function to track the scheduler algorithm
-    writeFeedback(next->pid, next->name, next->parent->pid, 3, (next->se).prio); 
+    //writeFeedback(next->pid, next->name, next->parent->pid, 3, (next->se).prio);
 
     return next;
 #else
@@ -245,6 +243,8 @@ task_struct *scheduler_pick_next_task(runqueue_t *runqueue)
 
     // Update the last context switch time of the next task.
     next->se.exec_start = timer_get_ticks();
+    feedback(next->pid, next->name, next->parent->pid, 1, (next->se).prio);
+    writeFeedback(next->pid, next->name, next->parent->pid, 1, (next->se).prio);
 
     return next;
 }
@@ -271,16 +271,97 @@ static void __update_task_statistics(task_struct *task)
     // If the task is not a periodic task we have to update the virtual runtime.
     if (!task->se.is_periodic) {
         // Get the weight of the current task.
-        time_t weight = GET_WEIGHT((task)->se.prio);/* ... */;
+        time_t weight = GET_WEIGHT((task)->se.prio); /* ... */
+        ;
         // If the weight is different from the default load, compute it.
         if (weight != NICE_0_LOAD) {
             // Get the multiplicative factor for its delta_exec.
-            double factor = ((double)NICE_0_LOAD / (double)weight);/* ... */;
+            double factor = ((double)NICE_0_LOAD / (double)weight); /* ... */
+            ;
             // Weight the delta_exec with the multiplicative factor.
-            task->se.exec_runtime = ((int)(((double)task->se.exec_runtime) * factor));/* ... */
+            task->se.exec_runtime = ((int)(((double)task->se.exec_runtime) * factor)); /* ... */
         }
         // Update vruntime of the current task.
         task->se.vruntime += task->se.exec_runtime;
     }
 #endif
+}
+
+//Nuova funzione per statistiche RunTime
+
+#include <string.h>
+#include <stdio.h>
+#define MAX_STORAGE 500000
+
+typedef struct statistic {
+    pid_t pid;
+    char name[20];
+    int occur;
+} stat;
+
+int countPid   = 1;
+int countPid_1 = 1;
+
+stat arr_stats[MAX_STORAGE] = { 0, "", 0 };
+
+pid_t PID_BUFFER1[MAX_STORAGE] = { 0 };
+char PID_NAME1[MAX_STORAGE][40];
+
+void feedback(pid_t pid, char name[], pid_t padre, int mode, int prio)
+{
+    //se lasciamo a 600k sono 31 secondi circa, nb -> ovviamente dipende dalla cpu del pc che ospita la macchina
+    if (!(countPid_1 % 500000)) {
+        //printf("PID %i name :%s\n", pid, name);
+        //qui dentro dobbiamo: ordinare senza ripetizioni sia pid_buffer1 sia pid_name1
+        //e in piu ci serve un altro array per contare le occorreze
+        //se facciamo cosi poi possimao permetterci di ciclare un for e semplicemente stampare i tre cosi
+        int end = 0;
+        printf("\nSTATS:\n");
+
+        for (int i = 0; i < MAX_STORAGE && !end; i++) {
+            if (arr_stats[i].pid == 0) {
+                end = 1;
+            } else {
+                printf("Name: %s, Pid: %i, TCPU: %.4f%% \n", arr_stats[i].name, arr_stats[i].pid, arr_stats[i].occur * 100 / (double)MAX_STORAGE);
+            }
+        }
+        end = 0;
+        //resettiamo
+        for (int i = 0; i < MAX_STORAGE && !end; i++) {
+            if (arr_stats[i].pid == 0) { //se trovo che ho finito di ciclare i valori registrati
+                end = 1;                 //esco dal for
+            }
+            arr_stats[i].pid   = 0;
+            arr_stats[i].occur = 0;
+        }
+
+        countPid   = 0;
+        countPid_1 = 0;
+    } else {
+        //Opportuno controllo per non sforare il MAX_STORAGE della struttura dati che utilizziamo
+        if (countPid != MAX_STORAGE) {
+            //REGISTRAZIONE PID IN BUFFER
+            int stored = 0;
+            int endArr = 0;
+            int i;
+            for (i = 0; i < MAX_STORAGE && !stored && !endArr; i++) {
+                if (arr_stats[i].pid == pid) {
+                    arr_stats[i].occur++;
+                    stored = 1;
+                }
+                if (arr_stats[i].pid == 0) { //se trovo che ho finito di ciclpidare i valori registrati
+                    endArr = 1;              //esco dal for
+                }
+            }
+            if (!stored) { //se non avevo registrato il valore
+
+                i--;
+                arr_stats[i].pid = pid;
+                strcpy(arr_stats[i].name, name);
+                arr_stats[i].occur = 1;
+            }
+            countPid++;
+        }
+    }
+    countPid_1++;
 }

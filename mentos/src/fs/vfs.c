@@ -324,7 +324,7 @@ vfs_file_t *vfs_creat(const char *path, mode_t mode)
     // Retrieve the file.
     vfs_file_t *file = sb_root->sys_operations->creat_f(absolute_path, mode);
     if (file == NULL) {
-        pr_err("vfs_open(%s): Cannot find the given file (%s)!\n", path, strerror(errno));
+        pr_err("vfs_creat(%s): Cannot find the given file (%s)!\n", path, strerror(errno));
         errno = ENOENT;
         return NULL;
     }
