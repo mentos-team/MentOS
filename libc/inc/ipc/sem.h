@@ -19,7 +19,7 @@
 #define SEM_UNDO	0x1000		/* undo the operation on exit */
 
 
-/// #brief Commands for semctl
+/// @brief Commands for semctl
 #define GETPID		11		/* get sempid */
 #define GETVAL		12		/* get semval */
 #define GETALL		13		/* get all semval's */
@@ -27,7 +27,7 @@
 #define GETZCNT		15		/* get semzcnt */
 #define SETVAL		16		/* set semval */
 #define SETALL		17		/* set all semval's */
-
+#define OPERATION_NOT_ALLOWED -18 /*return value for blocking operations on semaphores*/
 
 
 
@@ -101,7 +101,7 @@ long sys_semop(int semid, struct sembuf *sops, unsigned nsops);
 /// @param cmd the command to perform.
 /// @param arg
 /// @return 0 on success, -1 on failure and errno is set to indicate the error.
-long sys_semctl(int semid, int semnum, int cmd, union semun arg);
+long sys_semctl(int semid, int semnum, int cmd, union semun *arg);
 
 #else
 
@@ -127,6 +127,6 @@ long semop(int semid, struct sembuf *sops, unsigned nsops);
 /// @param cmd the command to perform.
 /// @param arg
 /// @return 0 on success, -1 on failure and errno is set to indicate the error.
-long semctl(int semid, int semnum, int cmd, union semun arg);
+long semctl(int semid, int semnum, int cmd, union semun *arg);
 
 #endif

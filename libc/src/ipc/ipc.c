@@ -26,9 +26,11 @@ _syscall3(long, shmctl, int, shmid, int, cmd, struct shmid_ds *, buf)
 
 _syscall3(long, semget, key_t, key, int, nsems, int, semflg)
 
-_syscall3(long, semop, int, semid, struct sembuf *, sops, unsigned, nsops)
 
-_syscall4(long, semctl, int, semid, int, semnum, int, cmd, unsigned long, arg)
+//we are writing our own user-side semop function 
+//_syscall3(long, semop, int, semid, struct sembuf *, sops, unsigned, nsops)
+
+_syscall4(long, semctl, int, semid, int, semnum, int, cmd, union semun*, arg)
 
 _syscall2(long, msgget, key_t, key, int, msgflg)
 
@@ -37,6 +39,28 @@ _syscall4(long, msgsnd, int, msqid, struct msgbuf *, msgp, size_t, msgsz, int, m
 _syscall5(long, msgrcv, int, msqid, struct msgbuf *, msgp, size_t, msgsz, long, msgtyp, int, msgflg)
 
 _syscall3(long, msgctl, int, msqid, int, cmd, struct msqid_ds *, buf)
+
+
+/*user-side semop*/
+long semop(int semid, struct sembuf *sops, unsigned nsops){
+    long __res;
+
+    if (nsops<=0 || sops == NULL){  //checking parameters
+        errno = EINVAL;
+        return -1;
+    }
+
+    /*the process continues to try to perform the operation until it completes or receives an error*/
+    while (1){
+        //calling kernel-side function
+        __inline_syscall3(__res,semop, semid, sops, nsops);
+
+        if (__res != OPERATION_NOT_ALLOWED)break;
+    }
+
+    __syscall_return(long, __res);  //returning the value
+}
+
 
 key_t ftok(char *path, int id){
 
