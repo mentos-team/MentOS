@@ -7,14 +7,12 @@
 #include "system/syscall_types.h"
 #include "sys/errno.h"
 #include "stddef.h"
+
 #include "ipc/sem.h"
 #include "ipc/shm.h"
 #include "ipc/msg.h"
-//#include "fs/vfs_types.h"
-//#include "fs/vfs.h"
-#include "fcntl.h"
+
 #include "sys/stat.h"
-#include "stdio.h"
 
 _syscall3(void *, shmat, int, shmid, const void *, shmaddr, int, shmflg)
 
@@ -26,11 +24,7 @@ _syscall3(long, shmctl, int, shmid, int, cmd, struct shmid_ds *, buf)
 
 _syscall3(long, semget, key_t, key, int, nsems, int, semflg)
 
-
-//we are writing our own user-side semop function 
-//_syscall3(long, semop, int, semid, struct sembuf *, sops, unsigned, nsops)
-
-_syscall4(long, semctl, int, semid, int, semnum, int, cmd, union semun*, arg)
+_syscall4(long, semctl, int, semid, int, semnum, int, cmd, union semun *, arg)
 
 _syscall2(long, msgget, key_t, key, int, msgflg)
 
@@ -40,53 +34,40 @@ _syscall5(long, msgrcv, int, msqid, struct msgbuf *, msgp, size_t, msgsz, long, 
 
 _syscall3(long, msgctl, int, msqid, int, cmd, struct msqid_ds *, buf)
 
-
-/*user-side semop*/
-long semop(int semid, struct sembuf *sops, unsigned nsops){
+long semop(int semid, struct sembuf *sops, unsigned nsops)
+{
     long __res;
-
-    if (nsops<=0 || sops == NULL){  //checking parameters
+    // Check the arguments.
+    if ((nsops <= 0) || (sops == NULL)) {
         errno = EINVAL;
         return -1;
     }
-
-    /*the process continues to try to perform the operation until it completes or receives an error*/
-    while (1){
-        //calling kernel-side function
-        __inline_syscall3(__res,semop, semid, sops, nsops);
-
-        if (__res != OPERATION_NOT_ALLOWED)break;
+    // The process continues to try to perform the operation until it completes
+    // or receives an error.
+    while (1) {
+        // Calling the kernel-side function.
+        __inline_syscall3(__res, semop, semid, sops, nsops);
+        // If we get an error we stop the loop.
+        if (__res != OPERATION_NOT_ALLOWED)
+            break;
     }
-
-    __syscall_return(long, __res);  //returning the value
+    // Now, we can return the value.
+    __syscall_return(long, __res);
 }
 
-
-key_t ftok(char *path, int id){
-
-
-    /*int fd;
-
-    fd=open(path, O_RDONLY, 0777);*/
-    
-    /*
-        if (() == -1){
-        errno = ENOENT;
-        return -1;
-    }
-    */
-    struct stat_t st;   //struct containing the serial number and the device number of the file 
-    if (stat(path, &st)<0){
+key_t ftok(char *path, int id)
+{
+    // Create a struct containing the serial number and the device number of the
+    // file we use to generate the key.
+    struct stat_t st;
+    if (stat(path, &st) < 0) {
         errno = ENOENT;
         //printf("Error finding the serial number, check Errno...\n");
-        return -1;   
+        return -1;
     }
-    //printf("Serial number: %d\n", st.st_ino);
-
-
-    //taking the upper 8 bits from the lower 8 bits of id, the second upper 8 bits from the lower 8 bits of the device number of the provided pathname, and the lower 16 bits from the lower 16 bits of the inode number of the provided pathname
-
+    // Taking the upper 8 bits from the lower 8 bits of id, the second upper 8
+    // bits from the lower 8 bits of the device number of the provided pathname,
+    // and the lower 16 bits from the lower 16 bits of the inode number of the
+    // provided pathname.
     return ((st.st_ino & 0xffff) | ((st.st_dev & 0xff) << 16) | ((id & 0xffu) << 24));
-
 }
-
