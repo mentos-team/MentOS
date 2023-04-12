@@ -5,15 +5,16 @@
 
 #pragma once
 
+#include "sys/types.h"
 
-#define IPC_CREAT  01000 ///< Create key if key does not exist.
-#define IPC_EXCL   02000 ///< Fail if key exists.
-#define IPC_NOWAIT 04000 ///< Return error on wait.
-#define IPC_RMID   0     ///< Remove identifier.
-#define IPC_SET    1     ///< Set `ipc_perm' options.
-#define IPC_STAT   2     ///< Get `ipc_perm' options.
-#define IPC_INFO   3     ///< See ipcs.
-#define IPC_PRIVATE 4    ///< assures getting a new ipc_key.
+#define IPC_CREAT   01000 ///< Create key if key does not exist.
+#define IPC_EXCL    02000 ///< Fail if key exists.
+#define IPC_NOWAIT  04000 ///< Return error on wait.
+#define IPC_RMID    0     ///< Remove identifier.
+#define IPC_SET     1     ///< Set `ipc_perm' options.
+#define IPC_STAT    2     ///< Get `ipc_perm' options.
+#define IPC_INFO    3     ///< See ipcs.
+#define IPC_PRIVATE 4     ///< assures getting a new ipc_key.
 
 /// @brief Permission details of an IPC object.
 struct ipc_perm {
@@ -33,10 +34,8 @@ struct ipc_perm {
     unsigned short __seq;
 };
 
-
 /// @brief Returns a possible key
 /// @param path file path
 /// @param id integer
 /// @return IPC key
-key_t ftok( char *path, int id);
-
+key_t ftok(char *path, int id);

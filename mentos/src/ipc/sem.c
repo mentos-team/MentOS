@@ -4,19 +4,18 @@
 /// See LICENSE.md for details.
 ///! @cond Doxygen_Suppress
 
-// Setup the logging for this file (do this before any other include).
-#include "sys/kernel_levels.h"           // Include kernel log levels.
-#define __DEBUG_HEADER__ "[IPCsem]"      ///< Change header.
-#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
-#include "io/debug.h"                    // Include debugging functions.
+#include "ipc/sem.h"
 #include "klib/list.h"
-#include <stdio.h> 
-#include "ipc/sem.h" 
-#include "mem/slab.h"
-#include "system/signal.h"
+#include "process/process.h"
 #include "sys/errno.h"
-#include "system/panic.h"
-#include "time.h"
+
+// ============================================================================
+// Setup the logging for this file (do this before any other include).
+#include "sys/kernel_levels.h"          // Include kernel log levels.
+#define __DEBUG_HEADER__ "[IPCsem]"     ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_DEBUG ///< Set log level.
+#include "io/debug.h"                   // Include debugging functions.
+// ============================================================================
 
 /*
     03/04 : at the moment we have various functions with their description (see comments).
@@ -41,56 +40,57 @@
 ///@brief a value to compute the semid value
 int semid_assign = 0;
 
-
-/// @brief to initialize a single semaphore 
+/// @brief to initialize a single semaphore
 /// @param temp the pointer to the struct of the semaphore
-void sem_init(struct sem * temp){
-    temp -> sem_val = 0; /*default*/
-    temp -> sem_pid = sys_getpid();
-    temp -> sem_zcnt = 0; /*default*/
+static inline void __sem_init(struct sem *temp)
+{
+    temp->sem_val  = 0; /*default*/
+    temp->sem_pid  = sys_getpid();
+    temp->sem_zcnt = 0; /*default*/
 }
 
-/// @brief to initialize a semid struct (set of semaphores)
+/// @brief Initializes a semid struct (set of semaphores).
 /// @param temp the pointer to the semid struct
 /// @param key IPC_KEY associated with the set of semaphores
 /// @param nsems number of semaphores to initialize
-void semid_init(struct semid_ds * temp, key_t key, int nsems){
-    temp -> owner = sys_getpid();
-    temp -> key = key;
-    temp -> semid = ++semid_assign;  //temporary -> gonna need a way to compute IPCKEY -> semid
-    temp -> sem_otime = 0; /*default*/
-    temp -> sem_ctime = 0; /*default*/
-    temp -> sem_nsems = nsems;
-    temp -> sems = (struct sem*)kmalloc(sizeof(struct sem)*nsems);
-    for (int i=0; i<nsems; i++){
-        sem_init(&(temp->sems[i]));
+static inline void __semid_init(struct semid_ds *temp, key_t key, int nsems)
+{
+    temp->owner     = sys_getpid();
+    temp->key       = key;
+    temp->semid     = ++semid_assign; //temporary -> gonna need a way to compute IPCKEY -> semid
+    temp->sem_otime = 0;              /*default*/
+    temp->sem_ctime = 0;              /*default*/
+    temp->sem_nsems = nsems;
+    temp->sems      = (struct sem *)kmalloc(sizeof(struct sem) * nsems);
+    for (int i = 0; i < nsems; i++) {
+        __sem_init(&(temp->sems[i]));
     }
 }
 
-///@brief for debugging purposes, print all the stats of the semid_ds
-///@param temp the pointer to the semid struct
-void semid_print(struct semid_ds *temp){
-    printf("pid, IPC_KEY, Semid, semop, change: %d, %d, %d, %d, %d\n", temp->owner, temp->key, temp->semid, temp->sem_otime, temp->sem_ctime);
-    for(int i=0; i<(temp->sem_nsems); i++){
-        printf("%d semaphore:\n", i+1);
-        printf("value: %d, pid %d, process waiting %d\n", temp->sems[i].sem_val, temp->sems[i].sem_pid, temp->sems[i].sem_zcnt);
-        //printf("pid of last op: %d\n", temp->sems[i].sem_pid);
-        //printf("process waiting: %d\n", temp->sems[i].sem_zcnt);
+/// @brief for debugging purposes, print all the stats of the semid_ds
+/// @param temp the pointer to the semid struct
+void semid_print(struct semid_ds *temp)
+{
+    pr_debug("pid, IPC_KEY, Semid, semop, change: %d, %d, %d, %d, %d\n", temp->owner, temp->key, temp->semid, temp->sem_otime, temp->sem_ctime);
+    for (int i = 0; i < (temp->sem_nsems); i++) {
+        pr_debug("%d semaphore:\n", i + 1);
+        pr_debug("value: %d, pid %d, process waiting %d\n", temp->sems[i].sem_val, temp->sems[i].sem_pid, temp->sems[i].sem_zcnt);
+        //pr_debug("pid of last op: %d\n", temp->sems[i].sem_pid);
+        //pr_debug("process waiting: %d\n", temp->sems[i].sem_zcnt);
     }
 }
-
 
 /// @brief list of all current active semaphores
 list_t *current_semaphores;
 
-int count_ipc_private = 2;  //temporary -> to implement the IPC_PRIVATE mechanism
+int count_ipc_private = 2; //temporary -> to implement the IPC_PRIVATE mechanism
 
 long sys_semget(key_t key, int nsems, int semflg)
 {
     struct semid_ds *temp = NULL;
     //check if nsems is a valid value
-    if(nsems<=0){
-        printf("Errore NSEMS\n");  //debuggin purposes
+    if (nsems <= 0) {
+        pr_err("Errore NSEMS\n"); //debuggin purposes
         errno = EINVAL;
         return -1;
     }
@@ -98,104 +98,106 @@ long sys_semget(key_t key, int nsems, int semflg)
     /*if (count == 0){  //first ever to call semget
         current_semaphores = list_create();  //init the list
         temp = (struct semid_ds *)kmalloc(sizeof(struct semid_ds));  //create the first one
-        semid_init(temp, key, nsems);
+        __semid_init(temp, key, nsems);
         list_insert_front(current_semaphores, temp);
         count++;
         return temp->semid;
     }*/
 
-    if (current_semaphores == NULL){  //if this is the first time that the function is called
-        current_semaphores = list_create();  //we initialize the list
-    }    
+    if (current_semaphores == NULL) {       //if this is the first time that the function is called
+        current_semaphores = list_create(); //we initialize the list
+    }
 
-    if (key == IPC_PRIVATE){ // need to find a unique key
+    if (key == IPC_PRIVATE) { // need to find a unique key
         int flag = 1;
-        while (1){  //exit when i find a unique key
-            listnode_foreach(listnode, current_semaphores){
+        while (1) { //exit when i find a unique key
+            listnode_foreach(listnode, current_semaphores)
+            {
                 if (((struct semid_ds *)listnode->value)->key == count_ipc_private)
                     flag = 0;
             }
-            if (flag==1)break;
+            if (flag == 1)
+                break;
             flag = 1;
-            count_ipc_private*=3; //multiply to try to find a unique key 
+            count_ipc_private *= 3; //multiply to try to find a unique key
         }
         //we have the key
         temp = (struct semid_ds *)kmalloc(sizeof(struct semid_ds));
-        semid_init(temp, count_ipc_private, nsems);
+        __semid_init(temp, count_ipc_private, nsems);
         list_insert_front(current_semaphores, temp);
-        return temp -> semid;
-    } 
-    int flag = 0;
+        return temp->semid;
+    }
+    int flag       = 0;
     int temp_semid = -1;
-    listnode_foreach(listnode, current_semaphores){  //iterate through the list 
-        if (((struct semid_ds *)listnode->value)->key == key){  //if we find a semid with the given key
-            temp_semid = ((struct semid_ds *)listnode->value)->semid;  //saving the semid
-            flag = 1;  //found
+    listnode_foreach(listnode, current_semaphores)
+    {                                                                 //iterate through the list
+        if (((struct semid_ds *)listnode->value)->key == key) {       //if we find a semid with the given key
+            temp_semid = ((struct semid_ds *)listnode->value)->semid; //saving the semid
+            flag       = 1;                                           //found
         }
-    }  
-    if (flag==0){ //unique key
-        if (semflg & IPC_CREAT){  //and i want to create a semaphore set with it
+    }
+    if (flag == 0) {              //unique key
+        if (semflg & IPC_CREAT) { //and i want to create a semaphore set with it
             temp = (struct semid_ds *)kmalloc(sizeof(struct semid_ds));
-            semid_init(temp, key, nsems);
+            __semid_init(temp, key, nsems);
             list_insert_front(current_semaphores, temp);
-            return temp -> semid;    
+            return temp->semid;
         }
         errno = EINVAL; //invalid argument bc it is a unique key but with no IPC_CREAT
         return -1;
     }
-    if(semflg & IPC_EXCL){ //error, the sem set already exist 
+    if (semflg & IPC_EXCL) { //error, the sem set already exist
         errno = EEXIST;
         return -1;
     }
-    return temp_semid;  //return the correspondent semid
+    return temp_semid; //return the correspondent semid
 
     //TODO("Not implemented");
 }
 
 long sys_semop(int semid, struct sembuf *sops, unsigned nsops)
 {
-
     int flag = 0;
     struct semid_ds *temp;
-    listnode_foreach(listnode, current_semaphores){  //iterate through the list 
-        if (((struct semid_ds *)listnode->value)->semid == semid){  //if we find a semid with the given key
+    listnode_foreach(listnode, current_semaphores)
+    {                                                               //iterate through the list
+        if (((struct semid_ds *)listnode->value)->semid == semid) { //if we find a semid with the given key
             flag = 1;
             temp = ((struct semid_ds *)listnode->value);
             break;
         }
     }
 
-    if (!flag){ /*if the semid does not find a match then we set the errno and return -1*/
+    if (!flag) { /*if the semid does not find a match then we set the errno and return -1*/
         errno = EINVAL;
         return errno;
     }
 
-    if (sops->sem_num<0 || sops->sem_num >= temp->sem_nsems){  //checking parameters
+    if (sops->sem_num < 0 || sops->sem_num >= temp->sem_nsems) { //checking parameters
         errno = EINVAL;
         return -1;
     }
 
-    temp -> sem_otime = sys_time(NULL);
+    temp->sem_otime = sys_time(NULL);
 
-    if (sops->sem_op < 0){
+    if (sops->sem_op < 0) {
         /*If the operation is negative then we need to check for possible blocking operation*/
-        
+
         /*if the value of the sem were to become negative then we return a special value*/
-        if (temp->sems[sops->sem_num].sem_val < (-nsops*(sops->sem_op))){   
+        if (temp->sems[sops->sem_num].sem_val < (-nsops * (sops->sem_op))) {
             return OPERATION_NOT_ALLOWED; //not allowed
-        }else{
+        } else {
             /*otherwise we can modify the sem_val and all the other parameters of the semaphore*/
-            temp->sems[sops->sem_num].sem_val += (nsops*(sops->sem_op));
+            temp->sems[sops->sem_num].sem_val += (nsops * (sops->sem_op));
             temp->sems[sops->sem_num].sem_pid = sys_getpid();
-            temp -> sem_ctime = sys_time(NULL);
+            temp->sem_ctime                   = sys_time(NULL);
             return 1; //allowed
         }
-    }
-    else{
+    } else {
         /*the operation is non negative so we can always do it*/
-        temp->sems[sops->sem_num].sem_val += (nsops*(sops->sem_op));
+        temp->sems[sops->sem_num].sem_val += (nsops * (sops->sem_op));
         temp->sems[sops->sem_num].sem_pid = sys_getpid();
-        temp -> sem_ctime = sys_time(NULL);
+        temp->sem_ctime                   = sys_time(NULL);
         return 1; //allowed
     }
 
@@ -206,77 +208,76 @@ long sys_semctl(int semid, int semnum, int cmd, union semun *arg)
 {
     int flag = 0;
     struct semid_ds *temp;
-    listnode_foreach(listnode, current_semaphores){  //iterate through the list 
-        if (((struct semid_ds *)listnode->value)->semid == semid){  //if we find a semid with the given key
+    listnode_foreach(listnode, current_semaphores)
+    {                                                               //iterate through the list
+        if (((struct semid_ds *)listnode->value)->semid == semid) { //if we find a semid with the given key
             flag = 1;
             temp = ((struct semid_ds *)listnode->value);
             break;
         }
     }
 
-    if (!flag){   /*if the semid does not find a match then we set the errno and return -1*/
+    if (!flag) { /*if the semid does not find a match then we set the errno and return -1*/
         errno = EINVAL;
         return -1;
     }
-    
-    switch (cmd)
-    {
+
+    switch (cmd) {
     //remove the semaphore set; any processes blocked is awakened (errno set to EIDRM); no argument required.
     case IPC_RMID:
         list_remove_node(current_semaphores, list_find(current_semaphores, temp));
 
-        //printf("\ndone\n");
+        //pr_debug("\ndone\n");
         /*gonna need to unblock all the processes on the semaphore*/
-               
-    
+
         break;
-    
+
     //place a copy of the semid_ds data structure in the buffer pointed to by arg.buf.
     case IPC_STAT:
-        if (arg->buf == NULL || arg->buf->sems == NULL){ /*checking the parameters*/
+        if (arg->buf == NULL || arg->buf->sems == NULL) { /*checking the parameters*/
             errno = EINVAL;
             return -1;
         }
 
         //copying all the data
-        arg->buf->key = temp -> key;
-        arg->buf->owner = temp -> owner;
-        arg->buf->semid = temp -> semid; 
-        arg->buf->sem_otime = temp -> sem_otime;
-        arg->buf->sem_ctime = temp -> sem_ctime;
-        arg->buf->sem_nsems = temp -> sem_nsems;
-        for(int i=0; i<temp->sem_nsems; i++){
-            arg->buf->sems[i].sem_val = temp->sems[i].sem_val;
-            arg->buf->sems[i].sem_pid = temp->sems[i].sem_pid;
+        arg->buf->key       = temp->key;
+        arg->buf->owner     = temp->owner;
+        arg->buf->semid     = temp->semid;
+        arg->buf->sem_otime = temp->sem_otime;
+        arg->buf->sem_ctime = temp->sem_ctime;
+        arg->buf->sem_nsems = temp->sem_nsems;
+        for (int i = 0; i < temp->sem_nsems; i++) {
+            arg->buf->sems[i].sem_val  = temp->sems[i].sem_val;
+            arg->buf->sems[i].sem_pid  = temp->sems[i].sem_pid;
             arg->buf->sems[i].sem_zcnt = temp->sems[i].sem_zcnt;
         }
 
         return 0;
-    
-    //update selected fields of the semid_ds using values in the buffer pointed to by arg.buf.
-    //case IPC_SET:
+
+        //update selected fields of the semid_ds using values in the buffer pointed to by arg.buf.
+        //case IPC_SET:
         /* code */
         //break;
-    
+
     //the value of the semnum-th semaphore in the set is initialized to the value specified in arg.val.
     case SETVAL:
-        if(semnum<0 || semnum>=(temp->sem_nsems)){  //if the index is valid
+        if (semnum < 0 || semnum >= (temp->sem_nsems)) { //if the index is valid
             errno = EINVAL;
             return -1;
         }
 
-        if(arg->val<0){  //checking if the value is valid
+        if (arg->val < 0) { //checking if the value is valid
             errno = ERANGE;
             return -1;
         }
         //setting the values
-        temp -> sem_ctime = sys_time(NULL);
+        temp->sem_ctime            = sys_time(NULL);
         temp->sems[semnum].sem_val = arg->val;
         return 0;
-    
+
     //returns the value of the semnum-th semaphore in the set specified by semid; no argument required.
     case GETVAL:
-        if(semnum<0 || semnum>=(temp->sem_nsems)){  //if the index is valid
+        if (semnum < 0 || semnum >= (temp->sem_nsems)) { //if the index is valid
             errno = EINVAL;
             return -1;
         }
@@ -285,48 +286,48 @@ long sys_semctl(int semid, int semnum, int cmd, union semun *arg)
 
     //initialize all semaphore in the set referred to by semid, using the values supplied in the array pointed to by arg.array.
     case SETALL:
-        if (arg->array == NULL){  /*checking parameters*/
+        if (arg->array == NULL) { /*checking parameters*/
             errno = EINVAL;
             return -1;
         }
-        for (int i = 0; i<temp->sem_nsems; i++){   //setting all the values
-            temp->sems[i].sem_val = arg->array[i]; 
+        for (int i = 0; i < temp->sem_nsems; i++) { //setting all the values
+            temp->sems[i].sem_val = arg->array[i];
         }
-        temp -> sem_ctime = sys_time(NULL);
+        temp->sem_ctime = sys_time(NULL);
         return 0;
-    
+
     //retrieve the values of all of the semaphores in the set referred to by semid, placing them in the array pointed to by arg.array.
     case GETALL:
-        if (arg->array == NULL){  //checking if the argument passed is valid
+        if (arg->array == NULL) { //checking if the argument passed is valid
             errno = EINVAL;
             return -1;
         }
-        for (int i = 0; i<temp->sem_nsems; i++){
+        for (int i = 0; i < temp->sem_nsems; i++) {
             arg->array[i] = temp->sems[i].sem_val;
         }
         return 0;
-    
+
     //return the process ID of the last process to perform a semop on the semnum-th semaphore.
     case GETPID:
-        if(semnum<0 || semnum>=(temp->sem_nsems)){  //if the index is valid
+        if (semnum < 0 || semnum >= (temp->sem_nsems)) { //if the index is valid
             errno = EINVAL;
             return -1;
         }
 
         return temp->sems[semnum].sem_pid;
 
-    //return the number of processes currently waiting for the value of the semnum-th semaphore to become 0. 
+    //return the number of processes currently waiting for the value of the semnum-th semaphore to become 0.
     case GETZCNT:
-        if(semnum<0 || semnum>=(temp->sem_nsems)){ //if the index is valid
+        if (semnum < 0 || semnum >= (temp->sem_nsems)) { //if the index is valid
             errno = EINVAL;
             return -1;
         }
 
         return temp->sems[semnum].sem_zcnt;
-    
+
     //not a valid argument.
     default:
-        errno = EINVAL; 
+        errno = EINVAL;
         return -1;
     }
 
