@@ -491,6 +491,10 @@ static bool_t ext2_valid_permissions(int flags, mode_t mask, uid_t uid, gid_t gi
 {
     // Check the permissions.
     task_struct *task = scheduler_get_current_process();
+    if (task == NULL) {
+        pr_warning("Failed to get the current running process, assuming we are booting.\n");
+        return true;
+    }
     // The current task is the owner.
     if (task->uid == uid) {
         if (!bitmask_check(mask, S_IRUSR))
@@ -2154,11 +2158,6 @@ static int ext2_create_inode(
         pr_err("Received a null EXT2 inode.\n");
         return -1;
     }
-    task_struct *task = scheduler_get_current_process();
-    if (task == NULL) {
-        pr_err("Failed to get the current running process.\n");
-        return -1;
-    }
     // Allocate an inode, inside the preferred_group if possible.
     int inode_index = ext2_allocate_inode(fs, preferred_group);
     if (inode_index == 0) {
@@ -2172,10 +2171,19 @@ static int ext2_create_inode(
         pr_err("Failed to read the newly created inode.\n");
         return -1;
     }
+    // Get the UID and GID.
+    uid_t uid = 0, gid = 0;
+    task_struct *task = scheduler_get_current_process();
+    if (task != NULL) {
+        pr_warning("Failed to get the current running process, assuming we are booting.\n");
+    } else {
+        uid = task->uid;
+        gid = task->gid;
+    }
     // Set the inode mode.
     inode->mode = mode;
     // Set the user identifiers of the owners.
-    inode->uid = task->uid;
+    inode->uid = uid;
     // Set the size of the file in bytes.
     inode->size = 0;
     // Set the time that the inode was accessed.
@@ -2187,7 +2195,7 @@ static int ext2_create_inode(
     // Set the time that the inode was deleted.
     inode->dtime = 0;
     // Set the group identifiers of the owners.
-    inode->gid = task->gid;
+    inode->gid = gid;
     // Set the number of hard links.
     inode->links_count = 0;
     // Set the blocks count.
@@ -2335,7 +2343,7 @@ static vfs_file_t *ext2_open(const char *path, int flags, mode_t mode)
     search.parent_inode = 0;
     // First check, if a file with the given name already exists.
     if (!ext2_resolve_path(fs->root, absolute_path, &search)) {
-        if (bitmask_check(flags, O_CREAT | O_EXCL)) {
+        if (bitmask_check(flags, O_CREAT) && bitmask_check(flags, O_EXCL)) {
             pr_err("A file or directory already exists at `%s` (O_CREAT | O_EXCL).\n", absolute_path);
             return NULL;
         } else if (bitmask_check(flags, O_DIRECTORY) && (direntry.file_type != ext2_file_type_directory)) {
@@ -2722,15 +2730,15 @@ static int ext2_mkdir(const char *path, mode_t permission)
         pr_err("Failed to properly get the parent directory (%s == %s).\n", parent_path, path);
         return -ENOENT;
     }
+    // Set the inode mode.
+    uint32_t mode = EXT2_S_IFDIR;
+    mode |= 0xFFF & permission;
     // Get the parent VFS node.
-    vfs_file_t *parent = vfs_open(parent_path, O_RDONLY, 0);
+    vfs_file_t *parent = vfs_open(parent_path, O_RDONLY, mode);
     if (parent == NULL) {
         pr_err("Failed to open parent directory (%s).\n", parent_path);
         return -ENOENT;
     }
-    // Set the inode mode.
-    uint32_t mode = EXT2_S_IFDIR;
-    mode |= 0xFFF & permission;
     // Get the group index of the parent.
     uint32_t group_index = ext2_get_group_index_from_inode(fs, parent->ino);
     // Create and initialize the new inode.
