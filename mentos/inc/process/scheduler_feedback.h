@@ -5,8 +5,11 @@
 #pragma once
 
 #include "sys/types.h"
+#include "process/process.h"
 
-void writeFeedback(pid_t pid, char name[], pid_t padre, int mode, int prio);
+/// @brief Function which is called by scheduler_algorithm after choosing the
+/// next task, and updates the sceduling statistics.
+void scheduler_feedback_update(task_struct * next);
 
 /// @brief Initialize the scheduler feedback system.
 /// @return 1 on success, 0 on failure.
