@@ -34,12 +34,14 @@ Istruzioni relative ai parametri della funzione start (che sono work in progress
 #include "fcntl.h"
 #include "stdio.h"
 
+//#define WRITE_ON_FILE
+
 /// @brief
 #define FEEDBACK_FILENAME "/var/feedback.txt"
 /// @brief
 #define FEEDBACK_HEADER "\nPID PRIO NAME\n\0"
 /// @brief
-#define LOG_INTERVAL 3
+#define LOG_INTERVAL_SEC 1
 
 #if defined(SCHEDULER_RR)
 #define POLICY_NAME "RR   "
@@ -57,22 +59,25 @@ Istruzioni relative ai parametri della funzione start (che sono work in progress
 #error "You should enable a scheduling algorithm!"
 #endif
 
+#ifdef WRITE_ON_FILE
 /// @brief
 ssize_t offset;
+#endif
+
 /// @brief
-size_t next_log;
+unsigned long next_log;
 /// @brief
 size_t total_occurrences;
 
 /// @brief
 struct statistic {
-    pid_t pid;
-    char name[20];
+    task_struct *task;
     unsigned long occur;
 } arr_stats[PID_MAX_LIMIT];
 
 int scheduler_feedback_init()
 {
+#ifdef WRITE_ON_FILE
     // Create the feedback file, if necessary.
     int ret = vfs_mkdir("/var", 0644);
     if ((ret < 0) && (-ret != EEXIST)) {
@@ -97,84 +102,82 @@ int scheduler_feedback_init()
     offset += header_len;
     // Close the file.
     vfs_close(feedback);
+#endif
     // Initialize the stat array.
     for (size_t i = 0; i < PID_MAX_LIMIT; ++i) {
-        arr_stats[i].pid   = -1;
+        arr_stats[i].task  = NULL;
         arr_stats[i].occur = 0;
     }
     // Set when the first logging should happen.
-    next_log = timer_get_seconds() + LOG_INTERVAL;
+    next_log = timer_get_ticks() + (LOG_INTERVAL_SEC * TICKS_PER_SECOND);
     // Initialize the number of occurrences.
     total_occurrences = 0;
     return 1;
 }
 
-void scheduler_feedback_update(task_struct *next)
+void scheduler_feedback_update()
 {
-    assert(next && "Received a NULL task.");
-
-    // ========================================================================
-
-    if (next_log < timer_get_seconds()) {
-        pr_debug("Scheduling Statistics (%s)\n", POLICY_NAME);
-
-        // Open the feedback file.
-        //vfs_file_t *feedback = vfs_open(FEEDBACK_FILENAME, O_WRONLY, 0644);
-        //if (feedback == NULL) {
-        //    pr_err("Failed to create the feedback file.\n");
-        //    pr_err("Error: %s\n", strerror(errno));
-        //    return;
-        //}
-
-        //char buffer[NAME_MAX * 2];
-        //int written = 0;
-
-        for (size_t i = 0; i < PID_MAX_LIMIT; ++i) {
-            if (arr_stats[i].pid == -1) {
-                break;
-            }
+    if (next_log >= timer_get_ticks()) {
+        return;
+    }
+    pr_debug("Scheduling Statistics (%s)\n", POLICY_NAME);
+#ifdef WRITE_ON_FILE
+    // Open the feedback file.
+    vfs_file_t *feedback = vfs_open(FEEDBACK_FILENAME, O_WRONLY, 0644);
+    if (feedback == NULL) {
+        pr_err("Failed to create the feedback file.\n");
+        pr_err("Error: %s\n", strerror(errno));
+        return;
+    }
+    char buffer[BUFSIZ];
+    int written = 0;
+#endif
+    for (size_t i = 0; i < PID_MAX_LIMIT; ++i) {
+        if (arr_stats[i].task) {
             float tcpu = ((float)arr_stats[i].occur * 100.0) / total_occurrences;
-            pr_debug("[%3d] %-12s -> TCPU: %.2f%% \n",
-                     arr_stats[i].pid,
-                     arr_stats[i].name,
+            pr_debug("[%3d] | %-24s | -> TCPU: %.2f%% \n",
+                     arr_stats[i].task->pid,
+                     arr_stats[i].task->name,
                      tcpu);
-
-            //written = sprintf(buffer, "[%3d](%s)[%f], ", arr_stats[i].pid, arr_stats[i].name, tcpu);
-            //vfs_write(feedback, buffer, offset, written);
-            //offset += written;
-        }
-        //vfs_write(feedback, "/n", offset, 1);
-        //offset++;
-
-        for (size_t i = 0; i < PID_MAX_LIMIT; ++i) {
-            if (arr_stats[i].pid == -1) {
-                break;
-            }
-            arr_stats[i].pid   = -1;
-            arr_stats[i].occur = 0;
-        }
-        // Update when in the future, the logging should happen.
-        next_log = timer_get_seconds() + LOG_INTERVAL;
-        // Reset the number of occurrences.
-        total_occurrences = 0;
-    } else {
-        for (size_t i = 0; i < PID_MAX_LIMIT; ++i) {
-            // If the process we are logging is already in the stat array, increase the occurrences.
-            if (arr_stats[i].pid == next->pid) {
-                arr_stats[i].occur += 1;
-                total_occurrences += 1;
-                break;
-            }
-
-            // If we reached the unused stat entries, it means the current
-            // process is not stored and we need to insert it.
-            if (arr_stats[i].pid == -1) {
-                arr_stats[i].pid = next->pid;
-                strcpy(arr_stats[i].name, next->name);
-                arr_stats[i].occur = 1;
-                total_occurrences += 1;
-                break;
-            }
+#ifdef WRITE_ON_FILE
+            written = sprintf(buffer, "[%3d](%s)[%f], ", arr_stats[i].pid, arr_stats[i].name, tcpu);
+            vfs_write(feedback, buffer, offset, written);
+            offset += written;
+#endif
         }
     }
+#ifdef WRITE_ON_FILE
+    vfs_write(feedback, "/n", offset, 1);
+    offset++;
+    vfs_close(feedback);
+#endif
+    for (size_t i = 0; i < PID_MAX_LIMIT; ++i) {
+        if (arr_stats[i].task)
+            arr_stats[i].occur = 0;
+    }
+    // Update when in the future, the logging should happen.
+    next_log = timer_get_ticks() + (LOG_INTERVAL_SEC * TICKS_PER_SECOND);
+    // Reset the number of occurrences.
+    total_occurrences = 0;
+}
+
+void scheduler_feedback_task_add(task_struct *task)
+{
+    assert(task && "Received a NULL task.");
+    arr_stats[task->pid].occur = 1;
+    arr_stats[task->pid].task  = task;
+}
+
+void scheduler_feedback_task_remove(pid_t pid)
+{
+    assert(pid < PID_MAX_LIMIT && "We received a wrong pid.");
+    arr_stats[pid].occur = 0;
+    arr_stats[pid].task  = NULL;
+}
+
+void scheduler_feedback_task_update(task_struct *task)
+{
+    assert(task && "Received a NULL task.");
+    arr_stats[task->pid].occur += 1;
+    total_occurrences += 1;
 }

@@ -13,9 +13,10 @@
 #include "assert.h"
 #include "strerror.h"
 #include "fs/vfs.h"
-#include "process/scheduler.h"
 #include "descriptor_tables/tss.h"
 #include "devices/fpu.h"
+#include "process/scheduler_feedback.h"
+#include "process/scheduler.h"
 #include "process/prio.h"
 #include "process/wait.h"
 #include "mem/kheap.h"
@@ -111,10 +112,13 @@ void scheduler_enqueue_task(task_struct *process)
     list_head_insert_before(&process->run_list, &runqueue.queue);
     // Increment the number of active processes.
     ++runqueue.num_active;
+
+    scheduler_feedback_task_add(process);
 }
 
 void scheduler_dequeue_task(task_struct *process)
 {
+    scheduler_feedback_task_remove(process->pid);
     // Delete the process from the list of running processes.
     list_head_remove(&process->run_list);
     // Decrement the number of active processes.
