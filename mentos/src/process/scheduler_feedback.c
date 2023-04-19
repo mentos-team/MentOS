@@ -2,6 +2,27 @@
 /// @brief Manage the current PID for the scheduler feedback session
 /// @copyright (c) 2014-2022 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
+/// @details
+/// all'avvio di MentOS, usa comando start, verrai avvisato su terminale quando la
+/// sessione sarà terminata. Puoi verificare i risultati a video lanciando il
+/// comando cat sul file del desktop (feedback.txt)
+/// 
+/// es:
+/// ~  start
+/// ~  cat feedback.txt
+/// 
+/// Questa e' una versione di prova in cui registriamo una brevissima sessione di
+/// soli 10 pid. (Funzionante per ora solo con lo scheduler RR) Istruzioni relative
+/// ai parametri della funzione start (che sono work in progress) sono in start.c
+
+#include "process/scheduler_feedback.h"
+#include "hardware/timer.h"
+#include "strerror.h"
+#include "fs/vfs.h"
+#include "assert.h"
+#include "string.h"
+#include "fcntl.h"
+#include "stdio.h"
 
 // Include the kernel log levels.
 #include "sys/kernel_levels.h"
@@ -9,40 +30,12 @@
 #define __DEBUG_HEADER__ "[SCHFBK]"
 /// Set the log level.
 #define __DEBUG_LEVEL__ LOGLEVEL_DEBUG
-
-/*
-HOW TO:
-all'avvio di MentOS, usa comando start, verrai avvisato su terminale quando la sessione sarà terminata.
-Puoi verificare i risultati a video lanciando il comando cat sul file del desktop (feedback.txt)
-
-es:
-~  start
-~  cat feedback.txt
-
-Questa e' una versione di prova in cui registriamo una brevissima sessione di soli 10 pid.
-(Funzionante per ora solo con lo scheduler RR)
-Istruzioni relative ai parametri della funzione start (che sono work in progress) sono in start.c
-*/
-
-#include "process/scheduler_feedback.h"
-#include "hardware/timer.h"
-#include "strerror.h"
 #include "io/debug.h"
-#include "fs/vfs.h"
-#include "assert.h"
-#include "string.h"
-#include "fcntl.h"
-#include "stdio.h"
 
-//#define WRITE_ON_FILE
+/// @brief How often the feedback is shown.
+#define LOG_INTERVAL_SEC 0.5
 
-/// @brief
-#define FEEDBACK_FILENAME "/var/feedback.txt"
-/// @brief
-#define FEEDBACK_HEADER "\nPID PRIO NAME\n\0"
-/// @brief
-#define LOG_INTERVAL_SEC 1
-
+/// @brief The name of the scheduling policy.
 #if defined(SCHEDULER_RR)
 #define POLICY_NAME "RR   "
 #elif defined(SCHEDULER_PRIORITY)
@@ -59,21 +52,65 @@ Istruzioni relative ai parametri della funzione start (che sono work in progress
 #error "You should enable a scheduling algorithm!"
 #endif
 
+/// @brief If uncommented, it writes the logging on file.
+//#define WRITE_ON_FILE
+
 #ifdef WRITE_ON_FILE
+/// @brief Name of the file where the feedback statistics are saved.
+#define FEEDBACK_FILENAME "/var/schedfb"
+/// @brief The header shown
+#define FEEDBACK_HEADER "\n[PID[] | NAME | -> (CPU UTILIZATION)\n\0"
 /// @brief
 ssize_t offset;
 #endif
 
-/// @brief
+/// @brief When the next log should be displayed/saved, in CPU ticks.
 unsigned long next_log;
-/// @brief
+/// @brief The total number of context-switches since the starting of the log
+/// session.
 size_t total_occurrences;
 
-/// @brief
+/// @brief A structure that keeps track of scheduling statistics.
 struct statistic {
     task_struct *task;
     unsigned long occur;
 } arr_stats[PID_MAX_LIMIT];
+
+/// @brief Logs the scheduling statistics either on file or on the terminal.
+static inline void __scheduler_feedback_log()
+{
+    pr_debug("Scheduling Statistics (%s)\n", POLICY_NAME);
+#ifdef WRITE_ON_FILE
+    // Open the feedback file.
+    vfs_file_t *feedback = vfs_open(FEEDBACK_FILENAME, O_WRONLY, 0644);
+    if (feedback == NULL) {
+        pr_err("Failed to create the feedback file.\n");
+        pr_err("Error: %s\n", strerror(errno));
+        return;
+    }
+    char buffer[BUFSIZ];
+    int written = 0;
+#endif
+    for (size_t i = 0; i < PID_MAX_LIMIT; ++i) {
+        if (arr_stats[i].task) {
+            float tcpu = ((float)arr_stats[i].occur * 100.0) / total_occurrences;
+            pr_debug("[%3d] | %-24s | -> TCPU: %.2f%% \n",
+                     arr_stats[i].task->pid,
+                     arr_stats[i].task->name,
+                     tcpu);
+#ifdef WRITE_ON_FILE
+            written = sprintf(buffer, "[%3d](%s)[%f], ", arr_stats[i].pid, arr_stats[i].name, tcpu);
+            vfs_write(feedback, buffer, offset, written);
+            offset += written;
+#endif
+        }
+    }
+#ifdef WRITE_ON_FILE
+    vfs_write(feedback, "/n", offset, 1);
+    offset++;
+    vfs_close(feedback);
+#endif
+}
 
 int scheduler_feedback_init()
 {
@@ -115,52 +152,6 @@ int scheduler_feedback_init()
     return 1;
 }
 
-void scheduler_feedback_update()
-{
-    if (next_log >= timer_get_ticks()) {
-        return;
-    }
-    pr_debug("Scheduling Statistics (%s)\n", POLICY_NAME);
-#ifdef WRITE_ON_FILE
-    // Open the feedback file.
-    vfs_file_t *feedback = vfs_open(FEEDBACK_FILENAME, O_WRONLY, 0644);
-    if (feedback == NULL) {
-        pr_err("Failed to create the feedback file.\n");
-        pr_err("Error: %s\n", strerror(errno));
-        return;
-    }
-    char buffer[BUFSIZ];
-    int written = 0;
-#endif
-    for (size_t i = 0; i < PID_MAX_LIMIT; ++i) {
-        if (arr_stats[i].task) {
-            float tcpu = ((float)arr_stats[i].occur * 100.0) / total_occurrences;
-            pr_debug("[%3d] | %-24s | -> TCPU: %.2f%% \n",
-                     arr_stats[i].task->pid,
-                     arr_stats[i].task->name,
-                     tcpu);
-#ifdef WRITE_ON_FILE
-            written = sprintf(buffer, "[%3d](%s)[%f], ", arr_stats[i].pid, arr_stats[i].name, tcpu);
-            vfs_write(feedback, buffer, offset, written);
-            offset += written;
-#endif
-        }
-    }
-#ifdef WRITE_ON_FILE
-    vfs_write(feedback, "/n", offset, 1);
-    offset++;
-    vfs_close(feedback);
-#endif
-    for (size_t i = 0; i < PID_MAX_LIMIT; ++i) {
-        if (arr_stats[i].task)
-            arr_stats[i].occur = 0;
-    }
-    // Update when in the future, the logging should happen.
-    next_log = timer_get_ticks() + (LOG_INTERVAL_SEC * TICKS_PER_SECOND);
-    // Reset the number of occurrences.
-    total_occurrences = 0;
-}
-
 void scheduler_feedback_task_add(task_struct *task)
 {
     assert(task && "Received a NULL task.");
@@ -171,6 +162,7 @@ void scheduler_feedback_task_add(task_struct *task)
 void scheduler_feedback_task_remove(pid_t pid)
 {
     assert(pid < PID_MAX_LIMIT && "We received a wrong pid.");
+    total_occurrences -= arr_stats[pid].occur;
     arr_stats[pid].occur = 0;
     arr_stats[pid].task  = NULL;
 }
@@ -180,4 +172,23 @@ void scheduler_feedback_task_update(task_struct *task)
     assert(task && "Received a NULL task.");
     arr_stats[task->pid].occur += 1;
     total_occurrences += 1;
+}
+
+void scheduler_feedback_update()
+{
+    // If it is not yet time for the next reset, skip.
+    if (next_log >= timer_get_ticks()) {
+        return;
+    }
+    // Dump on the feedback before reset.
+    __scheduler_feedback_log();
+    // Reset the occurences.
+    for (size_t i = 0; i < PID_MAX_LIMIT; ++i) {
+        if (arr_stats[i].task)
+            arr_stats[i].occur = 0;
+    }
+    // Update when in the future, the logging should happen.
+    next_log = timer_get_ticks() + (LOG_INTERVAL_SEC * TICKS_PER_SECOND);
+    // Reset the number of occurrences.
+    total_occurrences = 0;
 }
