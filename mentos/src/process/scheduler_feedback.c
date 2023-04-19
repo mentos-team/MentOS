@@ -2,18 +2,6 @@
 /// @brief Manage the current PID for the scheduler feedback session
 /// @copyright (c) 2014-2022 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
-/// @details
-/// all'avvio di MentOS, usa comando start, verrai avvisato su terminale quando la
-/// sessione sarà terminata. Puoi verificare i risultati a video lanciando il
-/// comando cat sul file del desktop (feedback.txt)
-/// 
-/// es:
-/// ~  start
-/// ~  cat feedback.txt
-/// 
-/// Questa e' una versione di prova in cui registriamo una brevissima sessione di
-/// soli 10 pid. (Funzionante per ora solo con lo scheduler RR) Istruzioni relative
-/// ai parametri della funzione start (che sono work in progress) sono in start.c
 
 #include "process/scheduler_feedback.h"
 #include "hardware/timer.h"
