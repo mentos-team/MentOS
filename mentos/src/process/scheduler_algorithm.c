@@ -23,8 +23,6 @@
 /// @param task the task to update.
 static void __update_task_statistics(task_struct *task);
 
-void feedback(pid_t pid, char name[], pid_t padre, int mode, int prio);
-
 /// @brief Checks if the given task is actually a periodic task.
 /// @param task the task to check.
 /// @return true if the task is periodic, false otherwise.
@@ -34,12 +32,12 @@ static inline bool_t __is_periodic_task(task_struct *task)
     return task->se.is_periodic && !task->se.is_under_analysis;
 }
 
-/// @brief Employs time-sharing, giving each job a timeslice, and is also
+/// @brief Employs time-sharing, giving each job a time-slot, and is also
 /// preemptive since the scheduler forces the task out of the CPU once
-/// the timeslice expires.
+/// the time-slot expires.
 /// @param runqueue list of all processes.
-/// @param skip_periodic tells the algorithm if there are periodic processes in
-/// the list, and in that case it needs to skip them.
+/// @param skip_periodic tells the algorithm that periodic processes in the list
+/// should be skipped.
 /// @return the next task on success, NULL on failure.
 static inline task_struct *__scheduler_rr(runqueue_t *runqueue, bool_t skip_periodic)
 {
