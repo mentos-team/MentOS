@@ -1,6 +1,6 @@
 /// @file vfs_types.h
 /// @brief Virtual filesystem data types.
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2023 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #pragma once
@@ -25,7 +25,7 @@ typedef int (*vfs_rmdir_callback)(const char *);
 /// Function used to open a file (or directory).
 typedef vfs_file_t *(*vfs_creat_callback)(const char *, mode_t);
 /// Function used to read the entries of a directory.
-typedef int (*vfs_getdents_callback)(vfs_file_t *, dirent_t *, off_t, size_t);
+typedef ssize_t (*vfs_getdents_callback)(vfs_file_t *, dirent_t *, off_t, size_t);
 /// Function used to open a file (or directory).
 typedef vfs_file_t *(*vfs_open_callback)(const char *, int, mode_t);
 /// Function used to remove a file.

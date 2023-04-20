@@ -1,14 +1,13 @@
 /// @file scheduler.c
 /// @brief Scheduler structures and functions.
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2023 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-// Include the kernel log levels.
-#include "sys/kernel_levels.h"
-/// Change the header.
-#define __DEBUG_HEADER__ "[SCHED ]"
-/// Set the log level.
-#define __DEBUG_LEVEL__ LOGLEVEL_NOTICE
+// Setup the logging for this file (do this before any other include).
+#include "sys/kernel_levels.h"           // Include kernel log levels.
+#define __DEBUG_HEADER__ "[SCHED ]"      ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
+#include "io/debug.h"                    // Include debugging functions.
 
 #include "assert.h"
 #include "strerror.h"
@@ -21,7 +20,6 @@
 #include "process/wait.h"
 #include "mem/kheap.h"
 #include "system/panic.h"
-#include "io/debug.h"
 #include "time.h"
 #include "sys/errno.h"
 #include "klib/list_head.h"
@@ -443,40 +441,45 @@ int sys_nice(int increment)
 
 pid_t sys_waitpid(pid_t pid, int *status, int options)
 {
-    // Get the current task.
-    if (runqueue.curr == NULL) {
+    task_struct *current_process, *entry;
+    // Get the current process.
+    current_process = scheduler_get_current_process();
+    // Check the current task.
+    if (current_process == NULL) {
         kernel_panic("There is no current process!");
     }
-
-    /* For now we do not support waiting for processes inside the given
-     * process group (pid < -1).
-     */
+    // For now we do not support waiting for processes inside the given process
+    // group (pid < -1).
     if ((pid < -1) || (pid == 0)) {
         return -ESRCH;
     }
-    if (pid == runqueue.curr->pid) {
+    // Check if the pid we are waiting for is the process itself.
+    if (pid == current_process->pid) {
         return -ECHILD;
     }
-    if (options != 0 && options != WNOHANG) {
+    // Check if the options are one of: WNOHANG, WUNTRACED.
+    if ((options != 0) && !bit_check(options, WNOHANG) && !bit_check(options, WUNTRACED)) {
         return -EINVAL;
     }
-#if 0
-    if (status == NULL) {
-        return -EFAULT;
-    }
-#endif
-    if (list_head_empty(&runqueue.curr->children)) {
+    // Check if there are children to wait.
+    if (list_head_empty(&current_process->children)) {
         return -ECHILD;
     }
-    list_head *it;
-    list_for_each (it, &runqueue.curr->children) {
-        task_struct *entry = list_entry(it, task_struct, sibling);
+    // Iterate the children.
+    list_for_each_decl(it, &current_process->children)
+    {
+        // Get the entry.
+        entry = list_entry(it, task_struct, sibling);
+        // Check the entry.
         if (entry == NULL) {
             continue;
         }
+        // If the entry is not in a zombie state, keep searching.
         if (entry->state != EXIT_ZOMBIE) {
             continue;
         }
+        // If a pid was provided, and is different from the pid we are
+        // exhamining, skip it.
         if ((pid > 1) && (entry->pid != pid)) {
             continue;
         }
@@ -493,7 +496,7 @@ pid_t sys_waitpid(pid_t pid, int *status, int options)
         scheduler_dequeue_task(entry);
         // Delete the task_struct.
         kmem_cache_free(entry);
-        pr_debug("Process %d is freeing memory of process %d.\n", runqueue.curr->pid, ppid);
+        pr_debug("Process %d is freeing memory of process %d.\n", current_process->pid, ppid);
         return ppid;
     }
     return 0;

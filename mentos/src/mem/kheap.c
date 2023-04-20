@@ -1,22 +1,20 @@
 /// @file kheap.c
 /// @brief
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2023 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-// Include the kernel log levels.
-#include "sys/kernel_levels.h"
-/// Change the header.
-#define __DEBUG_HEADER__ "[KHEAP ]"
-/// Set the log level.
-#define __DEBUG_LEVEL__ LOGLEVEL_NOTICE
+// Setup the logging for this file (do this before any other include).
+#include "sys/kernel_levels.h"           // Include kernel log levels.
+#define __DEBUG_HEADER__ "[KHEAP ]"      ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
+#include "io/debug.h"                    // Include debugging functions.
 
 #include "mem/kheap.h"
-#include "math.h"
-#include "io/debug.h"
-#include "string.h"
 #include "mem/paging.h"
-#include "assert.h"
 #include "klib/list_head.h"
+#include "string.h"
+#include "assert.h"
+#include "math.h"
 
 /// Overhead given by the block_t itself.
 #define OVERHEAD sizeof(block_t)
@@ -785,8 +783,8 @@ void *sys_brk(void *addr)
         task_struct *current_task = scheduler_get_current_process();
         mm_struct_t *current_mm   = current_task->mm;
         current_mm->start_brk     = create_vm_area(current_mm,
-                                               0x40000000 /*FIXME! stabilize this*/,
-                                               UHEAP_INITIAL_SIZE, MM_RW | MM_PRESENT | MM_USER | MM_UPDADDR, GFP_HIGHUSER);
+                                                   0x40000000 /*FIXME! stabilize this*/,
+                                                   UHEAP_INITIAL_SIZE, MM_RW | MM_PRESENT | MM_USER | MM_UPDADDR, GFP_HIGHUSER);
         current_mm->brk           = current_mm->start_brk;
         // Reserved space for:
         // 1) First memory block.
@@ -856,5 +854,5 @@ void kheap_dump()
         pr_debug("(%p)->", it);
     }
     pr_debug("\n\n");
-    (void) total, (void) total_overhead;
+    (void)total, (void)total_overhead;
 }

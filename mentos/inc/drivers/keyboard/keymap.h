@@ -1,6 +1,6 @@
 /// @file keymap.h
 /// @brief Keymap for keyboard.
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2023 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 /// @addtogroup drivers Device Drivers
 /// @{
@@ -157,7 +157,6 @@ void init_keymaps();
 #define KEY_DOWN_ARROW    0xE050U ///< Down Arrow 57424
 #define CODE_BREAK        0x0080U ///< Code break code
 
-#define MULTIMEDIA_SCAN_CODE 0xE0
 /// @}
 
 /// @}

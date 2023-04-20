@@ -1,6 +1,6 @@
 /// @file time.c
 /// @brief Clock functions.
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2023 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #include "time.h"
@@ -9,10 +9,12 @@
 #include "string.h"
 #include "stdio.h"
 
+/// @brief List of week days name.
 static const char *weekdays[] = {
     "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"
 };
 
+/// @brief List of months name.
 static const char *months[] = {
     "January", "February", "March", "April", "May", "June",
     "July", "August", "September", "October", "November", "December"

@@ -1,6 +1,6 @@
 /// @file vga.h
 /// @brief Functions required to manage the Video Graphics Array (VGA).
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2023 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #pragma once
@@ -38,6 +38,7 @@ void vga_draw_pixel(int x, int y, unsigned char color);
 /// @brief Reads a pixel at the given position.
 /// @param x x-axis position.
 /// @param y y-axis position.
+/// @return the pixel we read.
 unsigned int vga_read_pixel(int x, int y);
 
 /// @brief Draws a character at the given position.
@@ -114,6 +115,8 @@ void vga_get_screen_size(unsigned int * width, unsigned int * height);
 void vga_new_line();
 
 /// @brief Change the color.
+/// @param color the color to set.
 void vga_set_color(unsigned int color);
 
+/// @brief Run some VGA tests.
 void vga_run_test();

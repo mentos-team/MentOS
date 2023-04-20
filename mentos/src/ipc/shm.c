@@ -1,8 +1,14 @@
 /// @file shm.c
 /// @brief
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2023 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 ///! @cond Doxygen_Suppress
+
+// Setup the logging for this file (do this before any other include).
+#include "sys/kernel_levels.h"           // Include kernel log levels.
+#define __DEBUG_HEADER__ "[IPCshm]"      ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
+#include "io/debug.h"                    // Include debugging functions.
 
 #include "ipc/shm.h"
 #include "system/panic.h"

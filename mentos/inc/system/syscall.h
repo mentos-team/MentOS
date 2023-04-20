@@ -1,6 +1,6 @@
 /// @file   syscall.h
 /// @brief  System Call handler definition.
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2023 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #pragma once
@@ -38,7 +38,7 @@ ssize_t sys_read(int fd, void *buf, size_t nbytes);
 /// @param buf    The buffer collecting data to written.
 /// @param nbytes The number of bytes to write.
 /// @return The number of written bytes.
-ssize_t sys_write(int fd, void *buf, size_t nbytes);
+ssize_t sys_write(int fd, const void *buf, size_t nbytes);
 
 /// @brief Repositions the file offset inside a file.
 /// @param fd     The file descriptor of the file.
@@ -225,7 +225,7 @@ int sys_creat(const char *path, mode_t mode);
 /// @return On success, the number of bytes read is returned.  On end of
 ///         directory, 0 is returned.  On error, -1 is returned, and errno is set
 ///         appropriately.
-int sys_getdents(int fd, dirent_t *dirp, unsigned int count);
+ssize_t sys_getdents(int fd, dirent_t *dirp, unsigned int count);
 
 /// @brief Returns the current time.
 /// @param time Where the time should be stored.

@@ -1,6 +1,6 @@
 /// @file vfs.h
 /// @brief Headers for Virtual File System (VFS).
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2023 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #pragma once
@@ -64,7 +64,7 @@ ssize_t vfs_read(vfs_file_t *file, void *buf, size_t offset, size_t nbytes);
 /// @param offset The offset from which the function starts to write.
 /// @param nbytes The number of bytes to write.
 /// @return The number of written characters.
-ssize_t vfs_write(vfs_file_t *file, void *buf, size_t offset, size_t nbytes);
+ssize_t vfs_write(vfs_file_t *file, const void *buf, size_t offset, size_t nbytes);
 
 /// @brief Repositions the file offset inside a file.
 /// @param file   The file for which we reposition the offest.
@@ -84,7 +84,7 @@ off_t vfs_lseek(vfs_file_t *file, off_t offset, int whence);
 /// @return On success, the number of bytes read is returned.  On end of
 ///         directory, 0 is returned.  On error, -1 is returned, and errno is set
 ///         appropriately.
-int vfs_getdents(vfs_file_t *file, dirent_t *dirp, off_t off, size_t count);
+ssize_t vfs_getdents(vfs_file_t *file, dirent_t *dirp, off_t off, size_t count);
 
 /// @brief Perform the I/O control operation specified by REQUEST on FD.
 ///   One argument may follow; its presence and type depend on REQUEST.

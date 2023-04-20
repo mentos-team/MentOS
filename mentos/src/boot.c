@@ -1,7 +1,6 @@
-///               MentOS, The Mentoring Operating system project
 /// @file boot.c
 /// @brief Bootloader.
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2023 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #include "boot.h"
@@ -42,7 +41,7 @@ static page_directory_t boot_pgdir;
 /// @brief Boot page tables.
 static page_table_t boot_pgtables[1024];
 
-/// @brief      Use this to write to I/O ports to send bytes to devices.
+/// @brief Use this to write to I/O ports to send bytes to devices.
 /// @param port The output port.
 /// @param data The data to write.
 static inline void __outportb(uint16_t port, uint8_t data)

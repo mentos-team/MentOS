@@ -1,20 +1,18 @@
 /// @file buddysystem.c
 /// @brief Buddy System.
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2023 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-// Include the kernel log levels.
-#include "sys/kernel_levels.h"
-/// Change the header.
-#define __DEBUG_HEADER__ "[BUDDY ]"
-/// Set the log level.
-#define __DEBUG_LEVEL__ LOGLEVEL_DEBUG
+// Setup the logging for this file (do this before any other include).
+#include "sys/kernel_levels.h"           // Include kernel log levels.
+#define __DEBUG_HEADER__ "[BUDDY ]"      ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
+#include "io/debug.h"                    // Include debugging functions.
 
 #include "mem/buddysystem.h"
 #include "mem/paging.h"
-#include "assert.h"
-#include "io/debug.h"
 #include "system/panic.h"
+#include "assert.h"
 
 /// @brief Cache level low limit after which allocation starts.
 #define LOW_WATERMARK_LEVEL 10
@@ -114,8 +112,8 @@ static inline bb_free_area_t *__get_area_of_order(bb_instance_t *instance, unsig
 /// @brief Checks if the page is FREE and has the same order.
 /// @param page  the page to check.
 /// @param order the oder to check.
-/// @return true if the page is buddy, false otherwise.
-static inline bool_t __page_is_buddy(bb_page_t *page, unsigned int order)
+/// @return 1 if the page is buddy, 0 otherwise.
+static inline int __page_is_buddy(bb_page_t *page, unsigned int order)
 {
     return __bb_test_flag(page, FREE_PAGE) && (page->order == order);
 }

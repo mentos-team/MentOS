@@ -99,6 +99,7 @@ add_library(
     ${PROJECT_SOURCE_DIR}/src/abort.c
     ${PROJECT_SOURCE_DIR}/src/io/mm_io.c
     ${PROJECT_SOURCE_DIR}/src/io/port_io.c
+    ${PROJECT_SOURCE_DIR}/src/io/debug.c
     ${PROJECT_SOURCE_DIR}/src/ipc/ipc.c
     ${PROJECT_SOURCE_DIR}/src/sys/unistd.c
     ${PROJECT_SOURCE_DIR}/src/sys/errno.c
@@ -137,7 +138,6 @@ add_library(
     ${PROJECT_SOURCE_DIR}/src/unistd/signal.c
     ${PROJECT_SOURCE_DIR}/src/unistd/interval.c
     ${PROJECT_SOURCE_DIR}/src/libc_start.c
-    ${PROJECT_SOURCE_DIR}/src/debug.c
     ${PROJECT_SOURCE_DIR}/src/crt0.S
 )
 

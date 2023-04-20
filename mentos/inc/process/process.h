@@ -1,6 +1,6 @@
 /// @file process.h
 /// @brief Process data structures and functions.
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2023 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #pragma once
@@ -10,6 +10,7 @@
 #include "system/signal.h"
 #include "devices/fpu.h"
 #include "mem/paging.h"
+#include "stdbool.h"
 
 /// The maximum length of a name for a task_struct.
 #define TASK_NAME_MAX_LENGTH 100

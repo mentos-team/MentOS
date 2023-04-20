@@ -1,11 +1,14 @@
 /// @file stdlib.h
 /// @brief Useful generic functions and macros.
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2023 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #pragma once
 
 #include "stddef.h"
+
+#define EXIT_SUCCESS 0 ///< Successful execution of a program.
+#define EXIT_FAILURE 1 ///< Unsuccessful execution of a program.
 
 /// @brief Returns the number of usable bytes in the block pointed to by ptr.
 /// @param ptr The pointer for which we want to retrieve the usable size.

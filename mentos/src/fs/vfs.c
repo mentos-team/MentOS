@@ -1,17 +1,15 @@
 /// @file vfs.c
 /// @brief Headers for Virtual File System (VFS).
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2023 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
+// Setup the logging for this file (do this before any other include).
+#include "sys/kernel_levels.h"           // Include kernel log levels.
+#define __DEBUG_HEADER__ "[VFS   ]"      ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
+#include "io/debug.h"                    // Include debugging functions.
+
 #include "fs/vfs.h"
-
-// Include the kernel log levels.
-#include "sys/kernel_levels.h"
-/// Change the header.
-#define __DEBUG_HEADER__ "[VFS   ]"
-/// Set the log level.
-#define __DEBUG_LEVEL__ LOGLEVEL_NOTICE
-
 #include "process/scheduler.h"
 #include "klib/spinlock.h"
 #include "strerror.h"
@@ -21,7 +19,6 @@
 #include "fs/procfs.h"
 #include "assert.h"
 #include "libgen.h"
-#include "io/debug.h"
 #include "system/panic.h"
 #include "stdio.h"
 
@@ -175,7 +172,7 @@ ssize_t vfs_read(vfs_file_t *file, void *buf, size_t offset, size_t nbytes)
     return file->fs_operations->read_f(file, buf, offset, nbytes);
 }
 
-ssize_t vfs_write(vfs_file_t *file, void *buf, size_t offset, size_t nbytes)
+ssize_t vfs_write(vfs_file_t *file, const void *buf, size_t offset, size_t nbytes)
 {
     if (file->fs_operations->write_f == NULL) {
         pr_err("No WRITE function found for the current filesystem.\n");
@@ -193,7 +190,7 @@ off_t vfs_lseek(vfs_file_t *file, off_t offset, int whence)
     return file->fs_operations->lseek_f(file, offset, whence);
 }
 
-int vfs_getdents(vfs_file_t *file, dirent_t *dirp, off_t off, size_t count)
+ssize_t vfs_getdents(vfs_file_t *file, dirent_t *dirp, off_t off, size_t count)
 {
     if (file->fs_operations->getdents_f == NULL) {
         pr_err("No GETDENTS function found for the current filesystem.\n");

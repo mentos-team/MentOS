@@ -15,10 +15,11 @@
  4. [Compiling MentOS](#4-compiling-mentos)
  5. [Generating the EXT2 filesystem](#5-generating-the-ext2-filesystem)
  6. [Running MentOS](#6-running-mentos)
- 7. [Kernel logging](#7-kernel-logging)
- 8. [Change the scheduling algorithm](#8-change-the-scheduling-algorithm)
- 9. [Debugging the kernel](#9-debugging-the-kernel)
- 10. [Contributors](#10-contributors)
+ 7. [Running MentOS from GRUB](#7-running-mentos-from-grub)
+ 8. [Kernel logging](#8-kernel-logging)
+ 9. [Change the scheduling algorithm](#9-change-the-scheduling-algorithm)
+ 10. [Debugging the kernel](#10-debugging-the-kernel)
+ 11. [Contributors](#11-contributors)
 
 ## 1. What is MentOS
 
@@ -180,11 +181,32 @@ To login, use one of the usernames listed in `files/etc/passwd`.
 
 *[Back to the Table of Contents](#table-of-contents)*
 
-## 7. Kernel logging
+## 7. Running MentOS from GRUB
+
+For booting MentOS from GRUB in QEMU we need the following tools:
+
+ - xorriso
+ - grub-mkrescue (from grub-common)
+
+We also need `grub-pc-bin`, otherwise GRUB won't start in QEMU.
+
+Which can be installed in Ubuntu with the following command:
+```bash
+sudo apt-get update && sudo apt-get upgrade -y
+sudo apt-get install -y grub-common grub-pc-bin xorriso
+```
+
+Boot MentOS with qemu through GRUB by calling:
+
+```bash
+make qemu-grub
+```
+
+## 8. Kernel logging
 The kernel provides ways of printing logging messages *from* inside the kernel code *to* the bash where you executed the `make qemu`.
 
 These *logging* functions are:
-```C++
+```C
 #define pr_emerg(...)
 #define pr_alert(...)
 #define pr_crit(...)
@@ -197,7 +219,7 @@ These *logging* functions are:
 ```
 
 You use them like you would use a `printf`:
-```C++
+```C
     if (fd < 0) {
         pr_err("Failed to open file '%s', received file descriptor %d.\n", filename, fd);
         return 1;
@@ -207,7 +229,7 @@ You use them like you would use a `printf`:
 By default only message that goes from `pr_notice` included down to `pr_emerg` are displayed.
 
 Each logging function (they are actually macros) is a wrapper that automatically sets the desired **log level**. Each log level is identified by a number, and declared as follows:
-```C++
+```C
 #define LOGLEVEL_DEFAULT (-1) ///< default-level messages.
 #define LOGLEVEL_EMERG   0    ///< system is unusable.
 #define LOGLEVEL_ALERT   1    ///< action must be taken immediately.
@@ -220,19 +242,21 @@ Each logging function (they are actually macros) is a wrapper that automatically
 ```
 
 You can change the logging level by including the following lines at the beginning of your source code:
-```C++
+```C
 // Include the kernel log levels.
 #include "sys/kernel_levels.h"
 /// Change the header.
 #define __DEBUG_HEADER__ "[ATA   ]"
 /// Set the log level.
 #define __DEBUG_LEVEL__ LOGLEVEL_INFO
+// Include the debuggin header.
+#include "io/debug.h"
 ```
 This example sets the `__DEBUG_LEVEL__`, so that all the messages from `INFO` and below are shown. While `__DEBUG_HEADER__` is just a string that is automatically prepended to your message, helping you identifying from which code the message is coming from.
 
 *[Back to the Table of Contents](#table-of-contents)*
 
-## 8. Change the scheduling algorithm
+## 9. Change the scheduling algorithm
 
 MentOS supports scheduling algorithms for aperiodic:
 
@@ -300,7 +324,7 @@ make qemu
 
 *[Back to the Table of Contents](#table-of-contents)*
 
-## 9. Debugging the kernel
+## 10. Debugging the kernel
 
 If you want to use GDB to debug MentOS, first you need to compile everything:
 
@@ -353,7 +377,7 @@ Breakpoint 2, kmain (...) at .../mentos/src/kernel.c:95
 
 *[Back to the Table of Contents](#table-of-contents)*
 
-## 10. Contributors
+## 11. Contributors
 
 Project Manager:
 

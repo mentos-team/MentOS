@@ -1,17 +1,20 @@
 /// @file pwd.c
 /// @brief
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2023 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #include "pwd.h"
 #include "sys/unistd.h"
 #include "sys/errno.h"
+#include "io/debug.h"
 #include "assert.h"
 #include "string.h"
 #include "stdio.h"
 #include "fcntl.h"
-#include "debug.h"
 
+/// @brief Parses the input buffer and fills pwd with its details.
+/// @param pwd the structure we need to fill.
+/// @param buf the buffer from which we extract the information.
 static inline void __parse_line(passwd_t *pwd, char *buf)
 {
     assert(pwd && "Received null pwd!");

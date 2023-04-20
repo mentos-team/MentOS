@@ -1,6 +1,6 @@
 /// @file kill.c
 /// @brief
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2023 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #include <stdio.h>
@@ -9,7 +9,7 @@
 #include <limits.h>
 #include <strerror.h>
 #include <ctype.h>
-#include <debug.h>
+#include <io/debug.h>
 
 static inline int is_number(char *s)
 {

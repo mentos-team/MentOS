@@ -1,6 +1,6 @@
 /// @file signal.c
 /// @brief
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2023 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #include "sys/unistd.h"
@@ -10,10 +10,13 @@
 #include "signal.h"
 #include "sys/bitops.h"
 
+/// @brief Implement the sigreturn function.
 _syscall0(int, sigreturn)
 
+/// @brief Implement the sigprocmask function.
 _syscall3(int, sigprocmask, int, how, const sigset_t *, set, sigset_t *, oldset)
 
+/// @brief List of signals names.
 static const char *sys_siglist[] = {
     "HUP",
     "INT",

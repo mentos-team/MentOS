@@ -1,24 +1,22 @@
 /// @file paging.c
 /// @brief Implementation of a memory paging management.
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2023 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-// Include the kernel log levels.
-#include "sys/kernel_levels.h"
-/// Change the header.
-#define __DEBUG_HEADER__ "[PAGING]"
-/// Set the log level.
-#define __DEBUG_LEVEL__ LOGLEVEL_NOTICE
+// Setup the logging for this file (do this before any other include).
+#include "sys/kernel_levels.h"           // Include kernel log levels.
+#define __DEBUG_HEADER__ "[PAGING]"      ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
+#include "io/debug.h"                    // Include debugging functions.
 
 #include "mem/paging.h"
-#include "descriptor_tables/isr.h"
 #include "mem/vmem_map.h"
 #include "mem/zone_allocator.h"
 #include "mem/kheap.h"
-#include "io/debug.h"
+#include "descriptor_tables/isr.h"
+#include "system/panic.h"
 #include "assert.h"
 #include "string.h"
-#include "system/panic.h"
 
 /// Cache for storing mm_struct.
 kmem_cache_t *mm_cache;
@@ -68,8 +66,8 @@ void paging_switch_directory_va(page_directory_t *dir)
 
 void paging_flush_tlb_single(unsigned long addr)
 {
-    ASM("invlpg (%0)" ::"r"(addr)
-        : "memory");
+    __asm__ __volatile__("invlpg (%0)" ::"r"(addr)
+                         : "memory");
 }
 
 uint32_t create_vm_area(mm_struct_t *mm,
@@ -165,12 +163,12 @@ uint32_t clone_vm_area(mm_struct_t *mm, vm_area_struct_t *area, int cow, uint32_
 
 static void __init_pagedir(page_directory_t *pdir)
 {
-    *pdir = (page_directory_t){ {0} };
+    *pdir = (page_directory_t){ { 0 } };
 }
 
 static void __init_pagetable(page_table_t *ptable)
 {
-    *ptable = (page_table_t){ {0} };
+    *ptable = (page_table_t){ { 0 } };
 }
 
 void paging_init(boot_info_t *info)

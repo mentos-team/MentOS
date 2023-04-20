@@ -1,6 +1,6 @@
 /// @file setenv.c
 /// @brief Defines the functions used to manipulate the environmental variables.
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2023 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #include <assert.h>
@@ -10,7 +10,9 @@
 
 char **environ;
 
-static char **__environ      = NULL;
+/// @brief Global environ list.
+static char **__environ = NULL;
+/// @brief Size of the global environ list.
 static size_t __environ_size = 0;
 
 /// @brief Finds the entry in the environ.

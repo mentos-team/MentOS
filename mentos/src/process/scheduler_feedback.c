@@ -17,7 +17,7 @@
 /// Change the header.
 #define __DEBUG_HEADER__ "[SCHFBK]"
 /// Set the log level.
-#define __DEBUG_LEVEL__ LOGLEVEL_DEBUG
+#define __DEBUG_LEVEL__ LOGLEVEL_NOTICE
 #include "io/debug.h"
 
 /// @brief How often the feedback is shown.

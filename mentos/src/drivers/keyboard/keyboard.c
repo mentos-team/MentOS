@@ -1,25 +1,22 @@
 /// @file keyboard.c
 /// @brief Keyboard handling.
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2023 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 /// @addtogroup keyboard
 /// @{
 
-// Include the kernel log levels.
-#include "sys/kernel_levels.h"
-/// Change the header.
-#define __DEBUG_HEADER__ "[KEYBRD]"
-/// Set the log level.
-#define __DEBUG_LEVEL__ LOGLEVEL_NOTICE
+// Setup the logging for this file (do this before any other include).
+#include "sys/kernel_levels.h"           // Include kernel log levels.
+#define __DEBUG_HEADER__ "[KEYBRD]"      ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
+#include "io/debug.h"                    // Include debugging functions.
 
 #include "drivers/keyboard/keyboard.h"
-
 #include "io/port_io.h"
 #include "hardware/pic8259.h"
 #include "drivers/keyboard/keymap.h"
 #include "sys/bitops.h"
 #include "io/video.h"
-#include "io/debug.h"
 #include "drivers/ps2.h"
 #include "ctype.h"
 #include "descriptor_tables/isr.h"

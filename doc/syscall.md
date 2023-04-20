@@ -7,6 +7,7 @@ specifically:
 
 1. Implemented
 2. Tested
+X. Obsolete
 
 If the column is empty it means that it's not implemented yet.
 
@@ -22,7 +23,7 @@ If the column is empty it means that it's not implemented yet.
  2 | 5   | sys_open                   | fs/open.c                   | const char *             | int                          | int                     | -               | -                |
  2 | 6   | sys_close                  | fs/open.c                   | int                      | -                            | -                       | -               | -                |
  2 | 7   | sys_waitpid                | kernel/exit.c               | pid_t                    | unsigned int *               | int                     | -               | -                |
-   | 8   | sys_creat                  | fs/open.c                   | const char *             | int                          | -                       | -               | -                |
+ 2 | 8   | sys_creat                  | fs/open.c                   | const char *             | int                          | -                       | -               | -                |
    | 9   | sys_link                   | fs/namei.c                  | const char *             | const char *                 | -                       | -               | -                |
  2 | 10  | sys_unlink                 | fs/namei.c                  | const char *             | -                            | -                       | -               | -                |
  2 | 11  | sys_execve                 | arch/i386/kernel/process.c  | struct pt_regs           | -                            | -                       | -               | -                |
@@ -36,11 +37,11 @@ If the column is empty it means that it's not implemented yet.
  2 | 20  | sys_getpid                 | kernel/sched.c              | -                        | -                            | -                       | -               | -                |
    | 21  | sys_mount                  | fs/super.c                  | char *                   | char *                       | char *                  | -               | -                |
    | 22  | sys_oldumount              | fs/super.c                  | char *                   | -                            | -                       | -               | -                |
-   | 23  | sys_setuid                 | kernel/sys.c                | uid_t                    | -                            | -                       | -               | -                |
-   | 24  | sys_getuid                 | kernel/sched.c              | -                        | -                            | -                       | -               | -                |
+ 2 | 23  | sys_setuid                 | kernel/sys.c                | uid_t                    | -                            | -                       | -               | -                |
+ 2 | 24  | sys_getuid                 | kernel/sched.c              | -                        | -                            | -                       | -               | -                |
    | 25  | sys_stime                  | kernel/time.c               | int *                    | -                            | -                       | -               | -                |
    | 26  | sys_ptrace                 | arch/i386/kernel/ptrace.c   | long                     | long                         | long                    | long            | -                |
-   | 27  | sys_alarm                  | kernel/sched.c              | unsigned int             | -                            | -                       | -               | -                |
+ 2 | 27  | sys_alarm                  | kernel/sched.c              | unsigned int             | -                            | -                       | -               | -                |
  2 | 28  | sys_fstat                  | fs/stat.c                   | unsigned int             | struct __old_kernel_stat *   | -                       | -               | -                |
    | 29  | sys_pause                  | arch/i386/kernel/sys_i386.c | -                        | -                            | -                       | -               | -                |
    | 30  | sys_utime                  | fs/open.c                   | char *                   | struct utimbuf *             | -                       | -               | -                |
@@ -55,8 +56,8 @@ If the column is empty it means that it's not implemented yet.
    | 42  | sys_pipe                   | arch/i386/kernel/sys_i386.c | unsigned long *          | -                            | -                       | -               | -                |
    | 43  | sys_times                  | kernel/sys.c                | struct tms *             | -                            | -                       | -               | -                |
  2 | 45  | sys_brk                    | mm/mmap.c                   | unsigned long            | -                            | -                       | -               | -                |
-   | 46  | sys_setgid                 | kernel/sys.c                | gid_t                    | -                            | -                       | -               | -                |
-   | 47  | sys_getgid                 | kernel/sched.c              | -                        | -                            | -                       | -               | -                |
+ 2 | 46  | sys_setgid                 | kernel/sys.c                | gid_t                    | -                            | -                       | -               | -                |
+ 2 | 47  | sys_getgid                 | kernel/sched.c              | -                        | -                            | -                       | -               | -                |
  1 | 48  | sys_signal                 | kernel/signal.c             | int                      | __sighandler_t               | -                       | -               | -                |
    | 49  | sys_geteuid                | kernel/sched.c              | -                        | -                            | -                       | -               | -                |
    | 50  | sys_getegid                | kernel/sched.c              | -                        | -                            | -                       | -               | -                |
@@ -64,7 +65,7 @@ If the column is empty it means that it's not implemented yet.
    | 52  | sys_umount                 | fs/super.c                  | char *                   | int                          | -                       | -               | -                |
  1 | 54  | sys_ioctl                  | fs/ioctl.c                  | unsigned int             | unsigned int                 | unsigned long           | -               | -                |
    | 55  | sys_fcntl                  | fs/fcntl.c                  | unsigned int             | unsigned int                 | unsigned long           | -               | -                |
-   | 57  | sys_setpgid                | kernel/sys.c                | pid_t                    | pid_t                        | -                       | -               | -                |
+ 2 | 57  | sys_setpgid                | kernel/sys.c                | pid_t                    | pid_t                        | -                       | -               | -                |
    | 59  | sys_olduname               | arch/i386/kernel/sys_i386.c | struct oldold_utsname *  | -                            | -                       | -               | -                |
    | 60  | sys_umask                  | kernel/sys.c                | int                      | -                            | -                       | -               | -                |
    | 61  | sys_chroot                 | fs/open.c                   | const char *             | -                            | -                       | -               | -                |
@@ -72,10 +73,10 @@ If the column is empty it means that it's not implemented yet.
    | 63  | sys_dup2                   | fs/fcntl.c                  | unsigned int             | unsigned int                 | -                       | -               | -                |
  2 | 64  | sys_getppid                | kernel/sched.c              | -                        | -                            | -                       | -               | -                |
    | 65  | sys_getpgrp                | kernel/sys.c                | -                        | -                            | -                       | -               | -                |
-   | 66  | sys_setsid                 | kernel/sys.c                | -                        | -                            | -                       | -               | -                |
+ 2 | 66  | sys_setsid                 | kernel/sys.c                | -                        | -                            | -                       | -               | -                |
  1 | 67  | sys_sigaction              | arch/i386/kernel/signal.c   | int                      | const struct old_sigaction * | struct old_sigaction *  | -               | -                |
-   | 68  | sys_sgetmask               | kernel/signal.c             | -                        | -                            | -                       | -               | -                |
-   | 69  | sys_ssetmask               | kernel/signal.c             | int                      | -                            | -                       | -               | -                |
+ X | 68  | sys_sgetmask               | kernel/signal.c             | -                        | -                            | -                       | -               | -                |
+ X | 69  | sys_ssetmask               | kernel/signal.c             | int                      | -                            | -                       | -               | -                |
    | 70  | sys_setreuid               | kernel/sys.c                | uid_t                    | uid_t                        | -                       | -               | -                |
    | 71  | sys_setregid               | kernel/sys.c                | gid_t                    | gid_t                        | -                       | -               | -                |
    | 72  | sys_sigsuspend             | arch/i386/kernel/signal.c   | int                      | int                          | old_sigset_t            | -               | -                |

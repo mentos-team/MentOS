@@ -1,6 +1,6 @@
 ///// @file login.c
 /// @brief Functions used to manage login.
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2023 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #include <string.h>
@@ -14,9 +14,8 @@
 #include <pwd.h>
 #include <strerror.h>
 #include <stdlib.h>
-#include <debug.h>
-
-#include "ansi_colors.h"
+#include <io/debug.h>
+#include <io/ansi_colors.h>
 
 /// Maximum length of credentials.
 #define CREDENTIALS_LENGTH 50
@@ -52,7 +51,7 @@ static inline void __set_io_flags(unsigned flag, bool_t active)
     tcsetattr(STDIN_FILENO, 0, &_termios);
 }
 
-static inline void __print_message_file(const char * file)
+static inline void __print_message_file(const char *file)
 {
     char buffer[256];
     ssize_t nbytes, total = 0;
@@ -94,7 +93,7 @@ static inline bool_t __get_input(char *input, size_t max_len, bool_t hide)
         } else if (c == '\033') {
             c = getchar();
             if (c == '[') {
-                c = getchar(); // Get the char, and ignore it.
+                getchar(); // Get the char, and ignore it.
             } else if (c == '^') {
                 c = getchar(); // Get the char.
                 if (c == 'C') {
@@ -159,12 +158,12 @@ int main(int argc, char **argv)
         // Get the username.
         do {
             printf("Username :");
-        } while (!__get_input(username, CREDENTIALS_LENGTH, false));
+        } while (!__get_input(username, sizeof(username), false));
 
         // Get the password.
         do {
             printf("Password :");
-        } while (!__get_input(password, CREDENTIALS_LENGTH, true));
+        } while (!__get_input(password, sizeof(password), true));
 
         // Check if we can find the user.
         if ((pwd = getpwnam(username)) == NULL) {
@@ -200,10 +199,16 @@ int main(int argc, char **argv)
     }
 
     // Set the group id.
-    setgid(pwd->pw_gid);
+    if (setgid(pwd->pw_gid) < 0) {
+        printf("login: Failed to change group id: %s\n", strerror(errno));
+        return 1;
+    }
 
     // Set the user id.
-    setuid(pwd->pw_uid);
+    if (setuid(pwd->pw_uid) < 0) {
+        printf("login: Failed to change user id: %s\n", strerror(errno));
+        return 1;
+    }
 
     printf("\n");
 

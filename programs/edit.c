@@ -1,10 +1,15 @@
+/// @file edit.c
+/// @brief
+/// @copyright (c) 2014-2023 This file is distributed under the MIT License.
+/// See LICENSE.md for details.
+
 #include <sys/unistd.h>
 #include <sys/stat.h>
 #include <strerror.h>
 #include <termios.h>
 #include <stdbool.h>
 #include <string.h>
-#include <debug.h>
+#include <io/debug.h>
 #include <stdio.h>
 #include <ctype.h>
 #include <fcntl.h>

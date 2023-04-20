@@ -1,6 +1,6 @@
 /// @file shell.c
 /// @brief Implement shell functions.
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2023 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #include <sys/unistd.h>
@@ -9,19 +9,19 @@
 #include <libgen.h>
 #include <sys/stat.h>
 #include <signal.h>
-#include <debug.h>
+#include <io/debug.h>
+#include <io/ansi_colors.h>
 #include <sys/bitops.h>
-#include "stdbool.h"
-#include "stddef.h"
-#include "string.h"
-#include "stdio.h"
-#include "stdlib.h"
-#include "strerror.h"
-#include "termios.h"
-#include "limits.h"
-#include "sys/utsname.h"
-#include "ctype.h"
-#include "ansi_colors.h"
+#include <stdbool.h>
+#include <stddef.h>
+#include <string.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <strerror.h>
+#include <termios.h>
+#include <limits.h>
+#include <sys/utsname.h>
+#include <ctype.h>
 
 /// Maximum length of commands.
 #define CMD_LEN 32

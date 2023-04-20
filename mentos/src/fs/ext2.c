@@ -1,23 +1,20 @@
 /// @file ext2.c
 /// @brief EXT2 driver.
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2023 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
+// Setup the logging for this file (do this before any other include).
+#include "sys/kernel_levels.h"           // Include kernel log levels.
+#define __DEBUG_HEADER__ "[EXT2  ]"      ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
+#include "io/debug.h"                    // Include debugging functions.
+
 #include "fs/ext2.h"
-
-// Include the kernel log levels.
-#include "sys/kernel_levels.h"
-/// Change the header.
-#define __DEBUG_HEADER__ "[EXT2  ]"
-/// Set the log level.
-#define __DEBUG_LEVEL__ LOGLEVEL_NOTICE
-
 #include "process/scheduler.h"
 #include "process/process.h"
 #include "klib/spinlock.h"
 #include "fs/vfs_types.h"
 #include "sys/errno.h"
-#include "io/debug.h"
 #include "fs/vfs.h"
 #include "assert.h"
 #include "libgen.h"
@@ -380,7 +377,7 @@ static ssize_t ext2_write(vfs_file_t *file, const void *buffer, off_t offset, si
 static off_t ext2_lseek(vfs_file_t *file, off_t offset, int whence);
 static int ext2_fstat(vfs_file_t *file, stat_t *stat);
 static int ext2_ioctl(vfs_file_t *file, int request, void *data);
-static int ext2_getdents(vfs_file_t *file, dirent_t *dirp, off_t doff, size_t count);
+static ssize_t ext2_getdents(vfs_file_t *file, dirent_t *dirp, off_t doff, size_t count);
 
 static int ext2_mkdir(const char *path, mode_t mode);
 static int ext2_rmdir(const char *path);
@@ -2651,7 +2648,7 @@ static int ext2_ioctl(vfs_file_t *file, int request, void *data)
 /// @param doff  The offset inside the buffer where the data should be written.
 /// @param count The maximum length of the buffer.
 /// @return The number of written bytes in the buffer.
-static int ext2_getdents(vfs_file_t *file, dirent_t *dirp, off_t doff, size_t count)
+static ssize_t ext2_getdents(vfs_file_t *file, dirent_t *dirp, off_t doff, size_t count)
 {
     pr_debug("ext2_getdents(%s, %p, %d, %d)\n", file->name, dirp, doff, count);
     // Get the filesystem.
@@ -2666,7 +2663,8 @@ static int ext2_getdents(vfs_file_t *file, dirent_t *dirp, off_t doff, size_t co
         pr_err("Failed to read the inode (%d).\n", file->ino);
         return -ENOENT;
     }
-    uint32_t current = 0, written = 0;
+    uint32_t current = 0;
+    ssize_t written = 0;
     // Allocate the cache.
     uint8_t *cache = kmem_cache_alloc(fs->ext2_buffer_cache, GFP_KERNEL);
     // Clean the cache.

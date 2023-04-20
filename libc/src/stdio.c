@@ -1,6 +1,6 @@
 /// @file stdio.c
 /// @brief Standard I/0 functions.
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2023 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #include <sys/errno.h>
@@ -9,13 +9,14 @@
 #include "string.h"
 #include "stdbool.h"
 #include "sys/unistd.h"
+#include "strerror.h"
 
 void putchar(int character)
 {
     write(STDOUT_FILENO, &character, 1);
 }
 
-void puts(char *str)
+void puts(const char *str)
 {
     write(STDOUT_FILENO, str, strlen(str));
 }
@@ -205,4 +206,14 @@ char *fgets(char *buf, int n, int fd)
     if (p == buf || c == EOF)
         return NULL;
     return (p);
+}
+
+void perror(const char *s)
+{
+    if (s) {
+        puts(s);
+        putchar(':');
+        putchar(' ');
+    }
+    puts(strerror(errno));
 }

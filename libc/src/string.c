@@ -1,27 +1,36 @@
 /// @file string.c
 /// @brief String routines.
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2023 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include <fcntl.h>
 #include "string.h"
 #include "ctype.h"
 #include "stdio.h"
 #include "stdlib.h"
+#include "fcntl.h"
+
+#ifdef __KERNEL__
+#include "mem/kheap.h"
+#endif
 
 char *strncpy(char *destination, const char *source, size_t num)
 {
-    char *start = destination;
-    while (num && (*destination++ = *source++)) {
-        num--;
-    }
+    // Check if we have a valid number.
     if (num) {
-        while (--num) {
-            *destination++ = '\0';
+        // Copies the first num characters of source to destination.
+        while (num && (*destination++ = *source++)) {
+            num--;
+        }
+        // If the end of the source C string (which is signaled by a null-character)
+        // is found before num characters have been copied, destination is padded
+        // with zeros until a total of num characters have been written to it.
+        if (num) {
+            while (--num)
+                *destination++ = '\0';
         }
     }
-
-    return start;
+    // Pointer to destination is returned.
+    return destination;
 }
 
 int strncmp(const char *s1, const char *s2, size_t n)
@@ -32,7 +41,6 @@ int strncmp(const char *s1, const char *s2, size_t n)
         s1++;
         s2++;
     }
-
     return *(unsigned char *)s1 - *(unsigned char *)s2;
 }
 
@@ -266,12 +274,24 @@ char *strupr(char *s)
     return s;
 }
 
+char *strcat(char *dst, const char *src)
+{
+    char *cp = dst;
+
+    while (*cp) {
+        cp++;
+    }
+
+    while ((*cp++ = *src++) != '\0') {}
+
+    return dst;
+}
+
 char *strncat(char *s1, const char *s2, size_t n)
 {
     char *start = s1;
 
     while (*s1++) {}
-
     s1--;
 
     while (n--) {
@@ -282,15 +302,6 @@ char *strncat(char *s1, const char *s2, size_t n)
     *s1 = '\0';
 
     return start;
-}
-
-char *strnset(char *s, int c, size_t n)
-{
-    while (n-- && *s) {
-        *s++ = (char)c;
-    }
-
-    return s;
 }
 
 char *strrev(char *s)
@@ -386,53 +397,51 @@ char *strtok_r(char *str, const char *delim, char **saveptr)
 
 void *memset(void *ptr, int value, size_t num)
 {
-    // Truncate c to 8 bits.
-    value = (value & 0xFF);
-
-    char *dst = (char *)ptr;
-
-    // Initialize the rest of the size.
-    while (num--) {
-        *dst++ = (char)value;
-    }
-
+    // Turn the pointer into a char * pointer. Here, we use the volatile keyword
+    // to prevent the compiler from optimizing away the operations involving the
+    // pointer.
+    unsigned char volatile *dst = (unsigned char volatile *)ptr;
+    // Initialize the content of the memory.
+    while (num--) *dst++ = (unsigned char)value;
+    // Return the pointer.
     return ptr;
 }
 
-int memcmp(const void *ptr1, const void *ptr2, size_t n)
+int memcmp(const void *dst, const void *src, size_t n)
 {
     if (!n) {
         return 0;
     }
 
-    while (--n && *(char *)ptr1 == *(char *)ptr2) {
-        ptr1 = (char *)ptr1 + 1;
-        ptr2 = (char *)ptr2 + 1;
+    while (--n && *(char *)dst == *(char *)src) {
+        dst = (char *)dst + 1;
+        src = (char *)src + 1;
     }
 
-    return *((unsigned char *)ptr1) - *((unsigned char *)ptr2);
+    return *((unsigned char *)dst) - *((unsigned char *)src);
 }
 
-void *memcpy(void *ptr1, const void *ptr2, size_t num)
+void *memcpy(void *dst, const void *src, size_t num)
 {
-    char *_dst       = ptr1;
-    const char *_src = ptr2;
-
-    while (num--) {
-        *_dst++ = *_src++;
-    }
-
-    return ptr1;
+    // Turn the pointer into a char * pointer. Here, we use the volatile keyword
+    // to prevent the compiler from optimizing away the operations involving the
+    // pointer.
+    unsigned char volatile *_dst       = (unsigned char volatile *)dst;
+    const unsigned char volatile *_src = (const unsigned char volatile *)src;
+    // Initialize the content of the memory.
+    while (num--) *_dst++ = *_src++;
+    // Return the pointer.
+    return (void *)dst;
 }
 
-void *memccpy(void *ptr1, const void *ptr2, int c, size_t n)
+void *memccpy(void *dst, const void *src, int c, size_t n)
 {
-    while (n && (*((char *)(ptr1 = (char *)ptr1 + 1) - 1) =
-                     *((char *)(ptr2 = (char *)ptr2 + 1) - 1)) != (char)c) {
+    while (n && (*((char *)(dst = (char *)dst + 1) - 1) =
+                     *((char *)(src = (char *)src + 1) - 1)) != (char)c) {
         n--;
     }
 
-    return n ? ptr1 : NULL;
+    return n ? dst : NULL;
 }
 
 char *strcpy(char *dst, const char *src)
@@ -477,19 +486,6 @@ int strcmp(const char *s1, const char *s2)
                                         0;
 }
 
-char *strcat(char *dst, const char *src)
-{
-    char *cp = dst;
-
-    while (*cp) {
-        cp++;
-    }
-
-    while ((*cp++ = *src++) != '\0') {}
-
-    return dst;
-}
-
 char *strset(char *s, int c)
 {
     char *start = s;
@@ -499,6 +495,15 @@ char *strset(char *s, int c)
     }
 
     return start;
+}
+
+char *strnset(char *s, int c, size_t n)
+{
+    while (n-- && *s) {
+        *s++ = (char)c;
+    }
+
+    return s;
 }
 
 char *strtok(char *str, const char *delim)
@@ -593,7 +598,11 @@ char *trim(char *str)
 char *strdup(const char *s)
 {
     size_t len = strlen(s) + 1;
-    char *new  = malloc(len);
+#ifdef __KERNEL__
+    char *new = kmalloc(len);
+#else
+    char *new = malloc(len);
+#endif
     if (new == NULL)
         return NULL;
     new[len] = '\0';
@@ -603,7 +612,11 @@ char *strdup(const char *s)
 char *strndup(const char *s, size_t n)
 {
     size_t len = strnlen(s, n);
-    char *new  = malloc(len);
+#ifdef __KERNEL__
+    char *new = kmalloc(len);
+#else
+    char *new = malloc(len);
+#endif
     if (new == NULL)
         return NULL;
     new[len] = '\0';
