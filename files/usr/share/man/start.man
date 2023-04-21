@@ -1,0 +1,12 @@
+SYNOPSIS
+    start [OPTIONS] [FILE]
+
+DESCRIPTION
+    Start a recording session aimed at displaying an ordered list of 50 items 
+    containing information about the processes that the CPU has just processed.
+
+
+OPTIONS
+    -h: shows command help. //non funziona per ora lol
+    -p: start the session with generated children
+    -f [FILE]: start the session launching a specified program
