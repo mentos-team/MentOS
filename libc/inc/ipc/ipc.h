@@ -34,8 +34,8 @@ struct ipc_perm {
     unsigned short __seq;
 };
 
-/// @brief Returns a possible key
-/// @param path file path
-/// @param id integer
-/// @return IPC key
+/// @brief Returns a possible IPC key based upon the filepath and the id.
+/// @param path The file path.
+/// @param id the project id.
+/// @return the IPC key.
 key_t ftok(char *path, int id);

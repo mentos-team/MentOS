@@ -7,12 +7,11 @@
 #include "system/syscall_types.h"
 #include "sys/errno.h"
 #include "stddef.h"
-
 #include "ipc/sem.h"
 #include "ipc/shm.h"
 #include "ipc/msg.h"
-
 #include "sys/stat.h"
+#include "io/debug.h"
 
 _syscall3(void *, shmat, int, shmid, const void *, shmaddr, int, shmflg)
 
@@ -62,7 +61,7 @@ key_t ftok(char *path, int id)
     struct stat_t st;
     if (stat(path, &st) < 0) {
         errno = ENOENT;
-        //printf("Error finding the serial number, check Errno...\n");
+        pr_debug("Error finding the serial number, check Errno...\n");
         return -1;
     }
     // Taking the upper 8 bits from the lower 8 bits of id, the second upper 8
