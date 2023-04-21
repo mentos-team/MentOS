@@ -64,10 +64,23 @@ struct statistic {
     unsigned long occur;
 } arr_stats[PID_MAX_LIMIT];
 
+/// @brief Updates when the logging should happen.
+static inline void __scheduler_feedback_deadline_advance()
+{
+    next_log = timer_get_ticks() + (LOG_INTERVAL_SEC * TICKS_PER_SECOND);
+}
+
+/// @brief Checks if the deadline is passed.
+/// @return 1 if the deadline is passed, 0 otherwise.
+static inline int __scheduler_feedback_deadline_check()
+{
+    return (next_log < timer_get_ticks());
+}
+
 /// @brief Logs the scheduling statistics either on file or on the terminal.
 static inline void __scheduler_feedback_log()
 {
-    pr_debug("Scheduling Statistics (%s)\n", POLICY_NAME);
+    pr_info("Scheduling Statistics (%s)\n", POLICY_NAME);
 #ifdef WRITE_ON_FILE
     // Open the feedback file.
     vfs_file_t *feedback = vfs_open(FEEDBACK_FILENAME, O_WRONLY, 0644);
@@ -82,10 +95,10 @@ static inline void __scheduler_feedback_log()
     for (size_t i = 0; i < PID_MAX_LIMIT; ++i) {
         if (arr_stats[i].task) {
             float tcpu = ((float)arr_stats[i].occur * 100.0) / total_occurrences;
-            pr_debug("[%3d] | %-24s | -> TCPU: %.2f%% \n",
-                     arr_stats[i].task->pid,
-                     arr_stats[i].task->name,
-                     tcpu);
+            pr_info("[%3d] | %-24s | -> TCPU: %.2f%% \n",
+                    arr_stats[i].task->pid,
+                    arr_stats[i].task->name,
+                    tcpu);
 #ifdef WRITE_ON_FILE
             written = sprintf(buffer, "[%3d](%s)[%f], ", arr_stats[i].pid, arr_stats[i].name, tcpu);
             vfs_write(feedback, buffer, offset, written);
@@ -133,8 +146,8 @@ int scheduler_feedback_init()
         arr_stats[i].task  = NULL;
         arr_stats[i].occur = 0;
     }
-    // Set when the first logging should happen.
-    next_log = timer_get_ticks() + (LOG_INTERVAL_SEC * TICKS_PER_SECOND);
+    // Update when in the future, the logging should happen.
+    __scheduler_feedback_deadline_advance();
     // Initialize the number of occurrences.
     total_occurrences = 0;
     return 1;
@@ -165,7 +178,7 @@ void scheduler_feedback_task_update(task_struct *task)
 void scheduler_feedback_update()
 {
     // If it is not yet time for the next reset, skip.
-    if (next_log >= timer_get_ticks()) {
+    if (!__scheduler_feedback_deadline_check()) {
         return;
     }
     // Dump on the feedback before reset.
@@ -176,7 +189,7 @@ void scheduler_feedback_update()
             arr_stats[i].occur = 0;
     }
     // Update when in the future, the logging should happen.
-    next_log = timer_get_ticks() + (LOG_INTERVAL_SEC * TICKS_PER_SECOND);
+    __scheduler_feedback_deadline_advance();
     // Reset the number of occurrences.
     total_occurrences = 0;
 }
