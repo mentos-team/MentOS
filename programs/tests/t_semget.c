@@ -25,6 +25,7 @@ void semid_print(struct semid_ds *temp)
 int main()
 {
     struct sembuf op;
+    struct sembuf father[2];
     union semun arg;
     long ret, id;
     key_t key;
@@ -43,7 +44,7 @@ int main()
     //long id4 = semget(100, 2, IPC_CREAT | IPC_EXCL);  //need to return 101 (new semaphore)
 
     // Set the value of the semaphore in the structure.
-    arg.val = 1;
+    arg.val = 0;
     // Setting the semaphore value.
     printf("Set Value (%d): %d\n", id, arg.val);
     ret = semctl(id, 0, SETVAL, &arg);
@@ -54,12 +55,12 @@ int main()
 
     // Check if we successfully set the value of the semaphore.
     ret = semctl(id, 0, GETVAL, &arg);
-    printf("Check Value (%d): %d\n", id, ret);
+    printf("Check Value before(%d): %d\n", id, ret);
 
     // Create child process.
     if (!fork()) {
         // Make the child process sleep.
-        sleep(5);
+        sleep(2);
 
         // Initialize the operation structure.
         op.sem_num = 0; // Operate on semaphore 0.
@@ -70,31 +71,35 @@ int main()
 
         // Perform the operation.
         semop(id, &op, 1);
-
+        sleep(5);
+        semop(id, &op, 1);
         // Remove the semaphore.
-        semctl(id, 0, IPC_RMID, NULL);
+        //semctl(id, 0, IPC_RMID, NULL);
 
         // Exit with the child process.
         return 0;
     }
 
     // Initialize the operation structure.
-    op.sem_num = 0;  // Operate on semaphore 0.
-    op.sem_op  = -2; // Decrement value by 2.
-    op.sem_flg = 0;  // No flags.
+    father[0].sem_num = 0;  // Operate on semaphore 0.
+    father[0].sem_op  = -1; // Decrement value by 1.
+    father[0].sem_flg = 0;  // No flags.
+    father[1].sem_num = 0;  // Operate on semaphore 0.
+    father[1].sem_op  = -1; // Decrement value by 1.
+    father[1].sem_flg = 0;  // No flags.
 
     // We set the semaphore at the beginning at 1, and the child process will
     // increment the semaphore by 1, allowing us to decrement the semaphore by
     // 2.
 
     // Perform the operation.
-    if (semop(id, &op, 1) < 0) {
+    if (semop(id, father, 2) < 0) {
         printf("ERRORE\n");
     }
     
     // Check if we successfully set the value of the semaphore.
     ret = semctl(id, 0, GETVAL, &arg);
-    printf("Check Value (%d): %d\n", id, ret);
+    printf("Check Value after(%d): %d\n", id, ret);
 
     /*if ((semid = semctl(id, 0, IPC_RMID, 0)) == -1){
         printf("%d\n", errno);

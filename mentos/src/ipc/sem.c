@@ -205,18 +205,18 @@ long sys_semop(int semid, struct sembuf *sops, unsigned nsops)
         /*If the operation is negative then we need to check for possible blocking operation*/
 
         /*if the value of the sem were to become negative then we return a special value*/
-        if (temp->sems[sops->sem_num].sem_val < (-nsops * (sops->sem_op))) {
+        if (temp->sems[sops->sem_num].sem_val < (-(sops->sem_op))) {
             return OPERATION_NOT_ALLOWED; //not allowed
         } else {
             /*otherwise we can modify the sem_val and all the other parameters of the semaphore*/
-            temp->sems[sops->sem_num].sem_val += (nsops * (sops->sem_op));
+            temp->sems[sops->sem_num].sem_val += (sops->sem_op);
             temp->sems[sops->sem_num].sem_pid = sys_getpid();
             temp->sem_ctime                   = sys_time(NULL);
             return 1; //allowed
         }
     } else {
         /*the operation is non negative so we can always do it*/
-        temp->sems[sops->sem_num].sem_val += (nsops * (sops->sem_op));
+        temp->sems[sops->sem_num].sem_val += (sops->sem_op);
         temp->sems[sops->sem_num].sem_pid = sys_getpid();
         temp->sem_ctime                   = sys_time(NULL);
         return 1; //allowed

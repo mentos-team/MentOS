@@ -12,6 +12,7 @@
 #include "ipc/msg.h"
 #include "sys/stat.h"
 #include "io/debug.h"
+#include "stdio.h"
 
 _syscall3(void *, shmat, int, shmid, const void *, shmaddr, int, shmflg)
 
@@ -41,15 +42,22 @@ long semop(int semid, struct sembuf *sops, unsigned nsops)
         errno = EINVAL;
         return -1;
     }
-    // The process continues to try to perform the operation until it completes
-    // or receives an error.
-    while (1) {
-        // Calling the kernel-side function.
-        __inline_syscall3(__res, semop, semid, sops, nsops);
-        // If we get an error we stop the loop.
-        if (__res != OPERATION_NOT_ALLOWED)
-            break;
+
+    //this should be performed for each sops.
+    for (size_t i = 0; i < nsops; i++){
+       // The process continues to try to perform the operation until it completes
+        // or receives an error.
+        while (1) {
+            // Calling the kernel-side function.
+            __inline_syscall3(__res, semop, semid, &sops[i], 1);
+            // If we get an error we stop the loop.
+            if (__res != OPERATION_NOT_ALLOWED)
+                break;
+        }
+        //printf("op eseguita: %d\n", __res);
     }
+    
+    
     // Now, we can return the value.
     __syscall_return(long, __res);
 }
