@@ -127,6 +127,7 @@ set(KERNEL_SOURCES
     ${PROJECT_SOURCE_DIR}/src/io/stdio.c
     ${PROJECT_SOURCE_DIR}/src/io/proc_video.c
     ${PROJECT_SOURCE_DIR}/src/io/proc_running.c
+    ${PROJECT_SOURCE_DIR}/src/io/proc_feedback.c
     ${PROJECT_SOURCE_DIR}/src/io/proc_system.c
     ${PROJECT_SOURCE_DIR}/src/io/vga/vga.c
     ${PROJECT_SOURCE_DIR}/src/ipc/msg.c
@@ -166,6 +167,7 @@ set(KERNEL_SOURCES
     ${PROJECT_SOURCE_DIR}/src/descriptor_tables/tss.c
     ${PROJECT_SOURCE_DIR}/src/descriptor_tables/tss.S
     ${PROJECT_SOURCE_DIR}/src/process/scheduler_algorithm.c
+    ${PROJECT_SOURCE_DIR}/src/process/scheduler_feedback.c
     ${PROJECT_SOURCE_DIR}/src/process/scheduler.c
     ${PROJECT_SOURCE_DIR}/src/process/process.c
     ${PROJECT_SOURCE_DIR}/src/process/wait.c

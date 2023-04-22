@@ -29,6 +29,7 @@
 #include "drivers/keyboard/keymap.h"
 #include "drivers/ps2.h"
 #include "process/scheduler.h"
+#include "process/scheduler_feedback.h"
 #include "hardware/timer.h"
 #include "fs/vfs.h"
 #include "devices/fpu.h"
@@ -337,6 +338,24 @@ int kmain(boot_info_t *boot_informations)
     pr_notice("Init process management...\n");
     printf("Init process management...");
     if (!init_tasking()) {
+        print_fail();
+        return 1;
+    }
+    print_ok();
+
+    //==========================================================================
+    pr_notice("Initialize scheduler feedback system...\n");
+    printf("Initialize scheduler feedback system...");
+    if (!scheduler_feedback_init()) {
+        print_fail();
+        return 1;
+    }
+    print_ok();
+
+    //==========================================================================
+    pr_notice("Initialize scheduler feedback system (2)...\n");
+    printf("Initialize scheduler feedback system (2)...");
+    if (procfb_module_init()) {
         print_fail();
         return 1;
     }

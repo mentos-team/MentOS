@@ -61,17 +61,17 @@ set(MENTOS_TESTS_DIR ${CMAKE_SOURCE_DIR}/files/bin/tests)
 set(TESTS
     t_mem.c
     t_fork.c
-    # Real-time programs
+    # Test real-time programs.
     t_periodic1.c
     t_periodic2.c
     t_periodic3.c
-    # Exec
+    # Testing task execution.
     t_exec.c
     t_exec_callee.c
     # Test environmental variables.
     t_setenv.c
     t_getenv.c
-    # Test: signals.
+    # Test signals.
     t_stopcont.c
     t_sigusr.c
     t_abort.c
@@ -85,8 +85,11 @@ set(TESTS
     t_kill.c
     t_itimer.c
     t_gid.c
+    # Test semaphores.
     t_semget.c
     t_sem1.c
+    # Test scheduling feedback tests.
+    t_schedfb.c
 )
 
 foreach(TEST ${TESTS})

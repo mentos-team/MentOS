@@ -14,3 +14,5 @@ int procv_module_init();
 /// @brief Initialize the procfs system files.
 /// @return 0 on success, 1 on failure.
 int procs_module_init();
+
+int procfb_module_init();
