@@ -80,6 +80,13 @@ void semid_print(struct semid_ds *temp)
     }
 }
 
+/// @brief prints informations about the struct pointed by temp
+/// @param temp the pointer to the semid struct to print
+void show_ipcs(struct semid_ds *temp){
+    pr_debug("%d\t\t%d\t\t%d\t\t\t%d\n", temp->key, temp->semid, temp->owner, temp->sem_nsems);
+
+}
+
 /// @brief list of all current active semaphores
 list_t *current_semaphores;
 
@@ -236,6 +243,7 @@ long sys_semctl(int semid, int semnum, int cmd, union semun *arg)
     case IPC_STAT:
         if (arg->buf == NULL || arg->buf->sems == NULL) { /*checking the parameters*/
             errno = EINVAL;
+            pr_debug("Errore SEMCTL\n");
             return -1;
         }
 
@@ -325,10 +333,32 @@ long sys_semctl(int semid, int semnum, int cmd, union semun *arg)
 
         return temp->sems[semnum].sem_zcnt;
 
+    //return the number of semaphores in the set.
+    case GETNSEMS:
+        return temp->sem_nsems;
+
     //not a valid argument.
     default:
         errno = EINVAL;
         return -1;
+    }
+
+    return 0;
+}
+
+long sys_semipcs(){
+
+    if (current_semaphores == NULL){
+        pr_debug("------ Matrici semafori --------\n");
+        pr_debug("chiave\t\tsemid\t\tproprietario\t\tnsems\n");
+        return 0;
+    }
+
+    pr_debug("------ Matrici semafori --------\n");
+    pr_debug("chiave\t\tsemid\t\tproprietario\t\tnsems\n");
+    listnode_foreach(listnode, current_semaphores)
+    {                                                               //iterate through the list
+        show_ipcs(((struct semid_ds *)listnode->value));
     }
 
     return 0;

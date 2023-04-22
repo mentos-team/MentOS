@@ -54,8 +54,6 @@ int main()
         op2.sem_flg = 0;
         semop(id, &op2, 1);
 
-        semctl(id, 0, IPC_RMID, NULL);
-
         exit(0);
     }
 

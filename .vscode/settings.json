@@ -1,6 +1,14 @@
 {
     "files.associations": {
         "*.h": "c",
-        "*.c": "c"
+        "*.c": "c",
+        "limits": "c",
+        "compare": "c",
+        "type_traits": "c",
+        "typeinfo": "c",
+        "*.tcc": "c",
+        "bit": "c",
+        "cstdlib": "c"
     },
+    "cmake.configureOnOpen": false,
 }

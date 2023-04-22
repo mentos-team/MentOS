@@ -39,3 +39,7 @@ struct ipc_perm {
 /// @param id integer
 /// @return IPC key
 key_t ftok(char *path, int id);
+
+/// @brief Prints System V IPC Informations 
+/// @return 0 on success, -1 on failure and errno is set to indicate the error.
+long ipcs();

@@ -7,11 +7,13 @@
 #include "system/syscall_types.h"
 #include "sys/errno.h"
 #include "stddef.h"
-
+#include "string.h"
+#include "io/debug.h"
+#include "stdio.h"
 #include "ipc/sem.h"
 #include "ipc/shm.h"
 #include "ipc/msg.h"
-
+#include "stdlib.h"
 #include "sys/stat.h"
 
 _syscall3(void *, shmat, int, shmid, const void *, shmaddr, int, shmflg)
@@ -34,8 +36,73 @@ _syscall5(long, msgrcv, int, msqid, struct msgbuf *, msgp, size_t, msgsz, long, 
 
 _syscall3(long, msgctl, int, msqid, int, cmd, struct msqid_ds *, buf)
 
+
+
+
+long ipcs(int argc, char** argv){
+
+    long __res;
+    __inline_syscall0(__res, semipcs);
+    __syscall_return(long, __res);
+
+    /*if (argc>4)return -1;
+    if (argc == 1){ //default
+        long __res;
+        __inline_syscall0(__res, semipcs);
+        return __res;
+    }
+    if (argc == 2){
+        if (!strcmp(argv[1], "-s")){ //semaphores
+            long __res;
+            __inline_syscall0(__res, semipcs);
+            return __res;
+        }
+
+        if (!strcmp(argv[1], "-m")) { //shared memories
+            printf("Not Implemented!\n");
+            return 0;
+        }
+
+        if (!strcmp(argv[1], "-q")){ //message queues
+            printf("Not Implemented!\n");
+            return 0;
+        }
+
+        return -1;        
+    }
+    else{
+        if(!strcmp(argv[1], "-i" ) && !strcmp(argv[3],"-s")){
+            union semun temp;
+            temp.buf = (struct semid_ds *)malloc(sizeof(struct semid_ds));
+            long __res;
+            __inline_syscall4(__res, semctl, atoi(argv[2]), 0, GETNSEMS, NULL);
+            temp.buf -> sems = (struct sem *)malloc(sizeof(struct sem) * __res);
+            
+            __inline_syscall4(__res, semctl, atoi(argv[2]), 0, IPC_STAT, &temp);
+            printf("%d\t\t%d\t\t%d\t\t\t%d\n", temp.buf->key, temp.buf->semid, temp.buf->owner, temp.buf->sem_nsems);
+            if(__res == -1)
+                return -1;
+            return __res;
+        }
+        if(!strcmp(argv[1], "-i" ) && !strcmp(argv[3],"-m")){
+            printf("Not Implemented!\n");
+            return 0;
+        }
+        if(!strcmp(argv[1], "-i" ) && !strcmp(argv[3],"-q")){
+            printf("Not Implemented!\n");
+            return 0;
+        }
+        return -1;
+    }
+
+
+    return 0;*/
+    
+}
+
 long semop(int semid, struct sembuf *sops, unsigned nsops)
 {
+
     long __res;
     // Check the arguments.
     if ((nsops <= 0) || (sops == NULL)) {

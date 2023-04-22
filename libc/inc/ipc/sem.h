@@ -23,6 +23,7 @@
 #define GETZCNT               15  ///< Get semzcnt.
 #define SETVAL                16  ///< Set semval.
 #define SETALL                17  ///< Set all semval's.
+#define GETNSEMS              19  ///< Get sem_nsems
 #define OPERATION_NOT_ALLOWED -18 ///< Return value for blocking operations on semaphores.
 
 /// }@
@@ -105,6 +106,10 @@ long sys_semop(int semid, struct sembuf *sops, unsigned nsops);
 /// @return 0 on success, -1 on failure and errno is set to indicate the error.
 long sys_semctl(int semid, int semnum, int cmd, union semun *arg);
 
+/// @brief Prints System V semaphores Informations 
+/// @return 0 on success, -1 on failure and errno is set to indicate the error.
+long sys_semipcs();
+
 #else
 
 /// @brief Get a System V semaphore set identifier.
@@ -130,5 +135,9 @@ long semop(int semid, struct sembuf *sops, unsigned nsops);
 /// @param arg
 /// @return 0 on success, -1 on failure and errno is set to indicate the error.
 long semctl(int semid, int semnum, int cmd, union semun *arg);
+
+/// @brief Prints System V semaphores Informations 
+/// @return 0 on success, -1 on failure and errno is set to indicate the error.
+long semipcs();
 
 #endif

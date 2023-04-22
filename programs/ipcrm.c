@@ -3,8 +3,14 @@
 /// @copyright (c) 2014-2023 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
+#include <stdio.h>
+
+
 int main(int argc, char **argv)
 {
+
+    printf("Comando...\n");
+
 #if 0
     if (argc != 2) {
         printf("Bad arguments: you have to specify only IPC id, see ipcs.\n");

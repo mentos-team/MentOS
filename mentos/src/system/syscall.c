@@ -237,6 +237,7 @@ void syscall_init()
     sys_call_table[__NR_shmctl]                 = (SystemCall)sys_shmctl;
     sys_call_table[__NR_shmdt]                  = (SystemCall)sys_shmdt;
     sys_call_table[__NR_shmget]                 = (SystemCall)sys_shmget;
+    sys_call_table[__NR_semipcs]                = (SystemCall)sys_semipcs;
 
     isr_install_handler(SYSTEM_CALL, &syscall_handler, "syscall_handler");
 }
