@@ -17,7 +17,7 @@
 /// Change the header.
 #define __DEBUG_HEADER__ "[SCHFBK]"
 /// Set the log level.
-#define __DEBUG_LEVEL__ LOGLEVEL_NOTICE
+#define __DEBUG_LEVEL__ LOGLEVEL_INFO
 #include "io/debug.h"
 
 /// @brief How often the feedback is shown.
@@ -41,15 +41,15 @@
 #endif
 
 /// @brief If uncommented, it writes the logging on file.
-//#define WRITE_ON_FILE
+// #define WRITE_ON_FILE
 
 #ifdef WRITE_ON_FILE
 /// @brief Name of the file where the feedback statistics are saved.
 #define FEEDBACK_FILENAME "/var/schedfb"
-/// @brief The header shown
-#define FEEDBACK_HEADER "\n[PID[] | NAME | -> (CPU UTILIZATION)\n\0"
 /// @brief
 ssize_t offset;
+/// @brief
+vfs_file_t *feedback = NULL;
 #endif
 
 /// @brief When the next log should be displayed/saved, in CPU ticks.
@@ -83,7 +83,6 @@ static inline void __scheduler_feedback_log()
     pr_info("Scheduling Statistics (%s)\n", POLICY_NAME);
 #ifdef WRITE_ON_FILE
     // Open the feedback file.
-    vfs_file_t *feedback = vfs_open(FEEDBACK_FILENAME, O_WRONLY, 0644);
     if (feedback == NULL) {
         pr_err("Failed to create the feedback file.\n");
         pr_err("Error: %s\n", strerror(errno));
@@ -92,24 +91,31 @@ static inline void __scheduler_feedback_log()
     char buffer[BUFSIZ];
     int written = 0;
 #endif
+#ifdef WRITE_ON_FILE
+    written = sprintf(buffer, "TIME : %ds\n", timer_get_seconds());
+    vfs_write(feedback, buffer, offset, written);
+    offset += written;
+#endif
     for (size_t i = 0; i < PID_MAX_LIMIT; ++i) {
         if (arr_stats[i].task) {
             float tcpu = ((float)arr_stats[i].occur * 100.0) / total_occurrences;
-            pr_info("[%3d] | %-24s | -> TCPU: %.2f%% \n",
+            pr_info("[%3d] | %-18s | -> TCPU: %.2f%% \n",
                     arr_stats[i].task->pid,
                     arr_stats[i].task->name,
                     tcpu);
 #ifdef WRITE_ON_FILE
-            written = sprintf(buffer, "[%3d](%s)[%f], ", arr_stats[i].pid, arr_stats[i].name, tcpu);
+            written = sprintf(buffer, "[%3d] | %-18s | -> TCPU: %.2f%% \n",
+                              arr_stats[i].task->pid,
+                              arr_stats[i].task->name,
+                              tcpu);
             vfs_write(feedback, buffer, offset, written);
             offset += written;
 #endif
         }
     }
 #ifdef WRITE_ON_FILE
-    vfs_write(feedback, "/n", offset, 1);
+    vfs_write(feedback, "\n", offset, 1);
     offset++;
-    vfs_close(feedback);
 #endif
 }
 
@@ -123,23 +129,19 @@ int scheduler_feedback_init()
         pr_err("Error: %s\n", strerror(errno));
         return 0;
     }
+    // First close the file.
+    if (feedback != NULL) {
+        vfs_close(feedback);
+    }
     // Create the feedback file, if necessary.
-    vfs_file_t *feedback = vfs_open(FEEDBACK_FILENAME, O_WRONLY | O_TRUNC | O_CREAT, 0644);
+    feedback = vfs_open(FEEDBACK_FILENAME, O_WRONLY | O_TRUNC | O_CREAT, 0644);
     if (feedback == NULL) {
         pr_err("Failed to create the feedback file.\n");
         pr_err("Error: %s\n", strerror(errno));
         return 0;
     }
-    // Get the length of the headr.
-    ssize_t header_len = strlen(FEEDBACK_HEADER);
     // Reset the offset.
     offset = 0;
-    // Write the header.
-    vfs_write(feedback, FEEDBACK_HEADER, offset, header_len);
-    // Move the offset.
-    offset += header_len;
-    // Close the file.
-    vfs_close(feedback);
 #endif
     // Initialize the stat array.
     for (size_t i = 0; i < PID_MAX_LIMIT; ++i) {
