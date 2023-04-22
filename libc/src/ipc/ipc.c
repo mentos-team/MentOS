@@ -41,68 +41,19 @@ _syscall5(long, msgrcv, int, msqid, struct msgbuf *, msgp, size_t, msgsz, long, 
 
 _syscall3(long, msgctl, int, msqid, int, cmd, struct msqid_ds *, buf)
 
+_syscall0(long, semipcs)
 
 
 
-long ipcs(int argc, char** argv){
-
+long ipcs(int argc, char** argv)
+{
+    /*Right now we only call the semipcs function because shared memories and message queues
+    do not exist. When they will be implemented you will be able to just call their printing function
+    down here.
+    */
     long __res;
     __inline_syscall0(__res, semipcs);
-    __syscall_return(long, __res);
-
-    /*if (argc>4)return -1;
-    if (argc == 1){ //default
-        long __res;
-        __inline_syscall0(__res, semipcs);
-        return __res;
-    }
-    if (argc == 2){
-        if (!strcmp(argv[1], "-s")){ //semaphores
-            long __res;
-            __inline_syscall0(__res, semipcs);
-            return __res;
-        }
-
-        if (!strcmp(argv[1], "-m")) { //shared memories
-            printf("Not Implemented!\n");
-            return 0;
-        }
-
-        if (!strcmp(argv[1], "-q")){ //message queues
-            printf("Not Implemented!\n");
-            return 0;
-        }
-
-        return -1;        
-    }
-    else{
-        if(!strcmp(argv[1], "-i" ) && !strcmp(argv[3],"-s")){
-            union semun temp;
-            temp.buf = (struct semid_ds *)malloc(sizeof(struct semid_ds));
-            long __res;
-            __inline_syscall4(__res, semctl, atoi(argv[2]), 0, GETNSEMS, NULL);
-            temp.buf -> sems = (struct sem *)malloc(sizeof(struct sem) * __res);
-            
-            __inline_syscall4(__res, semctl, atoi(argv[2]), 0, IPC_STAT, &temp);
-            printf("%d\t\t%d\t\t%d\t\t\t%d\n", temp.buf->key, temp.buf->semid, temp.buf->owner, temp.buf->sem_nsems);
-            if(__res == -1)
-                return -1;
-            return __res;
-        }
-        if(!strcmp(argv[1], "-i" ) && !strcmp(argv[3],"-m")){
-            printf("Not Implemented!\n");
-            return 0;
-        }
-        if(!strcmp(argv[1], "-i" ) && !strcmp(argv[3],"-q")){
-            printf("Not Implemented!\n");
-            return 0;
-        }
-        return -1;
-    }
-
-
-    return 0;*/
-    
+    __syscall_return(long, __res);    
 }
 
 long semop(int semid, struct sembuf *sops, unsigned nsops)
@@ -114,21 +65,36 @@ long semop(int semid, struct sembuf *sops, unsigned nsops)
         errno = EINVAL;
         return -1;
     }
+    int flag_no_wait = 0;
 
     //this should be performed for each sops.
     for (size_t i = 0; i < nsops; i++){
+
+        /*Checking for IPC_NOWAIT flag*/
+        if (sops[i].sem_flg & IPC_NOWAIT){
+            flag_no_wait = 1;
+        }
+
        // The process continues to try to perform the operation until it completes
         // or receives an error.
         while (1) {
             // Calling the kernel-side function.
             __inline_syscall3(__res, semop, semid, &sops[i], 1);
-            // If we get an error we stop the loop.
-            if (__res != OPERATION_NOT_ALLOWED)
+            /*
+            If we get an error, the operation has been taken care of we stop the loop.
+            We also stop the loop if the operation is not allowed and the IPC_NOWAIT flag is 1
+            */ 
+            if (__res != OPERATION_NOT_ALLOWED || flag_no_wait)
                 break;
+        }
+
+        /*If the operation couldn't be performed and we had the IPC_NOWAIT set to 1 then we ret*/
+        if (flag_no_wait && __res == OPERATION_NOT_ALLOWED){
+            errno = EAGAIN;
+            return -1;
         }
         //printf("op eseguita: %d\n", __res);
     }
-    
     
     // Now, we can return the value.
     __syscall_return(long, __res);

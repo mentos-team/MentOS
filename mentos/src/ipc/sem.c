@@ -43,6 +43,7 @@
 #include "process/process.h"
 #include "sys/errno.h"
 #include "assert.h"
+#include "stdio.h"
 
 ///@brief A value to compute the semid value.
 int semid_assign = 0;
@@ -118,21 +119,20 @@ void semid_print(struct semid_ds *temp)
 /// @brief prints informations about the struct pointed by temp
 /// @param temp the pointer to the semid struct to print
 void show_ipcs(struct semid_ds *temp){
-    pr_debug("%d\t\t%d\t\t%d\t\t\t%d\n", temp->key, temp->semid, temp->owner, temp->sem_nsems);
+    printf("%d         %d        %d               %d\n", temp->key, temp->semid, temp->owner, temp->sem_nsems);
 
 }
 
 /// @brief list of all current active semaphores
 list_t *current_semaphores;
 
-int count_ipc_private = 2; //temporary -> to implement the IPC_PRIVATE mechanism
 
 long sys_semget(key_t key, int nsems, int semflg)
 {
     struct semid_ds *temp = NULL;
     //check if nsems is a valid value
-    if (nsems <= 0) {
-        pr_err("Errore NSEMS\n"); //debuggin purposes
+    if (nsems <= 0 && semflg != 0) {
+        //pr_err("Errore NSEMS\n"); //debuggin purposes
         errno = EINVAL;
         return -1;
     }
@@ -356,16 +356,17 @@ long sys_semctl(int semid, int semnum, int cmd, union semun *arg)
 
 long sys_semipcs(){
 
+    //default operation --- no semaphores
     if (current_semaphores == NULL){
-        pr_debug("------ Matrici semafori --------\n");
-        pr_debug("chiave\t\tsemid\t\tproprietario\t\tnsems\n");
+        printf("------ Matrici semafori --------\n");
+        printf("chiave    semid    proprietario    nsems\n");
         return 0;
     }
 
-    pr_debug("------ Matrici semafori --------\n");
-    pr_debug("chiave\t\tsemid\t\tproprietario\t\tnsems\n");
+    printf("------ Matrici semafori --------\n");
+    printf("chiave    semid    proprietario    nsems\n");
     listnode_foreach(listnode, current_semaphores)
-    {                                                               //iterate through the list
+    {                                                         //iterate through the list
         show_ipcs(((struct semid_ds *)listnode->value));
     }
 

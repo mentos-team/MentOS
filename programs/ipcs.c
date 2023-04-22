@@ -36,29 +36,31 @@ static inline void print_shm_stat()
 int main(int argc, char **argv)
 {
 
-    /*if (ipcs(argc, argv) == -1){
-        printf("Errore\n");
-    }*/
+    if (argc>4)
+        return -1;
 
-    if (argc>4)return -1;
-    if (argc == 1){ //default
+    if (argc == 1){ /*Default operation, prints all ipcs informations*/
         long __res;
         __res = ipcs();
         return __res;
     }
+
     if (argc == 2){
-        if (!strcmp(argv[1], "-s")){ //semaphores
+        // all semaphores
+        if (!strcmp(argv[1], "-s")){ 
             long __res;
-            __res = ipcs();
+            __res = semipcs();
             return __res;
         }
 
-        if (!strcmp(argv[1], "-m")) { //shared memories
+        // all shared memories
+        if (!strcmp(argv[1], "-m")) { 
             printf("Not Implemented!\n");
             return 0;
         }
 
-        if (!strcmp(argv[1], "-q")){ //message queues
+        // all message queues
+        if (!strcmp(argv[1], "-q")){ 
             printf("Not Implemented!\n");
             return 0;
         }
@@ -66,25 +68,29 @@ int main(int argc, char **argv)
         return -1;        
     }
     else{
+        // semaphore by id
         if(!strcmp(argv[1], "-i" ) && !strcmp(argv[3],"-s")){
             union semun temp;
             temp.buf = (struct semid_ds *)malloc(sizeof(struct semid_ds));
             long __res;
             __res = semctl(atoi(argv[2]), 0, GETNSEMS, NULL);
-            //__inline_syscall4(__res, semctl, atoi(argv[2]), 0, GETNSEMS, NULL);
             temp.buf -> sems = (struct sem *)malloc(sizeof(struct sem) * __res);
-            
             __res = semctl(atoi(argv[2]), 0, IPC_STAT, &temp);
-            //__inline_syscall4(__res, semctl, atoi(argv[2]), 0, IPC_STAT, &temp);
-            printf("%d\t\t%d\t\t%d\t\t\t%d\n", temp.buf->key, temp.buf->semid, temp.buf->owner, temp.buf->sem_nsems);
+            printf("------ Matrici semafori --------\n");
+            printf("chiave    semid    proprietario    nsems\n");
+            printf("%d         %d        %d               %d\n", temp.buf->key, temp.buf->semid, temp.buf->owner, temp.buf->sem_nsems);
             if(__res == -1)
                 return -1;
             return __res;
         }
+
+        // shared memory by id
         if(!strcmp(argv[1], "-i" ) && !strcmp(argv[3],"-m")){
             printf("Not Implemented!\n");
             return 0;
         }
+
+        // message queue by id
         if(!strcmp(argv[1], "-i" ) && !strcmp(argv[3],"-q")){
             printf("Not Implemented!\n");
             return 0;
