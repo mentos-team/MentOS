@@ -129,6 +129,7 @@ set(KERNEL_SOURCES
     ${PROJECT_SOURCE_DIR}/src/io/proc_running.c
     ${PROJECT_SOURCE_DIR}/src/io/proc_feedback.c
     ${PROJECT_SOURCE_DIR}/src/io/proc_system.c
+    ${PROJECT_SOURCE_DIR}/src/io/proc_ipc.c
     ${PROJECT_SOURCE_DIR}/src/io/vga/vga.c
     ${PROJECT_SOURCE_DIR}/src/ipc/msg.c
     ${PROJECT_SOURCE_DIR}/src/ipc/sem.c

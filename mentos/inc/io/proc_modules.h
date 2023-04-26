@@ -15,4 +15,10 @@ int procv_module_init();
 /// @return 0 on success, 1 on failure.
 int procs_module_init();
 
+/// @brief Initializes the scheduler feedback system.
+/// @return 0 on success, 1 on failure.
 int procfb_module_init();
+
+/// @brief Initializes the IPC information system.
+/// @return 0 on success, 1 on failure.
+int procipc_module_init();

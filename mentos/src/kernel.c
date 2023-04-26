@@ -299,6 +299,16 @@ int kmain(boot_info_t *boot_informations)
     print_ok();
 
     //==========================================================================
+    pr_notice("Initialize IPC information system...\n");
+    printf("Initialize IPC information system...");
+    if (procipc_module_init()) {
+        print_fail();
+        pr_emerg("Failed to initialize the IPC information system!\n");
+        return 1;
+    }
+    print_ok();
+
+    //==========================================================================
     pr_notice("Setting up PS/2 driver...\n");
     printf("Setting up PS/2 driver...");
     if (ps2_initialize()) {
