@@ -4,14 +4,20 @@
 /// See LICENSE.md for details.
 ///! @cond Doxygen_Suppress
 
+// ============================================================================
 // Setup the logging for this file (do this before any other include).
 #include "sys/kernel_levels.h"           // Include kernel log levels.
 #define __DEBUG_HEADER__ "[IPCshm]"      ///< Change header.
 #define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
 #include "io/debug.h"                    // Include debugging functions.
+// ============================================================================
 
 #include "ipc/shm.h"
 #include "system/panic.h"
+#include "process/process.h"
+#include "sys/errno.h"
+#include "assert.h"
+#include "stdio.h"
 
 #if 0
 struct shmid_ds *head        = NULL;
@@ -374,7 +380,7 @@ struct shmid_ds *find_shm_fromvaddr(void *shmvaddr)
 }
 #endif
 
-void * sys_shmat(int shmid, const void *shmaddr, int shmflg)
+void *sys_shmat(int shmid, const void *shmaddr, int shmflg)
 {
     TODO("Not implemented");
     return 0;
@@ -395,6 +401,16 @@ long sys_shmdt(const void *shmaddr)
 long sys_shmctl(int shmid, int cmd, struct shmid_ds *buf)
 {
     TODO("Not implemented");
+    return 0;
+}
+
+ssize_t procipc_shm_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyte)
+{
+    if (!file) {
+        pr_err("Received a NULL file.\n");
+        return -ENOENT;
+    }
+    pr_alert("Return SHM stat.\n");
     return 0;
 }
 

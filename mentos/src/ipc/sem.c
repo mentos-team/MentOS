@@ -42,44 +42,92 @@
 #include "klib/list.h"
 #include "process/process.h"
 #include "sys/errno.h"
+#include "string.h"
 #include "assert.h"
 #include "stdio.h"
 
 ///@brief A value to compute the semid value.
 int semid_assign = 0;
 
-/// @brief list of all current active semaphores
-list_t *current_semaphores;
+/// @brief List of all current active semaphores.
+list_t semaphores_list = {
+    .head = NULL,
+    .tail = NULL,
+    .size = 0
+};
 
 /// @brief [temporary] To implement the IPC_PRIVATE mechanism.
 int count_ipc_private = 2;
 
-/// @brief Initializes a single semaphore.
-/// @param temp the pointer to the struct of the semaphore.
-static inline void __sem_init(struct sem *temp)
+/// @brief Allocates the memory for an array of semaphores.
+/// @param nsems number of semaphores in the array.
+/// @return a pointer to the allocated array of semaphores.
+static inline struct sem *__sem_alloc(int nsems)
 {
-    temp->sem_val  = 0;
-    temp->sem_pid  = sys_getpid();
-    temp->sem_zcnt = 0;
+    // Allocate the memory.
+    struct sem *ptr = (struct sem *)kmalloc(sizeof(struct sem) * nsems);
+    // Check the allocated memory.
+    assert(ptr && "Failed to allocate memory for the array of semaphores.");
+    // Clean the memory.
+    memset(ptr, 0, sizeof(struct sem));
+    return ptr;
 }
 
-/// @brief Initializes a semid struct (set of semaphores).
-/// @param temp the pointer to the semid struct.
+/// @brief Frees the memory of an array of semaphores.
+/// @param ptr the pointer to the array of semaphores.
+static inline void __sem_dealloc(struct sem *ptr)
+{
+    assert(ptr && "Received a NULL pointer.");
+    kfree(ptr);
+}
+
+/// @brief Initializes a single semaphore.
+/// @param ptr the pointer to the single semaphore.
+static inline void __sem_init(struct sem *ptr)
+{
+    ptr->sem_val  = 0;
+    ptr->sem_pid  = sys_getpid();
+    ptr->sem_zcnt = 0;
+}
+
+/// @brief Allocates the memory for a semid structure.
+/// @return a pointer to the allocated semid structure.
+static inline struct semid_ds *__semid_alloc()
+{
+    // Allocate the memory.
+    struct semid_ds *ptr = (struct semid_ds *)kmalloc(sizeof(struct semid_ds));
+    // Check the allocated memory.
+    assert(ptr && "Failed to allocate memory for a semid structure.");
+    // Clean the memory.
+    memset(ptr, 0, sizeof(struct semid_ds));
+    return ptr;
+}
+
+/// @brief Frees the memory of a semid structure.
+/// @param ptr pointer to the semid structure.
+static inline void __semid_dealloc(struct semid_ds *ptr)
+{
+    assert(ptr && "Received a NULL pointer.");
+    kfree(ptr);
+}
+
+/// @brief Initializes a semid struct.
+/// @param ptr the pointer to the semid struct.
 /// @param key IPC_KEY associated with the set of semaphores
 /// @param nsems number of semaphores to initialize
 /// @todo The way we compute the semid is a temporary solution.
-static inline void __semid_init(struct semid_ds *temp, key_t key, int nsems)
+static inline void __semid_init(struct semid_ds *ptr, key_t key, int nsems)
 {
-    assert(temp && "Received NULL semid data structure.");
-    temp->owner     = sys_getpid();
-    temp->key       = key;
-    temp->semid     = ++semid_assign;
-    temp->sem_otime = 0;
-    temp->sem_ctime = 0;
-    temp->sem_nsems = nsems;
-    temp->sems      = (struct sem *)kmalloc(sizeof(struct sem) * nsems);
+    assert(ptr && "Received a NULL pointer.");
+    ptr->owner     = sys_getpid();
+    ptr->key       = key;
+    ptr->semid     = ++semid_assign;
+    ptr->sem_otime = 0;
+    ptr->sem_ctime = 0;
+    ptr->sem_nsems = nsems;
+    ptr->sems      = __sem_alloc(nsems);
     for (int i = 0; i < nsems; i++) {
-        __sem_init(&(temp->sems[i]));
+        __sem_init(&ptr->sems[i]);
     }
 }
 
@@ -88,48 +136,23 @@ static inline void __semid_init(struct semid_ds *temp, key_t key, int nsems)
 /// @return the semaphore with the given id.
 static inline struct semid_ds *__find_semaphore(int semid)
 {
-    struct semid_ds *semaphore, *entry;
+    struct semid_ds *semaphores;
     // Iterate through the list of semaphores.
-    listnode_foreach(listnode, current_semaphores)
+    listnode_foreach(listnode, &semaphores_list)
     {
-        // Get the current entry.
-        entry = (struct semid_ds *)listnode->value;
-        // If the entry is valid, check the id.
-        if (entry && (entry->semid == semid))
-            return entry;
+        // Get the current list of semaphores.
+        semaphores = (struct semid_ds *)listnode->value;
+        // If semaphores is valid, check the id.
+        if (semaphores && (semaphores->semid == semid))
+            return semaphores;
     }
     return NULL;
 }
 
-/// @brief for debugging purposes, print all the stats of the semid_ds
-/// @param temp the pointer to the semid struct
-void semid_print(struct semid_ds *temp)
-{
-    assert(temp && "Received NULL semid data structure.");
-
-    pr_debug("pid, IPC_KEY, Semid, semop, change: %d, %d, %d, %d, %d\n", temp->owner, temp->key, temp->semid, temp->sem_otime, temp->sem_ctime);
-    for (int i = 0; i < (temp->sem_nsems); i++) {
-        pr_debug("%d semaphore:\n", i + 1);
-        pr_debug("value: %d, pid %d, process waiting %d\n", temp->sems[i].sem_val, temp->sems[i].sem_pid, temp->sems[i].sem_zcnt);
-        //pr_debug("pid of last op: %d\n", temp->sems[i].sem_pid);
-        //pr_debug("process waiting: %d\n", temp->sems[i].sem_zcnt);
-    }
-}
-
-/// @brief prints informations about the struct pointed by temp
-/// @param temp the pointer to the semid struct to print
-void show_ipcs(struct semid_ds *temp){
-    printf("%d         %d        %d               %d\n", temp->key, temp->semid, temp->owner, temp->sem_nsems);
-
-}
-
-/// @brief list of all current active semaphores
-list_t *current_semaphores;
-
-
 long sys_semget(key_t key, int nsems, int semflg)
 {
-    struct semid_ds *temp = NULL;
+    struct semid_ds *semaphores = NULL;
+
     //check if nsems is a valid value
     if (nsems <= 0 && semflg != 0) {
         //pr_err("Errore NSEMS\n"); //debuggin purposes
@@ -137,25 +160,17 @@ long sys_semget(key_t key, int nsems, int semflg)
         return -1;
     }
 
-    /*if (count == 0){  //first ever to call semget
-        current_semaphores = list_create();  //init the list
-        temp = (struct semid_ds *)kmalloc(sizeof(struct semid_ds));  //create the first one
-        __semid_init(temp, key, nsems);
-        list_insert_front(current_semaphores, temp);
-        count++;
-        return temp->semid;
-    }*/
-
-    if (current_semaphores == NULL) {       //if this is the first time that the function is called
-        current_semaphores = list_create(); //we initialize the list
-    }
-
-    if (key == IPC_PRIVATE) { // need to find a unique key
+    // Need to find a unique key.
+    if (key == IPC_PRIVATE) {
         int flag = 1;
-        while (1) { //exit when i find a unique key
-            listnode_foreach(listnode, current_semaphores)
+        // Exit when i find a unique key.
+        while (1) {
+            listnode_foreach(listnode, &semaphores_list)
             {
-                if (((struct semid_ds *)listnode->value)->key == count_ipc_private)
+                // Get the current list of semaphores.
+                semaphores = (struct semid_ds *)listnode->value;
+                // If semaphores is valid, check the key.
+                if (semaphores && (semaphores->key == count_ipc_private))
                     flag = 0;
             }
             if (flag == 1)
@@ -164,14 +179,15 @@ long sys_semget(key_t key, int nsems, int semflg)
             count_ipc_private *= 3; //multiply to try to find a unique key
         }
         //we have the key
-        temp = (struct semid_ds *)kmalloc(sizeof(struct semid_ds));
-        __semid_init(temp, count_ipc_private, nsems);
-        list_insert_front(current_semaphores, temp);
-        return temp->semid;
+        semaphores = __semid_alloc();
+        __semid_init(semaphores, count_ipc_private, nsems);
+        list_insert_front(&semaphores_list, semaphores);
+        return semaphores->semid;
     }
+
     int flag       = 0;
     int temp_semid = -1;
-    listnode_foreach(listnode, current_semaphores)
+    listnode_foreach(listnode, &semaphores_list)
     {                                                                 //iterate through the list
         if (((struct semid_ds *)listnode->value)->key == key) {       //if we find a semid with the given key
             temp_semid = ((struct semid_ds *)listnode->value)->semid; //saving the semid
@@ -180,10 +196,10 @@ long sys_semget(key_t key, int nsems, int semflg)
     }
     if (flag == 0) {              //unique key
         if (semflg & IPC_CREAT) { //and i want to create a semaphore set with it
-            temp = (struct semid_ds *)kmalloc(sizeof(struct semid_ds));
-            __semid_init(temp, key, nsems);
-            list_insert_front(current_semaphores, temp);
-            return temp->semid;
+            semaphores = (struct semid_ds *)kmalloc(sizeof(struct semid_ds));
+            __semid_init(semaphores, key, nsems);
+            list_insert_front(&semaphores_list, semaphores);
+            return semaphores->semid;
         }
         errno = EINVAL; //invalid argument bc it is a unique key but with no IPC_CREAT
         return -1;
@@ -250,7 +266,7 @@ long sys_semctl(int semid, int semnum, int cmd, union semun *arg)
     switch (cmd) {
     //remove the semaphore set; any processes blocked is awakened (errno set to EIDRM); no argument required.
     case IPC_RMID:
-        list_remove_node(current_semaphores, list_find(current_semaphores, temp));
+        list_remove_node(&semaphores_list, list_find(&semaphores_list, temp));
 
         //pr_debug("\ndone\n");
         /*gonna need to unblock all the processes on the semaphore*/
@@ -354,23 +370,52 @@ long sys_semctl(int semid, int semnum, int cmd, union semun *arg)
     return 0;
 }
 
-long sys_semipcs(){
-
-    //default operation --- no semaphores
-    if (current_semaphores == NULL){
-        printf("------ Matrici semafori --------\n");
-        printf("chiave    semid    proprietario    nsems\n");
-        return 0;
-    }
-
-    printf("------ Matrici semafori --------\n");
-    printf("chiave    semid    proprietario    nsems\n");
-    listnode_foreach(listnode, current_semaphores)
-    {                                                         //iterate through the list
-        show_ipcs(((struct semid_ds *)listnode->value));
-    }
-
+long sys_semipcs()
+{
     return 0;
+}
+
+ssize_t procipc_sem_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyte)
+{
+    size_t buffer_len = 0, read_pos = 0, write_count = 0, ret = 0;
+    struct semid_ds *entry = NULL;
+
+    if (!file) {
+        pr_err("Received a NULL file.\n");
+        return -ENOENT;
+    }
+    pr_alert("Return SEM stat.\n");
+
+    // Prepare a buffer.
+    char buffer[BUFSIZ];
+    memset(buffer, 0, BUFSIZ);
+
+    // Prepare the header.
+    ret = sprintf(buffer, "key      semid perms      nsems   uid   gid  cuid  cgid      otime      ctime\n");
+
+    // Iterate through the list.
+    if (semaphores_list.size > 0) {
+        listnode_foreach(listnode, &semaphores_list)
+        {
+            entry = ((struct semid_ds *)listnode->value);
+            sprintf(buffer + ret, "%8d %5d %10d %7d %5d %4d %5d %9d %10d %d\n",
+                    entry->key, entry->semid, 0, entry->sem_nsems, entry->owner, 0, 0, 0, entry->sem_otime, entry->sem_ctime);
+        }
+    }
+
+    // Perform read.
+    buffer_len = strlen(buffer);
+    read_pos   = offset;
+    if (read_pos < buffer_len) {
+        while ((write_count < nbyte) && (read_pos < buffer_len)) {
+            buf[write_count] = buffer[read_pos];
+            // Move the pointers.
+            ++read_pos, ++write_count;
+        }
+    }
+    pr_debug("Write count: %d\n", write_count);
+    pr_debug("Buffer:\n\"\n%s\"\n", buffer);
+    return write_count;
 }
 
 ///! @endcond
