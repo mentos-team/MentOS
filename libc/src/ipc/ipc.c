@@ -41,21 +41,6 @@ _syscall5(long, msgrcv, int, msqid, struct msgbuf *, msgp, size_t, msgsz, long, 
 
 _syscall3(long, msgctl, int, msqid, int, cmd, struct msqid_ds *, buf)
 
-_syscall0(long, semipcs)
-
-
-
-long ipcs(int argc, char** argv)
-{
-    /*Right now we only call the semipcs function because shared memories and message queues
-    do not exist. When they will be implemented you will be able to just call their printing function
-    down here.
-    */
-    long __res;
-    __inline_syscall0(__res, semipcs);
-    __syscall_return(long, __res);    
-}
-
 long semop(int semid, struct sembuf *sops, unsigned nsops)
 {
 

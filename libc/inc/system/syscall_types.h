@@ -193,8 +193,7 @@
 #define __NR_shmctl                 197 ///<  System-call number for `shmctl`
 #define __NR_shmdt                  198 ///<  System-call number for `shmdt`
 #define __NR_shmget                 199 ///<  System-call number for `shmget`
-#define __NR_semipcs                   200 ///<  System-call number for `ipcs`
-#define SYSCALL_NUMBER              201 ///< The total number of system-calls.
+#define SYSCALL_NUMBER              200 ///< The total number of system-calls.
 
 /// @brief Handle the value returned from a system call.
 /// @param type Specifies the type of the returned value.

@@ -152,14 +152,12 @@ static inline struct semid_ds *__find_semaphore(int semid)
 long sys_semget(key_t key, int nsems, int semflg)
 {
     struct semid_ds *semaphores = NULL;
-
     //check if nsems is a valid value
     if (nsems <= 0 && semflg != 0) {
         //pr_err("Errore NSEMS\n"); //debuggin purposes
         errno = EINVAL;
         return -1;
     }
-
     // Need to find a unique key.
     if (key == IPC_PRIVATE) {
         int flag = 1;
@@ -196,7 +194,7 @@ long sys_semget(key_t key, int nsems, int semflg)
     }
     if (flag == 0) {              //unique key
         if (semflg & IPC_CREAT) { //and i want to create a semaphore set with it
-            semaphores = (struct semid_ds *)kmalloc(sizeof(struct semid_ds));
+            semaphores = __semid_alloc();
             __semid_init(semaphores, key, nsems);
             list_insert_front(&semaphores_list, semaphores);
             return semaphores->semid;
@@ -370,26 +368,18 @@ long sys_semctl(int semid, int semnum, int cmd, union semun *arg)
     return 0;
 }
 
-long sys_semipcs()
-{
-    return 0;
-}
-
 ssize_t procipc_sem_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyte)
 {
-    size_t buffer_len = 0, read_pos = 0, write_count = 0, ret = 0;
-    struct semid_ds *entry = NULL;
-
     if (!file) {
         pr_err("Received a NULL file.\n");
         return -ENOENT;
     }
-    pr_alert("Return SEM stat.\n");
+    size_t buffer_len = 0, read_pos = 0, write_count = 0, ret = 0;
+    struct semid_ds *entry = NULL;
+    char buffer[BUFSIZ];
 
     // Prepare a buffer.
-    char buffer[BUFSIZ];
     memset(buffer, 0, BUFSIZ);
-
     // Prepare the header.
     ret = sprintf(buffer, "key      semid perms      nsems   uid   gid  cuid  cgid      otime      ctime\n");
 
@@ -398,10 +388,11 @@ ssize_t procipc_sem_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyte
         listnode_foreach(listnode, &semaphores_list)
         {
             entry = ((struct semid_ds *)listnode->value);
-            sprintf(buffer + ret, "%8d %5d %10d %7d %5d %4d %5d %9d %10d %d\n",
-                    entry->key, entry->semid, 0, entry->sem_nsems, entry->owner, 0, 0, 0, entry->sem_otime, entry->sem_ctime);
+            ret += sprintf(buffer + ret, "%8d %5d %10d %7d %5d %4d %5d %9d %10d %d\n",
+                           entry->key, entry->semid, 0, entry->sem_nsems, entry->owner, 0, 0, 0, entry->sem_otime, entry->sem_ctime);
         }
     }
+    sprintf(buffer + ret, "\n");
 
     // Perform read.
     buffer_len = strlen(buffer);
@@ -413,8 +404,6 @@ ssize_t procipc_sem_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyte
             ++read_pos, ++write_count;
         }
     }
-    pr_debug("Write count: %d\n", write_count);
-    pr_debug("Buffer:\n\"\n%s\"\n", buffer);
     return write_count;
 }
 

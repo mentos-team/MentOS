@@ -16,6 +16,7 @@
 #include "system/panic.h"
 #include "process/process.h"
 #include "sys/errno.h"
+#include "string.h"
 #include "assert.h"
 #include "stdio.h"
 
@@ -410,8 +411,29 @@ ssize_t procipc_shm_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyte
         pr_err("Received a NULL file.\n");
         return -ENOENT;
     }
-    pr_alert("Return SHM stat.\n");
-    return 0;
+    size_t buffer_len = 0, read_pos = 0, write_count = 0, ret = 0;
+    struct semid_ds *entry = NULL;
+    char buffer[BUFSIZ];
+
+    // Prepare a buffer.
+    memset(buffer, 0, BUFSIZ);
+    // Prepare the header.
+    ret = sprintf(buffer, "key      shmid ...\n");
+
+    // Implementation goes here...
+    sprintf(buffer + ret, "\n");
+
+    // Perform read.
+    buffer_len = strlen(buffer);
+    read_pos   = offset;
+    if (read_pos < buffer_len) {
+        while ((write_count < nbyte) && (read_pos < buffer_len)) {
+            buf[write_count] = buffer[read_pos];
+            // Move the pointers.
+            ++read_pos, ++write_count;
+        }
+    }
+    return write_count;
 }
 
 ///! @endcond

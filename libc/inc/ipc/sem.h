@@ -106,10 +106,6 @@ long sys_semop(int semid, struct sembuf *sops, unsigned nsops);
 /// @return 0 on success, -1 on failure and errno is set to indicate the error.
 long sys_semctl(int semid, int semnum, int cmd, union semun *arg);
 
-/// @brief Prints System V semaphores Informations 
-/// @return 0 on success, -1 on failure and errno is set to indicate the error.
-long sys_semipcs();
-
 #else
 
 /// @brief Get a System V semaphore set identifier.
@@ -135,9 +131,5 @@ long semop(int semid, struct sembuf *sops, unsigned nsops);
 /// @param arg
 /// @return 0 on success, -1 on failure and errno is set to indicate the error.
 long semctl(int semid, int semnum, int cmd, union semun *arg);
-
-/// @brief Prints System V semaphores Informations 
-/// @return 0 on success, -1 on failure and errno is set to indicate the error.
-long semipcs();
 
 #endif
