@@ -38,9 +38,10 @@
 #include "io/debug.h"                   // Include debugging functions.
 // ============================================================================
 
-#include "ipc/sem.h"
-#include "klib/list.h"
+#include "sys/sem.h"
+
 #include "process/process.h"
+#include "klib/list.h"
 #include "sys/errno.h"
 #include "string.h"
 #include "assert.h"

@@ -12,7 +12,7 @@
 #include "io/debug.h"                    // Include debugging functions.
 // ============================================================================
 
-#include "ipc/shm.h"
+#include "sys/shm.h"
 #include "system/panic.h"
 #include "process/process.h"
 #include "sys/errno.h"

@@ -13,17 +13,17 @@
 #include "mem/kheap.h"
 #include "system/syscall.h"
 #include "descriptor_tables/isr.h"
-#include "sys/errno.h"
 #include "kernel.h"
 #include "process/process.h"
 #include "process/scheduler.h"
-#include "sys/utsname.h"
 #include "fs/ioctl.h"
 #include "hardware/timer.h"
 
-#include "ipc/msg.h"
-#include "ipc/sem.h"
-#include "ipc/shm.h"
+#include "sys/errno.h"
+#include "sys/utsname.h"
+#include "sys/msg.h"
+#include "sys/sem.h"
+#include "sys/shm.h"
 
 /// The signature of a function call.
 typedef int (*SystemCall)();

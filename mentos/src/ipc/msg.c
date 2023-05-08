@@ -12,10 +12,10 @@
 #include "io/debug.h"                    // Include debugging functions.
 // ============================================================================
 
-#include "ipc/msg.h"
-#include "system/panic.h"
 #include "process/process.h"
+#include "system/panic.h"
 #include "sys/errno.h"
+#include "sys/msg.h"
 #include "string.h"
 #include "assert.h"
 #include "stdio.h"

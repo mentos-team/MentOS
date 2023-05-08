@@ -1,7 +1,7 @@
 //test
-#include "ipc/sem.h"
+#include "sys/sem.h"
 #include "stdio.h"
-#include "ipc/ipc.h"
+#include "sys/ipc.h"
 #include "sys/errno.h"
 #include "sys/wait.h"
 #include "stdlib.h"

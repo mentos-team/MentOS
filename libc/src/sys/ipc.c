@@ -4,20 +4,18 @@
 /// See LICENSE.md for details.
 
 #include "sys/unistd.h"
-#include "system/syscall_types.h"
 #include "sys/errno.h"
+#include "sys/stat.h"
+#include "sys/sem.h"
+#include "sys/shm.h"
+#include "sys/msg.h"
+
+#include "system/syscall_types.h"
 #include "stddef.h"
 #include "string.h"
 #include "io/debug.h"
 #include "stdio.h"
-#include "ipc/sem.h"
-#include "ipc/shm.h"
-#include "ipc/msg.h"
 #include "stdlib.h"
-#include "ipc/sem.h"
-#include "ipc/shm.h"
-#include "ipc/msg.h"
-#include "sys/stat.h"
 #include "io/debug.h"
 #include "stdio.h"
 

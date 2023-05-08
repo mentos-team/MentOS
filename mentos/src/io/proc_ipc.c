@@ -3,15 +3,15 @@
 /// @copyright (c) 2014-2022 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "fs/procfs.h"
 #include "process/process.h"
 #include "sys/errno.h"
+#include "fs/procfs.h"
 #include "io/debug.h"
+#include "sys/msg.h"
+#include "sys/sem.h"
+#include "sys/shm.h"
 #include "string.h"
 
-#include "ipc/msg.h"
-#include "ipc/sem.h"
-#include "ipc/shm.h"
 
 extern ssize_t procipc_msg_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyte);
 

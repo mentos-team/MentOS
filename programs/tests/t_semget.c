@@ -1,10 +1,10 @@
 //test
-#include "ipc/sem.h"
-#include "stdio.h"
-#include "ipc/ipc.h"
-#include "sys/errno.h"
-#include "stdlib.h"
 #include "sys/unistd.h"
+#include "sys/errno.h"
+#include "sys/sem.h"
+#include "sys/ipc.h"
+#include "stdlib.h"
+#include "stdio.h"
 
 /*
 Testing Semaphores.

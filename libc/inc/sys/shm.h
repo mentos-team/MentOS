@@ -5,10 +5,11 @@
 
 #pragma once
 
+#include "sys/ipc.h"
+
 #include "sys/types.h"
 #include "stddef.h"
 #include "time.h"
-#include "ipc.h"
 
 /// Data type for storing the number of attaches.
 typedef unsigned long shmatt_t;
@@ -39,7 +40,6 @@ struct shmid_ds {
 
 #if 0
 
-#include "ipc.h"
 #include "debug.h"
 #include "time.h"
 #include "kheap.h"

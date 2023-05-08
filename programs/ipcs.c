@@ -5,8 +5,8 @@
 
 #include <sys/unistd.h>
 #include <stdio.h>
-#include <ipc/sem.h>
-#include <ipc/ipc.h>
+#include <sys/sem.h>
+#include <sys/ipc.h>
 #include <stdlib.h>
 #include <string.h>
 #include <fcntl.h>
