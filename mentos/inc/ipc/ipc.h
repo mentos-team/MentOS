@@ -11,4 +11,6 @@
 #error "How did you include this file... include `libc/inc/sys/ipc.h` instead!"
 #endif
 
-struct ipc_perm register_ipc(key_t key);
+int ipc_valid_permissions(int flags, struct ipc_perm *perm);
+
+struct ipc_perm register_ipc(key_t key, mode_t mode);

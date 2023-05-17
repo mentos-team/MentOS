@@ -4,6 +4,7 @@
 #include "sys/sem.h"
 #include "sys/ipc.h"
 #include "stdlib.h"
+#include "fcntl.h"
 #include "stdio.h"
 
 /*
@@ -15,7 +16,7 @@ five seconds and then it wakes up his father and then it deletes the semaphore.
 
 void semid_print(struct semid_ds *temp)
 {
-    printf("pid, IPC_KEY, Semid, semop, change: %d, %d, %d, %d, %d\n", temp->owner, temp->key, temp->semid, temp->sem_otime, temp->sem_ctime);
+    printf("pid, IPC_KEY, Semid, semop, change: %d, %d, %d, %d, %d\n", temp->sem_perm.uid, temp->sem_perm.key, temp->semid, temp->sem_otime, temp->sem_ctime);
     for (int i = 0; i < (temp->sem_nsems); i++) {
         printf("%d semaphore:\n", i + 1);
         printf("value: %d, pid %d, process waiting %d\n", temp->sems[i].sem_val, temp->sems[i].sem_pid, temp->sems[i].sem_zcnt);
@@ -35,7 +36,7 @@ int main()
     printf("Key : %d\n", key);
 
     // Create the first semaphore.
-    id = semget(2, 1, IPC_CREAT);
+    id = semget(2, 1, IPC_CREAT | IPC_EXCL | S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
     printf("Id: %d\n", id);
 
     //long id2 = semget(IPC_PRIVATE, 1, IPC_CREAT);
@@ -94,9 +95,10 @@ int main()
 
     // Perform the operation.
     if (semop(id, father, 2) < 0) {
-        printf("ERRORE\n");
+        perror("ERROR\n");
+        return 1;
     }
-    
+
     // Check if we successfully set the value of the semaphore.
     ret = semctl(id, 0, GETVAL, &arg);
     printf("Check Value after(%d): %d\n", id, ret);

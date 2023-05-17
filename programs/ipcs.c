@@ -74,7 +74,7 @@ int main(int argc, char **argv)
                 //ret          = semctl(atoi(argv[2]), 0, GETNSEMS, NULL);
                 //temp.buf->sems = (struct sem *)malloc(sizeof(struct sem) * ret);
                 printf("key        semid      owner      perms      nsems\n");
-                printf("%10d %10d %10d %10d %d\n", sem.key, sem.semid, sem.owner, 0, sem.sem_nsems);
+                printf("%10d %10d %10d %10d %d\n", sem.sem_perm.key, sem.semid, sem.sem_perm.uid, sem.sem_perm.mode, sem.sem_nsems);
                 return 0;
             }
             return 1;

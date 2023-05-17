@@ -39,13 +39,17 @@
 // ============================================================================
 
 #include "sys/sem.h"
+#include "ipc/ipc.h"
 
+#include "process/scheduler.h"
 #include "process/process.h"
 #include "klib/list.h"
 #include "sys/errno.h"
+#include "stdlib.h"
 #include "string.h"
 #include "assert.h"
 #include "stdio.h"
+#include "fcntl.h"
 
 ///@brief A value to compute the semid value.
 int semid_assign = 0;
@@ -57,8 +61,18 @@ list_t semaphores_list = {
     .size = 0
 };
 
-/// @brief [temporary] To implement the IPC_PRIVATE mechanism.
-int count_ipc_private = 2;
+/// Seed used to generate random numbers.
+static int ipc_sem_rseed = 0;
+/// The maximum value returned by the rand function.
+#define IPC_SEM_RAND_MAX ((1U << 31U) - 1U)
+static inline void ipc_sem_srand(int x)
+{
+    ipc_sem_rseed = x;
+}
+static inline int ipc_sem_rand()
+{
+    return ipc_sem_rseed = (ipc_sem_rseed * 1103515245U + 12345U) & IPC_SEM_RAND_MAX;
+}
 
 /// @brief Allocates the memory for an array of semaphores.
 /// @param nsems number of semaphores in the array.
@@ -117,12 +131,10 @@ static inline void __semid_dealloc(struct semid_ds *ptr)
 /// @param key IPC_KEY associated with the set of semaphores
 /// @param nsems number of semaphores to initialize
 /// @todo The way we compute the semid is a temporary solution.
-static inline void __semid_init(struct semid_ds *ptr, key_t key, int nsems)
+static inline void __semid_init(struct semid_ds *ptr, key_t key, int nsems, int semflg)
 {
     assert(ptr && "Received a NULL pointer.");
-    ptr->owner     = sys_getpid();
-    ptr->key       = key;
-    ptr->semid     = ++semid_assign;
+    ptr->sem_perm  = register_ipc(key, semflg & 0x1FF);
     ptr->sem_otime = 0;
     ptr->sem_ctime = 0;
     ptr->sem_nsems = nsems;
@@ -135,160 +147,211 @@ static inline void __semid_init(struct semid_ds *ptr, key_t key, int nsems)
 /// @brief Searches for the semaphore with the given id.
 /// @param semid the id we are searching.
 /// @return the semaphore with the given id.
-static inline struct semid_ds *__find_semaphore(int semid)
+static inline struct semid_ds *__find_semaphore_by_id(int semid)
 {
-    struct semid_ds *semaphores;
-    // Iterate through the list of semaphores.
+    struct semid_ds *sem_set;
+    // Iterate through the list of semaphore set.
     listnode_foreach(listnode, &semaphores_list)
     {
-        // Get the current list of semaphores.
-        semaphores = (struct semid_ds *)listnode->value;
-        // If semaphores is valid, check the id.
-        if (semaphores && (semaphores->semid == semid))
-            return semaphores;
+        // Get the current list of semaphore set.
+        sem_set = (struct semid_ds *)listnode->value;
+        // If semaphore set is valid, check the id.
+        if (sem_set && (sem_set->semid == semid))
+            return sem_set;
+    }
+    return NULL;
+}
+
+/// @brief Searches for the semaphore with the given key.
+/// @param key the key we are searching.
+/// @return the semaphore with the given key.
+static inline struct semid_ds *__find_semaphore_by_key(key_t key)
+{
+    struct semid_ds *sem_set;
+    // Iterate through the list of semaphore set.
+    listnode_foreach(listnode, &semaphores_list)
+    {
+        // Get the current list of semaphore set.
+        sem_set = (struct semid_ds *)listnode->value;
+        // If semaphore set is valid, check the id.
+        if (sem_set && (sem_set->sem_perm.key == key))
+            return sem_set;
     }
     return NULL;
 }
 
 long sys_semget(key_t key, int nsems, int semflg)
 {
-    struct semid_ds *semaphores = NULL;
-    //check if nsems is a valid value
-    if (nsems <= 0 && semflg != 0) {
-        //pr_err("Errore NSEMS\n"); //debuggin purposes
-        errno = EINVAL;
-        return -1;
+    struct semid_ds *sem_set = NULL;
+    // Check if nsems is less than 0 or greater than the maximum number of
+    // semaphores per semaphore set.
+    if ((nsems < 0) || (nsems > SEM_SET_MAX)) {
+        pr_err("Wrong number of semaphores for semaphore set.\n");
+        return -EINVAL;
     }
+
     // Need to find a unique key.
     if (key == IPC_PRIVATE) {
-        int flag = 1;
         // Exit when i find a unique key.
-        while (1) {
-            listnode_foreach(listnode, &semaphores_list)
-            {
-                // Get the current list of semaphores.
-                semaphores = (struct semid_ds *)listnode->value;
-                // If semaphores is valid, check the key.
-                if (semaphores && (semaphores->key == count_ipc_private))
-                    flag = 0;
-            }
-            if (flag == 1)
-                break;
-            flag = 1;
-            count_ipc_private *= 3; //multiply to try to find a unique key
-        }
-        //we have the key
-        semaphores = __semid_alloc();
-        __semid_init(semaphores, count_ipc_private, nsems);
-        list_insert_front(&semaphores_list, semaphores);
-        return semaphores->semid;
+        do {
+            key = -ipc_sem_rand();
+        } while (__find_semaphore_by_key(key));
+        // We have a unique key, create the semaphore set.
+        sem_set = __semid_alloc();
+        // Initialize the semaphore set.
+        __semid_init(sem_set, key, nsems, semflg);
+        // Add the semaphore set to the list.
+        list_insert_front(&semaphores_list, sem_set);
+        // Return the id of the semaphore set.
+        return sem_set->semid;
     }
 
-    int flag       = 0;
-    int temp_semid = -1;
-    listnode_foreach(listnode, &semaphores_list)
-    {                                                                 //iterate through the list
-        if (((struct semid_ds *)listnode->value)->key == key) {       //if we find a semid with the given key
-            temp_semid = ((struct semid_ds *)listnode->value)->semid; //saving the semid
-            flag       = 1;                                           //found
-        }
-    }
-    if (flag == 0) {              //unique key
-        if (semflg & IPC_CREAT) { //and i want to create a semaphore set with it
-            semaphores = __semid_alloc();
-            __semid_init(semaphores, key, nsems);
-            list_insert_front(&semaphores_list, semaphores);
-            return semaphores->semid;
-        }
-        errno = EINVAL; //invalid argument bc it is a unique key but with no IPC_CREAT
-        return -1;
-    }
-    if (semflg & IPC_EXCL) { //error, the sem set already exist
-        errno = EEXIST;
-        return -1;
-    }
-    return temp_semid; //return the correspondent semid
+    // Get the semaphore set if it exists.
+    sem_set = __find_semaphore_by_key(key);
 
-    //TODO("Not implemented");
+    // Check if a semaphore set with the given key already exists, but nsems is
+    // larger than the number of semaphores in that set.
+    if (sem_set && (nsems > sem_set->sem_nsems)) {
+        pr_err("Wrong number of semaphores for and existing semaphore set.\n");
+        return -EINVAL;
+    }
+
+    // Check if no semaphore set exists for the given key and semflg did not
+    // specify IPC_CREAT.
+    if (!sem_set && !(semflg & IPC_CREAT)) {
+        pr_err("No semaphore set exists for the given key and semflg did not specify IPC_CREAT.\n");
+        return -ENOENT;
+    }
+
+    // Check if IPC_CREAT and IPC_EXCL were specified in semflg, but a semaphore
+    // set already exists for key.
+    if (sem_set && (semflg & IPC_CREAT) && (semflg & IPC_EXCL)) {
+        pr_err("IPC_CREAT and IPC_EXCL were specified in semflg, but a semaphore set already exists for key.\n");
+        return -EEXIST;
+    }
+
+    // Check if the semaphore set exists for the given key, but the calling
+    // process does not have permission to access the set.
+    if (sem_set && !ipc_valid_permissions(semflg, &sem_set->sem_perm)) {
+        pr_err("The semaphore set exists for the given key, but the calling process does not have permission to access the set.\n");
+        return -EACCES;
+    }
+
+    // If the semaphore set does not exist we need to create a new one.
+    if (sem_set == NULL) {
+        // Create the semaphore set.
+        sem_set = __semid_alloc();
+        // Initialize the semaphore set.
+        __semid_init(sem_set, key, nsems, semflg);
+        // Add the semaphore set to the list.
+        list_insert_front(&semaphores_list, sem_set);
+    }
+    // Return the id of the semaphore set.
+    return sem_set->semid;
 }
 
 long sys_semop(int semid, struct sembuf *sops, unsigned nsops)
 {
-    struct semid_ds *temp;
+    struct semid_ds *sem_set;
+    // The semid is less than zero.
+    if (semid < 0) {
+        pr_err("The semid is less than zero.\n");
+        return -EINVAL;
+    }
+    // The value of nsops is negative.
+    if (nsops <= 0) {
+        pr_err("The value of nsops is negative.\n");
+        return -EINVAL;
+    }
     // Search for the semaphore.
-    temp = __find_semaphore(semid);
-    // If the semaphore is NULL, stop.
-    if (!temp) {
+    sem_set = __find_semaphore_by_id(semid);
+    // The semaphore set doesn't exist.
+    if (!sem_set) {
+        pr_err("The semaphore set doesn't exist.\n");
         return -EINVAL;
     }
-
-    if (sops->sem_num < 0 || sops->sem_num >= temp->sem_nsems) { //checking parameters
-        return -EINVAL;
+    // The value of sem_num is less than 0 or greater than or equal to the number of semaphores in the set.
+    if ((sops->sem_num < 0) || (sops->sem_num >= sem_set->sem_nsems)) {
+        pr_err("The value of sem_num is less than 0 or greater than or equal to the number of semaphores in the set.\n");
+        return -EFBIG;
     }
-
-    temp->sem_otime = sys_time(NULL);
+    // Check if the semaphore set exists for the given key, but the calling
+    // process does not have permission to access the set.
+    if (sem_set && !ipc_valid_permissions(O_RDWR, &sem_set->sem_perm)) {
+        pr_err("The semaphore set exists for the given key, but the calling process does not have permission to access the set.\n");
+        return -EACCES;
+    }
+    // Update semop time.
+    sem_set->sem_otime = sys_time(NULL);
 
     if (sops->sem_op < 0) {
-        /*If the operation is negative then we need to check for possible blocking operation*/
-
-        /*if the value of the sem were to become negative then we return a special value*/
-        if (temp->sems[sops->sem_num].sem_val < (-(sops->sem_op))) {
-            return OPERATION_NOT_ALLOWED; //not allowed
+        // If the operation is negative then we need to check for possible
+        // blocking operation. If the value of the sem were to become negative
+        // then we return a special value.
+        if (sem_set->sems[sops->sem_num].sem_val < (-(sops->sem_op))) {
+            // Not allowed.
+            return OPERATION_NOT_ALLOWED;
         } else {
-            /*otherwise we can modify the sem_val and all the other parameters of the semaphore*/
-            temp->sems[sops->sem_num].sem_val += (sops->sem_op);
-            temp->sems[sops->sem_num].sem_pid = sys_getpid();
-            temp->sem_ctime                   = sys_time(NULL);
-            return 1; //allowed
+            // Otherwise, we can modify the sem_val and all the other parameters
+            // of the semaphore.
+            sem_set->sems[sops->sem_num].sem_val += (sops->sem_op);
+            sem_set->sems[sops->sem_num].sem_pid = sys_getpid();
+            sem_set->sem_ctime                   = sys_time(NULL);
+            return 1;
         }
     } else {
-        /*the operation is non negative so we can always do it*/
-        temp->sems[sops->sem_num].sem_val += (sops->sem_op);
-        temp->sems[sops->sem_num].sem_pid = sys_getpid();
-        temp->sem_ctime                   = sys_time(NULL);
-        return 1; //allowed
+        // The operation is non negative so we can always do it.
+        sem_set->sems[sops->sem_num].sem_val += (sops->sem_op);
+        sem_set->sems[sops->sem_num].sem_pid = sys_getpid();
+        sem_set->sem_ctime                   = sys_time(NULL);
+        return 1;
     }
-
     return 0;
 }
 
 long sys_semctl(int semid, int semnum, int cmd, union semun *arg)
 {
-    struct semid_ds *temp;
+    struct semid_ds *sem_set;
+
     // Search for the semaphore.
-    temp = __find_semaphore(semid);
-    // If the semaphore is NULL, stop.
-    if (!temp) {
+    sem_set = __find_semaphore_by_id(semid);
+    // The semaphore set doesn't exist.
+    if (!sem_set) {
+        pr_err("The semaphore set doesn't exist.\n");
         return -EINVAL;
     }
 
+    // Get the calling task.
+    task_struct *task = scheduler_get_current_process();
+    assert(task && "Failed to get the current running process.");
+
     switch (cmd) {
-    //remove the semaphore set; any processes blocked is awakened (errno set to EIDRM); no argument required.
+    // Remove the semaphore set; any processes blocked is awakened (errno set to
+    // EIDRM); no argument required.
     case IPC_RMID:
-        list_remove_node(&semaphores_list, list_find(&semaphores_list, temp));
-
-        //pr_debug("\ndone\n");
-        /*gonna need to unblock all the processes on the semaphore*/
-
+        if ((sem_set->sem_perm.uid != task->uid) && (sem_set->sem_perm.cuid != task->uid)) {
+            pr_err("The calling process is not the creator or the owner of the semaphore set.\n");
+            return -EPERM;
+        }
+        list_remove_node(&semaphores_list, list_find(&semaphores_list, sem_set));
         break;
 
-    //place a copy of the semid_ds data structure in the buffer pointed to by arg.buf.
+    // Place a copy of the semid_ds data structure in the buffer pointed to by
+    // arg.buf.
     case IPC_STAT:
         if (arg->buf == NULL || arg->buf->sems == NULL) { /*checking the parameters*/
             return -EINVAL;
         }
-
         //copying all the data
-        arg->buf->key       = temp->key;
-        arg->buf->owner     = temp->owner;
-        arg->buf->semid     = temp->semid;
-        arg->buf->sem_otime = temp->sem_otime;
-        arg->buf->sem_ctime = temp->sem_ctime;
-        arg->buf->sem_nsems = temp->sem_nsems;
-        for (int i = 0; i < temp->sem_nsems; i++) {
-            arg->buf->sems[i].sem_val  = temp->sems[i].sem_val;
-            arg->buf->sems[i].sem_pid  = temp->sems[i].sem_pid;
-            arg->buf->sems[i].sem_zcnt = temp->sems[i].sem_zcnt;
+        arg->buf->sem_perm  = sem_set->sem_perm;
+        arg->buf->semid     = sem_set->semid;
+        arg->buf->sem_otime = sem_set->sem_otime;
+        arg->buf->sem_ctime = sem_set->sem_ctime;
+        arg->buf->sem_nsems = sem_set->sem_nsems;
+        for (int i = 0; i < sem_set->sem_nsems; i++) {
+            arg->buf->sems[i].sem_val  = sem_set->sems[i].sem_val;
+            arg->buf->sems[i].sem_pid  = sem_set->sems[i].sem_pid;
+            arg->buf->sems[i].sem_zcnt = sem_set->sems[i].sem_zcnt;
         }
 
         return 0;
@@ -300,7 +363,7 @@ long sys_semctl(int semid, int semnum, int cmd, union semun *arg)
 
     //the value of the semnum-th semaphore in the set is initialized to the value specified in arg.val.
     case SETVAL:
-        if (semnum < 0 || semnum >= (temp->sem_nsems)) { //if the index is valid
+        if (semnum < 0 || semnum >= (sem_set->sem_nsems)) { //if the index is valid
             return -EINVAL;
         }
 
@@ -308,27 +371,27 @@ long sys_semctl(int semid, int semnum, int cmd, union semun *arg)
             return -EINVAL;
         }
         //setting the values
-        temp->sem_ctime            = sys_time(NULL);
-        temp->sems[semnum].sem_val = arg->val;
+        sem_set->sem_ctime            = sys_time(NULL);
+        sem_set->sems[semnum].sem_val = arg->val;
         return 0;
 
     //returns the value of the semnum-th semaphore in the set specified by semid; no argument required.
     case GETVAL:
-        if (semnum < 0 || semnum >= (temp->sem_nsems)) { //if the index is valid
+        if (semnum < 0 || semnum >= (sem_set->sem_nsems)) { //if the index is valid
             return -EINVAL;
         }
 
-        return temp->sems[semnum].sem_val;
+        return sem_set->sems[semnum].sem_val;
 
     //initialize all semaphore in the set referred to by semid, using the values supplied in the array pointed to by arg.array.
     case SETALL:
         if (arg->array == NULL) { /*checking parameters*/
             return -EINVAL;
         }
-        for (int i = 0; i < temp->sem_nsems; i++) { //setting all the values
-            temp->sems[i].sem_val = arg->array[i];
+        for (int i = 0; i < sem_set->sem_nsems; i++) { //setting all the values
+            sem_set->sems[i].sem_val = arg->array[i];
         }
-        temp->sem_ctime = sys_time(NULL);
+        sem_set->sem_ctime = sys_time(NULL);
         return 0;
 
     //retrieve the values of all of the semaphores in the set referred to by semid, placing them in the array pointed to by arg.array.
@@ -336,30 +399,28 @@ long sys_semctl(int semid, int semnum, int cmd, union semun *arg)
         if (arg->array == NULL) { //checking if the argument passed is valid
             return -EINVAL;
         }
-        for (int i = 0; i < temp->sem_nsems; i++) {
-            arg->array[i] = temp->sems[i].sem_val;
+        for (int i = 0; i < sem_set->sem_nsems; i++) {
+            arg->array[i] = sem_set->sems[i].sem_val;
         }
         return 0;
 
     //return the process ID of the last process to perform a semop on the semnum-th semaphore.
     case GETPID:
-        if (semnum < 0 || semnum >= (temp->sem_nsems)) { //if the index is valid
+        if (semnum < 0 || semnum >= (sem_set->sem_nsems)) { //if the index is valid
             return -EINVAL;
         }
-
-        return temp->sems[semnum].sem_pid;
+        return sem_set->sems[semnum].sem_pid;
 
     //return the number of processes currently waiting for the value of the semnum-th semaphore to become 0.
     case GETZCNT:
-        if (semnum < 0 || semnum >= (temp->sem_nsems)) { //if the index is valid
+        if (semnum < 0 || semnum >= (sem_set->sem_nsems)) { //if the index is valid
             return -EINVAL;
         }
-
-        return temp->sems[semnum].sem_zcnt;
+        return sem_set->sems[semnum].sem_zcnt;
 
     //return the number of semaphores in the set.
     case GETNSEMS:
-        return temp->sem_nsems;
+        return sem_set->sem_nsems;
 
     //not a valid argument.
     default:
@@ -388,9 +449,20 @@ ssize_t procipc_sem_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyte
     if (semaphores_list.size > 0) {
         listnode_foreach(listnode, &semaphores_list)
         {
+            // Get the entry.
             entry = ((struct semid_ds *)listnode->value);
-            ret += sprintf(buffer + ret, "%8d %5d %10d %7d %5d %4d %5d %9d %10d %d\n",
-                           entry->key, entry->semid, 0, entry->sem_nsems, entry->owner, 0, 0, 0, entry->sem_otime, entry->sem_ctime);
+            ret += sprintf(
+                buffer + ret, "%8d %5d %10d %7d %5d %4d %5d %9d %10d %d\n",
+                abs(entry->sem_perm.key),
+                entry->semid,
+                entry->sem_perm.mode,
+                entry->sem_nsems,
+                entry->sem_perm.uid,
+                entry->sem_perm.gid,
+                entry->sem_perm.cuid,
+                entry->sem_perm.cgid,
+                entry->sem_otime,
+                entry->sem_ctime);
         }
     }
     sprintf(buffer + ret, "\n");

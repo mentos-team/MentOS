@@ -29,6 +29,8 @@
 
 /// }@
 
+#define SEM_SET_MAX 256
+
 /// @brief Optional argument for semctl() function
 union semun {
     /// @brief Value for SETVAL.
@@ -56,9 +58,7 @@ struct sem {
 /// @brief Semaphore set
 struct semid_ds {
     /// @brief Ownership and permissions.
-    pid_t owner;
-    /// @brief IPC_KEY associated to the semaphore set.
-    key_t key;
+    struct ipc_perm sem_perm;
     /// @brief Semaphore ID associated to the semaphore set.
     int semid;
     /// @brief Last semop time.

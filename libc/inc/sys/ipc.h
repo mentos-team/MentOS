@@ -20,8 +20,8 @@
 
 /// @brief Permission details of an IPC object.
 struct ipc_perm {
-    /// Key supplied to msgget(2).
-    key_t __key;
+    /// Key associated to the IPC.
+    key_t key;
     /// Effective UID of owner.
     uid_t uid;
     /// Effective GID of owner.
