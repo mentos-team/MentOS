@@ -41,44 +41,46 @@ _syscall3(long, msgctl, int, msqid, int, cmd, struct msqid_ds *, buf)
 
 long semop(int semid, struct sembuf *sops, unsigned nsops)
 {
-
+    struct sembuf *op;
     long __res;
-    // Check the arguments.
-    if ((nsops <= 0) || (sops == NULL)) {
-        errno = EINVAL;
-        return -1;
+
+    // The pointer to the operation is NULL.
+    if (!sops) {
+        pr_err("The pointer to the operation is NULL.\n");
+        return -EINVAL;
     }
-    int flag_no_wait = 0;
 
-    //this should be performed for each sops.
-    for (size_t i = 0; i < nsops; i++){
+    // The value of nsops is negative.
+    if (nsops <= 0) {
+        pr_err("The value of nsops is negative.\n");
+        return -EINVAL;
+    }
 
-        /*Checking for IPC_NOWAIT flag*/
-        if (sops[i].sem_flg & IPC_NOWAIT){
-            flag_no_wait = 1;
-        }
-
-       // The process continues to try to perform the operation until it completes
+    // This should be performed for each sops.
+    for (size_t i = 0; i < nsops; i++) {
+        // Get the operation.
+        op = &sops[i];
+        // The process continues to try to perform the operation until it completes
         // or receives an error.
         while (1) {
             // Calling the kernel-side function.
-            __inline_syscall3(__res, semop, semid, &sops[i], 1);
-            /*
-            If we get an error, the operation has been taken care of we stop the loop.
-            We also stop the loop if the operation is not allowed and the IPC_NOWAIT flag is 1
-            */ 
-            if (__res != OPERATION_NOT_ALLOWED || flag_no_wait)
+            __inline_syscall3(__res, semop, semid, op, 1);
+
+            // If we get an error, the operation has been taken care of we stop
+            // the loop. We also stop the loop if the operation is not allowed
+            // and the IPC_NOWAIT flag is 1
+            if ((__res != -EAGAIN) || (op->sem_flg & IPC_NOWAIT))
                 break;
         }
 
-        /*If the operation couldn't be performed and we had the IPC_NOWAIT set to 1 then we ret*/
-        if (flag_no_wait && __res == OPERATION_NOT_ALLOWED){
+        // If the operation couldn't be performed and we had the IPC_NOWAIT set
+        // to 1 then we return.
+        if ((__res == -EAGAIN) && (op->sem_flg & IPC_NOWAIT)) {
             errno = EAGAIN;
             return -1;
         }
-        //printf("op eseguita: %d\n", __res);
     }
-    
+
     // Now, we can return the value.
     __syscall_return(long, __res);
 }

@@ -65,10 +65,12 @@ list_t semaphores_list = {
 static int ipc_sem_rseed = 0;
 /// The maximum value returned by the rand function.
 #define IPC_SEM_RAND_MAX ((1U << 31U) - 1U)
+
 static inline void ipc_sem_srand(int x)
 {
     ipc_sem_rseed = x;
 }
+
 static inline int ipc_sem_rand()
 {
     return ipc_sem_rseed = (ipc_sem_rseed * 1103515245U + 12345U) & IPC_SEM_RAND_MAX;
@@ -77,7 +79,7 @@ static inline int ipc_sem_rand()
 /// @brief Allocates the memory for an array of semaphores.
 /// @param nsems number of semaphores in the array.
 /// @return a pointer to the allocated array of semaphores.
-static inline struct sem *__sem_alloc(int nsems)
+static inline struct sem *__sem_set_alloc(int nsems)
 {
     // Allocate the memory.
     struct sem *ptr = (struct sem *)kmalloc(sizeof(struct sem) * nsems);
@@ -90,7 +92,7 @@ static inline struct sem *__sem_alloc(int nsems)
 
 /// @brief Frees the memory of an array of semaphores.
 /// @param ptr the pointer to the array of semaphores.
-static inline void __sem_dealloc(struct sem *ptr)
+static inline void __sem_set_dealloc(struct sem *ptr)
 {
     assert(ptr && "Received a NULL pointer.");
     kfree(ptr);
@@ -123,6 +125,9 @@ static inline struct semid_ds *__semid_alloc()
 static inline void __semid_dealloc(struct semid_ds *ptr)
 {
     assert(ptr && "Received a NULL pointer.");
+    // Deallocate the array of semaphores.
+    __sem_set_dealloc(ptr->sems);
+    // Deallocate the semid memory.
     kfree(ptr);
 }
 
@@ -138,7 +143,7 @@ static inline void __semid_init(struct semid_ds *ptr, key_t key, int nsems, int 
     ptr->sem_otime = 0;
     ptr->sem_ctime = 0;
     ptr->sem_nsems = nsems;
-    ptr->sems      = __sem_alloc(nsems);
+    ptr->sems      = __sem_set_alloc(nsems);
     for (int i = 0; i < nsems; i++) {
         __sem_init(&ptr->sems[i]);
     }
@@ -253,9 +258,17 @@ long sys_semget(key_t key, int nsems, int semflg)
 long sys_semop(int semid, struct sembuf *sops, unsigned nsops)
 {
     struct semid_ds *sem_set;
+    unsigned short sem_num;
+    struct sem *semaphore;
+
     // The semid is less than zero.
     if (semid < 0) {
         pr_err("The semid is less than zero.\n");
+        return -EINVAL;
+    }
+    // The pointer to the operation is NULL.
+    if (!sops) {
+        pr_err("The pointer to the operation is NULL.\n");
         return -EINVAL;
     }
     // The value of nsops is negative.
@@ -263,6 +276,7 @@ long sys_semop(int semid, struct sembuf *sops, unsigned nsops)
         pr_err("The value of nsops is negative.\n");
         return -EINVAL;
     }
+
     // Search for the semaphore.
     sem_set = __find_semaphore_by_id(semid);
     // The semaphore set doesn't exist.
@@ -270,8 +284,11 @@ long sys_semop(int semid, struct sembuf *sops, unsigned nsops)
         pr_err("The semaphore set doesn't exist.\n");
         return -EINVAL;
     }
+
+    // Get the semaphore number.
+    sem_num = sops->sem_num;
     // The value of sem_num is less than 0 or greater than or equal to the number of semaphores in the set.
-    if ((sops->sem_num < 0) || (sops->sem_num >= sem_set->sem_nsems)) {
+    if ((sem_num < 0) || (sem_num >= sem_set->sem_nsems)) {
         pr_err("The value of sem_num is less than 0 or greater than or equal to the number of semaphores in the set.\n");
         return -EFBIG;
     }
@@ -283,29 +300,23 @@ long sys_semop(int semid, struct sembuf *sops, unsigned nsops)
     }
     // Update semop time.
     sem_set->sem_otime = sys_time(NULL);
+    // Get the specific semaphore.
+    semaphore = &sem_set->sems[sem_num];
 
-    if (sops->sem_op < 0) {
-        // If the operation is negative then we need to check for possible
-        // blocking operation. If the value of the sem were to become negative
-        // then we return a special value.
-        if (sem_set->sems[sops->sem_num].sem_val < (-(sops->sem_op))) {
-            // Not allowed.
-            return OPERATION_NOT_ALLOWED;
-        } else {
-            // Otherwise, we can modify the sem_val and all the other parameters
-            // of the semaphore.
-            sem_set->sems[sops->sem_num].sem_val += (sops->sem_op);
-            sem_set->sems[sops->sem_num].sem_pid = sys_getpid();
-            sem_set->sem_ctime                   = sys_time(NULL);
-            return 1;
-        }
-    } else {
-        // The operation is non negative so we can always do it.
-        sem_set->sems[sops->sem_num].sem_val += (sops->sem_op);
-        sem_set->sems[sops->sem_num].sem_pid = sys_getpid();
-        sem_set->sem_ctime                   = sys_time(NULL);
-        return 1;
+    // If the operation is negative then we need to check for possible blocking
+    // operation. If the value of the sem were to become negative then we return
+    // a special value.
+    if (((int)semaphore->sem_val + (int)sops->sem_op) < 0) {
+        // The value would become negative, we cannot perform the operation.
+        return -EAGAIN;
     }
+
+    // Update the semaphore value.
+    semaphore->sem_val += sops->sem_op;
+    // Update the pid of the process that did last op.
+    semaphore->sem_pid = sys_getpid();
+    // Update the time.
+    sem_set->sem_ctime = sys_time(NULL);
     return 0;
 }
 
@@ -333,16 +344,31 @@ long sys_semctl(int semid, int semnum, int cmd, union semun *arg)
             pr_err("The calling process is not the creator or the owner of the semaphore set.\n");
             return -EPERM;
         }
+        // Remove the set from the list.
         list_remove_node(&semaphores_list, list_find(&semaphores_list, sem_set));
+        // Delete the set.
+        __semid_dealloc(sem_set);
         break;
 
     // Place a copy of the semid_ds data structure in the buffer pointed to by
     // arg.buf.
     case IPC_STAT:
-        if (arg->buf == NULL || arg->buf->sems == NULL) { /*checking the parameters*/
+        // Check if the argument is a null pointer.
+        if (!arg) {
+            pr_err("The argument is NULL.\n");
             return -EINVAL;
         }
-        //copying all the data
+        // Check if the buffer is a null pointer.
+        if (!arg->buf) {
+            pr_err("The buffer is NULL.\n");
+            return -EINVAL;
+        }
+        // Check if the array of semaphores inside the buffer is a null pointer.
+        if (!arg->buf->sems) {
+            pr_err("The array of semaphores inside the buffer is NULL.\n");
+            return -EINVAL;
+        }
+        // Copying all the data.
         arg->buf->sem_perm  = sem_set->sem_perm;
         arg->buf->semid     = sem_set->semid;
         arg->buf->sem_otime = sem_set->sem_otime;
@@ -353,72 +379,102 @@ long sys_semctl(int semid, int semnum, int cmd, union semun *arg)
             arg->buf->sems[i].sem_pid  = sem_set->sems[i].sem_pid;
             arg->buf->sems[i].sem_zcnt = sem_set->sems[i].sem_zcnt;
         }
-
         return 0;
 
-        //update selected fields of the semid_ds using values in the buffer pointed to by arg.buf.
-        //case IPC_SET:
-        /* code */
-        //break;
-
-    //the value of the semnum-th semaphore in the set is initialized to the value specified in arg.val.
-    case SETVAL:
-        if (semnum < 0 || semnum >= (sem_set->sem_nsems)) { //if the index is valid
-            return -EINVAL;
-        }
-
-        if (arg->val < 0) { //checking if the value is valid
-            return -EINVAL;
-        }
-        //setting the values
-        sem_set->sem_ctime            = sys_time(NULL);
-        sem_set->sems[semnum].sem_val = arg->val;
-        return 0;
-
-    //returns the value of the semnum-th semaphore in the set specified by semid; no argument required.
-    case GETVAL:
-        if (semnum < 0 || semnum >= (sem_set->sem_nsems)) { //if the index is valid
-            return -EINVAL;
-        }
-
-        return sem_set->sems[semnum].sem_val;
-
-    //initialize all semaphore in the set referred to by semid, using the values supplied in the array pointed to by arg.array.
+    // Initialize all semaphore in the set referred to by semid, using the
+    // values supplied in the array pointed to by arg.array.
     case SETALL:
-        if (arg->array == NULL) { /*checking parameters*/
+        // Check if the argument is a null pointer.
+        if (!arg) {
+            pr_err("The argument is NULL.\n");
             return -EINVAL;
         }
-        for (int i = 0; i < sem_set->sem_nsems; i++) { //setting all the values
+        // Check if the array is valid.
+        if (!arg->array) {
+            pr_err("The array is NULL.\n");
+            return -EINVAL;
+        }
+        // Setting the values.
+        for (unsigned i = 0; i < sem_set->sem_nsems; ++i) {
             sem_set->sems[i].sem_val = arg->array[i];
         }
+        // Update the last change time.
         sem_set->sem_ctime = sys_time(NULL);
         return 0;
 
-    //retrieve the values of all of the semaphores in the set referred to by semid, placing them in the array pointed to by arg.array.
+    // Retrieve the values of all of the semaphores in the set referred to by
+    // semid, placing them in the array pointed to by arg.array.
     case GETALL:
-        if (arg->array == NULL) { //checking if the argument passed is valid
+        // Check if the argument is a null pointer.
+        if (!arg) {
+            pr_err("The argument is NULL.\n");
             return -EINVAL;
         }
-        for (int i = 0; i < sem_set->sem_nsems; i++) {
+        // Check if the array is valid.
+        if (!arg->array) {
+            pr_err("The array is NULL.\n");
+            return -EINVAL;
+        }
+        for (unsigned i = 0; i < sem_set->sem_nsems; ++i) {
             arg->array[i] = sem_set->sems[i].sem_val;
         }
         return 0;
 
-    //return the process ID of the last process to perform a semop on the semnum-th semaphore.
+    // The value of the semnum-th semaphore in the set is initialized to the
+    // value specified in arg.val.
+    case SETVAL:
+        // Check if the index is valid.
+        if ((semnum < 0) || (semnum >= (sem_set->sem_nsems))) {
+            pr_err("Semaphore number out of bound (%d not in [%d, %d])\n", semnum, 0, sem_set->sem_nsems);
+            return -EINVAL;
+        }
+        // Check if the argument is a null pointer.
+        if (!arg) {
+            pr_err("The argument is NULL.\n");
+            return -EINVAL;
+        }
+        // Checking if the value is valid.
+        if (arg->val < 0) {
+            pr_err("The value to set is not valid %d.\n", arg->val);
+            return -EINVAL;
+        }
+        // Setting the value.
+        sem_set->sems[semnum].sem_val = arg->val;
+        // Update the last change time.
+        sem_set->sem_ctime = sys_time(NULL);
+        return 0;
+
+    // Returns the value of the semnum-th semaphore in the set specified by
+    // semid; no argument required.
+    case GETVAL:
+        // Check if the index is valid.
+        if ((semnum < 0) || (semnum >= (sem_set->sem_nsems))) {
+            pr_err("Semaphore number out of bound (%d not in [%d, %d])\n", semnum, 0, sem_set->sem_nsems);
+            return -EINVAL;
+        }
+        return sem_set->sems[semnum].sem_val;
+
+    // Return the process ID of the last process to perform a semop on the
+    // semnum-th semaphore.
     case GETPID:
-        if (semnum < 0 || semnum >= (sem_set->sem_nsems)) { //if the index is valid
+        // Check if the index is valid.
+        if ((semnum < 0) || (semnum >= (sem_set->sem_nsems))) {
+            pr_err("Semaphore number out of bound (%d not in [%d, %d])\n", semnum, 0, sem_set->sem_nsems);
             return -EINVAL;
         }
         return sem_set->sems[semnum].sem_pid;
 
-    //return the number of processes currently waiting for the value of the semnum-th semaphore to become 0.
+    // Return the number of processes currently waiting for the value of the
+    // semnum-th semaphore to become 0.
     case GETZCNT:
-        if (semnum < 0 || semnum >= (sem_set->sem_nsems)) { //if the index is valid
+        // Check if the index is valid.
+        if ((semnum < 0) || (semnum >= (sem_set->sem_nsems))) {
+            pr_err("Semaphore number out of bound (%d not in [%d, %d])\n", semnum, 0, sem_set->sem_nsems);
             return -EINVAL;
         }
         return sem_set->sems[semnum].sem_zcnt;
 
-    //return the number of semaphores in the set.
+    // Return the number of semaphores in the set.
     case GETNSEMS:
         return sem_set->sem_nsems;
 

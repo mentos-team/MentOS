@@ -25,7 +25,6 @@
 #define SETVAL                16  ///< Set semval.
 #define SETALL                17  ///< Set all semval's.
 #define GETNSEMS              19  ///< Get sem_nsems
-#define OPERATION_NOT_ALLOWED -18 ///< Return value for blocking operations on semaphores.
 
 /// }@
 
