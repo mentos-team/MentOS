@@ -107,6 +107,16 @@ static inline void __sem_init(struct sem *ptr)
     ptr->sem_zcnt = 0;
 }
 
+/// @brief Copies a semaphore from source to destination.
+/// @param src source semaphore.
+/// @param dst destination semaphore.
+static inline void __sem_copy(struct sem *src, struct sem *dst)
+{
+    assert(src && "Received a NULL source semaphore.");
+    assert(dst && "Received a NULL destination semaphore.");
+    memcpy(dst, src, sizeof(struct sem));
+}
+
 /// @brief Allocates the memory for a semid structure.
 /// @return a pointer to the allocated semid structure.
 static inline struct semid_ds *__semid_alloc()
@@ -147,6 +157,18 @@ static inline void __semid_init(struct semid_ds *ptr, key_t key, int nsems, int 
     for (int i = 0; i < nsems; i++) {
         __sem_init(&ptr->sems[i]);
     }
+}
+
+/// @brief Copies a semid from source to destination.
+/// @param src source semid.
+/// @param dst destination semid.
+static inline void __semid_copy(struct semid_ds *src, struct semid_ds *dst)
+{
+    assert(src && "Received a NULL source semid.");
+    assert(src->sems && "Received a source semid with NULL sems.");
+    assert(dst && "Received a NULL destination semid.");
+    assert(dst->sems && "Received a destination semid with NULL sems.");
+    memcpy(dst, src, sizeof(struct semid_ds));
 }
 
 /// @brief Searches for the semaphore with the given id.
