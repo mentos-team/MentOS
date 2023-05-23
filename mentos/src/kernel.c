@@ -35,6 +35,7 @@
 #include "devices/fpu.h"
 #include "system/printk.h"
 #include "sys/module.h"
+#include "sys/sem.h"
 #include "drivers/rtc.h"
 #include "stdio.h"
 #include "assert.h"
@@ -304,6 +305,17 @@ int kmain(boot_info_t *boot_informations)
     if (procipc_module_init()) {
         print_fail();
         pr_emerg("Failed to initialize the IPC information system!\n");
+        return 1;
+    }
+    print_ok();
+    
+
+    //==========================================================================
+    pr_notice("Initialize IPC/SEM system...\n");
+    printf("Initialize IPC/SEM system...");
+    if (sem_init()) {
+        print_fail();
+        pr_emerg("Failed to initialize the IPC/SEM system!\n");
         return 1;
     }
     print_ok();

@@ -4,10 +4,10 @@
 /// See LICENSE.md for details.
 
 // Setup the logging for this file (do this before any other include).
-#include "sys/kernel_levels.h"           // Include kernel log levels.
-#define __DEBUG_HEADER__ "[EXT2  ]"      ///< Change header.
-#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
-#include "io/debug.h"                    // Include debugging functions.
+#include "sys/kernel_levels.h"          // Include kernel log levels.
+#define __DEBUG_HEADER__ "[EXT2  ]"     ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_DEBUG ///< Set log level.
+#include "io/debug.h"                   // Include debugging functions.
 
 #include "fs/ext2.h"
 #include "process/scheduler.h"
@@ -478,46 +478,52 @@ static const char *time_to_string(uint32_t time)
     return s;
 }
 
+static inline int __ext2_valid_permissions(
+    const task_struct *task,
+    const mode_t mask,
+    const uid_t uid,
+    const gid_t gid,
+    const int usr,
+    const int grp,
+    const int oth)
+{
+    // The task is the owner.
+    if ((mask & usr) && (task->uid == uid))
+        return 1;
+    // The task belongs to the correct group.
+    if ((mask & grp) && (task->gid == gid))
+        return 1;
+    // The task is not the owner and does not belong to the correct group.
+    if ((mask & oth) && (task->uid != uid) && (task->gid != gid))
+        return 1;
+    return 0;
+}
+
 /// @brief Checks if the requests in flags are valid.
 /// @param flags the flags to check.
 /// @param mask the mask to check against.
 /// @param uid the uid of the owner.
 /// @param gid the gid of the owner.
-/// @return true on success, false otherwise.
-static bool_t ext2_valid_permissions(int flags, mode_t mask, uid_t uid, gid_t gid)
+/// @return 1 on success, 0 otherwise.
+static int ext2_valid_permissions(int flags, mode_t mask, uid_t uid, gid_t gid)
 {
     // Check the permissions.
     task_struct *task = scheduler_get_current_process();
     if (task == NULL) {
         pr_warning("Failed to get the current running process, assuming we are booting.\n");
-        return true;
+        return 1;
     }
-    // The current task is the owner.
-    if (task->uid == uid) {
-        if (!bitmask_check(mask, S_IRUSR))
-            return false;
-        if (bitmask_check(flags, O_WRONLY) && !bitmask_check(mask, S_IWUSR))
-            return false;
-        if (bitmask_check(flags, O_RDWR) && (!bitmask_check(mask, S_IRUSR) || !bitmask_check(mask, S_IWUSR)))
-            return false;
-    }
-    if (task->gid == gid) {
-        if (!bitmask_check(mask, S_IRGRP))
-            return false;
-        if (bitmask_check(flags, O_WRONLY) && !bitmask_check(mask, S_IWGRP))
-            return false;
-        if (bitmask_check(flags, O_RDWR) && (!bitmask_check(mask, S_IRGRP) || !bitmask_check(mask, S_IWGRP)))
-            return false;
-    }
-    if ((task->uid != uid) && (task->gid != gid)) {
-        if (!bitmask_check(mask, S_IROTH))
-            return false;
-        if (bitmask_check(flags, O_WRONLY) && !bitmask_check(mask, S_IWOTH))
-            return false;
-        if (bitmask_check(flags, O_RDWR) && (!bitmask_check(mask, S_IROTH) || !bitmask_check(mask, S_IWOTH)))
-            return false;
-    }
-    return true;
+    // Init, and all root processes have full permissions.
+    if ((task->pid == 0) || (task->uid == 0) || (task->gid == 0))
+        return 1;
+
+    if (((flags & O_RDONLY) == O_RDONLY) && __ext2_valid_permissions(task, mask, uid, gid, S_IRUSR, S_IRGRP, S_IROTH))
+        return 1;
+    if (((flags & O_WRONLY) == O_WRONLY) && __ext2_valid_permissions(task, mask, uid, gid, S_IWUSR, S_IWGRP, S_IWOTH))
+        return 1;
+    if (((flags & O_RDWR) == O_RDWR) && __ext2_valid_permissions(task, mask, uid, gid, S_IRUSR | S_IWUSR, S_IRGRP | S_IWGRP, S_IROTH | S_IWOTH))
+        return 1;
+    return 0;
 }
 
 /// @brief Dumps on debugging output the superblock.
@@ -756,12 +762,12 @@ static void ext2_set_bitmap_bit(uint8_t *buffer, uint32_t linear_index, ext2_blo
 /// @param fs the ext2 filesystem structure.
 /// @param cache the cache from which we read the bgdt data.
 /// @param linear_index the output variable where we store the linear indes to the free inode.
-/// @return true if we found a free inode, false otherwise.
-static inline bool_t ext2_find_free_inode_in_group(
+/// @return 1 if we found a free inode, 0 otherwise.
+static inline int ext2_find_free_inode_in_group(
     ext2_filesystem_t *fs,
     uint8_t *cache,
     uint32_t *linear_index,
-    bool_t skip_reserved)
+    int skip_reserved)
 {
     for ((*linear_index) = 0; (*linear_index) < fs->superblock.inodes_per_group; ++(*linear_index)) {
         // If we need to skip the reserved inodes, we skip the round if the
@@ -770,9 +776,9 @@ static inline bool_t ext2_find_free_inode_in_group(
             continue;
         // Check if the entry is free.
         if (!ext2_check_bitmap_bit(cache, *linear_index))
-            return true;
+            return 1;
     }
-    return false;
+    return 0;
 }
 
 /// @brief Searches for a free inode inside the Block Group Descriptor Table (BGDT).
@@ -780,8 +786,8 @@ static inline bool_t ext2_find_free_inode_in_group(
 /// @param cache the cache from which we read the bgdt data.
 /// @param group_index the output variable where we store the group index.
 /// @param linear_index the output variable where we store the linear indes to the free inode.
-/// @return true if we found a free inode, false otherwise.
-static inline bool_t ext2_find_free_inode(
+/// @return 1 if we found a free inode, 0 otherwise.
+static inline int ext2_find_free_inode(
     ext2_filesystem_t *fs,
     uint8_t *cache,
     uint32_t *group_index,
@@ -795,7 +801,7 @@ static inline bool_t ext2_find_free_inode(
         // Find the first free inode. We need to ask to skip reserved inodes,
         // only if we are in group 0.
         if (ext2_find_free_inode_in_group(fs, cache, linear_index, (*group_index) == 0))
-            return true;
+            return 1;
     }
     // Get the group and bit index of the first free block.
     for ((*group_index) = 0; (*group_index) < fs->block_groups_count; ++(*group_index)) {
@@ -804,15 +810,15 @@ static inline bool_t ext2_find_free_inode(
             // Read the block bitmap.
             if (ext2_read_block(fs, fs->block_groups[(*group_index)].inode_bitmap, cache) < 0) {
                 pr_err("Failed to read the inode bitmap for group `%d`.\n", (*group_index));
-                return false;
+                return 0;
             }
             // Find the first free inode. We need to ask to skip reserved
             // inodes, only if we are in group 0.
             if (ext2_find_free_inode_in_group(fs, cache, linear_index, (*group_index) == 0))
-                return true;
+                return 1;
         }
     }
-    return false;
+    return 0;
 }
 
 /// @brief Searches for a free block inside the group data loaded inside the cache.
@@ -820,23 +826,23 @@ static inline bool_t ext2_find_free_inode(
 /// @param cache the cache from which we read the bgdt data.
 /// @param group_index the output variable where we store the group index.
 /// @param linear_index the output variable where we store the linear indes to the free block.
-/// @return true if we found a free block, false otherwise.
-static inline bool_t ext2_find_free_block_in_group(ext2_filesystem_t *fs, uint8_t *cache, uint32_t *linear_index)
+/// @return 1 if we found a free block, 0 otherwise.
+static inline int ext2_find_free_block_in_group(ext2_filesystem_t *fs, uint8_t *cache, uint32_t *linear_index)
 {
     for ((*linear_index) = 0; (*linear_index) < fs->superblock.blocks_per_group; ++(*linear_index)) {
         // Check if the entry is free.
         if (!ext2_check_bitmap_bit(cache, *linear_index))
-            return true;
+            return 1;
     }
-    return false;
+    return 0;
 }
 
 /// @brief Searches for a free block.
 /// @param fs the ext2 filesystem structure.
 /// @param cache the cache from which we read the bgdt data.
 /// @param linear_index the output variable where we store the linear indes to the free block.
-/// @return true if we found a free block, false otherwise.
-static inline bool_t ext2_find_free_block(
+/// @return 1 if we found a free block, 0 otherwise.
+static inline int ext2_find_free_block(
     ext2_filesystem_t *fs,
     uint8_t *cache,
     uint32_t *group_index,
@@ -849,14 +855,14 @@ static inline bool_t ext2_find_free_block(
             // Read the block bitmap.
             if (ext2_read_block(fs, fs->block_groups[(*group_index)].block_bitmap, cache) < 0) {
                 pr_err("Failed to read the block bitmap for group `%d`.\n", (*group_index));
-                return false;
+                return 0;
             }
             // Find the first free block.
             if (ext2_find_free_block_in_group(fs, cache, linear_index))
-                return true;
+                return 1;
         }
     }
-    return false;
+    return 0;
 }
 
 /// @brief Reads the superblock from the block device associated with this filesystem.
@@ -1614,8 +1620,8 @@ ext2_dirent_t *ext2_direntry_iterator_get(ext2_direntry_iterator_t *iterator)
 
 /// @brief Check if the iterator is valid.
 /// @param iterator the iterator to check.
-/// @return true if valid, false otherwise.
-bool_t ext2_direntry_iterator_valid(ext2_direntry_iterator_t *iterator)
+/// @return 1 if valid, 0 otherwise.
+int ext2_direntry_iterator_valid(ext2_direntry_iterator_t *iterator)
 {
     return iterator->direntry != NULL;
 }
@@ -1679,14 +1685,14 @@ void ext2_direntry_iterator_next(ext2_direntry_iterator_t *iterator)
     iterator->direntry = ext2_direntry_iterator_get(iterator);
 }
 
-static inline bool_t ext2_directory_is_empty(ext2_filesystem_t *fs, uint8_t *cache, ext2_inode_t *inode)
+static inline int ext2_directory_is_empty(ext2_filesystem_t *fs, uint8_t *cache, ext2_inode_t *inode)
 {
     ext2_direntry_iterator_t it = ext2_direntry_iterator_begin(fs, cache, inode);
     for (; ext2_direntry_iterator_valid(&it); ext2_direntry_iterator_next(&it)) {
         if (it.direntry->inode != 0)
-            return false;
+            return 0;
     }
-    return true;
+    return 1;
 }
 
 // ============================================================================
@@ -2344,6 +2350,7 @@ static vfs_file_t *ext2_open(const char *path, int flags, mode_t mode)
             pr_err("A file or directory already exists at `%s` (O_CREAT | O_EXCL).\n", absolute_path);
             return NULL;
         } else if (bitmask_check(flags, O_DIRECTORY) && (direntry.file_type != ext2_file_type_directory)) {
+            pr_err("That is not a directory.");
             errno = ENOTDIR;
             return NULL;
         }
@@ -2366,7 +2373,10 @@ static vfs_file_t *ext2_open(const char *path, int flags, mode_t mode)
         return NULL;
     }
 
+    ext2_dump_inode(&inode);
+
     if (!ext2_valid_permissions(flags, inode.mode, inode.uid, inode.gid)) {
+        pr_err("Task does not have access permission.\n");
         errno = EACCES;
         return NULL;
     }
@@ -2664,7 +2674,7 @@ static ssize_t ext2_getdents(vfs_file_t *file, dirent_t *dirp, off_t doff, size_
         return -ENOENT;
     }
     uint32_t current = 0;
-    ssize_t written = 0;
+    ssize_t written  = 0;
     // Allocate the cache.
     uint8_t *cache = kmem_cache_alloc(fs->ext2_buffer_cache, GFP_KERNEL);
     // Clean the cache.

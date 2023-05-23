@@ -64,17 +64,20 @@ int main(int argc, char **argv)
         if (!strcmp(argv[3], "-s")) {
             struct semid_ds sem;
             union semun temp;
+            int semid;
             long ret;
             // Prepare the data structure.
             temp.buf = &sem;
+            // Initialize the semid.
+            semid = atoi(argv[2]);
             // Retrive the statistics.
-            ret = semctl(atoi(argv[2]), 0, IPC_STAT, &temp);
+            ret = semctl(semid, 0, IPC_STAT, &temp);
             // Check if we succeded.
             if (!ret) {
                 //ret          = semctl(atoi(argv[2]), 0, GETNSEMS, NULL);
                 //temp.buf->sems = (struct sem *)malloc(sizeof(struct sem) * ret);
                 printf("key        semid      owner      perms      nsems\n");
-                printf("%10d %10d %10d %10d %d\n", sem.sem_perm.key, sem.semid, sem.sem_perm.uid, sem.sem_perm.mode, sem.sem_nsems);
+                printf("%10d %10d %10d %10d %d\n", sem.sem_perm.key, semid, sem.sem_perm.uid, sem.sem_perm.mode, sem.sem_nsems);
                 return 0;
             }
             return 1;

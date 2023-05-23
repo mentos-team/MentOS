@@ -87,8 +87,8 @@ set(TESTS
     t_gid.c
     # Test semaphores.
     t_semget.c
-    t_sem1.c
     t_semflg.c
+    t_semop.c
     # Test scheduling feedback tests.
     t_schedfb.c
 )

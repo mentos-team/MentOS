@@ -1,4 +1,10 @@
-//test
+/// @file t_semget.c
+/// @brief This program creates a son and then performs a blocking operation on
+/// a semaphore. The son sleeps for  five seconds and then it wakes up his
+/// father and then it deletes the semaphore.
+/// @copyright (c) 2014-2023 This file is distributed under the MIT License.
+/// See LICENSE.md for details.
+
 #include "sys/unistd.h"
 #include "sys/errno.h"
 #include "sys/sem.h"
@@ -7,23 +13,7 @@
 #include "fcntl.h"
 #include "stdio.h"
 
-/*
-Testing Semaphores.
-This program creates a son and then performs a blocking operation on a semaphore. The son sleeps for 
-five seconds and then it wakes up his father and then it deletes the semaphore.
-
-*/
-
-void semid_print(struct semid_ds *temp)
-{
-    printf("pid, IPC_KEY, Semid, semop, change: %d, %d, %d, %d, %d\n", temp->sem_perm.uid, temp->sem_perm.key, temp->semid, temp->sem_otime, temp->sem_ctime);
-    for (int i = 0; i < (temp->sem_nsems); i++) {
-        printf("%d semaphore:\n", i + 1);
-        printf("value: %d, pid %d, process waiting %d\n", temp->sems[i].sem_val, temp->sems[i].sem_pid, temp->sems[i].sem_zcnt);
-    }
-}
-
-int main()
+int main(int argc, char *argv[])
 {
     struct sembuf op_child;
     struct sembuf op_father[3];

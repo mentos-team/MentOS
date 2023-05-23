@@ -17,14 +17,15 @@
 /// @brief List of commands for semctl function.
 /// @{
 
-#define GETPID                11  ///< Get sempid.
-#define GETVAL                12  ///< Get semval.
-#define GETALL                13  ///< Get all semval's.
-#define GETNCNT               14  ///< Get semncnt.
-#define GETZCNT               15  ///< Get semzcnt.
-#define SETVAL                16  ///< Set semval.
-#define SETALL                17  ///< Set all semval's.
-#define GETNSEMS              19  ///< Get sem_nsems
+#define GETPID   11 ///< Get sempid.
+#define GETVAL   12 ///< Get semval.
+#define GETALL   13 ///< Get all semval's.
+#define GETNCNT  14 ///< Get semncnt.
+#define GETZCNT  15 ///< Get semzcnt.
+#define SETVAL   16 ///< Set semval.
+#define SETALL   17 ///< Set all semval's.
+#define SEM_STAT 18 ///< Return a semid_ds structure.
+#define SEM_INFO 19 ///< Return a seminfo structure.
 
 /// }@
 
@@ -44,12 +45,12 @@ union semun {
 
 /// @brief Single Semaphore.
 struct sem {
-    /// @brief Semaphore Value.
-    unsigned short sem_val;
     /// @brief Process ID of the last operation.
     pid_t sem_pid;
-    /// @brief Number of processes waiting of semaphore.
-    //unsigned short  semncnt;
+    /// @brief Semaphore Value.
+    unsigned short sem_val;
+    /// @brief Number of processes waiting for the semaphore.
+    unsigned short sem_ncnt;
     /// @brief Number of processes waiting for the value to become 0
     unsigned short sem_zcnt;
 };
@@ -63,7 +64,7 @@ struct semid_ds {
     /// @brief Last change time.
     time_t sem_ctime;
     /// @brief Number of semaphores in set.
-    unsigned long sem_nsems;
+    unsigned short sem_nsems;
 };
 
 /// @brief Buffer to use with the semaphore IPC.
@@ -77,6 +78,10 @@ struct sembuf {
 };
 
 #ifdef __KERNEL__
+
+/// @brief Initializes the semaphore system.
+/// @return int 
+int sem_init();
 
 /// @brief Get a System V semaphore set identifier.
 /// @param key can be used either to obtain the identifier of a previously

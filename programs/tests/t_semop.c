@@ -1,4 +1,8 @@
-//test
+/// @file t_semop.c
+/// @brief Tests semop between processes.
+/// @copyright (c) 2014-2023 This file is distributed under the MIT License.
+/// See LICENSE.md for details.
+
 #include "sys/sem.h"
 #include "stdio.h"
 #include "sys/ipc.h"
@@ -8,21 +12,7 @@
 #include "sys/unistd.h"
 #include "fcntl.h"
 
-/*
-First test of System V Semaphores.
-Correct output should be: Corso di Sistemi Operativi.
-*/
-
-void semid_print(struct semid_ds *temp)
-{
-    printf("pid, IPC_KEY, Semid, semop, change: %d, %d, %d, %d, %d\n", temp->sem_perm.uid, temp->sem_perm.key, temp->semid, temp->sem_otime, temp->sem_ctime);
-    for (int i = 0; i < (temp->sem_nsems); i++) {
-        printf("%d semaphore:\n", i + 1);
-        printf("value: %d, pid %d, process waiting %d\n", temp->sems[i].sem_val, temp->sems[i].sem_pid, temp->sems[i].sem_zcnt);
-    }
-}
-
-int main()
+int main(int argc, char *argv[])
 {
     struct sembuf sops[6];
     sops[0].sem_num = 0;
@@ -52,7 +42,7 @@ int main()
     int status;
 
     //create a semaphore set
-    int semid = semget(IPC_PRIVATE, 4, IPC_CREAT | IPC_EXCL | S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
+    int semid = semget(17, 4, IPC_CREAT | IPC_EXCL | S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
 
     //set the values of the semaphores
     unsigned short values[] = { 0, 0, 0, 1 };
