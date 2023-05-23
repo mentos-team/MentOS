@@ -54,12 +54,25 @@
 ///@brief A value to compute the semid value.
 int semid_assign = 0;
 
+typedef struct {
+    /// @brief Semaphore ID associated to the semaphore set.
+    int id;
+    /// @brief The semaphore data strcutre.
+    struct semid_ds semid;
+    /// @brief List of all the semaphores.
+    struct sem *sems;
+} sem_info_t;
+
 /// @brief List of all current active semaphores.
 list_t semaphores_list = {
     .head = NULL,
     .tail = NULL,
     .size = 0
 };
+
+// ============================================================================
+// KEY GENERATION (Private)
+// ============================================================================
 
 /// Seed used to generate random numbers.
 static int ipc_sem_rseed = 0;
@@ -75,6 +88,10 @@ static inline int ipc_sem_rand()
 {
     return ipc_sem_rseed = (ipc_sem_rseed * 1103515245U + 12345U) & IPC_SEM_RAND_MAX;
 }
+
+// ============================================================================
+// MEMORY MANAGEMENT (Private)
+// ============================================================================
 
 /// @brief Allocates the memory for an array of semaphores.
 /// @param nsems number of semaphores in the array.
@@ -107,32 +124,28 @@ static inline void __sem_init(struct sem *ptr)
     ptr->sem_zcnt = 0;
 }
 
-/// @brief Copies a semaphore from source to destination.
-/// @param src source semaphore.
-/// @param dst destination semaphore.
-static inline void __sem_copy(struct sem *src, struct sem *dst)
-{
-    assert(src && "Received a NULL source semaphore.");
-    assert(dst && "Received a NULL destination semaphore.");
-    memcpy(dst, src, sizeof(struct sem));
-}
-
 /// @brief Allocates the memory for a semid structure.
 /// @return a pointer to the allocated semid structure.
-static inline struct semid_ds *__semid_alloc()
+static inline struct sem_info_t *__sem_info_alloc(int nsems)
 {
     // Allocate the memory.
-    struct semid_ds *ptr = (struct semid_ds *)kmalloc(sizeof(struct semid_ds));
+    sem_info_t *ptr = (sem_info_t *)kmalloc(sizeof(sem_info_t));
     // Check the allocated memory.
     assert(ptr && "Failed to allocate memory for a semid structure.");
     // Clean the memory.
-    memset(ptr, 0, sizeof(struct semid_ds));
+    memset(ptr, 0, sizeof(sem_info_t));
+    // Allocate the memory for semaphores.
+    ptr->sems = (struct sem *)kmalloc(sizeof(struct sem) * nsems);
+    // Check the allocated memory.
+    assert(ptr && "Failed to allocate memory for a semid structure.");
+    // Clean the memory.
+    memset(ptr, 0, sizeof(sem_info_t));
     return ptr;
 }
 
 /// @brief Frees the memory of a semid structure.
 /// @param ptr pointer to the semid structure.
-static inline void __semid_dealloc(struct semid_ds *ptr)
+static inline void __sem_info_dealloc(struct semid_ds *ptr)
 {
     assert(ptr && "Received a NULL pointer.");
     // Deallocate the array of semaphores.
@@ -146,7 +159,7 @@ static inline void __semid_dealloc(struct semid_ds *ptr)
 /// @param key IPC_KEY associated with the set of semaphores
 /// @param nsems number of semaphores to initialize
 /// @todo The way we compute the semid is a temporary solution.
-static inline void __semid_init(struct semid_ds *ptr, key_t key, int nsems, int semflg)
+static inline void __sem_info_init(struct semid_ds *ptr, key_t key, int nsems, int semflg)
 {
     assert(ptr && "Received a NULL pointer.");
     ptr->sem_perm  = register_ipc(key, semflg & 0x1FF);
@@ -159,17 +172,9 @@ static inline void __semid_init(struct semid_ds *ptr, key_t key, int nsems, int 
     }
 }
 
-/// @brief Copies a semid from source to destination.
-/// @param src source semid.
-/// @param dst destination semid.
-static inline void __semid_copy(struct semid_ds *src, struct semid_ds *dst)
-{
-    assert(src && "Received a NULL source semid.");
-    assert(src->sems && "Received a source semid with NULL sems.");
-    assert(dst && "Received a NULL destination semid.");
-    assert(dst->sems && "Received a destination semid with NULL sems.");
-    memcpy(dst, src, sizeof(struct semid_ds));
-}
+// ============================================================================
+// SEARCH FUNCTIONS (Private)
+// ============================================================================
 
 /// @brief Searches for the semaphore with the given id.
 /// @param semid the id we are searching.
@@ -206,6 +211,10 @@ static inline struct semid_ds *__find_semaphore_by_key(key_t key)
     }
     return NULL;
 }
+
+// ============================================================================
+// SYSTEM FUNCTIONS
+// ============================================================================
 
 long sys_semget(key_t key, int nsems, int semflg)
 {
@@ -390,6 +399,11 @@ long sys_semctl(int semid, int semnum, int cmd, union semun *arg)
             pr_err("The array of semaphores inside the buffer is NULL.\n");
             return -EINVAL;
         }
+        // Check permissions.
+        if (!ipc_valid_permissions(O_RDONLY, sem_set->sem_perm)) {
+            pr_err("The calling process does not have read permission to access the set.\n");
+            return -EACCES;
+        }
         // Copying all the data.
         arg->buf->sem_perm  = sem_set->sem_perm;
         arg->buf->semid     = sem_set->semid;
@@ -508,6 +522,10 @@ long sys_semctl(int semid, int semnum, int cmd, union semun *arg)
     return 0;
 }
 
+// ============================================================================
+// PROCFS FUNCTIONS
+// ============================================================================
+
 ssize_t procipc_sem_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyte)
 {
     if (!file) {
@@ -557,5 +575,3 @@ ssize_t procipc_sem_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyte
     }
     return write_count;
 }
-
-///! @endcond

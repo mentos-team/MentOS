@@ -58,16 +58,12 @@ struct sem {
 struct semid_ds {
     /// @brief Ownership and permissions.
     struct ipc_perm sem_perm;
-    /// @brief Semaphore ID associated to the semaphore set.
-    int semid;
     /// @brief Last semop time.
     time_t sem_otime;
     /// @brief Last change time.
     time_t sem_ctime;
     /// @brief Number of semaphores in set.
     unsigned long sem_nsems;
-    /// @brief List of all the semaphores.
-    struct sem *sems;
 };
 
 /// @brief Buffer to use with the semaphore IPC.
