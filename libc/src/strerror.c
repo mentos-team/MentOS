@@ -76,7 +76,7 @@ char *strerror(int errnum)
 #endif
 #ifdef EAGAIN
     case EAGAIN:
-        strcpy(error, "No more processes");
+        strcpy(error, "Resource temporarily unavailable");
         break;
 #endif
 #ifdef ENOMEM

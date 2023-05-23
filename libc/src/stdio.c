@@ -216,4 +216,6 @@ void perror(const char *s)
         putchar(' ');
     }
     puts(strerror(errno));
+    puts("\n");
+    puts("\n");
 }
