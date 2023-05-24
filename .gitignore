@@ -117,3 +117,6 @@ files/bin/**
 
 # ISO creation files.
 iso/boot/*.bin
+
+# ClangD stuff.
+.cache

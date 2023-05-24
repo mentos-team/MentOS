@@ -412,7 +412,6 @@ ssize_t procipc_shm_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyte
         return -ENOENT;
     }
     size_t buffer_len = 0, read_pos = 0, write_count = 0, ret = 0;
-    struct semid_ds *entry = NULL;
     char buffer[BUFSIZ];
 
     // Prepare a buffer.

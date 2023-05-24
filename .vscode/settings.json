@@ -1,8 +1,0 @@
-{
-    "files.associations": {
-        "*.h": "c",
-        "*.c": "c"
-    },
-    "cmake.configureOnOpen": false,
-    "C_Cpp.intelliSenseEngine" : "Tag Parser"
-}

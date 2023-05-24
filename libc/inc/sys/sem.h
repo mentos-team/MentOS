@@ -63,6 +63,8 @@ struct semid_ds {
     time_t sem_otime;
     /// @brief Last change time.
     time_t sem_ctime;
+    /// @brief List of all the semaphores.
+    struct sem *sem_base;
     /// @brief Number of semaphores in set.
     unsigned short sem_nsems;
 };
