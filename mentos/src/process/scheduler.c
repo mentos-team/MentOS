@@ -9,24 +9,17 @@
 #define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
 #include "io/debug.h"                    // Include debugging functions.
 
-#include "assert.h"
-#include "strerror.h"
-#include "fs/vfs.h"
-#include "descriptor_tables/tss.h"
-#include "devices/fpu.h"
 #include "process/scheduler_feedback.h"
 #include "process/scheduler.h"
 #include "process/prio.h"
 #include "process/wait.h"
-#include "mem/kheap.h"
-#include "system/panic.h"
-#include "time.h"
-#include "sys/errno.h"
-#include "klib/list_head.h"
-#include "mem/paging.h"
+#include "descriptor_tables/tss.h"
 #include "hardware/timer.h"
-#include "math.h"
-#include "stdio.h"
+#include "system/panic.h"
+#include "sys/errno.h"
+#include "strerror.h"
+#include "assert.h"
+#include "fs/vfs.h"
 
 /// @brief          Assembly function setting the kernel stack to jump into
 ///                 location in Ring 3 mode (USER mode).
@@ -523,7 +516,7 @@ void sys_exit(int exit_code)
     if (runqueue.curr->parent) {
         int ret = sys_kill(runqueue.curr->parent->pid, SIGCHLD);
         if (ret == -1) {
-            printf("[%d] %5d failed sending signal %d : %s\n", ret, runqueue.curr->parent->pid,
+            pr_err("[%d] %5d failed sending signal %d : %s\n", ret, runqueue.curr->parent->pid,
                    SIGCHLD, strerror(errno));
         }
     }

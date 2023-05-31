@@ -437,13 +437,14 @@ static inline uint8_t ata_status_wait(ata_device_t *dev, int timeout)
     uint8_t status;
     if (timeout > 0) {
         while (timeout--) {
-            if (!bit_check((status = inportb(dev->io_reg.status)), ata_status_bsy))
+            status = inportb(dev->io_reg.status);
+            if (!bit_check(status, ata_status_bsy))
                 break;
         }
     } else {
-        while (bit_check((status = inportb(dev->io_reg.status)), ata_status_bsy)) {
-            cpu_relax();
-        }
+        do {
+            status = inportb(dev->io_reg.status);
+        } while (bit_check(status, ata_status_bsy));
     }
     return status;
 }
