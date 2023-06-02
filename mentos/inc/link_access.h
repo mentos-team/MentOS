@@ -5,15 +5,17 @@
 
 #pragma once
 
-#ifdef __APPLE__
+// #ifdef __APPLE__
 
-/// @brief Define variables pointing to external symbols, specifically
-///        to the .data section of a linked object file.
-#define EXTLD(NAME) extern const unsigned char _section$__DATA__##NAME[];
-/// Provide access to the .data of the linked object.
-#define LDVAR(NAME) _section$__DATA__##NAME
+// /// @brief Define variables pointing to external symbols, specifically
+// ///        to the .data section of a linked object file.
+// #define EXTLD(NAME) extern const unsigned char _section$__DATA__##NAME[];
+// /// Provide access to the .data of the linked object.
+// #define LDVAR(NAME) _section$__DATA__##NAME
 
-#elif (defined __WIN32__) // mingw
+// #elif (defined __WIN32__) // mingw
+
+#if (defined __WIN32__) // mingw
 
 /// @brief Define variables pointing to external symbols, specifically
 ///        to the .data section of a linked object file.
