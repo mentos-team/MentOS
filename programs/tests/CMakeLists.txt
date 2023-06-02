@@ -121,7 +121,11 @@ foreach(TEST ${TESTS})
     add_dependencies(${TARGET_NAME} libc)
 
     # Add the linking properties.
-    set_target_properties(${TARGET_NAME} PROPERTIES LINK_FLAGS "-Wl,-Ttext=0x${TEXADDR_FIRST}${TEXADDR_INFIX}0000,-e_start")
+    if((${CMAKE_HOST_SYSTEM_NAME} STREQUAL "Darwin") OR APPLE)
+        set_target_properties(${TARGET_NAME} PROPERTIES LINK_FLAGS "-Wl,-segaddr __TEXT 0x${TEXADDR_FIRST}${TEXADDR_INFIX}0000")
+    else()
+        set_target_properties(${TARGET_NAME} PROPERTIES LINK_FLAGS "-Wl,-Ttext 0x${TEXADDR_FIRST}${TEXADDR_INFIX}0000")
+    endif()
 
     # Add the final target that strips the debugging symbols from the program.
     add_custom_command(TARGET ${TARGET_NAME}
