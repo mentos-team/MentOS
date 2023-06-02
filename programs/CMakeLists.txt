@@ -53,7 +53,6 @@ endif(CMAKE_BUILD_TYPE STREQUAL "Debug")
 # =============================================================================
 # BUILD
 # =============================================================================
-
 # Set the directory where the compiled binaries will be placed.
 set(MENTOS_BIN_DIR ${CMAKE_SOURCE_DIR}/files/bin)
 
@@ -92,50 +91,26 @@ set(PROGRAMS
 foreach(PROGRAM ${PROGRAMS})
     # Prepare the program name.
     string(REPLACE ".c" "" PROGRAM_NAME ${PROGRAM})
-
     # Set the name of the target.
     set(TARGET_NAME prog_${PROGRAM_NAME})
-
-    # Randomize .text section address so when debugging symbols don't clash.
-    # The allowed range is from 256MB to 2.75GB
-    # Minimum allowed address: 0x10000000
-    # Max allowed address: 0xB0000000
-    string(MD5 RAND_HASH ${PROGRAM})
-    string(SUBSTRING ${RAND_HASH} 1 3 TEXADDR_INFIX)
-    string(RANDOM LENGTH 1 ALPHABET 0123456789AB RANDOM_SEED ${RAND_HASH} TEXADDR_FIRST)
-
     # Create the target.
     add_executable(${TARGET_NAME} ${PROGRAM})
-
     # Add the includes.
     target_include_directories(${TARGET_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/libc/inc)
-
     # Link the libc library.
     target_link_libraries(${TARGET_NAME} ${CMAKE_BINARY_DIR}/libc/libc.a)
-
     # Add the dependency to libc.
     add_dependencies(${TARGET_NAME} libc)
-
-    # Add the linking properties.
-    if((${CMAKE_HOST_SYSTEM_NAME} STREQUAL "Darwin") OR APPLE)
-        set_target_properties(${TARGET_NAME} PROPERTIES LINK_FLAGS "-Wl,-segaddr __TEXT 0x${TEXADDR_FIRST}${TEXADDR_INFIX}0000")
-    else()
-        set_target_properties(${TARGET_NAME} PROPERTIES LINK_FLAGS "-Wl,-Ttext 0x${TEXADDR_FIRST}${TEXADDR_INFIX}0000")
-    endif()
-
-    # Add the final target that strips the debugging symbols from the program.
-    add_custom_command(TARGET ${TARGET_NAME}
+    # Copy the progam to the bin folder.
+    add_custom_command(
+        TARGET ${TARGET_NAME}
         BYPRODUCTS ${MENTOS_BIN_DIR}/${PROGRAM_NAME}
-        COMMAND mkdir -p  ${MENTOS_BIN_DIR}
-        COMMAND strip --strip-debug ${PROJECT_BINARY_DIR}/${TARGET_NAME} -o ${MENTOS_BIN_DIR}/${PROGRAM_NAME}
+        COMMAND mkdir -p ${MENTOS_BIN_DIR}
+        COMMAND cp ${PROJECT_BINARY_DIR}/${TARGET_NAME} ${MENTOS_BIN_DIR}/${PROGRAM_NAME}
         DEPENDS ${TARGET_NAME}
     )
-
-    # Log the entry.
-    message(VERBOSE "Program ${PROGRAM_NAME}, `.text` at 0x${TEXADDR_FIRST}${TEXADDR_INFIX}0000")
-
     # Append the program name to the list of all the executables.
-    list(APPEND ALL_EXECUTABLES ${PROGRAM_NAME})
+    list(APPEND ALL_EXECUTABLES ${TARGET_NAME})
 endforeach()
 
 # Add the overall target that builds all the programs.

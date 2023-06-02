@@ -148,10 +148,10 @@ add_custom_target(
 add_custom_target(
     gdbinit
     BYPRODUCTS ${CMAKE_BINARY_DIR}/.gdbinit
-    COMMAND bash ${CMAKE_SOURCE_DIR}/scripts/get_text_address.sh ${CMAKE_BINARY_DIR}/mentos/kernel.bin > ${CMAKE_BINARY_DIR}/.gdbinit
-    COMMAND bash ${CMAKE_SOURCE_DIR}/scripts/get_text_address.sh ${CMAKE_BINARY_DIR}/mentos/kernel-bootloader.bin >> ${CMAKE_BINARY_DIR}/.gdbinit
-    COMMAND bash ${CMAKE_SOURCE_DIR}/scripts/get_text_address.sh ${CMAKE_BINARY_DIR}/programs/tests/test_* >> ${CMAKE_BINARY_DIR}/.gdbinit
-    COMMAND bash ${CMAKE_SOURCE_DIR}/scripts/get_text_address.sh ${CMAKE_BINARY_DIR}/programs/prog_* >> ${CMAKE_BINARY_DIR}/.gdbinit
+    COMMAND echo "add-symbol-file ${CMAKE_BINARY_DIR}/mentos/kernel.bin" > ${CMAKE_BINARY_DIR}/.gdbinit
+    COMMAND echo "add-symbol-file ${CMAKE_BINARY_DIR}/mentos/kernel-bootloader.bin" >> ${CMAKE_BINARY_DIR}/.gdbinit
+    COMMAND ls -1 ${CMAKE_BINARY_DIR}/programs/tests/test_* | sed 's/^/add-symbol-file /' >> ${CMAKE_BINARY_DIR}/.gdbinit
+    COMMAND ls -1 ${CMAKE_BINARY_DIR}/programs/prog_* | sed 's/^/add-symbol-file /' >> ${CMAKE_BINARY_DIR}/.gdbinit
     COMMAND echo "break boot.c: boot_main" >> ${CMAKE_BINARY_DIR}/.gdbinit
     COMMAND echo "break kernel.c: kmain" >> ${CMAKE_BINARY_DIR}/.gdbinit
     COMMAND echo "target remote localhost:1234" >> ${CMAKE_BINARY_DIR}/.gdbinit
