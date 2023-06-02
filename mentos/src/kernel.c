@@ -301,7 +301,6 @@ int kmain(boot_info_t *boot_informations)
         return 1;
     }
     print_ok();
-    
 
     //==========================================================================
     pr_notice("Initialize IPC/SEM system...\n");
@@ -359,6 +358,7 @@ int kmain(boot_info_t *boot_informations)
     print_ok();
 
     //==========================================================================
+#ifdef ENABLE_SCHEDULER_FEEDBACK
     pr_notice("Initialize scheduler feedback system...\n");
     printf("Initialize scheduler feedback system...");
     if (!scheduler_feedback_init()) {
@@ -366,6 +366,7 @@ int kmain(boot_info_t *boot_informations)
         return 1;
     }
     print_ok();
+#endif
 
     //==========================================================================
     pr_notice("Initialize scheduler feedback system (2)...\n");

@@ -388,11 +388,12 @@ task_struct *scheduler_pick_next_task(runqueue_t *runqueue)
     // Update the last context switch time of the next task.
     next->se.exec_start = timer_get_ticks();
 
+#ifdef ENABLE_SCHEDULER_FEEDBACK
     // Update the feedback statistics for the new scheduled task.
     scheduler_feedback_task_update(next);
     // Update the overall feedback system.
     scheduler_feedback_update();
-
+#endif
     return next;
 }
 

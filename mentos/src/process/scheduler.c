@@ -105,19 +105,24 @@ void scheduler_enqueue_task(task_struct *process)
     // Increment the number of active processes.
     ++runqueue.num_active;
 
+#ifdef ENABLE_SCHEDULER_FEEDBACK
     scheduler_feedback_task_add(process);
+#endif
 }
 
 void scheduler_dequeue_task(task_struct *process)
 {
     assert(process && "Received a NULL process.");
-    scheduler_feedback_task_remove(process->pid);
     // Delete the process from the list of running processes.
     list_head_remove(&process->run_list);
     // Decrement the number of active processes.
     --runqueue.num_active;
     if (process->se.is_periodic)
         runqueue.num_periodic--;
+        
+#ifdef ENABLE_SCHEDULER_FEEDBACK
+    scheduler_feedback_task_remove(process->pid);
+#endif
 }
 
 void scheduler_run(pt_regs *f)
