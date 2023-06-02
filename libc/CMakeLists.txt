@@ -23,16 +23,11 @@ endif(NOT ASM_COMPILER)
 # Set the asm compiler.
 set(CMAKE_ASM_COMPILER ${ASM_COMPILER})
 # Set the assembly compiler flags.
-set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -f elf")
-set(CMAKE_ASM_COMPILE_OBJECT "<CMAKE_ASM_COMPILER> <FLAGS> -o <OBJECT> <SOURCE>")
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-    set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -g")
-    set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -O0")
-    set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -F dwarf")
-elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
-    set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -g")
-    set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -O3")
-endif(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    set(CMAKE_ASM_COMPILE_OBJECT "<CMAKE_ASM_COMPILER> -f elf -g -O0 -F dwarf -o <OBJECT> <SOURCE>")
+else()
+    set(CMAKE_ASM_COMPILE_OBJECT "<CMAKE_ASM_COMPILER> -f elf -g -O3 -o <OBJECT> <SOURCE>")
+endif()
 
 # =============================================================================
 # C WARNINGs
