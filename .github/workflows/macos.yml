@@ -26,10 +26,12 @@ jobs:
         steps:
             - name: Clone repository
               uses: actions/checkout@v3
-            #- name: Install dependencies
-            #  run: |
-            #      brew update
-            #      brew install x86_64-elf-binutils x86_64-elf-gcc git cmake qemu nasm e2fsprogs
+            - name: Install dependencies
+              run: |
+                brew tap nanovms/homebrew-x86_64-elf
+                brew install nanovms/x86_64-elf/x86_64-elf-binutils
+              #   brew update
+              #    brew install x86_64-elf-binutils x86_64-elf-gcc git cmake qemu nasm e2fsprogs
             - name: Build
               run: |
                   cmake -B build
