@@ -9,24 +9,17 @@
 #define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
 #include "io/debug.h"                    // Include debugging functions.
 
-#include "assert.h"
-#include "strerror.h"
-#include "fs/vfs.h"
-#include "descriptor_tables/tss.h"
-#include "devices/fpu.h"
 #include "process/scheduler_feedback.h"
 #include "process/scheduler.h"
 #include "process/prio.h"
 #include "process/wait.h"
-#include "mem/kheap.h"
-#include "system/panic.h"
-#include "time.h"
-#include "sys/errno.h"
-#include "klib/list_head.h"
-#include "mem/paging.h"
+#include "descriptor_tables/tss.h"
 #include "hardware/timer.h"
-#include "math.h"
-#include "stdio.h"
+#include "system/panic.h"
+#include "sys/errno.h"
+#include "strerror.h"
+#include "assert.h"
+#include "fs/vfs.h"
 
 /// @brief          Assembly function setting the kernel stack to jump into
 ///                 location in Ring 3 mode (USER mode).
@@ -102,6 +95,7 @@ task_struct *scheduler_get_running_process(pid_t pid)
 
 void scheduler_enqueue_task(task_struct *process)
 {
+    assert(process && "Received a NULL process.");
     // If current_process is NULL, then process is the current process.
     if (runqueue.curr == NULL) {
         runqueue.curr = process;
@@ -116,6 +110,7 @@ void scheduler_enqueue_task(task_struct *process)
 
 void scheduler_dequeue_task(task_struct *process)
 {
+    assert(process && "Received a NULL process.");
     scheduler_feedback_task_remove(process->pid);
     // Delete the process from the list of running processes.
     list_head_remove(&process->run_list);
@@ -215,7 +210,7 @@ void scheduler_enter_user_jmp(uintptr_t location, uintptr_t stack)
 /// @param mode The type of wait (TASK_INTERRUPTIBLE or TASK_UNINTERRUPTIBLE).
 /// @param sync Specifies if the wakeup should be synchronous.
 /// @return 1 on success, 0 on failure.
-static inline int try_to_wake_up(task_struct *process, int mode, int sync)
+static inline int try_to_wake_up(task_struct *process, unsigned mode, int sync)
 {
     // Only tasks in the state TASK_UNINTERRUPTIBLE can be woke up
     if (process->state == TASK_UNINTERRUPTIBLE || process->state == TASK_STOPPED) {
@@ -236,27 +231,26 @@ wait_queue_entry_t *sleep_on(wait_queue_head_t *wq)
 {
     // Save the sleeping process registers state
     task_struct *sleeping_task = scheduler_get_current_process();
-
+    // Stops task from runqueue making it unrunnable.
+    sleeping_task->state = TASK_UNINTERRUPTIBLE;
 #if 0
-    pt_regs* f = get_current_interrupt_stack_frame();
+    // Get the interrupt registers.
+    pt_regs *f = get_current_interrupt_stack_frame();
+    // Store its context.
     scheduler_store_context(f, sleeping_task);
-
     // Select next process in the runqueue as the current, restore it's context,
     // we assume that the first process is init wich does not sleep (I hope).
     // This is necessary to make the scheduler_run() in syscall_handler work.
-    task_struct *next = list_entry(runqueue.queue.next, task_struct, run_list);
+    task_struct *next = scheduler_pick_next_task(&runqueue);
     assert((next != sleeping_task) && "The next selected process in the runqueue is the sleeping process");
     scheduler_restore_context(next, f);
 #endif
-
-    // Stops task from runqueue making it unrunnable
-    sleeping_task->state = TASK_UNINTERRUPTIBLE;
-
-    // Add sleeping process to sleep wait queue
+    // Allocate the wait_queue entry.
     wait_queue_entry_t *wait_entry = kmalloc(sizeof(struct wait_queue_entry_t));
+    // Initialize the entry.
     init_waitqueue_entry(wait_entry, sleeping_task);
+    // Add sleeping process to sleep wait queue.
     add_wait_queue(wq, wait_entry);
-
     return wait_entry;
 }
 
@@ -523,7 +517,7 @@ void sys_exit(int exit_code)
     if (runqueue.curr->parent) {
         int ret = sys_kill(runqueue.curr->parent->pid, SIGCHLD);
         if (ret == -1) {
-            printf("[%d] %5d failed sending signal %d : %s\n", ret, runqueue.curr->parent->pid,
+            pr_err("[%d] %5d failed sending signal %d : %s\n", ret, runqueue.curr->parent->pid,
                    SIGCHLD, strerror(errno));
         }
     }

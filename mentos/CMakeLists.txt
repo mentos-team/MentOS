@@ -129,7 +129,9 @@ set(KERNEL_SOURCES
     ${PROJECT_SOURCE_DIR}/src/io/proc_running.c
     ${PROJECT_SOURCE_DIR}/src/io/proc_feedback.c
     ${PROJECT_SOURCE_DIR}/src/io/proc_system.c
+    ${PROJECT_SOURCE_DIR}/src/io/proc_ipc.c
     ${PROJECT_SOURCE_DIR}/src/io/vga/vga.c
+    ${PROJECT_SOURCE_DIR}/src/ipc/ipc.c
     ${PROJECT_SOURCE_DIR}/src/ipc/msg.c
     ${PROJECT_SOURCE_DIR}/src/ipc/sem.c
     ${PROJECT_SOURCE_DIR}/src/ipc/shm.c
@@ -146,6 +148,7 @@ set(KERNEL_SOURCES
     ${PROJECT_SOURCE_DIR}/src/klib/math.c
     ${PROJECT_SOURCE_DIR}/src/klib/fcvt.c
     ${PROJECT_SOURCE_DIR}/src/klib/spinlock.c
+    ${PROJECT_SOURCE_DIR}/src/klib/stdlib.c
     ${PROJECT_SOURCE_DIR}/src/klib/rbtree.c
     ${PROJECT_SOURCE_DIR}/src/klib/ndtree.c
     ${PROJECT_SOURCE_DIR}/src/klib/hashmap.c

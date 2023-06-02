@@ -11,6 +11,13 @@
 
 static ssize_t procfb_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyte)
 {
+    if (!file) {
+        pr_err("Received a NULL file.\n");
+        return -ENOENT;
+    }
+    if (!strcmp(file->name, "/proc/feedback")) {
+        pr_alert("Return scheduling feedback information.\n");
+    }
     return 0;
 }
 

@@ -20,7 +20,7 @@ extern int *__geterrno();
 #define ENOEXEC         8 ///< Exec format error.
 #define EBADF           9 ///< Bad file number.
 #define ECHILD          10 ///< No child processes.
-#define EAGAIN          11 ///< Try again.
+#define EAGAIN          11 ///< Resource temporarily unavailable.
 #define ENOMEM          12 ///< Out of memory.
 #define EACCES          13 ///< Permission denied.
 #define EFAULT          14 ///< Bad address.

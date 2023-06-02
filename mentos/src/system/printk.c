@@ -5,8 +5,8 @@
 
 #include "system/printk.h"
 #include "stdarg.h"
-#include "stdio.h"
 #include "io/video.h"
+#include "stdio.h"
 
 int sys_syslog(const char *format, ...)
 {

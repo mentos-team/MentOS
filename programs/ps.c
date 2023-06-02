@@ -53,9 +53,6 @@ static inline void __iterate_proc_dirs(int proc_fd)
         strcat(absolute_path, "/stat");
         // Open the `/proc/<pid>/stat` file.
         if ((stat_fd = open(absolute_path, O_RDONLY, 0)) == -1) {
-            printf("Failed to open `%s`: ", absolute_path);
-            perror(NULL);
-            putchar('\n');
             continue;
         }
         // Reset the stat buffer.

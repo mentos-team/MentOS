@@ -5,10 +5,11 @@
 
 #pragma once
 
+#include "sys/ipc.h"
+
 #include "sys/types.h"
 #include "stddef.h"
 #include "time.h"
-#include "ipc.h"
 
 /// Type for storing the number of messages in a message queue.
 typedef unsigned int msgqnum_t;

@@ -85,6 +85,10 @@ set(TESTS
     t_kill.c
     t_itimer.c
     t_gid.c
+    # Test semaphores.
+    t_semget.c
+    t_semflg.c
+    t_semop.c
     # Test scheduling feedback tests.
     t_schedfb.c
 )

@@ -736,7 +736,7 @@ static inline ssize_t procfs_getdents(vfs_file_t *file, dirent_t *dirp, off_t do
         // Advance the size we just iterated.
         iterated_size += sizeof(dirent_t);
         // Check if the iterated size is still below the offset.
-        if (iterated_size < doff) {
+        if (iterated_size <= doff) {
             continue;
         }
         // Check if the last character of the entry is a slash.
@@ -851,14 +851,14 @@ proc_dir_entry_t *proc_mkdir(const char *name, proc_dir_entry_t *parent)
     strcat(entry_path, name);
     // Check if the entry exists.
     if (procfs_find_entry_path(entry_path) != NULL) {
-        pr_err("proc_destroy_entry(%s): Proc entry already exists.\n", entry_path);
+        pr_err("proc_mkdir(%s): Proc entry already exists.\n", entry_path);
         errno = EEXIST;
         return NULL;
     }
     // Create the new procfs file.
     procfs_file_t *procfs_file = procfs_create_file(entry_path, DT_DIR);
     if (!procfs_file) {
-        pr_err("proc_destroy_entry(%s): Cannot create proc entry.\n", entry_path);
+        pr_err("proc_mkdir(%s): Cannot create proc entry.\n", entry_path);
         errno = ENFILE;
         return NULL;
     }
@@ -877,25 +877,25 @@ int proc_rmdir(const char *name, proc_dir_entry_t *parent)
     // Check if the entry exists.
     procfs_file_t *procfs_file = procfs_find_entry_path(entry_path);
     if (procfs_file == NULL) {
-        pr_err("proc_destroy_entry(%s): Cannot find proc entry.\n", entry_path);
+        pr_err("proc_rmdir(%s): Cannot find proc entry.\n", entry_path);
         return -ENOENT;
     }
     if ((procfs_file->flags & DT_DIR) == 0) {
-        pr_err("proc_destroy_entry(%s): Proc entry is not a directory.\n", entry_path);
+        pr_err("proc_rmdir(%s): Proc entry is not a directory.\n", entry_path);
         return -ENOTDIR;
     }
     // Check if its empty.
     if (procfs_check_if_empty(procfs_file->name)) {
-        pr_err("procfs_rmdir(%s): The directory is not empty.\n", entry_path);
+        pr_err("proc_rmdir(%s): The directory is not empty.\n", entry_path);
         return -ENOTEMPTY;
     }
     // Check if the procfs file has still some file associated.
     if (!list_head_empty(&procfs_file->files)) {
-        pr_err("proc_destroy_entry(%s): Proc entry is busy.\n", entry_path);
+        pr_err("proc_rmdir(%s): Proc entry is busy.\n", entry_path);
         return -EBUSY;
     }
     if (procfs_destroy_file(procfs_file)) {
-        pr_err("proc_destroy_entry(%s): Failed to remove file.\n", entry_path);
+        pr_err("proc_rmdir(%s): Failed to remove file.\n", entry_path);
         return -ENOENT;
     }
     return 0;
@@ -912,14 +912,14 @@ proc_dir_entry_t *proc_create_entry(const char *name, proc_dir_entry_t *parent)
     strcat(entry_path, name);
     // Check if the entry exists.
     if (procfs_find_entry_path(entry_path) != NULL) {
-        pr_err("proc_destroy_entry(%s): Proc entry already exists.\n", entry_path);
+        pr_err("proc_create_entry(%s): Proc entry already exists.\n", entry_path);
         errno = EEXIST;
         return NULL;
     }
     // Create the new procfs file.
     procfs_file_t *procfs_file = procfs_create_file(entry_path, DT_REG);
     if (!procfs_file) {
-        pr_err("proc_destroy_entry(%s): Cannot create proc entry.\n", entry_path);
+        pr_err("proc_create_entry(%s): Cannot create proc entry.\n", entry_path);
         errno = ENFILE;
         return NULL;
     }

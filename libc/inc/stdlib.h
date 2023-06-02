@@ -5,6 +5,8 @@
 
 #pragma once
 
+#ifndef __KERNEL__
+
 #include "stddef.h"
 
 #define EXIT_SUCCESS 0 ///< Successful execution of a program.
@@ -41,17 +43,6 @@ void *realloc(void *ptr, size_t size);
 /// @param ptr The pointer to the allocated memory.
 void free(void *ptr);
 
-/// The maximum value returned by the rand function.
-#define RAND_MAX ((1U << 31U) - 1U)
-
-/// @brief Allows to set the seed of the random value generator.
-/// @param x The new seed.
-void srand(int x);
-
-/// @brief Generates a random value.
-/// @return The random value.
-int rand();
-
 /// @brief Cause an abnormal program termination with core-dump.
 void abort();
 
@@ -71,3 +62,16 @@ int unsetenv(const char *name);
 /// @param name Name of the variable.
 /// @return A pointer to the value, or NULL if there is no match.
 char *getenv(const char *name);
+
+#endif
+
+/// The maximum value returned by the rand function.
+#define RAND_MAX ((1U << 31U) - 1U)
+
+/// @brief Allows to set the seed of the random value generator.
+/// @param x The new seed.
+void srand(int x);
+
+/// @brief Generates a random value.
+/// @return The random value.
+int rand();

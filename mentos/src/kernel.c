@@ -9,38 +9,32 @@
 #define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
 #include "io/debug.h"                    // Include debugging functions.
 
-#include "io/proc_modules.h"
-#include "mem/vmem_map.h"
-#include "fs/procfs.h"
-#include "devices/pci.h"
-#include "drivers/ata.h"
-#include "descriptor_tables/idt.h"
 #include "kernel.h"
-#include "mem/zone_allocator.h"
+
 #include "descriptor_tables/gdt.h"
-#include "system/syscall.h"
-#include "version.h"
-#include "io/video.h"
-#include "hardware/pic8259.h"
-#include "drivers/fdc.h"
-#include "fs/ext2.h"
-#include "klib/irqflags.h"
+#include "descriptor_tables/idt.h"
 #include "drivers/keyboard/keyboard.h"
 #include "drivers/keyboard/keymap.h"
-#include "drivers/ps2.h"
-#include "process/scheduler.h"
-#include "process/scheduler_feedback.h"
-#include "hardware/timer.h"
-#include "fs/vfs.h"
-#include "devices/fpu.h"
-#include "system/printk.h"
-#include "sys/module.h"
+#include "drivers/ata.h"
 #include "drivers/rtc.h"
-#include "stdio.h"
-#include "assert.h"
+#include "drivers/ps2.h"
+#include "process/scheduler_feedback.h"
+#include "process/scheduler.h"
+#include "mem/zone_allocator.h"
+#include "mem/vmem_map.h"
+#include "hardware/pic8259.h"
+#include "hardware/timer.h"
+#include "system/syscall.h"
+#include "sys/module.h"
+#include "sys/sem.h"
+#include "io/proc_modules.h"
 #include "io/vga/vga.h"
-#include "string.h"
-#include "fcntl.h"
+#include "io/video.h"
+#include "fs/vfs.h"
+#include "fs/procfs.h"
+#include "fs/ext2.h"
+#include "version.h"
+#include "stdio.h"
 
 /// Describe start address of grub multiboot modules.
 char *module_start[MAX_MODULES];
@@ -294,6 +288,27 @@ int kmain(boot_info_t *boot_informations)
     if (procs_module_init()) {
         print_fail();
         pr_emerg("Failed to initialize proc system entries!\n");
+        return 1;
+    }
+    print_ok();
+
+    //==========================================================================
+    pr_notice("Initialize IPC information system...\n");
+    printf("Initialize IPC information system...");
+    if (procipc_module_init()) {
+        print_fail();
+        pr_emerg("Failed to initialize the IPC information system!\n");
+        return 1;
+    }
+    print_ok();
+    
+
+    //==========================================================================
+    pr_notice("Initialize IPC/SEM system...\n");
+    printf("Initialize IPC/SEM system...");
+    if (sem_init()) {
+        print_fail();
+        pr_emerg("Failed to initialize the IPC/SEM system!\n");
         return 1;
     }
     print_ok();
