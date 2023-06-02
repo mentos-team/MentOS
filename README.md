@@ -80,6 +80,12 @@ Follows the list of implemented features:
  - [x] Video drivers;
  - [ ] VGA drivers;
 
+**Inter-Process Communication (IPC)**
+ - [X] Semaphore
+ - [ ] Message queue
+ - [ ] Shared memory
+ - [ ] Named pipe
+
 I will try to keep it updated...
 
 *[Back to the Table of Contents](#table-of-contents)*
