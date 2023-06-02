@@ -148,6 +148,7 @@ set(KERNEL_SOURCES
     ${PROJECT_SOURCE_DIR}/src/klib/math.c
     ${PROJECT_SOURCE_DIR}/src/klib/fcvt.c
     ${PROJECT_SOURCE_DIR}/src/klib/spinlock.c
+    ${PROJECT_SOURCE_DIR}/src/klib/stdlib.c
     ${PROJECT_SOURCE_DIR}/src/klib/rbtree.c
     ${PROJECT_SOURCE_DIR}/src/klib/ndtree.c
     ${PROJECT_SOURCE_DIR}/src/klib/hashmap.c

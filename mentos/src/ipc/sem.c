@@ -68,25 +68,6 @@ typedef struct {
 list_head semaphores_list;
 
 // ============================================================================
-// KEY GENERATION (Private)
-// ============================================================================
-
-/// Seed used to generate random numbers.
-static int ipc_sem_rseed = 0;
-/// The maximum value returned by the rand function.
-#define IPC_SEM_RAND_MAX ((1U << 31U) - 1U)
-
-static inline void ipc_sem_srand(int x)
-{
-    ipc_sem_rseed = x;
-}
-
-static inline int ipc_sem_rand()
-{
-    return ipc_sem_rseed = (ipc_sem_rseed * 1103515245U + 12345U) & IPC_SEM_RAND_MAX;
-}
-
-// ============================================================================
 // MEMORY MANAGEMENT (Private)
 // ============================================================================
 
@@ -213,7 +194,7 @@ long sys_semget(key_t key, int nsems, int semflg)
     if (key == IPC_PRIVATE) {
         // Exit when i find a unique key.
         do {
-            key = -ipc_sem_rand();
+            key = -rand();
         } while (__list_find_sem_info_by_key(key));
         // We have a unique key, create the semaphore set.
         sem_info = __sem_info_alloc(key, nsems, semflg);
@@ -516,7 +497,8 @@ ssize_t procipc_sem_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyte
         pr_err("Received a NULL file.\n");
         return -ENOENT;
     }
-    size_t buffer_len = 0, read_pos = 0, write_count = 0, ret = 0;
+    size_t buffer_len = 0, read_pos = 0, ret = 0;
+    ssize_t write_count = 0;
     sem_info_t *sem_info = NULL;
     char buffer[BUFSIZ];
 

@@ -21,25 +21,25 @@
 
 _syscall3(void *, shmat, int, shmid, const void *, shmaddr, int, shmflg)
 
-_syscall3(long, shmget, key_t, key, size_t, size, int, flag)
+    _syscall3(long, shmget, key_t, key, size_t, size, int, flag)
 
-_syscall1(long, shmdt, const void *, shmaddr)
+        _syscall1(long, shmdt, const void *, shmaddr)
 
-_syscall3(long, shmctl, int, shmid, int, cmd, struct shmid_ds *, buf)
+            _syscall3(long, shmctl, int, shmid, int, cmd, struct shmid_ds *, buf)
 
-_syscall3(long, semget, key_t, key, int, nsems, int, semflg)
+                _syscall3(long, semget, key_t, key, int, nsems, int, semflg)
 
-_syscall4(long, semctl, int, semid, int, semnum, int, cmd, union semun *, arg)
+                    _syscall4(long, semctl, int, semid, int, semnum, int, cmd, union semun *, arg)
 
-_syscall2(long, msgget, key_t, key, int, msgflg)
+                        _syscall2(long, msgget, key_t, key, int, msgflg)
 
-_syscall4(long, msgsnd, int, msqid, struct msgbuf *, msgp, size_t, msgsz, int, msgflg)
+                            _syscall4(long, msgsnd, int, msqid, struct msgbuf *, msgp, size_t, msgsz, int, msgflg)
 
-_syscall5(long, msgrcv, int, msqid, struct msgbuf *, msgp, size_t, msgsz, long, msgtyp, int, msgflg)
+                                _syscall5(long, msgrcv, int, msqid, struct msgbuf *, msgp, size_t, msgsz, long, msgtyp, int, msgflg)
 
-_syscall3(long, msgctl, int, msqid, int, cmd, struct msqid_ds *, buf)
+                                    _syscall3(long, msgctl, int, msqid, int, cmd, struct msqid_ds *, buf)
 
-long semop(int semid, struct sembuf *sops, unsigned nsops)
+                                        long semop(int semid, struct sembuf *sops, unsigned nsops)
 {
     struct sembuf *op;
     long __res;
@@ -47,13 +47,15 @@ long semop(int semid, struct sembuf *sops, unsigned nsops)
     // The pointer to the operation is NULL.
     if (!sops) {
         pr_err("The pointer to the operation is NULL.\n");
-        return -EINVAL;
+        errno = EINVAL;
+        return -1;
     }
 
     // The value of nsops is negative.
     if (nsops <= 0) {
         pr_err("The value of nsops is negative.\n");
-        return -EINVAL;
+        errno = EINVAL;
+        return -1;
     }
 
     // This should be performed for each sops.
@@ -72,7 +74,6 @@ long semop(int semid, struct sembuf *sops, unsigned nsops)
             if ((__res != -EAGAIN) || (op->sem_flg & IPC_NOWAIT))
                 break;
         }
-
         // If the operation couldn't be performed and we had the IPC_NOWAIT set
         // to 1 then we return.
         if ((__res == -EAGAIN) && (op->sem_flg & IPC_NOWAIT)) {
@@ -91,13 +92,13 @@ key_t ftok(char *path, int id)
     // file we use to generate the key.
     struct stat_t st;
     if (stat(path, &st) < 0) {
+        pr_err("Cannot stat the file `%s`...\n", path);
         errno = ENOENT;
-        pr_debug("Error finding the serial number, check Errno...\n");
         return -1;
     }
     // Taking the upper 8 bits from the lower 8 bits of id, the second upper 8
     // bits from the lower 8 bits of the device number of the provided pathname,
     // and the lower 16 bits from the lower 16 bits of the inode number of the
     // provided pathname.
-    return ((st.st_ino & 0xffff) | ((st.st_dev & 0xff) << 16) | ((id & 0xffu) << 24));
+    return (st.st_ino & 0xffff) | ((st.st_dev & 0xff) << 16) | ((id & 0xffu) << 24);
 }
