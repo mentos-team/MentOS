@@ -2,7 +2,6 @@
 /// @brief
 /// @copyright (c) 2014-2023 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
-///! @cond Doxygen_Suppress
 
 // ============================================================================
 // Setup the logging for this file (do this before any other include).
@@ -29,12 +28,32 @@ typedef struct {
     int id;
     /// @brief The message queue data strcutre.
     struct msqid_ds msqid;
+    /// Pointer to the first message in the queue.
+    struct msg *msg_base;
     /// Reference inside the list of message queue management structures.
     list_head list;
 } msq_info_t;
 
 /// @brief List of all current active Message queues.
 list_head msq_list;
+
+// ============================================================================
+// MEMORY MANAGEMENT (Private)
+// ============================================================================
+
+// ============================================================================
+// SEARCH FUNCTIONS (Private)
+// ============================================================================
+
+// ============================================================================
+// SYSTEM FUNCTIONS
+// ============================================================================
+
+int msq_init()
+{
+    list_head_init(&msq_list);
+    return 0;
+}
 
 long sys_msgget(key_t key, int msgflg)
 {
@@ -59,6 +78,10 @@ long sys_msgctl(int msqid, int cmd, struct msqid_ds *buf)
     TODO("Not implemented");
     return 0;
 }
+
+// ============================================================================
+// PROCFS FUNCTIONS
+// ============================================================================
 
 ssize_t procipc_msg_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyte)
 {
@@ -90,5 +113,3 @@ ssize_t procipc_msg_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyte
     }
     return write_count;
 }
-
-///! @endcond

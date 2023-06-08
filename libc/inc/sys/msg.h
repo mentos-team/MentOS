@@ -27,8 +27,6 @@ struct msgbuf {
 
 /// Keeps track of a stored message.
 struct msg {
-    /// Pointer to the next message on queue.
-    struct msg *msg_next;
     /// The type of message.
     long msg_type;
     /// Pointer to the beginning of the message.
@@ -38,13 +36,9 @@ struct msg {
 };
 
 /// @brief Message queue data structure.
-typedef struct msqid_ds {
+struct msqid_ds {
     /// Ownership and permissions.
     struct ipc_perm msg_perm;
-    /// First message on queue
-    struct msg *msg_first;
-    /// Last message in queue
-    struct msg *msg_last;
     /// Time of last msgsnd(2).
     time_t msg_stime;
     /// Time of last msgrcv(2).
@@ -61,9 +55,13 @@ typedef struct msqid_ds {
     pid_t msg_lspid;
     /// PID of last msgrcv(2).
     pid_t msg_lrpid;
-} msqid_ds_t;
+};
 
 #ifdef __KERNEL__
+
+/// @brief Initializes the message queue system.
+/// @return 0 on success, 1 on failure.
+int msq_init();
 
 /// @brief Get a System V message queue identifier.
 /// @param key can be used either to obtain the identifier of a previously
@@ -99,7 +97,7 @@ long sys_msgrcv(int msqid, struct msgbuf *msgp, size_t msgsz, long msgtyp, int m
 /// @param cmd The command to perform.
 /// @param buf used with IPC_STAT and IPC_SET.
 /// @return 0 on success, -1 on failure and errno is set to indicate the error.
-long sys_msgctl(int msqid, int cmd, msqid_ds_t *buf);
+long sys_msgctl(int msqid, int cmd, struct msqid_ds *buf);
 
 #else
 
@@ -137,6 +135,6 @@ long msgrcv(int msqid, struct msgbuf *msgp, size_t msgsz, long msgtyp, int msgfl
 /// @param cmd The command to perform.
 /// @param buf used with IPC_STAT and IPC_SET.
 /// @return 0 on success, -1 on failure and errno is set to indicate the error.
-long msgctl(int msqid, int cmd, msqid_ds_t *buf);
+long msgctl(int msqid, int cmd, struct msqid_ds *buf);
 
 #endif
