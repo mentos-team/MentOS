@@ -60,6 +60,8 @@ typedef struct {
     int id;
     /// @brief The semaphore data strcutre.
     struct semid_ds semid;
+    /// @brief List of all the semaphores.
+    struct sem *sem_base;
     /// Reference inside the list of semaphore management structures.
     list_head list;
 } sem_info_t;
@@ -85,11 +87,11 @@ static inline sem_info_t *__sem_info_alloc(key_t key, int nsems, int semflg)
     // Clean the memory.
     memset(sem_info, 0, sizeof(sem_info_t));
     // Allocate the memory for semaphores.
-    sem_info->semid.sem_base = (struct sem *)kmalloc(sizeof(struct sem) * nsems);
+    sem_info->sem_base = (struct sem *)kmalloc(sizeof(struct sem) * nsems);
     // Check the allocated memory.
-    assert(sem_info->semid.sem_base && "Failed to allocate memory for a set of semaphores.");
+    assert(sem_info->sem_base && "Failed to allocate memory for a set of semaphores.");
     // Clean the memory.
-    memset(sem_info->semid.sem_base, 0, sizeof(struct sem) * nsems);
+    memset(sem_info->sem_base, 0, sizeof(struct sem) * nsems);
     // Initialize its values.
     sem_info->id              = ++__sem_id;
     sem_info->semid.sem_perm  = register_ipc(key, semflg & 0x1FF);
@@ -97,10 +99,10 @@ static inline sem_info_t *__sem_info_alloc(key_t key, int nsems, int semflg)
     sem_info->semid.sem_ctime = 0;
     sem_info->semid.sem_nsems = nsems;
     for (int i = 0; i < nsems; i++) {
-        sem_info->semid.sem_base[i].sem_pid  = sys_getpid();
-        sem_info->semid.sem_base[i].sem_val  = 0;
-        sem_info->semid.sem_base[i].sem_ncnt = 0;
-        sem_info->semid.sem_base[i].sem_zcnt = 0;
+        sem_info->sem_base[i].sem_pid  = sys_getpid();
+        sem_info->sem_base[i].sem_val  = 0;
+        sem_info->sem_base[i].sem_ncnt = 0;
+        sem_info->sem_base[i].sem_zcnt = 0;
     }
     // Return the semaphore management structure.
     return sem_info;
@@ -112,7 +114,7 @@ static inline void __sem_info_dealloc(sem_info_t *sem_info)
 {
     assert(sem_info && "Received a NULL pointer.");
     // Deallocate the array of semaphores.
-    kfree(sem_info->semid.sem_base);
+    kfree(sem_info->sem_base);
     // Deallocate the semid memory.
     kfree(sem_info);
 }
@@ -284,14 +286,14 @@ long sys_semop(int semid, struct sembuf *sops, unsigned nsops)
     // If the operation is negative then we need to check for possible blocking
     // operation. If the value of the sem were to become negative then we return
     // a special value.
-    if (((int)sem_info->semid.sem_base[sops->sem_num].sem_val + (int)sops->sem_op) < 0) {
+    if (((int)sem_info->sem_base[sops->sem_num].sem_val + (int)sops->sem_op) < 0) {
         // The value would become negative, we cannot perform the operation.
         return -EAGAIN;
     }
     // Update the semaphore value.
-    sem_info->semid.sem_base[sops->sem_num].sem_val += sops->sem_op;
+    sem_info->sem_base[sops->sem_num].sem_val += sops->sem_op;
     // Update the pid of the process that did last op.
-    sem_info->semid.sem_base[sops->sem_num].sem_pid = sys_getpid();
+    sem_info->sem_base[sops->sem_num].sem_pid = sys_getpid();
     // Update the time.
     sem_info->semid.sem_ctime = sys_time(NULL);
     return 0;
@@ -349,7 +351,7 @@ long sys_semctl(int semid, int semnum, int cmd, union semun *arg)
             return -EACCES;
         }
         // Setting the value.
-        sem_info->semid.sem_base[semnum].sem_val = arg->val;
+        sem_info->sem_base[semnum].sem_val = arg->val;
         // Update the last change time.
         sem_info->semid.sem_ctime = sys_time(NULL);
     } else if (cmd == SETALL) {
@@ -373,7 +375,7 @@ long sys_semctl(int semid, int semnum, int cmd, union semun *arg)
         }
         // Setting the values.
         for (unsigned i = 0; i < sem_info->semid.sem_nsems; ++i) {
-            sem_info->semid.sem_base[i].sem_val = arg->array[i];
+            sem_info->sem_base[i].sem_val = arg->array[i];
         }
         // Update the last change time.
         sem_info->semid.sem_ctime = sys_time(NULL);
@@ -413,7 +415,7 @@ long sys_semctl(int semid, int semnum, int cmd, union semun *arg)
             return -EINVAL;
         }
         for (unsigned i = 0; i < sem_info->semid.sem_nsems; ++i) {
-            arg->array[i] = sem_info->semid.sem_base[i].sem_val;
+            arg->array[i] = sem_info->sem_base[i].sem_val;
         }
     } else if (cmd == GETVAL) {
         // Returns the value of the semnum-th semaphore in the set specified by
@@ -429,7 +431,7 @@ long sys_semctl(int semid, int semnum, int cmd, union semun *arg)
             pr_err("The calling process does not have read permission to access the set.\n");
             return -EACCES;
         }
-        return sem_info->semid.sem_base[semnum].sem_val;
+        return sem_info->sem_base[semnum].sem_val;
     } else if (cmd == GETPID) {
         // Return the process ID of the last process to perform a semop on the
         // semnum-th semaphore.
@@ -444,7 +446,7 @@ long sys_semctl(int semid, int semnum, int cmd, union semun *arg)
             pr_err("The calling process does not have read permission to access the set.\n");
             return -EACCES;
         }
-        return sem_info->semid.sem_base[semnum].sem_pid;
+        return sem_info->sem_base[semnum].sem_pid;
     } else if (cmd == GETNCNT) {
         // Return the number of processes currently waiting for the resources to
         // become available.
@@ -459,7 +461,7 @@ long sys_semctl(int semid, int semnum, int cmd, union semun *arg)
             pr_err("The calling process does not have read permission to access the set.\n");
             return -EACCES;
         }
-        return sem_info->semid.sem_base[semnum].sem_ncnt;
+        return sem_info->sem_base[semnum].sem_ncnt;
     } else if (cmd == GETZCNT) {
         // Return the number of processes currently waiting for the value of the
         // semnum-th semaphore to become 0.
@@ -474,7 +476,7 @@ long sys_semctl(int semid, int semnum, int cmd, union semun *arg)
             pr_err("The calling process does not have read permission to access the set.\n");
             return -EACCES;
         }
-        return sem_info->semid.sem_base[semnum].sem_zcnt;
+        return sem_info->sem_base[semnum].sem_zcnt;
     } else if (cmd == SEM_STAT) {
         pr_err("Not implemented.\n");
         return -ENOSYS;
@@ -498,7 +500,7 @@ ssize_t procipc_sem_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyte
         return -ENOENT;
     }
     size_t buffer_len = 0, read_pos = 0, ret = 0;
-    ssize_t write_count = 0;
+    ssize_t write_count  = 0;
     sem_info_t *sem_info = NULL;
     char buffer[BUFSIZ];
 
