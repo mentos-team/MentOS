@@ -21,25 +21,25 @@
 
 _syscall3(void *, shmat, int, shmid, const void *, shmaddr, int, shmflg)
 
-    _syscall3(long, shmget, key_t, key, size_t, size, int, flag)
+_syscall3(long, shmget, key_t, key, size_t, size, int, flag)
 
-        _syscall1(long, shmdt, const void *, shmaddr)
+_syscall1(long, shmdt, const void *, shmaddr)
 
-            _syscall3(long, shmctl, int, shmid, int, cmd, struct shmid_ds *, buf)
+_syscall3(long, shmctl, int, shmid, int, cmd, struct shmid_ds *, buf)
 
-                _syscall3(long, semget, key_t, key, int, nsems, int, semflg)
+_syscall3(long, semget, key_t, key, int, nsems, int, semflg)
 
-                    _syscall4(long, semctl, int, semid, int, semnum, int, cmd, union semun *, arg)
+_syscall4(long, semctl, int, semid, int, semnum, int, cmd, union semun *, arg)
 
-                        _syscall2(long, msgget, key_t, key, int, msgflg)
+_syscall2(int, msgget, key_t, key, int, msgflg)
 
-                            _syscall4(long, msgsnd, int, msqid, struct msgbuf *, msgp, size_t, msgsz, int, msgflg)
+_syscall4(int, msgsnd, int, msqid, const void *, msgp, size_t, msgsz, int, msgflg)
 
-                                _syscall5(long, msgrcv, int, msqid, struct msgbuf *, msgp, size_t, msgsz, long, msgtyp, int, msgflg)
+_syscall5(ssize_t, msgrcv, int, msqid, void *, msgp, size_t, msgsz, long, msgtyp, int, msgflg)
 
-                                    _syscall3(long, msgctl, int, msqid, int, cmd, struct msqid_ds *, buf)
+_syscall3(int, msgctl, int, msqid, int, cmd, struct msqid_ds *, buf)
 
-                                        long semop(int semid, struct sembuf *sops, unsigned nsops)
+long semop(int semid, struct sembuf *sops, unsigned nsops)
 {
     struct sembuf *op;
     long __res;

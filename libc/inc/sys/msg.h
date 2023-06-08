@@ -16,6 +16,12 @@
 /// The default maximum size in bytes of a message queue.
 #define MSGMNB 16384
 
+/// Specify that we should not treat as an error if the message we are trying to
+/// return to the user, is too big. That message will be truncated to fit the
+/// user-defined reading buffer. If not specified, the message is kept in the
+/// queue, and an error is returned.
+#define MSG_NOERROR 010000
+
 /// @brief Buffer to use with the message queue IPC.
 struct msgbuf {
     /// Type of the message.
@@ -70,7 +76,7 @@ int msq_init();
 /// @param msgflg controls the behaviour of the function.
 /// @return the message queue identifier, -1 on failure, and errno is set to
 /// indicate the error.
-long sys_msgget(key_t key, int msgflg);
+int sys_msgget(key_t key, int msgflg);
 
 /// @brief Used to send messages.
 /// @param msqid the message queue identifier.
@@ -78,7 +84,7 @@ long sys_msgget(key_t key, int msgflg);
 /// @param msgsz specifies the size in bytes of mtext.
 /// @param msgflg specifies the action to be taken in case of specific events.
 /// @return 0 on success, -1 on failure and errno is set to indicate the error.
-int sys_msgsnd(int msqid, struct msgbuf *msgp, size_t msgsz, int msgflg);
+int sys_msgsnd(int msqid, const void *msgp, size_t msgsz, int msgflg);
 
 /// @brief Used to receive messages.
 /// @param msqid the message queue identifier.
@@ -90,15 +96,16 @@ int sys_msgsnd(int msqid, struct msgbuf *msgp, size_t msgsz, int msgflg);
 /// - msgtyp  < 0: the first message of the lowest type that is less than or
 ///                equal to the absolute value of msgtyp is received.
 /// @param msgflg specifies the action to be taken in case of specific events.
-/// @return 0 on success, -1 on failure and errno is set to indicate the error.
-ssize_t sys_msgrcv(int msqid, struct msgbuf *msgp, size_t msgsz, long msgtyp, int msgflg);
+/// @return the number of bytes actually copied on success, -1 on failure and
+/// errno is set to indicate the error.
+ssize_t sys_msgrcv(int msqid, void *msgp, size_t msgsz, long msgtyp, int msgflg);
 
 /// @brief Message queue control operations.
 /// @param msqid the message queue identifier.
 /// @param cmd The command to perform.
 /// @param buf used with IPC_STAT and IPC_SET.
 /// @return 0 on success, -1 on failure and errno is set to indicate the error.
-long sys_msgctl(int msqid, int cmd, struct msqid_ds *buf);
+int sys_msgctl(int msqid, int cmd, struct msqid_ds *buf);
 
 #else
 
@@ -108,7 +115,7 @@ long sys_msgctl(int msqid, int cmd, struct msqid_ds *buf);
 /// @param msgflg controls the behaviour of the function.
 /// @return the message queue identifier, -1 on failure, and errno is set to
 /// indicate the error.
-long msgget(key_t key, int msgflg);
+int msgget(key_t key, int msgflg);
 
 /// @brief Used to send messages.
 /// @param msqid the message queue identifier.
@@ -116,7 +123,7 @@ long msgget(key_t key, int msgflg);
 /// @param msgsz specifies the size in bytes of mtext.
 /// @param msgflg specifies the action to be taken in case of specific events.
 /// @return 0 on success, -1 on failure and errno is set to indicate the error.
-long msgsnd(int msqid, struct msgbuf *msgp, size_t msgsz, int msgflg);
+int msgsnd(int msqid, const void *msgp, size_t msgsz, int msgflg);
 
 /// @brief Used to receive messages.
 /// @param msqid the message queue identifier.
@@ -128,14 +135,15 @@ long msgsnd(int msqid, struct msgbuf *msgp, size_t msgsz, int msgflg);
 /// - msgtyp  < 0: the first message of the lowest type that is less than or
 ///                equal to the absolute value of msgtyp is received.
 /// @param msgflg specifies the action to be taken in case of specific events.
-/// @return 0 on success, -1 on failure and errno is set to indicate the error.
-long msgrcv(int msqid, struct msgbuf *msgp, size_t msgsz, long msgtyp, int msgflg);
+/// @return the number of bytes actually copied on success, -1 on failure and
+/// errno is set to indicate the error.
+ssize_t msgrcv(int msqid, void *msgp, size_t msgsz, long msgtyp, int msgflg);
 
 /// @brief Message queue control operations.
 /// @param msqid the message queue identifier.
 /// @param cmd The command to perform.
 /// @param buf used with IPC_STAT and IPC_SET.
 /// @return 0 on success, -1 on failure and errno is set to indicate the error.
-long msgctl(int msqid, int cmd, struct msqid_ds *buf);
+int msgctl(int msqid, int cmd, struct msqid_ds *buf);
 
 #endif

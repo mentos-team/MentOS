@@ -6,13 +6,14 @@
 // ============================================================================
 // Setup the logging for this file (do this before any other include).
 #include "klib/list_head.h"
+#include "limits.h"
 #include "mem/slab.h"
 #include "stddef.h"
 #include "sys/kernel_levels.h" // Include kernel log levels.
 #include "system/syscall.h"
-#define __DEBUG_HEADER__ "[IPCmsg]"      ///< Change header.
-#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
-#include "io/debug.h"                    // Include debugging functions.
+#define __DEBUG_HEADER__ "[IPCmsg]"     ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_DEBUG ///< Set log level.
+#include "io/debug.h"                   // Include debugging functions.
 // ============================================================================
 
 #include "process/process.h"
@@ -170,6 +171,26 @@ static inline void __msq_info_push_message(msq_info_t *msq_info, struct msg *mes
         msq_info->msg_last->msg_next = message;
 }
 
+static inline void __msq_info_remove_message(msq_info_t *msq_info, struct msg *message)
+{
+    assert(msq_info && "Received a NULL pointer.");
+    assert(message && "Received a NULL pointer.");
+    if (msq_info->msg_first == message) {
+        msq_info->msg_first = message->msg_next;
+    } else {
+        for (struct msg *it = msq_info->msg_first; it; it = it->msg_next) {
+            if (it->msg_next == message) {
+                it->msg_next = message->msg_next;
+                break;
+            }
+        }
+    }
+    if (msq_info->msg_last == message)
+        msq_info->msg_last = NULL;
+    // Clear the pointer in message.
+    message->msg_next = NULL;
+}
+
 // ============================================================================
 // SYSTEM FUNCTIONS
 // ============================================================================
@@ -180,7 +201,7 @@ int msq_init()
     return 0;
 }
 
-long sys_msgget(key_t key, int msgflg)
+int sys_msgget(key_t key, int msgflg)
 {
     msq_info_t *msq_info = NULL;
     // Need to find a unique key.
@@ -232,9 +253,10 @@ long sys_msgget(key_t key, int msgflg)
     return msq_info->id;
 }
 
-int sys_msgsnd(int msqid, struct msgbuf *msgp, size_t msgsz, int msgflg)
+int sys_msgsnd(int msqid, const void *msgp, size_t msgsz, int msgflg)
 {
     msq_info_t *msq_info = NULL;
+    struct msgbuf *_msgp = NULL;
     // The msqid is less than zero.
     if (msqid < 0) {
         pr_err("The msqid is less than zero.\n");
@@ -245,6 +267,8 @@ int sys_msgsnd(int msqid, struct msgbuf *msgp, size_t msgsz, int msgflg)
         pr_err("The pointer to the caller-defined structure is NULL.\n");
         return -EINVAL;
     }
+    // Use the template to acess the message.
+    _msgp = (struct msgbuf *)msgp;
     // The value of msgsz is negative.
     if (msgsz <= 0) {
         pr_err("The value of msgsz is negative.\n");
@@ -282,7 +306,7 @@ int sys_msgsnd(int msqid, struct msgbuf *msgp, size_t msgsz, int msgflg)
     // Initialize the pointer to the next.
     message->msg_next = NULL;
     // Copy the type of message.
-    message->msg_type = msgp->mtype;
+    message->msg_type = _msgp->mtype;
     // Allocate the memory for the content of the message.
     message->msg_ptr = (char *)kmalloc(msgsz);
     if (message->msg_ptr == NULL) {
@@ -291,7 +315,7 @@ int sys_msgsnd(int msqid, struct msgbuf *msgp, size_t msgsz, int msgflg)
         return -ENOMEM;
     }
     // Copy the content of the message.
-    memcpy(message->msg_ptr, msgp->mtext, msgsz);
+    memcpy(message->msg_ptr, _msgp->mtext, msgsz);
     // The length of the message.
     message->msg_size = msgsz;
     // Add the message to the queue.
@@ -306,12 +330,20 @@ int sys_msgsnd(int msqid, struct msgbuf *msgp, size_t msgsz, int msgflg)
     // Increment the number of messages in the message queue.
     msq_info->msqid.msg_qnum += 1;
 
+    pr_debug("[%2d] msg_lspid: %2d, msg_lrpid: %2d, msg_qnum: %2d, msg_cbytes: %4d (%s)\n",
+             msq_info->id,
+             msq_info->msqid.msg_lspid,
+             msq_info->msqid.msg_lrpid,
+             msq_info->msqid.msg_qnum,
+             msq_info->msqid.msg_cbytes,
+             message->msg_ptr);
     return 0;
 }
 
-ssize_t sys_msgrcv(int msqid, struct msgbuf *msgp, size_t msgsz, long msgtyp, int msgflg)
+ssize_t sys_msgrcv(int msqid, void *msgp, size_t msgsz, long msgtyp, int msgflg)
 {
     msq_info_t *msq_info = NULL;
+    struct msgbuf *_msgp = NULL;
     // The msqid is less than zero.
     if (msqid < 0) {
         pr_err("The msqid is less than zero.\n");
@@ -322,6 +354,8 @@ ssize_t sys_msgrcv(int msqid, struct msgbuf *msgp, size_t msgsz, long msgtyp, in
         pr_err("The pointer to the caller-defined structure is NULL.\n");
         return -EINVAL;
     }
+    // Use the template to acess the message.
+    _msgp = (struct msgbuf *)msgp;
     // The value of msgsz is negative.
     if (msgsz <= 0) {
         pr_err("The value of msgsz is negative.\n");
@@ -346,17 +380,88 @@ ssize_t sys_msgrcv(int msqid, struct msgbuf *msgp, size_t msgsz, long msgtyp, in
                "calling process does not have read permission to access the set.\n");
         return -EACCES;
     }
+    // Prepare a structure for the message.
+    struct msg *message = NULL;
+    // If msgtyp is 0, then the first message in the queue is read.
+    if (msgtyp == 0) {
+        // Get the first message.
+        message = msq_info->msg_first;
+    }
+    // If msgtyp is greater than 0, then the first message in the queue of type
+    // msgtyp is read.
+    else if (msgtyp > 0) {
+        for (struct msg *it = msq_info->msg_first; it; it = it->msg_next) {
+            if (it->msg_type == msgtyp) {
+                message = it;
+                break;
+            }
+        }
+    }
+    // If msgtyp is less than 0, then the first message in the queue with the
+    // lowest type less than or equal to the absolute value of msgtyp will be
+    // read.
+    else {
+        long lowest_type = LONG_MAX;
+        for (struct msg *it = msq_info->msg_first; it; it = it->msg_next) {
+            if ((it->msg_type < abs(msgtyp)) && (it->msg_type < lowest_type)) {
+                lowest_type = it->msg_type;
+            }
+        }
+        for (struct msg *it = msq_info->msg_first; it; it = it->msg_next) {
+            if (it->msg_type == lowest_type) {
+                message = it;
+                break;
+            }
+        }
+    }
+    if (message == NULL) {
+        pr_err("There are no messages to read.\n");
+        return -ENOMSG;
+    }
+    // Check if the message is longer than msgsz.
+    if (message->msg_size > msgsz) {
+        // If we have the MSG_NOERROR flag, we return E2BIG and leave the
+        // message on the queue.
+        if (!(msgflg & MSG_NOERROR)) {
+            pr_err("The message we are trying to retrieve is too big.\n");
+            return -E2BIG;
+        }
+        // Otherwise, we truncate the message to msgsz.
+    }
+    // The number of bytes actually copied.
+    ssize_t actual_size = min(message->msg_size, msgsz);
+    // Copy the content of the message (we might truncate).
+    memcpy(_msgp->mtext, message->msg_ptr, actual_size);
+
     // Update last receive time.
     msq_info->msqid.msg_rtime = sys_time(NULL);
     // Update pid of last process who issued a receive.
     msq_info->msqid.msg_lrpid = sys_getpid();
+    // Update the total consumed space of the message queue.
+    msq_info->msqid.msg_cbytes -= message->msg_size;
+    // Decrement the number of messages in the message queue.
+    msq_info->msqid.msg_qnum -= 1;
 
-    TODO("Not implemented");
+    pr_debug("[%2d] msg_lspid: %2d, msg_lrpid: %2d, msg_qnum: %2d, msg_cbytes: %4d (%s)\n",
+             msq_info->id,
+             msq_info->msqid.msg_lspid,
+             msq_info->msqid.msg_lrpid,
+             msq_info->msqid.msg_qnum,
+             msq_info->msqid.msg_cbytes,
+             message->msg_ptr);
 
-    return 0;
+    // Remove the message to the queue.
+    __msq_info_remove_message(msq_info, message);
+
+    // Free the memory of the message.
+    kfree(message->msg_ptr);
+    // Free the memory of the data structure.
+    kfree(message);
+
+    return actual_size;
 }
 
-long sys_msgctl(int msqid, int cmd, struct msqid_ds *buf)
+int sys_msgctl(int msqid, int cmd, struct msqid_ds *buf)
 {
     TODO("Not implemented");
     return 0;

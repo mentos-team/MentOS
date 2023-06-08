@@ -88,6 +88,8 @@ set(TESTS
     t_semget.c
     t_semflg.c
     t_semop.c
+    # Test message queues.
+    t_msgget.c
     # Test scheduling feedback tests.
     t_schedfb.c
 )
