@@ -120,7 +120,7 @@ static inline void __sem_info_dealloc(sem_info_t *sem_info)
 }
 
 // ============================================================================
-// SEARCH FUNCTIONS (Private)
+// LIST MANAGEMENT/SEARCH FUNCTIONS (Private)
 // ============================================================================
 
 /// @brief Searches for the semaphore with the given id.

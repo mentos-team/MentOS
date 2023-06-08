@@ -11,11 +11,10 @@
 #include "stddef.h"
 #include "time.h"
 
-/// Type for storing the number of messages in a message queue.
-typedef unsigned int msgqnum_t;
-
-/// Type for storing the number of bytes in a message queue.
-typedef unsigned int msglen_t;
+/// The maximum size for a message text.
+#define MSGMAX 8192
+/// The default maximum size in bytes of a message queue.
+#define MSGMNB 16384
 
 /// @brief Buffer to use with the message queue IPC.
 struct msgbuf {
@@ -27,12 +26,14 @@ struct msgbuf {
 
 /// Keeps track of a stored message.
 struct msg {
+    /// Pointer to the next message on queue.
+    struct msg *msg_next;
     /// The type of message.
     long msg_type;
     /// Pointer to the beginning of the message.
-    char *msg_spot;
+    char *msg_ptr;
     /// The length of the message.
-    short msg_ts;
+    size_t msg_size;
 };
 
 /// @brief Message queue data structure.
@@ -46,11 +47,11 @@ struct msqid_ds {
     /// Time of creation or last modification by msgctl().
     time_t msg_ctime;
     /// Number of bytes in queue.
-    unsigned long msg_cbytes;
+    unsigned short msg_cbytes;
     /// Number of messages in queue.
-    msgqnum_t msg_qnum;
+    unsigned short msg_qnum;
     /// Maximum number of bytes in queue.
-    msglen_t msg_qbytes;
+    unsigned short msg_qbytes;
     /// PID of last msgsnd(2).
     pid_t msg_lspid;
     /// PID of last msgrcv(2).
@@ -77,7 +78,7 @@ long sys_msgget(key_t key, int msgflg);
 /// @param msgsz specifies the size in bytes of mtext.
 /// @param msgflg specifies the action to be taken in case of specific events.
 /// @return 0 on success, -1 on failure and errno is set to indicate the error.
-long sys_msgsnd(int msqid, struct msgbuf *msgp, size_t msgsz, int msgflg);
+int sys_msgsnd(int msqid, struct msgbuf *msgp, size_t msgsz, int msgflg);
 
 /// @brief Used to receive messages.
 /// @param msqid the message queue identifier.
@@ -90,7 +91,7 @@ long sys_msgsnd(int msqid, struct msgbuf *msgp, size_t msgsz, int msgflg);
 ///                equal to the absolute value of msgtyp is received.
 /// @param msgflg specifies the action to be taken in case of specific events.
 /// @return 0 on success, -1 on failure and errno is set to indicate the error.
-long sys_msgrcv(int msqid, struct msgbuf *msgp, size_t msgsz, long msgtyp, int msgflg);
+ssize_t sys_msgrcv(int msqid, struct msgbuf *msgp, size_t msgsz, long msgtyp, int msgflg);
 
 /// @brief Message queue control operations.
 /// @param msqid the message queue identifier.
