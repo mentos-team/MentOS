@@ -51,7 +51,7 @@ struct sem {
     unsigned short sem_val;
     /// @brief Number of processes waiting for the semaphore.
     unsigned short sem_ncnt;
-    /// @brief Number of processes waiting for the value to become 0
+    /// @brief Number of processes waiting for the value to become 0.
     unsigned short sem_zcnt;
 };
 
@@ -63,8 +63,6 @@ struct semid_ds {
     time_t sem_otime;
     /// @brief Last change time.
     time_t sem_ctime;
-    /// @brief List of all the semaphores.
-    struct sem *sem_base;
     /// @brief Number of semaphores in set.
     unsigned short sem_nsems;
 };
@@ -82,7 +80,7 @@ struct sembuf {
 #ifdef __KERNEL__
 
 /// @brief Initializes the semaphore system.
-/// @return int 
+/// @return int
 int sem_init();
 
 /// @brief Get a System V semaphore set identifier.
