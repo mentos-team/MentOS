@@ -67,6 +67,25 @@ int main(int argc, char *argv[])
     // Display the message.
     printf("We received the message `%s`\n", message.mesg_text);
 
+    // ========================================================================
+    // Create child process.
+    if (!fork()) {
+        sleep(3);
+
+        // Set the content.
+        strcpy(message.mesg_text, "Hello there, i'm the child!");
+
+        // Display the message.
+        printf("I, the child, I'm sending the message `%s`\n", message.mesg_text);
+
+        // Send the message.
+        if (msgsnd(msqid, &message, sizeof(message), 0) < 0) {
+            perror("Failed to send the message");
+            return 1;
+        }
+        return 0;
+    }
+
     // Clear the user-defined message.
     memset(message.mesg_text, 0, sizeof(char) * MESSAGE_LEN);
     // Receive the message.
@@ -77,5 +96,11 @@ int main(int argc, char *argv[])
     // Display the message.
     printf("We received the message `%s`\n", message.mesg_text);
 
+    // Delete the message queue.
+    ret = msgctl(msqid, IPC_RMID, NULL);
+    if (ret < 0) {
+        perror("Failed to remove message queue.");
+    }
+    printf("Correctly removed message queue.\n");
     return 0;
 }

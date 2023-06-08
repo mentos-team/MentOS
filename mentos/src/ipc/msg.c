@@ -16,6 +16,7 @@
 #include "io/debug.h"                   // Include debugging functions.
 // ============================================================================
 
+#include "process/scheduler.h"
 #include "process/process.h"
 #include "system/panic.h"
 #include "sys/errno.h"
@@ -284,7 +285,7 @@ int sys_msgsnd(int msqid, const void *msgp, size_t msgsz, int msgflg)
     // The message queue doesn't exist.
     if (!msq_info) {
         pr_err("The message queue does not exist.\n");
-        return -EINVAL;
+        return -EIDRM;
     }
     // Check if the message queue exists for the given key, but the calling
     // process does not have permission to access the set.
@@ -293,9 +294,10 @@ int sys_msgsnd(int msqid, const void *msgp, size_t msgsz, int msgflg)
                "calling process does not have permission to access the set.\n");
         return -EACCES;
     }
+    // Check if the message can't be sent due to the msg_qbytes limit for the
+    // queue.
     if (((msq_info->msqid.msg_cbytes + msgsz) >= msq_info->msqid.msg_qbytes)) {
-        pr_err("The message can't be sent due to the message queue limit.\n");
-        return -EFAULT;
+        return -EAGAIN;
     }
     // Allocate the memory for the message.
     struct msg *message = (struct msg *)kmalloc(sizeof(struct msg));
@@ -371,7 +373,7 @@ ssize_t sys_msgrcv(int msqid, void *msgp, size_t msgsz, long msgtyp, int msgflg)
     // The message queue doesn't exist.
     if (!msq_info) {
         pr_err("The message queue does not exist.\n");
-        return -EINVAL;
+        return -EIDRM;
     }
     // Check if the message queue exists for the given key, but the calling
     // process does not have permission to access the set.
@@ -415,7 +417,7 @@ ssize_t sys_msgrcv(int msqid, void *msgp, size_t msgsz, long msgtyp, int msgflg)
         }
     }
     if (message == NULL) {
-        pr_err("There are no messages to read.\n");
+        // pr_err("There are no messages to read.\n");
         return -ENOMSG;
     }
     // Check if the message is longer than msgsz.
@@ -463,7 +465,52 @@ ssize_t sys_msgrcv(int msqid, void *msgp, size_t msgsz, long msgtyp, int msgflg)
 
 int sys_msgctl(int msqid, int cmd, struct msqid_ds *buf)
 {
-    TODO("Not implemented");
+    msq_info_t *msq_info = NULL;
+    task_struct *task    = NULL;
+    // The msqid is less than zero.
+    if (msqid < 0) {
+        pr_err("The msqid is less than zero.\n");
+        return -EINVAL;
+    }
+    // Search for the message queue.
+    msq_info = __list_find_msq_info_by_id(msqid);
+    // The message queue doesn't exist.
+    if (!msq_info) {
+        pr_err("The message queue does not exist.\n");
+        return -EIDRM;
+    }
+    // Get the calling task.
+    task = scheduler_get_current_process();
+    assert(task && "Failed to get the current running process.");
+
+    if (cmd == IPC_RMID) {
+        // Remove the message queue; any processes blocked is awakened (errno set to
+        // EIDRM); no argument required.
+
+        if ((msq_info->msqid.msg_perm.uid != task->uid) && (msq_info->msqid.msg_perm.cuid != task->uid)) {
+            pr_err("The calling process is not the creator or the owner of the queue.\n");
+            return -EPERM;
+        }
+        // Remove the info from the list.
+        __list_remove_msq_info(msq_info);
+        // Delete the info.
+        __msq_info_dealloc(msq_info);
+    } else if (cmd == IPC_STAT) {
+        // Place a copy of the msqid_ds data structure in the buffer pointed to
+        // by buf.
+        // Check if the buffer is a null pointer.
+        if (!buf) {
+            pr_err("The buffer is NULL.\n");
+            return -EINVAL;
+        }
+        // Check permissions.
+        if (!ipc_valid_permissions(O_RDONLY, &msq_info->msqid.msg_perm)) {
+            pr_err("The calling process does not have read permission to access the queue.\n");
+            return -EACCES;
+        }
+        // Copying all the data.
+        memcpy(buf, &msq_info->msqid, sizeof(struct msqid_ds));
+    }
     return 0;
 }
 

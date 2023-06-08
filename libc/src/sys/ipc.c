@@ -3,6 +3,7 @@
 /// @copyright (c) 2014-2023 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
+#include "sys/ipc.h"
 #include "sys/unistd.h"
 #include "sys/errno.h"
 #include "sys/stat.h"
@@ -33,11 +34,31 @@ _syscall4(long, semctl, int, semid, int, semnum, int, cmd, union semun *, arg)
 
 _syscall2(int, msgget, key_t, key, int, msgflg)
 
-_syscall4(int, msgsnd, int, msqid, const void *, msgp, size_t, msgsz, int, msgflg)
-
-_syscall5(ssize_t, msgrcv, int, msqid, void *, msgp, size_t, msgsz, long, msgtyp, int, msgflg)
-
 _syscall3(int, msgctl, int, msqid, int, cmd, struct msqid_ds *, buf)
+
+int msgsnd(int msqid, const void *msgp, size_t msgsz, int msgflg)
+{
+    long __res;
+    do {
+        __inline_syscall4(__res, msgsnd, msqid, msgp, msgsz, msgflg);
+        if (!(msgflg & IPC_NOWAIT) && (__res == -EAGAIN))
+            continue;
+        break;
+    } while (1);
+    __syscall_return(int, __res);
+}
+
+ssize_t msgrcv(int msqid, void *msgp, size_t msgsz, long msgtyp, int msgflg)
+{
+    long __res;
+    do {
+        __inline_syscall5(__res, msgrcv, msqid, msgp, msgsz, msgtyp, msgflg);
+        if (!(msgflg & IPC_NOWAIT) && ((__res == -EAGAIN) || (__res == -ENOMSG)))
+            continue;
+        break;
+    } while (1);
+    __syscall_return(int, __res);
+}
 
 long semop(int semid, struct sembuf *sops, unsigned nsops)
 {
