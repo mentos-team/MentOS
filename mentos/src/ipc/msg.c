@@ -20,6 +20,22 @@
 #include "assert.h"
 #include "stdio.h"
 
+///@brief A value to compute the message queue ID.
+static int __msq_id = 0;
+
+/// @brief Message queue management structure.
+typedef struct {
+    /// @brief ID associated to the message queue.
+    int id;
+    /// @brief The message queue data strcutre.
+    struct msqid_ds msqid;
+    /// Reference inside the list of message queue management structures.
+    list_head list;
+} msq_info_t;
+
+/// @brief List of all current active Message queues.
+list_head msq_list;
+
 long sys_msgget(key_t key, int msgflg)
 {
     TODO("Not implemented");
