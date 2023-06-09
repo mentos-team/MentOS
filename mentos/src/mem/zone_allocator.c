@@ -11,7 +11,7 @@
 
 #include "mem/zone_allocator.h"
 #include "mem/buddysystem.h"
-#include "klib/list_head.h"
+#include "sys/list_head.h"
 #include "kernel.h"
 #include "assert.h"
 #include "mem/paging.h"

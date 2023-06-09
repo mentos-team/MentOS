@@ -5,7 +5,7 @@
 
 // ============================================================================
 // Setup the logging for this file (do this before any other include).
-#include "klib/list_head.h"
+#include "sys/list_head.h"
 #include "limits.h"
 #include "mem/slab.h"
 #include "stddef.h"

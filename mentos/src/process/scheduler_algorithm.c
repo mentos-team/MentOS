@@ -12,7 +12,7 @@
 #include "hardware/timer.h"
 #include "process/prio.h"
 #include "assert.h"
-#include "klib/list_head.h"
+#include "sys/list_head.h"
 #include "process/wait.h"
 #include "process/scheduler.h"
 #include "process/scheduler_feedback.h"

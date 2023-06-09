@@ -11,7 +11,7 @@
 
 #include "mem/kheap.h"
 #include "mem/paging.h"
-#include "klib/list_head.h"
+#include "sys/list_head.h"
 #include "string.h"
 #include "assert.h"
 #include "math.h"

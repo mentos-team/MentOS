@@ -5,7 +5,7 @@
 
 #pragma once
 
-#include "klib/list_head.h"
+#include "sys/list_head.h"
 #include "klib/spinlock.h"
 
 /// @brief Return immediately if no child is there to be waited for.
