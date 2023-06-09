@@ -80,7 +80,7 @@ struct sembuf {
 #ifdef __KERNEL__
 
 /// @brief Initializes the semaphore system.
-/// @return int
+/// @return 0 on success, 1 on failure.
 int sem_init();
 
 /// @brief Get a System V semaphore set identifier.

@@ -27,6 +27,7 @@
 #include "system/syscall.h"
 #include "sys/module.h"
 #include "sys/sem.h"
+#include "sys/msg.h"
 #include "io/proc_modules.h"
 #include "io/vga/vga.h"
 #include "io/video.h"
@@ -308,6 +309,16 @@ int kmain(boot_info_t *boot_informations)
     if (sem_init()) {
         print_fail();
         pr_emerg("Failed to initialize the IPC/SEM system!\n");
+        return 1;
+    }
+    print_ok();
+
+    //==========================================================================
+    pr_notice("Initialize IPC/MSQ system...\n");
+    printf("Initialize IPC/MSQ system...");
+    if (msq_init()) {
+        print_fail();
+        pr_emerg("Failed to initialize the IPC/MSQ system!\n");
         return 1;
     }
     print_ok();

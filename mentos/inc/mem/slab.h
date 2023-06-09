@@ -5,7 +5,7 @@
 
 #pragma once
 
-#include "klib/list_head.h"
+#include "sys/list_head.h"
 #include "stddef.h"
 #include "mem/gfp.h"
 

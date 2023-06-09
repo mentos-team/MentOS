@@ -6,7 +6,7 @@
 #include "io/debug.h"
 #include "klib/ndtree.h"
 #include "assert.h"
-#include "klib/list_head.h"
+#include "sys/list_head.h"
 #include "mem/slab.h"
 
 // ============================================================================
