@@ -99,6 +99,7 @@ add_library(
     ${PROJECT_SOURCE_DIR}/src/sys/unistd.c
     ${PROJECT_SOURCE_DIR}/src/sys/errno.c
     ${PROJECT_SOURCE_DIR}/src/sys/utsname.c
+    ${PROJECT_SOURCE_DIR}/src/sys/mman.c
     ${PROJECT_SOURCE_DIR}/src/sys/ioctl.c
     ${PROJECT_SOURCE_DIR}/src/unistd/creat.c
     ${PROJECT_SOURCE_DIR}/src/unistd/getppid.c

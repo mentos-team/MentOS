@@ -4,7 +4,8 @@
 /// See LICENSE.md for details.
 
 // Setup the logging for this file (do this before any other include).
-#include "sys/kernel_levels.h"           // Include kernel log levels.
+#include "sys/kernel_levels.h" // Include kernel log levels.
+#include "system/syscall_types.h"
 #define __DEBUG_HEADER__ "[SYSCLL]"      ///< Change header.
 #define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
 #include "io/debug.h"                    // Include debugging functions.
@@ -21,6 +22,7 @@
 
 #include "sys/errno.h"
 #include "sys/utsname.h"
+#include "sys/mman.h"
 #include "sys/msg.h"
 #include "sys/sem.h"
 #include "sys/shm.h"
@@ -129,7 +131,7 @@ void syscall_init()
     sys_call_table[__NR_swapon]                 = (SystemCall)sys_ni_syscall;
     sys_call_table[__NR_reboot]                 = (SystemCall)sys_reboot;
     sys_call_table[__NR_readdir]                = (SystemCall)sys_ni_syscall;
-    sys_call_table[__NR_mmap]                   = (SystemCall)sys_ni_syscall;
+    sys_call_table[__NR_mmap]                   = (SystemCall)sys_mmap;
     sys_call_table[__NR_munmap]                 = (SystemCall)sys_ni_syscall;
     sys_call_table[__NR_truncate]               = (SystemCall)sys_ni_syscall;
     sys_call_table[__NR_ftruncate]              = (SystemCall)sys_ni_syscall;
@@ -278,7 +280,14 @@ void syscall_handler(pt_regs *f)
             (sc_index == __NR_sigreturn)) {
             arg0 = (uintptr_t)f;
         }
-        ret = func(arg0, arg1, arg2, arg3, arg4);
+        if (sc_index == __NR_mmap) {
+            // Get the arguments.
+            unsigned *args = (unsigned *)arg0;
+            // Call the function.
+            ret = func(args[0], args[1], args[2], args[3], args[4], args[5]);
+        } else {
+            ret = func(arg0, arg1, arg2, arg3, arg4);
+        }
     }
     f->eax = ret;
 

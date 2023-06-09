@@ -625,3 +625,19 @@ void destroy_process_image(mm_struct_t *mm)
     // Free the mm_struct.
     kmem_cache_free(mm);
 }
+
+void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset)
+{
+    pr_warning("%p\n", addr);
+    pr_warning("%d\n", length);
+    pr_warning("%d\n", prot);
+    pr_warning("%d\n", flags);
+    pr_warning("%d\n", fd);
+    pr_warning("%d\n", offset);
+    return NULL;
+}
+
+int sys_munmap(void *addr, size_t length)
+{
+    return 0;
+}
