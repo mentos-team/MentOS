@@ -163,22 +163,28 @@ static inline void __msq_info_push_message(msq_info_t *msq_info, struct msg *mes
     assert(msq_info && "Received a NULL pointer.");
     assert(message && "Received a NULL pointer.");
     // If there is no first message set, set it.
-    if (!msq_info->msg_first)
+    if (msq_info->msg_first == NULL) {
         msq_info->msg_first = message;
+    }
     // If there is no last message set, set it.
-    if (!msq_info->msg_last)
+    if (msq_info->msg_last == NULL) {
         msq_info->msg_last = message;
-    else // Otherwise, append after the last.
+    } else { // Otherwise, append after the last.
         msq_info->msg_last->msg_next = message;
+        msq_info->msg_last           = message;
+    }
 }
 
 static inline void __msq_info_remove_message(msq_info_t *msq_info, struct msg *message)
 {
     assert(msq_info && "Received a NULL pointer.");
     assert(message && "Received a NULL pointer.");
+    // If the message is the first of the queue, next will become the first.
     if (msq_info->msg_first == message) {
         msq_info->msg_first = message->msg_next;
     } else {
+        // Otherwise, we need to find the element before it, and connect the
+        // previous one with the next one.
         for (struct msg *it = msq_info->msg_first; it; it = it->msg_next) {
             if (it->msg_next == message) {
                 it->msg_next = message->msg_next;
@@ -186,6 +192,7 @@ static inline void __msq_info_remove_message(msq_info_t *msq_info, struct msg *m
             }
         }
     }
+    // If the message is the last of the queue, set the last to NULL.
     if (msq_info->msg_last == message)
         msq_info->msg_last = NULL;
     // Clear the pointer in message.
@@ -339,6 +346,12 @@ int sys_msgsnd(int msqid, const void *msgp, size_t msgsz, int msgflg)
              msq_info->msqid.msg_qnum,
              msq_info->msqid.msg_cbytes,
              message->msg_ptr);
+    for (struct msg *it = msq_info->msg_first; it; it = it->msg_next) {
+        pr_debug("    type: %3ld, size: %3d, msg: `%s`\n",
+                 it->msg_type,
+                 it->msg_size,
+                 it->msg_ptr);
+    }
     return 0;
 }
 
@@ -444,6 +457,9 @@ ssize_t sys_msgrcv(int msqid, void *msgp, size_t msgsz, long msgtyp, int msgflg)
     // Decrement the number of messages in the message queue.
     msq_info->msqid.msg_qnum -= 1;
 
+    // Remove the message to the queue.
+    __msq_info_remove_message(msq_info, message);
+
     pr_debug("[%2d] msg_lspid: %2d, msg_lrpid: %2d, msg_qnum: %2d, msg_cbytes: %4d (%s)\n",
              msq_info->id,
              msq_info->msqid.msg_lspid,
@@ -451,9 +467,12 @@ ssize_t sys_msgrcv(int msqid, void *msgp, size_t msgsz, long msgtyp, int msgflg)
              msq_info->msqid.msg_qnum,
              msq_info->msqid.msg_cbytes,
              message->msg_ptr);
-
-    // Remove the message to the queue.
-    __msq_info_remove_message(msq_info, message);
+    for (struct msg *it = msq_info->msg_first; it; it = it->msg_next) {
+        pr_debug("    type: %3ld, size: %3d, msg: `%s`\n",
+                 it->msg_type,
+                 it->msg_size,
+                 it->msg_ptr);
+    }
 
     // Free the memory of the message.
     kfree(message->msg_ptr);
@@ -524,16 +543,38 @@ ssize_t procipc_msg_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyte
         pr_err("Received a NULL file.\n");
         return -ENOENT;
     }
-    size_t buffer_len = 0, read_pos = 0, write_count = 0, ret = 0;
-    struct msqid_ds *entry = NULL;
+    size_t buffer_len = 0, read_pos = 0, ret = 0;
+    ssize_t write_count  = 0;
+    msq_info_t *msq_info = NULL;
     char buffer[BUFSIZ];
 
     // Prepare a buffer.
     memset(buffer, 0, BUFSIZ);
     // Prepare the header.
-    ret = sprintf(buffer, "key      msqid ...\n");
+    ret = sprintf(buffer, "       key      msqid perms      cbytes       qnum lspid lrpid   uid   gid  cuid  cgid      stime      rtime      ctime\n");
 
-    // Implementation goes here...
+    list_for_each_decl(it, &msq_list)
+    {
+        // Get the current entry.
+        msq_info = list_entry(it, msq_info_t, list);
+        // Add the line.
+        ret += sprintf(
+            buffer + ret, "%10d %11d %6d %12d %11d %6d %6d %6d %6d %6d %6d %11d %11d %11d\n",
+            abs(msq_info->msqid.msg_perm.key),
+            msq_info->id,
+            msq_info->msqid.msg_perm.mode,
+            msq_info->msqid.msg_cbytes,
+            msq_info->msqid.msg_qnum,
+            msq_info->msqid.msg_lspid,
+            msq_info->msqid.msg_lrpid,
+            msq_info->msqid.msg_perm.uid,
+            msq_info->msqid.msg_perm.gid,
+            msq_info->msqid.msg_perm.cuid,
+            msq_info->msqid.msg_perm.cgid,
+            msq_info->msqid.msg_stime,
+            msq_info->msqid.msg_rtime,
+            msq_info->msqid.msg_ctime);
+    }
     sprintf(buffer + ret, "\n");
 
     // Perform read.

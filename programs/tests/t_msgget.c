@@ -20,11 +20,38 @@ typedef struct {
     char mesg_text[MESSAGE_LEN];
 } message_t;
 
+static inline void __send_message(int msqid, long mtype, message_t *message, const char *msg)
+{
+    // Set the type.
+    message->mesg_type = mtype;
+    // Set the content.
+    strncpy(message->mesg_text, msg, MESSAGE_LEN);
+    // Send the message.
+    if (msgsnd(msqid, message, sizeof(message->mesg_text), 0) < 0) {
+        perror("Failed to send the message");
+    } else {
+        printf("[%2d] Message sent (%2d) `%s`\n", getpid(), message->mesg_type, message->mesg_text);
+    }
+}
+
+static inline void __receive_message(int msqid, long mtype, message_t *message)
+{
+    // Clear the user-defined message.
+    memset(message->mesg_text, 0, sizeof(char) * MESSAGE_LEN);
+    // Receive the message.
+    if (msgrcv(msqid, message, sizeof(message->mesg_text), mtype, 0) < 0) {
+        perror("Failed to receive the message");
+    } else {
+        printf("[%2d] Message received (%2d) `%s` (Query: %2d)\n", getpid(), message->mesg_type, message->mesg_text, mtype);
+    }
+}
+
 int main(int argc, char *argv[])
 {
     message_t message;
-    long ret, msqid;
+    long ret;
     key_t key;
+    int msqid;
 
     // ========================================================================
     // Generating a key using ftok
@@ -44,57 +71,34 @@ int main(int argc, char *argv[])
     }
     printf("Created message queue (id : %d)\n", msqid);
 
-    // Set the type.
-    message.mesg_type = 1;
-    // Set the content.
-    strcpy(message.mesg_text, "Hello there!");
-
-    // Send the message.
-    if (msgsnd(msqid, &message, sizeof(message), 0) < 0) {
-        perror("Failed to send the message");
-        return 1;
-    }
-    // Display the message.
-    printf("We sent the message `%s`\n", message.mesg_text);
-
-    // Clear the user-defined message.
-    memset(message.mesg_text, 0, sizeof(char) * MESSAGE_LEN);
-    // Receive the message.
-    if (msgrcv(msqid, &message, sizeof(message), 1, 0) < 0) {
-        perror("Failed to receive the message");
-        return 1;
-    }
-    // Display the message.
-    printf("We received the message `%s`\n", message.mesg_text);
-
     // ========================================================================
+    // Send the message.
+    __send_message(msqid, 1, &message, "Hello there!");
+    // Receive the message.
+    __receive_message(msqid, 1, &message);
     // Create child process.
     if (!fork()) {
         sleep(3);
-
-        // Set the content.
-        strcpy(message.mesg_text, "Hello there, i'm the child!");
-
-        // Display the message.
-        printf("I, the child, I'm sending the message `%s`\n", message.mesg_text);
-
         // Send the message.
-        if (msgsnd(msqid, &message, sizeof(message), 0) < 0) {
-            perror("Failed to send the message");
-            return 1;
-        }
+        __send_message(msqid, 1, &message, "General Kenobi...");
         return 0;
     }
-
-    // Clear the user-defined message.
-    memset(message.mesg_text, 0, sizeof(char) * MESSAGE_LEN);
     // Receive the message.
-    if (msgrcv(msqid, &message, sizeof(message), 1, 0) < 0) {
-        perror("Failed to receive the message");
-        return 1;
-    }
-    // Display the message.
-    printf("We received the message `%s`\n", message.mesg_text);
+    __receive_message(msqid, 1, &message);
+    sleep(3);
+
+    // ========================================================================
+    // Send the message.
+    __send_message(msqid, 7, &message, "course, ");
+    __send_message(msqid, 9, &message, "cheers!");
+    __send_message(msqid, 1, &message, "From the operating");
+    __send_message(msqid, 3, &message, "systems");
+
+    // Receive the message.
+    __receive_message(msqid, 1, &message);
+    __receive_message(msqid, -8, &message);
+    __receive_message(msqid, -8, &message);
+    __receive_message(msqid, 0, &message);
 
     // Delete the message queue.
     ret = msgctl(msqid, IPC_RMID, NULL);

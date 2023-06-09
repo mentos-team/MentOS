@@ -13,13 +13,6 @@ int main(int argc, char *argv[], char *envp[])
     char *_argv[] = { "login", NULL };
 
     if (fork() == 0) {
-        execv("/bin/tests/t_msgget", _argv);
-        printf("This is bad, I should not be here! EXEC NOT WORKING\n");
-    }
-
-    while (1) {}
-
-    if (fork() == 0) {
         execv("/bin/login", _argv);
         printf("This is bad, I should not be here! EXEC NOT WORKING\n");
     }
