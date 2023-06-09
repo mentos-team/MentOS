@@ -5,12 +5,7 @@
 
 // ============================================================================
 // Setup the logging for this file (do this before any other include).
-#include "sys/list_head.h"
-#include "limits.h"
-#include "mem/slab.h"
-#include "stddef.h"
 #include "sys/kernel_levels.h" // Include kernel log levels.
-#include "system/syscall.h"
 #define __DEBUG_HEADER__ "[IPCmsg]"     ///< Change header.
 #define __DEBUG_LEVEL__  LOGLEVEL_DEBUG ///< Set log level.
 #include "io/debug.h"                   // Include debugging functions.
