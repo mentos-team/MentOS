@@ -425,6 +425,9 @@ page_t *_alloc_pages(gfp_t gfp_mask, uint32_t order)
         zone->free_pages -= block_size;
     }
 
+#if 0
+    pr_warning("BS-A: (page: %p order: %d)\n", page, order);
+#endif
     return page;
 }
 
@@ -453,7 +456,7 @@ void __free_pages(page_t *page)
 
     zone->free_pages += block_size;
 #if 0
-    pr_debug("BS-F: (page: %p order: %d)\n", page, order);
+    pr_warning("BS-F: (page: %p order: %d)\n", page, order);
 #endif
     //buddy_system_dump(&zone->buddy_system);
 }
