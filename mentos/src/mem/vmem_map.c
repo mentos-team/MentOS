@@ -80,7 +80,7 @@ void virt_init(void)
 
 static virt_map_page_t *_alloc_virt_pages(uint32_t pfn_count)
 {
-    int order              = find_nearest_order_greater(0, pfn_count << 12);
+    unsigned order         = find_nearest_order_greater(0, pfn_count << 12);
     virt_map_page_t *vpage = PG_FROM_BBSTRUCT(bb_alloc_pages(&virt_default_mapping.bb_instance, order), virt_map_page_t, bbpage);
     return vpage;
 }
