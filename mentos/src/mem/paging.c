@@ -15,6 +15,11 @@
 #include "mem/kheap.h"
 #include "descriptor_tables/isr.h"
 #include "system/panic.h"
+#include "sys/list_head_algorithm.h"
+#include "stddef.h"
+#include "stdint.h"
+#include "sys/list_head.h"
+#include "sys/mman.h"
 #include "assert.h"
 #include "string.h"
 
@@ -178,6 +183,9 @@ uint32_t create_vm_area(mm_struct_t *mm,
     list_head_insert_after(&new_segment->vm_list, &mm->mmap_list);
     mm->mmap_cache = new_segment;
 
+    // Sort the mmap_list.
+    list_head_sort(&mm->mmap_list, vm_area_compare);
+
     // Update memory descriptor info.
     mm->map_count++;
 
@@ -231,6 +239,41 @@ uint32_t clone_vm_area(mm_struct_t *mm, vm_area_struct_t *area, int cow, uint32_
 
     mm->total_vm += (1U << order);
 
+    return 0;
+}
+
+int destroy_vm_area(mm_struct_t *mm, vm_area_struct_t *area)
+{
+    size_t area_total_size, area_size, area_start;
+    uint32_t order, block_size;
+    page_t *phy_page;
+    // Get the total area size.
+    area_total_size = area->vm_end - area->vm_start;
+    // Get the starting location.
+    area_start = area->vm_start;
+    // Free all the memory.
+    while (area_total_size > 0) {
+        area_size = area_total_size;
+        phy_page  = mem_virtual_to_page(mm->pgd, area_start, &area_size);
+        // If the pages are marked as copy-on-write, do not deallocate them!
+        if (page_count(phy_page) > 1) {
+            order      = phy_page->bbpage.order;
+            block_size = 1UL << order;
+            for (int i = 0; i < block_size; i++) {
+                page_dec(phy_page + i);
+            }
+        } else {
+            __free_pages(phy_page);
+        }
+        area_total_size -= area_size;
+        area_start += area_size;
+    }
+    // Delete segment from the mmap.
+    list_head_remove(&area->vm_list);
+    // Free the memory.
+    kmem_cache_free(area);
+    // Reduce the counter for memory mapped areas.
+    --mm->map_count;
     return 0;
 }
 

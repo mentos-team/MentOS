@@ -136,6 +136,13 @@ typedef struct mm_struct_t {
 /// @brief Cache used to store page tables.
 extern kmem_cache_t *pgtbl_cache;
 
+static inline int vm_area_compare(const list_head *a, const list_head *b)
+{
+    vm_area_struct_t *_a = list_entry(a, vm_area_struct_t, vm_list);
+    vm_area_struct_t *_b = list_entry(b, vm_area_struct_t, vm_list);
+    return _a->vm_start > _b->vm_end;
+}
+
 /// @brief Initializes paging
 /// @param info Information coming from bootloader.
 void paging_init(boot_info_t *info);
@@ -229,15 +236,21 @@ uint32_t create_vm_area(mm_struct_t *mm,
                         uint32_t gfpflags);
 
 /// @brief Clone a virtual memory area, using copy on write if specified
-/// @param mm       The memory descriptor which will contain the new segment.
-/// @param area     The area to clone
-/// @param cow      Whether to use copy-on-write or just copy everything.
-/// @param gfpflags The Get Free Pages flags.
+/// @param mm the memory descriptor which will contain the new segment.
+/// @param area the area to clone
+/// @param cow whether to use copy-on-write or just copy everything.
+/// @param gfpflags the Get Free Pages flags.
 /// @return Zero on success.
 uint32_t clone_vm_area(mm_struct_t *mm,
                        vm_area_struct_t *area,
                        int cow,
                        uint32_t gfpflags);
+
+/// @brief Destroys a virtual memory area.
+/// @param mm the memory descriptor from which we will destroy the area.
+/// @param area the are we want to destroy.
+/// @return 0 if the area was destroyed, or 1 if the operation failed.
+int destroy_vm_area(mm_struct_t *mm, vm_area_struct_t *area);
 
 /// @brief Creates the main memory descriptor.
 /// @param stack_size The size of the stack in byte.
