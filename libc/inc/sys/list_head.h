@@ -22,30 +22,36 @@ typedef struct list_head {
 #define list_entry(ptr, type, member) container_of(ptr, type, member)
 
 /// @brief Iterates over a list.
-/// @param pos    The &list_head to use as a loop cursor.
-/// @param head   The head for your list.
+/// @param pos the name of the iterator used to visit the list.
+/// @param head the head for your list.
 #define list_for_each(pos, head) \
     for ((pos) = (head)->next; (pos) != (head); (pos) = (pos)->next)
 
-/// @brief Iterates over a list backwards.
-/// @param pos    The &list_head to use as a loop cursor.
-/// @param head   The head for your list.
-#define list_for_each_prev(pos, head) \
-    for ((pos) = (head)->prev; (pos) != (head); (pos) = (pos)->prev)
-
 /// @brief Iterates over a list safe against removal of list entry.
-/// @param pos    The &list_head to use as a loop cursor.
-/// @param store  Another &list_head to use as temporary storage.
-/// @param head   The head for your list.
+/// @param pos the name of the iterator used to visit the list.
+/// @param store another list iterator to use as temporary storage.
+/// @param head the head for your list.
 #define list_for_each_safe(pos, store, head)                           \
     for ((pos) = (head)->next, (store) = (pos)->next; (pos) != (head); \
          (pos) = (store), (store) = (pos)->next)
 
-/// @brief Iterates over a list.
-/// @param pos    The &list_head to use as a loop cursor.
-/// @param head   The head for your list.
+/// @brief Iterates over a list, but declares the iterator.
+/// @param pos the name of the iterator used to visit the list.
+/// @param head the head for your list.
 #define list_for_each_decl(pos, head) \
     for (list_head * (pos) = (head)->next; (pos) != (head); (pos) = (pos)->next)
+
+/// @brief Iterates over a list backwards.
+/// @param pos the name of the iterator used to visit the list.
+/// @param head the head for your list.
+#define list_for_each_prev(pos, head) \
+    for ((pos) = (head)->prev; (pos) != (head); (pos) = (pos)->prev)
+
+/// @brief Iterates over a list backwards, but declares the iterator.
+/// @param pos the name of the iterator used to visit the list.
+/// @param head the head for your list.
+#define list_for_each_prev_decl(pos, head) \
+    for (list_head * (pos) = (head)->prev; (pos) != (head); (pos) = (pos)->prev)
 
 /// @brief Initializes the list_head.
 /// @param head The head of your list.
@@ -160,4 +166,32 @@ static inline void list_head_append(list_head *main, list_head *secondary)
         // Re-initialize the secondary list.
         list_head_init(secondary);
     }
+}
+
+/// @brief Replaces entry1 with entry2, entry1 will be removed from the list.
+/// @param entry1 the first entry to remove.
+/// @param entry2 the second entry which will take the place of the first entry.
+static inline void list_head_replace(list_head *entry1, list_head *entry2)
+{
+    // First we need to remove the second entry.
+    list_head_remove(entry2);
+    // Then, we can place second entry where the first entry is.
+    entry2->next       = entry1->next;
+    entry2->next->prev = entry2;
+    entry2->prev       = entry1->prev;
+    entry2->prev->next = entry2;
+    // Re-initialize the first entry.
+    list_head_init(entry1);
+}
+
+/// @brief Swaps entry1 and entry2 inside the list.
+/// @param entry1 the first entry.
+/// @param entry2 the second entry.
+static inline void list_head_swap(list_head *entry1, list_head *entry2)
+{
+    list_head *pos = entry2->prev;
+    list_head_replace(entry1, entry2);
+    if (pos == entry1)
+        pos = entry2;
+    list_head_insert_after(entry1, pos);
 }
