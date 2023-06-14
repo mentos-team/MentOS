@@ -70,6 +70,79 @@ void paging_flush_tlb_single(unsigned long addr)
                          : "memory");
 }
 
+/// @brief Searches for the virtual memory area at the given address.
+/// @param mm the memory descriptor which should contain the area.
+/// @param vm_start the starting address of the area we are looking for.
+/// @return a pointer to the area if we found it, NULL otherwise.
+static inline vm_area_struct_t *__find_vm_area(mm_struct_t *mm, uintptr_t vm_start)
+{
+    vm_area_struct_t *area;
+    // Find the area.
+    list_for_each_prev_decl(it, &mm->mmap_list)
+    {
+        area = list_entry(it, vm_area_struct_t, vm_list);
+        assert(area && "There is a NULL area in the list.");
+        if (area->vm_start == vm_start)
+            return area;
+    }
+    return NULL;
+}
+
+/// @brief
+/// @param mm
+/// @param vm_start
+/// @param vm_end
+/// @return int
+static inline int __valid_vm_area(mm_struct_t *mm, uintptr_t vm_start, uintptr_t vm_end)
+{
+    if (vm_end <= vm_start)
+        return 1;
+    // Get the stack.
+    vm_area_struct_t *area, *prev_area;
+    list_for_each_prev_decl(it, &mm->mmap_list)
+    {
+        area = list_entry(it, vm_area_struct_t, vm_list);
+        assert(area && "There is a NULL area in the list.");
+        // Check the previous segment.
+        if (area->vm_list.prev != &mm->mmap_list) {
+            prev_area = list_entry(area->vm_list.prev, vm_area_struct_t, vm_list);
+            assert(prev_area && "There is a NULL area in the list.");
+            if ((vm_start > prev_area->vm_end) && (vm_end < area->vm_start))
+                return 0;
+        }
+    }
+    return 1;
+}
+
+/// @brief Searches for an empty spot for a new virtual memory area.
+/// @param mm the memory descriptor which should contain the new area.
+/// @param length the size of the empty spot.
+/// @param vm_start where we save the starting address for the new area.
+/// @return 0 on success, 1 on failure.
+static inline int __find_vm_free_area(mm_struct_t *mm, size_t length, uintptr_t *vm_start)
+{
+    // Get the stack.
+    vm_area_struct_t *area, *prev_area;
+    list_for_each_prev_decl(it, &mm->mmap_list)
+    {
+        area = list_entry(it, vm_area_struct_t, vm_list);
+        assert(area && "There is a NULL area in the list.");
+        // Check the previous segment.
+        if (area->vm_list.prev != &mm->mmap_list) {
+            prev_area = list_entry(area->vm_list.prev, vm_area_struct_t, vm_list);
+            assert(prev_area && "There is a NULL area in the list.");
+            // Compute the available space.
+            unsigned available_space = area->vm_start - prev_area->vm_end;
+            // If the space is enough, return the address.
+            if (available_space >= length) {
+                *vm_start = area->vm_start - length;
+                return 0;
+            }
+        }
+    }
+    return 1;
+}
+
 uint32_t create_vm_area(mm_struct_t *mm,
                         uint32_t virt_start,
                         size_t size,
