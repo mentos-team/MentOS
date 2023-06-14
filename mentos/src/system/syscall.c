@@ -132,7 +132,7 @@ void syscall_init()
     sys_call_table[__NR_reboot]                 = (SystemCall)sys_reboot;
     sys_call_table[__NR_readdir]                = (SystemCall)sys_ni_syscall;
     sys_call_table[__NR_mmap]                   = (SystemCall)sys_mmap;
-    sys_call_table[__NR_munmap]                 = (SystemCall)sys_ni_syscall;
+    sys_call_table[__NR_munmap]                 = (SystemCall)sys_munmap;
     sys_call_table[__NR_truncate]               = (SystemCall)sys_ni_syscall;
     sys_call_table[__NR_ftruncate]              = (SystemCall)sys_ni_syscall;
     sys_call_table[__NR_fchmod]                 = (SystemCall)sys_ni_syscall;

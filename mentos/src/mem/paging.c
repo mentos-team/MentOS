@@ -627,8 +627,6 @@ mm_struct_t *create_blank_process_image(size_t stack_size)
     mm_struct_t *mm = kmem_cache_alloc(mm_cache, GFP_KERNEL);
     memset(mm, 0, sizeof(mm_struct_t));
 
-    list_head_init(&mm->mmap_list);
-
     // TODO: Use this field
     list_head_init(&mm->mm_list);
 
@@ -690,41 +688,18 @@ void destroy_process_image(mm_struct_t *mm)
 
     // Free each segment inside mm.
     vm_area_struct_t *segment = NULL;
-
-    list_head *it = mm->mmap_list.next;
+    // Iterate the list.
+    list_head *it = mm->mmap_list.next, *next;
     while (!list_head_empty(it)) {
         segment = list_entry(it, vm_area_struct_t, vm_list);
-
-        size_t size = segment->vm_end - segment->vm_start;
-
-        uint32_t area_start = segment->vm_start;
-
-        while (size > 0) {
-            size_t area_size = size;
-            page_t *phy_page = mem_virtual_to_page(mm->pgd, area_start, &area_size);
-
-            // If the pages are marked as copy-on-write, do not deallocate them!
-            if (page_count(phy_page) > 1) {
-                uint32_t order      = phy_page->bbpage.order;
-                uint32_t block_size = 1UL << order;
-                for (int i = 0; i < block_size; i++) {
-                    page_dec(phy_page + i);
-                }
-            } else {
-                __free_pages(phy_page);
-            }
-
-            size -= area_size;
-            area_start += area_size;
+        // Save the pointer to the next element in the list.
+        next = segment->vm_list.next;
+        if (destroy_vm_area(mm, segment)) {
+            // Destroy the area.
+            kernel_panic("We failed to destroy the virtual memory area.");
         }
-        // Free the vm_area_struct.
-
-        // Delete segment from the mmap
-        it = segment->vm_list.next;
-        list_head_remove(&segment->vm_list);
-        --mm->map_count;
-
-        kmem_cache_free(segment);
+        // Move to the next element.
+        it = next;
     }
 
     // Free all the page tables
@@ -744,16 +719,51 @@ void destroy_process_image(mm_struct_t *mm)
 
 void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset)
 {
-    pr_warning("%p\n", addr);
-    pr_warning("%d\n", length);
-    pr_warning("%d\n", prot);
-    pr_warning("%d\n", flags);
-    pr_warning("%d\n", fd);
-    pr_warning("%d\n", offset);
-    return NULL;
+    uintptr_t vm_start;
+    // Get the current task.
+    task_struct *task = scheduler_get_current_process();
+    // Check if we were asked for a specific spot.
+    if (addr && __valid_vm_area(task->mm, (uintptr_t)addr, (uintptr_t)addr + length)) {
+        vm_start = (uintptr_t)addr;
+    } else {
+        // Find an empty spot.
+        if (__find_vm_free_area(task->mm, length, &vm_start)) {
+            pr_err("We failed to find a suitable spot for a new virtual memory area.\n");
+            return NULL;
+        }
+    }
+    // Allocate the segment.
+    uintptr_t virt_addr = create_vm_area(
+        task->mm,
+        vm_start,
+        length,
+        MM_PRESENT | MM_RW | MM_COW | MM_USER,
+        GFP_HIGHUSER);
+    task->mm->mmap_cache->vm_flags = flags;
+    return (void *)virt_addr;
 }
 
 int sys_munmap(void *addr, size_t length)
 {
-    return 0;
+    // Get the current task.
+    task_struct *task = scheduler_get_current_process();
+    // Get the stack.
+    vm_area_struct_t *segment;
+    //
+    unsigned vm_start = (uintptr_t)addr, size;
+    // Find the area.
+    list_for_each_prev_decl(it, &task->mm->mmap_list)
+    {
+        segment = list_entry(it, vm_area_struct_t, vm_list);
+        assert(segment && "There is a NULL area in the list.");
+        // Compute the size of the segment.
+        size = segment->vm_end - segment->vm_start;
+        // Check the segment.
+        if ((vm_start == segment->vm_start) && (length == size)) {
+            pr_warning("[0x%p:0x%p] Found it, destroying it.\n", segment->vm_start, segment->vm_end);
+            destroy_vm_area(task->mm, segment);
+            return 0;
+        }
+    }
+    return 1;
 }
