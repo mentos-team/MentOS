@@ -10,6 +10,7 @@
 #include "kernel.h"
 #include "stddef.h"
 #include "boot.h"
+#include "stdint.h"
 
 /// Size of a page.
 #define PAGE_SIZE 4096U
@@ -251,6 +252,12 @@ uint32_t clone_vm_area(mm_struct_t *mm,
 /// @param area the are we want to destroy.
 /// @return 0 if the area was destroyed, or 1 if the operation failed.
 int destroy_vm_area(mm_struct_t *mm, vm_area_struct_t *area);
+
+/// @brief Searches for the virtual memory area at the given address.
+/// @param mm the memory descriptor which should contain the area.
+/// @param vm_start the starting address of the area we are looking for.
+/// @return a pointer to the area if we found it, NULL otherwise.
+vm_area_struct_t *find_vm_area(mm_struct_t *mm, uint32_t vm_start);
 
 /// @brief Creates the main memory descriptor.
 /// @param stack_size The size of the stack in byte.

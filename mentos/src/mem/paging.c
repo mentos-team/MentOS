@@ -75,24 +75,6 @@ void paging_flush_tlb_single(unsigned long addr)
                          : "memory");
 }
 
-/// @brief Searches for the virtual memory area at the given address.
-/// @param mm the memory descriptor which should contain the area.
-/// @param vm_start the starting address of the area we are looking for.
-/// @return a pointer to the area if we found it, NULL otherwise.
-static inline vm_area_struct_t *__find_vm_area(mm_struct_t *mm, uintptr_t vm_start)
-{
-    vm_area_struct_t *segment;
-    // Find the area.
-    list_for_each_prev_decl(it, &mm->mmap_list)
-    {
-        segment = list_entry(it, vm_area_struct_t, vm_list);
-        assert(segment && "There is a NULL area in the list.");
-        if (segment->vm_start == vm_start)
-            return segment;
-    }
-    return NULL;
-}
-
 /// @brief
 /// @param mm
 /// @param vm_start
@@ -275,6 +257,20 @@ int destroy_vm_area(mm_struct_t *mm, vm_area_struct_t *area)
     // Reduce the counter for memory mapped areas.
     --mm->map_count;
     return 0;
+}
+
+inline vm_area_struct_t *find_vm_area(mm_struct_t *mm, uint32_t vm_start)
+{
+    vm_area_struct_t *segment;
+    // Find the area.
+    list_for_each_prev_decl(it, &mm->mmap_list)
+    {
+        segment = list_entry(it, vm_area_struct_t, vm_list);
+        assert(segment && "There is a NULL area in the list.");
+        if (segment->vm_start == vm_start)
+            return segment;
+    }
+    return NULL;
 }
 
 static void __init_pagedir(page_directory_t *pdir)

@@ -161,31 +161,6 @@ static inline block_t *__blkmngr_get_next_block(block_t *block, uint32_t *tail)
     return block->next;
 }
 
-/// @brief Find the current user heap.
-/// @return The heap structure if heap exists, otherwise NULL.
-static vm_area_struct_t *__find_user_heap()
-{
-    // Get the current process.
-    task_struct *task = scheduler_get_current_process();
-    assert(task && "There is no current task!\n");
-    // Get the memory descriptor.
-    mm_struct_t *mm = task->mm;
-    assert(mm && "The mm_struct of the current task is not initialized!\n");
-    // If not set return NULL.
-    if (mm->start_brk) {
-        // Otherwise find the respective heap segment.
-        vm_area_struct_t *segment = NULL;
-        list_for_each_decl(it, &mm->mmap_list)
-        {
-            segment = list_entry(it, vm_area_struct_t, vm_list);
-            if (segment->vm_start == mm->start_brk) {
-                return segment;
-            }
-        }
-    }
-    return NULL;
-}
-
 /// @brief Extends the provided heap of the given increment.
 /// @param heap_top  Current top of the heap.
 /// @param heap      Pointer to the heap.
@@ -736,13 +711,11 @@ void *usbrk(int increment)
     // Get the current process.
     task_struct *task = scheduler_get_current_process();
     assert(task && "There is no current task!\n");
-    // Get the memory descriptor.
-    mm_struct_t *mm = task->mm;
-    assert(mm && "The mm_struct of the current task is not initialized!\n");
+    assert(task->mm && "The mm_struct of the current task is not initialized!\n");
     // Get the top address of the heap.
     uint32_t *heap_top = &task->mm->brk;
     // Get the heap.
-    vm_area_struct_t *heap_segment = __find_user_heap();
+    vm_area_struct_t *heap_segment = find_vm_area(task->mm, task->mm->start_brk);
     // Perform brk.
     return __do_brk(heap_top, heap_segment, increment);
 }
@@ -755,21 +728,19 @@ void *sys_brk(void *addr)
     // Get the current process.
     task = scheduler_get_current_process();
     assert(task && "There is no current task!\n");
-    // Get the memory descriptor.
-    mm = task->mm;
-    assert(mm && "The mm_struct of the current task is not initialized!\n");
+    assert(task->mm && "The mm_struct of the current task is not initialized!\n");
     // Get the heap.
-    heap_segment = __find_user_heap();
+    heap_segment = find_vm_area(task->mm, task->mm->start_brk);
     // Allocate the segment if don't exist.
     if (heap_segment == NULL) {
         heap_segment = create_vm_area(
-            mm,
+            task->mm,
             0x40000000 /*FIXME! stabilize this*/,
             UHEAP_INITIAL_SIZE,
             MM_RW | MM_PRESENT | MM_USER | MM_UPDADDR,
             GFP_HIGHUSER);
-        mm->start_brk = heap_segment->vm_start;
-        mm->brk       = heap_segment->vm_start;
+        task->mm->start_brk = heap_segment->vm_start;
+        task->mm->brk       = heap_segment->vm_start;
         // Reserved space for:
         // 1) First memory block.
         // static block_t *head = NULL;
@@ -777,7 +748,7 @@ void *sys_brk(void *addr)
         // static block_t *tail = NULL;
         // 3) All the memory blocks that are freed.
         // static block_t *freelist = NULL;
-        mm->brk += 3 * sizeof(block_t *);
+        task->mm->brk += 3 * sizeof(block_t *);
     }
     // If the address falls inside the memory region, call the free function,
     // otherwise execute a malloc of the specified amount.
