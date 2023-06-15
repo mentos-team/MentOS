@@ -4,6 +4,7 @@
 /// See LICENSE.md for details.
 
 // Setup the logging for this file (do this before any other include).
+#include "stdbool.h"
 #include "sys/kernel_levels.h"           // Include kernel log levels.
 #define __DEBUG_HEADER__ "[KHEAP ]"      ///< Change header.
 #define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
@@ -41,6 +42,16 @@ typedef struct block_t {
     struct block_t *next;
 } block_t;
 
+/// @brief Maps the heap memory to this three easily accessible values.
+typedef struct {
+    /// @brief Pointer to the head block.
+    block_t *head;
+    /// @brief Pointer to the tail block.
+    block_t *tail;
+    /// @brief Pointer to the free block list.
+    block_t *free;
+} heap_header_t;
+
 /// Kernel heap section.
 static vm_area_struct_t kernel_heap;
 /// Top of the kernel heap.
@@ -53,6 +64,11 @@ static uint32_t kernel_heap_top;
 static inline uint32_t __blkmngr_get_real_size(uint32_t size)
 {
     return (size >> 1U) << 1U;
+}
+
+static inline uint32_t __blkmngr_get_rounded_size(uint32_t size)
+{
+    return CEIL(size, 16);
 }
 
 /// @brief Sets the free/alloc bit of the size field.
@@ -78,18 +94,16 @@ static inline int __blkmngr_does_it_fit(block_t *block, uint32_t size)
 }
 
 /// @brief Removes the block from freelist.
-static inline void __blkmngr_remove_from_freelist(block_t *block, uint32_t *freelist)
+static inline void __blkmngr_remove_from_freelist(heap_header_t *header, block_t *block)
 {
+    assert(header && "Received a NULL heap header.");
     assert(block && "Received null block.");
-    assert(freelist && "Freelist is a null pointer.");
-    block_t *first_free_block = (block_t *)*freelist;
-    assert(first_free_block && "Freelist is empty.");
-    if (block == first_free_block) {
-        *freelist = (uint32_t)block->nextfree;
+    if (block == header->free) {
+        header->free = block->nextfree;
     } else {
-        block_t *prev = first_free_block;
-        while (prev != NULL && prev->nextfree != block) prev = prev->nextfree;
-
+        block_t *prev = header->free;
+        while (prev != NULL && prev->nextfree != block)
+            prev = prev->nextfree;
         if (prev) {
             prev->nextfree = block->nextfree;
         }
@@ -98,26 +112,23 @@ static inline void __blkmngr_remove_from_freelist(block_t *block, uint32_t *free
 }
 
 /// @brief Add the block to the free list.
-static inline void __blkmngr_add_to_freelist(block_t *block, uint32_t *freelist)
+static inline void __blkmngr_add_to_freelist(heap_header_t *header, block_t *block)
 {
+    assert(header && "Received a NULL heap header.");
     assert(block && "Received null block.");
-    assert(freelist && "Freelist is a null pointer.");
-    block_t *first_free_block = (block_t *)*freelist;
-    block->nextfree           = first_free_block;
-    *freelist                 = (uint32_t)block;
+    block->nextfree = header->free;
+    header->free    = block;
 }
 
 /// @brief Find the best fitting block in the memory pool.
-static inline block_t *__blkmngr_find_best_fitting(uint32_t size, uint32_t *freelist)
+/// @param header header describing the heap.
+/// @param size the size we want.
+/// @return a block that should fit our needs.
+static inline block_t *__blkmngr_find_best_fitting(heap_header_t *header, uint32_t size)
 {
-    assert(freelist && "Freelist is a null pointer.");
-    block_t *first_free_block = (block_t *)*freelist;
-
-    if (first_free_block == NULL) {
-        return NULL;
-    }
-    block_t *best_fitting = NULL;
-    for (block_t *current = first_free_block; current; current = current->nextfree) {
+    assert(header && "Received a NULL heap header.");
+    block_t *best_fitting = NULL, *current;
+    for (current = header->free; current; current = current->nextfree) {
         if (!__blkmngr_does_it_fit(current, size)) {
             continue;
         }
@@ -128,17 +139,32 @@ static inline block_t *__blkmngr_find_best_fitting(uint32_t size, uint32_t *free
     return best_fitting;
 }
 
-/// @brief Given a block, finds its previous block.
-static inline block_t *__blkmngr_get_previous_block(block_t *block, uint32_t *head)
+static inline void __blkmngr_dump(heap_header_t *header)
 {
-    assert(block && "Received null block.");
-    assert(head && "The head of the list is not set.");
-    block_t *head_block = (block_t *)*head;
-    assert(head_block && "The head of the list is not set.");
-    if (block == head_block) {
-        return NULL;
+    assert(header && "Received a NULL heap header.");
+    if (header->head) {
+        pr_warning("LIST: ");
+        for (block_t *it = header->head; it; it = it->nextfree)
+            pr_warning("0x%p:%2d ", it, it ? it->size : -1);
+        pr_warning("\n");
     }
-    block_t *prev = head_block;
+    if (header->free) {
+        pr_warning("FREE: ");
+        for (block_t *it = header->free; it; it = it->nextfree)
+            pr_warning("0x%p:%2d ", it, it ? it->size : -1);
+        pr_warning("\n");
+    }
+}
+
+/// @brief Given a block, finds its previous block.
+static inline block_t *__blkmngr_get_previous_block(heap_header_t *header, block_t *block)
+{
+    assert(header && "Received a NULL heap header.");
+    assert(block && "Received null block.");
+    // If the block is actually the head of the list, return NULL.
+    if (block == header->head)
+        return NULL;
+    block_t *prev = header->head;
     // FIXME: Sometimes enters infinite loop!
     while (prev->next != block) {
         prev = prev->next;
@@ -147,17 +173,13 @@ static inline block_t *__blkmngr_get_previous_block(block_t *block, uint32_t *he
 }
 
 /// @brief Given a block, finds its next block.
-static inline block_t *__blkmngr_get_next_block(block_t *block, uint32_t *tail)
+static inline block_t *__blkmngr_get_next_block(heap_header_t *header, block_t *block)
 {
+    assert(header && "Received a NULL heap header.");
     assert(block && "Received null block.");
-    assert(tail && "The tail of the list is not set.");
-
-    block_t *tail_block = (block_t *)*tail;
-    assert(tail_block && "The head of the list is not set.");
-
-    if (block == tail_block) {
+    // If the block is actually the tail of the list, return NULL.
+    if (block == header->tail)
         return NULL;
-    }
     return block->next;
 }
 
@@ -199,40 +221,22 @@ static void *__do_malloc(vm_area_struct_t *heap, size_t size)
 {
     if (size == 0)
         return NULL;
-
-    // Get:
-    // 1) First memory block.
-    // block_t *head = NULL;
-    // 2) Last memory block.
-    // block_t *tail = NULL;
-    // 3)  All the memory blocks that are freed.
-    // block_t *freelist = NULL;
-
-    // We will use these in writing.
-    uint32_t *head     = (uint32_t *)(heap->vm_start);
-    uint32_t *tail     = (uint32_t *)(heap->vm_start + sizeof(block_t *));
-    uint32_t *freelist = (uint32_t *)(heap->vm_start + 2 * sizeof(block_t *));
-    // assert(head && tail && freelist && "Heap block lists point to null.");
-
-    // We will use these others in reading.
-    block_t *head_block = (block_t *)*head;
-    block_t *tail_block = (block_t *)*tail;
-    // block_t *first_free_block = (block_t *) *freelist;
+    // Get the heap header.
+    heap_header_t *header = (heap_header_t *)heap->vm_start;
 
     // Calculate real size that's used, round it to multiple of 16.
-    uint32_t rounded_size = CEIL(size, 16);
+    uint32_t rounded_size = __blkmngr_get_rounded_size(size);
     // The block size takes into account also the block_t overhead.
     uint32_t block_size = rounded_size + OVERHEAD;
-
     // Find bestfit in avl tree. This bestfit function will remove the
     // best-fit node when there is more than one such node in tree.
-    block_t *best_fitting = __blkmngr_find_best_fitting(rounded_size, freelist);
-
-    if (best_fitting != NULL) {
-        // and! put a SIZE to the last four byte of the chunk
-        char *block_ptr = (void *)best_fitting;
+    block_t *best_fitting = __blkmngr_find_best_fitting(header, rounded_size);
+    // If we have found the best fitting block, use it.
+    if (best_fitting) {
+        // Store the base pointer.
+        block_t *base_ptr = best_fitting;
         // Store a pointer to the next block.
-        void *stored_next_block = __blkmngr_get_next_block(best_fitting, tail);
+        block_t *stored_next = __blkmngr_get_next_block(header, best_fitting);
         // Get the size of the chunk.
         uint32_t chunk_size = __blkmngr_get_real_size(best_fitting->size) + OVERHEAD;
         // Get what's left.
@@ -243,62 +247,60 @@ static void *__do_malloc(vm_area_struct_t *heap, size_t size)
         best_fitting->size = real_size - OVERHEAD;
         // Set the content of the block as free.
         __blkmngr_set_free(&(best_fitting->size), 0);
-        // Store the base pointer.
-        void *base_ptr = block_ptr;
-
-        block_ptr = (char *)block_ptr + real_size;
-
+        // and! put a SIZE to the last four byte of the chunk
+        char *block_ptr = (char *)best_fitting + real_size;
         if (remaining_size < (8 + OVERHEAD)) {
             goto no_split;
         } else if (remaining_size >= (8 + OVERHEAD)) {
-            if (__blkmngr_is_free(stored_next_block)) {
+            if (__blkmngr_is_free(stored_next)) {
                 // Choice b)  merge!
                 // Gather info about next block
-                void *nextblock      = stored_next_block;
+                void *nextblock      = stored_next;
                 block_t *n_nextblock = nextblock;
-                /* Remove next from list because it no longer exists(just
-                 * unlink it)
-                 */
-                __blkmngr_remove_from_freelist(n_nextblock, freelist);
+                // Remove next from list because it no longer exists(just unlink
+                // it).
+                __blkmngr_remove_from_freelist(header, n_nextblock);
 
                 // Merge!
                 block_t *t = (block_t *)block_ptr;
                 t->size    = remaining_size + __blkmngr_get_real_size(n_nextblock->size);
                 __blkmngr_set_free(&(t->size), 1);
 
-                t->next = __blkmngr_get_next_block(stored_next_block, tail);
+                t->next = __blkmngr_get_next_block(header, stored_next);
 
-                if (nextblock == tail_block) {
+                if (nextblock == header->tail) {
                     // I don't want to set it to tail now, instead, reclaim it
-                    *tail = (uint32_t)t;
+                    header->tail = t;
                     // int reclaimSize = __blkmngr_get_real_size(t->size) + OVERHEAD;
                     // ksbrk(-reclaimSize);
                     // goto no_split;
                 }
                 // then add merged one into the front of the list
-                __blkmngr_add_to_freelist(t, freelist);
+                __blkmngr_add_to_freelist(header, t);
             } else {
                 // Choice a)  seperate!
                 block_t *putThisBack = (block_t *)block_ptr;
                 putThisBack->size    = remaining_size - OVERHEAD;
                 __blkmngr_set_free(&(putThisBack->size), 1);
 
-                putThisBack->next = stored_next_block;
+                putThisBack->next = stored_next;
 
-                if (base_ptr == tail_block) {
-                    *tail = (uint32_t)putThisBack;
+                if (base_ptr == header->tail) {
+                    header->tail = putThisBack;
                     // int reclaimSize = __blkmngr_get_real_size(putThisBack->size) +OVERHEAD;
                     // ksbrk(-reclaimSize);
                     // goto no_split;
                 }
-                __blkmngr_add_to_freelist(putThisBack, freelist);
+                __blkmngr_add_to_freelist(header, putThisBack);
             }
 
             ((block_t *)base_ptr)->next = (block_t *)block_ptr;
         }
     no_split:
         // Remove the block from the free list.
-        __blkmngr_remove_from_freelist(base_ptr, freelist);
+        __blkmngr_remove_from_freelist(header, base_ptr);
+
+        __blkmngr_dump(header);
 
         return (char *)base_ptr + sizeof(block_t);
     } else {
@@ -313,15 +315,15 @@ static void *__do_malloc(vm_area_struct_t *heap, size_t size)
 
         assert(ret != NULL && "Heap is running out of space\n");
 
-        if (!head_block) {
-            *head = (uint32_t)ret;
+        if (!header->head) {
+            header->head = ret;
         } else {
-            tail_block->next = ret;
+            header->tail->next = ret;
         }
 
         ret->next     = NULL;
         ret->nextfree = NULL;
-        *tail         = (uint32_t)ret;
+        header->tail  = ret;
 
         void *save = ret;
 
@@ -336,273 +338,12 @@ static void *__do_malloc(vm_area_struct_t *heap, size_t size)
         // trailing_space = ptr;
         // *trailing_space = ret->size;
 
+        __blkmngr_dump(header);
+
         // Now, return it!
         return (char *)save + sizeof(block_t);
     }
 }
-//
-///// @brief Allocates size bytes of uninitialized storage with block align.
-//static void *__do_malloc_align(vm_area_struct_t *heap, uint32_t size)
-//{
-//    if (size == 0) return NULL;
-//
-//    // Get:
-//    // 1) First memory block.
-//    // static block_t *head = NULL;
-//    // 2) Last memory block.
-//    // static block_t *tail = NULL;
-//    // 3) All the memory blocks that are freed.
-//    // static block_t *freelist = NULL;
-//
-//    // We will use these in writing.
-//    uint32_t *head =     (uint32_t *) (heap->vm_start);
-//    uint32_t *tail =     (uint32_t *) (heap->vm_start + sizeof(block_t *));
-//    uint32_t *freelist = (uint32_t *) (heap->vm_start + 2 * sizeof(block_t *));
-//    assert(head && tail && freelist && "Heap block lists point to null.");
-//
-//    // We will use these others in reading.
-//    block_t *head_block = (block_t *) *head;
-//    block_t *tail_block = (block_t *) *tail;
-//    // block_t *first_free_block = (block_t *) *freelist;
-//
-//    // Calculate real size that's used, round it to multiple of 16.
-//    uint32_t rounded_size = CEIL(size, 16);
-//
-//    /* Find bestfit in avl tree. This bestfit function will remove
-//     * thebest-fit node when there is more than one such node in tree.
-//     */
-//    block_t *best_fitting = __blkmngr_find_best_fitting(rounded_size, freelist);
-//    if (best_fitting != NULL && (IS_ALIGN(best_fitting + sizeof(block_t))))
-//    {
-//        return kmalloc(size);
-//    }
-//    else
-//    {
-//        void *needed_addr = (void *) ADDR_ALIGN(
-//                ((uint32_t) kernel_heap_top + sizeof(block_t)) & 0xFFFFF000);
-//        block_t *block_addr = needed_addr - sizeof(block_t);
-//
-//        uint32_t realsize =
-//                (uint32_t) block_addr - (uint32_t) (kernel_heap_top) + OVERHEAD +
-//                rounded_size;
-//        block_t *ret;
-//        if(heap == &kernel_heap)
-//        {
-//            ret = ksbrk(realsize);
-//        }
-//        else
-//        {
-//            ret = usbrk(realsize);
-//        }
-//        assert(ret != NULL && "Heap is running out of space\n");
-//        if (!head_block)
-//        {
-//            *head = (uint32_t) block_addr;
-//        }
-//        else
-//        {
-//            tail_block->next = block_addr;
-//        }
-//
-//        ret->next = NULL;
-//        ret->nextfree = NULL;
-//        *tail = (uint32_t) block_addr;
-//
-//        /* After sbrk(), split the block into half [block_size  | the rest],
-//         * and put the rest into the tree.
-//         */
-//        block_addr->size = rounded_size;
-//        __blkmngr_set_free(&(block_addr->size),
-//                         0);
-//        // Set the block allocated.
-//        // ptr = ptr + block_size - sizeof(uint32_t);
-//        // trailing_space = ptr;
-//        // *trailing_space = block_addr->size;
-//
-//        // Now, return it!
-//        return needed_addr;
-//    }
-//}
-//
-///// @brief       Reallocates the given area of memory. It must be still allocated
-/////              and not yet freed with a call to free or realloc.
-///// @param ptr
-///// @param size
-///// @return
-//static void *__do_realloc(vm_area_struct_t *heap, void *ptr, uint32_t size)
-//{
-//    // Get:
-//    // 1) First memory block.
-//    // static block_t *head = NULL;
-//    // 2) Last memory block.
-//    // static block_t *tail = NULL;
-//    // 3) All the memory blocks that are freed.
-//    // static block_t *freelist = NULL;
-//
-//    // We will use these in writing.
-//    uint32_t *head =     (uint32_t *) (heap->vm_start);
-//    uint32_t *tail =     (uint32_t *) (heap->vm_start + sizeof(block_t *));
-//    uint32_t *freelist = (uint32_t *) (heap->vm_start + 2 * sizeof(block_t *));
-//    assert(head && tail && freelist && "Heap block lists point to null.");
-//
-//    // We will use these others in reading.
-//    block_t *head_block = (block_t *) *head;
-//    block_t *tail_block = (block_t *) *tail;
-//    // block_t *first_free_block = (block_t *) *freelist;
-//
-//    uint32_t *trailing_space = NULL;
-//    if (!ptr)
-//    {
-//        return kmalloc(size);
-//    }
-//    if (size == 0 && ptr != NULL)
-//    {
-//        kfree(ptr);
-//
-//        return NULL;
-//    }
-//    uint32_t rounded_size = CEIL(size, 16);
-//    uint32_t block_size = rounded_size + OVERHEAD;
-//    block_t *nextBlock;
-//    block_t *prevBlock;
-//
-//    /* Shrink or expand?
-//     *
-//     * Shrink:
-//     * Now, we would just return the same address, later we may split this
-//     * block.
-//     *
-//     * Expand:
-//     * First, try if the actual size of the memory block is enough
-//     * to hold the current size.
-//     * Second, if not, try if merging the next block works.
-//     * Third, if none of the above works, malloc another block, move all the
-//     * data there, and then free the original block.
-//     */
-//    block_t *nptr = ptr - sizeof(block_t);
-//    nextBlock = __blkmngr_get_next_block(nptr, tail);
-//    prevBlock = __blkmngr_get_previous_block(nptr, head);
-//    if (nptr->size == size)
-//    {
-//        return ptr;
-//    }
-//    if (nptr->size < size)
-//    {
-//        // Expand, size of the block is just not enough.
-//        if (tail_block != nptr && __blkmngr_is_free(nextBlock) &&
-//            (__blkmngr_get_real_size(nptr->size) + OVERHEAD +
-//             __blkmngr_get_real_size(nextBlock->size)) >= rounded_size)
-//        {
-//            // Merge with the next block, and return!
-//            // Change size to curr's size + OVERHEAD + next's size.
-//            __blkmngr_remove_from_freelist(nextBlock, freelist);
-//            nptr->size = __blkmngr_get_real_size(nptr->size) + OVERHEAD +
-//                         __blkmngr_get_real_size(nextBlock->size);
-//            __blkmngr_set_free(&(nptr->size), 0);
-//            trailing_space =
-//                    (void *) nptr + sizeof(block_t) + __blkmngr_get_real_size(nptr->size);
-//            *trailing_space = nptr->size;
-//            if (tail_block == nextBlock)
-//            {
-//                // Set it to tail for now, or we can reclaim it.
-//                *tail = (uint32_t) nptr;
-//            }
-//            return nptr + 1;
-//        }
-//        // Hey! Try merging with the previous block!
-//        else if (head_block != nptr && __blkmngr_is_free(prevBlock) &&
-//                 (__blkmngr_get_real_size(nptr->size) + OVERHEAD +
-//                  __blkmngr_get_real_size(prevBlock->size)) >= rounded_size)
-//        {
-//            // db_print();
-//            uint32_t originalSize = __blkmngr_get_real_size(nptr->size);
-//            // Hey! one more thing to do , copy data over to new block.
-//            __blkmngr_remove_from_freelist(prevBlock, freelist);
-//            prevBlock->size =
-//                    originalSize + OVERHEAD + __blkmngr_get_real_size(prevBlock->size);
-//            __blkmngr_set_free(&(prevBlock->size), 0);
-//            trailing_space = (void *) prevBlock + sizeof(block_t) +
-//                             __blkmngr_get_real_size(prevBlock->size);
-//            *trailing_space = prevBlock->size;
-//            if (tail_block == nptr)
-//            {
-//                *tail = (uint32_t) prevBlock;
-//            }
-//            memcpy(prevBlock + 1, ptr, originalSize);
-//
-//            return prevBlock + 1;
-//        }
-//
-//        // Move to somewhere else.
-//        void *newplace = kmalloc(size);
-//        // Copy data over.
-//        memcpy(newplace, ptr, __blkmngr_get_real_size(nptr->size));
-//        // Free original one
-//        kfree(ptr);
-//
-//        return newplace;
-//    }
-//    else
-//    {
-//        /* Shrink/Do nothing, you can leave it as it's, but yeah... shrink
-//         * it What's left after shrinking the original block.
-//         */
-//        uint32_t rest = __blkmngr_get_real_size(nptr->size) + OVERHEAD - block_size;
-//        if (rest < 8 + OVERHEAD) return ptr;
-//
-//        nptr->size = block_size - OVERHEAD;
-//        __blkmngr_set_free(&(nptr->size), 0);
-//        trailing_space =
-//                (void *) nptr + sizeof(block_t) + __blkmngr_get_real_size(nptr->size);
-//        *trailing_space = nptr->size;
-//        /*
-//         * if(tail == nptr)
-//         * {
-//         *     ksbrk(-reclaimSize);
-//         *
-//         *     return ptr;
-//         * }
-//         */
-//        block_t *splitBlock = (void *) trailing_space + sizeof(uint32_t);
-//
-//        /* Set the next, if the next of the next is also freed.. then merge!!
-//         * Wait... what if after merge, I get a much much more bigger block
-//         * than I even need? split again hahahahahah fuck!
-//         * Instead of spliting after merge, let's give splitBlock.
-//         */
-//        if (nextBlock && __blkmngr_is_free(nextBlock))
-//        {
-//            splitBlock->size = rest + __blkmngr_get_real_size(nextBlock->size);
-//            __blkmngr_set_free(&(splitBlock->size), 1);
-//            trailing_space = (void *) splitBlock + sizeof(block_t) +
-//                             __blkmngr_get_real_size(splitBlock->size);
-//            *trailing_space = splitBlock->size;
-//
-//            // Remove next block from freelist.
-//            __blkmngr_remove_from_freelist(nextBlock, freelist);
-//            // This can be deleted when you correctly implemented malloc()
-//            if (tail_block == nextBlock)
-//            {
-//                *tail = (uint32_t) splitBlock;
-//            }
-//            // Add splitblock to freelist.
-//            __blkmngr_add_to_freelist(splitBlock, freelist);
-//
-//            return ptr;
-//        }
-//        // Separate!
-//        splitBlock->size = rest - OVERHEAD;
-//        __blkmngr_set_free(&(splitBlock->size), 1);
-//        trailing_space = (void *) splitBlock + sizeof(block_t) +
-//                         __blkmngr_get_real_size(splitBlock->size);
-//        *trailing_space = splitBlock->size;
-//
-//        // Add this mo** f**r to the freelist!
-//        __blkmngr_add_to_freelist(splitBlock, freelist);
-//
-//        return ptr;
-//    }
-//}
 
 /// @brief Deallocates previously allocated space.
 /// @param heap Heap to which we return the allocated memory.
@@ -611,27 +352,12 @@ static void __do_free(vm_area_struct_t *heap, void *ptr)
 {
     assert(ptr);
 
-    // Get:
-    // 1) First memory block.
-    // static block_t *head = NULL;
-    // 2) Last memory block.
-    // static block_t *tail = NULL;
-    // 3) All the memory blocks that are freed.
-    // static block_t *freelist = NULL;
-
     // We will use these in writing.
-    uint32_t *head     = (uint32_t *)(heap->vm_start);
-    uint32_t *tail     = (uint32_t *)(heap->vm_start + sizeof(block_t *));
-    uint32_t *freelist = (uint32_t *)(heap->vm_start + 2 * sizeof(block_t *));
-    assert(head && tail && freelist && "Heap block lists point to null.");
-
-    // We will use these others in reading.
-    block_t *tail_block = (block_t *)*tail;
+    heap_header_t *header = (heap_header_t *)heap->vm_start;
 
     block_t *curr = (block_t *)((char *)ptr - sizeof(block_t));
-
-    block_t *prev = __blkmngr_get_previous_block(curr, head);
-    block_t *next = __blkmngr_get_next_block(curr, tail);
+    block_t *prev = __blkmngr_get_previous_block(header, curr);
+    block_t *next = __blkmngr_get_next_block(header, curr);
     if (__blkmngr_is_free(prev) && __blkmngr_is_free(next)) {
         prev->size =
             __blkmngr_get_real_size(prev->size) + 2 * OVERHEAD +
@@ -639,13 +365,13 @@ static void __do_free(vm_area_struct_t *heap, void *ptr)
             __blkmngr_get_real_size(next->size);
         __blkmngr_set_free(&(prev->size), 1);
 
-        prev->next = __blkmngr_get_next_block(next, tail);
+        prev->next = __blkmngr_get_next_block(header, next);
 
         // If next used to be tail, set prev = tail.
-        if (tail_block == next) {
-            *tail = (uint32_t)prev;
+        if (header->tail == next) {
+            header->tail = prev;
         }
-        __blkmngr_remove_from_freelist(next, freelist);
+        __blkmngr_remove_from_freelist(header, next);
     } else if (__blkmngr_is_free(prev)) {
         prev->size =
             __blkmngr_get_real_size(prev->size) + OVERHEAD + __blkmngr_get_real_size(curr->size);
@@ -653,8 +379,8 @@ static void __do_free(vm_area_struct_t *heap, void *ptr)
 
         prev->next = next;
 
-        if (tail_block == curr) {
-            *tail = (uint32_t)prev;
+        if (header->tail == curr) {
+            header->tail = prev;
         }
     } else if (__blkmngr_is_free(next)) {
         // Change size to curr's size + OVERHEAD + next's size.
@@ -662,18 +388,20 @@ static void __do_free(vm_area_struct_t *heap, void *ptr)
             __blkmngr_get_real_size(curr->size) + OVERHEAD + __blkmngr_get_real_size(next->size);
         __blkmngr_set_free(&(curr->size), 1);
 
-        curr->next = __blkmngr_get_next_block(next, tail);
+        curr->next = __blkmngr_get_next_block(header, next);
 
-        if (tail_block == next) {
-            *tail = (uint32_t)curr;
+        if (header->tail == next) {
+            header->tail = curr;
         }
-        __blkmngr_remove_from_freelist(next, freelist);
-        __blkmngr_add_to_freelist(curr, freelist);
+        __blkmngr_remove_from_freelist(header, next);
+        __blkmngr_add_to_freelist(header, curr);
     } else {
         // Just mark curr freed.
         __blkmngr_set_free(&(curr->size), 1);
-        __blkmngr_add_to_freelist(curr, freelist);
+        __blkmngr_add_to_freelist(header, curr);
     }
+
+    __blkmngr_dump(header);
 }
 
 void kheap_init(size_t initial_size)
