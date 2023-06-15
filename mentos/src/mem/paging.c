@@ -81,14 +81,14 @@ void paging_flush_tlb_single(unsigned long addr)
 /// @return a pointer to the area if we found it, NULL otherwise.
 static inline vm_area_struct_t *__find_vm_area(mm_struct_t *mm, uintptr_t vm_start)
 {
-    vm_area_struct_t *area;
+    vm_area_struct_t *segment;
     // Find the area.
     list_for_each_prev_decl(it, &mm->mmap_list)
     {
-        area = list_entry(it, vm_area_struct_t, vm_list);
-        assert(area && "There is a NULL area in the list.");
-        if (area->vm_start == vm_start)
-            return area;
+        segment = list_entry(it, vm_area_struct_t, vm_list);
+        assert(segment && "There is a NULL area in the list.");
+        if (segment->vm_start == vm_start)
+            return segment;
     }
     return NULL;
 }
@@ -148,11 +148,11 @@ static inline int __find_vm_free_area(mm_struct_t *mm, size_t length, uintptr_t 
     return 1;
 }
 
-uint32_t create_vm_area(mm_struct_t *mm,
-                        uint32_t virt_start,
-                        size_t size,
-                        uint32_t pgflags,
-                        uint32_t gfpflags)
+vm_area_struct_t *create_vm_area(mm_struct_t *mm,
+                                 uint32_t virt_start,
+                                 size_t size,
+                                 uint32_t pgflags,
+                                 uint32_t gfpflags)
 {
     // Allocate on kernel space the structure for the segment.
     vm_area_struct_t *new_segment = kmem_cache_alloc(vm_area_cache, GFP_KERNEL);
@@ -191,7 +191,7 @@ uint32_t create_vm_area(mm_struct_t *mm,
 
     mm->total_vm += (1U << order);
 
-    return vm_start;
+    return new_segment;
 }
 
 uint32_t clone_vm_area(mm_struct_t *mm, vm_area_struct_t *area, int cow, uint32_t gfpflags)
@@ -639,8 +639,10 @@ mm_struct_t *create_blank_process_image(size_t stack_size)
     list_head_init(&mm->mmap_list);
 
     // Allocate the stack segment.
-    mm->start_stack = create_vm_area(mm, PROCAREA_END_ADDR - stack_size, stack_size,
-                                     MM_PRESENT | MM_RW | MM_USER | MM_COW, GFP_HIGHUSER);
+    vm_area_struct_t *segment = create_vm_area(mm, PROCAREA_END_ADDR - stack_size, stack_size,
+                                               MM_PRESENT | MM_RW | MM_USER | MM_COW, GFP_HIGHUSER);
+    //    Update the start of the stack.
+    mm->start_stack = segment->vm_start;
     return mm;
 }
 
@@ -733,14 +735,14 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
         }
     }
     // Allocate the segment.
-    uintptr_t virt_addr = create_vm_area(
+    vm_area_struct_t *segment = create_vm_area(
         task->mm,
         vm_start,
         length,
         MM_PRESENT | MM_RW | MM_COW | MM_USER,
         GFP_HIGHUSER);
     task->mm->mmap_cache->vm_flags = flags;
-    return (void *)virt_addr;
+    return (void *)segment->vm_start;
 }
 
 int sys_munmap(void *addr, size_t length)

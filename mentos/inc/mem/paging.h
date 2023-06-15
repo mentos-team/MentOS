@@ -228,12 +228,12 @@ void mem_clone_vm_area(page_directory_t *src_pgd,
 /// @param size       The size of the segment.
 /// @param pgflags    The flags for the new memory area.
 /// @param gfpflags   The Get Free Pages flags.
-/// @return The virtual address of the starting point of the segment.
-uint32_t create_vm_area(mm_struct_t *mm,
-                        uint32_t virt_start,
-                        size_t size,
-                        uint32_t pgflags,
-                        uint32_t gfpflags);
+/// @return The newly created virtual memory area descriptor.
+vm_area_struct_t *create_vm_area(mm_struct_t *mm,
+                                 uint32_t virt_start,
+                                 size_t size,
+                                 uint32_t pgflags,
+                                 uint32_t gfpflags);
 
 /// @brief Clone a virtual memory area, using copy on write if specified
 /// @param mm the memory descriptor which will contain the new segment.

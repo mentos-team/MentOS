@@ -17,6 +17,9 @@
 #include <io/debug.h>
 #include <io/ansi_colors.h>
 
+#include <sys/mman.h>
+#include <sys/wait.h>
+
 /// Maximum length of credentials.
 #define CREDENTIALS_LENGTH 50
 
@@ -149,6 +152,22 @@ static inline bool_t __get_input(char *input, size_t max_len, bool_t hide)
 
 int main(int argc, char **argv)
 {
+#if 0
+    int *shared = mmap(NULL, sizeof(int), PROT_READ | PROT_WRITE,
+                       MAP_SHARED, -1, 0);
+    pid_t child;
+    int childstate;
+    pr_warning("[F] (%p) %d\n", shared, *shared);
+    if ((child = fork()) == 0) {
+        *shared = 1;
+        pr_warning("[C] (%p) %d\n", shared, *shared);
+        return 0;
+    }
+    waitpid(child, &childstate, 0);
+    pr_warning("[F] (%p) %d\n", shared, *shared);
+    return 0;
+    while (1) {}
+#endif
     // Print /etc/issue if it exists.
     __print_message_file("/etc/issue");
 
