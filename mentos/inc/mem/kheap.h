@@ -16,12 +16,12 @@ void kheap_init(size_t initial_size);
 /// @brief Increase the heap of the kernel.
 /// @param increment The amount to increment.
 /// @return Pointer to a ready-to-used memory area.
-void *ksbrk(int increment);
+void *ksbrk(uint32_t increment);
 
 /// @brief Increase the heap of the current process.
 /// @param increment The amount to increment.
 /// @return Pointer to a ready-to-used memory area.
-void *usbrk(int increment);
+void *usbrk(uint32_t increment);
 
 /// @brief User malloc.
 /// @param addr This argument is treated as an address of a dynamically

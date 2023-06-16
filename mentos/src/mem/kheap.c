@@ -4,7 +4,7 @@
 /// See LICENSE.md for details.
 
 // Setup the logging for this file (do this before any other include).
-#include "stdbool.h"
+#include "sys/bitops.h"
 #include "sys/kernel_levels.h"           // Include kernel log levels.
 #define __DEBUG_HEADER__ "[KHEAP ]"      ///< Change header.
 #define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
@@ -13,6 +13,8 @@
 #include "mem/kheap.h"
 #include "mem/paging.h"
 #include "sys/list_head.h"
+#include "stdbool.h"
+#include "stdint.h"
 #include "string.h"
 #include "assert.h"
 #include "math.h"
@@ -23,8 +25,6 @@
 #define ADDR_ALIGN(addr) ((((uint32_t)(addr)) & 0xFFFFF000) + 0x1000)
 /// Checks if the given address is aligned.
 #define IS_ALIGN(addr) ((((uint32_t)(addr)) & 0x00000FFF) == 0)
-/// Returns a rounded up, away from zero, to the nearest multiple of b.
-#define CEIL(NUMBER, BASE) (((NUMBER) + (BASE)-1) & ~((BASE)-1))
 /// User heap initial size ( 1 Megabyte).
 #define UHEAP_INITIAL_SIZE (1 * M)
 
@@ -57,30 +57,36 @@ static vm_area_struct_t kernel_heap;
 /// Top of the kernel heap.
 static uint32_t kernel_heap_top;
 
-/// @brief Given the field size in a Block(which contain free/alloc
-///        information), extract the size.
-/// @param size
-/// @return
+/// @brief The size is encoded in the lowest 31 bits, while the 32nd is used to
+/// determine if the block is free/used.
+/// @param size the size of the block.
+/// @return the real size of the block.
 static inline uint32_t __blkmngr_get_real_size(uint32_t size)
 {
-    return (size >> 1U) << 1U;
+    return bit_clear(size, 0);
 }
 
+/// @brief Returns the given size, rounded in multiples of 16.
+/// @param size the given size.
+/// @return the size rounded to the nearest multiple of 16.
 static inline uint32_t __blkmngr_get_rounded_size(uint32_t size)
 {
-    return CEIL(size, 16);
+    return round_up(size, 16);
 }
 
-/// @brief Sets the free/alloc bit of the size field.
-static inline void __blkmngr_set_free(uint32_t *size, int x)
+/// @brief Sets the free/used bit of the size field.
+/// @param size the size field we want to set free/used.
+/// @param control if 0 the block is free, otherwise is set as used.
+static inline void __blkmngr_set_free(block_t *block, int control)
 {
-    (*size) = (x) ? ((*size) | 1U) : ((*size) & 0xFFFFFFFE);
+    assert(block && "Received a NULL block.");
+    block->size = bit_toggle(block->size, 0, control);
 }
 
 /// @brief Checks if a block is freed or allocated.
 static inline unsigned __blkmngr_is_free(block_t *block)
 {
-    return (block == NULL) ? 0 : (block->size & 1U);
+    return block && bit_check(block->size, 0);
 }
 
 /// @brief       Checks if the given size fits inside the block.
@@ -91,6 +97,23 @@ static inline int __blkmngr_does_it_fit(block_t *block, uint32_t size)
 {
     assert(block && "Received null block.");
     return (block->size >= __blkmngr_get_real_size(size)) && __blkmngr_is_free(block);
+}
+
+static inline void __blkmngr_dump(heap_header_t *header)
+{
+    assert(header && "Received a NULL heap header.");
+    if (header->head) {
+        pr_warning("LIST: ");
+        for (block_t *it = header->head; it; it = it->nextfree)
+            pr_warning("0x%p:%2d ", it, it ? it->size : -1);
+        pr_warning("\n");
+    }
+    if (header->free) {
+        pr_warning("FREE: ");
+        for (block_t *it = header->free; it; it = it->nextfree)
+            pr_warning("0x%p:%2d ", it, it ? it->size : -1);
+        pr_warning("\n");
+    }
 }
 
 /// @brief Removes the block from freelist.
@@ -139,23 +162,6 @@ static inline block_t *__blkmngr_find_best_fitting(heap_header_t *header, uint32
     return best_fitting;
 }
 
-static inline void __blkmngr_dump(heap_header_t *header)
-{
-    assert(header && "Received a NULL heap header.");
-    if (header->head) {
-        pr_warning("LIST: ");
-        for (block_t *it = header->head; it; it = it->nextfree)
-            pr_warning("0x%p:%2d ", it, it ? it->size : -1);
-        pr_warning("\n");
-    }
-    if (header->free) {
-        pr_warning("FREE: ");
-        for (block_t *it = header->free; it; it = it->nextfree)
-            pr_warning("0x%p:%2d ", it, it ? it->size : -1);
-        pr_warning("\n");
-    }
-}
-
 /// @brief Given a block, finds its previous block.
 static inline block_t *__blkmngr_get_previous_block(heap_header_t *header, block_t *block)
 {
@@ -188,29 +194,21 @@ static inline block_t *__blkmngr_get_next_block(heap_header_t *header, block_t *
 /// @param heap      Pointer to the heap.
 /// @param increment Increment to the heap.
 /// @return Pointer to the old top of the heap, ready to be used.
-static void *__do_brk(uint32_t *heap_top, vm_area_struct_t *heap, int increment)
+static void *__do_brk(uint32_t *heap_top, vm_area_struct_t *heap, uint32_t increment)
 {
     assert(heap_top && "Pointer to the current top of the heap is NULL.");
     assert(heap && "Pointer to the heap is NULL.");
-    //    pr_default("BRK> %s: heap_start: %p, free space: %d\n",
-    //              (heap == &kernel_heap)? "KERNEL" : "USER",
-    //              heap->vm_start, heap_end - heap_curr);
-    if (increment > 0) {
-        // Compute the new boundary.
-        uint32_t new_boundary = *heap_top + increment;
-        // If new boundary is smaller or equal to end, simply
-        // update the heap_top to the new boundary and return
-        // the old heap_top.
-        if (new_boundary <= heap->vm_end) {
-            // Save the old top of the heap.
-            uint32_t old_heap_top = *heap_top;
-            // Overwrite the top of the heap.
-            *heap_top = new_boundary;
-            // Return the old top of the heap.
-            return (void *)old_heap_top;
-        }
-    }
-    return NULL;
+    uint32_t new_heap_top = *heap_top + increment, old_heap_top = *heap_top;
+    // If new boundary is larger than the end, we fail.
+    if (new_heap_top > heap->vm_end)
+        return NULL;
+    // Overwrite the top of the heap.
+    *heap_top = new_heap_top;
+    pr_debug("[%s] free space: %lu\n",
+             (heap == &kernel_heap) ? "KERNEL" : " USER ",
+             heap->vm_end - ((uint32_t)heap_top / M));
+    // Return the old top of the heap.
+    return (void *)old_heap_top;
 }
 
 /// @brief Allocates size bytes of uninitialized storage.
@@ -246,7 +244,7 @@ static void *__do_malloc(vm_area_struct_t *heap, size_t size)
         // Set the size of the best fitting block.
         best_fitting->size = real_size - OVERHEAD;
         // Set the content of the block as free.
-        __blkmngr_set_free(&(best_fitting->size), 0);
+        __blkmngr_set_free(best_fitting, 0);
         // and! put a SIZE to the last four byte of the chunk
         char *block_ptr = (char *)best_fitting + real_size;
         if (remaining_size < (8 + OVERHEAD)) {
@@ -262,26 +260,26 @@ static void *__do_malloc(vm_area_struct_t *heap, size_t size)
                 __blkmngr_remove_from_freelist(header, n_nextblock);
 
                 // Merge!
-                block_t *t = (block_t *)block_ptr;
-                t->size    = remaining_size + __blkmngr_get_real_size(n_nextblock->size);
-                __blkmngr_set_free(&(t->size), 1);
+                block_t *merged_block = (block_t *)block_ptr;
+                merged_block->size    = remaining_size + __blkmngr_get_real_size(n_nextblock->size);
+                __blkmngr_set_free(merged_block, 1);
 
-                t->next = __blkmngr_get_next_block(header, stored_next);
+                merged_block->next = __blkmngr_get_next_block(header, stored_next);
 
                 if (nextblock == header->tail) {
                     // I don't want to set it to tail now, instead, reclaim it
-                    header->tail = t;
+                    header->tail = merged_block;
                     // int reclaimSize = __blkmngr_get_real_size(t->size) + OVERHEAD;
                     // ksbrk(-reclaimSize);
                     // goto no_split;
                 }
-                // then add merged one into the front of the list
-                __blkmngr_add_to_freelist(header, t);
+                // Then, add the merged block to the free list.
+                __blkmngr_add_to_freelist(header, merged_block);
             } else {
                 // Choice a)  seperate!
                 block_t *putThisBack = (block_t *)block_ptr;
                 putThisBack->size    = remaining_size - OVERHEAD;
-                __blkmngr_set_free(&(putThisBack->size), 1);
+                __blkmngr_set_free(putThisBack, 1);
 
                 putThisBack->next = stored_next;
 
@@ -293,53 +291,38 @@ static void *__do_malloc(vm_area_struct_t *heap, size_t size)
                 }
                 __blkmngr_add_to_freelist(header, putThisBack);
             }
-
             ((block_t *)base_ptr)->next = (block_t *)block_ptr;
         }
     no_split:
         // Remove the block from the free list.
         __blkmngr_remove_from_freelist(header, base_ptr);
-
-        __blkmngr_dump(header);
-
         return (char *)base_ptr + sizeof(block_t);
     } else {
-        uint32_t realsize = block_size;
         block_t *ret;
-
         if (heap == &kernel_heap) {
-            ret = ksbrk(realsize);
+            ret = ksbrk(block_size);
         } else {
-            ret = usbrk(realsize);
+            ret = usbrk(block_size);
         }
-
-        assert(ret != NULL && "Heap is running out of space\n");
-
+        assert(ret && "Heap is running out of space\n");
         if (!header->head) {
             header->head = ret;
         } else {
             header->tail->next = ret;
         }
-
         ret->next     = NULL;
         ret->nextfree = NULL;
         header->tail  = ret;
-
         void *save = ret;
-
         /* After sbrk(), split the block into half [block_size  | the rest],
          * and put the rest into the tree.
          */
         ret->size = block_size - OVERHEAD;
-        __blkmngr_set_free(&(ret->size),
-                           0);
+        __blkmngr_set_free(ret, 0);
         // Set the block allocated.
         // ptr = ptr + block_size - sizeof(uint32_t);
         // trailing_space = ptr;
         // *trailing_space = ret->size;
-
-        __blkmngr_dump(header);
-
         // Now, return it!
         return (char *)save + sizeof(block_t);
     }
@@ -363,7 +346,7 @@ static void __do_free(vm_area_struct_t *heap, void *ptr)
             __blkmngr_get_real_size(prev->size) + 2 * OVERHEAD +
             __blkmngr_get_real_size(curr->size) +
             __blkmngr_get_real_size(next->size);
-        __blkmngr_set_free(&(prev->size), 1);
+        __blkmngr_set_free(prev, 1);
 
         prev->next = __blkmngr_get_next_block(header, next);
 
@@ -375,7 +358,7 @@ static void __do_free(vm_area_struct_t *heap, void *ptr)
     } else if (__blkmngr_is_free(prev)) {
         prev->size =
             __blkmngr_get_real_size(prev->size) + OVERHEAD + __blkmngr_get_real_size(curr->size);
-        __blkmngr_set_free(&(prev->size), 1);
+        __blkmngr_set_free(prev, 1);
 
         prev->next = next;
 
@@ -386,7 +369,7 @@ static void __do_free(vm_area_struct_t *heap, void *ptr)
         // Change size to curr's size + OVERHEAD + next's size.
         curr->size =
             __blkmngr_get_real_size(curr->size) + OVERHEAD + __blkmngr_get_real_size(next->size);
-        __blkmngr_set_free(&(curr->size), 1);
+        __blkmngr_set_free(curr, 1);
 
         curr->next = __blkmngr_get_next_block(header, next);
 
@@ -397,11 +380,9 @@ static void __do_free(vm_area_struct_t *heap, void *ptr)
         __blkmngr_add_to_freelist(header, curr);
     } else {
         // Just mark curr freed.
-        __blkmngr_set_free(&(curr->size), 1);
+        __blkmngr_set_free(curr, 1);
         __blkmngr_add_to_freelist(header, curr);
     }
-
-    __blkmngr_dump(header);
 }
 
 void kheap_init(size_t initial_size)
@@ -418,23 +399,16 @@ void kheap_init(size_t initial_size)
     //    kernel_heap.vm_next = NULL;
     //    kernel_heap.vm_mm = NULL;
 
-    // Reserved space for:
-    // 1) First memory block.
-    // static block_t *head = NULL;
-    // 2) Last memory block.
-    // static block_t *tail = NULL;
-    // 3) All the memory blocks that are freed.
-    // static block_t *freelist = NULL;
     memset((void *)kernel_heap_top, 0, 3 * sizeof(block_t *));
     kernel_heap_top += 3 * sizeof(block_t *);
 }
 
-void *ksbrk(int increment)
+void *ksbrk(unsigned increment)
 {
     return __do_brk(&kernel_heap_top, &kernel_heap, increment);
 }
 
-void *usbrk(int increment)
+void *usbrk(unsigned increment)
 {
     // Get the current process.
     task_struct *task = scheduler_get_current_process();
