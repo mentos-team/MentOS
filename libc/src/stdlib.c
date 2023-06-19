@@ -3,6 +3,7 @@
 /// @copyright (c) 2014-2023 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
+#include "stddef.h"
 #include "system/syscall_types.h"
 #include "stdlib.h"
 #include "string.h"
@@ -12,36 +13,32 @@
 /// malloc(), calloc() or realloc().
 #define MALLOC_MAGIC_NUMBER 0x600DC0DE
 
-/// @brief Checks if the pointer is a valid malloc entry.
-/// @param ptr the pointer we are checking.
-/// @return 1 of success, 0 on failure.
-static inline int __malloc_is_valid_ptr(void *ptr)
-{
-    return (ptr && (((size_t *)ptr)[-1] == MALLOC_MAGIC_NUMBER));
-}
-
-size_t malloc_usable_size(void *ptr)
-{
-    if (__malloc_is_valid_ptr(ptr))
-        return ((size_t *)ptr)[-2];
-    return 0;
-}
+typedef struct {
+    unsigned magic;
+    size_t size;
+} malloc_header_t;
 
 void *malloc(unsigned int size)
 {
-    size_t *_res, _size = 2 * sizeof(size_t) + size;
-    __inline_syscall1(_res, brk, _size);
-    _res[0] = size;
-    _res[1] = MALLOC_MAGIC_NUMBER;
-    return &_res[2];
+    assert(size && "Zero size requested.");
+    size_t *ptr;
+    // Compute the real size we need to allocate.
+    size_t real_size = size + sizeof(malloc_header_t);
+    // Allocate the memory.
+    __inline_syscall1(ptr, brk, real_size);
+    // Initialize the malloc header.
+    malloc_header_t *malloc_header = (malloc_header_t *)ptr;
+    malloc_header->magic           = MALLOC_MAGIC_NUMBER;
+    malloc_header->size            = size;
+    // Return the allocated memory.
+    return (void *)((char *)ptr + sizeof(malloc_header_t));
 }
 
 void *calloc(size_t num, size_t size)
 {
     void *ptr = malloc(num * size);
-    if (ptr) {
+    if (ptr)
         memset(ptr, 0, num * size);
-    }
     return ptr;
 }
 
@@ -58,8 +55,12 @@ void *realloc(void *ptr, size_t size)
         free(ptr);
         return NULL;
     }
+    // Get the malloc header.
+    malloc_header_t *malloc_header = (malloc_header_t *)((char *)ptr - sizeof(malloc_header_t));
+    // Check the header.
+    assert(malloc_header->magic == MALLOC_MAGIC_NUMBER && "This is not a valid pointer.");
     // Get the old size.
-    size_t old_size = malloc_usable_size(ptr);
+    size_t old_size = malloc_header->size;
     // Create the new pointer.
     void *newp = malloc(size);
     memset(newp, 0, size);
@@ -70,13 +71,15 @@ void *realloc(void *ptr, size_t size)
 
 void free(void *ptr)
 {
+    // Get the malloc header.
+    malloc_header_t *malloc_header = (malloc_header_t *)((char *)ptr - sizeof(malloc_header_t));
+    // Check the header.
+    assert(malloc_header->magic == MALLOC_MAGIC_NUMBER && "This is not a valid pointer.");
+    // Get the real pointer.
+    ptr = (char *)ptr - sizeof(malloc_header_t);
+    // Call the free.
     int _res;
-    if (__malloc_is_valid_ptr(ptr)) {
-        size_t *_ptr = (size_t *)ptr - 2;
-        __inline_syscall1(_res, brk, _ptr);
-    } else {
-        __inline_syscall1(_res, brk, ptr);
-    }
+    __inline_syscall1(_res, brk, ptr);
 }
 
 /// Seed used to generate random numbers.

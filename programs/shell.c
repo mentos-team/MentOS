@@ -609,10 +609,11 @@ static void __cmd_get()
 
 /// @brief Gets the options from the command.
 /// @param command The executed command.
-static void __cmd_opt(char *command, int *argc, char ***argv)
+static void __alloc_argv(char *command, int *argc, char ***argv)
 {
+    (*argc) = __count_words(command);
     // Get the number of arguments, return if zero.
-    if (((*argc) = __count_words(command)) == 0) {
+    if ((*argc) == 0) {
         return;
     }
     (*argv)         = (char **)malloc(sizeof(char *) * ((*argc) + 1));
@@ -636,6 +637,14 @@ static void __cmd_opt(char *command, int *argc, char ***argv)
         }
     } while (*cit++);
     (*argv)[argcIt] = NULL;
+}
+
+static inline void __free_argv(int argc, char **argv)
+{
+    for (int i = 0; i < argc; ++i) {
+        free(argv[i]);
+    }
+    free(argv);
 }
 
 void wait_for_child(int signum)
@@ -671,7 +680,7 @@ int main(int argc, char *argv[])
         printf("Failed to set signal handler (%s).\n", SIGCHLD, strerror(errno));
         return 1;
     }
-    
+
     // Move inside the home directory.
     __cd(0, NULL);
 
@@ -694,7 +703,7 @@ int main(int argc, char *argv[])
         int _argc = 1;
         // The vector of arguments.
         char **_argv;
-        __cmd_opt(cmd, &_argc, &_argv);
+        __alloc_argv(cmd, &_argc, &_argv);
         // Check if the command is empty.
         if (_argc == 0) {
             continue;
@@ -716,6 +725,7 @@ int main(int argc, char *argv[])
                 free(_argv[_argc - 1]);
                 _argv[_argc - 1] = NULL;
                 blocking         = false;
+                _argc -= 1;
             }
             // Is a shell path, execute it!
             int status;
@@ -735,13 +745,7 @@ int main(int argc, char *argv[])
             }
         }
         // Free up the memory reserved for the arguments.
-        for (int it = 0; it < _argc; ++it) {
-            // Check if the argument is not empty.
-            if (_argv[it] != NULL) {
-                // Free up its memory.
-                free(_argv[it]);
-            }
-        }
+        __free_argv(_argc, _argv);
     }
 #pragma clang diagnostic pop
     return 0;
