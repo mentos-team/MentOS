@@ -48,24 +48,18 @@ typedef struct block_t {
     ///  |    first bits of real size    | free/alloc |
     ///  To calculate the real size, set to zero the last bit
     uint32_t size;
-    /// Pointer to the next free block.
-    struct block_t *nextfree;
-    /// Pointer to the previous free block.
-    struct block_t *prevfree;
-    /// Pointer to the previous block.
-    struct block_t *prev;
-    /// Pointer to the next block.
-    struct block_t *next;
+    /// Entry in the list of blocks.
+    list_head list;
+    /// Entry in the list of free blocks.
+    list_head free;
 } block_t;
 
 /// @brief Maps the heap memory to this three easily accessible values.
 typedef struct {
-    /// @brief Pointer to the head block.
-    block_t *head;
-    /// @brief Pointer to the tail block.
-    block_t *tail;
-    /// @brief Pointer to the free block list.
-    block_t *free;
+    /// List of blocks.
+    list_head list;
+    /// List of free blocks.
+    list_head free;
 } heap_header_t;
 
 /// @brief Returns the given size, rounded in multiples of 16.
@@ -107,45 +101,31 @@ static inline void __blkmngr_dump(heap_header_t *header)
 {
     assert(header && "Received a NULL heap header.");
     pr_debug("\n");
-    if (header->head) {
+    block_t *block;
+    if (!list_head_empty(&header->list)) {
         pr_debug("# LIST:\n");
-        for (block_t *it = header->head; it; it = it->next)
-            pr_debug("#  %s{%p,%p}\n", __block_to_string(it), it->prev, it->next);
+        list_for_each_decl(it, &header->list)
+        {
+            block = list_entry(it, block_t, list);
+            pr_debug("#  %s{0x%p,0x%p}\n",
+                     __block_to_string(block),
+                     list_entry(it->prev, block_t, list),
+                     list_entry(it->next, block_t, list));
+        }
         pr_debug("\n");
     }
-    if (header->free) {
+    if (!list_head_empty(&header->free)) {
         pr_debug("# FREE:\n");
-        for (block_t *it = header->free; it; it = it->nextfree)
-            pr_debug("#  %s{%p,%p}\n", __block_to_string(it), it->prevfree, it->nextfree);
+        list_for_each_decl(it, &header->free)
+        {
+            block = list_entry(it, block_t, free);
+            pr_debug("#  %s{0x%p,0x%p}\n",
+                     __block_to_string(block),
+                     list_entry(it->prev, block_t, free),
+                     list_entry(it->next, block_t, free));
+        }
     }
     pr_debug("\n");
-}
-
-/// @brief Removes the block from freelist.
-static inline void __blkmngr_remove_from_freelist(heap_header_t *header, block_t *block)
-{
-    assert(header && "Received a NULL heap header.");
-    assert(block && "Received null block.");
-    if (block == header->free)
-        header->free = block->nextfree;
-    else if (block->prevfree)
-        block->prevfree->nextfree = block->nextfree;
-    if (block->nextfree)
-        block->nextfree->prevfree = block->prevfree;
-    block->prevfree = NULL;
-    block->nextfree = NULL;
-}
-
-/// @brief Add the block to the free list.
-static inline void __blkmngr_add_to_freelist(heap_header_t *header, block_t *block)
-{
-    assert(header && "Received a NULL heap header.");
-    assert(block && "Received null block.");
-    if (header->free)
-        header->free->prevfree = block;
-    block->prevfree = NULL;
-    block->nextfree = header->free;
-    header->free    = block;
 }
 
 /// @brief Find the best fitting block in the memory pool.
@@ -155,12 +135,14 @@ static inline void __blkmngr_add_to_freelist(heap_header_t *header, block_t *blo
 static inline block_t *__blkmngr_find_best_fitting(heap_header_t *header, uint32_t size)
 {
     assert(header && "Received a NULL heap header.");
-    block_t *best_fitting = NULL, *it;
-    for (it = header->free; it; it = it->nextfree) {
-        if (!__blkmngr_does_it_fit(it, size))
+    block_t *best_fitting = NULL, *block;
+    list_for_each_decl(it, &header->free)
+    {
+        block = list_entry(it, block_t, free);
+        if (!__blkmngr_does_it_fit(block, size))
             continue;
-        if (!best_fitting || (BLOCK_REAL_SIZE(it->size) < BLOCK_REAL_SIZE(best_fitting->size)))
-            best_fitting = it;
+        if (!best_fitting || (BLOCK_REAL_SIZE(block->size) < BLOCK_REAL_SIZE(best_fitting->size)))
+            best_fitting = block;
     }
     return best_fitting;
 }
@@ -171,9 +153,9 @@ static inline block_t *__blkmngr_get_previous_block(heap_header_t *header, block
     assert(header && "Received a NULL heap header.");
     assert(block && "Received null block.");
     // If the block is actually the head of the list, return NULL.
-    if (block == header->head)
+    if (block->list.prev == &header->list)
         return NULL;
-    return block->prev;
+    return list_entry(block->list.prev, block_t, list);
 }
 
 /// @brief Given a block, finds its next block.
@@ -182,76 +164,57 @@ static inline block_t *__blkmngr_get_next_block(heap_header_t *header, block_t *
     assert(header && "Received a NULL heap header.");
     assert(block && "Received null block.");
     // If the block is actually the tail of the list, return NULL.
-    if (block == header->tail)
+    if (block->list.next == &header->list)
         return NULL;
-    return block->next;
+    return list_entry(block->list.next, block_t, list);
 }
 
 static inline void __blkmngr_split_block(heap_header_t *header, block_t *block, uint32_t size)
 {
     assert(block && "Received NULL block.");
     assert(BLOCK_IS_FREE(block) && "The block is not free.");
+
     pr_debug("Splitting %s", __block_to_string(block));
-    pr_debug("{next: %s,", __block_to_string(block->next));
-    pr_debug(" nextfree: %s}\n", __block_to_string(block->nextfree));
+
     // Create the new block.
     block_t *split = (block_t *)((char *)block + OVERHEAD + size);
-    // Update the pointer of the new block.
-    split->prev     = block;
-    split->prevfree = block;
-    split->next     = block->next;
-    split->nextfree = block->nextfree;
-    // Update the pointer of the base block.
-    block->next     = split;
-    block->nextfree = split;
+
+    // Insert the block in the list.
+    list_head_insert_after(&split->list, &block->list);
+    // Insert the block in the free list.
+    list_head_insert_after(&split->free, &block->free);
     // Update the size of the new block.
     split->size = BLOCK_REAL_SIZE(block->size) - OVERHEAD - size;
     // Update the size of the base block.
     block->size = BLOCK_REAL_SIZE(size);
     // Set the splitted block as free.
     BLOCK_SET_FREE(split);
-    // If the block was the tail of the list, replace it with the new one.
-    if (header->tail == block)
-        header->tail = split;
-    pr_debug("Into %s", __block_to_string(block));
-    pr_debug("{next: %s,", __block_to_string(block->next));
-    pr_debug(" nextfree: %s}\n", __block_to_string(block->nextfree));
-    pr_debug("And %s", __block_to_string(split));
-    pr_debug("{next: %s,", __block_to_string(split->next));
-    pr_debug(" nextfree: %s}\n", __block_to_string(split->nextfree));
+
+    pr_debug("into %s", __block_to_string(block));
+    pr_debug("and %s\n", __block_to_string(split));
 }
 
-static inline void __blkmngr_merge_blocks(heap_header_t *header, block_t *block1, block_t *block2)
+static inline void __blkmngr_merge_blocks(heap_header_t *header, block_t *block, block_t *other)
 {
-    assert(block1 && "Received NULL first block.");
-    assert(block2 && "Received NULL second block.");
-    assert(BLOCK_IS_FREE(block1) && "The first block is not free.");
-    assert(BLOCK_IS_FREE(block2) && "The second block is not free.");
-    assert(block1->next == block2 && "The blocks are not adjacent.");
+    assert(block && "Received NULL first block.");
+    assert(other && "Received NULL second block.");
+    assert(BLOCK_IS_FREE(block) && "The first block is not free.");
+    assert(BLOCK_IS_FREE(other) && "The second block is not free.");
+    assert(block->list.next == &other->list && "The blocks are not adjacent.");
 
-    pr_debug("Merging %s", __block_to_string(block1));
-    pr_debug("{next: %s,", __block_to_string(block1->next));
-    pr_debug(" nextfree: %s}\n", __block_to_string(block1->nextfree));
-    pr_debug("And %s", __block_to_string(block2));
-    pr_debug("{next: %s,", __block_to_string(block2->next));
-    pr_debug(" nextfree: %s}\n", __block_to_string(block2->nextfree));
+    pr_debug("Merging %s", __block_to_string(block));
+    pr_debug(" and %s", __block_to_string(other));
 
     // Remove the block from the free list.
-    __blkmngr_remove_from_freelist(header, block2);
-    // Merge the block.
-    block1->next = block2->next;
+    list_head_remove(&other->free);
+    // Remove the block from the list.
+    list_head_remove(&other->list);
     // Update the size.
-    block1->size = BLOCK_REAL_SIZE(block1->size) +
-                   BLOCK_REAL_SIZE(block2->size) + OVERHEAD;
+    block->size = BLOCK_REAL_SIZE(block->size) + BLOCK_REAL_SIZE(other->size) + OVERHEAD;
     // Set the splitted block as free.
-    BLOCK_SET_FREE(block1);
-    // If the second block was the tail of the list, replace it with the first one.
-    if (header->tail == block2)
-        header->tail = block1;
+    BLOCK_SET_FREE(block);
 
-    pr_debug("Into %s", __block_to_string(block1));
-    pr_debug("{next: %s,", __block_to_string(block1->next));
-    pr_debug(" nextfree: %s}\n", __block_to_string(block1->nextfree));
+    pr_debug("into %s", __block_to_string(block));
 }
 
 /// @brief Extends the provided heap of the given increment.
@@ -270,7 +233,7 @@ static void *__do_brk(vm_area_struct_t *heap, uint32_t increment)
     // Compute the new heap top.
     uint32_t new_heap_top = mm->brk + increment;
     // Debugging message.
-    pr_notice("Expanding heap from %p to %p.\n", mm->brk, new_heap_top);
+    pr_notice("Expanding heap from 0x%p to 0x%p.\n", mm->brk, new_heap_top);
     // If new boundary is larger than the end, we fail.
     if (new_heap_top > heap->vm_end) {
         pr_err("The new boundary is larger than the end!");
@@ -302,10 +265,10 @@ static void *__do_malloc(vm_area_struct_t *heap, size_t size)
             // Split the block.
             __blkmngr_split_block(header, block, rounded_size);
         } else {
-            pr_debug("Found perferct block: %s\n", __block_to_string(block));
+            pr_debug("Found perfect block: %s\n", __block_to_string(block));
         }
         // Remove the block from the free list.
-        __blkmngr_remove_from_freelist(header, block);
+        list_head_remove(&block->free);
     } else {
         pr_warning("Failed to find suitable block, we need to create a new one.\n");
         // We need more space, specifically the size of the block plus the size
@@ -313,16 +276,10 @@ static void *__do_malloc(vm_area_struct_t *heap, size_t size)
         block = __do_brk(heap, rounded_size + OVERHEAD);
         // Check the block.
         assert(block && "Failed to create a new block!");
-        // Check if the tail is properly set.
-        assert(header->tail && "The tail is not set!");
-        // Add the new block to the list.
-        header->tail->next = block;
         // Setup the new block.
-        block->size     = rounded_size;
-        block->prev     = header->tail;
-        block->next     = NULL;
-        block->prevfree = NULL;
-        block->nextfree = NULL;
+        list_head_init(&block->list);
+        list_head_init(&block->free);
+        list_head_insert_before(&block->list, &header->list);
     }
     // Set the new block as used.
     BLOCK_SET_USED(block);
@@ -343,9 +300,9 @@ static void __do_free(vm_area_struct_t *heap, void *ptr)
     block_t *prev = __blkmngr_get_previous_block(header, block);
     // Get the next block.
     block_t *next = __blkmngr_get_next_block(header, block);
+    pr_debug("Freeing block %s\n", __block_to_string(block));
     // Set the block free.
     BLOCK_SET_FREE(block);
-    pr_debug("Freeing block %s\n", __block_to_string(block));
     // Merge adjacent blocks.
     if (prev && next && BLOCK_IS_FREE(prev) && BLOCK_IS_FREE(next)) {
         __blkmngr_merge_blocks(header, prev, block);
@@ -356,10 +313,10 @@ static void __do_free(vm_area_struct_t *heap, void *ptr)
         // Merge the blocks.
         __blkmngr_merge_blocks(header, block, next);
         // Add the block to the free list.
-        __blkmngr_add_to_freelist(header, block);
+        list_head_insert_before(&block->free, &header->free);
     } else {
         // Add the block to the free list.
-        __blkmngr_add_to_freelist(header, block);
+        list_head_insert_before(&block->free, &header->free);
     }
     __blkmngr_dump(header);
 }
@@ -390,8 +347,8 @@ void *sys_brk(void *addr)
             MM_RW | MM_PRESENT | MM_USER | MM_UPDADDR,
             GFP_HIGHUSER);
         pr_debug("Heap size  : %s.\n", to_human_size(heap_size));
-        pr_debug("Heap start : %p.\n", heap->vm_start);
-        pr_debug("Heap end   : %p.\n", heap->vm_end);
+        pr_debug("Heap start : 0x%p.\n", heap->vm_start);
+        pr_debug("Heap end   : 0x%p.\n", heap->vm_end);
         // Initialize the memory.
         memset((char *)heap->vm_start, 0, segment_size);
         // Save where the original heap starts.
@@ -400,17 +357,18 @@ void *sys_brk(void *addr)
         task->mm->brk = heap->vm_start + sizeof(heap_header_t);
         // Initialize the header.
         heap_header_t *header = (heap_header_t *)heap->vm_start;
-        header->head          = (block_t *)(header + sizeof(heap_header_t));
-        header->tail          = (block_t *)(header + sizeof(heap_header_t));
-        header->free          = header->head;
+        list_head_init(&header->list);
+        list_head_init(&header->free);
         // Preare the first block.
-        block_t *first  = header->head;
-        first->size     = heap_size;
-        first->prev     = NULL;
-        first->next     = NULL;
-        first->nextfree = NULL;
+        block_t *block = (block_t *)(header + sizeof(heap_header_t));
+        block->size    = heap_size;
+        list_head_init(&block->list);
+        list_head_init(&block->free);
+        // Insert the block inside the heap.
+        list_head_insert_before(&block->list, &header->list);
+        list_head_insert_before(&block->free, &header->free);
         // Set the block as free.
-        BLOCK_SET_FREE(first);
+        BLOCK_SET_FREE(block);
         __blkmngr_dump(header);
     }
     void *_ret = NULL;
