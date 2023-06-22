@@ -6,14 +6,34 @@
 #include "stdlib.h"
 
 /// Seed used to generate random numbers.
-static int rseed = 0;
+static unsigned rseed = 0;
 
-void srand(int x)
+void srand(unsigned x)
 {
     rseed = x;
 }
 
-int rand()
+unsigned rand()
 {
     return rseed = (rseed * 1103515245U + 12345U) & RAND_MAX;
+}
+
+float randf()
+{
+    return ((float)rand() / (float)(RAND_MAX));
+}
+
+int randint(int lb, int ub)
+{
+    return lb + ((int)rand() % (ub - lb + 1));
+}
+
+unsigned randuint(unsigned lb, unsigned ub)
+{
+    return lb + (rand() % (ub - lb + 1));
+}
+
+float randfloat(float lb, float ub)
+{
+    return lb + (randf() * (ub - lb));
 }

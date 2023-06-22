@@ -70,8 +70,30 @@ char *getenv(const char *name);
 
 /// @brief Allows to set the seed of the random value generator.
 /// @param x The new seed.
-void srand(int x);
+void srand(unsigned x);
 
-/// @brief Generates a random value.
-/// @return The random value.
-int rand();
+/// @brief Generates a random unsigned integer between 0 and RAND_MAX.
+/// @return the random value.
+unsigned rand();
+
+/// @brief Generates a random floating point number between 0 and 1.
+/// @return the random value.
+float randf();
+
+/// @brief Generates a random integer between lb and ub.
+/// @param lb the lower-bound value.
+/// @param ub the upper-bound value.
+/// @return the random value.
+int randint(int lb, int ub);
+
+/// @brief Generates a random unsigned between lb and ub.
+/// @param lb the lower-bound value.
+/// @param ub the upper-bound value.
+/// @return the random value.
+unsigned randuint(unsigned lb, unsigned ub);
+
+/// @brief Generates a random float between lb and ub.
+/// @param lb the lower-bound value.
+/// @param ub the upper-bound value.
+/// @return the random value.
+float randfloat(float lb, float ub);

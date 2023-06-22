@@ -59,14 +59,6 @@ typedef struct {
     list_head free;
 } heap_header_t;
 
-/// @brief Randomizes the starting address of the
-///
-/// @return uint32_t
-static inline uint32_t __vm_get_random_address(uint32_t lb, uint32_t ub)
-{
-    return lb + (rand() % (ub - lb + 1));
-}
-
 /// @brief Returns the given size, rounded in multiples of 16.
 /// @param size the given size.
 /// @return the size rounded to the nearest multiple of 16.
@@ -395,7 +387,7 @@ void *sys_brk(void *addr)
         // code will check if it is a valid area anyway.
         heap = create_vm_area(
             task->mm,
-            __vm_get_random_address(HEAP_VM_LB, HEAP_VM_UB),
+            randuint(HEAP_VM_LB, HEAP_VM_UB),
             segment_size,
             MM_RW | MM_PRESENT | MM_USER | MM_UPDADDR,
             GFP_HIGHUSER);
