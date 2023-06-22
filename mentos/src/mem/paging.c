@@ -83,20 +83,19 @@ void paging_flush_tlb_single(unsigned long addr)
 static inline int __valid_vm_area(mm_struct_t *mm, uintptr_t vm_start, uintptr_t vm_end)
 {
     if (vm_end <= vm_start)
-        return 1;
+        return -1;
     // Get the stack.
-    vm_area_struct_t *area, *prev_area;
+    vm_area_struct_t *area;
     list_for_each_prev_decl(it, &mm->mmap_list)
     {
         area = list_entry(it, vm_area_struct_t, vm_list);
         assert(area && "There is a NULL area in the list.");
-        // Check the previous segment.
-        if (area->vm_list.prev != &mm->mmap_list) {
-            prev_area = list_entry(area->vm_list.prev, vm_area_struct_t, vm_list);
-            assert(prev_area && "There is a NULL area in the list.");
-            if ((vm_start > prev_area->vm_end) && (vm_end < area->vm_start))
-                return 0;
-        }
+        if ((vm_start >= area->vm_start) && (vm_start <= area->vm_end))
+            return 0;
+        if ((vm_end >= area->vm_start) && (vm_end <= area->vm_end))
+            return 0;
+        if ((vm_start <= area->vm_start) && (vm_end >= area->vm_end))
+            return 0;
     }
     return 1;
 }
@@ -131,16 +130,22 @@ static inline int __find_vm_free_area(mm_struct_t *mm, size_t length, uintptr_t 
 }
 
 vm_area_struct_t *create_vm_area(mm_struct_t *mm,
-                                 uint32_t virt_start,
+                                 uint32_t vm_start,
                                  size_t size,
                                  uint32_t pgflags,
                                  uint32_t gfpflags)
 {
+    // Compute the end of the virtual memory area.
+    uint32_t vm_end = vm_start + size;
+    // Check if the range is already occupied.
+    if (__valid_vm_area(mm, vm_start, vm_end) <= 0) {
+        pr_crit("The virtual memory area range [%p, %p] is already in use.\n", vm_start, vm_end);
+        kernel_panic("Wrong virtual memory area range.");
+    }
     // Allocate on kernel space the structure for the segment.
     vm_area_struct_t *new_segment = kmem_cache_alloc(vm_area_cache, GFP_KERNEL);
-
-    uint32_t order = find_nearest_order_greater(virt_start, size);
-
+    // Find the nearest order for the given memory size.
+    uint32_t order = find_nearest_order_greater(vm_start, size);
     uint32_t phy_vm_start;
 
     if (pgflags & MM_COW) {
@@ -152,13 +157,11 @@ vm_area_struct_t *create_vm_area(mm_struct_t *mm,
         phy_vm_start = get_physical_address_from_page(page);
     }
 
-    mem_upd_vm_area(mm->pgd, virt_start, phy_vm_start, size, pgflags);
-
-    uint32_t vm_start = virt_start;
+    mem_upd_vm_area(mm->pgd, vm_start, phy_vm_start, size, pgflags);
 
     // Update vm_area_struct info.
     new_segment->vm_start = vm_start;
-    new_segment->vm_end   = vm_start + size;
+    new_segment->vm_end   = vm_end;
     new_segment->vm_mm    = mm;
 
     // Update memory descriptor list of vm_area_struct.
