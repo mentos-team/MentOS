@@ -88,15 +88,17 @@ static inline int __folder_contains(
     dirent_t *result)
 {
     int fd = open(folder, O_RDONLY | O_DIRECTORY, 0);
-    if (fd == -1)
+    if (fd == -1) {
         return 0;
+    }
     // Prepare the variables for the search.
     dirent_t dent;
     size_t entry_len = strlen(entry);
     int found        = 0;
     while (getdents(fd, &dent, sizeof(dirent_t)) == sizeof(dirent_t)) {
-        if (accepted_type && (accepted_type != dent.d_type))
+        if (accepted_type && (accepted_type != dent.d_type)) {
             continue;
+        }
         if (strncmp(entry, dent.d_name, entry_len) == 0) {
             *result = dent;
             found   = 1;
@@ -462,7 +464,9 @@ static void __cmd_get()
             putchar('\n');
             // Break the while loop.
             break;
-        } else if (c == '\033') {
+        }
+        // It is a special character.
+        if (c == '\033') {
             c = getchar();
             if (c == '[') {
                 c = getchar(); // Get the char.
@@ -512,11 +516,13 @@ static void __cmd_get()
             // Count the number of words.
             int words = __count_words(cmd);
             // If there are no words, skip.
-            if (words == 0)
+            if (words == 0) {
                 continue;
+            }
             // Determines if we are at the beginning of a new argument, last character is space.
-            if (__is_separator(cmd[cmd_len - 1]))
+            if (__is_separator(cmd[cmd_len - 1])) {
                 continue;
+            }
             // If the last two characters are two dots `..` append a slash `/`,
             // and continue.
             if ((cmd_len >= 2) && ((cmd[cmd_len - 2] == '.') && (cmd[cmd_len - 1] == '.'))) {
@@ -533,19 +539,28 @@ static void __cmd_get()
             dirent_t dent;
             // If there is only one word, we are searching for a command.
             if (is_run_cmd) {
-                if (__folder_contains(cwd, cmd + 2, 0, &dent))
+                if (__folder_contains(cwd, cmd + 2, 0, &dent)) {
                     __cmd_sug(&dent, cmd_len - 2);
+                }
             } else if (is_abs_path) {
-                const char *_dirname = dirname(cmd), *_basename = basename(cmd);
-                if (!_dirname || !_basename)
+                char _dirname[PATH_MAX];
+                if (!dirname(cmd, _dirname, sizeof(_dirname))) {
                     continue;
-                if ((*_dirname == 0) || (*_basename == 0))
+                }
+                const char *_basename = basename(cmd);
+                if (!_basename) {
                     continue;
-                if (__folder_contains(_dirname, _basename, 0, &dent))
+                }
+                if ((*_dirname == 0) || (*_basename == 0)) {
+                    continue;
+                }
+                if (__folder_contains(_dirname, _basename, 0, &dent)) {
                     __cmd_sug(&dent, strlen(_basename));
+                }
             } else if (words == 1) {
-                if (__search_in_path(cmd, &dent))
+                if (__search_in_path(cmd, &dent)) {
                     __cmd_sug(&dent, cmd_len);
+                }
             } else {
                 // Search the last occurrence of a space, from there on
                 // we will have the last argument.
@@ -553,17 +568,25 @@ static void __cmd_get()
                 // We need to move ahead of one character if we found the space.
                 last_argument = last_argument ? last_argument + 1 : NULL;
                 // If there is no last argument.
-                if (last_argument == NULL)
+                if (last_argument == NULL) {
                     continue;
-                const char *_dirname = dirname(last_argument), *_basename = basename(last_argument);
-                if (!_dirname || !_basename)
+                }
+                char _dirname[PATH_MAX];
+                if (!dirname(last_argument, _dirname, sizeof(_dirname))) {
                     continue;
+                }
+                const char *_basename = basename(last_argument);
+                if (!_basename) {
+                    continue;
+                }
                 if ((*_dirname != 0) && (*_basename != 0)) {
-                    if (__folder_contains(_dirname, _basename, 0, &dent))
+                    if (__folder_contains(_dirname, _basename, 0, &dent)) {
                         __cmd_sug(&dent, strlen(_basename));
+                    }
                 } else if (*_basename != 0) {
-                    if (__folder_contains(cwd, _basename, 0, &dent))
+                    if (__folder_contains(cwd, _basename, 0, &dent)) {
                         __cmd_sug(&dent, strlen(_basename));
+                    }
                 }
             }
         } else if (c == 127) {

@@ -43,4 +43,4 @@ typedef struct termios {
 #define IEXTEN  0x00000400 ///< Enables implementation-defined input processing.
 
 /// @brief Mask for extracting control values.
-#define CTRL(x) (x & 037)
+#define CTRL(x) ((x) & 037)

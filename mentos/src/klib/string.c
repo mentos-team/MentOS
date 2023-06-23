@@ -213,6 +213,28 @@ char *strpbrk(const char *string, const char *control)
     return NULL;
 }
 
+int tokenize(char **path, char separator, char *buffer, ssize_t buflen)
+{
+    // If we reached the end of the parsed string, stop.
+    if (**path == '\0') {
+        return 0;
+    }
+    // If the first character is the separator, skip it/
+    if (**path == separator) {
+        ++(*path);
+    }
+    // Keep copying character until we either reach 1) the end of the buffer, 2) a
+    // separator, or 3) the end of the string we are parsing.
+    while ((buflen > 0) && (**path != '\0') && (**path != separator)) {
+        *buffer++ = **path;
+        ++(*path);
+        --buflen;
+    }
+    // Close the buffer.
+    *buffer = '\0';
+    return 1;
+}
+
 void *memmove(void *dst, const void *src, size_t n)
 {
     void *ret = dst;

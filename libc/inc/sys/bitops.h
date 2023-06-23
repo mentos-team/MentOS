@@ -28,9 +28,11 @@
 /// @return the position of the first zero bit.
 static inline int find_first_zero(unsigned long value)
 {
-    for (int i = 0; i < 32; ++i)
-        if (!bit_check(value, i))
+    for (int i = 0; i < 32; ++i) {
+        if (!bit_check(value, i)) {
             return i;
+        }
+    }
     return 0;
 }
 
@@ -39,8 +41,10 @@ static inline int find_first_zero(unsigned long value)
 /// @return the position of the first non-zero bit.
 static inline int find_first_non_zero(unsigned long value)
 {
-    for (int i = 0; i < 32; ++i)
-        if (bit_check(value, i))
+    for (int i = 0; i < 32; ++i) {
+        if (bit_check(value, i)) {
             return i;
+        }
+    }
     return 0;
 }

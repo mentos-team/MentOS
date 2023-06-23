@@ -6,9 +6,8 @@
 #pragma once
 
 #include "sys/types.h"
-#include "sys/ipc.h"
-
 #include "stddef.h"
+#include "sys/ipc.h"
 #include "time.h"
 
 #define SEM_UNDO 0x1000 ///< Undo the operation on exit.

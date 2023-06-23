@@ -170,6 +170,15 @@ char *strtok(char *str, const char *delim);
 /// should be NULL, and saveptr should be unchanged since the previous call.
 char *strtok_r(char *str, const char *delim, char **saveptr);
 
+/// @brief Parses the string using the separator, and at each call it saves the
+/// parsed token in buffer. The pointer `string` will be modified.
+/// @param string cursor used to parse the string, it will be modified.
+/// @param separator the separator we are using.
+/// @param buffer the buffer where we save the parsed token.
+/// @param buflen the length of the buffer.
+/// @return 1 if we still have things to parse, 0 if we finished parsing.
+int tokenize(char **string, char separator, char *buffer, ssize_t buflen);
+
 /// @brief Copies the values of num bytes from the location pointed by source
 /// to the memory block pointed by destination.
 /// @param dst Pointer to the destination array where the content is to be

@@ -5,25 +5,23 @@
 
 // Setup the logging for this file (do this before any other include).
 #include "sys/kernel_levels.h" // Include kernel log levels.
-#include "system/syscall.h"
-#include "time.h"
 #define __DEBUG_HEADER__ "[KHEAP ]"    ///< Change header.
 #define __DEBUG_LEVEL__  LOGLEVEL_INFO ///< Set log level.
 #include "io/debug.h"                  // Include debugging functions.
 
+#include "assert.h"
 #include "kernel.h"
-#include "stddef.h"
-#include "stdlib.h"
+#include "math.h"
 #include "mem/kheap.h"
 #include "mem/paging.h"
-#include "sys/list_head.h"
-#include "sys/bitops.h"
 #include "stdbool.h"
+#include "stddef.h"
 #include "stdint.h"
-#include "string.h"
-#include "assert.h"
 #include "stdio.h"
-#include "math.h"
+#include "stdlib.h"
+#include "string.h"
+#include "sys/bitops.h"
+#include "sys/list_head.h"
 
 /// The heap size.
 #define HEAP_SIZE (4 * M)

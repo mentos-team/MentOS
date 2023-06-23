@@ -9,63 +9,38 @@
 #include "limits.h"
 #include "assert.h"
 #include "mem/paging.h"
+#include "io/debug.h"
 
-int parse_path(char *out, char **cur, char sep, size_t max)
+int dirname(const char *path, char *buffer, size_t buflen)
 {
-    if (**cur == '\0') {
+    if ((path == NULL) || (buffer == NULL) || (buflen == 0)) {
         return 0;
     }
-
-    *out++ = **cur;
-    ++*cur;
-    --max;
-
-    while ((max > 0) && (**cur != '\0') && (**cur != sep)) {
-        *out++ = **cur;
-        ++*cur;
-        --max;
+    // Search for the last slash.
+    const char *last_slash = NULL;
+    for (const char *it = path; *it; it++) {
+        if ((*it) == '/') {
+            last_slash = it;
+        }
     }
-
-    *out = '\0';
-
-    return 1;
-}
-
-char *dirname(const char *path)
-{
-    static char s[PATH_MAX];
-
-    static char dot[2] = ".";
-
-    // Check the input path.
-    if (path == NULL) {
-        return dot;
-    }
-
-    // Copy the path to the support string.
-    strcpy(s, path);
-
-    // Get the last occurrence of '/'.
-    char *last_slash = strrchr(s, '/');
-
-    if (last_slash == s) {
-        // If the slash is acutally the first character of the string, move the
-        // pointer to the last slash after it.
-        ++last_slash;
-    } else if ((last_slash != NULL) && (last_slash[1] == '\0')) {
-        // If the slash is the last character, we need to search before it.
-        last_slash = memchr(s, '/', last_slash - s);
-    }
-
-    if (last_slash != NULL) {
-        // If we have found it, close the string.
-        last_slash[0] = '\0';
+    // If we were able to find a slash, and the slash is not in the first
+    // position, copy the substring.
+    if (last_slash) {
+        // Get the length of the substring, if the last slash is at the beginning,
+        // add 1.
+        size_t dirlen = last_slash - path + (last_slash == path);
+        // Check if the path will fit inside the buffer.
+        if (dirlen >= buflen) {
+            return 0;
+        }
+        // Copy the substring.
+        strncpy(buffer, path, dirlen);
+        // Close the buffer.
+        buffer[dirlen] = 0;
     } else {
-        // Otherwise, return '.'.
-        return dot;
+        strcpy(buffer, ".");
     }
-
-    return s;
+    return 1;
 }
 
 char *basename(const char *path)

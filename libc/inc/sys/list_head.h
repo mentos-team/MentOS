@@ -74,8 +74,9 @@ static inline int list_head_empty(const list_head *head)
 static inline unsigned list_head_size(const list_head *head)
 {
     unsigned size = 0;
-    if (!list_head_empty(head))
+    if (!list_head_empty(head)) {
         list_for_each_decl(it, head) size += 1;
+    }
     return size;
 }
 
@@ -191,7 +192,8 @@ static inline void list_head_swap(list_head *entry1, list_head *entry2)
 {
     list_head *pos = entry2->prev;
     list_head_replace(entry1, entry2);
-    if (pos == entry1)
+    if (pos == entry1) {
         pos = entry2;
+    }
     list_head_insert_after(entry1, pos);
 }

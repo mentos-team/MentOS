@@ -5,20 +5,13 @@
 
 #include "stddef.h"
 
-// TODO: doxygen comment.
-/// @brief
-/// @param out
-/// @param cur
-/// @param sep
-/// @param max
-/// @result
-int parse_path(char *out, char **cur, char sep, size_t max);
-
-// TODO: doxygen comment.
-/// @brief
-/// @param path
-/// @result
-char *dirname(const char *path);
+/// @brief Extracts the parent directory of the given path and saves it inside
+/// the given buffer, e.g., from "/home/user/test.txt" it extracts "/home/user".
+/// @param path the path we are parsing.
+/// @param buffer the buffer where we save the directory name.
+/// @param buflen the length of the buffer.
+/// @return 1 if succesfull, or 0 if the buffer cannot contain the path.
+int dirname(const char *path, char *buffer, size_t buflen);
 
 // TODO: doxygen comment.
 /// @brief

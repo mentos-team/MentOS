@@ -5,10 +5,9 @@
 
 #pragma once
 
-#include "sys/ipc.h"
-
 #include "sys/types.h"
 #include "stddef.h"
+#include "sys/ipc.h"
 #include "time.h"
 
 /// Data type for storing the number of attaches.

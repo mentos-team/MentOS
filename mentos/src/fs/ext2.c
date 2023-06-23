@@ -4,10 +4,10 @@
 /// See LICENSE.md for details.
 
 // Setup the logging for this file (do this before any other include).
-#include "sys/kernel_levels.h"          // Include kernel log levels.
-#define __DEBUG_HEADER__ "[EXT2  ]"     ///< Change header.
+#include "sys/kernel_levels.h"           // Include kernel log levels.
+#define __DEBUG_HEADER__ "[EXT2  ]"      ///< Change header.
 #define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
-#include "io/debug.h"                   // Include debugging functions.
+#include "io/debug.h"                    // Include debugging functions.
 
 #include "fs/ext2.h"
 #include "process/scheduler.h"
@@ -2231,7 +2231,11 @@ static int ext2_create_inode(
 static vfs_file_t *ext2_creat(const char *path, mode_t permission)
 {
     // Get the name of the directory.
-    const char *parent_path = dirname(path), *file_name = basename(path);
+    char parent_path[PATH_MAX];
+    if (!dirname(path, parent_path, sizeof(parent_path))) {
+        return NULL;
+    }
+    char *file_name = basename(path);
     if (strcmp(parent_path, path) == 0) {
         return NULL;
     }
@@ -2349,8 +2353,9 @@ static vfs_file_t *ext2_open(const char *path, int flags, mode_t mode)
         if (bitmask_check(flags, O_CREAT) && bitmask_check(flags, O_EXCL)) {
             pr_err("A file or directory already exists at `%s` (O_CREAT | O_EXCL).\n", absolute_path);
             return NULL;
-        } else if (bitmask_check(flags, O_DIRECTORY) && (direntry.file_type != ext2_file_type_directory)) {
-            pr_err("That is not a directory.");
+        }
+        if (bitmask_check(flags, O_DIRECTORY) && (direntry.file_type != ext2_file_type_directory)) {
+            pr_err("Directory entry `%s` is not a directory.\n", direntry.name);
             errno = ENOTDIR;
             return NULL;
         }
@@ -2358,11 +2363,10 @@ static vfs_file_t *ext2_open(const char *path, int flags, mode_t mode)
         // If we need to create it, it's ok if it does not exist.
         if (bitmask_check(flags, O_CREAT)) {
             return ext2_creat(path, mode);
-        } else {
-            pr_err("The file does not exist `%s`.\n", absolute_path);
-            errno = ENOENT;
-            return NULL;
         }
+        pr_err("The file does not exist `%s`.\n", absolute_path);
+        errno = ENOENT;
+        return NULL;
     }
     // Prepare the structure for the inode.
     ext2_inode_t inode;
@@ -2733,7 +2737,11 @@ static int ext2_mkdir(const char *path, mode_t permission)
         return -EEXIST;
     }
     // Get the parent directory.
-    char *parent_path = dirname(path);
+    char parent_path[PATH_MAX];
+    if (!dirname(path, parent_path, sizeof(parent_path))) {
+        return -ENOENT;
+    }
+    // Check the parent path.
     if (strcmp(parent_path, path) == 0) {
         pr_err("Failed to properly get the parent directory (%s == %s).\n", parent_path, path);
         return -ENOENT;

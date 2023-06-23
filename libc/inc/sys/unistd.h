@@ -6,8 +6,8 @@
 #pragma once
 
 #include "sys/types.h"
-#include "sys/dirent.h"
 #include "stddef.h"
+#include "sys/dirent.h"
 
 #define STDIN_FILENO  0 ///< Standard input.
 #define STDOUT_FILENO 1 ///< Standard output.

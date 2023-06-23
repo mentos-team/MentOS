@@ -205,6 +205,7 @@ static inline int procfs_check_if_empty(const char *path)
 {
     procfs_file_t *procfs_file;
     if (!list_head_empty(&fs.files)) {
+        char filedir[PATH_MAX];
         list_for_each_decl(it, &fs.files)
         {
             // Get the file structure.
@@ -212,13 +213,17 @@ static inline int procfs_check_if_empty(const char *path)
             // Check if it a valid pointer.
             if (procfs_file) {
                 // It's the directory itself.
-                if (!strcmp(path, procfs_file->name))
+                if (!strcmp(path, procfs_file->name)) {
                     continue;
+                }
                 // Get the directory of the file.
-                char *filedir = dirname(procfs_file->name);
+                if (!dirname(procfs_file->name, filedir, sizeof(filedir))) {
+                    continue;
+                }
                 // Check if directory path and file directory are the same.
-                if (filedir && !strcmp(path, filedir))
+                if (!strcmp(path, filedir)) {
                     return 1;
+                }
             }
         }
     }
@@ -352,10 +357,13 @@ static int procfs_mkdir(const char *path, mode_t mode)
         return -EEXIST;
     }
     // Check if the directories before it exist.
+    char parent_path[PATH_MAX];
+    if (!dirname(path, parent_path, sizeof(parent_path))) {
+        return -EEXIST;
+    }
     procfs_file_t *parent_file = NULL;
-    char *parent               = dirname(path);
-    if ((strcmp(parent, ".") != 0) && (strcmp(parent, "/") != 0)) {
-        parent_file = procfs_find_entry_path(parent);
+    if ((strcmp(parent_path, ".") != 0) && (strcmp(parent_path, "/") != 0)) {
+        parent_file = procfs_find_entry_path(parent_path);
         if (parent_file == NULL) {
             return -ENOENT;
         }
@@ -415,8 +423,11 @@ static int procfs_rmdir(const char *path)
 /// @return The file descriptor of the opened file, otherwise returns -1.
 static vfs_file_t *procfs_open(const char *path, int flags, mode_t mode)
 {
+    char parent_path[PATH_MAX];
+    if (!dirname(path, parent_path, sizeof(parent_path))) {
+        return NULL;
+    }
     // Get the parent path.
-    char *parent_path = dirname(path);
     // Check if the directories before it exist.
     if ((strcmp(parent_path, ".") != 0) && (strcmp(parent_path, "/") != 0)) {
         procfs_file_t *parent_file = procfs_find_entry_path(parent_path);
@@ -713,26 +724,31 @@ static inline ssize_t procfs_getdents(vfs_file_t *file, dirent_t *dirp, off_t do
     // Clear the buffer.
     memset(dirp, 0, count);
     // Initialize, the length of the directory name.
-    int len        = strlen(direntry->name);
+    int len              = strlen(direntry->name);
     ssize_t written_size = 0;
     off_t iterated_size  = 0;
-    char *parent   = NULL;
+    char parent_path[PATH_MAX];
     // Iterate the filesystem files.
     list_for_each_decl(it, &fs.files)
     {
         // Get the file structure.
         procfs_file_t *entry = procfs_get_file(it);
         // Check if it a valid procfs file.
-        if (!entry)
+        if (!entry) {
             continue;
+        }
         // If the entry is the directory itself, skip.
-        if (!strcmp(direntry->name, entry->name))
+        if (!strcmp(direntry->name, entry->name)) {
             continue;
+        }
         // Get the parent directory.
-        parent = dirname(entry->name);
-        // Check if the parent of the entry is the directory we are iterating.
-        if (strcmp(direntry->name, parent))
+        if (!dirname(entry->name, parent_path, sizeof(parent_path))) {
             continue;
+        }
+        // Check if the parent of the entry is the directory we are iterating.
+        if (strcmp(direntry->name, parent_path)) {
+            continue;
+        }
         // Advance the size we just iterated.
         iterated_size += sizeof(dirent_t);
         // Check if the iterated size is still below the offset.
@@ -740,8 +756,9 @@ static inline ssize_t procfs_getdents(vfs_file_t *file, dirent_t *dirp, off_t do
             continue;
         }
         // Check if the last character of the entry is a slash.
-        if (*(entry->name + len) == '/')
+        if (*(entry->name + len) == '/') {
             ++len;
+        }
         // Write on current dirp.
         dirp->d_ino  = entry->inode;
         dirp->d_type = entry->flags;
