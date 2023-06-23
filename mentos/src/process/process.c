@@ -4,10 +4,10 @@
 /// See LICENSE.md for details.
 
 // Setup the logging for this file (do this before any other include).
-#include "sys/kernel_levels.h"          // Include kernel log levels.
-#define __DEBUG_HEADER__ "[PROC  ]"     ///< Change header.
+#include "sys/kernel_levels.h"           // Include kernel log levels.
+#define __DEBUG_HEADER__ "[PROC  ]"      ///< Change header.
 #define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
-#include "io/debug.h"                   // Include debugging functions.
+#include "io/debug.h"                    // Include debugging functions.
 
 #include "process/process.h"
 #include "process/scheduler.h"
@@ -348,10 +348,14 @@ int sys_chdir(char const *path)
 {
     task_struct *current = scheduler_get_current_process();
     assert(current && "There is no running process.");
-    if (!path)
+    if (!path) {
         return -EFAULT;
+    }
     char absolute_path[PATH_MAX];
-    realpath(path, absolute_path);
+    if (!realpath(path, absolute_path, sizeof(absolute_path))) {
+        pr_err("Cannot get the absolute path for path `%s`.\n", path);
+        return -ENOENT;
+    }
     // Check that the directory exists.
     vfs_file_t *dir = vfs_open(absolute_path, O_RDONLY | O_DIRECTORY, S_IXUSR);
     if (dir) {
@@ -368,18 +372,24 @@ int sys_fchdir(int fd)
     task_struct *current = scheduler_get_current_process();
     assert(current && "There is no running process.");
     // Check if it is a valid file descriptor.
-    if ((fd < 0) || (fd >= current->max_fd))
+    if ((fd < 0) || (fd >= current->max_fd)) {
         return -EBADF;
+    }
     // Get the file descriptor.
     vfs_file_descriptor_t *vfd = &current->fd_list[fd];
     // Check if the file descriptor file is set.
-    if (vfd->file_struct == NULL)
+    if (vfd->file_struct == NULL) {
         return -ENOENT;
+    }
     // Check that the path points to a directory.
-    if (!bitmask_check(vfd->file_struct->flags, DT_DIR))
+    if (!bitmask_check(vfd->file_struct->flags, DT_DIR)) {
         return -ENOTDIR;
+    }
     char absolute_path[PATH_MAX];
-    realpath(vfd->file_struct->name, absolute_path);
+    if (!realpath(vfd->file_struct->name, absolute_path, sizeof(absolute_path))) {
+        pr_err("Cannot get the absolute path for path `%s`.\n", vfd->file_struct->name);
+        return -ENOENT;
+    }
     strcpy(current->cwd, absolute_path);
     return 0;
 }

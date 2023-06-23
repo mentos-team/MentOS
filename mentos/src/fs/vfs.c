@@ -111,7 +111,7 @@ vfs_file_t *vfs_open(const char *path, int flags, mode_t mode)
     // Allocate a variable for the path.
     char absolute_path[PATH_MAX];
     // If the first character is not the '/' then get the absolute path.
-    if (!realpath(path, absolute_path)) {
+    if (!realpath(path, absolute_path, sizeof(absolute_path))) {
         pr_err("vfs_open(%s): Cannot get the absolute path!\n", path);
         errno = ENODEV;
         return NULL;
@@ -213,7 +213,7 @@ int vfs_unlink(const char *path)
     // Allocate a variable for the path.
     char absolute_path[PATH_MAX];
     // If the first character is not the '/' then get the absolute path.
-    if (!realpath(path, absolute_path)) {
+    if (!realpath(path, absolute_path, sizeof(absolute_path))) {
         pr_err("vfs_unlink(%s): Cannot get the absolute path.", path);
         return -ENODEV;
     }
@@ -240,7 +240,7 @@ int vfs_mkdir(const char *path, mode_t mode)
     // Allocate a variable for the path.
     char absolute_path[PATH_MAX];
     // If the first character is not the '/' then get the absolute path.
-    if (!realpath(path, absolute_path)) {
+    if (!realpath(path, absolute_path, sizeof(absolute_path))) {
         pr_err("vfs_mkdir(%s): Cannot get the absolute path.", path);
         return -ENODEV;
     }
@@ -267,7 +267,7 @@ int vfs_rmdir(const char *path)
     // Allocate a variable for the path.
     char absolute_path[PATH_MAX];
     // If the first character is not the '/' then get the absolute path.
-    if (!realpath(path, absolute_path)) {
+    if (!realpath(path, absolute_path, sizeof(absolute_path))) {
         pr_err("vfs_rmdir(%s): Cannot get the absolute path.", path);
         return -ENODEV;
     }
@@ -295,7 +295,7 @@ vfs_file_t *vfs_creat(const char *path, mode_t mode)
     // Allocate a variable for the path.
     char absolute_path[PATH_MAX];
     // If the first character is not the '/' then get the absolute path.
-    if (!realpath(path, absolute_path)) {
+    if (!realpath(path, absolute_path, sizeof(absolute_path))) {
         pr_err("vfs_creat(%s): Cannot get the absolute path.", path);
         errno = ENODEV;
         return NULL;
@@ -336,7 +336,7 @@ int vfs_stat(const char *path, stat_t *buf)
     // Allocate a variable for the path.
     char absolute_path[PATH_MAX];
     // If the first character is not the '/' then get the absolute path.
-    if (!realpath(path, absolute_path)) {
+    if (!realpath(path, absolute_path, sizeof(absolute_path))) {
         pr_err("vfs_stat(%s): Cannot get the absolute path.", path);
         return -ENODEV;
     }

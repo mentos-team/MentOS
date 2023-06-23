@@ -43,18 +43,22 @@ int dirname(const char *path, char *buffer, size_t buflen)
     return 1;
 }
 
-char *basename(const char *path)
+const char *basename(const char *path)
 {
-    char *p = strrchr(path, '/');
-
-    return p ? p + 1 : (char *)path;
+    // Search for the last slash.
+    const char *last_slash = NULL;
+    for (const char *it = path; *it; it++) {
+        if ((*it) == '/') {
+            last_slash = it;
+        }
+    }
+    return last_slash ? last_slash + 1 : path;
 }
 
-char *realpath(const char *path, char *resolved)
+char *realpath(const char *path, char *buffer, size_t buflen)
 {
     assert(path && "Provided null path.");
-    if (resolved == NULL)
-        resolved = malloc(sizeof(char) * PATH_MAX);
+    assert(buffer && "Provided null buffer.");
     char abspath[PATH_MAX];
     // Initialize the absolute path.
     memset(abspath, '\0', PATH_MAX);
@@ -94,22 +98,27 @@ char *realpath(const char *path, char *resolved)
         // Go to previous directory if /../ is found
         else if (!strncmp("/../", abspath + absidx, 4)) {
             // Go to a valid path character (pathidx points to the next one)
-            if (pathidx)
+            if (pathidx) {
                 pathidx--;
-            while (pathidx && resolved[pathidx] != '/') {
+            }
+            while (pathidx && buffer[pathidx] != '/') {
                 pathidx--;
             }
             absidx += 3;
         } else if (!strncmp("/./", abspath + absidx, 3)) {
             absidx += 2;
         } else {
-            resolved[pathidx++] = abspath[absidx++];
+            if ((pathidx + 1) >= buflen) {
+                return NULL;
+            }
+            buffer[pathidx++] = abspath[absidx++];
         }
     }
     // Remove the last /
-    if (pathidx > 1)
-        resolved[pathidx - 1] = '\0';
-    else
-        resolved[1] = '\0';
-    return resolved;
+    if (pathidx > 1) {
+        buffer[pathidx - 1] = '\0';
+    } else {
+        buffer[1] = '\0';
+    }
+    return buffer;
 }

@@ -2235,7 +2235,7 @@ static vfs_file_t *ext2_creat(const char *path, mode_t permission)
     if (!dirname(path, parent_path, sizeof(parent_path))) {
         return NULL;
     }
-    char *file_name = basename(path);
+    const char *file_name = basename(path);
     if (strcmp(parent_path, path) == 0) {
         return NULL;
     }
@@ -2327,7 +2327,7 @@ static vfs_file_t *ext2_open(const char *path, int flags, mode_t mode)
     // Get the absolute path.
     char absolute_path[PATH_MAX];
     // If the first character is not the '/' then get the absolute path.
-    if (!realpath(path, absolute_path)) {
+    if (!realpath(path, absolute_path, sizeof(absolute_path))) {
         pr_err("Cannot get the absolute path for path `%s`.\n", path);
         return NULL;
     }
@@ -2409,12 +2409,12 @@ static int ext2_unlink(const char *path)
     // Get the absolute path.
     char absolute_path[PATH_MAX];
     // If the first character is not the '/' then get the absolute path.
-    if (!realpath(path, absolute_path)) {
+    if (!realpath(path, absolute_path, sizeof(absolute_path))) {
         pr_err("Cannot get the absolute path for path `%s`.\n", path);
         return -ENOENT;
     }
     // Get the name of the entry we want to unlink.
-    char *name = basename(absolute_path);
+    const char *name = basename(absolute_path);
     if (name == NULL) {
         pr_err("Cannot get the basename from the absolute path `%s`.\n", absolute_path);
         return -ENOENT;
@@ -2716,7 +2716,7 @@ static int ext2_mkdir(const char *path, mode_t permission)
     // Get the absolute path.
     char absolute_path[PATH_MAX];
     // If the first character is not the '/' then get the absolute path.
-    if (!realpath(path, absolute_path)) {
+    if (!realpath(path, absolute_path, sizeof(absolute_path))) {
         pr_err("Cannot get the absolute path for path `%s`.\n", path);
         return -ENOENT;
     }
@@ -2808,12 +2808,12 @@ static int ext2_rmdir(const char *path)
     // Get the absolute path.
     char absolute_path[PATH_MAX];
     // If the first character is not the '/' then get the absolute path.
-    if (!realpath(path, absolute_path)) {
+    if (!realpath(path, absolute_path, sizeof(absolute_path))) {
         pr_err("Cannot get the absolute path for path `%s`.\n", path);
         return -ENOENT;
     }
     // Get the name of the entry we want to unlink.
-    char *name = basename(absolute_path);
+    const char *name = basename(absolute_path);
     if (name == NULL) {
         pr_err("Cannot get the basename from the absolute path `%s`.\n", absolute_path);
         return -ENOENT;
@@ -2911,7 +2911,7 @@ static int ext2_stat(const char *path, stat_t *stat)
     // Get the absolute path.
     char absolute_path[PATH_MAX];
     // If the first character is not the '/' then get the absolute path.
-    if (!realpath(path, absolute_path)) {
+    if (!realpath(path, absolute_path, sizeof(absolute_path))) {
         pr_err("Cannot get the absolute path for path `%s`.\n", path);
         return -ENOENT;
     }
@@ -3100,7 +3100,7 @@ static vfs_file_t *ext2_mount_callback(const char *path, const char *device)
     // Allocate a variable for the path.
     char absolute_path[PATH_MAX];
     // If the first character is not the '/' then get the absolute path.
-    if (!realpath(device, absolute_path)) {
+    if (!realpath(device, absolute_path, sizeof(absolute_path))) {
         pr_err("ext2_mount_callback(%s, %s): Cannot get the absolute path.", path, device);
         return NULL;
     }
