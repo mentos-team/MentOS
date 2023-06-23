@@ -16,7 +16,7 @@
 #define TASK_NAME_MAX_LENGTH 100
 
 /// The default dimension of the stack of a process (1 MByte).
-#define DEFAULT_STACK_SIZE 0x100000
+#define DEFAULT_STACK_SIZE (1 * M)
 
 /// @brief This structure is used to track the statistics of a process.
 /// @details
