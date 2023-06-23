@@ -7,9 +7,9 @@
 #include "sys/kernel_levels.h" // Include kernel log levels.
 #include "system/syscall.h"
 #include "time.h"
-#define __DEBUG_HEADER__ "[KHEAP ]"     ///< Change header.
-#define __DEBUG_LEVEL__  LOGLEVEL_DEBUG ///< Set log level.
-#include "io/debug.h"                   // Include debugging functions.
+#define __DEBUG_HEADER__ "[KHEAP ]"    ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_INFO ///< Set log level.
+#include "io/debug.h"                  // Include debugging functions.
 
 #include "kernel.h"
 #include "stddef.h"
