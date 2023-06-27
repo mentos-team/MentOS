@@ -38,45 +38,39 @@ static kmem_cache_t *malloc_blocks[MAX_KMALLOC_CACHE_ORDER];
 
 static int __alloc_slab_page(kmem_cache_t *cachep, gfp_t flags)
 {
+    // ALlocate the required number of pages.
     page_t *page = _alloc_pages(flags, cachep->gfp_order);
     if (!page) {
         pr_crit("Failed to allocate a new page from slab.\n");
         return -1;
     }
-
+    // Initialize the lists.
     list_head_init(&page->slabs);
-
-    // Save in the root page the kmem_cache_t pointer,
-    // to allow freeing arbitrary pointers
+    list_head_init(&page->slab_freelist);
+    // Save in the root page the kmem_cache_t pointer, to allow freeing
+    // arbitrary pointers.
     page[0].container.slab_cache = cachep;
-
-    // Update slab main pages of all child pages, to allow
-    // reconstructing which page handles a specified address
+    // Update slab main pages of all child pages, to allow reconstructing which
+    // page handles a specified address
     for (unsigned int i = 1; i < (1U << cachep->gfp_order); i++) {
         page[i].container.slab_main_page = page;
     }
-
+    // Compute the slab size.
     unsigned int slab_size = PAGE_SIZE * (1U << cachep->gfp_order);
-
-    // Update the page objects counters
+    // Update the page objects counters.
     page->slab_objcnt  = slab_size / cachep->size;
     page->slab_objfree = page->slab_objcnt;
-
+    // Get the page address.
     unsigned int pg_addr = get_lowmem_address_from_page(page);
-
-    list_head_init(&page->slab_freelist);
-
     // Build the objects structures
     for (unsigned int i = 0; i < page->slab_objcnt; i++) {
         kmem_obj *obj = KMEM_OBJ(cachep, pg_addr + cachep->size * i);
         list_head_insert_after(&obj->objlist, &page->slab_freelist);
     }
-
     // Add the page to the slab list and update the counters
     list_head_insert_after(&page->slabs, &cachep->slabs_free);
     cachep->total_num += page->slab_objcnt;
     cachep->free_num += page->slab_objcnt;
-
     return 0;
 }
 
@@ -90,26 +84,28 @@ static void __kmem_cache_refill(kmem_cache_t *cachep, unsigned int free_num, gfp
     }
 }
 
-static unsigned int __find_next_alignment(unsigned int size, unsigned int align)
-{
-    return (size / align + (size % align ? 1 : 0)) * align;
-}
-
 static void __compute_size_and_order(kmem_cache_t *cachep)
 {
-    // Align the whole object to the required padding
-    cachep->size = __find_next_alignment(
+    // Align the whole object to the required padding.
+    cachep->size = round_up(
         max(cachep->object_size, KMEM_OBJ_OVERHEAD),
         max(8, cachep->align));
-
     // Compute the gfp order
-    unsigned int size = __find_next_alignment(cachep->size, PAGE_SIZE) / PAGE_SIZE;
+    unsigned int size = round_up(cachep->size, PAGE_SIZE) / PAGE_SIZE;
     while ((size /= 2) > 0) {
         cachep->gfp_order++;
     }
 }
 
-static void __kmem_cache_create(kmem_cache_t *cachep, const char *name, unsigned int size, unsigned int align, slab_flags_t flags, void (*ctor)(void *), void (*dtor)(void *), unsigned int start_count)
+static void __kmem_cache_create(
+    kmem_cache_t *cachep,
+    const char *name,
+    unsigned int size,
+    unsigned int align,
+    slab_flags_t flags,
+    kmem_fun_t ctor,
+    kmem_fun_t dtor,
+    unsigned int start_count)
 {
     pr_info("Creating new cache `%s` with objects of size `%d`.\n", name, size);
 
@@ -194,7 +190,13 @@ void kmem_cache_init()
     }
 }
 
-kmem_cache_t *kmem_cache_create(const char *name, unsigned int size, unsigned int align, slab_flags_t flags, void (*ctor)(void *), void (*dtor)(void *))
+kmem_cache_t *kmem_cache_create(
+    const char *name,
+    unsigned int size,
+    unsigned int align,
+    slab_flags_t flags,
+    kmem_fun_t ctor,
+    kmem_fun_t dtor)
 {
     kmem_cache_t *cachep = (kmem_cache_t *)kmem_cache_alloc(&kmem_cache, GFP_KERNEL);
     if (!cachep)
