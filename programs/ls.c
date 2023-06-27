@@ -111,7 +111,7 @@ static void print_ls(int fd, const char *path, unsigned int flags)
     printf("\n");
 
     if (bitmask_check(flags, FLAG_L)) {
-        printf("Total: %d byte\n", total_size);
+        printf("Total: %s\n", to_human_size(total_size));
     }
     printf("\n");
 }
