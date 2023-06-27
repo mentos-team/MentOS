@@ -4,10 +4,10 @@
 /// See LICENSE.md for details.
 
 // Setup the logging for this file (do this before any other include).
-#include "sys/kernel_levels.h"           // Include kernel log levels.
-#define __DEBUG_HEADER__ "[PMM   ]"      ///< Change header.
-#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
-#include "io/debug.h"                    // Include debugging functions.
+#include "sys/kernel_levels.h"          // Include kernel log levels.
+#define __DEBUG_HEADER__ "[PMM   ]"     ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_DEBUG ///< Set log level.
+#include "io/debug.h"                   // Include debugging functions.
 
 #include "mem/zone_allocator.h"
 #include "mem/buddysystem.h"
@@ -226,9 +226,6 @@ static void zone_init(char *name, int zone_index, uint32_t adr_from, uint32_t ad
     zone->free_pages     = num_page_frames;
     zone->zone_mem_map   = mem_map + first_page_frame;
     zone->zone_start_pfn = first_page_frame;
-    // Dump the information.
-    pr_debug("ZONE %s, first page: %p, last page: %p, npages:%d\n", zone->name,
-             zone->zone_mem_map, zone->zone_mem_map + zone->size, zone->size);
     // Set to zero all page structures.
     memset(zone->zone_mem_map, 0, zone->size * sizeof(page_t));
     // Initialize the buddy system for the new zone.
@@ -263,41 +260,33 @@ unsigned int find_nearest_order_greater(uint32_t base_addr, uint32_t amount)
 
 int pmmngr_init(boot_info_t *boot_info)
 {
+    uint32_t lowmem_phy_start, lowmem_virt_start;
+    uint32_t mem_size, mem_num_frames;
+    uint32_t normal_start_addr, normal_end_addr, normal_size;
+    uint32_t high_start_addr, high_end_addr, high_size;
+
     //=======================================================================
-
-    uint32_t lowmem_phy_start = boot_info->lowmem_phy_start;
-
-    // Now we have skipped all modules in physical space, is time to
-    // consider also virtual lowmem space!
-    uint32_t lowmem_virt_start = boot_info->lowmem_start + (lowmem_phy_start - boot_info->lowmem_phy_start);
-
-    pr_debug("Start memory address after skip modules (phy => virt) : 0x%p => 0x%p \n",
-             lowmem_phy_start, lowmem_virt_start);
+    lowmem_phy_start = boot_info->lowmem_phy_start;
+    // Now we have skipped all modules in physical space, is time to consider
+    // also virtual lowmem space!
+    lowmem_virt_start = boot_info->lowmem_start;
     //=======================================================================
 
     //==== Initialize array of page_t =======================================
     pr_debug("Initializing low memory map structure...\n");
     mem_map = (page_t *)lowmem_virt_start;
-
-    uint32_t mem_size = boot_info->highmem_phy_end;
-
+    // Compute the size of memory.
+    mem_size = boot_info->highmem_phy_end;
     // Total number of blocks (all lowmem+highmem RAM).
-    uint32_t mem_num_frames = mem_size / PAGE_SIZE;
-
+    mem_num_frames = mem_size / PAGE_SIZE;
     // Initialize each page_t.
-    for (int page_index = 0; page_index < mem_num_frames; ++page_index) {
-        page_t *page = mem_map + page_index;
+    for (unsigned i = 0; i < mem_num_frames; ++i) {
         // Mark page as free.
-        set_page_count(page, 0);
+        set_page_count(&mem_map[i], 0);
     }
-    //=======================================================================
-
-    //==== Skip memory space used for page_t[] ==============================
+    // Skip memory space used for page_t[]
     lowmem_phy_start += sizeof(page_t) * mem_num_frames;
     lowmem_virt_start += sizeof(page_t) * mem_num_frames;
-    pr_debug("Size of mem_map                            : %i byte [0x%p - 0x%p]\n",
-             (char *)lowmem_virt_start - (char *)mem_map, mem_map,
-             lowmem_virt_start);
     //=======================================================================
 
     //==== Initialize contig_page_data node =================================
@@ -317,47 +306,52 @@ int pmmngr_init(boot_info_t *boot_info)
     contig_page_data->node_start_mapnr = 0;
     // The first physical page.
     contig_page_data->node_start_paddr = 0x0;
-    //=======================================================================
-
-    //==== Skip memory space used for pg_data_t =============================
+    // Skip memory space used for pg_data_t.
     lowmem_phy_start += sizeof(pg_data_t);
     lowmem_virt_start += sizeof(pg_data_t);
     //=======================================================================
 
-    //==== Initialize zones zone_t ==========================================
     pr_debug("Initializing zones...\n");
 
-    // ZONE_NORMAL   [ memory_start - mem_size/4 ]
-    uint32_t start_normal_addr = MAX_PAGE_ALIGN(lowmem_phy_start);
-    uint32_t stop_normal_addr  = MIN_PAGE_ALIGN(boot_info->lowmem_phy_end);
-
-    // Move the stop address so that the size is a multiple of max buddysystem order
-    uint32_t normal_area_size = MIN_ORDER_ALIGN(stop_normal_addr - start_normal_addr);
-    stop_normal_addr          = start_normal_addr + normal_area_size;
-
-    uint32_t phv_delta = start_normal_addr - lowmem_phy_start;
-    lowmem_virt_base   = lowmem_virt_start + phv_delta;
-    lowmem_page_base   = start_normal_addr / PAGE_SIZE;
-    zone_init("Normal", ZONE_NORMAL, start_normal_addr, stop_normal_addr);
-
+    //==== Initialize ZONE_NORMAL ==========================================
+    // ZONE_NORMAL   [ memory_start - mem_size / 4 ]
+    normal_start_addr = MAX_PAGE_ALIGN(lowmem_phy_start);
+    normal_end_addr   = MIN_PAGE_ALIGN(boot_info->lowmem_phy_end);
+    // Move the stop address so that the size is a multiple of max buddysystem
+    // order.
+    normal_size      = MIN_ORDER_ALIGN(normal_end_addr - normal_start_addr);
+    normal_end_addr  = normal_start_addr + normal_size;
+    lowmem_virt_base = lowmem_virt_start + (normal_start_addr - lowmem_phy_start);
+    lowmem_page_base = normal_start_addr / PAGE_SIZE;
+    //==== Initialize ZONE_HIGHMEM ==========================================
     // ZONE_HIGHMEM  [ mem_size/4 - mem_size ]
-    uint32_t start_high_addr = MAX_PAGE_ALIGN((uint32_t)boot_info->highmem_phy_start);
-    uint32_t stop_high_addr  = MIN_PAGE_ALIGN(boot_info->highmem_phy_end);
-
-    // Move the stop address so that the size is a multiple of max buddysystem order
-    uint32_t high_area_size = MIN_ORDER_ALIGN(stop_high_addr - start_high_addr);
-    stop_high_addr          = start_high_addr + high_area_size;
-
-    zone_init("HighMem", ZONE_HIGHMEM, start_high_addr, stop_high_addr);
+    high_start_addr = MAX_PAGE_ALIGN((uint32_t)boot_info->highmem_phy_start);
+    high_end_addr   = MIN_PAGE_ALIGN(boot_info->highmem_phy_end);
+    // Move the stop address so that the size is a multiple of max buddysystem
+    // order.
+    high_size     = MIN_ORDER_ALIGN(high_end_addr - high_start_addr);
+    high_end_addr = high_start_addr + high_size;
     //=======================================================================
 
-    pr_debug("Memory Size                                : %u MB \n", mem_size / M);
-    pr_debug("Total page frames    (MemorySize/4096)     : %u \n", mem_num_frames);
-    pr_debug("mem_map address                            : 0x%p \n", mem_map);
-    pr_debug("Memory Start                               : 0x%p \n", lowmem_phy_start);
+    zone_init("Normal", ZONE_NORMAL, normal_start_addr, normal_end_addr);
+    zone_init("HighMem", ZONE_HIGHMEM, high_start_addr, high_end_addr);
 
-    // With the caching enabled, the pmm check is useless.
-    //return pmm_check();
+    pr_debug("Memory addresses:\n");
+    pr_debug("    LowMem  (phy): 0x%p to 0x%p\n", boot_info->lowmem_phy_start, boot_info->lowmem_phy_end);
+    pr_debug("    HighMem (phy): 0x%p to 0x%p\n", boot_info->highmem_phy_start, boot_info->highmem_phy_end);
+    pr_debug("    LowMem  (vrt): 0x%p to 0x%p\n", boot_info->lowmem_start, boot_info->lowmem_end);
+    pr_debug("Memory map  size      : %s\n", to_human_size(sizeof(page_t) * mem_num_frames));
+    pr_debug("Memory size           : %s\n", to_human_size(mem_size));
+    pr_debug("Page size             : %s\n", to_human_size(PAGE_SIZE));
+    pr_debug("Number of page frames : %u\n", mem_num_frames);
+    for (unsigned i = 0; i < __MAX_NR_ZONES; ++i) {
+        zone_t *zone = &contig_page_data->node_zones[i];
+        pr_debug("Zone %9s, first page: 0x%p, last page: 0x%p, # pages: %6d\n",
+                 zone->name,
+                 zone->zone_mem_map,
+                 zone->zone_mem_map + zone->size,
+                 zone->size);
+    }
     return 1;
 }
 
