@@ -20,9 +20,6 @@
 #include "string.h"
 #include "math.h"
 
-/// Counts the number of elements of an array.
-#define COUNT_OF(x) ((sizeof(x) / sizeof(0 [x])) / ((size_t)(!(sizeof(x) % sizeof(0 [x])))))
-
 /// Attribute Controller index port.
 #define AC_INDEX 0x03C0
 /// Attribute Controller write port.

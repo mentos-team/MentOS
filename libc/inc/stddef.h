@@ -68,3 +68,6 @@ typedef unsigned int pgprot_t;
 /// Returns the alignment, in bytes, of the specified type.
 #define alignof(type) offsetof( \
     struct { char c; type member; }, member)
+
+/// Counts the number of elements of an array.
+#define count_of(x) ((sizeof(x) / sizeof((x)[0])) / ((size_t)(!(sizeof(x) % sizeof((x)[0])))))
