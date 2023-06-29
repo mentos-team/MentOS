@@ -125,7 +125,7 @@ set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -vga std)
 # Set the amount of memory.
 set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -m 1096M)
 # Set the EXT2 drive.
-set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -drive file=${CMAKE_BINARY_DIR}/rootfs.img,format=raw)
+set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -drive file=${CMAKE_BINARY_DIR}/rootfs.img,format=raw,index=0,media=disk)
 
 # =============================================================================
 # Booting with QEMU for fun
@@ -152,8 +152,8 @@ add_custom_target(
     COMMAND echo "add-symbol-file ${CMAKE_BINARY_DIR}/mentos/kernel-bootloader.bin" >> ${CMAKE_BINARY_DIR}/.gdbinit
     COMMAND ls -1 ${CMAKE_BINARY_DIR}/programs/tests/test_* | sed 's/^/add-symbol-file /' >> ${CMAKE_BINARY_DIR}/.gdbinit
     COMMAND ls -1 ${CMAKE_BINARY_DIR}/programs/prog_* | sed 's/^/add-symbol-file /' >> ${CMAKE_BINARY_DIR}/.gdbinit
-    COMMAND echo "break boot.c: boot_main" >> ${CMAKE_BINARY_DIR}/.gdbinit
-    COMMAND echo "break kernel.c: kmain" >> ${CMAKE_BINARY_DIR}/.gdbinit
+    # COMMAND echo "break boot.c: boot_main" >> ${CMAKE_BINARY_DIR}/.gdbinit
+    # COMMAND echo "break kernel.c: kmain" >> ${CMAKE_BINARY_DIR}/.gdbinit
     COMMAND echo "target remote localhost:1234" >> ${CMAKE_BINARY_DIR}/.gdbinit
     DEPENDS kernel-bootloader.bin
     DEPENDS all_programs
