@@ -71,3 +71,10 @@ typedef unsigned int pgprot_t;
 
 /// Counts the number of elements of an array.
 #define count_of(x) ((sizeof(x) / sizeof((x)[0])) / ((size_t)(!(sizeof(x) % sizeof((x)[0])))))
+
+#define swap(a, b)             \
+    do {                       \
+        typeof(a) temp = (a);  \
+        (a)            = (b);  \
+        (b)            = temp; \
+    } while (0)
