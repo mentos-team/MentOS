@@ -232,110 +232,41 @@ typedef enum {
 /// @brief PIC scan function.
 typedef void (*pci_scan_func_t)(uint32_t device, uint16_t vendor_id, uint16_t device_id, void *extra);
 
-/// @brief Extract the `bus` from the device.
-/// @param device the device details.
-/// @return the `bus` value.
-static inline int pci_extract_bus(uint32_t device)
-{
-    return (uint8_t)((device >> 16));
-}
+/// @brief Writes a 8bit field to the given PCI device.
+/// @param device the device.
+/// @param field the field to write.
+/// @param value the value to write.
+void pci_write_8(uint32_t device, uint32_t field, uint8_t value);
 
-/// @brief Extract the `slot` from the device.
-/// @param device the device details.
-/// @return the `slot` value.
-static inline int pci_extract_slot(uint32_t device)
-{
-    return (uint8_t)((device >> 8));
-}
+/// @brief Writes a 16bit field to the given PCI device.
+/// @param device the device.
+/// @param field the field to write.
+/// @param value the value to write.
+void pci_write_16(uint32_t device, uint32_t field, uint16_t value);
 
-/// @brief Extract the `func` from the device.
-/// @param device the device details.
-/// @return the `func` value.
-static inline int pci_extract_func(uint32_t device)
-{
-    return (uint8_t)(device);
-}
+/// @brief Writes a 32bit field to the given PCI device.
+/// @param device the device.
+/// @param field the field to write.
+/// @param value the value to write.
+void pci_write_32(uint32_t device, uint32_t field, uint32_t value);
 
-/// @brief TODO: Comment.
-/// @param device 
-/// @param field 
-/// @return 
-static inline uint32_t pci_get_addr(uint32_t device, int field)
-{
-    return 0x80000000 | (pci_extract_bus(device) << 16) |
-           (pci_extract_slot(device) << 11) | (pci_extract_func(device) << 8) |
-           ((field)&0xFC);
-}
-
-/// @brief Get device number from: bus, slot and function.
-/// @param bus
-/// @param slot
-/// @param func
-/// @return uint32_t
-static inline uint32_t pci_box_device(int bus, int slot, int func)
-{
-    return (uint32_t)((bus << 16) | (slot << 8) | func);
-}
-
-/// @brief Reads a field from the given PCI device.
+/// @brief Reads a 8bit field from the given PCI device.
 /// @param device the device.
 /// @param field the field to read.
-/// @param size the size of the field.
 /// @return the value we read.
-uint32_t pci_read_field(uint32_t device, int field, int size);
+uint8_t pci_read_8(uint32_t device, int field);
 
-/// @brief Writes a field from the given PCI device.
-/// @param device the device number.
-/// @param field the field to write.
-/// @param size the size of the field.
-/// @param value the value we write.
-void pci_write_field(uint32_t device, int field, int size, uint32_t value);
+/// @brief Reads a 16bit field from the given PCI device.
+/// @param device the device.
+/// @param field the field to read.
+/// @return the value we read.
+uint16_t pci_read_16(uint32_t device, int field);
 
-/// @brief Finds the type of the given device.
-/// @param device the device number.
-/// @return the type of the device.
-uint32_t pci_find_type(uint32_t device);
-
-/// @brief Searches for the vendor name from the ID.
-/// @param vendor_id the vendor ID.
-/// @return the vendor name.
-const char *pci_vendor_lookup(unsigned short vendor_id);
-
-/// @brief Searches for the device name from its ID and the vendor id.
-/// @param vendor_id the vendor ID.
-/// @param device_id the device ID.
-/// @return the device name.
-const char *pci_device_lookup(unsigned short vendor_id, unsigned short device_id);
-
-/// @brief Calls the function f on the device if found.
-/// @param f the function to call.
-/// @param device the device number.
-/// @param extra the extra arguemnts.
-void pci_scan_hit(pci_scan_func_t f, uint32_t device, void *extra);
-
-/// @brief Scans for the given type of device.
-/// @param f the function to call once we have found the device.
-/// @param type the type of device we are searching for.
-/// @param bus bus number.
-/// @param slot slot number.
-/// @param func choose a specific function in a device.
-/// @param extra the extra arguemnts.
-void pci_scan_func(pci_scan_func_t f, int type, int bus, int slot, int func, void *extra);
-
-/// @brief Scans for the given type of device.
-/// @param f the function to call once we have found the device.
-/// @param type the type of device we are searching for.
-/// @param bus bus number.
-/// @param slot slot number.
-/// @param extra the extra arguemnts.
-void pci_scan_slot(pci_scan_func_t f, int type, int bus, int slot, void *extra);
-
-/// @brief Scans for the given type of device.
-/// @param f the function to call once we have found the device.
-/// @param type the type of device we are searching for.
-/// @param bus bus number.
-/// @param extra the extra arguemnts.
-void pci_scan_bus(pci_scan_func_t f, int type, int bus, void *extra);
+/// @brief Reads a 32bit field from the given PCI device.
+/// @param device the device.
+/// @param field the field to read.
+/// @return the value we read.
+uint32_t pci_read_32(uint32_t device, int field);
 
 /// @brief Scans for the given type of device.
 /// @param f the function to call once we have found the device.
@@ -350,6 +281,8 @@ void pci_remap(void);
 /// @param device the device.
 /// @return interrupt number.
 int pci_get_interrupt(uint32_t device);
+
+void pci_dump_device_data(uint32_t device, uint16_t vendorid, uint16_t deviceid);
 
 /// @brief Prints all the devices connected to the PCI interfance.
 void pci_debug_scan();
