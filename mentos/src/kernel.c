@@ -15,7 +15,7 @@
 #include "descriptor_tables/idt.h"
 #include "drivers/keyboard/keyboard.h"
 #include "drivers/keyboard/keymap.h"
-#include "drivers/ata.h"
+#include "drivers/ata/ata.h"
 #include "drivers/rtc.h"
 #include "drivers/ps2.h"
 #include "process/scheduler_feedback.h"
