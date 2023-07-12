@@ -18,7 +18,7 @@ static int max_log_level = LOGLEVEL_DEBUG;
 
 void dbg_putchar(char c)
 {
-    outportb(SERIAL_COM1, (uint8_t)c);
+    outportb(SERIAL_COM1, (unsigned char)c);
 }
 
 void dbg_puts(const char *s)
@@ -142,9 +142,14 @@ const char *to_human_size(unsigned long bytes)
 const char *dec_to_binary(unsigned long value, unsigned length)
 {
     static char buffer[33];
-    memset(buffer, 0, 33);
-    for (int i = 0, j = 32 - min(max(0, length), 32); j < 32; ++i, ++j)
+    // Adjust the length.
+    length = min(max(0, length), 32U);
+    // Build the binary.
+    for (unsigned i = 0, j = 32U - length; j < 32U; ++i, ++j) {
         buffer[i] = bit_check(value, 31 - j) ? '1' : '0';
+    }
+    // Close the string.
+    buffer[length] = 0;
     return buffer;
 }
 
