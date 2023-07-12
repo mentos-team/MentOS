@@ -43,7 +43,8 @@ if (DOXYGEN_FOUND)
         ${PROJECT_SOURCE_DIR}/mentos/inc/descriptor_tables/tss.h
         ${PROJECT_SOURCE_DIR}/mentos/inc/devices/fpu.h
         ${PROJECT_SOURCE_DIR}/mentos/inc/devices/pci.h
-        ${PROJECT_SOURCE_DIR}/mentos/inc/drivers/ata.h
+        ${PROJECT_SOURCE_DIR}/mentos/inc/drivers/ata/ata.h
+        ${PROJECT_SOURCE_DIR}/mentos/inc/drivers/ata/ata_types.h
         ${PROJECT_SOURCE_DIR}/mentos/inc/drivers/fdc.h
         ${PROJECT_SOURCE_DIR}/mentos/inc/drivers/keyboard/keyboard.h
         ${PROJECT_SOURCE_DIR}/mentos/inc/drivers/keyboard/keymap.h
@@ -133,7 +134,6 @@ if (DOXYGEN_FOUND)
         ${PROJECT_SOURCE_DIR}/mentos/src/hardware/timer.c
         ${PROJECT_SOURCE_DIR}/mentos/src/io/debug.c
         ${PROJECT_SOURCE_DIR}/mentos/src/io/mm_io.c
-        ${PROJECT_SOURCE_DIR}/mentos/src/io/port_io.c
         ${PROJECT_SOURCE_DIR}/mentos/src/io/proc_running.c
         ${PROJECT_SOURCE_DIR}/mentos/src/io/proc_system.c
         ${PROJECT_SOURCE_DIR}/mentos/src/io/proc_video.c
@@ -242,7 +242,6 @@ if (DOXYGEN_FOUND)
         ${PROJECT_SOURCE_DIR}/libc/src/grp.c
         ${PROJECT_SOURCE_DIR}/libc/src/io/debug.c
         ${PROJECT_SOURCE_DIR}/libc/src/io/mm_io.c
-        ${PROJECT_SOURCE_DIR}/libc/src/io/port_io.c
         ${PROJECT_SOURCE_DIR}/libc/src/ipc/ipc.c
         ${PROJECT_SOURCE_DIR}/libc/src/libc_start.c
         ${PROJECT_SOURCE_DIR}/libc/src/libgen.c

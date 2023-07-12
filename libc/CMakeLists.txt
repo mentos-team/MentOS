@@ -93,7 +93,6 @@ add_library(
     ${PROJECT_SOURCE_DIR}/src/assert.c
     ${PROJECT_SOURCE_DIR}/src/abort.c
     ${PROJECT_SOURCE_DIR}/src/io/mm_io.c
-    ${PROJECT_SOURCE_DIR}/src/io/port_io.c
     ${PROJECT_SOURCE_DIR}/src/io/debug.c
     ${PROJECT_SOURCE_DIR}/src/sys/ipc.c
     ${PROJECT_SOURCE_DIR}/src/sys/unistd.c

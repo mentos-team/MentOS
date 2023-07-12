@@ -117,7 +117,6 @@ set(KERNEL_SOURCES
     ${PROJECT_SOURCE_DIR}/src/hardware/cpuid.c
     ${PROJECT_SOURCE_DIR}/src/hardware/pic8259.c
     ${PROJECT_SOURCE_DIR}/src/io/debug.c
-    ${PROJECT_SOURCE_DIR}/src/io/port_io.c
     ${PROJECT_SOURCE_DIR}/src/io/mm_io.c
     ${PROJECT_SOURCE_DIR}/src/io/video.c
     ${PROJECT_SOURCE_DIR}/src/io/stdio.c
