@@ -3,6 +3,8 @@
 /// @copyright (c) 2014-2023 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
+#pragma once
+
 /// @brief Manipulates the underlying device parameters of special files, or operating
 /// 		characteristics of character special files (e.g., terminals).
 /// @param fd      Must be an open file descriptor.
