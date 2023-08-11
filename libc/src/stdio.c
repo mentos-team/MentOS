@@ -3,13 +3,13 @@
 /// @copyright (c) 2014-2023 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include <sys/errno.h>
-#include "stdio.h"
+#include "sys/errno.h"
 #include "ctype.h"
-#include "string.h"
 #include "stdbool.h"
-#include "sys/unistd.h"
+#include "stdio.h"
 #include "strerror.h"
+#include "string.h"
+#include "sys/unistd.h"
 
 void putchar(int character)
 {
@@ -24,17 +24,18 @@ void puts(const char *str)
 int getchar(void)
 {
     char c;
-    while (read(STDIN_FILENO, &c, 1) == 0)
+    while (read(STDIN_FILENO, &c, 1) == 0) {
         continue;
-
+    }
     return c;
 }
 
 char *gets(char *str)
 {
     // Check the input string.
-    if (str == NULL)
+    if (str == NULL) {
         return NULL;
+    }
     // Buffer for reading input.
     char buffer[GETS_BUFFERSIZE];
     memset(buffer, '\0', GETS_BUFFERSIZE);
@@ -75,13 +76,15 @@ char *gets(char *str)
 int atoi(const char *str)
 {
     // Check the input string.
-    if (str == NULL)
+    if (str == NULL) {
         return 0;
+    }
     // Initialize sign, the result variable, and two indices.
     int sign = (str[0] == '-') ? -1 : +1, result = 0, i;
     // Find where the number ends.
-    for (i = (sign == -1) ? 1 : 0; (str[i] != '\0') && isdigit(str[i]); ++i)
+    for (i = (sign == -1) ? 1 : 0; (str[i] != '\0') && isdigit(str[i]); ++i) {
         result = (result * 10) + str[i] - '0';
+    }
     return sign * result;
 }
 
@@ -114,8 +117,9 @@ long strtol(const char *str, char **endptr, int base)
         s += 2;
         base = 16;
     }
-    if (base == 0)
+    if (base == 0) {
         base = c == '0' ? 8 : 10;
+    }
     /*
      * Compute the cutoff value between legal numbers and illegal
      * numbers.  That is the largest legal value, divided by the
@@ -144,16 +148,19 @@ long strtol(const char *str, char **endptr, int base)
         cutlim = -cutlim;
     }
     for (acc = 0, any = 0;; c = (unsigned char)*s++) {
-        if (isdigit(c))
+        if (isdigit(c)) {
             c -= '0';
-        else if (isalpha(c))
+        } else if (isalpha(c)) {
             c -= isupper(c) ? 'A' - 10 : 'a' - 10;
-        else
+        } else {
             break;
-        if (c >= base)
+        }
+        if (c >= base) {
             break;
-        if (any < 0)
+        }
+        if (any < 0) {
             continue;
+        }
         if (neg) {
             if (acc < cutoff || (acc == cutoff && c > cutlim)) {
                 any   = -1;
@@ -176,16 +183,18 @@ long strtol(const char *str, char **endptr, int base)
             }
         }
     }
-    if (endptr != 0)
+    if (endptr != 0) {
         *endptr = (char *)(any ? s - 1 : str);
+    }
     return (acc);
 }
 
 int fgetc(int fd)
 {
     unsigned char c;
-    if (read(fd, &c, 1) <= 0)
+    if (read(fd, &c, 1) <= 0) {
         return EOF;
+    }
     return c;
 }
 
@@ -196,15 +205,20 @@ char *fgets(char *buf, int n, int fd)
 
     /* get max bytes or upto a newline */
     for (p = buf, n--; n > 0; n--) {
-        if ((c = fgetc(fd)) == EOF)
+        // Get the character.
+        c = fgetc(fd);
+        if (c == EOF) {
             break;
+        }
         *p++ = c;
-        if (c == '\n')
+        if (c == '\n') {
             break;
+        }
     }
     *p = 0;
-    if (p == buf || c == EOF)
+    if (p == buf || c == EOF) {
         return NULL;
+    }
     return (p);
 }
 
@@ -216,6 +230,6 @@ void perror(const char *s)
         putchar(' ');
     }
     puts(strerror(errno));
-    puts("\n");
-    puts("\n");
+    putchar('\n');
+    putchar('\n');
 }
