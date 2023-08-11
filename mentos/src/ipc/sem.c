@@ -38,18 +38,18 @@
 #include "io/debug.h"                    // Include debugging functions.
 // ============================================================================
 
-#include "sys/sem.h"
 #include "ipc/ipc.h"
+#include "sys/sem.h"
 
-#include "process/scheduler.h"
-#include "process/process.h"
+#include "assert.h"
+#include "fcntl.h"
 #include "klib/list.h"
-#include "sys/errno.h"
+#include "process/process.h"
+#include "process/scheduler.h"
+#include "stdio.h"
 #include "stdlib.h"
 #include "string.h"
-#include "assert.h"
-#include "stdio.h"
-#include "fcntl.h"
+#include "sys/errno.h"
 
 ///@brief A value to compute the semid value.
 int __sem_id = 0;
@@ -135,8 +135,9 @@ static inline sem_info_t *__list_find_sem_info_by_id(int semid)
         // Get the current entry.
         sem_info = list_entry(it, sem_info_t, list);
         // If semaphore set is valid, check the id.
-        if (sem_info && (sem_info->id == semid))
+        if (sem_info && (sem_info->id == semid)) {
             return sem_info;
+        }
     }
     return NULL;
 }
@@ -153,8 +154,9 @@ static inline sem_info_t *__list_find_sem_info_by_key(key_t key)
         // Get the current entry.
         sem_info = list_entry(it, sem_info_t, list);
         // If semaphore set is valid, check the id.
-        if (sem_info && (sem_info->semid.sem_perm.key == key))
+        if (sem_info && (sem_info->semid.sem_perm.key == key)) {
             return sem_info;
+        }
     }
     return NULL;
 }
@@ -196,7 +198,7 @@ long sys_semget(key_t key, int nsems, int semflg)
     if (key == IPC_PRIVATE) {
         // Exit when i find a unique key.
         do {
-            key = -rand();
+            key = (int)-rand();
         } while (__list_find_sem_info_by_key(key));
         // We have a unique key, create the semaphore set.
         sem_info = __sem_info_alloc(key, nsems, semflg);
