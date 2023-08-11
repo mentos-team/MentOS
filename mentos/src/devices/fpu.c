@@ -9,13 +9,13 @@
 #define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
 #include "io/debug.h"                    // Include debugging functions.
 
-#include "devices/fpu.h"
-#include "descriptor_tables/isr.h"
-#include "string.h"
 #include "assert.h"
-#include "process/scheduler.h"
+#include "descriptor_tables/isr.h"
+#include "devices/fpu.h"
 #include "math.h"
 #include "process/process.h"
+#include "process/scheduler.h"
+#include "string.h"
 #include "system/signal.h"
 
 /// Pointerst to the current thread using the FPU.
@@ -36,12 +36,12 @@ static inline void __enable_fpu()
     __asm__ __volatile__("clts");
     size_t t;
     __asm__ __volatile__("mov %%cr0, %0"
-                 : "=r"(t));
+                         : "=r"(t));
     t &= ~(1U << 2U);
     t |= (1U << 1U);
     __asm__ __volatile__("mov %0, %%cr0" ::"r"(t));
     __asm__ __volatile__("mov %%cr4, %0"
-                 : "=r"(t));
+                         : "=r"(t));
     t |= 3U << 9U;
     __asm__ __volatile__("mov %0, %%cr4" ::"r"(t));
 }
@@ -52,7 +52,7 @@ static inline void __disable_fpu()
     size_t t;
 
     __asm__ __volatile__("mov %%cr0, %0"
-                 : "=r"(t));
+                         : "=r"(t));
 
     t |= 1U << 3U;
 
@@ -116,7 +116,7 @@ static inline void __invalid_op(pt_regs *f)
 
 /// Kernel trap for various integer and floating-point errors
 /// @param f The interrupt stack frame.
-static inline void __sigfpe_handler(pt_regs* f) 
+static inline void __sigfpe_handler(pt_regs *f)
 {
     pr_debug("__sigfpe_handler(%p)\n", f);
 
@@ -124,7 +124,6 @@ static inline void __sigfpe_handler(pt_regs* f)
     thread_using_fpu = scheduler_get_current_process();
     sys_kill(thread_using_fpu->pid, SIGFPE);
 }
-
 
 /// @brief Ensure basic FPU functionality works.
 /// @details
@@ -137,17 +136,21 @@ static int __fpu_test()
     for (int i = 0; i < 10000; i++) {
         a = a * 1.123 + (a / 3);
         a /= 1.111;
-        while (a > 100.0)
+        while (a > 100.0) {
             a /= 3.1234563212;
-        while (a < 2.0)
+        }
+        while (a < 2.0) {
             a += 1.1232132131;
+        }
     }
-    if (a != 50.11095685350556294679336133413)
+    if (a != 50.11095685350556294679336133413) {
         return 0;
+    }
     // Second test.
     a = M_PI;
-    for (int i = 0; i < 100; i++)
+    for (int i = 0; i < 100; i++) {
         a = a * 3 + (a / 3);
+    }
     return (a == 60957114488184560000000000000000000000000000000000000.0);
 }
 
@@ -173,9 +176,10 @@ int fpu_install()
     // Install handlers for floating points and integers errors
     isr_install_handler(DIVIDE_ERROR, &__sigfpe_handler, "divide error");
 
+    isr_install_handler(FLOATING_POINT_ERR, &__sigfpe_handler, "floating point error");
+
     // NB: The exceptions bolow don't seems to ever trigger
     //isr_install_handler(OVERFLOW,           &__sigfpe_handler, "overflow");
-    //isr_install_handler(FLOATING_POINT_ERR, &__sigfpe_handler, "floating point error");
 
     return __fpu_test();
 }
