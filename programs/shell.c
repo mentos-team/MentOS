@@ -291,7 +291,7 @@ static int __cd(int argc, char *argv[])
     } else {
         path = getenv("HOME");
         if (path == NULL) {
-            printf("cd: There is no home directory set.\n");
+            printf("cd: There is no home directory set.\n\n");
             return 1;
         }
     }
@@ -311,6 +311,7 @@ static int __cd(int argc, char *argv[])
         printf("cd: Failed to set current working directory.\n");
         return 1;
     }
+    putchar('\n');
     return 0;
 }
 
