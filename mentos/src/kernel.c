@@ -13,29 +13,29 @@
 
 #include "descriptor_tables/gdt.h"
 #include "descriptor_tables/idt.h"
+#include "drivers/ata/ata.h"
 #include "drivers/keyboard/keyboard.h"
 #include "drivers/keyboard/keymap.h"
-#include "drivers/ata/ata.h"
-#include "drivers/rtc.h"
 #include "drivers/ps2.h"
-#include "process/scheduler_feedback.h"
-#include "process/scheduler.h"
-#include "mem/zone_allocator.h"
-#include "mem/vmem_map.h"
+#include "drivers/rtc.h"
+#include "fs/ext2.h"
+#include "fs/procfs.h"
+#include "fs/vfs.h"
 #include "hardware/pic8259.h"
 #include "hardware/timer.h"
-#include "system/syscall.h"
-#include "sys/module.h"
-#include "sys/sem.h"
-#include "sys/msg.h"
 #include "io/proc_modules.h"
 #include "io/vga/vga.h"
 #include "io/video.h"
-#include "fs/vfs.h"
-#include "fs/procfs.h"
-#include "fs/ext2.h"
-#include "version.h"
+#include "mem/vmem_map.h"
+#include "mem/zone_allocator.h"
+#include "process/scheduler.h"
+#include "process/scheduler_feedback.h"
 #include "stdio.h"
+#include "sys/module.h"
+#include "sys/msg.h"
+#include "sys/sem.h"
+#include "system/syscall.h"
+#include "version.h"
 
 /// Describe start address of grub multiboot modules.
 char *module_start[MAX_MODULES];
@@ -106,18 +106,13 @@ int kmain(boot_info_t *boot_informations)
     boot_info = *boot_informations;
     // Am I booted by a Multiboot-compliant boot loader?
     if (boot_info.magic != MULTIBOOT_BOOTLOADER_MAGIC) {
-        printf("Invalid magic number: 0x%x\n", (unsigned)boot_info.magic);
+        printf("Invalid magic number: 0x%x\n", boot_info.magic);
         return 1;
     }
     // Set the initial esp.
     initial_esp = boot_info.stack_base;
     // Dump the multiboot structure.
     dump_multiboot(boot_info.multiboot_header);
-
-    //==========================================================================
-    // First, disable the keyboard, otherwise the PS/2 initialization does not
-    // work properly.
-    keyboard_disable();
 
     //==========================================================================
     pr_notice("Initialize the video...\n");
@@ -155,24 +150,12 @@ int kmain(boot_info_t *boot_informations)
     print_ok();
 
     //==========================================================================
-    // The Global Descriptor Table (GDT) is a data structure used by Intel
-    // x86-family processors starting with the 80286 in order to define the
-    // characteristics of the various memory areas used during program execution,
-    // including the base address, the size, and access privileges like
-    // executability and writability. These memory areas are called segments in
-    // Intel terminology.
     pr_notice("Initialize Global Descriptor Table (GDT)...\n");
     printf("Initialize GDT...");
     init_gdt();
     print_ok();
-    // The IDT is used to show the processor what Interrupt Service Routine
-    // (ISR) to call to handle an exception. IDT entries are also called
-    // Interrupt requests whenever a device has completed a request and needs to
-    // be serviced.
-    // ISRs are used to save the current processor state and set up the
-    // appropriate segment registers needed for kernel mode before the kernel’s
-    // C-level interrupt handler is called. To handle the right exception, the
-    // correct entry in the IDT should be pointed to the correct ISR.
+
+    //==========================================================================
     pr_notice("Initialize Interrupt Service Routine(ISR)...\n");
     printf("Initialize IDT...");
     init_idt();
@@ -324,6 +307,11 @@ int kmain(boot_info_t *boot_informations)
     print_ok();
 
     //==========================================================================
+    // First, disable the keyboard, otherwise the PS/2 initialization does not
+    // work properly.
+    keyboard_disable();
+
+    //==========================================================================
     pr_notice("Setting up PS/2 driver...\n");
     printf("Setting up PS/2 driver...");
     if (ps2_initialize()) {
@@ -344,6 +332,8 @@ int kmain(boot_info_t *boot_informations)
 #else
     set_keymap_type(KEYMAP_IT);
 #endif
+
+    keyboard_enable();
 
     //==========================================================================
 #if 0
