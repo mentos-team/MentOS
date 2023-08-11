@@ -514,15 +514,18 @@ static int ext2_valid_permissions(int flags, mode_t mask, uid_t uid, gid_t gid)
         return 1;
     }
     // Init, and all root processes have full permissions.
-    if ((task->pid == 0) || (task->uid == 0) || (task->gid == 0))
+    if ((task->pid == 0) || (task->uid == 0) || (task->gid == 0)) {
         return 1;
-
-    if (((flags & O_RDONLY) == O_RDONLY) && __ext2_valid_permissions(task, mask, uid, gid, S_IRUSR, S_IRGRP, S_IROTH))
+    }
+    if (((flags & O_RDONLY) == O_RDONLY) && __ext2_valid_permissions(task, mask, uid, gid, S_IRUSR, S_IRGRP, S_IROTH)) {
         return 1;
-    if (((flags & O_WRONLY) == O_WRONLY) && __ext2_valid_permissions(task, mask, uid, gid, S_IWUSR, S_IWGRP, S_IWOTH))
+    }
+    if (((flags & O_WRONLY) == O_WRONLY) && __ext2_valid_permissions(task, mask, uid, gid, S_IWUSR, S_IWGRP, S_IWOTH)) {
         return 1;
-    if (((flags & O_RDWR) == O_RDWR) && __ext2_valid_permissions(task, mask, uid, gid, S_IRUSR | S_IWUSR, S_IRGRP | S_IWGRP, S_IROTH | S_IWOTH))
+    }
+    if (((flags & O_RDWR) == O_RDWR) && __ext2_valid_permissions(task, mask, uid, gid, S_IRUSR | S_IWUSR, S_IRGRP | S_IWGRP, S_IROTH | S_IWOTH)) {
         return 1;
+    }
     return 0;
 }
 
@@ -2177,7 +2180,7 @@ static int ext2_create_inode(
     // Get the UID and GID.
     uid_t uid = 0, gid = 0;
     task_struct *task = scheduler_get_current_process();
-    if (task != NULL) {
+    if (task == NULL) {
         pr_warning("Failed to get the current running process, assuming we are booting.\n");
     } else {
         uid = task->uid;
