@@ -34,6 +34,7 @@
 #include "sys/module.h"
 #include "sys/msg.h"
 #include "sys/sem.h"
+#include "sys/shm.h"
 #include "system/syscall.h"
 #include "version.h"
 
@@ -302,6 +303,16 @@ int kmain(boot_info_t *boot_informations)
     if (msq_init()) {
         print_fail();
         pr_emerg("Failed to initialize the IPC/MSQ system!\n");
+        return 1;
+    }
+    print_ok();
+
+    //==========================================================================
+    pr_notice("Initialize IPC/SHM system...\n");
+    printf("Initialize IPC/SHM system...");
+    if (shm_init()) {
+        print_fail();
+        pr_emerg("Failed to initialize the IPC/SHM system!\n");
         return 1;
     }
     print_ok();

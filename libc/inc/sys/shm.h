@@ -19,22 +19,18 @@ struct shmid_ds {
     struct ipc_perm shm_perm;
     /// Size of segment in bytes.
     size_t shm_segsz;
-    /// Time of last shmat().
+    /// Time of last attach.
     time_t shm_atime;
-    /// Time of last shmdt().
+    /// Time of last detach.
     time_t shm_dtime;
-    /// Time of last change by shmctl().
+    /// Time of last change.
     time_t shm_ctime;
     /// Pid of creator.
     pid_t shm_cpid;
-    /// Pid of last shmop.
+    /// Pid of last operator.
     pid_t shm_lpid;
     /// Number of current attaches.
     shmatt_t shm_nattch;
-    /// Pointer to the next shared memory data structure.
-    struct shmid_ds *next;
-    /// Where shm created is memorized, should be a file.
-    void *shm_location;
 };
 
 #if 0
@@ -134,6 +130,10 @@ struct shmid_ds *find_shm_fromvaddr(void *shmvaddr);
 
 #ifdef __KERNEL__
 
+/// @brief Initializes the shared memory.
+/// @return 0 on success, 1 on failure.
+int shm_init();
+
 /// @brief Get a System V shared memory identifier.
 /// @param key can be used either to obtain the identifier of a previously
 /// created shared memory, or to create a new one.
@@ -150,7 +150,7 @@ long sys_shmget(key_t key, size_t size, int flag);
 /// @param shmflg controls the behaviour of the function.
 /// @return returns the address of the attached shared memory segment; on error
 /// (void *) -1 is returned, and errno is set to indicate the error.
-void * sys_shmat(int shmid, const void *shmaddr, int shmflg);
+void *sys_shmat(int shmid, const void *shmaddr, int shmflg);
 
 /// @brief Detaches the shared memory segment located at the address specified
 /// by shmaddr from the address space of the calling process
@@ -185,7 +185,7 @@ long shmget(key_t key, size_t size, int flag);
 /// @param shmflg controls the behaviour of the function.
 /// @return returns the address of the attached shared memory segment; on error
 /// (void *) -1 is returned, and errno is set to indicate the error.
-void * shmat(int shmid, const void *shmaddr, int shmflg);
+void *shmat(int shmid, const void *shmaddr, int shmflg);
 
 /// @brief Detaches the shared memory segment located at the address specified
 /// by shmaddr from the address space of the calling process

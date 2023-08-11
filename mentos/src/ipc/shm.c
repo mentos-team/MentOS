@@ -12,398 +12,164 @@
 #include "io/debug.h"                    // Include debugging functions.
 // ============================================================================
 
+#include "ipc/ipc.h"
 #include "sys/shm.h"
-#include "system/panic.h"
-#include "process/process.h"
-#include "sys/errno.h"
-#include "string.h"
+
 #include "assert.h"
+#include "mem/kheap.h"
 #include "stdio.h"
+#include "string.h"
+#include "sys/errno.h"
+#include "sys/list_head.h"
 
-#if 0
-struct shmid_ds *head        = NULL;
-static ushort shm_descriptor = 0;
+// #include "process/process.h"
 
-int syscall_shmctl(int *args)
+///@brief A value to compute the shmid value.
+int __shm_id = 0;
+
+// @brief Shared memory management structure.
+typedef struct {
+    /// @brief ID associated to the shared memory.
+    int id;
+    /// @brief The shared memory data strcutre.
+    struct shmid_ds shmid;
+    /// Where shm created is memorized.
+    void *shm_location;
+    /// Reference inside the list of shared memory management structures.
+    list_head list;
+} shm_info_t;
+
+/// @brief List of all current active shared memorys.
+list_head shm_list;
+
+// ============================================================================
+// MEMORY MANAGEMENT (Private)
+// ============================================================================
+
+/// @brief Allocates the memory for shared memory structure.
+/// @param key IPC_KEY associated with the shared memory.
+/// @param shmflg flags used to create the shared memory.
+/// @return a pointer to the allocated shared memory structure.
+static inline shm_info_t *__shm_info_alloc(key_t key, size_t size, int shmflg)
 {
-    int shmid = args[0];
-    int cmd   = args[1];
-
-    // TODO: for IPC_STAT
-    // struct shmid_ds * buf = (struct shmid_ds *) args[2];
-
-    struct shmid_ds *myshmid_ds = find_shm_fromid(shmid);
-
-    if (myshmid_ds == NULL) {
-        return -1;
-    }
-
-    // Upgrade shm info.
-    myshmid_ds->shm_lpid  = scheduler_get_current_process()->pid;
-    myshmid_ds->shm_ctime = time(NULL);
-
-    switch (cmd) {
-    case IPC_RMID:
-        if (myshmid_ds->shm_nattch == 0) {
-            kfree(myshmid_ds->shm_location);
-
-            // Manage list.
-            if (myshmid_ds == head) {
-                head = head->next;
-            } else {
-                // Finding the previous shmid_ds.
-                struct shmid_ds *prev = head;
-                while (prev->next != myshmid_ds) {
-                    prev = prev->next;
-                }
-                prev->next = myshmid_ds->next;
-            }
-            kfree(myshmid_ds);
-        } else {
-            (myshmid_ds->shm_perm).mode |= SHM_DEST;
-        }
-
-        return 0;
-
-    case IPC_STAT:
-        break;
-    case IPC_SET:
-        break;
-    case SHM_LOCK:
-        break;
-    case SHM_UNLOCK:
-        break;
-    default:
-        break;
-    }
-
-    return -1;
+    // Allocate the memory.
+    shm_info_t *shm_info = (shm_info_t *)kmalloc(sizeof(shm_info_t));
+    // Check the allocated memory.
+    assert(shm_info && "Failed to allocate memory for a shared memory structure.");
+    // Clean the memory.
+    memset(shm_info, 0, sizeof(shm_info_t));
+    // Initialize its values.
+    shm_info->id               = ++__shm_id;
+    shm_info->shmid.shm_perm   = register_ipc(key, shmflg & 0x1FF);
+    shm_info->shmid.shm_segsz  = size;
+    shm_info->shmid.shm_atime  = 0;
+    shm_info->shmid.shm_dtime  = 0;
+    shm_info->shmid.shm_ctime  = 0;
+    shm_info->shmid.shm_cpid   = 0;
+    shm_info->shmid.shm_lpid   = 0;
+    shm_info->shmid.shm_nattch = 0;
+    // Return the shared memory structure.
+    return shm_info;
 }
 
-// Get shared memory segment.
-int syscall_shmget(int *args)
+/// @brief Frees the memory of a shared memory structure.
+/// @param shm_info pointer to the shared memory structure.
+static inline void __shm_info_dealloc(shm_info_t *shm_info)
 {
-    int flags   = args[2];
-    key_t key   = (key_t)args[0];
-    size_t size = (size_t)args[1];
-
-    struct shmid_ds *shmid_ds;
-
-    if (flags & IPC_EXCL) {
-        return -1;
-    }
-
-    if (flags & IPC_CREAT) {
-        shmid_ds = find_shm_fromkey(key);
-
-        if (shmid_ds != NULL) {
-            return -1;
-        }
-
-        shmid_ds = kmalloc(sizeof(struct shmid_ds));
-        pr_default("\n[SHM] shmget() shmid_ds      : 0x%p", shmid_ds);
-
-        shmid_ds->shm_location = kmalloc_align(size);
-        pr_default("\n[SHM] shmget() Location      : 0x%p",
-                  shmid_ds->shm_location);
-        pr_default("\n[SHM] shmget() physLocation  : 0x%p",
-                  paging_virtual_to_physical(get_current_page_directory(),
-                                             shmid_ds->shm_location));
-
-        shmid_ds->next = head;
-        head           = shmid_ds;
-
-        shmid_ds->shm_segsz  = size;
-        shmid_ds->shm_atime  = 0;
-        shmid_ds->shm_dtime  = 0;
-        shmid_ds->shm_ctime  = 0;
-        shmid_ds->shm_cpid   = scheduler_get_current_process()->pid;
-        shmid_ds->shm_lpid   = scheduler_get_current_process()->pid;
-        shmid_ds->shm_nattch = 0;
-
-        // No user implementation.
-        (shmid_ds->shm_perm).cuid = 0;
-        // No group implementation.
-        (shmid_ds->shm_perm).cgid = 0;
-        // No user implementation
-        (shmid_ds->shm_perm).uid = 0;
-        // No group implementation.
-        (shmid_ds->shm_perm).gid  = 0;
-        (shmid_ds->shm_perm).mode = flags & 0777;
-        (shmid_ds->shm_perm).seq  = shm_descriptor++;
-        (shmid_ds->shm_perm).key  = key;
-    } else {
-        shmid_ds = find_shm_fromkey(key);
-        pr_default("\n[SHM] shmget() shmid_ds found  : 0x%p", shmid_ds);
-
-        if (shmid_ds == NULL) {
-            return -1;
-        }
-
-        if ((flags & 0777) > ((shmid_ds->shm_perm).mode & 0777)) {
-            return -1;
-        }
-        shmid_ds->shm_lpid = scheduler_get_current_process()->pid;
-    }
-
-    return (shmid_ds->shm_perm).seq;
+    assert(shm_info && "Received a NULL pointer.");
+    // Deallocate the shmid memory.
+    kfree(shm_info);
 }
 
-// Attach shared memory segment.
-void *syscall_shmat(int *args)
+// ============================================================================
+// LIST MANAGEMENT/SEARCH FUNCTIONS (Private)
+// ============================================================================
+
+/// @brief Searches for the shared memory with the given id.
+/// @param shmid the id we are searching.
+/// @return the shared memory with the given id.
+static inline shm_info_t *__list_find_shm_info_by_id(int shmid)
 {
-    int shmid     = args[0];
-    void *shmaddr = (void *)args[1];
-
-    // TODO: for more settings
-    // int flags = args[2];
-
-    struct shmid_ds *myshmid_ds = find_shm_fromid(shmid);
-    pr_default("\n[SHM] shmat() shmid_ds found  : 0x%p", myshmid_ds);
-
-    if (myshmid_ds == NULL) {
-        return (void *)-1;
-    }
-
-    void *shm_start = myshmid_ds->shm_location;
-
-    if (shmaddr == NULL) {
-        void *ret = kmalloc_align(myshmid_ds->shm_segsz);
-
-        uint32_t shm_vaddr_start = (uint32_t)ret & 0xfffff000;
-        uint32_t shm_vaddr_end =
-            ((uint32_t)ret + myshmid_ds->shm_segsz) & 0xfffff000;
-
-        uint32_t shm_paddr_start = (uint32_t)paging_virtual_to_physical(
-            get_current_page_directory(), shm_start);
-
-        free_map_region(get_current_page_directory(), shm_vaddr_start,
-                        shm_vaddr_end, true);
-
-        while (shm_vaddr_start <= shm_vaddr_end) {
-            paging_allocate_page(get_current_page_directory(), shm_vaddr_start,
-                                 shm_paddr_start / PAGE_SIZE, true, true);
-            shm_vaddr_start += PAGE_SIZE;
-            shm_paddr_start += PAGE_SIZE;
+    shm_info_t *shm_info;
+    // Iterate through the list of shared memories.
+    list_for_each_decl(it, &shm_list)
+    {
+        // Get the current entry.
+        shm_info = list_entry(it, shm_info_t, list);
+        // If shared memories is valid, check the id.
+        if (shm_info && (shm_info->id == shmid)) {
+            return shm_info;
         }
-
-        pr_default("\n[SHM] shmat() vaddr          : 0x%p", ret);
-        pr_default("\n[SHM] shmat() paddr          : 0x%p",
-                  (void *)shm_paddr_start);
-        pr_default("\n[SHM] shmat() paddr after map: 0x%p",
-                  paging_virtual_to_physical(get_current_page_directory(),
-                                             ret));
-
-        // Upgrade shm info.
-        myshmid_ds->shm_lpid = scheduler_get_current_process()->pid;
-        (myshmid_ds->shm_nattch)++;
-        myshmid_ds->shm_atime = time(NULL);
-
-        return ret;
     }
-
-    return (void *)-1;
+    return NULL;
 }
 
-// Detach shared memory segment.
-int syscall_shmdt(int *args)
+/// @brief Searches for the shared memory with the given key.
+/// @param key the key we are searching.
+/// @return the shared memory with the given key.
+static inline shm_info_t *__list_find_shm_info_by_key(key_t key)
 {
-    void *shmaddr = (void *)args[0];
-
-    if (shmaddr == NULL) {
-        return -1;
-    }
-
-    struct shmid_ds *myshmid_ds = find_shm_fromvaddr(shmaddr);
-    pr_default("\n[SHM] shmdt() shmid_ds found  : 0x%p", myshmid_ds);
-
-    if (myshmid_ds == NULL) {
-        return -1;
-    }
-
-    // ===== Test ==============================================================
-    uint32_t shm_vaddr_start = (uint32_t)shmaddr & 0xfffff000;
-    uint32_t shm_vaddr_end =
-        ((uint32_t)shmaddr + myshmid_ds->shm_segsz) & 0xfffff000;
-
-    free_map_region(get_current_page_directory(), shm_vaddr_start,
-                    shm_vaddr_end, false);
-
-    while (shm_vaddr_start <= shm_vaddr_end) {
-        paging_allocate_page(get_current_page_directory(), shm_vaddr_start,
-                             shm_vaddr_start / PAGE_SIZE, true, true);
-        shm_vaddr_start += PAGE_SIZE;
-    }
-    // =========================================================================
-
-    kfree(shmaddr);
-
-    // Upgrade shm info.
-    myshmid_ds->shm_lpid = scheduler_get_current_process()->pid;
-    (myshmid_ds->shm_nattch)--;
-    myshmid_ds->shm_dtime = time(NULL);
-
-    // Manage SHM_DEST flag on.
-    if (myshmid_ds->shm_nattch == 0 && (myshmid_ds->shm_perm).mode & SHM_DEST) {
-        kfree(myshmid_ds->shm_location);
-
-        // Manage list.
-        if (myshmid_ds == head) {
-            head = head->next;
-        } else {
-            // Finding the previous shmid_ds.
-            struct shmid_ds *prev = head;
-            while (prev->next != myshmid_ds) {
-                prev = prev->next;
-            }
-            prev->next = myshmid_ds->next;
+    shm_info_t *shm_info;
+    // Iterate through the list of shared memories.
+    list_for_each_decl(it, &shm_list)
+    {
+        // Get the current entry.
+        shm_info = list_entry(it, shm_info_t, list);
+        // If shared memories is valid, check the id.
+        if (shm_info && (shm_info->shmid.shm_perm.key == key)) {
+            return shm_info;
         }
-        kfree(myshmid_ds);
     }
+    return NULL;
+}
 
+static inline void __list_add_shm_info(shm_info_t *shm_info)
+{
+    assert(shm_info && "Received a NULL pointer.");
+    // Add the new item at the end.
+    list_head_insert_before(&shm_info->list, &shm_list);
+}
+
+static inline void __list_remove_shm_info(shm_info_t *shm_info)
+{
+    assert(shm_info && "Received a NULL pointer.");
+    // Delete the item from the list.
+    list_head_remove(&shm_info->list);
+}
+
+// ============================================================================
+// SYSTEM FUNCTIONS
+// ============================================================================
+
+int shm_init()
+{
+    list_head_init(&shm_list);
     return 0;
 }
 
-int shmctl(int shmid, int cmd, struct shmid_ds *buf)
-{
-    int error;
-
-    __asm__("movl   %0, %%ecx\n"
-            "movl   %1, %%ebx\n"
-            "movl   %2, %%edx\n"
-            "movl   $6, %%eax\n"
-            "int    $80\n"
-            :
-            : "r"(shmid), "r"(cmd), "r"(buf));
-    __asm__("movl %%eax, %0\n\t"
-            : "=r"(error));
-
-    return error;
-}
-
-int shmget(key_t key, size_t size, int flags)
-{
-    int id;
-
-    __asm__("movl   %0, %%ecx\n"
-            "movl   %1, %%ebx\n"
-            "movl   %2, %%edx\n"
-            "movl   $3, %%eax\n"
-            "int    $80\n"
-            :
-            : "r"(key), "r"(size), "r"(flags));
-    __asm__("movl %%eax, %0\n\t"
-            : "=r"(id));
-
-    return id;
-}
-
-void *shmat(int shmid, void *shmaddr, int flag)
-{
-    void *addr;
-
-    __asm__("movl   %0, %%ecx\n"
-            "movl   %1, %%ebx\n"
-            "movl   %2, %%edx\n"
-            "movl   $4, %%eax\n"
-            "int    $80\n"
-            :
-            : "r"(shmid), "r"(shmaddr), "r"(flag));
-    // The kernel is serving my system call
-
-    // Now I have the control
-    __asm__("movl %%eax, %0\n\t"
-            : "=r"(addr));
-
-    return addr;
-}
-
-int shmdt(void *shmaddr)
-{
-    int error;
-
-    __asm__("movl   %0, %%ecx\n"
-            "movl   $5, %%eax\n"
-            "int    $80\n"
-            :
-            : "r"(shmaddr));
-    __asm__("movl %%eax, %0\n\t"
-            : "=r"(error));
-
-    return error;
-}
-
-struct shmid_ds *find_shm_fromid(int shmid)
-{
-    struct shmid_ds *res = head;
-
-    while (res != NULL) {
-        if ((res->shm_perm).seq == shmid) {
-            return res;
-        }
-        res = res->next;
-    }
-
-    return NULL;
-}
-
-struct shmid_ds *find_shm_fromkey(key_t key)
-{
-    struct shmid_ds *res = head;
-
-    while (res != NULL) {
-        if ((res->shm_perm).key == key) {
-            return res;
-        }
-        res = res->next;
-    }
-
-    return NULL;
-}
-
-struct shmid_ds *find_shm_fromvaddr(void *shmvaddr)
-{
-    void *shmpaddr =
-        paging_virtual_to_physical(get_current_page_directory(), shmvaddr);
-    void *paddr;
-    struct shmid_ds *res = head;
-
-    while (res != NULL) {
-        paddr = paging_virtual_to_physical(get_current_page_directory(),
-                                           res->shm_location);
-        if (paddr == shmpaddr) {
-            return res;
-        }
-        res = res->next;
-    }
-
-    return NULL;
-}
-#endif
-
 void *sys_shmat(int shmid, const void *shmaddr, int shmflg)
 {
-    TODO("Not implemented");
     return 0;
 }
 
 long sys_shmget(key_t key, size_t size, int flag)
 {
-    TODO("Not implemented");
     return 0;
 }
 
 long sys_shmdt(const void *shmaddr)
 {
-    TODO("Not implemented");
     return 0;
 }
 
 long sys_shmctl(int shmid, int cmd, struct shmid_ds *buf)
 {
-    TODO("Not implemented");
     return 0;
 }
+
+// ============================================================================
+// PROCFS FUNCTIONS
+// ============================================================================
 
 ssize_t procipc_shm_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyte)
 {
@@ -411,15 +177,39 @@ ssize_t procipc_shm_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyte
         pr_err("Received a NULL file.\n");
         return -ENOENT;
     }
-    size_t buffer_len = 0, read_pos = 0, write_count = 0, ret = 0;
+    size_t buffer_len = 0, read_pos = 0, ret = 0;
+    ssize_t write_count  = 0;
+    shm_info_t *shm_info = NULL;
     char buffer[BUFSIZ];
 
     // Prepare a buffer.
     memset(buffer, 0, BUFSIZ);
     // Prepare the header.
-    ret = sprintf(buffer, "key      shmid ...\n");
+    ret = sprintf(buffer, "key      shmid perms      segsz   uid   gid  cuid  cgid      atime      dtime      ctime   cpid   lpid nattch\n");
 
-    // Implementation goes here...
+    // Iterate through the list of shmaphore set.
+    list_for_each_decl(it, &shm_list)
+    {
+        // Get the current entry.
+        shm_info = list_entry(it, shm_info_t, list);
+        // Add the line.
+        ret += sprintf(
+            buffer + ret, "%8d %5d %10d %7d %5d %4d %5d %9d %10d %10d %10d %5d %5d %5d\n",
+            abs(shm_info->shmid.shm_perm.key),
+            shm_info->id,
+            shm_info->shmid.shm_perm.mode,
+            shm_info->shmid.shm_segsz,
+            shm_info->shmid.shm_perm.uid,
+            shm_info->shmid.shm_perm.gid,
+            shm_info->shmid.shm_perm.cuid,
+            shm_info->shmid.shm_perm.cgid,
+            shm_info->shmid.shm_atime,
+            shm_info->shmid.shm_dtime,
+            shm_info->shmid.shm_ctime,
+            shm_info->shmid.shm_cpid,
+            shm_info->shmid.shm_lpid,
+            shm_info->shmid.shm_nattch);
+    }
     sprintf(buffer + ret, "\n");
 
     // Perform read.
