@@ -24,7 +24,8 @@ int main(int argc, char *argv[])
         return 0;
     }
     if (mkdir(argv[1], S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH)) {
-        printf("mkdir: cannot create directory '%s': %s\n\n", argv[1], strerror(errno));
+        printf("mkdir: cannot create directory '%s': %s\n", argv[1], strerror(errno));
     }
+    putchar('\n');
     return 0;
 }
