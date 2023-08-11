@@ -6,10 +6,10 @@
 /// @{
 
 // Setup the logging for this file (do this before any other include).
-#include "sys/kernel_levels.h"          // Include kernel log levels.
-#define __DEBUG_HEADER__ "[ATA   ]"     ///< Change header.
-#define __DEBUG_LEVEL__  LOGLEVEL_DEBUG ///< Set log level.
-#include "io/debug.h"                   // Include debugging functions.
+#include "sys/kernel_levels.h"           // Include kernel log levels.
+#define __DEBUG_HEADER__ "[ATA   ]"      ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
+#include "io/debug.h"                    // Include debugging functions.
 
 #include "drivers/ata/ata.h"
 #include "drivers/ata/ata_types.h"
@@ -505,15 +505,6 @@ static inline int ata_status_wait_not(ata_device_t *dev, long mask, long timeout
     if (timeout > 0) {
         return 0;
     }
-    if (!(status & ata_status_drq)) {
-        return 1;
-    }
-    if (status & ata_status_err) {
-        return 1;
-    }
-    if (status & ata_status_df) {
-        return 1;
-    }
     return 1;
 }
 
@@ -529,15 +520,6 @@ static inline int ata_status_wait_for(ata_device_t *dev, long mask, long timeout
     if (timeout > 0) {
         return 0;
     }
-    if (!(status & ata_status_drq)) {
-        return 1;
-    }
-    if (status & ata_status_err) {
-        return 1;
-    }
-    if (status & ata_status_df) {
-        return 1;
-    }
     return 1;
 }
 
@@ -546,10 +528,12 @@ static inline int ata_status_wait_for(ata_device_t *dev, long mask, long timeout
 static inline void ata_print_status_error(ata_device_t *dev)
 {
     uint8_t error = inportb(dev->io_reg.error), status = inportb(dev->io_reg.status);
-    pr_err("[%s] Device error [%s] status [%s]\n",
-           ata_get_device_settings_str(dev),
-           ata_get_device_error_str(error),
-           ata_get_device_status_str(status));
+    if (error) {
+        pr_err("[%s] Device error [%s] status [%s]\n",
+               ata_get_device_settings_str(dev),
+               ata_get_device_error_str(error),
+               ata_get_device_status_str(status));
+    }
 }
 
 /// @brief Ge the maximum offset for the given device.
@@ -590,6 +574,7 @@ static inline void ata_fix_string(char *str, size_t len)
 static inline void ata_soft_reset(ata_device_t *dev)
 {
     pr_debug("[%s] Performing ATA soft reset...\n", ata_get_device_settings_str(dev));
+    ata_print_status_error(dev);
     // Write reset.
     outportb(dev->io_control, ata_control_srst);
     // Flush.
@@ -601,7 +586,7 @@ static inline void ata_soft_reset(ata_device_t *dev)
     // Flush.
     inportb(dev->io_control);
     // Wait until master drive is ready again.
-    ata_io_wait(dev);
+    ata_status_wait_not(dev, ata_status_bsy | ata_status_drq, 100000);
 }
 
 /// @brief Creates the DMA memory area used to write and read on the device.
@@ -698,7 +683,7 @@ static inline ata_device_type_t ata_detect_device_type(ata_device_t *dev)
     // BSY or DRQ is set in the Status Register. Any write to the Command
     // Register when BSY or DRQ is set is ignored unless the write is to issue a
     // Device Reset command.
-    if (ata_status_wait_not(dev, ata_status_bsy | ata_status_drq, 10000)) {
+    if (ata_status_wait_not(dev, ata_status_bsy | ata_status_drq, 100000)) {
         ata_print_status_error(dev);
         return 1;
     }
@@ -710,7 +695,7 @@ static inline ata_device_type_t ata_detect_device_type(ata_device_t *dev)
     // Request the device identity.
     outportb(dev->io_reg.command, ata_command_pata_ident);
     // Wait for the device to become non-busy, and ready.
-    if (ata_status_wait_not(dev, ata_status_bsy & ~(ata_status_drq | ata_status_rdy), 10000)) {
+    if (ata_status_wait_not(dev, ata_status_bsy & ~(ata_status_drq | ata_status_rdy), 100000)) {
         ata_print_status_error(dev);
         return 1;
     }
@@ -749,14 +734,14 @@ static bool_t ata_device_init(ata_device_t *dev)
 {
     pr_debug("[%s] Initializing ATA device...\n", ata_get_device_settings_str(dev));
     // Check the status of the device.
-    if (ata_status_wait_for(dev, ata_status_drq | ata_status_rdy, 10000)) {
+    if (ata_status_wait_for(dev, ata_status_drq | ata_status_rdy, 100000)) {
         ata_print_status_error(dev);
         return 1;
     }
     // Initialize the bus mastering addresses.
     ata_dma_initialize_bus_mastering_address(dev);
     // Check the status of the device.
-    if (ata_status_wait_for(dev, ata_status_drq | ata_status_rdy, 10000)) {
+    if (ata_status_wait_for(dev, ata_status_drq | ata_status_rdy, 100000)) {
         ata_print_status_error(dev);
         return 1;
     }
@@ -770,8 +755,6 @@ static bool_t ata_device_init(ata_device_t *dev)
     dev->dma.prdt->byte_count = ATA_DMA_SIZE;
     // Set the EOT to 1.
     dev->dma.prdt->end_of_table = 0x8000;
-    // Update the filesystem entry with the length of the device.
-    dev->fs_root->length = ata_max_offset(dev);
     // Print the device data.
     ata_dump_device(dev);
     return 0;
@@ -788,7 +771,7 @@ static void ata_device_read_sector(ata_device_t *dev, uint32_t lba_sector, uint8
     spinlock_lock(&dev->lock);
 
     // Wait for the
-    if (ata_status_wait_not(dev, ata_status_bsy, 10000)) {
+    if (ata_status_wait_not(dev, ata_status_bsy, 100000)) {
         ata_print_status_error(dev);
         spinlock_unlock(&dev->lock);
         return;
@@ -806,7 +789,7 @@ static void ata_device_read_sector(ata_device_t *dev, uint32_t lba_sector, uint8
     // Set read.
     outportb(dev->bmr.command, 0x08);
 
-    if (ata_status_wait_not(dev, ata_status_bsy, 10000)) {
+    if (ata_status_wait_not(dev, ata_status_bsy, 100000)) {
         ata_print_status_error(dev);
         spinlock_unlock(&dev->lock);
         return;
@@ -827,7 +810,7 @@ static void ata_device_read_sector(ata_device_t *dev, uint32_t lba_sector, uint8
     outportb(dev->io_reg.lba_mid, (lba_sector & 0x0000ff00) >> 8);
     outportb(dev->io_reg.lba_hi, (lba_sector & 0x00ff0000) >> 16);
 
-    if (ata_status_wait_not(dev, ata_status_bsy & ~ata_status_rdy, 10000)) {
+    if (ata_status_wait_not(dev, ata_status_bsy & ~ata_status_rdy, 100000)) {
         ata_print_status_error(dev);
         spinlock_unlock(&dev->lock);
         return;
@@ -877,7 +860,7 @@ static void ata_device_write_sector(ata_device_t *dev, uint32_t lba_sector, uint
     outportb(dev->bmr.status, inportb(dev->bmr.status) | 0x04 | 0x02);
 
     // Select drive
-    if (ata_status_wait_not(dev, ata_status_bsy, 10000)) {
+    if (ata_status_wait_not(dev, ata_status_bsy, 100000)) {
         ata_print_status_error(dev);
         spinlock_unlock(&dev->lock);
         return;
@@ -885,7 +868,7 @@ static void ata_device_write_sector(ata_device_t *dev, uint32_t lba_sector, uint
 
     outportb(dev->io_reg.hddevsel, 0xe0 | dev->slave << 4 | (lba_sector & 0x0f000000) >> 24);
 
-    if (ata_status_wait_not(dev, ata_status_bsy, 10000)) {
+    if (ata_status_wait_not(dev, ata_status_bsy, 100000)) {
         ata_print_status_error(dev);
         spinlock_unlock(&dev->lock);
         return;
@@ -898,7 +881,7 @@ static void ata_device_write_sector(ata_device_t *dev, uint32_t lba_sector, uint
     outportb(dev->io_reg.lba_mid, (lba_sector & 0x0000ff00) >> 8);
     outportb(dev->io_reg.lba_hi, (lba_sector & 0x00ff0000) >> 16);
 
-    if (ata_status_wait_not(dev, ata_status_bsy, 10000)) {
+    if (ata_status_wait_not(dev, ata_status_bsy, 100000)) {
         ata_print_status_error(dev);
         spinlock_unlock(&dev->lock);
         return;
@@ -1186,6 +1169,11 @@ static ata_device_type_t ata_device_detect(ata_device_t *dev)
         sprintf(dev->name, "hd%c", ata_drive_char);
         // Set the device path.
         sprintf(dev->path, "/dev/hd%c", ata_drive_char);
+        // Initialize the drive.
+        if (ata_device_init(dev)) {
+            pr_debug("[%s] Skip device...\n", ata_get_device_settings_str(dev));
+            return ata_dev_type_unknown;
+        }
         // Create the filesystem entry for the drive.
         dev->fs_root = ata_device_create(dev);
         // Check if we failed to create the filesystem entry.
@@ -1193,16 +1181,11 @@ static ata_device_type_t ata_device_detect(ata_device_t *dev)
             pr_alert("Failed to create ata device!\n");
             return ata_dev_type_unknown;
         }
+        // Update the filesystem entry with the length of the device.
+        dev->fs_root->length = ata_max_offset(dev);
         // Try to mount the drive.
         if (!vfs_mount(dev->path, dev->fs_root)) {
             pr_alert("Failed to mount ata device!\n");
-            // Free the memory.
-            kmem_cache_free(dev->fs_root);
-            return ata_dev_type_unknown;
-        }
-        // Initialize the drive.
-        if (ata_device_init(dev)) {
-            pr_alert("Failed to initialize ata device!\n");
             // Free the memory.
             kmem_cache_free(dev->fs_root);
             return ata_dev_type_unknown;
@@ -1215,12 +1198,12 @@ static ata_device_type_t ata_device_detect(ata_device_t *dev)
     } else if (type == ata_dev_type_no_device) {
         pr_debug("[%s] Found no device...\n", ata_get_device_settings_str(dev));
     }
-    if (type == ata_dev_type_unknown) {
-        pr_debug("[%s] Found unsupported device...\n", ata_get_device_settings_str(dev));
-    }
-    if ((type != ata_dev_type_no_device) && (type != ata_dev_type_unknown)) {
-        pr_notice("    Found %s device connected to %s.\n", ata_get_device_type_str(type), ata_get_device_settings_str(dev));
-    }
+    // if (type == ata_dev_type_unknown) {
+    //     pr_debug("[%s] Found unsupported device...\n", ata_get_device_settings_str(dev));
+    // }
+    // if ((type != ata_dev_type_no_device) && (type != ata_dev_type_unknown)) {
+    //     pr_warning("    Found %s device connected to %s.\n", ata_get_device_type_str(type), ata_get_device_settings_str(dev));
+    // }
     return type;
 }
 
@@ -1272,6 +1255,7 @@ int ata_initialize()
     ata_device_detect(&ata_primary_slave);
     ata_device_detect(&ata_secondary_master);
     ata_device_detect(&ata_secondary_slave);
+
     return 0;
 }
 
