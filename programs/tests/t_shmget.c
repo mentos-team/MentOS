@@ -11,7 +11,7 @@
 
 int main(void)
 {
-    int semid, shmid;
+    int shmid;
     pid_t cpid;
     int *array;
 
@@ -21,39 +21,47 @@ int main(void)
         perror("shmget");
         return EXIT_FAILURE;
     }
-    // Create a semaphore set containing one semaphore.
-    semid = semget(IPC_PRIVATE, 1, IPC_CREAT | 0600);
-    if (semid == -1) {
-        perror("semget");
-        return EXIT_FAILURE;
-    }
+    printf("shmid = %d;\n", shmid);
 
+    // Create a child.
     cpid = fork();
-
     if (cpid == 0) {
+        // Child attaches the shared memory.
         array = (int *)shmat(shmid, NULL, 0);
+        if (array == NULL) {
+            perror("shmat");
+            return EXIT_FAILURE;
+        }
         printf("C: %p\n", array);
         array[0] = 1;
         return 0;
-    } else {
-        array = (int *)shmat(shmid, NULL, 0);
-        printf("F: %p\n", array);
-        array[1] = 2;
     }
 
+    // Father attaches the shared memory.
+    array = (int *)shmat(shmid, NULL, 0);
+    if (array == NULL) {
+        perror("shmat");
+        return EXIT_FAILURE;
+    }
+    
+    // Wait for the child to finish.
     while (wait(NULL) != -1) continue;
+    
+    printf("F: %p\n", array);
+    array[1] = 2;
 
     printf("array[%d] : %d\n", 0, array[0]);
     printf("array[%d] : %d\n", 1, array[1]);
 
+    // Detatch the shared memory.
+    if (shmdt(array) < 0) {
+        perror("shmdt");
+        return EXIT_FAILURE;
+    }
+
     // Remove the shared memory.
     if (shmctl(shmid, IPC_RMID, NULL) == -1) {
         perror("shmctl");
-        return EXIT_FAILURE;
-    }
-    // Remove the semaphore set.
-    if (semctl(semid, 0, IPC_RMID, NULL) == -1) {
-        perror("semctl");
         return EXIT_FAILURE;
     }
     return EXIT_SUCCESS;

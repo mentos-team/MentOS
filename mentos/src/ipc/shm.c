@@ -73,6 +73,7 @@ static inline shm_info_t *__shm_info_alloc(key_t key, size_t size, int shmflg)
     // Allocate the memory.
     uint32_t order         = find_nearest_order_greater(0, size);
     shm_info->shm_location = _alloc_pages(GFP_KERNEL, order);
+    pr_crit("page: %p\n", shm_info->shm_location);
     // Return the shared memory structure.
     return shm_info;
 }
@@ -124,6 +125,25 @@ static inline shm_info_t *__list_find_shm_info_by_key(key_t key)
         shm_info = list_entry(it, shm_info_t, list);
         // If shared memories is valid, check the id.
         if (shm_info && (shm_info->shmid.shm_perm.key == key)) {
+            return shm_info;
+        }
+    }
+    return NULL;
+}
+
+/// @brief Searches for the shared memory with the given page.
+/// @param page the page we are searching.
+/// @return the shared memory with the given page.
+static inline shm_info_t *__list_find_shm_info_by_page(page_t *page)
+{
+    shm_info_t *shm_info;
+    // Iterate through the list of shared memories.
+    list_for_each_decl(it, &shm_list)
+    {
+        // Get the current entry.
+        shm_info = list_entry(it, shm_info_t, list);
+        // If shared memories is valid, check the id.
+        if (shm_info && (shm_info->shm_location == page)) {
             return shm_info;
         }
     }
@@ -198,34 +218,12 @@ long sys_shmget(key_t key, size_t size, int shmflg)
     return shm_info->id;
 }
 
-static inline int __find_vm_free_area(mm_struct_t *mm, size_t length, uintptr_t *vm_start)
-{
-    // Get the stack.
-    vm_area_struct_t *area, *prev_area;
-    list_for_each_prev_decl(it, &mm->mmap_list)
-    {
-        area = list_entry(it, vm_area_struct_t, vm_list);
-        assert(area && "There is a NULL area in the list.");
-        // Check the previous segment.
-        if (area->vm_list.prev != &mm->mmap_list) {
-            prev_area = list_entry(area->vm_list.prev, vm_area_struct_t, vm_list);
-            assert(prev_area && "There is a NULL area in the list.");
-            // Compute the available space.
-            unsigned available_space = area->vm_start - prev_area->vm_end;
-            // If the space is enough, return the address.
-            if (available_space >= length) {
-                *vm_start = area->vm_start - length;
-                return 0;
-            }
-        }
-    }
-    return 1;
-}
-
 void *sys_shmat(int shmid, const void *shmaddr, int shmflg)
 {
     shm_info_t *shm_info = NULL;
     task_struct *task    = NULL;
+    uint32_t vm_start, phy_start;
+
     // The id is less than zero.
     if (shmid < 0) {
         pr_err("The id is less than zero.\n");
@@ -251,26 +249,55 @@ void *sys_shmat(int shmid, const void *shmaddr, int shmflg)
     // Get the calling task.
     task = scheduler_get_current_process();
     assert(task && "Failed to get the current running process.");
-
-    uint32_t phy_start = get_physical_address_from_page(shm_info->shm_location);
-    uint32_t vm_start;
-    __find_vm_free_area(
-        task->mm,
-        shm_info->shmid.shm_segsz,
-        &vm_start);
-
+    // Get the phyisical address from the allocated pages.
+    phy_start = get_physical_address_from_page(shm_info->shm_location);
+    // Find the virtual address for the new area.
+    if (find_free_vm_area(task->mm, shm_info->shmid.shm_segsz, &vm_start)) {
+        pr_err("We failed to find space for the new virtual memory area.\n");
+        return (void *)-EACCES;
+    }
     mem_upd_vm_area(
         task->mm->pgd,
         vm_start,
         phy_start,
         shm_info->shmid.shm_segsz,
         MM_RW | MM_PRESENT | MM_USER | MM_UPDADDR);
-
     return (void *)vm_start;
 }
 
 long sys_shmdt(const void *shmaddr)
 {
+    shm_info_t *shm_info = NULL;
+    task_struct *task    = NULL;
+    uint32_t phy_start;
+    size_t size;
+    page_t *page;
+
+    // Get the calling task.
+    task = scheduler_get_current_process();
+    assert(task && "Failed to get the current running process.");
+    // Get the page.
+    page = mem_virtual_to_page(task->mm->pgd, (uint32_t)shmaddr, &size);
+    // Check if we can find the page.
+    if (page == NULL) {
+        pr_err("Cannot retrieve the page from the give address.\n");
+        return -ENOENT;
+    }
+    shm_info = __list_find_shm_info_by_page(page);
+    // Check if no shared memory exists for the given address.
+    if (!shm_info) {
+        pr_err("No shared memory exists for the given address.\n");
+        return -ENOENT;
+    }
+    // Get the phyisical address from the allocated pages.
+    phy_start = get_physical_address_from_page(shm_info->shm_location);
+    // Set all virtual pages as not present.
+    mem_upd_vm_area(
+        task->mm->pgd,
+        (uint32_t)shmaddr,
+        phy_start,
+        shm_info->shmid.shm_segsz,
+        MM_GLOBAL);
     return 0;
 }
 

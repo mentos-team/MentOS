@@ -75,98 +75,46 @@ void paging_flush_tlb_single(unsigned long addr)
                          : "memory");
 }
 
-/// @brief
-/// @param mm
-/// @param vm_start
-/// @param vm_end
-/// @return int
-static inline int __valid_vm_area(mm_struct_t *mm, uintptr_t vm_start, uintptr_t vm_end)
-{
-    if (vm_end <= vm_start)
-        return -1;
-    // Get the stack.
-    vm_area_struct_t *area;
-    list_for_each_prev_decl(it, &mm->mmap_list)
-    {
-        area = list_entry(it, vm_area_struct_t, vm_list);
-        assert(area && "There is a NULL area in the list.");
-        if ((vm_start >= area->vm_start) && (vm_start <= area->vm_end))
-            return 0;
-        if ((vm_end >= area->vm_start) && (vm_end <= area->vm_end))
-            return 0;
-        if ((vm_start <= area->vm_start) && (vm_end >= area->vm_end))
-            return 0;
-    }
-    return 1;
-}
-
-/// @brief Searches for an empty spot for a new virtual memory area.
-/// @param mm the memory descriptor which should contain the new area.
-/// @param length the size of the empty spot.
-/// @param vm_start where we save the starting address for the new area.
-/// @return 0 on success, 1 on failure.
-static inline int __find_vm_free_area(mm_struct_t *mm, size_t length, uintptr_t *vm_start)
-{
-    // Get the stack.
-    vm_area_struct_t *area, *prev_area;
-    list_for_each_prev_decl(it, &mm->mmap_list)
-    {
-        area = list_entry(it, vm_area_struct_t, vm_list);
-        assert(area && "There is a NULL area in the list.");
-        // Check the previous segment.
-        if (area->vm_list.prev != &mm->mmap_list) {
-            prev_area = list_entry(area->vm_list.prev, vm_area_struct_t, vm_list);
-            assert(prev_area && "There is a NULL area in the list.");
-            // Compute the available space.
-            unsigned available_space = area->vm_start - prev_area->vm_end;
-            // If the space is enough, return the address.
-            if (available_space >= length) {
-                *vm_start = area->vm_start - length;
-                return 0;
-            }
-        }
-    }
-    return 1;
-}
-
 vm_area_struct_t *create_vm_area(mm_struct_t *mm,
                                  uint32_t vm_start,
                                  size_t size,
                                  uint32_t pgflags,
                                  uint32_t gfpflags)
 {
+    uint32_t vm_end, phy_start, order;
+    vm_area_struct_t *segment;
+
     // Compute the end of the virtual memory area.
-    uint32_t vm_end = vm_start + size;
+    vm_end = vm_start + size;
     // Check if the range is already occupied.
-    if (__valid_vm_area(mm, vm_start, vm_end) <= 0) {
+    if (is_valid_vm_area(mm, vm_start, vm_end) <= 0) {
         pr_crit("The virtual memory area range [%p, %p] is already in use.\n", vm_start, vm_end);
         kernel_panic("Wrong virtual memory area range.");
     }
     // Allocate on kernel space the structure for the segment.
-    vm_area_struct_t *new_segment = kmem_cache_alloc(vm_area_cache, GFP_KERNEL);
+    segment = kmem_cache_alloc(vm_area_cache, GFP_KERNEL);
     // Find the nearest order for the given memory size.
-    uint32_t order = find_nearest_order_greater(vm_start, size);
-    uint32_t phy_vm_start;
+    order = find_nearest_order_greater(vm_start, size);
 
     if (pgflags & MM_COW) {
-        pgflags &= ~(MM_PRESENT | MM_UPDADDR);
-        phy_vm_start = 0;
+        pgflags   = pgflags & ~(MM_PRESENT | MM_UPDADDR);
+        phy_start = 0;
     } else {
-        pgflags |= MM_UPDADDR;
+        pgflags      = pgflags | MM_UPDADDR;
         page_t *page = _alloc_pages(gfpflags, order);
-        phy_vm_start = get_physical_address_from_page(page);
+        phy_start    = get_physical_address_from_page(page);
     }
 
-    mem_upd_vm_area(mm->pgd, vm_start, phy_vm_start, size, pgflags);
+    mem_upd_vm_area(mm->pgd, vm_start, phy_start, size, pgflags);
 
     // Update vm_area_struct info.
-    new_segment->vm_start = vm_start;
-    new_segment->vm_end   = vm_end;
-    new_segment->vm_mm    = mm;
+    segment->vm_start = vm_start;
+    segment->vm_end   = vm_end;
+    segment->vm_mm    = mm;
 
     // Update memory descriptor list of vm_area_struct.
-    list_head_insert_after(&new_segment->vm_list, &mm->mmap_list);
-    mm->mmap_cache = new_segment;
+    list_head_insert_after(&segment->vm_list, &mm->mmap_list);
+    mm->mmap_cache = segment;
 
     // Sort the mmap_list.
     list_head_sort(&mm->mmap_list, vm_area_compare);
@@ -176,7 +124,7 @@ vm_area_struct_t *create_vm_area(mm_struct_t *mm,
 
     mm->total_vm += (1U << order);
 
-    return new_segment;
+    return segment;
 }
 
 uint32_t clone_vm_area(mm_struct_t *mm, vm_area_struct_t *area, int cow, uint32_t gfpflags)
@@ -274,6 +222,57 @@ inline vm_area_struct_t *find_vm_area(mm_struct_t *mm, uint32_t vm_start)
             return segment;
     }
     return NULL;
+}
+
+inline int is_valid_vm_area(mm_struct_t *mm, uintptr_t vm_start, uintptr_t vm_end)
+{
+    if (vm_end <= vm_start) {
+        return -1;
+    }
+    // Get the stack.
+    vm_area_struct_t *area;
+    list_for_each_prev_decl(it, &mm->mmap_list)
+    {
+        area = list_entry(it, vm_area_struct_t, vm_list);
+        assert(area && "There is a NULL area in the list.");
+        if ((vm_start > area->vm_start) && (vm_start < area->vm_end)) {
+            pr_crit("INSIDE(START): %p <= %p <= %p", area->vm_start, vm_start, area->vm_end);
+            return 0;
+        }
+        if ((vm_end > area->vm_start) && (vm_end < area->vm_end)) {
+            pr_crit("INSIDE(END): %p <= %p <= %p", area->vm_start, vm_end, area->vm_end);
+            return 0;
+        }
+        if ((vm_start < area->vm_start) && (vm_end > area->vm_end)) {
+            pr_crit("WRAPS: %p <= (%p, %p) <= %p", vm_start, area->vm_start, area->vm_end, vm_end);
+            return 0;
+        }
+    }
+    return 1;
+}
+
+inline int find_free_vm_area(mm_struct_t *mm, size_t length, uintptr_t *vm_start)
+{
+    // Get the stack.
+    vm_area_struct_t *area, *prev_area;
+    list_for_each_prev_decl(it, &mm->mmap_list)
+    {
+        area = list_entry(it, vm_area_struct_t, vm_list);
+        assert(area && "There is a NULL area in the list.");
+        // Check the previous segment.
+        if (area->vm_list.prev != &mm->mmap_list) {
+            prev_area = list_entry(area->vm_list.prev, vm_area_struct_t, vm_list);
+            assert(prev_area && "There is a NULL area in the list.");
+            // Compute the available space.
+            unsigned available_space = area->vm_start - prev_area->vm_end;
+            // If the space is enough, return the address.
+            if (available_space >= length) {
+                *vm_start = area->vm_start - length;
+                return 0;
+            }
+        }
+    }
+    return 1;
 }
 
 static void __init_pagedir(page_directory_t *pdir)
@@ -724,11 +723,11 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
     // Get the current task.
     task_struct *task = scheduler_get_current_process();
     // Check if we were asked for a specific spot.
-    if (addr && __valid_vm_area(task->mm, (uintptr_t)addr, (uintptr_t)addr + length)) {
+    if (addr && is_valid_vm_area(task->mm, (uintptr_t)addr, (uintptr_t)addr + length)) {
         vm_start = (uintptr_t)addr;
     } else {
         // Find an empty spot.
-        if (__find_vm_free_area(task->mm, length, &vm_start)) {
+        if (find_free_vm_area(task->mm, length, &vm_start)) {
             pr_err("We failed to find a suitable spot for a new virtual memory area.\n");
             return NULL;
         }
