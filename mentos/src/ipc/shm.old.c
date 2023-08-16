@@ -447,7 +447,7 @@ void *sys_shmat(int shmid, const void *shmaddr, int shmflg)
     return 0;
 }
 
-long sys_shmget(key_t key, size_t size, int flag)
+int sys_shmget(key_t key, size_t size, int flag)
 {
     return 0;
 }

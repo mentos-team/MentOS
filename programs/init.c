@@ -13,7 +13,8 @@ int main(int argc, char *argv[], char *envp[])
     char *_argv[] = { "login", NULL };
 
     if (fork() == 0) {
-        execv("/bin/login", _argv);
+        // execv("/bin/login", _argv);
+        execv("/bin/tests/t_shmget", _argv);
         printf("This is bad, I should not be here! EXEC NOT WORKING\n");
     }
     int status;

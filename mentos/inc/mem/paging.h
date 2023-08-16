@@ -236,6 +236,13 @@ vm_area_struct_t *create_vm_area(mm_struct_t *mm,
                                  uint32_t pgflags,
                                  uint32_t gfpflags);
 
+vm_area_struct_t *create_vm_area_with_phy(mm_struct_t *mm,
+                                          uint32_t virt_start,
+                                          size_t size,
+                                          uint32_t pgflags,
+                                          uint32_t gfpflags,
+                                          uint32_t phy_vm_start);
+
 /// @brief Clone a virtual memory area, using copy on write if specified
 /// @param mm the memory descriptor which will contain the new segment.
 /// @param area the area to clone

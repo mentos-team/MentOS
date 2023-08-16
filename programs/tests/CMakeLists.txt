@@ -90,6 +90,8 @@ set(TESTS
     t_semop.c
     # Test message queues.
     t_msgget.c
+    # Test shared memory.
+    t_shmget.c
     # Test scheduling feedback tests.
     t_schedfb.c
 )
