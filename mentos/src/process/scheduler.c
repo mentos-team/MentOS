@@ -4,10 +4,10 @@
 /// See LICENSE.md for details.
 
 // Setup the logging for this file (do this before any other include).
-#include "sys/kernel_levels.h"           // Include kernel log levels.
-#define __DEBUG_HEADER__ "[SCHED ]"      ///< Change header.
-#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
-#include "io/debug.h"                    // Include debugging functions.
+#include "sys/kernel_levels.h"          // Include kernel log levels.
+#define __DEBUG_HEADER__ "[SCHED ]"     ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_DEBUG ///< Set log level.
+#include "io/debug.h"                   // Include debugging functions.
 
 #include "process/scheduler_feedback.h"
 #include "process/scheduler.h"
@@ -119,7 +119,7 @@ void scheduler_dequeue_task(task_struct *process)
     --runqueue.num_active;
     if (process->se.is_periodic)
         runqueue.num_periodic--;
-        
+
 #ifdef ENABLE_SCHEDULER_FEEDBACK
     scheduler_feedback_task_remove(process->pid);
 #endif
@@ -485,8 +485,9 @@ pid_t sys_waitpid(pid_t pid, int *status, int options)
         // Save the pid to return.
         pid_t ppid = entry->pid;
         // Save the state (TODO: Improve status set).
-        if (status)
-            (*status) = entry->state;
+        if (status) {
+            (*status) = entry->exit_code;
+        }
         // Finalize the VFS structures.
         vfs_destroy_task(entry);
         // Remove entry from children of parent.
@@ -515,7 +516,7 @@ void sys_exit(int exit_code)
     }
 
     // Set the termination code of the process.
-    runqueue.curr->exit_code = (exit_code << 8) & 0xFF00;
+    runqueue.curr->exit_code = exit_code;
     // Set the state of the process to zombie.
     runqueue.curr->state = EXIT_ZOMBIE;
     // Send a SIGCHLD to the parent process.

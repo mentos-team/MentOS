@@ -40,8 +40,7 @@ int main(int argc, char *argv[])
     }
     // Print the message.
     printf("Data read from memory: %s (%p)\n", str, str);
-    strcpy(str, "Hello!");
-    // printf("Data read from memory: %s (%p)\n", str, str);
+    str[0] = 'H';
     // Detatch the shared memory.
     if (shmdt(str) < 0) {
         perror("shmdt");

@@ -19,6 +19,8 @@
 #include "klib/irqflags.h"
 #include "klib/stack_helper.h"
 
+#define GET_EXIT_STATUS(status) (((status)&0x00FF) << 8)
+
 /// SLAB caches for signal bits.
 static kmem_cache_t *sigqueue_cachep;
 
@@ -477,28 +479,38 @@ int do_signal(struct pt_regs *f)
 
                 continue;
             case SIGQUIT:
+                sys_exit(GET_EXIT_STATUS(1));
+                continue;
             case SIGILL:
+                sys_exit(GET_EXIT_STATUS(132));
+                continue;
             case SIGTRAP:
-
+                sys_exit(GET_EXIT_STATUS(133));
+                continue;
             case SIGABRT:
-                sys_exit(3);
-
+                sys_exit(GET_EXIT_STATUS(134));
                 continue;
             case SIGFPE:
-            case SIGSEGV:
+                sys_exit(GET_EXIT_STATUS(136) | signr);
+                __unlock_task_sighand(current_process);
+                return 1;
             case SIGBUS:
-            case SIGSYS:
+                sys_exit(GET_EXIT_STATUS(138) | signr);
+                __unlock_task_sighand(current_process);
+                return 1;
+            case SIGSEGV:
+                sys_exit(GET_EXIT_STATUS(139) | signr);
+                __unlock_task_sighand(current_process);
+                return 1;
             case SIGXCPU:
+                sys_exit(GET_EXIT_STATUS(158) | signr);
+                __unlock_task_sighand(current_process);
             case SIGXFSZ:
-#if 0
-                if (do_coredump(signr, f))
-                    exit_code |= 0x80;
-#endif
+                sys_exit(GET_EXIT_STATUS(159) | signr);
+                __unlock_task_sighand(current_process);
+            case SIGSYS:
             default:
-#if 0
-                current_process->flags |= PF_SIGNALED;
-#endif
-                sys_exit(exit_code);
+                sys_exit(GET_EXIT_STATUS(exit_code) | signr);
                 __unlock_task_sighand(current_process);
                 return 1;
             }
