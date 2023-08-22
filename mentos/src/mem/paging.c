@@ -4,10 +4,10 @@
 /// See LICENSE.md for details.
 
 // Setup the logging for this file (do this before any other include).
-#include "sys/kernel_levels.h"           // Include kernel log levels.
-#define __DEBUG_HEADER__ "[PAGING]"      ///< Change header.
-#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
-#include "io/debug.h"                    // Include debugging functions.
+#include "sys/kernel_levels.h"          // Include kernel log levels.
+#define __DEBUG_HEADER__ "[PAGING]"     ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_DEBUG ///< Set log level.
+#include "io/debug.h"                   // Include debugging functions.
 
 #include "mem/paging.h"
 #include "mem/vmem_map.h"
@@ -458,20 +458,27 @@ void page_fault_handler(pt_regs *f)
     // Get the directory entry.
     page_dir_entry_t *direntry = &lowmem_dir->entries[faulting_addr / (1024U * PAGE_SIZE)];
     // Extract the error
-    bool_t err_user    = bit_check(f->err_code, 2);
-    bool_t err_rw      = bit_check(f->err_code, 1);
-    bool_t err_present = bit_check(f->err_code, 0);
+    bool_t err_user    = bit_check(f->err_code, 2) != 0;
+    bool_t err_rw      = bit_check(f->err_code, 1) != 0;
+    bool_t err_present = bit_check(f->err_code, 0) != 0;
     // Panic only if page is in kernel memory, else abort process with SIGSEGV.
     if (!direntry->present) {
+        pr_crit("ERR(0): %d%d%d\n", err_user, err_rw, err_present);
         if (err_user) {
             // Get the current process.
             task_struct *task = scheduler_get_current_process();
             if (task) {
                 // Notifies current process.
                 sys_kill(task->pid, SIGSEGV);
+                // Now, we know the process needs to be removed from the list of
+                // running processes. We pushed the SEGV signal in the queues of
+                // signal to send to the process. To properly handle the signal,
+                // just run scheduler.
+                scheduler_run(f);
                 return;
             }
         }
+        pr_crit("ERR(0): So, it is not present, and it was not the user.\n");
         __page_fault_panic(f, faulting_addr);
     }
     // Get the physical address of the page table.
@@ -489,6 +496,7 @@ void page_fault_handler(pt_regs *f)
         page_table_entry_t *orig_entry = (page_table_entry_t *)(*(uint32_t *)entry);
         // Check if the page is Copy on Write (CoW).
         if (__page_handle_cow(orig_entry)) {
+            pr_crit("ERR(1): %d%d%d\n", err_user, err_rw, err_present);
             __page_fault_panic(f, faulting_addr);
         }
         // Update the page table entry frame.
@@ -498,16 +506,23 @@ void page_fault_handler(pt_regs *f)
     } else {
         // Check if the page is Copy on Write (CoW).
         if (__page_handle_cow(entry)) {
-            
+            pr_crit("ERR(2): %d%d%d\n", err_user, err_rw, err_present);
             if (err_user && err_rw && err_present) {
                 // Get the current process.
                 task_struct *task = scheduler_get_current_process();
                 if (task) {
                     // Notifies current process.
                     sys_kill(task->pid, SIGSEGV);
+                    // Now, we know the process needs to be removed from the list of
+                    // running processes. We pushed the SEGV signal in the queues of
+                    // signal to send to the process. To properly handle the signal,
+                    // just run scheduler.
+                    scheduler_run(f);
                     return;
                 }
+                pr_crit("ERR(2): There is no task.\n");
             }
+            pr_crit("ERR(2): We continued...\n");
             __page_fault_panic(f, faulting_addr);
         }
     }
