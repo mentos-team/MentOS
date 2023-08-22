@@ -365,7 +365,7 @@ static void __page_fault_panic(pt_regs *f, uint32_t addr)
     __asm__ __volatile__("cli");
 }
 
-static void __page_handle_cow(page_table_entry_t *entry)
+static int __page_handle_cow(page_table_entry_t *entry)
 {
     // Check if the page is Copy On Write (COW).
     if (entry->kernel_cow) {
@@ -384,10 +384,11 @@ static void __page_handle_cow(page_table_entry_t *entry)
             entry->frame = get_physical_address_from_page(page) >> 12U;
             // Set it as allocated.
             entry->present = 1;
-            return;
+            return 0;
         }
     }
-    kernel_panic("Page not cow!");
+    pr_err("Page not cow!\n");
+    return 1;
 }
 
 static page_table_t *__mem_pg_entry_alloc(page_dir_entry_t *entry, uint32_t flags)
