@@ -73,7 +73,6 @@ static inline shm_info_t *__shm_info_alloc(key_t key, size_t size, int shmflg)
     // Allocate the memory.
     uint32_t order         = find_nearest_order_greater(0, size);
     shm_info->shm_location = _alloc_pages(GFP_KERNEL, order);
-    pr_crit("page: %p\n", shm_info->shm_location);
     // Return the shared memory structure.
     return shm_info;
 }
@@ -223,6 +222,7 @@ void *sys_shmat(int shmid, const void *shmaddr, int shmflg)
     shm_info_t *shm_info = NULL;
     task_struct *task    = NULL;
     uint32_t vm_start, phy_start;
+    uint32_t flags = MM_RW | MM_PRESENT | MM_USER | MM_UPDADDR;
 
     // The id is less than zero.
     if (shmid < 0) {
@@ -238,11 +238,14 @@ void *sys_shmat(int shmid, const void *shmaddr, int shmflg)
     }
     // Check if the shared memory exists for the given key, but the calling
     // process does not have permission to access the set.
-    if ((shmflg & SHM_RDONLY) && !ipc_valid_permissions(O_RDONLY, &shm_info->shmid.shm_perm)) {
-        pr_err("The shared memory exists for the given key, but the calling process does not have permission to access the set.\n");
-        return (void *)-EACCES;
-    }
-    if (!ipc_valid_permissions(O_RDWR, &shm_info->shmid.shm_perm)) {
+    if (shmflg & SHM_RDONLY) {
+        if (!ipc_valid_permissions(O_RDONLY, &shm_info->shmid.shm_perm)) {
+            pr_err("The shared memory exists for the given key, but the calling process does not have permission to access the set.\n");
+            return (void *)-EACCES;
+        }
+        // Remove the read-write flag.
+        flags = bitmask_clear(flags, MM_RW);
+    } else if (!ipc_valid_permissions(O_RDWR, &shm_info->shmid.shm_perm)) {
         pr_err("The shared memory exists for the given key, but the calling process does not have permission to access the set.\n");
         return (void *)-EACCES;
     }
@@ -261,7 +264,7 @@ void *sys_shmat(int shmid, const void *shmaddr, int shmflg)
         vm_start,
         phy_start,
         shm_info->shmid.shm_segsz,
-        MM_RW | MM_PRESENT | MM_USER | MM_UPDADDR);
+        flags);
     return (void *)vm_start;
 }
 
