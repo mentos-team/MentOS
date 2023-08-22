@@ -92,6 +92,8 @@ set(TESTS
     t_msgget.c
     # Test shared memory.
     t_shmget.c
+    t_shm_read.c
+    t_shm_write.c
     # Test scheduling feedback tests.
     t_schedfb.c
 )
