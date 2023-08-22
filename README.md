@@ -352,7 +352,11 @@ make qemu-gdb
 
 If you did everything correctly, you should see an empty QEMU window. Basically, QEMU is waiting for you to connect *remotely* with gdb. Anyway, running `make qemu-gdb` will make your current shell busy, you cannot call `gdb` in it. You need to open a new shell inside the `build` folder and do a:
 ```bash
-cgdb -q -iex 'add-auto-load-safe-path .'
+gdb --quiet --command=gdb.run
+```
+or
+```bash
+cgdb --quiet --command=gdb.run
 ```
 
 Now you should have in front of you:
@@ -380,6 +384,9 @@ This will make the kernel run, and stop at the **second** breakpoint which is in
 Breakpoint 2, kmain (...) at .../mentos/src/kernel.c:95
 95      {
 ```
+
+There is also a launch configuration for vscode in `.vscode/launch.json`, called `(gdb) Attach`, which should allow you
+to connect to the running process.
 
 *[Back to the Table of Contents](#table-of-contents)*
 

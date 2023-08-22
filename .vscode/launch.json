@@ -1,0 +1,13 @@
+{
+    "configurations": [
+        {
+            "type": "gdb",
+            "request": "attach",
+            "name": "(gdb) Attach",
+            "target": "localhost:1234",
+            "remote": true,
+            "cwd": "${workspaceRoot}/build",
+            "valuesFormatting": "parseText"
+        }
+    ]
+}
