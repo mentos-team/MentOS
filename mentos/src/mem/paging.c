@@ -429,16 +429,25 @@ static inline void __set_pg_entry_frame(page_dir_entry_t *entry, page_table_t *t
 void page_fault_handler(pt_regs *f)
 {
     // Here you will find the `Demand Paging` mechanism.
-    // From `Understanding The Linux Kernel 3rd Edition`:
-    //  The term demand paging denotes a dynamic memory allocation
-    //  technique that consists of deferring page frame allocation
-    //  until the last possible moment—until the process attempts
-    //  to address a page that is not present in RAM, thus causing
-    //  a Page Fault exception.
+    // From `Understanding The Linux Kernel 3rd Edition`: The term demand paging denotes a dynamic memory allocation
+    // technique that consists of deferring page frame allocation until the last possible moment—until the process
+    // attempts to address a page that is not present in RAM, thus causing a Page Fault exception.
+    //
+    // So, if you go inside `mentos/src/exceptions.S`, and check out the macro ISR_ERR, we are pushing the error code on
+    // the stack before firing a page fault exception. The error code must be analyzed by the exception handler to
+    // determine how to handle the exception. The following bits are the only ones used, all others are reserved.
+    // | US RW  P | Description
+    // |  0  0  0 | Supervisory process tried to read a non-present page entry
+    // |  0  0  1 | Supervisory process tried to read a page and caused a protection fault
+    // |  0  1  0 | Supervisory process tried to write to a non-present page entry
+    // |  0  1  1 | Supervisory process tried to write a page and caused a protection fault
+    // |  1  0  0 | User process tried to read a non-present page entry
+    // |  1  0  1 | User process tried to read a page and caused a protection fault
+    // |  1  1  0 | User process tried to write to a non-present page entry
+    // |  1  1  1 | User process tried to write a page and caused a protection fault
 
-    // First, read the linear address that caused the Page Fault.
-    // When the exception occurs, the CPU control unit stores that
-    // value in the cr2 control register.
+    // First, read the linear address that caused the Page Fault. When the exception occurs, the CPU control unit stores
+    // that value in the cr2 control register.
     uint32_t faulting_addr;
     __asm__ __volatile__("mov %%cr2, %0"
                          : "=r"(faulting_addr));
@@ -448,8 +457,21 @@ void page_fault_handler(pt_regs *f)
     page_directory_t *lowmem_dir = (page_directory_t *)get_lowmem_address_from_page(get_page_from_physical_address(phy_dir));
     // Get the directory entry.
     page_dir_entry_t *direntry = &lowmem_dir->entries[faulting_addr / (1024U * PAGE_SIZE)];
-    // TODO: Panic only if page is in kernel memory, else abort process with sigsegv
+    // Extract the error
+    bool_t err_user    = bit_check(f->err_code, 2);
+    bool_t err_rw      = bit_check(f->err_code, 1);
+    bool_t err_present = bit_check(f->err_code, 0);
+    // Panic only if page is in kernel memory, else abort process with SIGSEGV.
     if (!direntry->present) {
+        if (err_user) {
+            // Get the current process.
+            task_struct *task = scheduler_get_current_process();
+            if (task) {
+                // Notifies current process.
+                sys_kill(task->pid, SIGSEGV);
+                return;
+            }
+        }
         __page_fault_panic(f, faulting_addr);
     }
     // Get the physical address of the page table.
