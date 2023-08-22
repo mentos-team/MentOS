@@ -488,14 +488,28 @@ void page_fault_handler(pt_regs *f)
         // Get the original page table entry from the virtually mapped one.
         page_table_entry_t *orig_entry = (page_table_entry_t *)(*(uint32_t *)entry);
         // Check if the page is Copy on Write (CoW).
-        __page_handle_cow(orig_entry);
+        if (__page_handle_cow(orig_entry)) {
+            __page_fault_panic(f, faulting_addr);
+        }
         // Update the page table entry frame.
         entry->frame = orig_entry->frame;
         // Update the entry flags.
         __set_pg_table_flags(entry, MM_PRESENT | MM_RW | MM_GLOBAL | MM_COW | MM_UPDADDR);
     } else {
         // Check if the page is Copy on Write (CoW).
-        __page_handle_cow(entry);
+        if (__page_handle_cow(entry)) {
+            
+            if (err_user && err_rw && err_present) {
+                // Get the current process.
+                task_struct *task = scheduler_get_current_process();
+                if (task) {
+                    // Notifies current process.
+                    sys_kill(task->pid, SIGSEGV);
+                    return;
+                }
+            }
+            __page_fault_panic(f, faulting_addr);
+        }
     }
     // Invalidate the page table entry.
     paging_flush_tlb_single(faulting_addr);
