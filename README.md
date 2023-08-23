@@ -230,7 +230,7 @@ int main(int argc, char *argv[])
 
 ### 8.2. Add the new program to the list of compiled sources
 Now we can add the program to the list of files which are compiled and placed inside MentOS filesystem.
-The folowing procedure is the same for both `programs` and `programs/tests`, what changes is which `CMakeLists.txt` file we modify.
+The following procedure is the same for both `programs` and `programs/tests`, what changes is which `CMakeLists.txt` file we modify.
 
 You need to modify the `CMakeLists.txt` file, either `programs/CMakeLists.txt` or `programs/tests/CMakeLists.txt`, and add your program to the list of files to be compiled:
 ```Makefile
@@ -254,7 +254,7 @@ set(TESTS
 That's it, the `hello_world.c` file will be compiled and will appear inside the `/bin` or `/bin/tests` folder of MentOS.
 
 ### 8.3. Running a program or a test
-Once you login into MentOS, you can execute the program by simply typing:
+Once you login into MentOS, if you placed your source code in `programs`, you can execute the program by simply typing:
 ```bash
 hello_world
 ```
