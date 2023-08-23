@@ -16,10 +16,11 @@
  5. [Generating the EXT2 filesystem](#5-generating-the-ext2-filesystem)
  6. [Running MentOS](#6-running-mentos)
  7. [Running MentOS from GRUB](#7-running-mentos-from-grub)
- 8. [Kernel logging](#8-kernel-logging)
- 9. [Change the scheduling algorithm](#9-change-the-scheduling-algorithm)
- 10. [Debugging the kernel](#10-debugging-the-kernel)
- 11. [Contributors](#11-contributors)
+ 8. [Running and adding new programs to MentOS](#8-running-and-adding-new-programs-to-mentos)
+ 9. [Kernel logging](#9-kernel-logging)
+ 10. [Change the scheduling algorithm](#10-change-the-scheduling-algorithm)
+ 11. [Debugging the kernel](#11-debugging-the-kernel)
+ 12. [Contributors](#12-contributors)
 
 ## 1. What is MentOS
 
@@ -208,7 +209,65 @@ Boot MentOS with qemu through GRUB by calling:
 make qemu-grub
 ```
 
-## 8. Kernel logging
+*[Back to the Table of Contents](#table-of-contents)*
+
+## 8. Running and adding new programs to MentOS
+
+To add new programs (or tests) to MentOS, you can do as follow.
+
+### 8.1. Create a new program
+
+Head to the `programs` (or the `programs/tests`) folder.
+```bash
+cd programs
+```
+
+Create a new program, for instance, create a file called `hello_world.c`:
+```bash
+touch hello_world.c
+```
+
+Write the content of our new file:
+```C
+#include <stdio.h>
+
+int main(int argc, char *argv[]) {
+   printf("Hello, World!");
+   return 0;
+}
+```
+
+### 8.2. Add the new program to the list of compiled sources
+Once the programs is ready, we can add the program to the list of files which are compiled and placed inside MentOS filesystem. The folowing procedure is the same for both `programs` and `programs/tests`, what changes is which `CMakeLists.txt` file we modify.
+
+You need to modify the `CMakeLists.txt` file, either `programs/CMakeLists.txt` or `programs/tests/CMakeLists.txt`, and add your program to the list of files to be compiled:
+
+```Makefile
+# Add the executables (manually).
+set(PROGRAMS
+    init.c
+    ...
+    hello_world.c
+)
+```
+
+That's it, the `hello_world.c` file will be compiled and will appear inside the `/bin` or `/bin/tests` folder of MentOS.
+
+### 8.3. Running a program or a test
+Once you login into MentOS, you can execute the program by simply typing:
+```bash
+hello_world
+```
+because the file resides in `/bin`, and that folder is listed in the `PATH` environment variable.
+
+Now, the `/bin/tests` folder is not listed in `PATH`, so, if you want to execute a test from that folder you need to specify the full path:
+```bash
+/bin/tests/hello_world
+```
+
+*[Back to the Table of Contents](#table-of-contents)*
+
+## 9. Kernel logging
 The kernel provides ways of printing logging messages *from* inside the kernel code *to* the bash where you executed the `make qemu`.
 
 These *logging* functions are:
@@ -262,7 +321,7 @@ This example sets the `__DEBUG_LEVEL__`, so that all the messages from `INFO` an
 
 *[Back to the Table of Contents](#table-of-contents)*
 
-## 9. Change the scheduling algorithm
+## 10. Change the scheduling algorithm
 
 MentOS supports scheduling algorithms for aperiodic:
 
@@ -330,7 +389,7 @@ make qemu
 
 *[Back to the Table of Contents](#table-of-contents)*
 
-## 10. Debugging the kernel
+## 11. Debugging the kernel
 
 If you want to use GDB to debug MentOS, first you need to compile everything:
 
@@ -390,7 +449,7 @@ to connect to the running process.
 
 *[Back to the Table of Contents](#table-of-contents)*
 
-## 11. Contributors
+## 12. Contributors
 
 Project Manager:
 
