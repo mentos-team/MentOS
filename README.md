@@ -213,39 +213,39 @@ make qemu-grub
 
 ## 8. Running and adding new programs to MentOS
 
-To add new programs (or tests) to MentOS, you can do as follow.
+This section explains how to add a new program to MentOS, and also how to run programs in mentos. It also explains how to add new tests, which are located in the `programs/tests` folder.
 
 ### 8.1. Create a new program
 
-Head to the `programs` (or the `programs/tests`) folder.
-```bash
-cd programs
-```
-
-Create a new program, for instance, create a file called `hello_world.c`:
-```bash
-touch hello_world.c
-```
-
-Write the content of our new file:
+Head to the `programs` (or the `programs/tests`) folder. Create and open a new program, for instance a file called `hello_world.c`, with your preferred editor, and add this content to the file:
 ```C
 #include <stdio.h>
 
-int main(int argc, char *argv[]) {
-   printf("Hello, World!");
-   return 0;
+int main(int argc, char *argv[])
+{
+    printf("Hello, World!\n\n");
+    return 0;
 }
 ```
 
 ### 8.2. Add the new program to the list of compiled sources
-Once the programs is ready, we can add the program to the list of files which are compiled and placed inside MentOS filesystem. The folowing procedure is the same for both `programs` and `programs/tests`, what changes is which `CMakeLists.txt` file we modify.
+Now we can add the program to the list of files which are compiled and placed inside MentOS filesystem.
+The folowing procedure is the same for both `programs` and `programs/tests`, what changes is which `CMakeLists.txt` file we modify.
 
 You need to modify the `CMakeLists.txt` file, either `programs/CMakeLists.txt` or `programs/tests/CMakeLists.txt`, and add your program to the list of files to be compiled:
-
 ```Makefile
 # Add the executables (manually).
 set(PROGRAMS
     init.c
+    ...
+    hello_world.c
+)
+```
+or
+```Makefile
+# Add the executables (manually).
+set(TESTS
+    t_mem.c
     ...
     hello_world.c
 )
@@ -260,7 +260,8 @@ hello_world
 ```
 because the file resides in `/bin`, and that folder is listed in the `PATH` environment variable.
 
-Now, the `/bin/tests` folder is not listed in `PATH`, so, if you want to execute a test from that folder you need to specify the full path:
+Now, if you placed your source code inside the `programs/tests` folder, the executable will end up inside the `/bin/tests` folder.
+However, the `/bin/tests` folder is not listed in `PATH`, so, if you want to execute a test from that folder you need to specify the full path:
 ```bash
 /bin/tests/hello_world
 ```
