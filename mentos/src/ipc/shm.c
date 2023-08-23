@@ -16,8 +16,10 @@
 #include "sys/shm.h"
 
 #include "assert.h"
+#include "fcntl.h"
 #include "mem/kheap.h"
 #include "stdio.h"
+#include "stdlib.h"
 #include "string.h"
 #include "sys/errno.h"
 #include "sys/list_head.h"
@@ -34,7 +36,7 @@ typedef struct {
     /// @brief The shared memory data strcutre.
     struct shmid_ds shmid;
     /// Where shm created is memorized.
-    void *shm_location;
+    page_t *shm_location;
     /// Reference inside the list of shared memory management structures.
     list_head list;
 } shm_info_t;
@@ -68,6 +70,9 @@ static inline shm_info_t *__shm_info_alloc(key_t key, size_t size, int shmflg)
     shm_info->shmid.shm_cpid   = 0;
     shm_info->shmid.shm_lpid   = 0;
     shm_info->shmid.shm_nattch = 0;
+    // Allocate the memory.
+    uint32_t order         = find_nearest_order_greater(0, size);
+    shm_info->shm_location = _alloc_pages(GFP_KERNEL, order);
     // Return the shared memory structure.
     return shm_info;
 }
@@ -77,6 +82,8 @@ static inline shm_info_t *__shm_info_alloc(key_t key, size_t size, int shmflg)
 static inline void __shm_info_dealloc(shm_info_t *shm_info)
 {
     assert(shm_info && "Received a NULL pointer.");
+    // Free the shared memory.
+    __free_pages(shm_info->shm_location);
     // Deallocate the shmid memory.
     kfree(shm_info);
 }
@@ -123,6 +130,25 @@ static inline shm_info_t *__list_find_shm_info_by_key(key_t key)
     return NULL;
 }
 
+/// @brief Searches for the shared memory with the given page.
+/// @param page the page we are searching.
+/// @return the shared memory with the given page.
+static inline shm_info_t *__list_find_shm_info_by_page(page_t *page)
+{
+    shm_info_t *shm_info;
+    // Iterate through the list of shared memories.
+    list_for_each_decl(it, &shm_list)
+    {
+        // Get the current entry.
+        shm_info = list_entry(it, shm_info_t, list);
+        // If shared memories is valid, check the id.
+        if (shm_info && (shm_info->shm_location == page)) {
+            return shm_info;
+        }
+    }
+    return NULL;
+}
+
 static inline void __list_add_shm_info(shm_info_t *shm_info)
 {
     assert(shm_info && "Received a NULL pointer.");
@@ -147,23 +173,165 @@ int shm_init()
     return 0;
 }
 
-void *sys_shmat(int shmid, const void *shmaddr, int shmflg)
+long sys_shmget(key_t key, size_t size, int shmflg)
 {
-    return 0;
+    shm_info_t *shm_info = NULL;
+    // Need to find a unique key.
+    if (key == IPC_PRIVATE) {
+        // Exit when i find a unique key.
+        do {
+            key = (int)-rand();
+        } while (__list_find_shm_info_by_key(key));
+        // We have a unique key, create the shared memory.
+        shm_info = __shm_info_alloc(key, size, shmflg);
+        // Add the shared memory to the list.
+        __list_add_shm_info(shm_info);
+    } else {
+        // Get the shared memory if it exists.
+        shm_info = __list_find_shm_info_by_key(key);
+        // Check if no shared memory exists for the given key and the flags did not specify IPC_CREAT.
+        if (!shm_info && !(shmflg & IPC_CREAT)) {
+            pr_err("No shared memory exists for the given key and the flags did not specify IPC_CREAT.\n");
+            return -ENOENT;
+        }
+        // Check if IPC_CREAT and IPC_EXCL were specified, but a shared memory already exists for key.
+        if (shm_info && (shmflg & IPC_CREAT) && (shmflg & IPC_EXCL)) {
+            pr_err("IPC_CREAT and IPC_EXCL were specified, but a shared memory already exists for key.\n");
+            return -EEXIST;
+        }
+        // Check if the shared memory exists for the given key, but the calling
+        // process does not have permission to access the set.
+        if (shm_info && !ipc_valid_permissions(shmflg, &shm_info->shmid.shm_perm)) {
+            pr_err("The shared memory exists for the given key, but the calling process does not have permission to access the set.\n");
+            return -EACCES;
+        }
+        // If the shared memory does not exist we need to create a new one.
+        if (shm_info == NULL) {
+            // Create the shared memory.
+            shm_info = __shm_info_alloc(key, size, shmflg);
+            // Add the shared memory to the list.
+            __list_add_shm_info(shm_info);
+        }
+    }
+    // Return the id of the shared memory.
+    return shm_info->id;
 }
 
-long sys_shmget(key_t key, size_t size, int flag)
+void *sys_shmat(int shmid, const void *shmaddr, int shmflg)
 {
-    return 0;
+    shm_info_t *shm_info = NULL;
+    task_struct *task    = NULL;
+    uint32_t vm_start, phy_start;
+    uint32_t flags = MM_RW | MM_PRESENT | MM_USER | MM_UPDADDR;
+
+    // The id is less than zero.
+    if (shmid < 0) {
+        pr_err("The id is less than zero.\n");
+        return (void *)-EINVAL;
+    }
+    // Get the shared memory if it exists.
+    shm_info = __list_find_shm_info_by_id(shmid);
+    // Check if no shared memory exists for the given key and the flags did not specify IPC_CREAT.
+    if (!shm_info) {
+        pr_err("No shared memory exists for the given id and the flags did not specify IPC_CREAT.\n");
+        return (void *)-ENOENT;
+    }
+    // Check if the shared memory exists for the given key, but the calling
+    // process does not have permission to access the set.
+    if (shmflg & SHM_RDONLY) {
+        if (!ipc_valid_permissions(O_RDONLY, &shm_info->shmid.shm_perm)) {
+            pr_err("The shared memory exists for the given key, but the calling process does not have permission to access the set.\n");
+            return (void *)-EACCES;
+        }
+        // Remove the read-write flag.
+        flags = bitmask_clear(flags, MM_RW);
+    } else if (!ipc_valid_permissions(O_RDWR, &shm_info->shmid.shm_perm)) {
+        pr_err("The shared memory exists for the given key, but the calling process does not have permission to access the set.\n");
+        return (void *)-EACCES;
+    }
+    // Get the calling task.
+    task = scheduler_get_current_process();
+    assert(task && "Failed to get the current running process.");
+    // Get the phyisical address from the allocated pages.
+    phy_start = get_physical_address_from_page(shm_info->shm_location);
+    // Find the virtual address for the new area.
+    if (find_free_vm_area(task->mm, shm_info->shmid.shm_segsz, &vm_start)) {
+        pr_err("We failed to find space for the new virtual memory area.\n");
+        return (void *)-EACCES;
+    }
+    mem_upd_vm_area(
+        task->mm->pgd,
+        vm_start,
+        phy_start,
+        shm_info->shmid.shm_segsz,
+        flags);
+    return (void *)vm_start;
 }
 
 long sys_shmdt(const void *shmaddr)
 {
+    shm_info_t *shm_info = NULL;
+    task_struct *task    = NULL;
+    uint32_t phy_start;
+    size_t size;
+    page_t *page;
+
+    // Get the calling task.
+    task = scheduler_get_current_process();
+    assert(task && "Failed to get the current running process.");
+    // Get the page.
+    page = mem_virtual_to_page(task->mm->pgd, (uint32_t)shmaddr, &size);
+    // Check if we can find the page.
+    if (page == NULL) {
+        pr_err("Cannot retrieve the page from the give address.\n");
+        return -ENOENT;
+    }
+    shm_info = __list_find_shm_info_by_page(page);
+    // Check if no shared memory exists for the given address.
+    if (!shm_info) {
+        pr_err("No shared memory exists for the given address.\n");
+        return -ENOENT;
+    }
+    // Get the phyisical address from the allocated pages.
+    phy_start = get_physical_address_from_page(shm_info->shm_location);
+    // Set all virtual pages as not present.
+    mem_upd_vm_area(
+        task->mm->pgd,
+        (uint32_t)shmaddr,
+        phy_start,
+        shm_info->shmid.shm_segsz,
+        MM_GLOBAL);
     return 0;
 }
 
 long sys_shmctl(int shmid, int cmd, struct shmid_ds *buf)
 {
+    shm_info_t *shm_info = NULL;
+    task_struct *task    = NULL;
+
+    // Search for the shared memory.
+    shm_info = __list_find_shm_info_by_id(shmid);
+    // The shared memory doesn't exist.
+    if (!shm_info) {
+        pr_err("The shared memory doesn't exist.\n");
+        return -EINVAL;
+    }
+
+    // Get the calling task.
+    task = scheduler_get_current_process();
+    assert(task && "Failed to get the current running process.");
+
+    if (cmd == IPC_RMID) {
+        // Remove the shared memory; any processes blocked is awakened (errno set to EIDRM); no argument required.
+        if ((shm_info->shmid.shm_perm.uid != task->uid) && (shm_info->shmid.shm_perm.cuid != task->uid)) {
+            pr_err("The calling process is not the creator or the owner of the shared memory.\n");
+            return -EPERM;
+        }
+        // Remove the set from the list.
+        __list_remove_shm_info(shm_info);
+        // Delete the set.
+        __shm_info_dealloc(shm_info);
+    }
     return 0;
 }
 
@@ -187,7 +355,7 @@ ssize_t procipc_shm_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyte
     // Prepare the header.
     ret = sprintf(buffer, "key      shmid perms      segsz   uid   gid  cuid  cgid      atime      dtime      ctime   cpid   lpid nattch\n");
 
-    // Iterate through the list of shmaphore set.
+    // Iterate through the list of shared memory.
     list_for_each_decl(it, &shm_list)
     {
         // Get the current entry.

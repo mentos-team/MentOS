@@ -259,6 +259,20 @@ int destroy_vm_area(mm_struct_t *mm, vm_area_struct_t *area);
 /// @return a pointer to the area if we found it, NULL otherwise.
 vm_area_struct_t *find_vm_area(mm_struct_t *mm, uint32_t vm_start);
 
+/// @brief Checks if the given virtual memory area range is valid.
+/// @param mm the memory descriptor which we use to check the range.
+/// @param vm_start the starting address of the area.
+/// @param vm_end the ending address of the area.
+/// @return 1 if it's valid, 0 if it's occupied, -1 if it's outside the memory.
+int is_valid_vm_area(mm_struct_t *mm, uintptr_t vm_start, uintptr_t vm_end);
+
+/// @brief Searches for an empty spot for a new virtual memory area.
+/// @param mm the memory descriptor which should contain the new area.
+/// @param length the size of the empty spot.
+/// @param vm_start where we save the starting address for the new area.
+/// @return 0 on success, 1 on failure.
+int find_free_vm_area(mm_struct_t *mm, size_t length, uintptr_t *vm_start);
+
 /// @brief Creates the main memory descriptor.
 /// @param stack_size The size of the stack in byte.
 /// @return The Memory Descriptor created.

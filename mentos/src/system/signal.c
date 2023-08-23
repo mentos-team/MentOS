@@ -9,15 +9,17 @@
 #define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
 #include "io/debug.h"                    // Include debugging functions.
 
-#include "system/signal.h"
-#include "process/wait.h"
-#include "process/scheduler.h"
-#include "process/process.h"
-#include "sys/errno.h"
 #include "assert.h"
-#include "string.h"
 #include "klib/irqflags.h"
 #include "klib/stack_helper.h"
+#include "process/process.h"
+#include "process/scheduler.h"
+#include "process/wait.h"
+#include "string.h"
+#include "sys/errno.h"
+#include "system/signal.h"
+
+#define GET_EXIT_STATUS(status) (((status)&0x00FF) << 8)
 
 /// SLAB caches for signal bits.
 static kmem_cache_t *sigqueue_cachep;
@@ -103,8 +105,9 @@ static int __sig_is_ignored(struct task_struct *t, int sig)
     // Blocked signals are never ignored, since the
     // signal handler may change by the time it is
     // unblocked.
-    if (sigismember(&t->blocked, sig) || sigismember(&t->real_blocked, sig))
+    if (sigismember(&t->blocked, sig) || sigismember(&t->real_blocked, sig)) {
         return 0;
+    }
     // Get the signal handler.
     sighandler_t handler = __get_handler(t, sig);
     // Check the type of the handler.
@@ -118,21 +121,22 @@ static int __sig_is_ignored(struct task_struct *t, int sig)
 /// @param t     The task to which the signal belongs.
 /// @param sig   The signal to set.
 /// @param flags Flags identifying from where we are going to take the memory.
-static sigqueue_t *__sigqueue_alloc(struct task_struct *t, int sig, gfp_t flags)
+static inline sigqueue_t *__sigqueue_alloc(struct task_struct *t, int sig, gfp_t flags)
 {
-    sigqueue_t *q = NULL;
-    if ((q = kmem_cache_alloc(sigqueue_cachep, flags)) == NULL)
-        return NULL;
-    // Initiliaze the values.
-    q->flags = 0;
-    list_head_init(&q->list);
-    return q;
+    sigqueue_t *sigqueue = kmem_cache_alloc(sigqueue_cachep, flags);
+    // If we successfully allocated the signal queue, initiliaze the values.
+    if (sigqueue) {
+        sigqueue->flags = 0;
+        list_head_init(&sigqueue->list);
+    }
+    return sigqueue;
 }
 
-static void __sigqueue_free(sigqueue_t *q)
+static inline void __sigqueue_free(sigqueue_t *sigqueue)
 {
-    if (q)
-        kmem_cache_free(q);
+    if (sigqueue) {
+        kmem_cache_free(sigqueue);
+    }
 }
 
 /// @brief
@@ -144,18 +148,18 @@ static int __send_signal(int sig, siginfo_t *info, struct task_struct *t)
 {
     // Lock the signal handling for the given task.
     __lock_task_sighand(t);
-    pr_debug("Trying to add signal (%2d)`%s` to task (%2d)`%s`, currently pending `%d, %d`.\n",
+    pr_debug("Trying to add signal (%2d:%s) to task (%2d:%s), currently pending `%d, %d`.\n",
              sig, strsignal(sig), t->pid, t->name, t->pending.signal.sig[0], t->pending.signal.sig[1]);
     // Check if the signal is ignored.
     if (__sig_is_ignored(t, sig)) {
-        pr_debug("Trying to send signal (%2d)`%s` to task (%2d)`%s`: ignored.\n",
+        pr_debug("Trying to send signal (%2d:%s) to task (%2d:%s): ignored.\n",
                  sig, strsignal(sig), t->pid, t->name);
         __unlock_task_sighand(t);
         return 0;
     }
     // Check if the process is in an invalid status.
     if ((t->state == EXIT_ZOMBIE) || (t->state == EXIT_DEAD)) {
-        pr_debug("Trying to send signal (%2d)`%s` to task (%2d)`%s`: zombie or dead.\n",
+        pr_debug("Trying to send signal (%2d:%s) to task (%2d:%s): zombie or dead.\n",
                  sig, strsignal(sig), t->pid, t->name);
         __unlock_task_sighand(t);
         return -EINVAL;
@@ -166,11 +170,12 @@ static int __send_signal(int sig, siginfo_t *info, struct task_struct *t)
         return -EAGAIN;
     }
     list_head_insert_before(&q->list, &t->pending.list);
-    if (info != SEND_SIG_NOINFO)
+    if (info != SEND_SIG_NOINFO) {
         __copy_siginfo(&q->info, info);
+    }
     // Set that there is a signal pending.
     sigaddset(&t->pending.signal, sig);
-    pr_debug("Added pending signal (%2d)`%s` to task (%2d)`%s`, pending `%d, %d`.\n",
+    pr_debug("Added pending signal (%2d:%s) to task (%2d:%s), pending `%d, %d`.\n",
              sig, strsignal(sig), t->pid, t->name, t->pending.signal.sig[0], t->pending.signal.sig[1]);
     __unlock_task_sighand(t);
     return 0;
@@ -182,16 +187,20 @@ static inline int __next_signal(sigpending_t *pending, sigset_t *mask)
     assert(pending && "Null `pending` structure.");
     assert(mask && "Null `mask` structure.");
     unsigned long x;
-    if ((x = bitmask_clear(pending->signal.sig[0], mask->sig[0])) != 0)
+    x = bitmask_clear(pending->signal.sig[0], mask->sig[0]);
+    if (x != 0) {
         return 1 + find_first_non_zero(x);
-    if ((x = bitmask_clear(pending->signal.sig[1], mask->sig[1])) != 0)
+    }
+    x = bitmask_clear(pending->signal.sig[1], mask->sig[1]);
+    if (x != 0) {
         return 33 + find_first_non_zero(x);
+    }
     return 0;
 }
 
 static inline void __collect_signal(int sig, sigpending_t *list, siginfo_t *info)
 {
-    pr_debug("__collect_signal(%d, %p, %p)\n", sig, list, info);
+    pr_debug("__collect_signal(%2d:%s, %p, %p)\n", sig, strsignal(sig), list, info);
     assert(list && "Null `list` structure.");
     assert(info && "Null `info` structure.");
 
@@ -202,13 +211,13 @@ static inline void __collect_signal(int sig, sigpending_t *list, siginfo_t *info
     list_for_each_decl(it, &list->list)
     {
         sigqueue_t *q = list_entry(it, sigqueue_t, list);
-        pr_debug("__collect_signal(%d, %p, %p) : Signal in queue : %p(%d : %s).\n", sig, list, info,
+        pr_debug("__collect_signal(%2d:%s, %p, %p) : Signal in queue : %p(%d : %s).\n", sig, strsignal(sig), list, info,
                  q, q->info.si_signo, strsignal(q->info.si_signo));
         if (q->info.si_signo == sig) {
             // If the entry is already set, this means that there are several handlers
             // pending for this particular signal.
             if (queue_entry) {
-                pr_debug("__collect_signal(%d, %p, %p) : Still pending, do not remove from set.\n", sig, list, info);
+                pr_debug("__collect_signal(%2d:%s, %p, %p) : Still pending, do not remove from set.\n", sig, strsignal(sig), list, info);
                 still_pending = true;
                 break;
             }
@@ -220,12 +229,12 @@ static inline void __collect_signal(int sig, sigpending_t *list, siginfo_t *info
     // remove the signal from the set.
     if (!still_pending) {
         sigdelset(&list->signal, sig);
-        pr_debug("__collect_signal(%d, %p, %p) : Remove signal from set: %d.\n", sig, list, info,
+        pr_debug("__collect_signal(%2d:%s, %p, %p) : Remove signal from set: %d.\n", sig, strsignal(sig), list, info,
                  list->signal.sig[0]);
     }
     // If we have found an entry.
     if (queue_entry) {
-        pr_debug("__collect_signal(%d, %p, %p) : Remove and delete sigqueue entry : %p.\n", sig, list, info, queue_entry);
+        pr_debug("__collect_signal(%2d:%s, %p, %p) : Remove and delete sigqueue entry : %p.\n", sig, strsignal(sig), list, info, queue_entry);
         // Remove the entry from the queue.
         list_head_remove(&queue_entry->list);
         // Copy the details about the entry inside the info structure.
@@ -233,7 +242,7 @@ static inline void __collect_signal(int sig, sigpending_t *list, siginfo_t *info
         // Free the memory for the queue entry.
         __sigqueue_free(queue_entry);
     } else {
-        pr_debug("__collect_signal(%d, %p, %p) : Cannot find the signal in the queue.\n", sig, list, info);
+        pr_debug("__collect_signal(%2d:%s, %p, %p) : Cannot find the signal in the queue.\n", sig, strsignal(sig), list, info);
         // Ok, it wasn't in the queue, zero out the info.
         __clear_siginfo(info);
         // Get the current process.
@@ -347,38 +356,43 @@ static int __notify_parent(struct task_struct *current, int signr)
     return __send_signal(signr, &info, current->parent);
 }
 
-// Removes from the pending signal queue q the pending signals corresponding to
-// the bit mask mask
+/// @brief Removes from the pending signal queue q the pending signals
+/// corresponding to the bit mask mask.
+/// @param mask the mask we use to guide signals removal.
+/// @param q pensing signals.
 static void __rm_from_queue(sigset_t *mask, sigpending_t *q)
 {
+    struct sigqueue_t *entry;
     list_head *it, *tmp;
     list_for_each_safe (it, tmp, &q->list) {
-        struct sigqueue_t *entry = list_entry(it, struct sigqueue_t, list);
-        int sig                  = entry->info.si_signo;
-
-        if (sigismember(mask, sig)) {
+        // Get the entry.
+        entry = list_entry(it, struct sigqueue_t, list);
+        // Remove the signal.
+        if (sigismember(mask, entry->info.si_signo)) {
             list_head_remove(it);
             kfree(entry);
         }
     }
 }
 
-// We do not consider group stopping because for now we don't have thread groups
+/// @brief We do not consider group stopping because for now we don't have thread groups.
+/// @param current the current process.
+/// @param f the stack frame.
+/// @param signr signal number.
 static void __do_signal_stop(struct task_struct *current, struct pt_regs *f, int signr)
 {
     // The do_signal( ) function also sends a SIGCHLD signal to
     // the parent process of current, unless the parent has set
     // the SA_NOCLDSTOP flag of SIGCHLD.
-    if (!(SA_NOCLDSTOP & current->parent->sighand.action[SIGCHLD - 1].sa_flags))
-        if (__notify_parent(current, SIGCHLD) != 0)
+    if (!(SA_NOCLDSTOP & current->parent->sighand.action[SIGCHLD - 1].sa_flags)) {
+        if (__notify_parent(current, SIGCHLD) != 0) {
             pr_warning("Failed to notify parent with signal: %d", signr);
-
+        }
+    }
     // The state is now TASK_UNINTERRUPTABLE
     sleep_on(&stopped_queue);
-
     current->state     = TASK_STOPPED;
     current->exit_code = signr;
-
     scheduler_run(f);
 }
 
@@ -394,8 +408,9 @@ int do_signal(struct pt_regs *f)
     // if so, it simply returns. Otherwise, if the function was triggered by an
     // exception that was raised while the process was running in User Mode,
     // the function continues executing.
-    if ((f->cs & 3) != 3)
+    if ((f->cs & 3) != 3) {
         return 0;
+    }
 
     // Create a siginfo.
     siginfo_t info;
@@ -431,15 +446,17 @@ int do_signal(struct pt_regs *f)
 
         // The only exception comes when the receiving process is init, in
         // which case the signal is discarded.
-        if (current_process->pid == 1)
+        if (current_process->pid == 1) {
             continue;
+        }
 
         // When a delivered signal is explicitly ignored, the do_signal( )
         // function normally just continues with a new execution of the loop
         // and therefore considers another pending signal.
         if (ka->sa_handler == SIG_IGN) {
-            if (signr == SIGCHLD)
+            if (signr == SIGCHLD) {
                 while (sys_waitpid(-1, NULL, WNOHANG) > 0) {}
+            }
             continue;
         }
 
@@ -467,8 +484,9 @@ int do_signal(struct pt_regs *f)
             case SIGTSTP:
             case SIGTTIN:
             case SIGTTOU:
-                if (is_orphaned_pgrp(current_process->pgid))
+                if (is_orphaned_pgrp(current_process->pgid)) {
                     continue;
+                }
 
             case SIGSTOP:
                 __unlock_task_sighand(current_process);
@@ -477,28 +495,38 @@ int do_signal(struct pt_regs *f)
 
                 continue;
             case SIGQUIT:
+                sys_exit(GET_EXIT_STATUS(1));
+                continue;
             case SIGILL:
+                sys_exit(GET_EXIT_STATUS(132));
+                continue;
             case SIGTRAP:
-
+                sys_exit(GET_EXIT_STATUS(133));
+                continue;
             case SIGABRT:
-                sys_exit(3);
-
+                sys_exit(GET_EXIT_STATUS(134));
                 continue;
             case SIGFPE:
-            case SIGSEGV:
+                sys_exit(GET_EXIT_STATUS(136) | signr);
+                __unlock_task_sighand(current_process);
+                return 1;
             case SIGBUS:
-            case SIGSYS:
+                sys_exit(GET_EXIT_STATUS(138) | signr);
+                __unlock_task_sighand(current_process);
+                return 1;
+            case SIGSEGV:
+                sys_exit(GET_EXIT_STATUS(139) | signr);
+                __unlock_task_sighand(current_process);
+                return 1;
             case SIGXCPU:
+                sys_exit(GET_EXIT_STATUS(158) | signr);
+                __unlock_task_sighand(current_process);
             case SIGXFSZ:
-#if 0
-                if (do_coredump(signr, f))
-                    exit_code |= 0x80;
-#endif
+                sys_exit(GET_EXIT_STATUS(159) | signr);
+                __unlock_task_sighand(current_process);
+            case SIGSYS:
             default:
-#if 0
-                current_process->flags |= PF_SIGNALED;
-#endif
-                sys_exit(exit_code);
+                sys_exit(GET_EXIT_STATUS(exit_code) | signr);
                 __unlock_task_sighand(current_process);
                 return 1;
             }
@@ -515,11 +543,11 @@ int do_signal(struct pt_regs *f)
 
 int signals_init()
 {
-    if ((sigqueue_cachep = KMEM_CREATE(sigqueue_t)) == NULL) {
+    sigqueue_cachep = KMEM_CREATE(sigqueue_t);
+    if (sigqueue_cachep == NULL) {
         pr_emerg("Failed to allocate cache for signals.\n");
         return 0;
     }
-
     list_head_init(&stopped_queue.task_list);
     return 1;
 }
@@ -535,7 +563,7 @@ void handle_stop_signal(int sig, siginfo_t *info, struct task_struct *p)
     // pending signal queue p->signal->shared_pending and from the private
     // queues of all members of the thread group.
     if (sig == SIGSTOP || sig == SIGTSTP || sig == SIGTTIN || sig == SIGTTOU) {
-        // TODO: shared and thread group
+        // TODO: shared and thread group.
 
         sigset_t mask;
         sigemptyset(&mask);
@@ -587,8 +615,9 @@ void handle_stop_signal(int sig, siginfo_t *info, struct task_struct *p)
 /// @return Returns 0 if there is no error, otherwise returns an error code
 int __send_sig_info(int sig, siginfo_t *info, struct task_struct *p)
 {
-    if (sig < 0 || sig > NSIG)
+    if (sig < 0 || sig > NSIG) {
         return -EINVAL;
+    }
 
     // If the signal is being sent by a User Mode process,
     // it checks whether the operation is allowed.
@@ -598,8 +627,9 @@ int __send_sig_info(int sig, siginfo_t *info, struct task_struct *p)
 
     // If the sig parameter has the value 0,
     // it returns immediately without generating any signal
-    if (!sig)
+    if (!sig) {
         return 0;
+    }
 
     __lock_task_sighand(p);
 
@@ -621,14 +651,16 @@ int __send_sig_info(int sig, siginfo_t *info, struct task_struct *p)
 
 int sys_kill(pid_t pid, int sig)
 {
-    pr_debug("sys_kill(%d, %d)\n", pid, sig);
+    pr_debug("sys_kill(%d, %2d:%s)\n", pid, sig, strsignal(sig));
     struct task_struct *process = scheduler_get_running_process(pid);
     // Check the task associated with the pid.
-    if (!process)
+    if (!process) {
         return -ESRCH;
+    }
     // Check the signal that we want to send.
-    if ((sig < 0) || (sig >= NSIG))
+    if ((sig < 0) || (sig >= NSIG)) {
         return -EINVAL;
+    }
     siginfo_t info;
     info.si_signo           = sig;
     info.si_code            = SI_USER;
@@ -644,7 +676,7 @@ int sys_kill(pid_t pid, int sig)
 
 sighandler_t sys_signal(int signum, sighandler_t handler, uint32_t sigreturn_addr)
 {
-    pr_debug("sys_signal(%d, %p, %p)\n", signum, handler, sigreturn_ptr);
+    pr_debug("sys_signal(%d, %p, %p)\n", signum, handler, sigreturn_addr);
     // Check the signal that we want to send.
     if ((signum < 0) || (signum >= NSIG)) {
         pr_err("sys_signal(%d, %p): Wrong signal number!\n", signum, handler);
@@ -687,7 +719,7 @@ sighandler_t sys_signal(int signum, sighandler_t handler, uint32_t sigreturn_add
 
 int sys_sigaction(int signum, const sigaction_t *act, sigaction_t *oldact, uint32_t sigreturn_addr)
 {
-    pr_debug("sys_sigaction(%d, %p, %p, %p)\n", signum, act, oldact, sigreturn_ptr);
+    pr_debug("sys_sigaction(%d, %p, %p, %p)\n", signum, act, oldact, sigreturn_addr);
     // Check the signal that we want to send.
     if ((signum < 0) || (signum >= NSIG)) {
         pr_err("sys_sigaction(%d, %p, %p): Wrong signal number!\n", signum, act, oldact);
@@ -783,8 +815,9 @@ int sys_sigpending(sigset_t *set)
 
 const char *strsignal(int sig)
 {
-    if ((sig >= SIGHUP) && (sig < NSIG))
+    if ((sig >= SIGHUP) && (sig < NSIG)) {
         return sys_siglist[sig - 1];
+    }
     return NULL;
 }
 
@@ -826,7 +859,8 @@ int sigdelset(sigset_t *set, int signum)
 
 int sigismember(sigset_t *set, int signum)
 {
-    if (set)
+    if (set) {
         return bit_check(set->sig[(signum - 1) / 32], (signum - 1) % 32);
+    }
     return -1;
 }

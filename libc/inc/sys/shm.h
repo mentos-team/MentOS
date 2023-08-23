@@ -51,20 +51,6 @@ struct shmid_ds {
 #define SHM_W      0200
 //==============================================================================
 
-//======== Flags for shmat =====================================================
-// Attach read-only else read-write.
-#define SHM_RDONLY 010000
-
-// Round attach address to SHMLBA.
-#define SHM_RND    020000
-
-// Take-over region on attach.
-#define SHM_REMAP  040000
-
-// Execution access.
-#define SHM_EXEC   0100000
-//==============================================================================
-
 //======== Commands for shmctl =================================================
 // Lock segment (root only).
 #define SHM_LOCK   11
@@ -93,40 +79,12 @@ struct shmid_ds {
 // Don't check for reservations.
 #define SHM_NORESERVE 010000
 
-/// @@brief Syscall Service Routine: Shared memory control operation.
-int syscall_shmctl(int *args);
-
-/// @@brief Syscall Service Routine: Get shared memory segment.
-int syscall_shmget(int *args);
-
-/// @@brief Syscall Service Routine: Attach shared memory segment.
-void *syscall_shmat(int *args);
-
-/// @@brief Syscall  Service Routine: Detach shared memory segment.
-int syscall_shmdt(int *args);
-
-/// @@brief User Wrapper: Shared memory control operation.
-int shmctl(int shmid, int cmd, struct shmid_ds *buf);
-
-/// @@brief User Wrapper: Get shared memory segment.
-int shmget(key_t key, size_t size, int flags);
-
-/// @@brief User Wrapper: Attach shared memory segment.
-void *shmat(int shmid, void *shmaddr, int flag);
-
-/// @@brief User Wrapper: Detach shared memory segment.
-int shmdt(void *shmaddr);
-
-/// @@brief Find shmid_ds on list.
-struct shmid_ds *find_shm_fromid(int shmid);
-
-/// @@brief Find shmid_ds on list.
-struct shmid_ds *find_shm_fromkey(key_t key);
-
-/// @@brief shmid_ds on list.
-struct shmid_ds *find_shm_fromvaddr(void *shmvaddr);
-
 #endif
+
+#define SHM_RDONLY 010000  ///< Attach read-only else read-write.
+#define SHM_RND    020000  ///< Round attach address to SHMLBA.
+#define SHM_REMAP  040000  ///< Take-over region on attach.
+#define SHM_EXEC   0100000 ///< Execution access.
 
 #ifdef __KERNEL__
 
@@ -138,10 +96,10 @@ int shm_init();
 /// @param key can be used either to obtain the identifier of a previously
 /// created shared memory, or to create a new one.
 /// @param size of the shared memory, rounded up to a multiple of PAGE_SIZE.
-/// @param flag controls the behaviour of the function.
+/// @param shmflg controls the behaviour of the function.
 /// @return the shared memory identifier, -1 on failure, and errno is set to
 /// indicate the error.
-long sys_shmget(key_t key, size_t size, int flag);
+long sys_shmget(key_t key, size_t size, int shmflg);
 
 /// @brief Attaches the shared memory segment identified by shmid to the address
 /// space of the calling process.
@@ -173,10 +131,10 @@ long sys_shmctl(int shmid, int cmd, struct shmid_ds *buf);
 /// @param key can be used either to obtain the identifier of a previously
 /// created shared memory, or to create a new one.
 /// @param size of the shared memory, rounded up to a multiple of PAGE_SIZE.
-/// @param flag controls the behaviour of the function.
+/// @param shmflg controls the behaviour of the function.
 /// @return the shared memory identifier, -1 on failure, and errno is set to
 /// indicate the error.
-long shmget(key_t key, size_t size, int flag);
+long shmget(key_t key, size_t size, int shmflg);
 
 /// @brief Attaches the shared memory segment identified by shmid to the address
 /// space of the calling process.

@@ -4,10 +4,10 @@
 /// See LICENSE.md for details.
 
 // Setup the logging for this file (do this before any other include).
-#include "sys/kernel_levels.h"           // Include kernel log levels.
-#define __DEBUG_HEADER__ "[PAGING]"      ///< Change header.
-#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
-#include "io/debug.h"                    // Include debugging functions.
+#include "sys/kernel_levels.h"          // Include kernel log levels.
+#define __DEBUG_HEADER__ "[PAGING]"     ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_DEBUG ///< Set log level.
+#include "io/debug.h"                   // Include debugging functions.
 
 #include "mem/paging.h"
 #include "mem/vmem_map.h"
@@ -75,98 +75,46 @@ void paging_flush_tlb_single(unsigned long addr)
                          : "memory");
 }
 
-/// @brief
-/// @param mm
-/// @param vm_start
-/// @param vm_end
-/// @return int
-static inline int __valid_vm_area(mm_struct_t *mm, uintptr_t vm_start, uintptr_t vm_end)
-{
-    if (vm_end <= vm_start)
-        return -1;
-    // Get the stack.
-    vm_area_struct_t *area;
-    list_for_each_prev_decl(it, &mm->mmap_list)
-    {
-        area = list_entry(it, vm_area_struct_t, vm_list);
-        assert(area && "There is a NULL area in the list.");
-        if ((vm_start >= area->vm_start) && (vm_start <= area->vm_end))
-            return 0;
-        if ((vm_end >= area->vm_start) && (vm_end <= area->vm_end))
-            return 0;
-        if ((vm_start <= area->vm_start) && (vm_end >= area->vm_end))
-            return 0;
-    }
-    return 1;
-}
-
-/// @brief Searches for an empty spot for a new virtual memory area.
-/// @param mm the memory descriptor which should contain the new area.
-/// @param length the size of the empty spot.
-/// @param vm_start where we save the starting address for the new area.
-/// @return 0 on success, 1 on failure.
-static inline int __find_vm_free_area(mm_struct_t *mm, size_t length, uintptr_t *vm_start)
-{
-    // Get the stack.
-    vm_area_struct_t *area, *prev_area;
-    list_for_each_prev_decl(it, &mm->mmap_list)
-    {
-        area = list_entry(it, vm_area_struct_t, vm_list);
-        assert(area && "There is a NULL area in the list.");
-        // Check the previous segment.
-        if (area->vm_list.prev != &mm->mmap_list) {
-            prev_area = list_entry(area->vm_list.prev, vm_area_struct_t, vm_list);
-            assert(prev_area && "There is a NULL area in the list.");
-            // Compute the available space.
-            unsigned available_space = area->vm_start - prev_area->vm_end;
-            // If the space is enough, return the address.
-            if (available_space >= length) {
-                *vm_start = area->vm_start - length;
-                return 0;
-            }
-        }
-    }
-    return 1;
-}
-
 vm_area_struct_t *create_vm_area(mm_struct_t *mm,
                                  uint32_t vm_start,
                                  size_t size,
                                  uint32_t pgflags,
                                  uint32_t gfpflags)
 {
+    uint32_t vm_end, phy_start, order;
+    vm_area_struct_t *segment;
+
     // Compute the end of the virtual memory area.
-    uint32_t vm_end = vm_start + size;
+    vm_end = vm_start + size;
     // Check if the range is already occupied.
-    if (__valid_vm_area(mm, vm_start, vm_end) <= 0) {
+    if (is_valid_vm_area(mm, vm_start, vm_end) <= 0) {
         pr_crit("The virtual memory area range [%p, %p] is already in use.\n", vm_start, vm_end);
         kernel_panic("Wrong virtual memory area range.");
     }
     // Allocate on kernel space the structure for the segment.
-    vm_area_struct_t *new_segment = kmem_cache_alloc(vm_area_cache, GFP_KERNEL);
+    segment = kmem_cache_alloc(vm_area_cache, GFP_KERNEL);
     // Find the nearest order for the given memory size.
-    uint32_t order = find_nearest_order_greater(vm_start, size);
-    uint32_t phy_vm_start;
+    order = find_nearest_order_greater(vm_start, size);
 
     if (pgflags & MM_COW) {
-        pgflags &= ~(MM_PRESENT | MM_UPDADDR);
-        phy_vm_start = 0;
+        pgflags   = pgflags & ~(MM_PRESENT | MM_UPDADDR);
+        phy_start = 0;
     } else {
-        pgflags |= MM_UPDADDR;
+        pgflags      = pgflags | MM_UPDADDR;
         page_t *page = _alloc_pages(gfpflags, order);
-        phy_vm_start = get_physical_address_from_page(page);
+        phy_start    = get_physical_address_from_page(page);
     }
 
-    mem_upd_vm_area(mm->pgd, vm_start, phy_vm_start, size, pgflags);
+    mem_upd_vm_area(mm->pgd, vm_start, phy_start, size, pgflags);
 
     // Update vm_area_struct info.
-    new_segment->vm_start = vm_start;
-    new_segment->vm_end   = vm_end;
-    new_segment->vm_mm    = mm;
+    segment->vm_start = vm_start;
+    segment->vm_end   = vm_end;
+    segment->vm_mm    = mm;
 
     // Update memory descriptor list of vm_area_struct.
-    list_head_insert_after(&new_segment->vm_list, &mm->mmap_list);
-    mm->mmap_cache = new_segment;
+    list_head_insert_after(&segment->vm_list, &mm->mmap_list);
+    mm->mmap_cache = segment;
 
     // Sort the mmap_list.
     list_head_sort(&mm->mmap_list, vm_area_compare);
@@ -176,7 +124,7 @@ vm_area_struct_t *create_vm_area(mm_struct_t *mm,
 
     mm->total_vm += (1U << order);
 
-    return new_segment;
+    return segment;
 }
 
 uint32_t clone_vm_area(mm_struct_t *mm, vm_area_struct_t *area, int cow, uint32_t gfpflags)
@@ -276,6 +224,57 @@ inline vm_area_struct_t *find_vm_area(mm_struct_t *mm, uint32_t vm_start)
     return NULL;
 }
 
+inline int is_valid_vm_area(mm_struct_t *mm, uintptr_t vm_start, uintptr_t vm_end)
+{
+    if (vm_end <= vm_start) {
+        return -1;
+    }
+    // Get the stack.
+    vm_area_struct_t *area;
+    list_for_each_prev_decl(it, &mm->mmap_list)
+    {
+        area = list_entry(it, vm_area_struct_t, vm_list);
+        assert(area && "There is a NULL area in the list.");
+        if ((vm_start > area->vm_start) && (vm_start < area->vm_end)) {
+            pr_crit("INSIDE(START): %p <= %p <= %p", area->vm_start, vm_start, area->vm_end);
+            return 0;
+        }
+        if ((vm_end > area->vm_start) && (vm_end < area->vm_end)) {
+            pr_crit("INSIDE(END): %p <= %p <= %p", area->vm_start, vm_end, area->vm_end);
+            return 0;
+        }
+        if ((vm_start < area->vm_start) && (vm_end > area->vm_end)) {
+            pr_crit("WRAPS: %p <= (%p, %p) <= %p", vm_start, area->vm_start, area->vm_end, vm_end);
+            return 0;
+        }
+    }
+    return 1;
+}
+
+inline int find_free_vm_area(mm_struct_t *mm, size_t length, uintptr_t *vm_start)
+{
+    // Get the stack.
+    vm_area_struct_t *area, *prev_area;
+    list_for_each_prev_decl(it, &mm->mmap_list)
+    {
+        area = list_entry(it, vm_area_struct_t, vm_list);
+        assert(area && "There is a NULL area in the list.");
+        // Check the previous segment.
+        if (area->vm_list.prev != &mm->mmap_list) {
+            prev_area = list_entry(area->vm_list.prev, vm_area_struct_t, vm_list);
+            assert(prev_area && "There is a NULL area in the list.");
+            // Compute the available space.
+            unsigned available_space = area->vm_start - prev_area->vm_end;
+            // If the space is enough, return the address.
+            if (available_space >= length) {
+                *vm_start = area->vm_start - length;
+                return 0;
+            }
+        }
+    }
+    return 1;
+}
+
 static void __init_pagedir(page_directory_t *pdir)
 {
     *pdir = (page_directory_t){ { 0 } };
@@ -366,7 +365,7 @@ static void __page_fault_panic(pt_regs *f, uint32_t addr)
     __asm__ __volatile__("cli");
 }
 
-static void __page_handle_cow(page_table_entry_t *entry)
+static int __page_handle_cow(page_table_entry_t *entry)
 {
     // Check if the page is Copy On Write (COW).
     if (entry->kernel_cow) {
@@ -385,10 +384,11 @@ static void __page_handle_cow(page_table_entry_t *entry)
             entry->frame = get_physical_address_from_page(page) >> 12U;
             // Set it as allocated.
             entry->present = 1;
-            return;
+            return 0;
         }
     }
-    kernel_panic("Page not cow!");
+    pr_err("Page not cow!\n");
+    return 1;
 }
 
 static page_table_t *__mem_pg_entry_alloc(page_dir_entry_t *entry, uint32_t flags)
@@ -429,16 +429,25 @@ static inline void __set_pg_entry_frame(page_dir_entry_t *entry, page_table_t *t
 void page_fault_handler(pt_regs *f)
 {
     // Here you will find the `Demand Paging` mechanism.
-    // From `Understanding The Linux Kernel 3rd Edition`:
-    //  The term demand paging denotes a dynamic memory allocation
-    //  technique that consists of deferring page frame allocation
-    //  until the last possible moment—until the process attempts
-    //  to address a page that is not present in RAM, thus causing
-    //  a Page Fault exception.
+    // From `Understanding The Linux Kernel 3rd Edition`: The term demand paging denotes a dynamic memory allocation
+    // technique that consists of deferring page frame allocation until the last possible moment—until the process
+    // attempts to address a page that is not present in RAM, thus causing a Page Fault exception.
+    //
+    // So, if you go inside `mentos/src/exceptions.S`, and check out the macro ISR_ERR, we are pushing the error code on
+    // the stack before firing a page fault exception. The error code must be analyzed by the exception handler to
+    // determine how to handle the exception. The following bits are the only ones used, all others are reserved.
+    // | US RW  P | Description
+    // |  0  0  0 | Supervisory process tried to read a non-present page entry
+    // |  0  0  1 | Supervisory process tried to read a page and caused a protection fault
+    // |  0  1  0 | Supervisory process tried to write to a non-present page entry
+    // |  0  1  1 | Supervisory process tried to write a page and caused a protection fault
+    // |  1  0  0 | User process tried to read a non-present page entry
+    // |  1  0  1 | User process tried to read a page and caused a protection fault
+    // |  1  1  0 | User process tried to write to a non-present page entry
+    // |  1  1  1 | User process tried to write a page and caused a protection fault
 
-    // First, read the linear address that caused the Page Fault.
-    // When the exception occurs, the CPU control unit stores that
-    // value in the cr2 control register.
+    // First, read the linear address that caused the Page Fault. When the exception occurs, the CPU control unit stores
+    // that value in the cr2 control register.
     uint32_t faulting_addr;
     __asm__ __volatile__("mov %%cr2, %0"
                          : "=r"(faulting_addr));
@@ -448,8 +457,28 @@ void page_fault_handler(pt_regs *f)
     page_directory_t *lowmem_dir = (page_directory_t *)get_lowmem_address_from_page(get_page_from_physical_address(phy_dir));
     // Get the directory entry.
     page_dir_entry_t *direntry = &lowmem_dir->entries[faulting_addr / (1024U * PAGE_SIZE)];
-    // TODO: Panic only if page is in kernel memory, else abort process with sigsegv
+    // Extract the error
+    bool_t err_user    = bit_check(f->err_code, 2) != 0;
+    bool_t err_rw      = bit_check(f->err_code, 1) != 0;
+    bool_t err_present = bit_check(f->err_code, 0) != 0;
+    // Panic only if page is in kernel memory, else abort process with SIGSEGV.
     if (!direntry->present) {
+        pr_crit("ERR(0): %d%d%d\n", err_user, err_rw, err_present);
+        if (err_user) {
+            // Get the current process.
+            task_struct *task = scheduler_get_current_process();
+            if (task) {
+                // Notifies current process.
+                sys_kill(task->pid, SIGSEGV);
+                // Now, we know the process needs to be removed from the list of
+                // running processes. We pushed the SEGV signal in the queues of
+                // signal to send to the process. To properly handle the signal,
+                // just run scheduler.
+                scheduler_run(f);
+                return;
+            }
+        }
+        pr_crit("ERR(0): So, it is not present, and it was not the user.\n");
         __page_fault_panic(f, faulting_addr);
     }
     // Get the physical address of the page table.
@@ -466,14 +495,36 @@ void page_fault_handler(pt_regs *f)
         // Get the original page table entry from the virtually mapped one.
         page_table_entry_t *orig_entry = (page_table_entry_t *)(*(uint32_t *)entry);
         // Check if the page is Copy on Write (CoW).
-        __page_handle_cow(orig_entry);
+        if (__page_handle_cow(orig_entry)) {
+            pr_crit("ERR(1): %d%d%d\n", err_user, err_rw, err_present);
+            __page_fault_panic(f, faulting_addr);
+        }
         // Update the page table entry frame.
         entry->frame = orig_entry->frame;
         // Update the entry flags.
         __set_pg_table_flags(entry, MM_PRESENT | MM_RW | MM_GLOBAL | MM_COW | MM_UPDADDR);
     } else {
         // Check if the page is Copy on Write (CoW).
-        __page_handle_cow(entry);
+        if (__page_handle_cow(entry)) {
+            pr_crit("ERR(2): %d%d%d\n", err_user, err_rw, err_present);
+            if (err_user && err_rw && err_present) {
+                // Get the current process.
+                task_struct *task = scheduler_get_current_process();
+                if (task) {
+                    // Notifies current process.
+                    sys_kill(task->pid, SIGSEGV);
+                    // Now, we know the process needs to be removed from the list of
+                    // running processes. We pushed the SEGV signal in the queues of
+                    // signal to send to the process. To properly handle the signal,
+                    // just run scheduler.
+                    scheduler_run(f);
+                    return;
+                }
+                pr_crit("ERR(2): There is no task.\n");
+            }
+            pr_crit("ERR(2): We continued...\n");
+            __page_fault_panic(f, faulting_addr);
+        }
     }
     // Invalidate the page table entry.
     paging_flush_tlb_single(faulting_addr);
@@ -724,11 +775,11 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
     // Get the current task.
     task_struct *task = scheduler_get_current_process();
     // Check if we were asked for a specific spot.
-    if (addr && __valid_vm_area(task->mm, (uintptr_t)addr, (uintptr_t)addr + length)) {
+    if (addr && is_valid_vm_area(task->mm, (uintptr_t)addr, (uintptr_t)addr + length)) {
         vm_start = (uintptr_t)addr;
     } else {
         // Find an empty spot.
-        if (__find_vm_free_area(task->mm, length, &vm_start)) {
+        if (find_free_vm_area(task->mm, length, &vm_start)) {
             pr_err("We failed to find a suitable spot for a new virtual memory area.\n");
             return NULL;
         }

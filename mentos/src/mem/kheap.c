@@ -4,7 +4,7 @@
 /// See LICENSE.md for details.
 
 // Setup the logging for this file (do this before any other include).
-#include "sys/kernel_levels.h" // Include kernel log levels.
+#include "sys/kernel_levels.h"         // Include kernel log levels.
 #define __DEBUG_HEADER__ "[KHEAP ]"    ///< Change header.
 #define __DEBUG_LEVEL__  LOGLEVEL_INFO ///< Set log level.
 #include "io/debug.h"                  // Include debugging functions.

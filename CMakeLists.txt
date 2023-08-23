@@ -147,14 +147,16 @@ add_custom_target(
 # executables.
 add_custom_target(
     gdbinit
-    BYPRODUCTS ${CMAKE_BINARY_DIR}/.gdbinit
+    BYPRODUCTS ${CMAKE_BINARY_DIR}/.gdbinit ${CMAKE_BINARY_DIR}/gdb.run
+    # Create the generic gdb configuration.
     COMMAND echo "add-symbol-file ${CMAKE_BINARY_DIR}/mentos/kernel.bin" > ${CMAKE_BINARY_DIR}/.gdbinit
     COMMAND echo "add-symbol-file ${CMAKE_BINARY_DIR}/mentos/kernel-bootloader.bin" >> ${CMAKE_BINARY_DIR}/.gdbinit
     COMMAND ls -1 ${CMAKE_BINARY_DIR}/programs/tests/test_* | sed 's/^/add-symbol-file /' >> ${CMAKE_BINARY_DIR}/.gdbinit
     COMMAND ls -1 ${CMAKE_BINARY_DIR}/programs/prog_* | sed 's/^/add-symbol-file /' >> ${CMAKE_BINARY_DIR}/.gdbinit
-    # COMMAND echo "break boot.c: boot_main" >> ${CMAKE_BINARY_DIR}/.gdbinit
-    # COMMAND echo "break kernel.c: kmain" >> ${CMAKE_BINARY_DIR}/.gdbinit
-    COMMAND echo "target remote localhost:1234" >> ${CMAKE_BINARY_DIR}/.gdbinit
+    COMMAND echo "break boot.c: boot_main" >> ${CMAKE_BINARY_DIR}/.gdbinit
+    COMMAND echo "break kernel.c: kmain" >> ${CMAKE_BINARY_DIR}/.gdbinit
+    # Create the GDB connection file.
+    COMMAND echo "target remote localhost:1234" >> ${CMAKE_BINARY_DIR}/gdb.run
     DEPENDS kernel-bootloader.bin
     DEPENDS all_programs
     DEPENDS all_tests
@@ -170,8 +172,10 @@ add_custom_target(
     COMMAND echo ""
     COMMAND echo "Now, QEMU has loaded the kernel, and it is waiting that you"
     COMMAND echo "remotely connect to it. To start debugging, open a new shell"
-    COMMAND echo "in THIS same folder, and just type :"
-    COMMAND printf "    cgdb -q -iex %q" "add-auto-load-safe-path ."
+    COMMAND echo "in THIS same folder, and just type:"
+    COMMAND echo "    gdb --quiet --command=gdb.run"
+    COMMAND echo "or if you want to use cgdb, type:"
+    COMMAND echo "    cgdb --quiet --command=gdb.run"
     COMMAND echo ""
     COMMAND ${EMULATOR} ${EMULATOR_FLAGS} -s -S -kernel ${CMAKE_BINARY_DIR}/mentos/kernel-bootloader.bin
     DEPENDS kernel-bootloader.bin

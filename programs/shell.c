@@ -766,6 +766,11 @@ int main(int argc, char *argv[])
             }
             if (blocking) {
                 waitpid(cpid, &status, 0);
+                if (WIFSIGNALED(status)) {
+                    printf(FG_RED "\nExit status %d, killed by signal %d\n" FG_RESET, WEXITSTATUS(status), WTERMSIG(status));
+                } else if (WIFSTOPPED(status)) {
+                    printf(FG_YELLOW "\nExit status %d, stopped by signal %d\n" FG_RESET, WEXITSTATUS(status), WSTOPSIG(status));
+                }
             }
         }
         // Free up the memory reserved for the arguments.
