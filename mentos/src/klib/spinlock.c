@@ -16,8 +16,9 @@ void spinlock_lock(spinlock_t *spinlock)
         if (atomic_set_and_test(spinlock, SPINLOCK_BUSY) == 0) {
             break;
         }
-        while (*spinlock)
+        while (*spinlock) {
             cpu_relax();
+        }
     }
 }
 

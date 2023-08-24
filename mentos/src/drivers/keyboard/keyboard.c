@@ -11,18 +11,18 @@
 #define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
 #include "io/debug.h"                    // Include debugging functions.
 
-#include "drivers/keyboard/keyboard.h"
-#include "io/port_io.h"
-#include "hardware/pic8259.h"
-#include "drivers/keyboard/keymap.h"
-#include "sys/bitops.h"
-#include "io/video.h"
-#include "drivers/ps2.h"
 #include "ctype.h"
 #include "descriptor_tables/isr.h"
+#include "drivers/keyboard/keyboard.h"
+#include "drivers/keyboard/keymap.h"
+#include "drivers/ps2.h"
+#include "hardware/pic8259.h"
+#include "io/port_io.h"
+#include "io/video.h"
 #include "process/scheduler.h"
 #include "ring_buffer.h"
 #include "string.h"
+#include "sys/bitops.h"
 
 /// Tracks the state of the leds.
 static uint8_t ledstate = 0;
@@ -43,48 +43,37 @@ spinlock_t scancodes_lock;
 #define KBD_LEFT_ALT      (1 << 7) ///< Flag which identifies the left alt.
 #define KBD_RIGHT_ALT     (1 << 8) ///< Flag which identifies the right alt.
 
-static inline bool_t get_keypad_number(int scancode)
+static inline int get_keypad_number(unsigned int scancode)
 {
-    if (scancode == KEY_KP0)
-        return 0;
-    if (scancode == KEY_KP1)
-        return 1;
-    if (scancode == KEY_KP2)
-        return 2;
-    if (scancode == KEY_KP3)
-        return 3;
-    if (scancode == KEY_KP4)
-        return 4;
-    if (scancode == KEY_KP5)
-        return 5;
-    if (scancode == KEY_KP6)
-        return 6;
-    if (scancode == KEY_KP7)
-        return 7;
-    if (scancode == KEY_KP8)
-        return 8;
-    if (scancode == KEY_KP9)
-        return 9;
+    if (scancode == KEY_KP0) { return 0; }
+    if (scancode == KEY_KP1) { return 1; }
+    if (scancode == KEY_KP2) { return 2; }
+    if (scancode == KEY_KP3) { return 3; }
+    if (scancode == KEY_KP4) { return 4; }
+    if (scancode == KEY_KP5) { return 5; }
+    if (scancode == KEY_KP6) { return 6; }
+    if (scancode == KEY_KP7) { return 7; }
+    if (scancode == KEY_KP8) { return 8; }
+    if (scancode == KEY_KP9) { return 9; }
     return -1;
 }
 
-static inline void keyboard_push_front(int c)
+static inline void keyboard_push_front(unsigned int c)
 {
-    if (c >= 0) {
-        spinlock_lock(&scancodes_lock);
-        fs_rb_scancode_push_front(&scancodes, c);
-        spinlock_unlock(&scancodes_lock);
-    }
+    spinlock_lock(&scancodes_lock);
+    fs_rb_scancode_push_front(&scancodes, (int)c);
+    spinlock_unlock(&scancodes_lock);
 }
 
 int keyboard_pop_back()
 {
     int c;
     spinlock_lock(&scancodes_lock);
-    if (!fs_rb_scancode_empty(&scancodes))
+    if (!fs_rb_scancode_empty(&scancodes)) {
         c = fs_rb_scancode_pop_back(&scancodes);
-    else
+    } else {
         c = -1;
+    }
     spinlock_unlock(&scancodes_lock);
     return c;
 }
@@ -93,10 +82,11 @@ int keyboard_back()
 {
     int c;
     spinlock_lock(&scancodes_lock);
-    if (!fs_rb_scancode_empty(&scancodes))
+    if (!fs_rb_scancode_empty(&scancodes)) {
         c = fs_rb_scancode_back(&scancodes);
-    else
+    } else {
         c = -1;
+    }
     spinlock_unlock(&scancodes_lock);
     return c;
 }
@@ -105,10 +95,11 @@ int keyboard_front()
 {
     int c = -1;
     spinlock_lock(&scancodes_lock);
-    if (!fs_rb_scancode_empty(&scancodes))
+    if (!fs_rb_scancode_empty(&scancodes)) {
         c = fs_rb_scancode_front(&scancodes);
-    else
+    } else {
         c = -1;
+    }
     spinlock_unlock(&scancodes_lock);
     return c;
 }

@@ -9,18 +9,18 @@
 #define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
 #include "io/debug.h"                    // Include debugging functions.
 
+#include "bits/ioctls.h"
 #include "bits/termios-struct.h"
+#include "ctype.h"
 #include "drivers/keyboard/keyboard.h"
 #include "drivers/keyboard/keymap.h"
-#include "fs/procfs.h"
-#include "bits/ioctls.h"
-#include "sys/bitops.h"
-#include "io/video.h"
-#include "sys/errno.h"
 #include "fcntl.h"
+#include "fs/procfs.h"
 #include "fs/vfs.h"
-#include "ctype.h"
+#include "io/video.h"
 #include "process/scheduler.h"
+#include "sys/bitops.h"
+#include "sys/errno.h"
 
 /// @brief Prints the ring-buffer.
 /// @param rb the ring-buffer to print.
@@ -37,8 +37,9 @@ void print_rb(fs_rb_scancode_t *rb)
 static ssize_t procv_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyte)
 {
     // Stop if the buffer is invalid.
-    if (buf == NULL)
+    if (buf == NULL) {
         return -1;
+    }
 
     // Get the currently running process.
     task_struct *process = scheduler_get_current_process();
@@ -61,8 +62,9 @@ static ssize_t procv_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyt
     int c = keyboard_pop_back();
 
     // Check that it's a valid caracter.
-    if (c < 0)
+    if (c < 0) {
         return 0;
+    }
 
     // Keep only the character not the scancode.
     c &= 0x00FF;
@@ -78,8 +80,9 @@ static ssize_t procv_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyt
             // Pop the previous character in buffer.
             fs_rb_scancode_pop_front(rb);
             // Delete the previous character on video.
-            if (flg_echoe)
+            if (flg_echoe) {
                 video_putc(c);
+            }
         } else {
             // Add the character to the buffer.
             fs_rb_scancode_push_front(rb, c);
@@ -88,7 +91,8 @@ static ssize_t procv_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyt
             return 1;
         }
         return 0;
-    } else if (c == 0x7f) {
+    }
+    if (c == 0x7f) {
         if (flg_echo) {
             video_puts("^[[3~");
         }
@@ -98,10 +102,9 @@ static ssize_t procv_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyt
         fs_rb_scancode_push_front(rb, '3');
         fs_rb_scancode_push_front(rb, '~');
         return 0;
-    } else {
-        // Add the character to the buffer.
-        fs_rb_scancode_push_front(rb, c);
     }
+    // Add the character to the buffer.
+    fs_rb_scancode_push_front(rb, c);
 
     // If echo is activated, output the character to video.
     if (flg_echo) {

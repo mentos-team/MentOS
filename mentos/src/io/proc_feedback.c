@@ -4,10 +4,10 @@
 /// See LICENSE.md for details.
 
 #include "fs/procfs.h"
-#include "process/process.h"
-#include "sys/errno.h"
 #include "io/debug.h"
+#include "process/process.h"
 #include "string.h"
+#include "sys/errno.h"
 
 static ssize_t procfb_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyte)
 {

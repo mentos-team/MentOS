@@ -10,22 +10,21 @@
 #define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
 #include "io/debug.h"                    // Include debugging functions.
 
-#include "devices/fpu.h"
-#include "mem/kheap.h"
-#include "system/syscall.h"
 #include "descriptor_tables/isr.h"
-#include "kernel.h"
-#include "process/process.h"
-#include "process/scheduler.h"
+#include "devices/fpu.h"
 #include "fs/ioctl.h"
 #include "hardware/timer.h"
-
+#include "kernel.h"
+#include "mem/kheap.h"
+#include "process/process.h"
+#include "process/scheduler.h"
 #include "sys/errno.h"
-#include "sys/utsname.h"
 #include "sys/mman.h"
 #include "sys/msg.h"
 #include "sys/sem.h"
 #include "sys/shm.h"
+#include "sys/utsname.h"
+#include "system/syscall.h"
 
 /// The signature of a function call.
 typedef int (*SystemCall)();

@@ -9,18 +9,18 @@
 #define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
 #include "io/debug.h"                    // Include debugging functions.
 
-#include "fs/ext2.h"
-#include "process/scheduler.h"
-#include "process/process.h"
-#include "klib/spinlock.h"
-#include "fs/vfs_types.h"
-#include "sys/errno.h"
-#include "fs/vfs.h"
 #include "assert.h"
-#include "libgen.h"
-#include "string.h"
-#include "stdio.h"
 #include "fcntl.h"
+#include "fs/ext2.h"
+#include "fs/vfs.h"
+#include "fs/vfs_types.h"
+#include "klib/spinlock.h"
+#include "libgen.h"
+#include "process/process.h"
+#include "process/scheduler.h"
+#include "stdio.h"
+#include "string.h"
+#include "sys/errno.h"
 
 #define EXT2_SUPERBLOCK_MAGIC  0xEF53 ///< Magic value used to identify an ext2 filesystem.
 #define EXT2_INDIRECT_BLOCKS   12     ///< Amount of indirect blocks in an inode.
@@ -431,39 +431,25 @@ static const char *uuid_to_string(uint8_t uuid[16])
 /// @return the string representing the ext2_file_type.
 static const char *ext2_file_type_to_string(ext2_file_type_t ext2_type)
 {
-    if (ext2_type == ext2_file_type_regular_file)
-        return "REG";
-    if (ext2_type == ext2_file_type_directory)
-        return "DIR";
-    if (ext2_type == ext2_file_type_character_device)
-        return "CHR";
-    if (ext2_type == ext2_file_type_block_device)
-        return "BLK";
-    if (ext2_type == ext2_file_type_named_pipe)
-        return "FIFO";
-    if (ext2_type == ext2_file_type_socket)
-        return "SOCK";
-    if (ext2_type == ext2_file_type_symbolic_link)
-        return "LNK";
+    if (ext2_type == ext2_file_type_regular_file) { return "REG"; }
+    if (ext2_type == ext2_file_type_directory) { return "DIR"; }
+    if (ext2_type == ext2_file_type_character_device) { return "CHR"; }
+    if (ext2_type == ext2_file_type_block_device) { return "BLK"; }
+    if (ext2_type == ext2_file_type_named_pipe) { return "FIFO"; }
+    if (ext2_type == ext2_file_type_socket) { return "SOCK"; }
+    if (ext2_type == ext2_file_type_symbolic_link) { return "LNK"; }
     return "UNK";
 }
 
 static int ext2_file_type_to_vfs_file_type(int ext2_type)
 {
-    if (ext2_type == ext2_file_type_regular_file)
-        return DT_REG;
-    if (ext2_type == ext2_file_type_directory)
-        return DT_DIR;
-    if (ext2_type == ext2_file_type_character_device)
-        return DT_CHR;
-    if (ext2_type == ext2_file_type_block_device)
-        return DT_BLK;
-    if (ext2_type == ext2_file_type_named_pipe)
-        return DT_FIFO;
-    if (ext2_type == ext2_file_type_socket)
-        return DT_SOCK;
-    if (ext2_type == ext2_file_type_symbolic_link)
-        return DT_LNK;
+    if (ext2_type == ext2_file_type_regular_file) { return DT_REG; }
+    if (ext2_type == ext2_file_type_directory) { return DT_DIR; }
+    if (ext2_type == ext2_file_type_character_device) { return DT_CHR; }
+    if (ext2_type == ext2_file_type_block_device) { return DT_BLK; }
+    if (ext2_type == ext2_file_type_named_pipe) { return DT_FIFO; }
+    if (ext2_type == ext2_file_type_socket) { return DT_SOCK; }
+    if (ext2_type == ext2_file_type_symbolic_link) { return DT_LNK; }
     return DT_UNKNOWN;
 }
 
@@ -488,14 +474,17 @@ static inline int __ext2_valid_permissions(
     const int oth)
 {
     // The task is the owner.
-    if ((mask & usr) && (task->uid == uid))
+    if ((mask & usr) && (task->uid == uid)) {
         return 1;
+    }
     // The task belongs to the correct group.
-    if ((mask & grp) && (task->gid == gid))
+    if ((mask & grp) && (task->gid == gid)) {
         return 1;
+    }
     // The task is not the owner and does not belong to the correct group.
-    if ((mask & oth) && (task->uid != uid) && (task->gid != gid))
+    if ((mask & oth) && (task->uid != uid) && (task->gid != gid)) {
         return 1;
+    }
     return 0;
 }
 
@@ -620,8 +609,9 @@ static void ext2_dump_inode(ext2_inode_t *inode)
     pr_debug("  Links : %2u Flags : %d\n", inode->links_count, inode->flags);
     pr_debug(" Blocks : [ ");
     for (int i = 0; i < EXT2_INDIRECT_BLOCKS; ++i) {
-        if (inode->data.blocks.dir_blocks[i])
+        if (inode->data.blocks.dir_blocks[i]) {
             pr_debug("%u ", inode->data.blocks.dir_blocks[i]);
+        }
     }
     pr_debug("]\n");
     pr_debug("IBlocks : %u\n", inode->data.blocks.indir_block);
@@ -662,8 +652,9 @@ static void ext2_dump_bgdt(ext2_filesystem_t *fs)
         ext2_read_block(fs, gd->block_bitmap, cache);
         pr_debug("    Block Bitmap at %u\n", gd->block_bitmap);
         for (uint32_t j = 0; j < fs->block_size; ++j) {
-            if ((j % 8) == 0)
+            if ((j % 8) == 0) {
                 pr_debug("        Block index: %4u, Bitmap: %s\n", j / 8, dec_to_binary(cache[j / 8], 8));
+            }
             if (!ext2_check_bitmap_bit(cache, j)) {
                 pr_debug("    First free block in group is in block %u, the linear index is %u\n", j / 8, j);
                 break;
@@ -673,8 +664,9 @@ static void ext2_dump_bgdt(ext2_filesystem_t *fs)
         ext2_read_block(fs, gd->inode_bitmap, cache);
         pr_debug("    Inode Bitmap at %d\n", gd->inode_bitmap);
         for (uint32_t j = 0; j < fs->block_size; ++j) {
-            if ((j % 8) == 0)
+            if ((j % 8) == 0) {
                 pr_debug("        Block index: %4d, Bitmap: %s\n", j / 8, dec_to_binary(cache[j / 8], 8));
+            }
             if (!ext2_check_bitmap_bit(cache, j)) {
                 pr_debug("    First free block in group is in block %d, the linear index is %d\n", j / 8, j);
                 break;
@@ -755,10 +747,11 @@ static ext2_block_status_t ext2_check_bitmap_bit(uint8_t *buffer, uint32_t linea
 /// @param status the new status of the block (free|occupied).
 static void ext2_set_bitmap_bit(uint8_t *buffer, uint32_t linear_index, ext2_block_status_t status)
 {
-    if (status == ext2_block_status_occupied)
+    if (status == ext2_block_status_occupied) {
         bit_set_assign(buffer[linear_index / 8], linear_index % 8);
-    else
+    } else {
         bit_clear_assign(buffer[linear_index / 8], linear_index % 8);
+    }
 }
 
 /// @brief Searches for a free inode inside the group data loaded inside the cache.
@@ -775,11 +768,13 @@ static inline int ext2_find_free_inode_in_group(
     for ((*linear_index) = 0; (*linear_index) < fs->superblock.inodes_per_group; ++(*linear_index)) {
         // If we need to skip the reserved inodes, we skip the round if the
         // index is that of a reserved inode (superblock.first_ino).
-        if (skip_reserved && ((*linear_index) < fs->superblock.first_ino))
+        if (skip_reserved && ((*linear_index) < fs->superblock.first_ino)) {
             continue;
+        }
         // Check if the entry is free.
-        if (!ext2_check_bitmap_bit(cache, *linear_index))
+        if (!ext2_check_bitmap_bit(cache, *linear_index)) {
             return 1;
+        }
     }
     return 0;
 }
@@ -803,8 +798,9 @@ static inline int ext2_find_free_inode(
         (*group_index) = preferred_group;
         // Find the first free inode. We need to ask to skip reserved inodes,
         // only if we are in group 0.
-        if (ext2_find_free_inode_in_group(fs, cache, linear_index, (*group_index) == 0))
+        if (ext2_find_free_inode_in_group(fs, cache, linear_index, (*group_index) == 0)) {
             return 1;
+        }
     }
     // Get the group and bit index of the first free block.
     for ((*group_index) = 0; (*group_index) < fs->block_groups_count; ++(*group_index)) {
@@ -817,8 +813,9 @@ static inline int ext2_find_free_inode(
             }
             // Find the first free inode. We need to ask to skip reserved
             // inodes, only if we are in group 0.
-            if (ext2_find_free_inode_in_group(fs, cache, linear_index, (*group_index) == 0))
+            if (ext2_find_free_inode_in_group(fs, cache, linear_index, (*group_index) == 0)) {
                 return 1;
+            }
         }
     }
     return 0;
@@ -834,8 +831,9 @@ static inline int ext2_find_free_block_in_group(ext2_filesystem_t *fs, uint8_t *
 {
     for ((*linear_index) = 0; (*linear_index) < fs->superblock.blocks_per_group; ++(*linear_index)) {
         // Check if the entry is free.
-        if (!ext2_check_bitmap_bit(cache, *linear_index))
+        if (!ext2_check_bitmap_bit(cache, *linear_index)) {
             return 1;
+        }
     }
     return 0;
 }
@@ -861,8 +859,9 @@ static inline int ext2_find_free_block(
                 return 0;
             }
             // Find the first free block.
-            if (ext2_find_free_block_in_group(fs, cache, linear_index))
+            if (ext2_find_free_block_in_group(fs, cache, linear_index)) {
                 return 1;
+            }
         }
     }
     return 0;
@@ -929,8 +928,9 @@ static int ext2_read_bgdt(ext2_filesystem_t *fs)
 {
     pr_debug("Read BGDT for EXT2 filesystem (0x%x)\n", fs);
     if (fs->block_groups) {
-        for (uint32_t i = 0; i < fs->bgdt_length; ++i)
+        for (uint32_t i = 0; i < fs->bgdt_length; ++i) {
             ext2_read_block(fs, fs->bgdt_start_block + i, (uint8_t *)((uintptr_t)fs->block_groups + (fs->block_size * i)));
+        }
         return 0;
     }
     pr_err("The `block_groups` list is not initialized.\n");
@@ -944,8 +944,9 @@ static int ext2_write_bgdt(ext2_filesystem_t *fs)
 {
     pr_debug("Write BGDT for EXT2 filesystem (0x%x)\n", fs);
     if (fs->block_groups) {
-        for (uint32_t i = 0; i < fs->bgdt_length; ++i)
+        for (uint32_t i = 0; i < fs->bgdt_length; ++i) {
             ext2_write_block(fs, fs->bgdt_start_block + i, (uint8_t *)((uintptr_t)fs->block_groups + (fs->block_size * i)));
+        }
         return 0;
     }
     pr_err("The `block_groups` list is not initialized.\n");
@@ -1149,13 +1150,15 @@ static int ext2_set_real_block_index(ext2_filesystem_t *fs, ext2_inode_t *inode,
         if (!inode->data.blocks.indir_block) {
             // Allocate a new block.
             uint32_t new_block_index = ext2_allocate_block(fs);
-            if (new_block_index == 0)
+            if (new_block_index == 0) {
                 return -1;
+            }
             // Update the index.
             inode->data.blocks.indir_block = new_block_index;
             // Update the inode.
-            if (ext2_write_inode(fs, inode, inode_index) == -1)
+            if (ext2_write_inode(fs, inode, inode_index) == -1) {
                 return -1;
+            }
         }
 
         // Allocate the cache.
@@ -1188,13 +1191,15 @@ static int ext2_set_real_block_index(ext2_filesystem_t *fs, ext2_inode_t *inode,
         if (!inode->data.blocks.doubly_indir_block) {
             // Allocate a new block.
             uint32_t new_block_index = ext2_allocate_block(fs);
-            if (new_block_index == 0)
+            if (new_block_index == 0) {
                 return -1;
+            }
             // Update the index.
             inode->data.blocks.doubly_indir_block = new_block_index;
             // Update the inode.
-            if (ext2_write_inode(fs, inode, inode_index) == -1)
+            if (ext2_write_inode(fs, inode, inode_index) == -1) {
                 return -1;
+            }
         }
 
         // Allocate the cache.
@@ -1246,13 +1251,15 @@ static int ext2_set_real_block_index(ext2_filesystem_t *fs, ext2_inode_t *inode,
         if (!inode->data.blocks.trebly_indir_block) {
             // Allocate a new block.
             uint32_t new_block_index = ext2_allocate_block(fs);
-            if (new_block_index == 0)
+            if (new_block_index == 0) {
                 return -1;
+            }
             // Update the index.
             inode->data.blocks.trebly_indir_block = new_block_index;
             // Update the inode.
-            if (ext2_write_inode(fs, inode, inode_index) == -1)
+            if (ext2_write_inode(fs, inode, inode_index) == -1) {
                 return -1;
+            }
         }
 
         // Allocate the cache.
@@ -1391,11 +1398,13 @@ static int ext2_allocate_inode_block(ext2_filesystem_t *fs, ext2_inode_t *inode,
     pr_debug("Allocating block with index `%d` for inode with index `%d`.\n", block_index, inode_index);
     // Allocate the block.
     int real_index = ext2_allocate_block(fs);
-    if (real_index == -1)
+    if (real_index == -1) {
         return -1;
+    }
     // Associate the real index and the index inside the inode.
-    if (ext2_set_real_block_index(fs, inode, inode_index, block_index, real_index) == -1)
+    if (ext2_set_real_block_index(fs, inode, inode_index, block_index, real_index) == -1) {
         return -1;
+    }
     // Compute the new blocks count.
     uint32_t blocks_count = (block_index + 1) * fs->blocks_per_block_count;
     if (inode->blocks_count < blocks_count) {
@@ -1406,8 +1415,9 @@ static int ext2_allocate_inode_block(ext2_filesystem_t *fs, ext2_inode_t *inode,
         pr_debug("Setting the block count for inode `%d` to `%d` blocks.\n", inode_index, blocks_count / fs->blocks_per_block_count);
     }
     // Update the inode.
-    if (ext2_write_inode(fs, inode, inode_index) == -1)
+    if (ext2_write_inode(fs, inode, inode_index) == -1) {
         return -1;
+    }
     return 0;
 }
 
@@ -1419,12 +1429,14 @@ static int ext2_allocate_inode_block(ext2_filesystem_t *fs, ext2_inode_t *inode,
 /// @return the amount of data we read, or negative value for an error.
 static ssize_t ext2_read_inode_block(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t block_index, uint8_t *buffer)
 {
-    if (block_index >= (inode->blocks_count / fs->blocks_per_block_count))
+    if (block_index >= (inode->blocks_count / fs->blocks_per_block_count)) {
         return -1;
+    }
     // Get the real index.
     uint32_t real_index = ext2_get_real_block_index(fs, inode, block_index);
-    if (real_index == 0)
+    if (real_index == 0) {
         return -1;
+    }
     // Log the address to the inode block.
     pr_debug("Read inode block  (block:%4u real:%4u)\n", block_index, real_index);
     // Read the block.
@@ -1446,8 +1458,9 @@ static ssize_t ext2_write_inode_block(ext2_filesystem_t *fs, ext2_inode_t *inode
     }
     // Get the real index.
     uint32_t real_index = ext2_get_real_block_index(fs, inode, block_index);
-    if (real_index == 0)
+    if (real_index == 0) {
         return -1;
+    }
     // Log the address to the inode block.
     pr_debug("Write inode block (block:%4u real:%4u inode:%4u)\n", block_index, real_index, inode_index);
     // Write the block.
@@ -1465,8 +1478,9 @@ static ssize_t ext2_write_inode_block(ext2_filesystem_t *fs, ext2_inode_t *inode
 static ssize_t ext2_read_inode_data(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t inode_index, off_t offset, size_t nbyte, char *buffer)
 {
     // Check if the file is empty.
-    if (inode->size == 0)
+    if (inode->size == 0) {
         return 0;
+    }
 
     uint32_t end;
     if ((offset + nbyte) > inode->size) {
@@ -1692,8 +1706,9 @@ static inline int ext2_directory_is_empty(ext2_filesystem_t *fs, uint8_t *cache,
 {
     ext2_direntry_iterator_t it = ext2_direntry_iterator_begin(fs, cache, inode);
     for (; ext2_direntry_iterator_valid(&it); ext2_direntry_iterator_next(&it)) {
-        if (it.direntry->inode != 0)
+        if (it.direntry->inode != 0) {
             return 0;
+        }
     }
     return 1;
 }
@@ -1771,8 +1786,9 @@ static int ext2_allocate_direntry(
         // If we hit a direntry with an empty inode, that is a free direntry.
         if (it.direntry->inode == 0) {
             pr_debug("Found free direntry: %p (%d <= %d)\n", it.direntry, it.direntry->rec_len, rec_len);
-            if (rec_len <= it.direntry->rec_len)
+            if (rec_len <= it.direntry->rec_len) {
                 break;
+            }
         }
         // Compute the real rec_len of the entry.
         uint32_t real_rec_len = ext2_get_rec_len_from_direntry(it.direntry);
@@ -1896,16 +1912,19 @@ static int ext2_find_direntry(ext2_filesystem_t *fs, ino_t ino, const char *name
     ext2_direntry_iterator_t it = ext2_direntry_iterator_begin(fs, cache, &inode);
     for (; ext2_direntry_iterator_valid(&it); ext2_direntry_iterator_next(&it)) {
         // Skip unused inode.
-        if (it.direntry->inode == 0)
+        if (it.direntry->inode == 0) {
             continue;
+        }
         // Chehck the name.
         if (!strcmp(it.direntry->name, ".") && !strcmp(name, "/")) {
             break;
         }
         // Check if the entry has the same name.
-        if (strlen(name) == it.direntry->name_len)
-            if (!strncmp(it.direntry->name, name, it.direntry->name_len))
+        if (strlen(name) == it.direntry->name_len) {
+            if (!strncmp(it.direntry->name, name, it.direntry->name_len)) {
                 break;
+            }
+        }
     }
     // Copy the inode of the parent, even if we did not find the entry.
     search->parent_inode = ino;
@@ -1975,8 +1994,9 @@ static int ext2_resolve_path(vfs_file_t *directory, char *path, ext2_direntry_se
         return -1;
     }
     // If the path is `/`.
-    if (strcmp(path, "/") == 0)
+    if (strcmp(path, "/") == 0) {
         return ext2_find_direntry(fs, directory->ino, path, search);
+    }
     ino_t ino      = directory->ino;
     char *tmp_path = strdup(path);
     char *token    = strtok(tmp_path, "/");
@@ -2134,8 +2154,9 @@ static vfs_file_t *ext2_find_vfs_file_with_inode(ext2_filesystem_t *fs, ino_t in
         {
             // Get the file structure.
             file = list_entry(it, vfs_file_t, siblings);
-            if (file && (file->ino == inode))
+            if (file && (file->ino == inode)) {
                 return file;
+            }
         }
     }
     return NULL;
@@ -2690,12 +2711,14 @@ static ssize_t ext2_getdents(vfs_file_t *file, dirent_t *dirp, off_t doff, size_
     ext2_direntry_iterator_t it = ext2_direntry_iterator_begin(fs, cache, &inode);
     for (; ext2_direntry_iterator_valid(&it) && (written < count); ext2_direntry_iterator_next(&it)) {
         // Skip unused inode.
-        if (it.direntry->inode == 0)
+        if (it.direntry->inode == 0) {
             continue;
+        }
         // Skip if already provided.
         current += sizeof(dirent_t);
-        if (current <= doff)
+        if (current <= doff) {
             continue;
+        }
         // Write on current directory entry data.
         dirp->d_ino  = it.direntry->inode;
         dirp->d_type = ext2_file_type_to_vfs_file_type(it.direntry->file_type);

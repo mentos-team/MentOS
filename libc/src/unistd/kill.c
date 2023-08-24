@@ -4,7 +4,7 @@
 /// See LICENSE.md for details.
 
 #include "sys/unistd.h"
-#include "system/syscall_types.h"
 #include "sys/errno.h"
+#include "system/syscall_types.h"
 
 _syscall2(int, kill, pid_t, pid, int, sig)

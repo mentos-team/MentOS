@@ -9,14 +9,14 @@
 #define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
 #include "io/debug.h"                    // Include debugging functions.
 
+#include "assert.h"
+#include "fcntl.h"
 #include "fs/procfs.h"
 #include "fs/vfs.h"
+#include "libgen.h"
+#include "stdio.h"
 #include "string.h"
 #include "sys/errno.h"
-#include "fcntl.h"
-#include "libgen.h"
-#include "assert.h"
-#include "stdio.h"
 #include "time.h"
 
 /// Maximum length of name in PROCFS.
@@ -134,9 +134,14 @@ static inline bool_t procfs_check_file(procfs_file_t *procfs_file)
 static inline procfs_file_t *procfs_get_file(list_head *entry)
 {
     procfs_file_t *procfs_file;
-    if (entry)
-        if (procfs_check_file((procfs_file = list_entry(entry, procfs_file_t, siblings))))
+    if (entry) {
+        // Get the entry.
+        procfs_file = list_entry(entry, procfs_file_t, siblings);
+        // Check the file.
+        if (procfs_file && procfs_check_file(procfs_file)) {
             return procfs_file;
+        }
+    }
     return NULL;
 }
 
@@ -152,8 +157,9 @@ static inline procfs_file_t *procfs_find_entry_path(const char *path)
             // Get the file structure.
             procfs_file = procfs_get_file(it);
             // Check its name.
-            if (procfs_file && !strcmp(procfs_file->name, path))
+            if (procfs_file && !strcmp(procfs_file->name, path)) {
                 return procfs_file;
+            }
         }
     }
     return NULL;
@@ -162,7 +168,7 @@ static inline procfs_file_t *procfs_find_entry_path(const char *path)
 /// @brief Finds the PROCFS file with the given inode.
 /// @param inode the inode we search.
 /// @return a pointer to the PROCFS file, NULL otherwise.
-static inline procfs_file_t *procfs_find_entry_inode(int inode)
+static inline procfs_file_t *procfs_find_entry_inode(uint32_t inode)
 {
     procfs_file_t *procfs_file;
     if (!list_head_empty(&fs.files)) {
@@ -185,16 +191,19 @@ static inline procfs_file_t *procfs_find_entry_inode(int inode)
 static inline int procfs_find_inode(const char *path)
 {
     procfs_file_t *procfs_file = procfs_find_entry_path(path);
-    if (procfs_file)
+    if (procfs_file) {
         return procfs_file->inode;
+    }
     return -1;
 }
 
 static inline int procfs_get_free_inode()
 {
-    for (int inode = 1; inode < PROCFS_MAX_FILES; ++inode)
-        if (procfs_find_entry_inode(inode) == NULL)
+    for (int inode = 1; inode < PROCFS_MAX_FILES; ++inode) {
+        if (procfs_find_entry_inode(inode) == NULL) {
             return inode;
+        }
+    }
     return -1;
 }
 
@@ -333,8 +342,9 @@ static void dump_procfs()
             // Get the file structure.
             file = procfs_get_file(it);
             // Check if it a valid procfs file.
-            if (file)
+            if (file) {
                 pr_debug("[%3d] `%s`\n", file->inode, file->name);
+            }
         }
     }
 }
@@ -580,9 +590,11 @@ static ssize_t procfs_read(vfs_file_t *file, char *buf, off_t offset, size_t nby
 {
     if (file) {
         procfs_file_t *procfs_file = procfs_find_entry_inode(file->ino);
-        if (procfs_file && procfs_file->dir_entry.fs_operations)
-            if (procfs_file->dir_entry.fs_operations->read_f)
+        if (procfs_file && procfs_file->dir_entry.fs_operations) {
+            if (procfs_file->dir_entry.fs_operations->read_f) {
                 return procfs_file->dir_entry.fs_operations->read_f(file, buf, offset, nbyte);
+            }
+        }
     }
     return -ENOSYS;
 }
@@ -597,9 +609,11 @@ static ssize_t procfs_write(vfs_file_t *file, const void *buf, off_t offset, siz
 {
     if (file) {
         procfs_file_t *procfs_file = procfs_find_entry_inode(file->ino);
-        if (procfs_file && procfs_file->dir_entry.fs_operations)
-            if (procfs_file->dir_entry.fs_operations->write_f)
+        if (procfs_file && procfs_file->dir_entry.fs_operations) {
+            if (procfs_file->dir_entry.fs_operations->write_f) {
                 return procfs_file->dir_entry.fs_operations->write_f(file, buf, offset, nbyte);
+            }
+        }
     }
     return -ENOSYS;
 }
@@ -623,9 +637,11 @@ off_t procfs_lseek(vfs_file_t *file, off_t offset, int whence)
         pr_err("There is no PROCFS fiel associated with the VFS file.\n");
         return -ENOSYS;
     }
-    if (procfs_file->dir_entry.fs_operations)
-        if (procfs_file->dir_entry.fs_operations->lseek_f)
+    if (procfs_file->dir_entry.fs_operations) {
+        if (procfs_file->dir_entry.fs_operations->lseek_f) {
             return procfs_file->dir_entry.fs_operations->lseek_f(file, offset, whence);
+        }
+    }
     return -EINVAL;
 }
 
@@ -656,10 +672,10 @@ static int procfs_fstat(vfs_file_t *file, stat_t *stat)
     if (file && stat) {
         procfs_file_t *procfs_file = procfs_find_entry_inode(file->ino);
         if (procfs_file) {
-            if (procfs_file->dir_entry.fs_operations && procfs_file->dir_entry.fs_operations->stat_f)
+            if (procfs_file->dir_entry.fs_operations && procfs_file->dir_entry.fs_operations->stat_f) {
                 return procfs_file->dir_entry.fs_operations->stat_f(file, stat);
-            else
-                return __procfs_stat(procfs_file, stat);
+            }
+            return __procfs_stat(procfs_file, stat);
         }
     }
     return -ENOSYS;
@@ -674,10 +690,10 @@ static int procfs_stat(const char *path, stat_t *stat)
     if (path && stat) {
         procfs_file_t *procfs_file = procfs_find_entry_path(path);
         if (procfs_file) {
-            if (procfs_file->dir_entry.sys_operations && procfs_file->dir_entry.sys_operations->stat_f)
+            if (procfs_file->dir_entry.sys_operations && procfs_file->dir_entry.sys_operations->stat_f) {
                 return procfs_file->dir_entry.sys_operations->stat_f(path, stat);
-            else
-                return __procfs_stat(procfs_file, stat);
+            }
+            return __procfs_stat(procfs_file, stat);
         }
     }
     return -1;
@@ -687,9 +703,11 @@ static int procfs_ioctl(vfs_file_t *file, int request, void *data)
 {
     if (file) {
         procfs_file_t *procfs_file = procfs_find_entry_inode(file->ino);
-        if (procfs_file)
-            if (procfs_file->dir_entry.fs_operations && procfs_file->dir_entry.fs_operations->ioctl_f)
+        if (procfs_file) {
+            if (procfs_file->dir_entry.fs_operations && procfs_file->dir_entry.fs_operations->ioctl_f) {
                 return procfs_file->dir_entry.fs_operations->ioctl_f(file, request, data);
+            }
+        }
     }
     return -1;
 }
@@ -704,27 +722,31 @@ static int procfs_ioctl(vfs_file_t *file, int request, void *data)
 /// @return The number of written bytes in the buffer.
 static inline ssize_t procfs_getdents(vfs_file_t *file, dirent_t *dirp, off_t doff, size_t count)
 {
-    if (!file || !dirp)
+    if (!file || !dirp) {
         return -1;
+    }
     // Check if the size of the buffer is big enough to hold the data about the
     // directory entry.
-    if (count < sizeof(dirent_t))
+    if (count < sizeof(dirent_t)) {
         return -1;
+    }
     // If there are no file, stop right here.
-    if (list_head_empty(&fs.files))
+    if (list_head_empty(&fs.files)) {
         return 0;
+    }
     // Find the directory entry.
     procfs_file_t *direntry = procfs_find_entry_inode(file->ino);
     if (direntry == NULL) {
         return -ENOENT;
     }
     // Check if it is a directory.
-    if ((direntry->flags & DT_DIR) == 0)
+    if ((direntry->flags & DT_DIR) == 0) {
         return -ENOTDIR;
+    }
     // Clear the buffer.
     memset(dirp, 0, count);
     // Initialize, the length of the directory name.
-    int len              = strlen(direntry->name);
+    size_t len           = strlen(direntry->name);
     ssize_t written_size = 0;
     off_t iterated_size  = 0;
     char parent_path[PATH_MAX];
@@ -746,7 +768,7 @@ static inline ssize_t procfs_getdents(vfs_file_t *file, dirent_t *dirp, off_t do
             continue;
         }
         // Check if the parent of the entry is the directory we are iterating.
-        if (strcmp(direntry->name, parent_path)) {
+        if (strcmp(direntry->name, parent_path) != 0) {
             continue;
         }
         // Advance the size we just iterated.
@@ -769,8 +791,9 @@ static inline ssize_t procfs_getdents(vfs_file_t *file, dirent_t *dirp, off_t do
         written_size += sizeof(dirent_t);
         // Move to next writing position.
         ++dirp;
-        if (written_size >= count)
+        if (written_size >= count) {
             break;
+        }
     }
     return written_size;
 }

@@ -4,23 +4,25 @@
 /// See LICENSE.md for details.
 
 #include "system/syscall.h"
-#include "sys/errno.h"
-#include "stdio.h"
-#include "io/video.h"
 #include "ctype.h"
 #include "drivers/keyboard/keyboard.h"
+#include "io/video.h"
+#include "stdio.h"
 #include "string.h"
+#include "sys/errno.h"
 
 int atoi(const char *str)
 {
     // Check the input string.
-    if (str == NULL)
+    if (str == NULL) {
         return 0;
+    }
     // Initialize sign, the result variable, and two indices.
     int sign = (str[0] == '-') ? -1 : +1, result = 0, i;
     // Find where the number ends.
-    for (i = (sign == -1) ? 1 : 0; (str[i] != '\0') && isdigit(str[i]); ++i)
+    for (i = (sign == -1) ? 1 : 0; (str[i] != '\0') && isdigit(str[i]); ++i) {
         result = (result * 10) + str[i] - '0';
+    }
     return sign * result;
 }
 
@@ -44,8 +46,9 @@ long strtol(const char *str, char **endptr, int base)
         c   = *s++;
     } else {
         neg = 0;
-        if (c == '+')
+        if (c == '+') {
             c = *s++;
+        }
     }
     if ((base == 0 || base == 16) &&
         c == '0' && (*s == 'x' || *s == 'X')) {
@@ -53,8 +56,9 @@ long strtol(const char *str, char **endptr, int base)
         s += 2;
         base = 16;
     }
-    if (base == 0)
+    if (base == 0) {
         base = c == '0' ? 8 : 10;
+    }
     /*
      * Compute the cutoff value between legal numbers and illegal
      * numbers.  That is the largest legal value, divided by the
@@ -83,16 +87,19 @@ long strtol(const char *str, char **endptr, int base)
         cutlim = -cutlim;
     }
     for (acc = 0, any = 0;; c = (unsigned char)*s++) {
-        if (isdigit(c))
+        if (isdigit(c)) {
             c -= '0';
-        else if (isalpha(c))
+        } else if (isalpha(c)) {
             c -= isupper(c) ? 'A' - 10 : 'a' - 10;
-        else
+        } else {
             break;
-        if (c >= base)
+        }
+        if (c >= base) {
             break;
-        if (any < 0)
+        }
+        if (any < 0) {
             continue;
+        }
         if (neg) {
             if (acc < cutoff || (acc == cutoff && c > cutlim)) {
                 any   = -1;
@@ -115,7 +122,8 @@ long strtol(const char *str, char **endptr, int base)
             }
         }
     }
-    if (endptr != 0)
+    if (endptr != 0) {
         *endptr = (char *)(any ? s - 1 : str);
+    }
     return (acc);
 }

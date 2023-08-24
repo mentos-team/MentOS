@@ -4,13 +4,13 @@
 /// See LICENSE.md for details.
 
 #include "process/scheduler_feedback.h"
-#include "hardware/timer.h"
-#include "strerror.h"
-#include "fs/vfs.h"
 #include "assert.h"
-#include "string.h"
 #include "fcntl.h"
+#include "fs/vfs.h"
+#include "hardware/timer.h"
 #include "stdio.h"
+#include "strerror.h"
+#include "string.h"
 
 // Include the kernel log levels.
 #include "sys/kernel_levels.h"
@@ -187,8 +187,9 @@ void scheduler_feedback_update()
     __scheduler_feedback_log();
     // Reset the occurences.
     for (size_t i = 0; i < PID_MAX_LIMIT; ++i) {
-        if (arr_stats[i].task)
+        if (arr_stats[i].task) {
             arr_stats[i].occur = 0;
+        }
     }
     // Update when in the future, the logging should happen.
     __scheduler_feedback_deadline_advance();

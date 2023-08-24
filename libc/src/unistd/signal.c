@@ -4,8 +4,8 @@
 /// See LICENSE.md for details.
 
 #include "sys/unistd.h"
-#include "system/syscall_types.h"
 #include "sys/errno.h"
+#include "system/syscall_types.h"
 
 #include "signal.h"
 #include "sys/bitops.h"
@@ -68,8 +68,9 @@ int sigaction(int signum, const sigaction_t *act, sigaction_t *oldact)
 
 const char *strsignal(int sig)
 {
-    if ((sig >= SIGHUP) && (sig < NSIG))
+    if ((sig >= SIGHUP) && (sig < NSIG)) {
         return sys_siglist[sig - 1];
+}
     return NULL;
 }
 
@@ -111,7 +112,8 @@ int sigdelset(sigset_t *set, int signum)
 
 int sigismember(sigset_t *set, int signum)
 {
-    if (set)
+    if (set) {
         return bit_check(set->sig[(signum - 1) / 32], (signum - 1) % 32);
+}
     return -1;
 }

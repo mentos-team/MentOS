@@ -9,17 +9,17 @@
 #define __DEBUG_LEVEL__  LOGLEVEL_DEBUG ///< Set log level.
 #include "io/debug.h"                   // Include debugging functions.
 
-#include "process/scheduler_feedback.h"
-#include "process/scheduler.h"
-#include "process/prio.h"
-#include "process/wait.h"
-#include "descriptor_tables/tss.h"
-#include "hardware/timer.h"
-#include "system/panic.h"
-#include "sys/errno.h"
-#include "strerror.h"
 #include "assert.h"
+#include "descriptor_tables/tss.h"
 #include "fs/vfs.h"
+#include "hardware/timer.h"
+#include "process/prio.h"
+#include "process/scheduler.h"
+#include "process/scheduler_feedback.h"
+#include "process/wait.h"
+#include "strerror.h"
+#include "sys/errno.h"
+#include "system/panic.h"
 
 /// @brief          Assembly function setting the kernel stack to jump into
 ///                 location in Ring 3 mode (USER mode).
@@ -61,17 +61,20 @@ time_t scheduler_get_maximum_vruntime()
     list_for_each_decl(it, &runqueue.queue)
     {
         // Check if we reached the head of list_head, and skip it.
-        if (it == &runqueue.queue)
+        if (it == &runqueue.queue) {
             continue;
+        }
         // Get the current entry.
         entry = list_entry(it, task_struct, run_list);
         // Skip the process if it is a periodic one, we are issued to skip
         // periodic tasks, and the entry is not a periodic task under
         // analysis.
-        if (entry->se.is_periodic && !entry->se.is_under_analysis)
+        if (entry->se.is_periodic && !entry->se.is_under_analysis) {
             continue;
-        if (entry->se.vruntime > vruntime)
+        }
+        if (entry->se.vruntime > vruntime) {
             vruntime = entry->se.vruntime;
+        }
     }
     return vruntime;
 }
@@ -87,8 +90,9 @@ task_struct *scheduler_get_running_process(pid_t pid)
     list_for_each_decl(it, &runqueue.queue)
     {
         entry = list_entry(it, task_struct, run_list);
-        if (entry->pid == pid)
+        if (entry->pid == pid) {
             return entry;
+        }
     }
     return NULL;
 }
@@ -117,8 +121,9 @@ void scheduler_dequeue_task(task_struct *process)
     list_head_remove(&process->run_list);
     // Decrement the number of active processes.
     --runqueue.num_active;
-    if (process->se.is_periodic)
+    if (process->se.is_periodic) {
         runqueue.num_periodic--;
+    }
 
 #ifdef ENABLE_SCHEDULER_FEEDBACK
     scheduler_feedback_task_remove(process->pid);
@@ -128,8 +133,9 @@ void scheduler_dequeue_task(task_struct *process)
 void scheduler_run(pt_regs *f)
 {
     // Check if there is a running process.
-    if (runqueue.curr == NULL)
+    if (runqueue.curr == NULL) {
         return;
+    }
 
     task_struct *next = NULL;
 
@@ -190,7 +196,7 @@ void scheduler_restore_context(task_struct *process, pt_regs *f)
     runqueue.curr = process;
     // Restore the registers.
     *f = process->thread.regs;
-    // TODO: Explain paging switch (ring 0 doesn't need page switching)
+    // TODO(enrico): Explain paging switch (ring 0 doesn't need page switching)
     // Switch to process page directory
     paging_switch_directory_va(process->mm->pgd);
 }
@@ -219,7 +225,7 @@ static inline int try_to_wake_up(task_struct *process, unsigned mode, int sync)
 {
     // Only tasks in the state TASK_UNINTERRUPTIBLE can be woke up
     if (process->state == TASK_UNINTERRUPTIBLE || process->state == TASK_STOPPED) {
-        //TODO: Recalc task priority
+        // TODO(enrico): Recalc task priority
         process->state = TASK_RUNNING;
         return 1;
     }
@@ -310,8 +316,11 @@ pid_t sys_getsid(pid_t pid)
     list_for_each (it, &runqueue.queue) {
         task_struct *task = list_entry(it, task_struct, run_list);
         if (task->pid == pid) {
-            if (runqueue.curr->sid != task->sid)
-                return -EPERM;
+            if (runqueue.curr->sid != task->sid) {
+                {
+                    return -EPERM;
+                }
+            }
 
             return task->sid;
         }
@@ -339,25 +348,29 @@ pid_t sys_setsid()
 pid_t sys_getpgid(pid_t pid)
 {
     task_struct *task = NULL;
-    if (pid == 0)
+    if (pid == 0) {
         task = runqueue.curr;
-    else
+    } else {
         task = scheduler_get_running_process(pid);
-    if (task)
+    }
+    if (task) {
         return task->pgid;
+    }
     return 0;
 }
 
 int sys_setpgid(pid_t pid, pid_t pgid)
 {
     task_struct *task = NULL;
-    if (pid == 0)
+    if (pid == 0) {
         task = runqueue.curr;
-    else
+    } else {
         task = scheduler_get_running_process(pid);
+    }
     if (task) {
-        if (task->pgid == task->pid)
+        if (task->pgid == task->pid) {
             pr_debug("Process %d is already a session leader.", task->pid);
+        }
         task->pgid = pgid;
     }
     return 0;
@@ -365,8 +378,9 @@ int sys_setpgid(pid_t pid, pid_t pgid)
 
 uid_t sys_getuid()
 {
-    if (runqueue.curr)
+    if (runqueue.curr) {
         return runqueue.curr->uid;
+    }
     return -EPERM;
 }
 
@@ -399,8 +413,9 @@ int sys_setgid(pid_t gid)
 pid_t sys_getppid()
 {
     // Get the current task.
-    if (runqueue.curr && runqueue.curr->parent)
+    if (runqueue.curr && runqueue.curr->parent) {
         return runqueue.curr->parent->pid;
+    }
     return -EPERM;
 }
 
@@ -565,10 +580,11 @@ int sys_sched_setparam(pid_t pid, const sched_param_t *param)
     list_for_each (it, &runqueue.queue) {
         task_struct *entry = list_entry(it, task_struct, run_list);
         if (entry->pid == pid) {
-            if (!entry->se.is_periodic && param->is_periodic)
+            if (!entry->se.is_periodic && param->is_periodic) {
                 runqueue.num_periodic++;
-            else if (entry->se.is_periodic && !param->is_periodic)
+            } else if (entry->se.is_periodic && !param->is_periodic) {
                 runqueue.num_periodic--;
+            }
             // Sets the parameters from param to the "se" struct parameters.
             entry->se.prio        = param->sched_priority;
             entry->se.period      = param->period;
@@ -615,8 +631,9 @@ static int __response_time_analysis()
         // Get the curent entry in the list.
         entry = list_entry(it, task_struct, run_list);
         // If the process is not periodic we skip it.
-        if (!entry->se.is_periodic)
+        if (!entry->se.is_periodic) {
             continue;
+        }
         // Put r equal to worst case exec because is the first point in time
         // that the task could possibly complete.
         r = entry->se.worst_case_exec, previous_r = 0;
@@ -647,8 +664,9 @@ static int __response_time_analysis()
         }
         // Feasibility of scheduler is guaranteed if and only if response time
         // analysis is lower than deadline.
-        if (r > entry->se.deadline)
+        if (r > entry->se.deadline) {
             return 1;
+        }
     }
     return 0;
 }
@@ -664,8 +682,9 @@ static inline double __compute_utilization_factor()
         // Get the entry.
         entry = list_entry(it, task_struct, run_list);
         // Sum the utilization factor of all periodic tasks.
-        if (entry->se.is_periodic)
+        if (entry->se.is_periodic) {
             U += entry->se.utilization_factor;
+        }
     }
     return U;
 }
@@ -689,8 +708,9 @@ int sys_waitperiod()
 
     // Update the Worst Case Execution Time (WCET).
     time_t wcet = current_time - current->se.exec_start;
-    if (current->se.worst_case_exec < wcet)
+    if (current->se.worst_case_exec < wcet) {
         current->se.worst_case_exec = wcet;
+    }
     // Update the utilization factor.
     current->se.utilization_factor = ((double)current->se.worst_case_exec / (double)current->se.period);
     // If the task is under analysis, we need to test if the process can be
@@ -727,8 +747,9 @@ int sys_waitperiod()
         pr_warning("Utilization factor is : %.2f, Least Upper Bound: %.2f\n", u, ulub);
 #endif
         // If it is not schedulable, we need to tell it to the process.
-        if (is_not_schedulable)
+        if (is_not_schedulable) {
             return -ENOTSCHEDULABLE;
+        }
         // Otherwise, it is schedulable and thus it is not under analysis
         // anymore.
         current->se.is_under_analysis = false;

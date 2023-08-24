@@ -4,9 +4,9 @@
 /// See LICENSE.md for details.
 
 #include "termios.h"
-#include "system/syscall_types.h"
-#include "sys/errno.h"
 #include "bits/ioctls.h"
+#include "sys/errno.h"
+#include "system/syscall_types.h"
 
 int tcgetattr(int fd, termios_t *termios_p)
 {
@@ -16,7 +16,7 @@ int tcgetattr(int fd, termios_t *termios_p)
                      : "0"(__NR_ioctl), "b"((long)(fd)), "c"((long)(TCGETS)),
                        "d"((long)(termios_p)));
     if (retval < 0) {
-        errno = -retval;
+        errno  = -retval;
         retval = -1;
     }
     return retval;
@@ -30,7 +30,7 @@ int tcsetattr(int fd, int optional_actions, const termios_t *termios_p)
                      : "0"(__NR_ioctl), "b"((long)(fd)), "c"((long)(TCSETS)),
                        "d"((long)(termios_p)));
     if (retval < 0) {
-        errno = -retval;
+        errno  = -retval;
         retval = -1;
     }
     return retval;

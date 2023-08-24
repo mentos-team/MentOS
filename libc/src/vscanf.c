@@ -3,9 +3,9 @@
 /// @copyright (c) 2014-2023 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include <string.h>
 #include <ctype.h>
 #include <stdio.h>
+#include <string.h>
 #include <sys/unistd.h>
 
 /// @brief Read formatted data from string.
@@ -21,18 +21,19 @@ static int __vsscanf(const char *buf, const char *s, va_list ap)
     char tmp[BUFSIZ];
 
     while (*s && *buf) {
-        while (isspace(*s))
+        while (isspace(*s)) {
             ++s;
+        }
         if (*s == '%') {
             ++s;
             for (; *s; ++s) {
-                if (strchr("dibouxcsefg%", *s))
+                if (strchr("dibouxcsefg%", *s)) {
                     break;
-                if (*s == '*')
+                }
+                if (*s == '*') {
                     noassign = 1;
-                else if (isdigit(*s)) {
-                    for (tc = s; isdigit(*s); ++s)
-                        {}
+                } else if (isdigit(*s)) {
+                    for (tc = s; isdigit(*s); ++s) {}
                     strncpy(tmp, tc, s - tc);
                     tmp[s - tc] = '\0';
                     width       = strtol(tmp, NULL, 10);
@@ -40,10 +41,12 @@ static int __vsscanf(const char *buf, const char *s, va_list ap)
                 }
             }
             if (*s == 's') {
-                while (isspace(*buf))
+                while (isspace(*buf)) {
                     ++buf;
-                if (!width)
+                }
+                if (!width) {
                     width = strcspn(buf, " \t\n\r\f\v");
+                }
                 if (!noassign) {
                     char *string = va_arg(ap, char *);
                     strncpy(string, buf, width);
@@ -51,48 +54,56 @@ static int __vsscanf(const char *buf, const char *s, va_list ap)
                 }
                 buf += width;
             } else if (*s == 'c') {
-                while (isspace(*buf))
+                while (isspace(*buf)) {
                     ++buf;
-                if (!width)
+                }
+                if (!width) {
                     width = 1;
+                }
                 if (!noassign) {
                     strncpy(va_arg(ap, char *), buf, width);
                 }
                 buf += width;
             } else if (strchr("duxob", *s)) {
-                while (isspace(*buf))
+                while (isspace(*buf)) {
                     ++buf;
-                if (*s == 'd' || *s == 'u')
+                }
+                if (*s == 'd' || *s == 'u') {
                     base = 10;
-                else if (*s == 'x')
+                } else if (*s == 'x') {
                     base = 16;
-                else if (*s == 'o')
+                } else if (*s == 'o') {
                     base = 8;
-                else if (*s == 'b')
+                } else if (*s == 'b') {
                     base = 2;
+                }
                 if (!width) {
-                    if (isspace(*(s + 1)) || *(s + 1) == 0)
+                    if (isspace(*(s + 1)) || *(s + 1) == 0) {
                         width = strcspn(buf, " \t\n\r\f\v");
-                    else
+                    } else {
                         width = strchr(buf, *(s + 1)) - buf;
+                    }
                 }
                 strncpy(tmp, buf, width);
                 tmp[width] = '\0';
                 buf += width;
-                if (!noassign)
+                if (!noassign) {
                     *va_arg(ap, unsigned int *) = strtol(tmp, NULL, base);
+                }
             }
-            if (!noassign)
+            if (!noassign) {
                 ++count;
+            }
             width = noassign = 0;
             ++s;
         } else {
-            while (isspace(*buf))
+            while (isspace(*buf)) {
                 ++buf;
-            if (*s != *buf)
+            }
+            if (*s != *buf) {
                 break;
-            else
-                ++s, ++buf;
+            }
+            ++s, ++buf;
         }
     }
     return (count);
@@ -109,8 +120,9 @@ static int __vfscanf(int fd, const char *fmt, va_list ap)
     int count;
     char buf[BUFSIZ + 1];
 
-    if (fgets(buf, BUFSIZ, fd) == 0)
+    if (fgets(buf, BUFSIZ, fd) == 0) {
         return (-1);
+    }
     count = __vsscanf(buf, fmt, ap);
     return (count);
 }

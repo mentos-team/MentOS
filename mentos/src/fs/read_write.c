@@ -4,12 +4,12 @@
 /// See LICENSE.md for details.
 
 #include "process/scheduler.h"
-#include "fs/vfs_types.h"
-#include "system/panic.h"
-#include "sys/errno.h"
 #include "fcntl.h"
-#include "stdio.h"
 #include "fs/vfs.h"
+#include "fs/vfs_types.h"
+#include "stdio.h"
+#include "sys/errno.h"
+#include "system/panic.h"
 
 ssize_t sys_read(int fd, void *buf, size_t nbytes)
 {

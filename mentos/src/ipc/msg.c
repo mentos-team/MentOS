@@ -5,22 +5,22 @@
 
 // ============================================================================
 // Setup the logging for this file (do this before any other include).
-#include "sys/kernel_levels.h" // Include kernel log levels.
+#include "sys/kernel_levels.h"          // Include kernel log levels.
 #define __DEBUG_HEADER__ "[IPCmsg]"     ///< Change header.
 #define __DEBUG_LEVEL__  LOGLEVEL_DEBUG ///< Set log level.
 #include "io/debug.h"                   // Include debugging functions.
 // ============================================================================
 
-#include "process/scheduler.h"
+#include "assert.h"
+#include "fcntl.h"
 #include "process/process.h"
-#include "system/panic.h"
-#include "sys/errno.h"
-#include "sys/msg.h"
+#include "process/scheduler.h"
+#include "stdio.h"
 #include "stdlib.h"
 #include "string.h"
-#include "assert.h"
-#include "stdio.h"
-#include "fcntl.h"
+#include "sys/errno.h"
+#include "sys/msg.h"
+#include "system/panic.h"
 
 #include "ipc/ipc.h"
 
@@ -115,8 +115,9 @@ static inline msq_info_t *__list_find_msq_info_by_id(int msqid)
         // Get the current entry.
         msq_info = list_entry(it, msq_info_t, list);
         // If message queue set is valid, check the id.
-        if (msq_info && (msq_info->id == msqid))
+        if (msq_info && (msq_info->id == msqid)) {
             return msq_info;
+        }
     }
     return NULL;
 }
@@ -133,8 +134,9 @@ static inline msq_info_t *__list_find_msq_info_by_key(key_t key)
         // Get the current entry.
         msq_info = list_entry(it, msq_info_t, list);
         // If message queue set is valid, check the id.
-        if (msq_info && (msq_info->msqid.msg_perm.key == key))
+        if (msq_info && (msq_info->msqid.msg_perm.key == key)) {
             return msq_info;
+        }
     }
     return NULL;
 }
@@ -188,8 +190,9 @@ static inline void __msq_info_remove_message(msq_info_t *msq_info, struct msg *m
         }
     }
     // If the message is the last of the queue, set the last to NULL.
-    if (msq_info->msg_last == message)
+    if (msq_info->msg_last == message) {
         msq_info->msg_last = NULL;
+    }
     // Clear the pointer in message.
     message->msg_next = NULL;
 }

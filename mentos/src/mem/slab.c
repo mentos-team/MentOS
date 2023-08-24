@@ -9,10 +9,10 @@
 #define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
 #include "io/debug.h"                    // Include debugging functions.
 
-#include "mem/zone_allocator.h"
+#include "assert.h"
 #include "mem/paging.h"
 #include "mem/slab.h"
-#include "assert.h"
+#include "mem/zone_allocator.h"
 
 /// @brief Use it to manage cached pages.
 typedef struct kmem_obj {
@@ -144,8 +144,9 @@ static inline void *__kmem_cache_alloc_slab(kmem_cache_t *cachep, page_t *slab_p
     // Get the element from the kmem_obj object
     void *elem = ADDR_FROM_KMEM_OBJ(cachep, obj);
 
-    if (cachep->ctor)
+    if (cachep->ctor) {
         cachep->ctor(elem);
+    }
 
     return elem;
 }
@@ -199,8 +200,9 @@ kmem_cache_t *kmem_cache_create(
     kmem_fun_t dtor)
 {
     kmem_cache_t *cachep = (kmem_cache_t *)kmem_cache_alloc(&kmem_cache, GFP_KERNEL);
-    if (!cachep)
+    if (!cachep) {
         return cachep;
+    }
 
     __kmem_cache_create(cachep, name, size, align, flags, ctor, dtor, KMEM_START_OBJ_COUNT);
 
@@ -236,8 +238,9 @@ void *kmem_cache_alloc(kmem_cache_t *cachep, gfp_t flags)
 {
     if (list_head_empty(&cachep->slabs_partial)) {
         if (list_head_empty(&cachep->slabs_free)) {
-            if (flags == 0)
+            if (flags == 0) {
                 flags = cachep->flags;
+            }
 
             // Refill the cache in an exponential fashion, capping at KMEM_MAX_REFILL_OBJ_COUNT to avoid
             // too big allocations
@@ -286,8 +289,9 @@ void kmem_cache_free(void *ptr)
 #ifdef ENABLE_CACHE_TRACE
     pr_notice("CHACE-FREE  0x%p in %-20s at %s:%d\n", ptr, cachep->name, file, line);
 #endif
-    if (cachep->dtor)
+    if (cachep->dtor) {
         cachep->dtor(ptr);
+    }
 
     kmem_obj *obj = KMEM_OBJ(cachep, ptr);
 

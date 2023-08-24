@@ -5,9 +5,9 @@
 /// See LICENSE.md for details.
 
 #include "sys/mman.h"
-#include "system/syscall_types.h"
-#include "sys/unistd.h"
 #include "sys/errno.h"
+#include "sys/unistd.h"
+#include "system/syscall_types.h"
 
 _syscall6(void *, mmap, void *, addr, size_t, length, int, prot, int, flags, int, fd, off_t, offset)
 

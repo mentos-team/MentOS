@@ -10,10 +10,10 @@
 #include "io/debug.h"                    // Include debugging functions.
 
 #include "drivers/ps2.h"
-#include "proc_access.h"
-#include "sys/bitops.h"
 #include "io/port_io.h"
+#include "proc_access.h"
 #include "stdbool.h"
+#include "sys/bitops.h"
 
 #define PS2_DATA    0x60 ///< Data signal line.
 #define PS2_STATUS  0x64 ///< Status signal line.
@@ -48,15 +48,17 @@
 /// @brief Polling until we can receive bytes from the device.
 static inline void __ps2_wait_read()
 {
-    while (!bit_check(inportb(PS2_STATUS), 0))
+    while (!bit_check(inportb(PS2_STATUS), 0)) {
         pause();
+    }
 }
 
 /// @brief Polling until we can send bytes to the device.
 static inline void __ps2_wait_write()
 {
-    while (bit_check(inportb(PS2_STATUS), 1))
+    while (bit_check(inportb(PS2_STATUS), 1)) {
         pause();
+    }
 }
 
 void ps2_write(unsigned char data)
@@ -127,14 +129,18 @@ static inline void __ps2_write_second_port(unsigned char byte)
 
 static const char *__ps2_get_response_error_message(unsigned response)
 {
-    if (response == 0x01)
+    if (response == 0x01) {
         return "clock line stuck low";
-    if (response == 0x02)
+    }
+    if (response == 0x02) {
         return "clock line stuck high";
-    if (response == 0x03)
+    }
+    if (response == 0x03) {
         return "data line stuck low";
-    if (response == 0x04)
+    }
+    if (response == 0x04) {
         return "data line stuck high";
+    }
     return "unknown error";
 }
 
@@ -206,7 +212,8 @@ int ps2_initialize()
     // Send 0xAA to the controller.
     __ps2_write_command(PS2_CTRL_TEST_CONTROLLER);
     // Read the response.
-    if ((response = ps2_read()) == PS2_TEST_FAIL1) {
+    response = ps2_read();
+    if (response == PS2_TEST_FAIL1) {
         pr_err("Self-test failed : 0x%02x\n", response);
         return 1;
     }
@@ -226,7 +233,8 @@ int ps2_initialize()
     // Read the status.
     status = __ps2_get_controller_status();
     // Check if it is a dual channel PS/2 device.
-    if ((dual = !bit_check(status, 5))) {
+    dual = !bit_check(status, 5);
+    if (dual) {
         pr_debug("Recognized a `dual channel` PS/2 controller...\n");
         __ps2_disable_second_port();
     } else {
@@ -245,7 +253,8 @@ int ps2_initialize()
     // can still keep using/supporting the other PS/2 port.
 
     __ps2_write_command(PS2_CTRL_P1_TEST);
-    if ((response = ps2_read()) && (response >= 0x01) && (response <= 0x04)) {
+    response = ps2_read();
+    if (response && (response >= 0x01) && (response <= 0x04)) {
         pr_err("Interface test failed on first port : %02x\n", response);
         pr_err("Reason: %s.\n", __ps2_get_response_error_message(response));
         return 1;
@@ -253,7 +262,8 @@ int ps2_initialize()
     // If it is a dual channel, check the second port.
     if (dual) {
         __ps2_write_command(PS2_CTRL_P2_TEST);
-        if ((response = ps2_read()) && (response >= 0x01) && (response <= 0x04)) {
+        response = ps2_read();
+        if (response && (response >= 0x01) && (response <= 0x04)) {
             pr_err("Interface test failed on second port : %02x\n", response);
             pr_err("Reason: %s.\n", __ps2_get_response_error_message(response));
             return 1;
@@ -271,8 +281,9 @@ int ps2_initialize()
     // Enable the first port.
     __ps2_enable_first_port();
     // Enable the second port.
-    if (dual)
+    if (dual) {
         __ps2_enable_second_port();
+    }
     // Get the status.
     status = __ps2_get_controller_status();
     pr_debug("Status   : %s (%3d | %02x)\n", dec_to_binary(status, 8), status, status);
@@ -298,12 +309,14 @@ int ps2_initialize()
     // Reset first port.
     __ps2_write_first_port(0xFF);
     // Wait for `command acknowledged`.
-    if ((response = ps2_read()) != PS2_ACK) {
+    response = ps2_read();
+    if ((response) != PS2_ACK) {
         pr_err("Failed to reset first PS/2 port: %d\n", response);
         return 1;
     }
     // Wait for `self test successful`.
-    if ((response = ps2_read()) != PS2_TEST_SUCCESS) {
+    response = ps2_read();
+    if ((response) != PS2_TEST_SUCCESS) {
         pr_err("Failed to reset first PS/2 port: %d\n", response);
         return 1;
     }
@@ -311,12 +324,14 @@ int ps2_initialize()
     // Reset second port.
     __ps2_write_second_port(0xFF);
     // Wait for `command acknowledged`.
-    if ((response = ps2_read()) != PS2_ACK) {
+    response = ps2_read();
+    if ((response) != PS2_ACK) {
         pr_err("Failed to reset first PS/2 port: %d\n", response);
         return 1;
     }
     // Wait for `self test successful`.
-    if ((response = ps2_read()) != PS2_TEST_SUCCESS) {
+    response = ps2_read();
+    if ((response) != PS2_TEST_SUCCESS) {
         pr_err("Failed to reset first PS/2 port: %d\n", response);
         return 1;
     }

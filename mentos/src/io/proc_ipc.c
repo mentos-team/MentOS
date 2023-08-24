@@ -4,13 +4,13 @@
 /// See LICENSE.md for details.
 
 #include "process/process.h"
-#include "sys/errno.h"
 #include "fs/procfs.h"
 #include "io/debug.h"
+#include "string.h"
+#include "sys/errno.h"
 #include "sys/msg.h"
 #include "sys/sem.h"
 #include "sys/shm.h"
-#include "string.h"
 
 
 extern ssize_t procipc_msg_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyte);

@@ -5,9 +5,9 @@
 
 #include "string.h"
 #include "ctype.h"
+#include "fcntl.h"
 #include "stdio.h"
 #include "stdlib.h"
-#include "fcntl.h"
 
 #ifdef __KERNEL__
 #include "mem/kheap.h"
@@ -25,8 +25,9 @@ char *strncpy(char *destination, const char *source, size_t num)
         // is found before num characters have been copied, destination is padded
         // with zeros until a total of num characters have been written to it.
         if (num) {
-            while (--num)
+            while (--num) {
                 *destination++ = '\0';
+            }
         }
     }
     // Pointer to destination is returned.
@@ -35,8 +36,9 @@ char *strncpy(char *destination, const char *source, size_t num)
 
 int strncmp(const char *s1, const char *s2, size_t n)
 {
-    if (!n)
+    if (!n) {
         return 0;
+    }
     while ((--n > 0) && (*s1) && (*s2) && (*s1 == *s2)) {
         s1++;
         s2++;
@@ -75,8 +77,9 @@ char *strchr(const char *s, int ch)
     while (*s && *s != (char)ch) {
         s++;
     }
-    if (*s == (char)ch)
+    if (*s == (char)ch) {
         return (char *)s;
+    }
     {
         return NULL;
     }
@@ -164,8 +167,9 @@ size_t strcspn(const char *string, const char *control)
     size_t n;
 
     // Clear out bit map.
-    for (n = 0; n < 32; n++)
+    for (n = 0; n < 32; n++) {
         map[n] = 0;
+    }
 
     // Set bits in control map.
     while (*ctrl) {
@@ -193,8 +197,9 @@ char *strpbrk(const char *string, const char *control)
     int n;
 
     // Clear out bit map.
-    for (n = 0; n < 32; n++)
+    for (n = 0; n < 32; n++) {
         map[n] = 0;
+    }
 
     // Set bits in control map.
     while (*ctrl) {
@@ -318,8 +323,9 @@ char *strncat(char *s1, const char *s2, size_t n)
     s1--;
 
     while (n--) {
-        if (!(*s1++ = *s2++))
+        if (!(*s1++ = *s2++)) {
             return start;
+        }
     }
 
     *s1 = '\0';
@@ -400,9 +406,8 @@ char *strtok_r(char *str, const char *delim, char **saveptr)
     // Determine if a token has been found.
     if (str == (char *)s) {
         return NULL;
-    } else {
-        return str;
     }
+    return str;
 }
 
 // Intrinsic functions.
@@ -626,8 +631,9 @@ char *strdup(const char *s)
 #else
     char *new = malloc(len);
 #endif
-    if (new == NULL)
+    if (new == NULL) {
         return NULL;
+    }
     new[len] = '\0';
     return (char *)memcpy(new, s, len);
 }
@@ -640,8 +646,9 @@ char *strndup(const char *s, size_t n)
 #else
     char *new = malloc(len);
 #endif
-    if (new == NULL)
+    if (new == NULL) {
         return NULL;
+    }
     new[len] = '\0';
     return (char *)memcpy(new, s, len);
 }

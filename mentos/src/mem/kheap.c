@@ -148,12 +148,15 @@ static inline block_t *__blkmngr_find_best_fitting(heap_header_t *header, uint32
     list_for_each_decl(it, &header->free)
     {
         block = list_entry(it, block_t, free);
-        if (!block->is_free)
+        if (!block->is_free) {
             continue;
-        if (!__blkmngr_does_it_fit(block, size))
+        }
+        if (!__blkmngr_does_it_fit(block, size)) {
             continue;
-        if (!best_fitting || (block->size < best_fitting->size))
+        }
+        if (!best_fitting || (block->size < best_fitting->size)) {
             best_fitting = block;
+        }
     }
     return best_fitting;
 }
@@ -164,8 +167,9 @@ static inline block_t *__blkmngr_get_previous_block(heap_header_t *header, block
     assert(header && "Received a NULL heap header.");
     assert(block && "Received null block.");
     // If the block is actually the head of the list, return NULL.
-    if (block->list.prev == &header->list)
+    if (block->list.prev == &header->list) {
         return NULL;
+    }
     return list_entry(block->list.prev, block_t, list);
 }
 
@@ -175,8 +179,9 @@ static inline block_t *__blkmngr_get_next_block(heap_header_t *header, block_t *
     assert(header && "Received a NULL heap header.");
     assert(block && "Received null block.");
     // If the block is actually the tail of the list, return NULL.
-    if (block->list.next == &header->list)
+    if (block->list.next == &header->list) {
         return NULL;
+    }
     return list_entry(block->list.next, block_t, list);
 }
 
@@ -284,8 +289,9 @@ static void *__do_brk(vm_area_struct_t *heap, uint32_t increment)
 /// @return Pointer to the allocated memory area.
 static void *__do_malloc(vm_area_struct_t *heap, size_t size)
 {
-    if (size == 0)
+    if (size == 0) {
         return NULL;
+    }
     // Get the heap header.
     heap_header_t *header = (heap_header_t *)heap->vm_start;
     // Calculate size that's used, round it to multiple of 16.

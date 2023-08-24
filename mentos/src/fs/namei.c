@@ -4,9 +4,9 @@
 /// See LICENSE.md for details.
 
 #include "process/scheduler.h"
-#include "sys/errno.h"
-#include "io/debug.h"
 #include "fs/vfs.h"
+#include "io/debug.h"
+#include "sys/errno.h"
 
 int sys_unlink(const char *path)
 {

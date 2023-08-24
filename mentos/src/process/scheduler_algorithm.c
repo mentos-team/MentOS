@@ -9,13 +9,13 @@
 #define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
 #include "io/debug.h"                    // Include debugging functions.
 
+#include "assert.h"
 #include "hardware/timer.h"
 #include "process/prio.h"
-#include "assert.h"
-#include "sys/list_head.h"
-#include "process/wait.h"
 #include "process/scheduler.h"
 #include "process/scheduler_feedback.h"
+#include "process/wait.h"
+#include "sys/list_head.h"
 
 /// @brief Updates task execution statistics.
 /// @param task the task to update.
@@ -49,16 +49,19 @@ static inline task_struct *__scheduler_rr(runqueue_t *runqueue, bool_t skip_peri
     list_for_each_decl(it, &runqueue->curr->run_list)
     {
         // Check if we reached the head of list_head, and skip it.
-        if (it == &runqueue->queue)
+        if (it == &runqueue->queue) {
             continue;
+        }
         // Get the current entry.
         entry = list_entry(it, task_struct, run_list);
         // We consider only runnable processes
-        if (entry->state != TASK_RUNNING)
+        if (entry->state != TASK_RUNNING) {
             continue;
+        }
         // If entry is a periodic task, and we were asked to skip periodic tasks, skip it.
-        if (__is_periodic_task(entry) && skip_periodic)
+        if (__is_periodic_task(entry) && skip_periodic) {
             continue;
+        }
         // We have our next entry.
         return entry;
     }

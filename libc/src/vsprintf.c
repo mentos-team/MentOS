@@ -4,12 +4,12 @@
 /// See LICENSE.md for details.
 
 #include "sys/bitops.h"
-#include "fcvt.h"
 #include "ctype.h"
-#include "string.h"
+#include "fcvt.h"
 #include "stdarg.h"
 #include "stdint.h"
 #include "stdio.h"
+#include "string.h"
 #include "sys/unistd.h"
 
 /// Size of the buffer used to call cvt functions.
@@ -35,8 +35,9 @@ static char *_upper_digits = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 static inline int skip_atoi(const char **s)
 {
     int i = 0;
-    while (isdigit(**s))
+    while (isdigit(**s)) {
         i = i * 10 + *((*s)++) - '0';
+    }
     return i;
 }
 
@@ -106,16 +107,17 @@ static char *number(char *str, long num, int base, int size, int32_t precision, 
     }
     size -= precision;
     if (!bitmask_check(flags, FLAGS_ZEROPAD | FLAGS_LEFT)) {
-        while (size-- > 0)
+        while (size-- > 0) {
             *str++ = ' ';
+        }
     }
     if (sign) {
         *str++ = sign;
     }
     if (bitmask_check(flags, FLAGS_HASH)) {
-        if (base == 8)
+        if (base == 8) {
             *str++ = '0';
-        else if (base == 16) {
+        } else if (base == 16) {
             *str++ = '0';
             *str++ = _digits[33];
         }
@@ -377,8 +379,9 @@ static char *flt(char *str, double num, int size, int precision, char fmt, unsig
     int n, i;
 
     // Left align means no zero padding.
-    if (bitmask_check(flags, FLAGS_LEFT))
+    if (bitmask_check(flags, FLAGS_LEFT)) {
         bitmask_clear_assign(flags, FLAGS_ZEROPAD);
+    }
 
     // Determine padding and sign char.
     c    = bitmask_check(flags, FLAGS_ZEROPAD) ? '0' : ' ';
@@ -589,10 +592,11 @@ int vsprintf(char *str, const char *fmt, va_list args)
             bitmask_set_assign(flags, FLAGS_UPPERCASE);
             break;
         case 'a':
-            if (qualifier == 'l')
+            if (qualifier == 'l') {
                 tmp = eaddr(tmp, va_arg(args, unsigned char *), field_width, precision, flags);
-            else
+            } else {
                 tmp = iaddr(tmp, va_arg(args, unsigned char *), field_width, precision, flags);
+            }
             continue;
             // Integer number formats - set up the flags and "break".
         case 'o':
@@ -621,12 +625,14 @@ int vsprintf(char *str, const char *fmt, va_list args)
             tmp = flt(tmp, va_arg(args, double), field_width, precision, *fmt, bitmask_set(flags, FLAGS_SIGN));
             continue;
         default:
-            if (*fmt != '%')
+            if (*fmt != '%') {
                 *tmp++ = '%';
-            if (*fmt)
+            }
+            if (*fmt) {
                 *tmp++ = *fmt;
-            else
+            } else {
                 --fmt;
+            }
             continue;
         }
 
@@ -694,8 +700,9 @@ int fprintf(int fd, const char *fmt, ...)
     va_end(ap);
 
     if (len > 0) {
-        if (write(fd, buffer, len) <= 0)
+        if (write(fd, buffer, len) <= 0) {
             return EOF;
+        }
         return len;
     }
     return -1;

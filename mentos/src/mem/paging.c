@@ -9,19 +9,19 @@
 #define __DEBUG_LEVEL__  LOGLEVEL_DEBUG ///< Set log level.
 #include "io/debug.h"                   // Include debugging functions.
 
+#include "assert.h"
+#include "descriptor_tables/isr.h"
+#include "mem/kheap.h"
 #include "mem/paging.h"
 #include "mem/vmem_map.h"
 #include "mem/zone_allocator.h"
-#include "mem/kheap.h"
-#include "descriptor_tables/isr.h"
-#include "system/panic.h"
-#include "sys/list_head_algorithm.h"
 #include "stddef.h"
 #include "stdint.h"
-#include "sys/list_head.h"
-#include "sys/mman.h"
-#include "assert.h"
 #include "string.h"
+#include "sys/list_head.h"
+#include "sys/list_head_algorithm.h"
+#include "sys/mman.h"
+#include "system/panic.h"
 
 /// Cache for storing mm_struct.
 kmem_cache_t *mm_cache;
@@ -218,8 +218,9 @@ inline vm_area_struct_t *find_vm_area(mm_struct_t *mm, uint32_t vm_start)
     {
         segment = list_entry(it, vm_area_struct_t, vm_list);
         assert(segment && "There is a NULL area in the list.");
-        if (segment->vm_start == vm_start)
+        if (segment->vm_start == vm_start) {
             return segment;
+        }
     }
     return NULL;
 }
@@ -343,16 +344,21 @@ static void __page_fault_panic(pt_regs *f, uint32_t addr)
     pr_err("Page fault: 0x%x\n", addr);
 
     pr_err("Possible causes: [ ");
-    if (!(f->err_code & ERR_PRESENT))
+    if (!(f->err_code & ERR_PRESENT)) {
         pr_err("Page not present ");
-    if (f->err_code & ERR_RW)
+    }
+    if (f->err_code & ERR_RW) {
         pr_err("Page is read only ");
-    if (f->err_code & ERR_USER)
+    }
+    if (f->err_code & ERR_USER) {
         pr_err("Page is privileged ");
-    if (f->err_code & ERR_RESERVED)
+    }
+    if (f->err_code & ERR_RESERVED) {
         pr_err("Overwrote reserved bits ");
-    if (f->err_code & ERR_INST)
+    }
+    if (f->err_code & ERR_INST) {
         pr_err("Instruction fetch ");
+    }
     pr_err("]\n");
     dbg_print_regs(f);
 
@@ -404,19 +410,18 @@ static page_table_t *__mem_pg_entry_alloc(page_dir_entry_t *entry, uint32_t flag
         entry->accessed  = 0;
         entry->available = 1;
         return kmem_cache_alloc(pgtbl_cache, GFP_KERNEL);
-    } else {
-        entry->present |= (flags & MM_PRESENT) != 0;
-        entry->rw |= (flags & MM_RW) != 0;
-
-        // We should not remove a global flag from a page directory,
-        // if this happens there is probably a bug in the kernel
-        assert(!entry->global || (flags & MM_GLOBAL));
-
-        entry->global &= (flags & MM_GLOBAL) != 0;
-        entry->user |= (flags & MM_USER) != 0;
-        return (page_table_t *)get_lowmem_address_from_page(
-            get_page_from_physical_address(((uint32_t)entry->frame) << 12U));
     }
+    entry->present |= (flags & MM_PRESENT) != 0;
+    entry->rw |= (flags & MM_RW) != 0;
+
+    // We should not remove a global flag from a page directory,
+    // if this happens there is probably a bug in the kernel
+    assert(!entry->global || (flags & MM_GLOBAL));
+
+    entry->global &= (flags & MM_GLOBAL) != 0;
+    entry->user |= (flags & MM_USER) != 0;
+    return (page_table_t *)get_lowmem_address_from_page(
+        get_page_from_physical_address(((uint32_t)entry->frame) << 12U));
 }
 
 static inline void __set_pg_entry_frame(page_dir_entry_t *entry, page_table_t *table)
@@ -630,7 +635,7 @@ void mem_upd_vm_area(page_directory_t *pgd,
         if (flags & MM_UPDADDR) {
             it.entry->frame = phy_pfn++;
             // Flush the tlb to allow address update
-            // TODO: Check if it's always needed (ex. when the pgdir is not the current one)
+            // TODO(enrico): Check if it's always needed (ex. when the pgdir is not the current one)
             paging_flush_tlb_single(it.pfn * PAGE_SIZE);
         }
         __set_pg_table_flags(it.entry, flags);
@@ -666,7 +671,7 @@ void mem_clone_vm_area(page_directory_t *src_pgd,
         }
 
         // Flush the tlb to allow address update
-        // TODO: Check if it's always needed (ex. when the pgdir is not the current one)
+        // TODO(enrico): Check if it's always needed (ex. when the pgdir is not the current one)
         paging_flush_tlb_single(dst_it.pfn * PAGE_SIZE);
     }
 }
@@ -677,7 +682,7 @@ mm_struct_t *create_blank_process_image(size_t stack_size)
     mm_struct_t *mm = kmem_cache_alloc(mm_cache, GFP_KERNEL);
     memset(mm, 0, sizeof(mm_struct_t));
 
-    // TODO: Use this field
+    // TODO(enrico): Use this field
     list_head_init(&mm->mm_list);
 
     page_directory_t *pdir_cpy = kmem_cache_alloc(pgdir_cache, GFP_KERNEL);

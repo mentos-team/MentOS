@@ -4,8 +4,8 @@
 /// See LICENSE.md for details.
 
 #include "system/printk.h"
-#include "stdarg.h"
 #include "io/video.h"
+#include "stdarg.h"
 #include "stdio.h"
 
 int sys_syslog(const char *format, ...)

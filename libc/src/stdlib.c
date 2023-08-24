@@ -4,10 +4,10 @@
 /// See LICENSE.md for details.
 
 #include "stddef.h"
-#include "system/syscall_types.h"
+#include "assert.h"
 #include "stdlib.h"
 #include "string.h"
-#include "assert.h"
+#include "system/syscall_types.h"
 
 /// @brief Number which identifies a memory area allocated through a call to
 /// malloc(), calloc() or realloc().
@@ -37,8 +37,9 @@ void *malloc(unsigned int size)
 void *calloc(size_t num, size_t size)
 {
     void *ptr = malloc(num * size);
-    if (ptr)
+    if (ptr) {
         memset(ptr, 0, num * size);
+    }
     return ptr;
 }
 

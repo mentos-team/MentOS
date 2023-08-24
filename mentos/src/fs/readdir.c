@@ -4,14 +4,14 @@
 /// See LICENSE.md for details.
 
 #include "sys/dirent.h"
-#include "process/scheduler.h"
-#include "system/syscall.h"
-#include "system/printk.h"
-#include "sys/errno.h"
-#include "stdio.h"
-#include "fs/vfs.h"
-#include "string.h"
 #include "assert.h"
+#include "fs/vfs.h"
+#include "process/scheduler.h"
+#include "stdio.h"
+#include "string.h"
+#include "sys/errno.h"
+#include "system/printk.h"
+#include "system/syscall.h"
 
 ssize_t sys_getdents(int fd, dirent_t *dirp, unsigned int count)
 {
@@ -44,7 +44,8 @@ ssize_t sys_getdents(int fd, dirent_t *dirp, unsigned int count)
     // Perform the read.
     ssize_t actual_read = vfs_getdents(file, dirp, process_fd->file_struct->f_pos, count);
     // Update the offset, only if the value the function returns is positive.
-    if (actual_read > 0)
+    if (actual_read > 0) {
         process_fd->file_struct->f_pos += actual_read;
+    }
     return actual_read;
 }

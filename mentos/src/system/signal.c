@@ -112,7 +112,7 @@ static int __sig_is_ignored(struct task_struct *t, int sig)
     sighandler_t handler = __get_handler(t, sig);
     // Check the type of the handler.
     return (handler == SIG_IGN) && (sig != SIGCHLD);
-    // TODO: do_signal() specifically checks if the handler is IGN and the signal
+    // TODO(enrico): do_signal() specifically checks if the handler is IGN and the signal
     //        is SIGCHLD, in that case it forces a wait for the parent, that's why
     //        here I'm also accepting as not-ignored a SIG_IGN which is a SIGCHLD.
 }
@@ -563,7 +563,7 @@ void handle_stop_signal(int sig, siginfo_t *info, struct task_struct *p)
     // pending signal queue p->signal->shared_pending and from the private
     // queues of all members of the thread group.
     if (sig == SIGSTOP || sig == SIGTSTP || sig == SIGTTIN || sig == SIGTTOU) {
-        // TODO: shared and thread group.
+        // TODO(enrico): shared and thread group.
 
         sigset_t mask;
         sigemptyset(&mask);
@@ -622,7 +622,7 @@ int __send_sig_info(int sig, siginfo_t *info, struct task_struct *p)
     // If the signal is being sent by a User Mode process,
     // it checks whether the operation is allowed.
     if (info->si_code == SI_USER) {
-        // TODO
+        // TODO(enrico):
     }
 
     // If the sig parameter has the value 0,

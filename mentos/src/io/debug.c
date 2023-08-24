@@ -4,13 +4,13 @@
 /// See LICENSE.md for details.
 
 #include "io/debug.h"
-#include "io/port_io.h"
 #include "io/ansi_colors.h"
-#include "sys/bitops.h"
+#include "io/port_io.h"
 #include "kernel.h"
-#include "string.h"
-#include "stdio.h"
 #include "math.h"
+#include "stdio.h"
+#include "string.h"
+#include "sys/bitops.h"
 
 /// Serial port for QEMU.
 #define SERIAL_COM1 (0x03F8)
@@ -24,8 +24,9 @@ void dbg_putchar(char c)
 
 void dbg_puts(const char *s)
 {
-    while ((*s) != 0)
+    while ((*s) != 0) {
         dbg_putchar(*s++);
+    }
 }
 
 static inline void __debug_print_header(const char *file, const char *fun, int line, short log_level, char *header)
@@ -77,8 +78,9 @@ static inline void __debug_print_header(const char *file, const char *fun, int l
 
 void set_log_level(int level)
 {
-    if ((level >= LOGLEVEL_EMERG) && (level <= LOGLEVEL_DEBUG))
+    if ((level >= LOGLEVEL_EMERG) && (level <= LOGLEVEL_DEBUG)) {
         max_log_level = level;
+    }
 }
 
 int get_log_level()
@@ -93,8 +95,9 @@ void dbg_printf(const char *file, const char *fun, int line, char *header, short
     static short new_line = 1;
 
     // Stage 1: FORMAT
-    if (strlen(format) >= BUFSIZ)
+    if (strlen(format) >= BUFSIZ) {
         return;
+    }
 
     // Start variabile argument's list.
     va_list ap;
@@ -133,8 +136,9 @@ const char *to_human_size(unsigned long bytes)
     int i                = 0;
     double dblBytes      = bytes;
     if (bytes > 1024) {
-        for (i = 0; (bytes / 1024) > 0 && i < length - 1; i++, bytes /= 1024)
+        for (i = 0; (bytes / 1024) > 0 && i < length - 1; i++, bytes /= 1024) {
             dblBytes = bytes / 1024.0;
+        }
     }
     sprintf(output, "%.02lf %2s", dblBytes, suffix[i]);
     return output;

@@ -10,9 +10,9 @@
 #include "io/debug.h"                    // Include debugging functions.
 
 #include "mem/slab.h"
-#include "sys/module.h"
 #include "string.h"
 #include "sys/bitops.h"
+#include "sys/module.h"
 
 /// Defined in kernel.ld, points at the end of kernel's data segment.
 extern void *_kernel_end;
@@ -27,8 +27,9 @@ int init_modules(multiboot_info_t *header)
         modules[i].cmdline   = 0;
         modules[i].pad       = 0;
     }
-    if (!bitmask_check(header->flags, MULTIBOOT_FLAG_MODS))
+    if (!bitmask_check(header->flags, MULTIBOOT_FLAG_MODS)) {
         return 1;
+    }
     multiboot_module_t *mod = first_module(header);
     for (int i = 0; (mod != 0) && (i < MAX_MODULES);
          ++i, mod = next_module(header, mod)) {
@@ -41,8 +42,9 @@ int relocate_modules()
 {
     for (int i = 0; i < MAX_MODULES; ++i) {
         // Exit if modules are finished
-        if (!modules[i].mod_start)
+        if (!modules[i].mod_start) {
             break;
+        }
 
         // Get module and cmdline sizes
         uint32_t mod_size     = modules[i].mod_end - modules[i].mod_start;
@@ -51,8 +53,9 @@ int relocate_modules()
         // Allocate needed memory, to copy both module and command line
         uint32_t memory = (uint32_t)kmalloc(mod_size + cmdline_size);
 
-        if (!memory)
+        if (!memory) {
             return 0;
+        }
 
         // Copy module and its command line
         memcpy((char *)memory, (char *)modules[i].mod_start, mod_size);
@@ -70,8 +73,9 @@ uintptr_t get_address_after_modules()
     // By default the first valid address is end.
     uintptr_t address_after_modules = (uintptr_t)&_kernel_end;
     for (int i = 0; i < MAX_MODULES; ++i) {
-        if (modules[i].mod_start != 0)
+        if (modules[i].mod_start != 0) {
             address_after_modules = modules[i].mod_end;
+        }
     }
     return address_after_modules;
 }

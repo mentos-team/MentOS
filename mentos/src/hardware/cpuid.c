@@ -146,7 +146,7 @@ char *cpuid_brand_index(pt_regs *f)
                           "Mobile Intel Celeron",
                           NULL };
 
-    int bx = (f->ebx & 0xFF);
+    uint32_t bx = (f->ebx & 0xFF);
 
     if (bx > 0x17) {
         bx = 0;

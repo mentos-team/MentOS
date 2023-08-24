@@ -9,13 +9,13 @@
 #define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
 #include "io/debug.h"                    // Include debugging functions.
 
-#include "mem/zone_allocator.h"
-#include "mem/buddysystem.h"
-#include "sys/list_head.h"
-#include "kernel.h"
 #include "assert.h"
+#include "kernel.h"
+#include "mem/buddysystem.h"
 #include "mem/paging.h"
+#include "mem/zone_allocator.h"
 #include "string.h"
+#include "sys/list_head.h"
 
 /// TODO: Comment.
 #define MIN_PAGE_ALIGN(addr) ((addr) & (~(PAGE_SIZE - 1)))
@@ -75,8 +75,9 @@ static zone_t *get_zone_from_page(page_t *page)
         last_page = zone->zone_mem_map + zone->size;
         assert(last_page && "Failed to retrieve the last page of the zone.");
         // Check if the page is before the last page of the zone.
-        if (page < last_page)
+        if (page < last_page) {
             return zone;
+        }
     }
     // Error: page is over memory size.
     return (zone_t *)NULL;
@@ -193,7 +194,7 @@ static int pmm_check()
     for (; j < 20; ++j) {
         free_pages_lowmem((uint32_t)ptr[j]);
     }
-    free_page_lowmem((uint32_t)ptr1);
+    free_page_lowmem(ptr1);
 
     if (!is_memory_clean(GFP_KERNEL)) {
         pr_emerg("Test failed, memory is not clean.\n");

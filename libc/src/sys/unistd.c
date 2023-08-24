@@ -4,9 +4,9 @@
 /// See LICENSE.md for details.
 
 #include "sys/unistd.h"
-#include "string.h"
 #include "limits.h"
 #include "stdio.h"
+#include "string.h"
 
 #if 0
 #include "vfs.h"

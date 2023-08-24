@@ -3,13 +3,13 @@
 /// @copyright (c) 2014-2023 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
+#include "libgen.h"
+#include "io/debug.h"
+#include "limits.h"
+#include "string.h"
 #include <assert.h>
 #include <stdlib.h>
 #include <sys/unistd.h>
-#include "libgen.h"
-#include "string.h"
-#include "limits.h"
-#include "io/debug.h"
 
 int dirname(const char *path, char *buffer, size_t buflen)
 {

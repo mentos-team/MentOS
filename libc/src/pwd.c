@@ -4,13 +4,13 @@
 /// See LICENSE.md for details.
 
 #include "pwd.h"
-#include "sys/unistd.h"
-#include "sys/errno.h"
-#include "io/debug.h"
 #include "assert.h"
-#include "string.h"
-#include "stdio.h"
 #include "fcntl.h"
+#include "io/debug.h"
+#include "stdio.h"
+#include "string.h"
+#include "sys/errno.h"
+#include "sys/unistd.h"
 
 /// @brief Parses the input buffer and fills pwd with its details.
 /// @param pwd the structure we need to fill.
@@ -20,32 +20,40 @@ static inline void __parse_line(passwd_t *pwd, char *buf)
     assert(pwd && "Received null pwd!");
     char *token, *ch;
     // Parse the username.
-    if ((token = strtok(buf, ":")) != NULL)
+    if ((token = strtok(buf, ":")) != NULL) {
         pwd->pw_name = token;
+    }
     // Parse the password.
-    if ((token = strtok(NULL, ":")) != NULL)
+    if ((token = strtok(NULL, ":")) != NULL) {
         pwd->pw_passwd = token;
+    }
     // Parse the user ID.
-    if ((token = strtok(NULL, ":")) != NULL)
+    if ((token = strtok(NULL, ":")) != NULL) {
         pwd->pw_uid = atoi(token);
+    }
     // Parse the group ID.
-    if ((token = strtok(NULL, ":")) != NULL)
+    if ((token = strtok(NULL, ":")) != NULL) {
         pwd->pw_gid = atoi(token);
+    }
     // Parse the user information.
-    if ((token = strtok(NULL, ":")) != NULL)
+    if ((token = strtok(NULL, ":")) != NULL) {
         pwd->pw_gecos = token;
+    }
     // Parse the dir.
-    if ((token = strtok(NULL, ":")) != NULL)
+    if ((token = strtok(NULL, ":")) != NULL) {
         pwd->pw_dir = token;
+    }
     // Parse the shell.
     if ((token = strtok(NULL, ":")) != NULL) {
         pwd->pw_shell = token;
         // Find carriege return.
-        if ((ch = strchr(pwd->pw_shell, '\r')))
+        if ((ch = strchr(pwd->pw_shell, '\r'))) {
             *ch = 0;
+        }
         // Find newline.
-        if ((ch = strchr(pwd->pw_shell, '\n')))
+        if ((ch = strchr(pwd->pw_shell, '\n'))) {
             *ch = 0;
+        }
     }
 }
 
@@ -71,7 +79,7 @@ ssize_t __readline(int fd, char *buffer, size_t buflen)
             }
         }
     }
-    long newline_len = (int)(newline - buffer);
+    long newline_len = (newline - buffer);
     if (newline_len <= 0) {
         return 0;
     }
@@ -106,17 +114,20 @@ static inline char *__search_entry(int fd, char *buffer, int buflen, const char 
         } else {
             // Name
             char *ptr = strchr(buffer, ':');
-            if (ptr == NULL)
+            if (ptr == NULL) {
                 continue;
+            }
             // Password
             ++ptr;
             char *uid_start = strchr(ptr, ':');
-            if (uid_start == NULL)
+            if (uid_start == NULL) {
                 continue;
+            }
             ++uid_start;
             ptr = strchr(uid_start, ':');
-            if (ptr == NULL)
+            if (ptr == NULL) {
                 continue;
+            }
             *ptr = '\0';
             // Parse the uid.
             int found_uid = atoi(uid_start);
@@ -132,13 +143,15 @@ static inline char *__search_entry(int fd, char *buffer, int buflen, const char 
 
 passwd_t *getpwnam(const char *name)
 {
-    if (name == NULL)
+    if (name == NULL) {
         return NULL;
+    }
     static passwd_t pwd;
     static char buffer[BUFSIZ];
     passwd_t *result;
-    if (!getpwnam_r(name, &pwd, buffer, BUFSIZ, &result))
+    if (!getpwnam_r(name, &pwd, buffer, BUFSIZ, &result)) {
         return NULL;
+    }
     return &pwd;
 }
 
@@ -147,15 +160,17 @@ passwd_t *getpwuid(uid_t uid)
     static passwd_t pwd;
     static char buffer[BUFSIZ];
     passwd_t *result;
-    if (!getpwuid_r(uid, &pwd, buffer, BUFSIZ, &result))
+    if (!getpwuid_r(uid, &pwd, buffer, BUFSIZ, &result)) {
         return NULL;
+    }
     return &pwd;
 }
 
 int getpwnam_r(const char *name, passwd_t *pwd, char *buf, size_t buflen, passwd_t **result)
 {
-    if (name == NULL)
+    if (name == NULL) {
         return 0;
+    }
     int fd = open("/etc/passwd", O_RDONLY, 0);
     if (fd == -1) {
         pr_debug("Cannot open `/etc/passwd`\n");

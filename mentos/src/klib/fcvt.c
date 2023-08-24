@@ -83,8 +83,9 @@ static void cvt(double arg, int ndigits, int *decpt, int *sign, char *buf, unsig
             *p1 = '1';
             (*decpt)++;
             if (eflag == 0) {
-                if (p > buf)
+                if (p > buf) {
                     *p = '0';
+                }
                 p++;
             }
         }

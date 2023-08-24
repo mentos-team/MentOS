@@ -11,12 +11,12 @@
 #define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
 #include "io/debug.h"                    // Include debugging functions.
 
+#include "descriptor_tables/isr.h"
 #include "drivers/rtc.h"
 #include "hardware/pic8259.h"
-#include "string.h"
 #include "io/port_io.h"
 #include "kernel.h"
-#include "descriptor_tables/isr.h"
+#include "string.h"
 
 #define CMOS_ADDR 0x70 ///< Addess where we need to write the Address.
 #define CMOS_DATA 0x71 ///< Addess where we need to write the Data.
@@ -30,20 +30,13 @@ int is_bcd;
 
 static inline unsigned int rtc_are_different(tm_t *t0, tm_t *t1)
 {
-    if (t0->tm_sec != t1->tm_sec)
-        return 1;
-    if (t0->tm_min != t1->tm_min)
-        return 1;
-    if (t0->tm_hour != t1->tm_hour)
-        return 1;
-    if (t0->tm_mon != t1->tm_mon)
-        return 1;
-    if (t0->tm_year != t1->tm_year)
-        return 1;
-    if (t0->tm_wday != t1->tm_wday)
-        return 1;
-    if (t0->tm_mday != t1->tm_mday)
-        return 1;
+    if (t0->tm_sec != t1->tm_sec) { return 1; }
+    if (t0->tm_min != t1->tm_min) { return 1; }
+    if (t0->tm_hour != t1->tm_hour) { return 1; }
+    if (t0->tm_mon != t1->tm_mon) { return 1; }
+    if (t0->tm_year != t1->tm_year) { return 1; }
+    if (t0->tm_wday != t1->tm_wday) { return 1; }
+    if (t0->tm_mday != t1->tm_mday) { return 1; }
     return 0;
 }
 

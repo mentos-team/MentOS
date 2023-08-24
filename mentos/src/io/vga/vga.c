@@ -9,16 +9,16 @@
 #define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
 #include "io/debug.h"                    // Include debugging functions.
 
-#include "io/vga/vga.h"
-#include "io/vga/vga_palette.h"
-#include "io/vga/vga_mode.h"
-#include "io/vga/vga_font.h"
 #include "hardware/timer.h"
 #include "io/port_io.h"
+#include "io/vga/vga.h"
+#include "io/vga/vga_font.h"
+#include "io/vga/vga_mode.h"
+#include "io/vga/vga_palette.h"
 #include "io/video.h"
+#include "math.h"
 #include "stdbool.h"
 #include "string.h"
-#include "math.h"
 
 /// Attribute Controller index port.
 #define AC_INDEX 0x03C0
@@ -111,12 +111,15 @@ static inline char *__get_seg(void)
     unsigned int seg;
     outportb(GC_INDEX, 6);
     seg = (inportb(GC_DATA) >> 2) & 3;
-    if ((seg == 0) || (seg == 1))
+    if ((seg == 0) || (seg == 1)) {
         return (char *)0xA0000;
-    if (seg == 2)
+    }
+    if (seg == 2) {
         return (char *)0xB0000;
-    if (seg == 3)
+    }
+    if (seg == 3) {
         return (char *)0xB8000;
+    }
     return (char *)seg;
 }
 
@@ -183,8 +186,9 @@ static inline void __set_plane(unsigned int plane)
     static unsigned __current_plane = -1u;
     unsigned char pmask;
     plane &= 3;
-    if (__current_plane == plane)
+    if (__current_plane == plane) {
         return;
+    }
     // Store the current plane.
     __current_plane = plane;
     // Compute the plane mask.
@@ -384,8 +388,9 @@ static inline unsigned int __reverse_bits(char num)
     unsigned int reverse_num = 0;
     int i;
     for (i = 0; i < NO_OF_BITS; i++) {
-        if ((num & (1 << i)))
+        if ((num & (1 << i))) {
             reverse_num |= 1 << ((NO_OF_BITS - 1) - i);
+        }
     }
     return reverse_num;
 }
@@ -461,10 +466,11 @@ static inline void __write_pixel_4(int x, int y, unsigned char color)
     pmask = 1;
     for (plane = 0; plane < 4; ++plane) {
         __set_plane(plane);
-        if (pmask & color)
+        if (pmask & color) {
             __write_byte(off, __read_byte(off) | mask);
-        else
+        } else {
             __write_byte(off, __read_byte(off) & ~mask);
+        }
         pmask <<= 1;
     }
 }
@@ -511,15 +517,17 @@ int vga_is_enabled()
 
 int vga_width()
 {
-    if (vga_enable)
+    if (vga_enable) {
         return driver->width;
+    }
     return 0;
 }
 
 int vga_height()
 {
-    if (vga_enable)
+    if (vga_enable) {
         return driver->height;
+    }
     return 0;
 }
 
@@ -571,19 +579,22 @@ void vga_draw_line(int x0, int y0, int x1, int y1, unsigned char color)
     int err = (dx > dy ? dx : -dy) / 2;
     while (true) {
         vga_draw_pixel(x0, y0, color);
-        if ((x0 == x1) && (y0 == y1))
+        if ((x0 == x1) && (y0 == y1)) {
             break;
+        }
         if (dx > dy) {
             x0 += sx;
             err -= dy;
-            if (err < 0)
+            if (err < 0) {
                 err += dx;
+            }
             y0 += sy;
         } else {
             y0 += sy;
             err -= dx;
-            if (err < 0)
+            if (err < 0) {
                 err += dy;
+            }
             x0 += sx;
         }
     }
@@ -602,8 +613,9 @@ void vga_draw_circle(int xc, int yc, int r, unsigned char color)
     int x = 0;
     int y = r;
     int p = 3 - 2 * r;
-    if (!r)
+    if (!r) {
         return;
+    }
     while (y >= x) // only formulate 1/8 of circle
     {
         vga_draw_pixel(xc - x, yc - y, color); //upper left left
@@ -791,30 +803,36 @@ static int _cursor_state    = 0;
 
 inline static void __vga_clear_cursor()
 {
-    for (unsigned cy = 0; cy < driver->font->height; ++cy)
-        for (unsigned cx = 0; cx < driver->font->width; ++cx)
+    for (unsigned cy = 0; cy < driver->font->height; ++cy) {
+        for (unsigned cx = 0; cx < driver->font->width; ++cx) {
             vga_draw_pixel(_x + cx, _y + cy, 0);
+        }
+    }
 }
 
 inline static void __vga_draw_cursor()
 {
     unsigned char color = (_cursor_state = (_cursor_state == 0)) * _color;
-    for (unsigned cy = 0; cy < driver->font->height; ++cy)
-        for (unsigned cx = 0; cx < driver->font->width; ++cx)
+    for (unsigned cy = 0; cy < driver->font->height; ++cy) {
+        for (unsigned cx = 0; cx < driver->font->width; ++cx) {
             vga_draw_pixel(_x + cx, _y + cy, color);
+        }
+    }
 }
 
 void vga_putc(int c)
 {
     if (_cursor_state)
+
         __vga_clear_cursor();
     // If the character is '\n' go the new line.
     if (c == '\n') {
         vga_new_line();
     } else if ((c >= 0x20) && (c <= 0x7E)) {
         vga_draw_char(_x, _y, c, _color);
-        if ((_x += driver->font->width) >= driver->width)
+        if ((_x += driver->font->width) >= driver->width) {
             vga_new_line();
+        }
     } else {
         return;
     }
@@ -836,18 +854,22 @@ void vga_move_cursor(unsigned int x, unsigned int y)
 
 void vga_get_cursor_position(unsigned int *x, unsigned int *y)
 {
-    if (x)
+    if (x) {
         *x = _x / driver->font->width;
-    if (y)
+    }
+    if (y) {
         *y = _y / driver->font->height;
+    }
 }
 
 void vga_get_screen_size(unsigned int *width, unsigned int *height)
 {
-    if (width)
+    if (width) {
         *width = driver->width / driver->font->width;
-    if (height)
+    }
+    if (height) {
         *height = driver->height / driver->font->height;
+    }
 }
 
 void vga_clear_screen()

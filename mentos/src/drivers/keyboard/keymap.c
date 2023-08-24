@@ -20,19 +20,21 @@ keymap_type_t get_keymap_type()
 
 void set_keymap_type(keymap_type_t type)
 {
-    if (type != keymap_type)
+    if (type != keymap_type) {
         keymap_type = type;
+    }
 }
 
-const keymap_t *get_keymap(int scancode)
+const keymap_t *get_keymap(unsigned int scancode)
 {
     return &keymaps[keymap_type][scancode];
 }
 
 void init_keymaps()
 {
-    for (int i = 0; i < KEYMAP_TYPE_MAX; ++i)
+    for (int i = 0; i < KEYMAP_TYPE_MAX; ++i) {
         memset(&keymaps[i], -1, sizeof(keymap_t));
+    }
 
     // == ITALIAN KEY MAPPING =================================================
     //                 Keys                Normal  Shifted Ctrl    Alt

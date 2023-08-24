@@ -4,21 +4,21 @@
 /// See LICENSE.md for details.
 
 #include "sys/ipc.h"
-#include "sys/unistd.h"
-#include "sys/errno.h"
-#include "sys/stat.h"
-#include "sys/sem.h"
-#include "sys/shm.h"
-#include "sys/msg.h"
 
-#include "system/syscall_types.h"
-#include "stddef.h"
-#include "string.h"
 #include "io/debug.h"
+#include "io/debug.h"
+#include "stddef.h"
+#include "stdio.h"
 #include "stdio.h"
 #include "stdlib.h"
-#include "io/debug.h"
-#include "stdio.h"
+#include "string.h"
+#include "sys/errno.h"
+#include "sys/msg.h"
+#include "sys/sem.h"
+#include "sys/shm.h"
+#include "sys/stat.h"
+#include "sys/unistd.h"
+#include "system/syscall_types.h"
 
 _syscall3(void *, shmat, int, shmid, const void *, shmaddr, int, shmflg)
 
@@ -41,8 +41,9 @@ int msgsnd(int msqid, const void *msgp, size_t msgsz, int msgflg)
     long __res;
     do {
         __inline_syscall4(__res, msgsnd, msqid, msgp, msgsz, msgflg);
-        if (!(msgflg & IPC_NOWAIT) && (__res == -EAGAIN))
+        if (!(msgflg & IPC_NOWAIT) && (__res == -EAGAIN)) {
             continue;
+        }
         break;
     } while (1);
     __syscall_return(int, __res);
@@ -53,8 +54,9 @@ ssize_t msgrcv(int msqid, void *msgp, size_t msgsz, long msgtyp, int msgflg)
     long __res;
     do {
         __inline_syscall5(__res, msgrcv, msqid, msgp, msgsz, msgtyp, msgflg);
-        if (!(msgflg & IPC_NOWAIT) && ((__res == -EAGAIN) || (__res == -ENOMSG)))
+        if (!(msgflg & IPC_NOWAIT) && ((__res == -EAGAIN) || (__res == -ENOMSG))) {
             continue;
+        }
         break;
     } while (1);
     __syscall_return(int, __res);
@@ -92,8 +94,9 @@ long semop(int semid, struct sembuf *sops, unsigned nsops)
             // If we get an error, the operation has been taken care of we stop
             // the loop. We also stop the loop if the operation is not allowed
             // and the IPC_NOWAIT flag is 1
-            if ((__res != -EAGAIN) || (op->sem_flg & IPC_NOWAIT))
+            if ((__res != -EAGAIN) || (op->sem_flg & IPC_NOWAIT)) {
                 break;
+            }
         }
         // If the operation couldn't be performed and we had the IPC_NOWAIT set
         // to 1 then we return.

@@ -4,23 +4,23 @@
 /// See LICENSE.md for details.
 
 // Setup the logging for this file (do this before any other include).
-#include "sys/kernel_levels.h"          // Include kernel log levels.
-#define __DEBUG_HEADER__ "[VFS   ]"     ///< Change header.
+#include "sys/kernel_levels.h"           // Include kernel log levels.
+#define __DEBUG_HEADER__ "[VFS   ]"      ///< Change header.
 #define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
-#include "io/debug.h"                   // Include debugging functions.
+#include "io/debug.h"                    // Include debugging functions.
 
-#include "fs/vfs.h"
-#include "process/scheduler.h"
-#include "klib/spinlock.h"
-#include "strerror.h"
-#include "system/syscall.h"
-#include "klib/hashmap.h"
-#include "string.h"
-#include "fs/procfs.h"
 #include "assert.h"
+#include "fs/procfs.h"
+#include "fs/vfs.h"
+#include "klib/hashmap.h"
+#include "klib/spinlock.h"
 #include "libgen.h"
-#include "system/panic.h"
+#include "process/scheduler.h"
 #include "stdio.h"
+#include "strerror.h"
+#include "string.h"
+#include "system/panic.h"
+#include "system/syscall.h"
 
 /// The hashmap that associates a type of Filesystem `name` to its `mount` function;
 static hashmap_t *vfs_filesystems;
@@ -94,7 +94,7 @@ super_block_t *vfs_get_superblock(const char *absolute_path)
             }
         }
 #else
-        int len = strlen(superblock->path);
+        size_t len = strlen(superblock->path);
         if (!strncmp(absolute_path, superblock->path, len)) {
             if (len > last_sb_len) {
                 last_sb_len = len;
@@ -544,8 +544,9 @@ int vfs_destroy_task(task_struct *task)
             // Decrease the counter.
             --task->fd_list[fd].file_struct->count;
             // If counter is zero, close the file.
-            if (task->fd_list[fd].file_struct->count == 0)
+            if (task->fd_list[fd].file_struct->count == 0) {
                 task->fd_list[fd].file_struct->fs_operations->close_f(task->fd_list[fd].file_struct);
+            }
             // Clear the pointer to the file structure.
             task->fd_list[fd].file_struct = NULL;
         }

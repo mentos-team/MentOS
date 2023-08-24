@@ -246,4 +246,4 @@ ssize_t getdents(int fd, dirent_t *dirp, unsigned int count);
 /// shall return a non-zero value that is the number of seconds until the
 /// previous request would have generated a SIGALRM signal. Otherwise, alarm()
 /// shall return 0.
-int alarm(int seconds);
+unsigned alarm(int seconds);

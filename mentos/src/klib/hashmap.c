@@ -5,8 +5,8 @@
 
 #include "klib/hashmap.h"
 #include "assert.h"
-#include "string.h"
 #include "mem/slab.h"
+#include "string.h"
 
 /// @brief Stores information of an entry of the hashmap.
 struct hashmap_entry_t {
@@ -84,8 +84,9 @@ unsigned int hashmap_str_hash(const void *_key)
     char c;
     // This is the so-called "sdbm" hash. It comes from a piece of public
     // domain code from a clone of ndbm.
-    while ((c = *key++))
+    while ((c = *key++)) {
         hash = c + (hash << 6) + (hash << 16) - hash;
+    }
     return hash;
 }
 
@@ -178,9 +179,13 @@ void *hashmap_set(hashmap_t *map, const void *key, void *value)
 void *hashmap_get(hashmap_t *map, const void *key)
 {
     unsigned int hash = map->hash_func(key) % map->size;
-    for (hashmap_entry_t *x = map->entries[hash]; x; x = x->next)
-        if (map->hash_comp(x->key, key))
-            return x->value;
+    for (hashmap_entry_t *x = map->entries[hash]; x; x = x->next) {
+        if (map->hash_comp(x->key, key)) {
+            {
+                return x->value;
+            }
+        }
+    }
     return NULL;
 }
 
@@ -219,35 +224,43 @@ void *hashmap_remove(hashmap_t *map, const void *key)
 
 int hashmap_is_empty(hashmap_t *map)
 {
-    for (unsigned int i = 0; i < map->size; ++i)
-        if (map->entries[i])
+    for (unsigned int i = 0; i < map->size; ++i) {
+        if (map->entries[i]) {
             return 0;
+        }
+    }
     return 1;
 }
 
 int hashmap_has(hashmap_t *map, const void *key)
 {
     unsigned int hash = map->hash_func(key) % map->size;
-    for (hashmap_entry_t *x = map->entries[hash]; x; x = x->next)
-        if (map->hash_comp(x->key, key))
+    for (hashmap_entry_t *x = map->entries[hash]; x; x = x->next) {
+        if (map->hash_comp(x->key, key)) {
             return 1;
+        }
+    }
     return 0;
 }
 
 list_t *hashmap_keys(hashmap_t *map)
 {
     list_t *l = list_create();
-    for (unsigned int i = 0; i < map->size; ++i)
-        for (hashmap_entry_t *x = map->entries[i]; x; x = x->next)
+    for (unsigned int i = 0; i < map->size; ++i) {
+        for (hashmap_entry_t *x = map->entries[i]; x; x = x->next) {
             list_insert_back(l, x->key);
+        }
+    }
     return l;
 }
 
 list_t *hashmap_values(hashmap_t *map)
 {
     list_t *l = list_create();
-    for (unsigned int i = 0; i < map->size; ++i)
-        for (hashmap_entry_t *x = map->entries[i]; x; x = x->next)
+    for (unsigned int i = 0; i < map->size; ++i) {
+        for (hashmap_entry_t *x = map->entries[i]; x; x = x->next) {
             list_insert_back(l, x->value);
+        }
+    }
     return l;
 }

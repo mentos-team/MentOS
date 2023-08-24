@@ -4,11 +4,11 @@
 /// See LICENSE.md for details.
 
 #include "fs/ioctl.h"
+#include "fs/vfs.h"
 #include "process/scheduler.h"
-#include "system/printk.h"
 #include "stdio.h"
 #include "sys/errno.h"
-#include "fs/vfs.h"
+#include "system/printk.h"
 
 int sys_ioctl(int fd, int request, void *data)
 {

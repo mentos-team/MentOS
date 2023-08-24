@@ -11,8 +11,8 @@
 #define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
 #include "io/debug.h"                    // Include debugging functions.
 
-#include "drivers/mouse.h"
 #include "descriptor_tables/isr.h"
+#include "drivers/mouse.h"
 #include "hardware/pic8259.h"
 #include "io/port_io.h"
 
@@ -38,21 +38,15 @@ static void __mouse_waitcmd(unsigned char type)
 {
     register unsigned int _time_out = 100000;
     if (type == 0) {
-        // DATA.
+        // DATA
         while (_time_out--) {
-            if ((inportb(0x64) & 1) == 1) {
-                return;
-            }
+            if ((inportb(0x64) & 1) == 1) { break; }
         }
-        return;
     } else {
-        while (_time_out--) // SIGNALS
-        {
-            if ((inportb(0x64) & 2) == 0) {
-                return;
-            }
+        // SIGNALS
+        while (_time_out--) {
+            if ((inportb(0x64) & 2) == 0) { break; }
         }
-        return;
     }
 }
 
@@ -207,7 +201,7 @@ int mouse_finalize()
 {
     // Uninstall the IRQ.
     irq_uninstall_handler(IRQ_MOUSE, __mouse_isr);
-    
+
     // Disable the mouse.
     __mouse_disable();
     return 0;

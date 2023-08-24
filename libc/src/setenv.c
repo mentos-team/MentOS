@@ -3,10 +3,10 @@
 /// @copyright (c) 2014-2023 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include <assert.h>
 #include "sys/errno.h"
-#include "string.h"
 #include "stdlib.h"
+#include "string.h"
+#include <assert.h>
 
 char **environ;
 
@@ -23,9 +23,11 @@ static inline int __find_entry(const char *name, const size_t name_len)
 {
     if (environ) {
         int index = 0;
-        for (char **ptr = environ; *ptr; ++ptr, ++index)
-            if (!strncmp((*ptr), name, name_len) && (*ptr)[name_len] == '=')
+        for (char **ptr = environ; *ptr; ++ptr, ++index) {
+            if (!strncmp((*ptr), name, name_len) && (*ptr)[name_len] == '=') {
                 return index;
+            }
+        }
     }
     return -1;
 }
@@ -98,8 +100,9 @@ int setenv(const char *name, const char *value, int replace)
         environ = __environ = new_environ;
     }
     // Free the previous entry.
-    if (environ[index])
+    if (environ[index]) {
         free(environ[index]);
+    }
     // Allocate the new entry.
     environ[index] = malloc(total_len);
     // Memcopy because we do not want the null terminating character.
@@ -129,8 +132,9 @@ int unsetenv(const char *name)
         if (!strncmp(*ep, name, len) && (*ep)[len] == '=') {
             /* Found it.  Remove this pointer by moving later ones back.  */
             char **dp = ep;
-            do dp[0] = dp[1];
-            while (*dp++);
+            do {
+                dp[0] = dp[1];
+            } while (*dp++);
             /* Continue the loop in case NAME appears again.  */
         } else {
             ++ep;

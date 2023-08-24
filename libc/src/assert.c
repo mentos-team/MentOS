@@ -4,8 +4,8 @@
 /// See LICENSE.md for details.
 
 #include "assert.h"
-#include "stdlib.h"
 #include "stdio.h"
+#include "stdlib.h"
 
 void __assert_fail(const char *assertion, const char *file, const char *function, unsigned int line)
 {

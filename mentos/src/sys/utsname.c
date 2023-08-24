@@ -9,21 +9,23 @@
 #define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
 #include "io/debug.h"                    // Include debugging functions.
 
-#include "string.h"
-#include "sys/utsname.h"
-#include "version.h"
-#include "sys/errno.h"
 #include "fcntl.h"
 #include "fs/vfs.h"
+#include "string.h"
+#include "sys/errno.h"
+#include "sys/utsname.h"
+#include "version.h"
 
 static inline int __gethostname(char *name, size_t len)
 {
     // Check if name is an invalid address.
-    if (!name)
+    if (!name) {
         return -EFAULT;
+    }
     // Check if len is negative.
-    if (len < 0)
+    if (len < 0) {
         return -EINVAL;
+    }
     // Open the file.
     vfs_file_t *file = vfs_open("/etc/hostname", O_RDONLY, 0);
     if (file == NULL) {

@@ -4,12 +4,12 @@
 /// See LICENSE.md for details.
 
 #include "system/syscall.h"
-#include "libgen.h"
-#include "string.h"
-#include "limits.h"
 #include "assert.h"
-#include "mem/paging.h"
 #include "io/debug.h"
+#include "libgen.h"
+#include "limits.h"
+#include "mem/paging.h"
+#include "string.h"
 
 int dirname(const char *path, char *buffer, size_t buflen)
 {

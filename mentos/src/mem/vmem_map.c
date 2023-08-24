@@ -10,8 +10,8 @@
 #include "io/debug.h"                    // Include debugging functions.
 
 #include "mem/vmem_map.h"
-#include "system/panic.h"
 #include "string.h"
+#include "system/panic.h"
 
 /// Virtual addresses manager.
 static virt_map_page_manager_t virt_default_mapping;
@@ -88,8 +88,9 @@ static virt_map_page_t *_alloc_virt_pages(uint32_t pfn_count)
 uint32_t virt_map_physical_pages(page_t *page, int pfn_count)
 {
     virt_map_page_t *vpage = _alloc_virt_pages(pfn_count);
-    if (!vpage)
+    if (!vpage) {
         return 0;
+    }
 
     uint32_t virt_address = VIRT_PAGE_TO_ADDRESS(vpage);
     uint32_t phy_address  = get_physical_address_from_page(page);

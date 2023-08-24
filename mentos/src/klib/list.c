@@ -5,8 +5,8 @@
 
 #include "klib/list.h"
 #include "assert.h"
-#include "string.h"
 #include "mem/slab.h"
+#include "string.h"
 
 static inline listnode_t *__node_alloc()
 {
@@ -105,7 +105,8 @@ void *list_remove_node(list_t *list, listnode_t *node)
 
     if (list->head == node) {
         return list_remove_front(list);
-    } else if (list->tail == node) {
+    }
+    if (list->tail == node) {
         return list_remove_back(list);
     }
 

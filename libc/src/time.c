@@ -4,10 +4,10 @@
 /// See LICENSE.md for details.
 
 #include "time.h"
-#include "system/syscall_types.h"
-#include "sys/errno.h"
-#include "string.h"
 #include "stdio.h"
+#include "string.h"
+#include "sys/errno.h"
+#include "system/syscall_types.h"
 
 /// @brief List of week days name.
 static const char *weekdays[] = {
@@ -23,7 +23,7 @@ static const char *months[] = {
 /// @brief Time function.
 _syscall1(time_t, time, time_t *, t)
 
-time_t difftime(time_t time1, time_t time2)
+    time_t difftime(time_t time1, time_t time2)
 {
     return time1 - time2;
 }
@@ -69,7 +69,7 @@ tm_t *localtime(const time_t *time)
     t /= 24;
     // Convert Unix time to date
     a = (unsigned int)((4 * t + 102032) / 146097 + 15);
-    b = (unsigned int)(t + 2442113 + a - (a / 4));
+    b = (t + 2442113 + a - (a / 4));
     c = (20 * b - 2442) / 7305;
     d = b - 365 * c - (c / 4);
     e = d * 1000 / 30601;
@@ -383,7 +383,7 @@ size_t strftime(char *str, size_t maxsize, const char *format, const tm_t *timep
 /// @brief nanosleep function.
 _syscall2(int, nanosleep, const timespec *, req, timespec *, rem)
 
-unsigned int sleep(unsigned int seconds)
+    unsigned int sleep(unsigned int seconds)
 {
     timespec req, rem;
     req.tv_sec = seconds;
@@ -399,4 +399,4 @@ unsigned int sleep(unsigned int seconds)
 
 _syscall2(int, getitimer, int, which, itimerval *, curr_value)
 
-_syscall3(int, setitimer, int, which, const itimerval *, new_value, itimerval *, old_value)
+    _syscall3(int, setitimer, int, which, const itimerval *, new_value, itimerval *, old_value)

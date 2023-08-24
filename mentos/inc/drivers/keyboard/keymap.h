@@ -44,7 +44,7 @@ void set_keymap_type(keymap_type_t type);
 /// @brief Returns the current keymap for the given scancode.
 /// @param scancode the scancode we want.
 /// @return Pointer to the keymap.
-const keymap_t *get_keymap(int scancode);
+const keymap_t *get_keymap(unsigned int scancode);
 
 /// @brief Initializes the supported keymaps.
 void init_keymaps();
