@@ -7,6 +7,7 @@
 #include "assert.h"
 #include "fcntl.h"
 #include "io/debug.h"
+#include "readline.h"
 #include "stdio.h"
 #include "string.h"
 #include "sys/errno.h"
@@ -57,41 +58,6 @@ static inline void __parse_line(passwd_t *pwd, char *buf)
     }
 }
 
-/// @brief Reads a line from the file.
-/// @param fd the file descriptor.
-/// @param buffer the buffer where we place the line.
-/// @param buflen the length of the buffer.
-/// @return the amount we read.
-ssize_t __readline(int fd, char *buffer, size_t buflen)
-{
-    memset(buffer, 0, buflen);
-    long num_read = read(fd, buffer, buflen);
-    if (num_read == 0) {
-        return 0;
-    }
-    char *newline = strchr(buffer, '\n');
-    if (newline == NULL) {
-        newline = strchr(buffer, EOF);
-        if (newline == NULL) {
-            newline = strchr(buffer, 0);
-            if (newline == NULL) {
-                return 0;
-            }
-        }
-    }
-    long newline_len = (newline - buffer);
-    if (newline_len <= 0) {
-        return 0;
-    }
-    buffer[newline_len] = 0;
-    long rollback       = newline_len - num_read + 1;
-    if (rollback > 1) {
-        return 0;
-    }
-    lseek(fd, rollback, SEEK_CUR);
-    return newline_len;
-}
-
 /// @brief Searches for the given entry inside the buffer.
 /// @param fd the file descriptor of the file.
 /// @param buffer the support buffer we use to read the file.
@@ -101,7 +67,7 @@ ssize_t __readline(int fd, char *buffer, size_t buflen)
 /// @return the buffer itself if we have found the entry, NULL otherwise.
 static inline char *__search_entry(int fd, char *buffer, int buflen, const char *name, uid_t uid)
 {
-    while (__readline(fd, buffer, buflen)) {
+    while (readline(fd, buffer, buflen, NULL) != 0) {
         if (name != NULL) {
             char *name_end = strchr(buffer, ':');
             if (name_end) {
