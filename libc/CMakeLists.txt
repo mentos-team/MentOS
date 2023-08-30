@@ -89,6 +89,7 @@ add_library(
     ${PROJECT_SOURCE_DIR}/src/pwd.c
     ${PROJECT_SOURCE_DIR}/src/grp.c
     ${PROJECT_SOURCE_DIR}/src/sched.c
+    ${PROJECT_SOURCE_DIR}/src/readline.c
     ${PROJECT_SOURCE_DIR}/src/setenv.c
     ${PROJECT_SOURCE_DIR}/src/assert.c
     ${PROJECT_SOURCE_DIR}/src/abort.c
