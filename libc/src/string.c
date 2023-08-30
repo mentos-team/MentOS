@@ -218,7 +218,7 @@ char *strpbrk(const char *string, const char *control)
     return NULL;
 }
 
-int tokenize(char *string, char *separators, size_t *offset, char *buffer, ssize_t buflen)
+int tokenize(const char *string, char *separators, size_t *offset, char *buffer, ssize_t buflen)
 {
     // If we reached the end of the parsed string, stop.
     if (string[*offset] == 0) {
