@@ -43,6 +43,7 @@ int strncmp(const char *s1, const char *s2, size_t n)
         s1++;
         s2++;
     }
+
     return *(unsigned char *)s1 - *(unsigned char *)s2;
 }
 
@@ -217,23 +218,29 @@ char *strpbrk(const char *string, const char *control)
     return NULL;
 }
 
-int tokenize(char **path, char separator, char *buffer, ssize_t buflen)
+int tokenize(char *string, char *separators, size_t *offset, char *buffer, ssize_t buflen)
 {
     // If we reached the end of the parsed string, stop.
-    if (**path == '\0') {
+    if (string[*offset] == 0) {
         return 0;
-    }
-    // If the first character is the separator, skip it/
-    if (**path == separator) {
-        ++(*path);
     }
     // Keep copying character until we either reach 1) the end of the buffer, 2) a
     // separator, or 3) the end of the string we are parsing.
-    while ((buflen > 0) && (**path != '\0') && (**path != separator)) {
-        *buffer++ = **path;
-        ++(*path);
-        --buflen;
-    }
+    do {
+        for (char *separator = separators; *separator != 0; ++separator) {
+            if (string[*offset] == *separator) {
+                // Skip the character.
+                ++(*offset);
+                // Close the buffer.
+                *buffer = '\0';
+                return 1;
+            }
+        }
+        // Save the character.
+        *buffer = string[*offset];
+        // Advance the offset, decrese the available size in the buffer, and advance the buffer.
+        ++(*offset), --buflen, ++buffer;
+    } while ((buflen > 0) && (string[*offset] != 0));
     // Close the buffer.
     *buffer = '\0';
     return 1;
@@ -458,7 +465,7 @@ void *memcpy(void *dst, const void *src, size_t num)
     // Initialize the content of the memory.
     while (num--) *_dst++ = *_src++;
     // Return the pointer.
-    return dst;
+    return (void *)dst;
 }
 
 void *memccpy(void *dst, const void *src, int c, size_t n)
@@ -474,62 +481,49 @@ void *memccpy(void *dst, const void *src, int c, size_t n)
 char *strcpy(char *dst, const char *src)
 {
     char *save = dst;
-
     while ((*dst++ = *src++) != '\0') {}
-
     return save;
 }
 
 size_t strlen(const char *s)
 {
-    const char *eos;
-
-    for (eos = s; *eos != 0; ++eos) {}
-
-    long len = eos - s;
-
-    return (len < 0) ? 0 : (size_t)len;
+    const char *it = s;
+    while (*(++it) != 0) {}
+    return ((it - s) < 0) ? 0 : (size_t)(it - s);
 }
 
 size_t strnlen(const char *s, size_t count)
 {
-    const char *sc;
-
-    for (sc = s; *sc != '\0' && count--; ++sc) {}
-
-    long len = sc - s;
-
-    return (len < 0) ? 0 : (size_t)len;
+    const char *it = s;
+    while ((*(++it) != 0) && --count) {}
+    return ((it - s) < 0) ? 0 : (size_t)(it - s);
 }
 
 int strcmp(const char *s1, const char *s2)
 {
-    int ret         = 0;
-    const char *s1t = s1, *s2t = s2;
-
-    for (; !(ret = *s1t - *s2t) && *s2t; ++s1t, ++s2t) {}
-
-    return (ret < 0) ? -1 : (ret > 0) ? 1 :
-                                        0;
+    while (*s1 && *s2) {
+        if (*s1 < *s2) break;
+        if (*s1 > *s2) break;
+        s1++, s2++;
+    }
+    return *s1 - *s2;
 }
 
 char *strset(char *s, int c)
 {
-    char *start = s;
-
-    while (*s) {
-        *s++ = (char)c;
+    char *it = s;
+    while (*it) {
+        *it++ = (char)c;
     }
-
-    return start;
+    return s;
 }
 
 char *strnset(char *s, int c, size_t n)
 {
-    while (n-- && *s) {
-        *s++ = (char)c;
+    char *it = s;
+    while (*it && n--) {
+        *it++ = (char)c;
     }
-
     return s;
 }
 
