@@ -7,6 +7,51 @@ cmake_minimum_required(VERSION 3.1...3.22)
 project(tests C)
 
 # =============================================================================
+# List of programs.
+# =============================================================================
+# Add your file in this list.
+set(TESTS
+    t_mem.c
+    t_fork.c
+    # Test real-time programs.
+    t_periodic1.c
+    t_periodic2.c
+    t_periodic3.c
+    # Testing task execution.
+    t_exec.c
+    t_exec_callee.c
+    # Test environmental variables.
+    t_setenv.c
+    t_getenv.c
+    # Test signals.
+    t_stopcont.c
+    t_sigusr.c
+    t_abort.c
+    t_sigfpe.c
+    t_siginfo.c
+    t_sleep.c
+    t_sigaction.c
+    t_sigmask.c
+    t_groups.c
+    t_alarm.c
+    t_kill.c
+    t_itimer.c
+    t_gid.c
+    # Test semaphores.
+    t_semget.c
+    t_semflg.c
+    t_semop.c
+    # Test message queues.
+    t_msgget.c
+    # Test shared memory.
+    t_shmget.c
+    t_shm_read.c
+    t_shm_write.c
+    # Test scheduling feedback tests.
+    t_schedfb.c
+)
+
+# =============================================================================
 # C WARNINGs
 # =============================================================================
 
@@ -55,48 +100,6 @@ endif(CMAKE_BUILD_TYPE STREQUAL "Debug")
 # =============================================================================
 # Set the directory where the compiled binaries will be placed.
 set(MENTOS_TESTS_DIR ${CMAKE_SOURCE_DIR}/files/bin/tests)
-
-# Add the executables (manually).
-set(TESTS
-    t_mem.c
-    t_fork.c
-    # Test real-time programs.
-    t_periodic1.c
-    t_periodic2.c
-    t_periodic3.c
-    # Testing task execution.
-    t_exec.c
-    t_exec_callee.c
-    # Test environmental variables.
-    t_setenv.c
-    t_getenv.c
-    # Test signals.
-    t_stopcont.c
-    t_sigusr.c
-    t_abort.c
-    t_sigfpe.c
-    t_siginfo.c
-    t_sleep.c
-    t_sigaction.c
-    t_sigmask.c
-    t_groups.c
-    t_alarm.c
-    t_kill.c
-    t_itimer.c
-    t_gid.c
-    # Test semaphores.
-    t_semget.c
-    t_semflg.c
-    t_semop.c
-    # Test message queues.
-    t_msgget.c
-    # Test shared memory.
-    t_shmget.c
-    t_shm_read.c
-    t_shm_write.c
-    # Test scheduling feedback tests.
-    t_schedfb.c
-)
 
 foreach(TEST ${TESTS})
     # Prepare the program name.

@@ -7,6 +7,41 @@ cmake_minimum_required(VERSION 3.1...3.22)
 project(programs C)
 
 # =============================================================================
+# List of programs.
+# =============================================================================
+# Add your file in this list.
+set(PROGRAMS
+    init.c
+    cpuid.c
+    clear.c
+    date.c
+    ls.c
+    logo.c
+    nice.c
+    poweroff.c
+    rm.c
+    shell.c
+    uname.c
+    cat.c
+    echo.c
+    login.c
+    mkdir.c
+    pwd.c
+    rmdir.c
+    showpid.c
+    touch.c
+    env.c
+    ps.c
+    kill.c
+    ipcrm.c
+    ipcs.c
+    sleep.c
+    man.c
+    edit.c
+    uptime.c
+)
+
+# =============================================================================
 # C WARNINGs
 # =============================================================================
 
@@ -55,38 +90,6 @@ endif(CMAKE_BUILD_TYPE STREQUAL "Debug")
 # =============================================================================
 # Set the directory where the compiled binaries will be placed.
 set(MENTOS_BIN_DIR ${CMAKE_SOURCE_DIR}/files/bin)
-
-# Add the executables (manually).
-set(PROGRAMS
-    init.c
-    cpuid.c
-    clear.c
-    date.c
-    ls.c
-    logo.c
-    nice.c
-    poweroff.c
-    rm.c
-    shell.c
-    uname.c
-    cat.c
-    echo.c
-    login.c
-    mkdir.c
-    pwd.c
-    rmdir.c
-    showpid.c
-    touch.c
-    env.c
-    ps.c
-    kill.c
-    ipcrm.c
-    ipcs.c
-    sleep.c
-    man.c
-    edit.c
-    uptime.c
-)
 
 foreach(PROGRAM ${PROGRAMS})
     # Prepare the program name.
