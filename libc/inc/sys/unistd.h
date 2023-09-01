@@ -54,6 +54,12 @@ off_t lseek(int fd, off_t offset, int whence);
 /// @return
 int unlink(const char *path);
 
+/// @brief Creates a symbolic link.
+/// @param linkname the name of the link.
+/// @param path the entity it is linking to.
+/// @return 0 on success, a negative number if fails and errno is set.
+int symlink(const char *linkname, const char *path);
+
 /// @brief Wrapper for exit system call.
 /// @param status The exit status.
 extern void exit(int status);

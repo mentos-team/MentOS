@@ -1114,9 +1114,11 @@ static int ata_stat(const char *path, stat_t *stat)
 // == VFS ENTRY GENERATION ====================================================
 /// Filesystem general operations.
 static vfs_sys_operations_t ata_sys_operations = {
-    .mkdir_f = NULL,
-    .rmdir_f = NULL,
-    .stat_f  = ata_stat
+    .mkdir_f   = NULL,
+    .rmdir_f   = NULL,
+    .stat_f    = ata_stat,
+    .creat_f   = NULL,
+    .symlink_f = NULL,
 };
 
 /// ATA filesystem file operations.

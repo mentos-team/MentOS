@@ -217,6 +217,12 @@ int sys_rmdir(const char *path);
 /// It is equivalent to: open(path, O_WRONLY|O_CREAT|O_TRUNC, mode)
 int sys_creat(const char *path, mode_t mode);
 
+/// @brief Creates a symbolic link.
+/// @param linkname the name of the link.
+/// @param path the entity it is linking to.
+/// @return 0 on success, a negative number if fails and errno is set.
+int sys_symlink(const char *linkname, const char *path);
+
 /// Provide access to the directory entries.
 /// @param fd    The file descriptor of the directory for which we accessing
 ///              the entries.

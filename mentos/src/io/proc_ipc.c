@@ -12,7 +12,6 @@
 #include "sys/sem.h"
 #include "sys/shm.h"
 
-
 extern ssize_t procipc_msg_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyte);
 
 extern ssize_t procipc_sem_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyte);
@@ -21,9 +20,11 @@ extern ssize_t procipc_shm_read(vfs_file_t *file, char *buf, off_t offset, size_
 
 /// Filesystem general operations.
 static vfs_sys_operations_t procipc_sys_operations = {
-    .mkdir_f = NULL,
-    .rmdir_f = NULL,
-    .stat_f  = NULL
+    .mkdir_f   = NULL,
+    .rmdir_f   = NULL,
+    .stat_f    = NULL,
+    .creat_f   = NULL,
+    .symlink_f = NULL,
 };
 
 /// Filesystem file operations for message queues.

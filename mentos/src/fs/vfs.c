@@ -331,6 +331,34 @@ vfs_file_t *vfs_creat(const char *path, mode_t mode)
     return file;
 }
 
+int vfs_symlink(const char *linkname, const char *path)
+{
+    // Allocate a variable for the path.
+    char absolute_path[PATH_MAX];
+    // If the first character is not the '/' then get the absolute path.
+    if (!realpath(linkname, absolute_path, sizeof(absolute_path))) {
+        pr_err("vfs_symlink(%s, %s): Cannot get the absolute path.", linkname, path);
+        return -ENODEV;
+    }
+    super_block_t *sb = vfs_get_superblock(absolute_path);
+    if (sb == NULL) {
+        pr_err("vfs_symlink(%s, %s): Cannot find the superblock!\n");
+        return -ENODEV;
+    }
+    vfs_file_t *sb_root = sb->root;
+    if (sb_root == NULL) {
+        pr_err("vfs_symlink(%s, %s): Cannot find the superblock root.", linkname, path);
+        return -ENOENT;
+    }
+    // Check if the function is implemented.
+    if (sb_root->sys_operations->symlink_f == NULL) {
+        pr_err("vfs_symlink(%s, %s): Function not supported in current filesystem.", linkname, path);
+        return -ENOSYS;
+    }
+    pr_alert("vfs_symlink(%s, %s)", linkname, path);
+    return 0;
+}
+
 int vfs_stat(const char *path, stat_t *buf)
 {
     // Allocate a variable for the path.

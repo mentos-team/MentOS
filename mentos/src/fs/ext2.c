@@ -391,10 +391,11 @@ static vfs_file_t *ext2_mount(vfs_file_t *block_device, const char *path);
 
 /// Filesystem general operations.
 static vfs_sys_operations_t ext2_sys_operations = {
-    .mkdir_f = ext2_mkdir,
-    .rmdir_f = ext2_rmdir,
-    .stat_f  = ext2_stat,
-    .creat_f = ext2_creat
+    .mkdir_f   = ext2_mkdir,
+    .rmdir_f   = ext2_rmdir,
+    .stat_f    = ext2_stat,
+    .creat_f   = ext2_creat,
+    .symlink_f = NULL,
 };
 
 /// Filesystem file operations.

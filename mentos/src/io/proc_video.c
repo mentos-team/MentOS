@@ -212,9 +212,11 @@ static int procv_ioctl(vfs_file_t *file, int request, void *data)
 
 /// Filesystem general operations.
 static vfs_sys_operations_t procv_sys_operations = {
-    .mkdir_f = NULL,
-    .rmdir_f = NULL,
-    .stat_f  = NULL
+    .mkdir_f   = NULL,
+    .rmdir_f   = NULL,
+    .stat_f    = NULL,
+    .creat_f   = NULL,
+    .symlink_f = NULL,
 };
 
 /// Filesystem file operations.

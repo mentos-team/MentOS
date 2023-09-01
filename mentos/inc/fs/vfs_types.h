@@ -44,6 +44,8 @@ typedef int (*vfs_stat_callback)(const char *, stat_t *);
 typedef int (*vfs_fstat_callback)(vfs_file_t *, stat_t *);
 /// Function used to perform ioctl on files.
 typedef int (*vfs_ioctl_callback)(vfs_file_t *, int, void *);
+/// Function for creating symbolic links.
+typedef int (*vfs_symlink_callback)(const char *, const char *);
 
 /// @brief Filesystem information.
 typedef struct file_system_type {
@@ -65,6 +67,8 @@ typedef struct vfs_sys_operations_t {
     vfs_stat_callback stat_f;
     /// File creation function.
     vfs_creat_callback creat_f;
+    /// Symbolic link creation function.
+    vfs_symlink_callback symlink_f;
 } vfs_sys_operations_t;
 
 /// @brief Set of functions used to perform operations on files.

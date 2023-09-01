@@ -407,9 +407,11 @@ static inline ssize_t __procr_read(vfs_file_t *file, char *buffer, off_t offset,
 
 /// Filesystem general operations.
 static vfs_sys_operations_t procr_sys_operations = {
-    .mkdir_f = NULL,
-    .rmdir_f = NULL,
-    .stat_f  = NULL
+    .mkdir_f   = NULL,
+    .rmdir_f   = NULL,
+    .stat_f    = NULL,
+    .creat_f   = NULL,
+    .symlink_f = NULL,
 };
 
 /// Filesystem file operations.

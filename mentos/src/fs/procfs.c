@@ -98,9 +98,11 @@ static ssize_t procfs_getdents(vfs_file_t *file, dirent_t *dirp, off_t doff, siz
 
 /// Filesystem general operations.
 static vfs_sys_operations_t procfs_sys_operations = {
-    .mkdir_f = procfs_mkdir,
-    .rmdir_f = procfs_rmdir,
-    .stat_f  = procfs_stat
+    .mkdir_f   = procfs_mkdir,
+    .rmdir_f   = procfs_rmdir,
+    .stat_f    = procfs_stat,
+    .creat_f   = NULL,
+    .symlink_f = NULL,
 };
 
 /// Filesystem file operations.

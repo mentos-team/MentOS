@@ -119,6 +119,12 @@ int vfs_rmdir(const char *path);
 /// It is equivalent to: open(path, O_WRONLY|O_CREAT|O_TRUNC, mode)
 vfs_file_t *vfs_creat(const char *path, mode_t mode);
 
+/// @brief Creates a symbolic link.
+/// @param linkname the name of the link.
+/// @param path the entity it is linking to.
+/// @return 0 on success, a negative number if fails and errno is set.
+int vfs_symlink(const char *linkname, const char *path);
+
 /// @brief Stat the file at the given path.
 /// @param path Path to the file for which we are retrieving the statistics.
 /// @param buf  Buffer where we are storing the statistics.

@@ -61,3 +61,8 @@ int sys_creat(const char *path, mode_t mode)
     // Return the file descriptor and increment it.
     return fd;
 }
+
+int sys_symlink(const char *linkname, const char *path)
+{
+    return vfs_symlink(linkname, path);
+}
