@@ -331,6 +331,20 @@ vfs_file_t *vfs_creat(const char *path, mode_t mode)
     return file;
 }
 
+ssize_t vfs_readlink(vfs_file_t *file, char *buffer, size_t bufsize)
+{
+    if (file == NULL) {
+        pr_err("vfs_readlink: received a null pointer for file.\n");
+        return -ENOENT;
+    }
+    if (file->fs_operations->readlink_f == NULL) {
+        pr_err("vfs_readlink(%s): Function not supported in current filesystem.", file->name);
+        return -ENOSYS;
+    }
+    // Perform the read.
+    return file->fs_operations->readlink_f(file, buffer, bufsize);
+}
+
 int vfs_symlink(const char *linkname, const char *path)
 {
     // Allocate a variable for the path.

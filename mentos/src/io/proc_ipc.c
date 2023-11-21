@@ -37,7 +37,8 @@ static vfs_file_operations_t procipc_msg_fs_operations = {
     .lseek_f    = NULL,
     .stat_f     = NULL,
     .ioctl_f    = NULL,
-    .getdents_f = NULL
+    .getdents_f = NULL,
+    .readlink_f = NULL,
 };
 
 /// Filesystem file operations for semaphores.
@@ -50,7 +51,8 @@ static vfs_file_operations_t procipc_sem_fs_operations = {
     .lseek_f    = NULL,
     .stat_f     = NULL,
     .ioctl_f    = NULL,
-    .getdents_f = NULL
+    .getdents_f = NULL,
+    .readlink_f = NULL,
 };
 
 /// Filesystem file operations for shared memry.
@@ -63,7 +65,8 @@ static vfs_file_operations_t procipc_shm_fs_operations = {
     .lseek_f    = NULL,
     .stat_f     = NULL,
     .ioctl_f    = NULL,
-    .getdents_f = NULL
+    .getdents_f = NULL,
+    .readlink_f = NULL,
 };
 
 int procipc_module_init()

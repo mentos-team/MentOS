@@ -115,7 +115,8 @@ static vfs_file_operations_t procfs_fs_operations = {
     .lseek_f    = procfs_lseek,
     .stat_f     = procfs_fstat,
     .ioctl_f    = procfs_ioctl,
-    .getdents_f = procfs_getdents
+    .getdents_f = procfs_getdents,
+    .readlink_f = NULL,
 };
 
 // ============================================================================

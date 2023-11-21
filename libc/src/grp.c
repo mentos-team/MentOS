@@ -18,30 +18,31 @@ static int __fd = -1;
 /// @brief It parses the line (as string) and saves its content inside the
 /// group_t structure.
 /// @param grp the struct where we store the information.
-/// @param buf the buffer from which we extract the information.
+/// @param buf the line from which we extract the information.
 static inline void __parse_line(group_t *grp, char *buf)
 {
     assert(grp && "Received null grp!");
     char *token;
     // Parse the group name.
-    if ((token = strtok(buf, ":")) != NULL) {
+    token = strtok(buf, ":");
+    if (token != NULL) {
         grp->gr_name = token;
     }
     // Parse the group passwd.
-    if ((token = strtok(NULL, ":")) != NULL) {
+    token = strtok(NULL, ":");
+    if (token != NULL) {
         grp->gr_passwd = token;
     }
     // Parse the group id.
-    if ((token = strtok(NULL, ":")) != NULL) {
+    token = strtok(NULL, ":");
+    if (token != NULL) {
         grp->gr_gid = atoi(token);
     }
-
     size_t found_users = 0;
     while ((token = strtok(NULL, ",\n\0")) != NULL && found_users < MAX_MEMBERS_PER_GROUP) {
         grp->gr_mem[found_users] = token;
         found_users += 1;
     }
-
     // Null terminate array
     grp->gr_mem[found_users] = "\0";
 }
@@ -52,8 +53,8 @@ static inline void __parse_line(group_t *grp, char *buf)
 /// @param buflen the length of the buffer.
 /// @param name the name we are looking for.
 /// @param gid the group id we must match.
-/// @return a pointer to the filled input buffer on success, NULL on failure.
-static inline char *__search_entry(int fd, char *buf, int buflen, const char *name, gid_t gid)
+/// @return 1 on success, 0 on failure.
+static inline int __search_entry(int fd, char *buf, size_t buflen, const char *name, gid_t gid)
 {
     int ret;
     char c;
@@ -65,7 +66,7 @@ static inline char *__search_entry(int fd, char *buf, int buflen, const char *na
         }
         if (pos >= buflen) {
             errno = ERANGE;
-            return NULL;
+            return 0;
         }
         // If we have found a newline or the EOF, parse the entry.
         if ((c == '\n') || (ret == EOF)) {
@@ -74,7 +75,7 @@ static inline char *__search_entry(int fd, char *buf, int buflen, const char *na
             // Check the entry.
             if (name) {
                 if (strncmp(buf, name, strlen(name)) == 0) {
-                    return buf;
+                    return 1;
                 }
             } else {
                 int gid_start = -1, col_count = 0;
@@ -91,7 +92,7 @@ static inline char *__search_entry(int fd, char *buf, int buflen, const char *na
                     int found_gid = atoi(&buf[gid_start]);
                     // Check the gid.
                     if (found_gid == gid) {
-                        return buf;
+                        return 1;
                     }
                 }
             }
@@ -106,7 +107,7 @@ static inline char *__search_entry(int fd, char *buf, int buflen, const char *na
         }
     }
     errno = ENOENT;
-    return NULL;
+    return 0;
 }
 
 group_t *getgrgid(gid_t gid)
@@ -148,12 +149,11 @@ int getgrgid_r(gid_t gid, group_t *group, char *buf, size_t buflen, group_t **re
         return 0;
     }
 
-    char *entry = __search_entry(fd, buf, buflen, NULL, gid);
-    if (entry != NULL) {
+    if (__search_entry(fd, buf, buflen, NULL, gid)) {
         // Close the file.
         close(fd);
         // Parse the line.
-        __parse_line(group, entry);
+        __parse_line(group, buf);
         // Return success.
         return 1;
     }
@@ -173,12 +173,11 @@ int getgrnam_r(const char *name, group_t *group, char *buf, size_t buflen, group
         return 0;
     }
 
-    char *entry = __search_entry(fd, buf, buflen, name, 0);
-    if (entry != NULL) {
+    if (__search_entry(fd, buf, buflen, name, 0)) {
         // Close the file.
         close(fd);
         // Parse the line.
-        __parse_line(group, entry);
+        __parse_line(group, buf);
         // Return success.
         return 1;
     }

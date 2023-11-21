@@ -60,6 +60,13 @@ int unlink(const char *path);
 /// @return 0 on success, a negative number if fails and errno is set.
 int symlink(const char *linkname, const char *path);
 
+/// @brief Read the symbolic link, if present.
+/// @param file the file for which we want to read the symbolic link information.
+/// @param buffer the buffer where we will store the symbolic link path.
+/// @param bufsize the size of the buffer.
+/// @return The number of read characters on success, -1 otherwise and errno is set to indicate the error.
+int readlink(const char *path, char *buffer, size_t bufsize);
+
 /// @brief Wrapper for exit system call.
 /// @param status The exit status.
 extern void exit(int status);

@@ -229,7 +229,8 @@ static vfs_file_operations_t procv_fs_operations = {
     .lseek_f    = NULL,
     .stat_f     = procv_fstat,
     .ioctl_f    = procv_ioctl,
-    .getdents_f = NULL
+    .getdents_f = NULL,
+    .readlink_f = NULL,
 };
 
 int procv_module_init()

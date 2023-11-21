@@ -133,6 +133,8 @@ add_library(
     ${PROJECT_SOURCE_DIR}/src/unistd/kill.c
     ${PROJECT_SOURCE_DIR}/src/unistd/signal.c
     ${PROJECT_SOURCE_DIR}/src/unistd/interval.c
+    ${PROJECT_SOURCE_DIR}/src/unistd/symlink.c
+    ${PROJECT_SOURCE_DIR}/src/unistd/readlink.c
     ${PROJECT_SOURCE_DIR}/src/libc_start.c
     ${PROJECT_SOURCE_DIR}/src/crt0.S
 )

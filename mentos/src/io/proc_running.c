@@ -424,7 +424,8 @@ static vfs_file_operations_t procr_fs_operations = {
     .lseek_f    = NULL,
     .stat_f     = NULL,
     .ioctl_f    = NULL,
-    .getdents_f = NULL
+    .getdents_f = NULL,
+    .readlink_f = NULL,
 };
 
 int procr_create_entry_pid(task_struct *entry)

@@ -3,9 +3,10 @@
 /// @copyright (c) 2014-2023 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "process/scheduler.h"
+#include "fcntl.h"
 #include "fs/vfs.h"
 #include "io/debug.h"
+#include "process/scheduler.h"
 #include "sys/errno.h"
 
 int sys_unlink(const char *path)
@@ -65,4 +66,19 @@ int sys_creat(const char *path, mode_t mode)
 int sys_symlink(const char *linkname, const char *path)
 {
     return vfs_symlink(linkname, path);
+}
+
+int sys_readlink(const char *path, char *buffer, size_t bufsize)
+{
+    // Try to open the file.
+    vfs_file_t *file = vfs_open(path, O_RDONLY, 0);
+    if (file == NULL) {
+        return -errno;
+    }
+    // Read the link.
+    ssize_t nbytes = vfs_readlink(file, buffer, bufsize);
+    // Close the file.
+    vfs_close(file);
+    // Return the number of bytes we read.
+    return nbytes;
 }

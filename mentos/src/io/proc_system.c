@@ -86,7 +86,8 @@ static vfs_file_operations_t procs_fs_operations = {
     .lseek_f    = NULL,
     .stat_f     = NULL,
     .ioctl_f    = NULL,
-    .getdents_f = NULL
+    .getdents_f = NULL,
+    .readlink_f = NULL,
 };
 
 int procs_module_init()

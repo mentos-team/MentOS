@@ -1131,7 +1131,8 @@ static vfs_file_operations_t ata_fs_operations = {
     .lseek_f    = NULL,
     .stat_f     = ata_fstat,
     .ioctl_f    = NULL,
-    .getdents_f = NULL
+    .getdents_f = NULL,
+    .readlink_f = NULL,
 };
 
 static vfs_file_t *ata_device_create(ata_device_t *dev)

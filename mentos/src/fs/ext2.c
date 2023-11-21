@@ -4,10 +4,10 @@
 /// See LICENSE.md for details.
 
 // Setup the logging for this file (do this before any other include).
-#include "sys/kernel_levels.h"           // Include kernel log levels.
-#define __DEBUG_HEADER__ "[EXT2  ]"      ///< Change header.
-#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
-#include "io/debug.h"                    // Include debugging functions.
+#include "sys/kernel_levels.h"          // Include kernel log levels.
+#define __DEBUG_HEADER__ "[EXT2  ]"     ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_DEBUG ///< Set log level.
+#include "io/debug.h"                   // Include debugging functions.
 
 #include "assert.h"
 #include "fcntl.h"
@@ -378,6 +378,7 @@ static off_t ext2_lseek(vfs_file_t *file, off_t offset, int whence);
 static int ext2_fstat(vfs_file_t *file, stat_t *stat);
 static int ext2_ioctl(vfs_file_t *file, int request, void *data);
 static ssize_t ext2_getdents(vfs_file_t *file, dirent_t *dirp, off_t doff, size_t count);
+static ssize_t ext2_readlink(vfs_file_t *file, char *buffer, size_t bufsize);
 
 static int ext2_mkdir(const char *path, mode_t mode);
 static int ext2_rmdir(const char *path);
@@ -408,7 +409,8 @@ static vfs_file_operations_t ext2_fs_operations = {
     .lseek_f    = ext2_lseek,
     .stat_f     = ext2_fstat,
     .ioctl_f    = ext2_ioctl,
-    .getdents_f = ext2_getdents
+    .getdents_f = ext2_getdents,
+    .readlink_f = ext2_readlink,
 };
 
 // ============================================================================
@@ -2393,6 +2395,9 @@ static vfs_file_t *ext2_open(const char *path, int flags, mode_t mode)
         errno = ENOENT;
         return NULL;
     }
+    if (direntry.file_type == ext2_file_type_symbolic_link) {
+        pr_alert("Beware, it is a symbolic link.\n");
+    }
     // Prepare the structure for the inode.
     ext2_inode_t inode;
     memset(&inode, 0, sizeof(ext2_inode_t));
@@ -2735,6 +2740,28 @@ static ssize_t ext2_getdents(vfs_file_t *file, dirent_t *dirp, off_t doff, size_
     // Free the cache.
     kmem_cache_free(cache);
     return written;
+}
+
+static ssize_t ext2_readlink(vfs_file_t *file, char *buffer, size_t bufsize)
+{
+    // Get the filesystem.
+    ext2_filesystem_t *fs = (ext2_filesystem_t *)file->device;
+    if (fs == NULL) {
+        pr_err("The file does not belong to an EXT2 filesystem `%s`.\n", file->name);
+        return -ENOENT;
+    }
+    // Get the inode associated with the file.
+    ext2_inode_t inode;
+    if (ext2_read_inode(fs, &inode, file->ino) == -1) {
+        pr_err("Failed to read the inode (%d).\n", file->ino);
+        return -ENOENT;
+    }
+    // Get the length of the symlink.
+    ssize_t nbytes = min(strlen(inode.data.symlink), bufsize);
+    // Copy the symlink information.
+    strncpy(buffer, inode.data.symlink, nbytes);
+    // Return how much we read.
+    return nbytes;
 }
 
 static int ext2_mkdir(const char *path, mode_t permission)

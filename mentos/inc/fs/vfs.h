@@ -119,6 +119,13 @@ int vfs_rmdir(const char *path);
 /// It is equivalent to: open(path, O_WRONLY|O_CREAT|O_TRUNC, mode)
 vfs_file_t *vfs_creat(const char *path, mode_t mode);
 
+/// @brief Read the symbolic link, if present.
+/// @param file the file for which we want to read the symbolic link information.
+/// @param buffer the buffer where we will store the symbolic link path.
+/// @param bufsize the size of the buffer.
+/// @return The number of read characters on success, -1 otherwise and errno is set to indicate the error.
+ssize_t vfs_readlink(vfs_file_t *file, char *buffer, size_t bufsize);
+
 /// @brief Creates a symbolic link.
 /// @param linkname the name of the link.
 /// @param path the entity it is linking to.

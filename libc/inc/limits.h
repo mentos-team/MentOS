@@ -53,5 +53,8 @@
 /// Maximum number of characters in a path name.
 #define PATH_MAX 4096
 
+/// Maximum length of arguments provided to exec function.
+#define ARG_MAX 256
+
 /// Maximum pid number.
 #define PID_MAX_LIMIT 32768

@@ -46,6 +46,8 @@ typedef int (*vfs_fstat_callback)(vfs_file_t *, stat_t *);
 typedef int (*vfs_ioctl_callback)(vfs_file_t *, int, void *);
 /// Function for creating symbolic links.
 typedef int (*vfs_symlink_callback)(const char *, const char *);
+/// Function that reads the symbolic link data associated with a file.
+typedef ssize_t (*vfs_readlink_callback)(vfs_file_t *, char *, size_t);
 
 /// @brief Filesystem information.
 typedef struct file_system_type {
@@ -91,6 +93,8 @@ typedef struct vfs_file_operations_t {
     vfs_ioctl_callback ioctl_f;
     /// Read entries inside the directory.
     vfs_getdents_callback getdents_f;
+    /// Reads the symbolik link data.
+    vfs_readlink_callback readlink_f;
 } vfs_file_operations_t;
 
 /// @brief Data structure that contains information about the mounted filesystems.

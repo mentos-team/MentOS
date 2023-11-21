@@ -125,7 +125,7 @@ void syscall_init()
     sys_call_table[__NR_setgroups]              = (SystemCall)sys_ni_syscall;
     sys_call_table[__NR_symlink]                = (SystemCall)sys_symlink;
     sys_call_table[__NR_lstat]                  = (SystemCall)sys_ni_syscall;
-    sys_call_table[__NR_readlink]               = (SystemCall)sys_ni_syscall;
+    sys_call_table[__NR_readlink]               = (SystemCall)sys_readlink;
     sys_call_table[__NR_uselib]                 = (SystemCall)sys_ni_syscall;
     sys_call_table[__NR_swapon]                 = (SystemCall)sys_ni_syscall;
     sys_call_table[__NR_reboot]                 = (SystemCall)sys_reboot;
