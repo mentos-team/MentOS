@@ -654,11 +654,27 @@ off_t procfs_lseek(vfs_file_t *file, off_t offset, int whence)
 /// @return 0 if success.
 static int __procfs_stat(procfs_file_t *file, stat_t *stat)
 {
+    if (!file) {
+        pr_err("We received a NULL file pointer.\n");
+        return -EFAULT;
+    }
+    if (!stat) {
+        pr_err("We received a NULL stat pointer.\n");
+        return -EFAULT;
+    }
+    if ((file->flags & DT_DIR)) {
+        stat->st_mode = 0040000;
+    } else if ((file->flags & DT_REG)) {
+        stat->st_mode = 0100000;
+    } else if ((file->flags & DT_LNK)) {
+        stat->st_mode = 0120000;
+    } else {
+        return -ENOENT;
+    }
     stat->st_uid   = file->uid;
     stat->st_gid   = file->gid;
     stat->st_dev   = 0;
     stat->st_ino   = file->inode;
-    stat->st_mode  = file->flags;
     stat->st_size  = 0;
     stat->st_atime = file->atime;
     stat->st_mtime = file->mtime;

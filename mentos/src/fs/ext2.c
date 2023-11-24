@@ -6,7 +6,7 @@
 // Setup the logging for this file (do this before any other include).
 #include "sys/kernel_levels.h"          // Include kernel log levels.
 #define __DEBUG_HEADER__ "[EXT2  ]"     ///< Change header.
-#define __DEBUG_LEVEL__  LOGLEVEL_DEBUG ///< Set log level.
+#define __DEBUG_LEVEL__  LOGLEVEL_INFO ///< Set log level.
 #include "io/debug.h"                   // Include debugging functions.
 
 #include "assert.h"
@@ -2659,6 +2659,14 @@ static int __ext2_stat(ext2_inode_t *inode, stat_t *stat)
 /// @return 0 if success.
 static int ext2_fstat(vfs_file_t *file, stat_t *stat)
 {
+    if (!file) {
+        pr_err("We received a NULL file pointer.\n");
+        return -EFAULT;
+    }
+    if (!stat) {
+        pr_err("We received a NULL stat pointer.\n");
+        return -EFAULT;
+    }
     // Get the filesystem.
     ext2_filesystem_t *fs = (ext2_filesystem_t *)file->device;
     if (fs == NULL) {

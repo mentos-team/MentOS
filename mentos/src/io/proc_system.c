@@ -24,13 +24,15 @@ static ssize_t procs_do_meminfo(char *buffer, size_t bufsize);
 
 static ssize_t procs_do_stat(char *buffer, size_t bufsize);
 
-static ssize_t procs_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyte)
+static ssize_t __procs_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyte)
 {
-    if (file == NULL) {
+    if (!file) {
+        pr_err("We received a NULL file pointer.\n");
         return -EFAULT;
     }
     proc_dir_entry_t *entry = (proc_dir_entry_t *)file->device;
     if (entry == NULL) {
+        pr_err("The file is not a valid proc entry.\n");
         return -EFAULT;
     }
     // Prepare a buffer.
@@ -81,7 +83,7 @@ static vfs_file_operations_t procs_fs_operations = {
     .open_f     = NULL,
     .unlink_f   = NULL,
     .close_f    = NULL,
-    .read_f     = procs_read,
+    .read_f     = __procs_read,
     .write_f    = NULL,
     .lseek_f    = NULL,
     .stat_f     = NULL,

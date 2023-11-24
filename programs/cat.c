@@ -14,6 +14,7 @@
 
 static inline void print_content(const char *path, char *buffer, unsigned buflen)
 {
+    pr_warning("Printing content of %s\n", path);
     // Open the file.
     int fd = open(path, O_RDONLY, 42);
     if (fd >= 0) {
