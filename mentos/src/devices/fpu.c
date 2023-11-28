@@ -31,7 +31,7 @@ static inline void __set_fpu_cw(const uint16_t cw)
 }
 
 /// @brief Enable the FPU and SSE.
-static inline void __enable_fpu()
+static inline void __enable_fpu(void)
 {
     __asm__ __volatile__("clts");
     size_t t;
@@ -47,7 +47,7 @@ static inline void __enable_fpu()
 }
 
 /// Disable FPU and SSE so it traps to the kernel.
-static inline void __disable_fpu()
+static inline void __disable_fpu(void)
 {
     size_t t;
 
@@ -80,7 +80,7 @@ static inline void __save_fpu(task_struct *proc)
 }
 
 /// Initialize the FPU.
-static inline void __init_fpu()
+static inline void __init_fpu(void)
 {
     __asm__ __volatile__("fninit");
 }
@@ -129,7 +129,7 @@ static inline void __sigfpe_handler(pt_regs *f)
 /// @details
 /// For processors without a FPU, this tests that maths libraries link
 /// correctly.
-static int __fpu_test()
+static int __fpu_test(void)
 {
     double a = M_PI;
     // First test.
@@ -154,17 +154,17 @@ static int __fpu_test()
     return (a == 60957114488184560000000000000000000000000000000000000.0);
 }
 
-void switch_fpu()
+void switch_fpu(void)
 {
     __save_fpu(scheduler_get_current_process());
 }
 
-void unswitch_fpu()
+void unswitch_fpu(void)
 {
     __restore_fpu(scheduler_get_current_process());
 }
 
-int fpu_install()
+int fpu_install(void)
 {
     __enable_fpu();
     __init_fpu();

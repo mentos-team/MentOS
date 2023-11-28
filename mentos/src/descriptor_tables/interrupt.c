@@ -33,7 +33,7 @@ static list_head shared_interrupt_handlers[IRQ_NUM];
 static kmem_cache_t *irq_cache;
 
 /// @brief Creates a new irq struct.
-static inline irq_struct_t *__irq_struct_alloc()
+static inline irq_struct_t *__irq_struct_alloc(void)
 {
     // Allocate the structure.
     irq_struct_t *irq_struct = kmem_cache_alloc(irq_cache, GFP_KERNEL);
@@ -52,7 +52,7 @@ static inline void __irq_struct_dealloc(irq_struct_t *irq_struct)
     kmem_cache_free(irq_struct);
 }
 
-void irq_init()
+void irq_init(void)
 {
     // Initialize the cache.
     irq_cache = KMEM_CREATE(irq_struct_t);

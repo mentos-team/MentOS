@@ -12,7 +12,7 @@
 #include "sys/types.h"
 
 /// @brief Initialize the system calls.
-void syscall_init();
+void syscall_init(void);
 
 /// @brief Handler for the system calls.
 /// @param f The interrupt stack frame.
@@ -20,7 +20,7 @@ void syscall_handler(pt_regs *f);
 
 /// @brief Returns the current interrupt stack frame.
 /// @return Pointer to the stack frame.
-pt_regs *get_current_interrupt_stack_frame();
+pt_regs *get_current_interrupt_stack_frame(void);
 
 /// The exit() function causes normal process termination.
 /// @param exit_code The exit code.
@@ -98,7 +98,7 @@ int sys_fchdir(int fd);
 
 /// @brief Returns the process ID (PID) of the calling process.
 /// @return The process ID.
-pid_t sys_getpid();
+pid_t sys_getpid(void);
 
 ///@brief  Return session id of the given process.
 ///        If pid == 0 return the SID of the calling process
@@ -116,7 +116,7 @@ pid_t sys_getsid(pid_t pid);
 ///       is made the same as its process ID).
 ///@return On success return SID of the session just created
 ///        Otherwise return -1 with errno : EPERM
-pid_t sys_setsid();
+pid_t sys_setsid(void);
 
 ///@brief returns the Process Group ID (PGID) of the process specified by pid.
 /// If pid is zero, the process ID of the calling process is used.
@@ -133,7 +133,7 @@ int sys_setpgid(pid_t pid, pid_t pgid);
 
 ///@brief returns the group ID of the calling process.
 ///@return GID of the current process
-pid_t sys_getgid();
+pid_t sys_getgid(void);
 
 ///@brief sets the effective group ID of the calling process.
 ///@param pid process identifier to
@@ -143,11 +143,11 @@ int sys_setgid(pid_t pid);
 
 /// @brief Returns the parent process ID (PPID) of the calling process.
 /// @return The parent process ID.
-pid_t sys_getppid();
+pid_t sys_getppid(void);
 
 /// @brief Returns the User ID (UID) of the calling process.
 /// @return The User ID.
-uid_t sys_getuid();
+uid_t sys_getuid(void);
 
 /// @brief Tries to set the User ID (UID) of the calling process.
 /// @param uid the new User ID.

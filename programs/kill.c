@@ -20,7 +20,7 @@ static inline int is_number(char *s)
     return 1;
 }
 
-static inline void print_signal_list()
+static inline void print_signal_list(void)
 {
     for (int it = 1; it < (NSIG - 1); ++it) {
         printf("%6s ", strsignal(it));

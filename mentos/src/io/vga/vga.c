@@ -208,7 +208,7 @@ static inline void __set_plane(unsigned int plane)
 
 /// @brief Returns the current plane.
 /// @return the current plane.
-static inline unsigned __get_plane()
+static inline unsigned __get_plane(void)
 {
     // Set read plane.
     outportb(GC_INDEX, 4);
@@ -510,12 +510,12 @@ static inline unsigned __read_pixel_8(int x, int y)
 // = VGA PUBLIC FUNCTIONS
 // ============================================================================
 
-int vga_is_enabled()
+int vga_is_enabled(void)
 {
     return vga_enable;
 }
 
-int vga_width()
+int vga_width(void)
 {
     if (vga_enable) {
         return driver->width;
@@ -523,7 +523,7 @@ int vga_width()
     return 0;
 }
 
-int vga_height()
+int vga_height(void)
 {
     if (vga_enable) {
         return driver->height;
@@ -741,7 +741,7 @@ static vga_driver_t driver_320_200_256 = {
 
 // == INITIALIZE and FINALIZE =================================================
 
-void vga_initialize()
+void vga_initialize(void)
 {
     // Save the current palette.
     __save_palette(stored_palette, 256);
@@ -788,7 +788,7 @@ void vga_initialize()
     vga_enable = true;
 }
 
-void vga_finalize()
+void vga_finalize(void)
 {
     memcpy(driver->address, vidmem, 256 * 1024);
     __set_mode(&_mode_80_25_text);
@@ -801,7 +801,7 @@ static int _y               = 0;
 static unsigned char _color = 7;
 static int _cursor_state    = 0;
 
-inline static void __vga_clear_cursor()
+inline static void __vga_clear_cursor(void)
 {
     for (unsigned cy = 0; cy < driver->font->height; ++cy) {
         for (unsigned cx = 0; cx < driver->font->width; ++cx) {
@@ -810,7 +810,7 @@ inline static void __vga_clear_cursor()
     }
 }
 
-inline static void __vga_draw_cursor()
+inline static void __vga_draw_cursor(void)
 {
     unsigned char color = (_cursor_state = (_cursor_state == 0)) * _color;
     for (unsigned cy = 0; cy < driver->font->height; ++cy) {
@@ -872,7 +872,7 @@ void vga_get_screen_size(unsigned int *width, unsigned int *height)
     }
 }
 
-void vga_clear_screen()
+void vga_clear_screen(void)
 {
     unsigned original_plane = __get_plane();
     for (unsigned plane = 0; plane < 4; ++plane) {
@@ -883,7 +883,7 @@ void vga_clear_screen()
     _x = 0, _y = 0;
 }
 
-void vga_new_line()
+void vga_new_line(void)
 {
     // Just the 5x6 font needs some space.
     const unsigned int vertical_space = (driver->font == &font_5x6);
@@ -895,7 +895,7 @@ void vga_new_line()
     }
 }
 
-void vga_update()
+void vga_update(void)
 {
     if ((timer_get_ticks() % (TICKS_PER_SECOND / 2)) == 0) {
         __vga_draw_cursor();

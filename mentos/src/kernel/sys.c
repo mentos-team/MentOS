@@ -9,7 +9,7 @@
 #include "sys/errno.h"
 #include "sys/reboot.h"
 
-static void machine_power_off()
+static void machine_power_off(void)
 {
     while (1) {
         cpu_relax();
@@ -17,7 +17,7 @@ static void machine_power_off()
 }
 
 /// @brief Shutdown everything and perform a clean system power_off.
-static void kernel_power_off()
+static void kernel_power_off(void)
 {
     //    kernel_shutdown_prepare(SYSTEM_POWER_OFF);
     //    if (pm_power_off_prepare)

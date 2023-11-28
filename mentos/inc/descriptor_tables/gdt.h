@@ -134,7 +134,7 @@ typedef struct gdt_pointer_t {
 ///          finally call gdt_flush() in our assembler file in order
 ///          to tell the processor where the new GDT is and update the
 ///          new segment registers.
-void init_gdt();
+void init_gdt(void);
 
 /// @brief          Sets the value of one GDT entry.
 /// @param index    The index inside the GDT.

@@ -8,7 +8,7 @@
 
 /// @brief Returns the error number for the current process.
 /// @return Pointer to the error number.
-int *__geterrno()
+int *__geterrno(void)
 {
     static int _errno            = 0;
     task_struct *current_process = scheduler_get_current_process();

@@ -12,11 +12,11 @@
 
 /// @brief Initializes the floppy disk controller.
 /// @return 0 on success, 1 on error.
-int fdc_initialize();
+int fdc_initialize(void);
 
 /// @brief De-initializes the floppy disk controller.
 /// @return 0 on success, 1 on error.
-int fdc_finalize();
+int fdc_finalize(void);
 
 /// @}
 /// @}

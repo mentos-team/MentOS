@@ -90,7 +90,7 @@ struct shmid_ds {
 
 /// @brief Initializes the shared memory.
 /// @return 0 on success, 1 on failure.
-int shm_init();
+int shm_init(void);
 
 /// @brief Get a System V shared memory identifier.
 /// @param key can be used either to obtain the identifier of a previously

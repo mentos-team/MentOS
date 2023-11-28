@@ -33,7 +33,7 @@ static inline int __find_entry(const char *name, const size_t name_len)
 }
 
 /// @brief Makes a clone of the current environ.
-static void __clone_environ()
+static void __clone_environ(void)
 {
     if (environ) {
         // Count the number of variables.

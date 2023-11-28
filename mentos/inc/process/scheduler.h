@@ -36,23 +36,23 @@ typedef struct sched_param_t {
 } sched_param_t;
 
 /// @brief Initialize the scheduler.
-void scheduler_initialize();
+void scheduler_initialize(void);
 
 /// @brief  Returns a non-decreasing unique process id.
 /// @return Process identifier (PID).
-uint32_t scheduler_getpid();
+uint32_t scheduler_getpid(void);
 
 /// @brief Returns the pointer to the current active process.
 /// @return Pointer to the current process.
-task_struct *scheduler_get_current_process();
+task_struct *scheduler_get_current_process(void);
 
 /// @brief Returns the maximum vruntime of all the processes in running state.
 /// @return A maximum vruntime value.
-time_t scheduler_get_maximum_vruntime();
+time_t scheduler_get_maximum_vruntime(void);
 
 /// @brief Returns the number of active processes.
 /// @return Number of processes.
-size_t scheduler_get_active_processes();
+size_t scheduler_get_active_processes(void);
 
 /// @brief Returns a pointer to the process with the given pid.
 /// @param pid The pid of the process we are looking for.
@@ -105,7 +105,7 @@ int sys_sched_getparam(pid_t pid, sched_param_t *param);
 
 /// @brief Puts the process on wait until its next period starts.
 /// @return 0 on success, a negative value on failure.
-int sys_waitperiod();
+int sys_waitperiod(void);
 
 /// @brief Returns 1 if the given group is orphaned, the session leader of the group
 /// is no longer alive.

@@ -34,7 +34,7 @@ typedef struct keymap_t {
 
 /// @brief Returns the current keymap type.
 /// @return The current keymap type.
-keymap_type_t get_keymap_type();
+keymap_type_t get_keymap_type(void);
 
 /// @brief Changes the current keymap type.
 /// @param type The type to set.
@@ -47,7 +47,7 @@ void set_keymap_type(keymap_type_t type);
 const keymap_t *get_keymap(unsigned int scancode);
 
 /// @brief Initializes the supported keymaps.
-void init_keymaps();
+void init_keymaps(void);
 
 /// @name Keyboard Codes
 /// @brief This is the list of keyboard codes.

@@ -609,7 +609,7 @@ static inline uintptr_t ata_dma_malloc(size_t size, uintptr_t *physical)
 
 /// @brief Emables bus mastering, allowing Direct Memory Access (DMA) transactions.
 /// @param dev the device for which we enable bus mastering.
-static inline void ata_dma_enable_bus_mastering()
+static inline void ata_dma_enable_bus_mastering(void)
 {
     uint32_t pci_cmd = pci_read_32(ata_pci, PCI_COMMAND);
     if (bit_check(pci_cmd, pci_command_bus_master)) {
@@ -1242,7 +1242,7 @@ static void pci_find_ata(uint32_t device, uint16_t vendorid, uint16_t deviceid, 
 }
 
 // == INITIALIZE/FINALIZE ATA =================================================
-int ata_initialize()
+int ata_initialize(void)
 {
     // Search for ATA devices.
     pci_scan(&pci_find_ata, -1, &ata_pci);
@@ -1262,7 +1262,7 @@ int ata_initialize()
     return 0;
 }
 
-int ata_finalize()
+int ata_finalize(void)
 {
     return 0;
 }

@@ -41,7 +41,7 @@ struct rbtree_iter_t {
     unsigned int top;
 };
 
-rbtree_node_t *rbtree_node_alloc()
+rbtree_node_t *rbtree_node_alloc(void)
 {
     return kmalloc(sizeof(rbtree_node_t));
 }
@@ -126,7 +126,7 @@ static void rbtree_tree_node_dealloc_cb(rbtree_t *tree, rbtree_node_t *node)
 
 // rbtree_t
 
-rbtree_t *rbtree_tree_alloc()
+rbtree_t *rbtree_tree_alloc(void)
 {
     return kmalloc(sizeof(rbtree_t));
 }
@@ -408,7 +408,7 @@ unsigned int rbtree_tree_size(rbtree_t *tree)
 
 // rbtree_iter_t
 
-rbtree_iter_t *rbtree_iter_alloc()
+rbtree_iter_t *rbtree_iter_alloc(void)
 {
     return kmalloc(sizeof(rbtree_iter_t));
 }
@@ -423,7 +423,7 @@ rbtree_iter_t *rbtree_iter_init(rbtree_iter_t *iter)
     return iter;
 }
 
-rbtree_iter_t *rbtree_iter_create()
+rbtree_iter_t *rbtree_iter_create(void)
 {
     return rbtree_iter_init(rbtree_iter_alloc());
 }

@@ -44,7 +44,7 @@ static vfs_file_operations_t procfb_fs_operations = {
     .readlink_f = NULL,
 };
 
-int procfb_module_init()
+int procfb_module_init(void)
 {
     // Create the file.
     proc_dir_entry_t *file = proc_create_entry("feedback", NULL);

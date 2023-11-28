@@ -7,8 +7,8 @@
 
 /// @brief Initializes the EXT2 drivers.
 /// @return 0 on success, 1 on error.
-int ext2_initialize();
+int ext2_initialize(void);
 
 /// @brief De-initializes the EXT2 drivers.
 /// @return 0 on success, 1 on error.
-int ext2_finalize();
+int ext2_finalize(void);

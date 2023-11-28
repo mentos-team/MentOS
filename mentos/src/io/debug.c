@@ -83,7 +83,7 @@ void set_log_level(int level)
     }
 }
 
-int get_log_level()
+int get_log_level(void)
 {
     return max_log_level;
 }

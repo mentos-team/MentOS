@@ -41,7 +41,7 @@ static inline unsigned int rtc_are_different(tm_t *t0, tm_t *t1)
 }
 
 /// @brief Check if rtc is updating time currently.
-static inline unsigned int is_updating_rtc()
+static inline unsigned int is_updating_rtc(void)
 {
     outportb(CMOS_ADDR, 0x0A);
     uint32_t status = inportb(CMOS_DATA);
@@ -65,7 +65,7 @@ static inline unsigned char bcd2bin(unsigned char bcd)
     return ((bcd >> 4u) * 10) + (bcd & 0x0Fu);
 }
 
-static inline void rtc_read_datetime()
+static inline void rtc_read_datetime(void)
 {
     if (read_register(0x0Cu) & 0x10u) {
         if (is_bcd) {
@@ -88,7 +88,7 @@ static inline void rtc_read_datetime()
     }
 }
 
-static inline void rtc_update_datetime()
+static inline void rtc_update_datetime(void)
 {
     static unsigned int first_update = 1;
     // Wait until rtc is not updating.
@@ -119,7 +119,7 @@ void gettime(tm_t *time)
     memcpy(time, &global_time, sizeof(tm_t));
 }
 
-int rtc_initialize()
+int rtc_initialize(void)
 {
     unsigned char status;
 
@@ -142,7 +142,7 @@ int rtc_initialize()
     return 0;
 }
 
-int rtc_finalize()
+int rtc_finalize(void)
 {
     // Uninstall the IRQ.
     irq_uninstall_handler(IRQ_REAL_TIME_CLOCK, rtc_handler_isr);

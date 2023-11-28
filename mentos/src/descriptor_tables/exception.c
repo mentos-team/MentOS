@@ -85,7 +85,7 @@ void isr_handler(pt_regs *f)
     //    pr_default("end calling ISR %d\n", isr_number);
 }
 
-void isrs_init()
+void isrs_init(void)
 {
     // Setting the default_isr_handler as default handler.
     for (uint32_t i = 0; i < IDT_SIZE; ++i) {

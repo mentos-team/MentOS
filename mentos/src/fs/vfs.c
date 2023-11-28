@@ -38,7 +38,7 @@ static kmem_cache_t *vfs_superblock_cache;
 /// VFS memory cache for files.
 kmem_cache_t *vfs_file_cache;
 
-void vfs_init()
+void vfs_init(void)
 {
     // Initialize the list of superblocks.
     list_head_init(&vfs_super_blocks);

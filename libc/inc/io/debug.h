@@ -26,7 +26,7 @@ void set_log_level(int level);
 
 /// @brief Returns the current loglevel.
 /// @return The current loglevel
-int get_log_level();
+int get_log_level(void);
 
 /// @brief Prints the given character to debug output.
 /// @param c The character to print.

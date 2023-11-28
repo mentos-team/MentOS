@@ -555,7 +555,7 @@ static void __scan_hit_list(uint32_t device, uint16_t vendorid, uint16_t devicei
     pr_debug("\n");
 }
 
-void pci_debug_scan()
+void pci_debug_scan(void)
 {
     pr_default("\n--------------------------------------------------\n");
     pr_default("Counting PCI entities...\n");

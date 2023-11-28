@@ -55,7 +55,7 @@ typedef struct kmem_cache_t {
 } kmem_cache_t;
 
 /// Initialize the slab system
-void kmem_cache_init();
+void kmem_cache_init(void);
 
 /// @brief Creates a new slab cache.
 /// @param name  Name of the cache.

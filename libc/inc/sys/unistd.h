@@ -73,7 +73,7 @@ extern void exit(int status);
 
 /// @brief Returns the process ID (PID) of the calling process.
 /// @return pid_t process identifier.
-extern pid_t getpid();
+extern pid_t getpid(void);
 
 ///@brief  Return session id of the given process.
 ///        If pid == 0 return the SID of the calling process
@@ -91,7 +91,7 @@ extern pid_t getsid(pid_t pid);
 ///       is made the same as its process ID).
 ///@return On success return SID of the session just created
 ///        Otherwise return -1 with errno : EPERM 
-extern pid_t setsid();
+extern pid_t setsid(void);
 
 ///@brief returns the Process Group ID (PGID) of the process specified by pid.
 /// If pid is zero, the process ID of the calling process is used.
@@ -108,7 +108,7 @@ int setpgid(pid_t pid, pid_t pgid);
 
 ///@brief returns the group ID of the calling process.
 ///@return GID of the current process
-extern pid_t getgid();
+extern pid_t getgid(void);
 
 ///@brief sets the effective group ID of the calling process.
 ///@param pid process identifier to 
@@ -118,7 +118,7 @@ extern int setgid(pid_t pid);
 
 ///@brief Returns the User ID of the calling process.
 ///@return User ID of the current process.
-extern uid_t getuid();
+extern uid_t getuid(void);
 
 ///@brief Sets the effective User ID of the calling process.
 ///@param uid the new User ID.
@@ -128,14 +128,14 @@ extern int setuid(uid_t uid);
 
 /// @brief Returns the parent process ID (PPID) of the calling process.
 /// @return pid_t parent process identifier.
-extern pid_t getppid();
+extern pid_t getppid(void);
 
 /// @brief Clone the calling process, but without copying the whole address space.
 ///        The calling process is suspended until the new process exits or is
 ///        replaced by a call to `execve'.
 /// @return Return -1 for errors, 0 to the new process, and the process ID of
 ///         the new process to the old process.
-extern pid_t fork();
+extern pid_t fork(void);
 
 /// @brief Replaces the current process image with a new process image (argument list).
 /// @param path The absolute path to the binary file to execute.

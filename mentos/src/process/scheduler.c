@@ -30,7 +30,7 @@ extern void enter_userspace(uintptr_t location, uintptr_t stack);
 /// The list of processes.
 runqueue_t runqueue;
 
-void scheduler_initialize()
+void scheduler_initialize(void)
 {
     // Initialize the runqueue list of tasks.
     list_head_init(&runqueue.queue);
@@ -49,12 +49,12 @@ uint32_t scheduler_getpid(void)
     return tid++;
 }
 
-task_struct *scheduler_get_current_process()
+task_struct *scheduler_get_current_process(void)
 {
     return runqueue.curr;
 }
 
-time_t scheduler_get_maximum_vruntime()
+time_t scheduler_get_maximum_vruntime(void)
 {
     time_t vruntime = 0;
     task_struct *entry;
@@ -79,7 +79,7 @@ time_t scheduler_get_maximum_vruntime()
     return vruntime;
 }
 
-size_t scheduler_get_active_processes()
+size_t scheduler_get_active_processes(void)
 {
     return runqueue.num_active;
 }
@@ -290,7 +290,7 @@ int is_orphaned_pgrp(pid_t pgid)
     return 1;
 }
 
-pid_t sys_getpid()
+pid_t sys_getpid(void)
 {
     // Get the current task.
     if (runqueue.curr == NULL) {
@@ -328,7 +328,7 @@ pid_t sys_getsid(pid_t pid)
     return -ESRCH;
 }
 
-pid_t sys_setsid()
+pid_t sys_setsid(void)
 {
     task_struct *task = runqueue.curr;
     if (task == NULL) {
@@ -376,7 +376,7 @@ int sys_setpgid(pid_t pid, pid_t pgid)
     return 0;
 }
 
-uid_t sys_getuid()
+uid_t sys_getuid(void)
 {
     if (runqueue.curr) {
         return runqueue.curr->uid;
@@ -393,7 +393,7 @@ int sys_setuid(uid_t uid)
     return -EPERM;
 }
 
-pid_t sys_getgid()
+pid_t sys_getgid(void)
 {
     if (runqueue.curr) {
         return runqueue.curr->gid;
@@ -410,7 +410,7 @@ int sys_setgid(pid_t gid)
     return -EPERM;
 }
 
-pid_t sys_getppid()
+pid_t sys_getppid(void)
 {
     // Get the current task.
     if (runqueue.curr && runqueue.curr->parent) {
@@ -622,7 +622,7 @@ int sys_sched_getparam(pid_t pid, sched_param_t *param)
 /// @brief Performs the response time analysis for the current list of periodic
 /// processes.
 /// @return 1 if scheduling periodic processes is feasible, 0 otherwise.
-static int __response_time_analysis()
+static int __response_time_analysis(void)
 {
     task_struct *entry, *previous;
     time_t r, previous_r = 0;
@@ -673,7 +673,7 @@ static int __response_time_analysis()
 
 /// @brief Computes the total utilization factor.
 /// @return the utilization factor.
-static inline double __compute_utilization_factor()
+static inline double __compute_utilization_factor(void)
 {
     task_struct *entry;
     double U = 0;
@@ -689,7 +689,7 @@ static inline double __compute_utilization_factor()
     return U;
 }
 
-int sys_waitperiod()
+int sys_waitperiod(void)
 {
     // Get the current process.
     task_struct *current = scheduler_get_current_process();

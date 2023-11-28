@@ -40,4 +40,4 @@ int sched_getparam(pid_t pid, sched_param_t *param);
 /// @brief Placed at the end of an infinite while loop, stops the process until,
 /// its next period starts. The calling process must be a periodic one.
 /// @return 0 on success, -1 on failure and errno is set to indicate the error.
-int waitperiod();
+int waitperiod(void);

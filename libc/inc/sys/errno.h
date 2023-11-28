@@ -5,7 +5,7 @@
 
 #pragma once
 
-extern int *__geterrno();
+extern int *__geterrno(void);
 
 /// Provide easy access to the error number.
 #define errno (*__geterrno())

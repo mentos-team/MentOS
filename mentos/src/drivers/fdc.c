@@ -44,7 +44,7 @@ typedef enum fdc_registers_t {
     ///< This register sets the datarate and is write only.
 } fdc_registers_t;
 
-int fdc_initialize()
+int fdc_initialize(void)
 {
     /* Setting bits:
      * 2: (RESET)
@@ -54,7 +54,7 @@ int fdc_initialize()
     return 0;
 }
 
-int fdc_finalize()
+int fdc_finalize(void)
 {
     /* Setting bits:
      * 3: (IRQ)

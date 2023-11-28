@@ -62,7 +62,7 @@ static void __mouse_write(unsigned char data)
 
 /// @brief  Read data from mouse.
 /// @return The data received from mouse.
-static unsigned char __mouse_read()
+static unsigned char __mouse_read(void)
 {
     __mouse_waitcmd(0);
     return inportb(0x60);
@@ -147,7 +147,7 @@ static void __mouse_isr(pt_regs *f)
 }
 
 /// @brief Enable the mouse driver.
-static void __mouse_enable()
+static void __mouse_enable(void)
 {
     // Enable the mouse interrupts.
     pic8259_irq_enable(IRQ_MOUSE);
@@ -158,7 +158,7 @@ static void __mouse_enable()
 }
 
 /// @brief Disable the mouse driver.
-static void __mouse_disable()
+static void __mouse_disable(void)
 {
     // Disable the mouse interrupts.
     pic8259_irq_disable(IRQ_MOUSE);
@@ -168,7 +168,7 @@ static void __mouse_disable()
     __mouse_read();
 }
 
-int mouse_initialize()
+int mouse_initialize(void)
 {
     // Enable the auxiliary mouse device.
     __mouse_waitcmd(1);
@@ -197,7 +197,7 @@ int mouse_initialize()
     return 0;
 }
 
-int mouse_finalize()
+int mouse_finalize(void)
 {
     // Uninstall the IRQ.
     irq_uninstall_handler(IRQ_MOUSE, __mouse_isr);

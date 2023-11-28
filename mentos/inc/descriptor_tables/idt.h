@@ -66,7 +66,7 @@ typedef struct idt_pointer_t {
 } __attribute__((packed)) idt_pointer_t;
 
 /// @brief Initialise the interrupt descriptor table.
-void init_idt();
+void init_idt(void);
 
 /// @}
 /// @}

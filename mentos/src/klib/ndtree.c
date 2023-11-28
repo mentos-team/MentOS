@@ -54,7 +54,7 @@ static inline int __ndtree_tree_node_cmp_ptr_cb(ndtree_t *self, void *a, void *b
 // ============================================================================
 // Node management functions.
 
-ndtree_node_t *ndtree_node_alloc()
+ndtree_node_t *ndtree_node_alloc(void)
 {
     return kmalloc(sizeof(ndtree_node_t));
 }
@@ -145,7 +145,7 @@ void ndtree_node_dealloc(ndtree_node_t *node)
 
 // ============================================================================
 // Tree management functions.
-ndtree_t *ndtree_tree_alloc()
+ndtree_t *ndtree_tree_alloc(void)
 {
     return kmalloc(sizeof(ndtree_t));
 }
@@ -300,7 +300,7 @@ int ndtree_tree_remove_with_cb(ndtree_t *tree, void *value, ndtree_tree_node_f n
 
 // ============================================================================
 // Iterators.
-ndtree_iter_t *ndtree_iter_alloc()
+ndtree_iter_t *ndtree_iter_alloc(void)
 {
     ndtree_iter_t *iter = kmalloc(sizeof(ndtree_iter_t));
     iter->head          = NULL;

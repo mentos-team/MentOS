@@ -26,7 +26,7 @@ gdt_descriptor_t gdt[GDT_SIZE];
 /// Pointer structure to give to the CPU.
 gdt_pointer_t gdt_pointer;
 
-void init_gdt()
+void init_gdt(void)
 {
     // BEWARE: Look below for a deeper explanation.
 

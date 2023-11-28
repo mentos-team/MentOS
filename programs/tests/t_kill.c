@@ -29,7 +29,7 @@ void child_sigusr1_handler(int sig)
     printf("handler(sig: %d) : Ending handler (pid: %d).\n", sig, getpid());
 }
 
-void child_process()
+void child_process(void)
 {
     while (1) {
         printf("I'm the child (%d): I'm playing around!\n", getpid());

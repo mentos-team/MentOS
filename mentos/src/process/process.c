@@ -246,7 +246,7 @@ static inline task_struct *__alloc_task(task_struct *source, task_struct *parent
     return proc;
 }
 
-int init_tasking()
+int init_tasking(void)
 {
     if ((task_struct_cache = KMEM_CREATE(task_struct)) == NULL) {
         return 0;

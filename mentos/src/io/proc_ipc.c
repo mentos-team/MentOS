@@ -69,7 +69,7 @@ static vfs_file_operations_t procipc_shm_fs_operations = {
     .readlink_f = NULL,
 };
 
-int procipc_module_init()
+int procipc_module_init(void)
 {
     proc_dir_entry_t *folder = NULL, *entry = NULL;
 

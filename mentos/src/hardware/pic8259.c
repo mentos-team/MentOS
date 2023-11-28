@@ -53,7 +53,7 @@ static byte_t master_cur_mask;
 /// The current mask of the slave.
 static byte_t slave_cur_mask;
 
-void pic8259_init_irq()
+void pic8259_init_irq(void)
 {
     // Set the masks for the master and slave.
     master_cur_mask = 0xFF;

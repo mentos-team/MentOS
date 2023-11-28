@@ -113,7 +113,7 @@ void timer_handler(pt_regs *reg)
     pic8259_send_eoi(IRQ_TIMER);
 }
 
-void timer_install()
+void timer_install(void)
 {
     dynamic_timers_install();
 
@@ -125,12 +125,12 @@ void timer_install()
     pic8259_irq_enable(IRQ_TIMER);
 }
 
-uint64_t timer_get_seconds()
+uint64_t timer_get_seconds(void)
 {
     return timer_ticks / TICKS_PER_SECOND;
 }
 
-unsigned long timer_get_ticks()
+unsigned long timer_get_ticks(void)
 {
     return timer_ticks;
 }
@@ -145,7 +145,7 @@ static tvec_base_t cpu_base = { 0 };
 static wait_queue_head_t sleep_queue;
 
 /// @brief Initialize dynamic timer system
-void dynamic_timers_install()
+void dynamic_timers_install(void)
 {
 #ifndef ENABLE_REAL_TIMER_SYSTEM
     list_head_init(&cpu_base.list);
@@ -377,7 +377,7 @@ static uint32_t cascate(tvec_base_t *base, timer_vec *tv, uint32_t time_index, i
     return time_index;
 }
 
-void run_timer_softirq()
+void run_timer_softirq(void)
 {
     tvec_base_t *base = &cpu_base;
     spinlock_lock(&base->lock);

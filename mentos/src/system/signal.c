@@ -541,7 +541,7 @@ int do_signal(struct pt_regs *f)
     return 0;
 }
 
-int signals_init()
+int signals_init(void)
 {
     sigqueue_cachep = KMEM_CREATE(sigqueue_t);
     if (sigqueue_cachep == NULL) {

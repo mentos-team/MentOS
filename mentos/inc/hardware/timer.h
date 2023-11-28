@@ -42,15 +42,15 @@
 void timer_handler(pt_regs *f);
 
 /// @brief Sets up the system clock by installing the timer handler into IRQ0.
-void timer_install();
+void timer_install(void);
 
 /// @brief Returns the number of seconds since the system started its execution.
 /// @return Value in seconds.
-uint64_t timer_get_seconds();
+uint64_t timer_get_seconds(void);
 
 /// @brief Returns the number of ticks since the system started its execution.
 /// @return Value in ticks.
-unsigned long timer_get_ticks();
+unsigned long timer_get_ticks(void);
 
 /// @brief Allows to set the timer phase to the given frequency.
 /// @param hz The frequency to set.
@@ -138,14 +138,14 @@ struct timer_list {
 };
 
 /// @brief Initialize dynamic timer system
-void dynamic_timers_install();
+void dynamic_timers_install(void);
 
 /// @brief Initializes a new timer struct.
 /// @param timer The timer to initialize.
 void init_timer(struct timer_list *timer);
 
 /// @brief Updates the timer data structures
-void run_timer_softirq();
+void run_timer_softirq(void);
 
 /// @brief Add a new timer to the current CPU.
 /// @param timer The timer to add.
@@ -156,7 +156,7 @@ void add_timer(struct timer_list *timer);
 void del_timer(struct timer_list *timer);
 
 /// @brief Updates and executes dynamics timers
-void run_timer_softirq();
+void run_timer_softirq(void);
 
 /// @brief Suspends the execution of the calling thread.
 /// @param req The amount of time we want to sleep.

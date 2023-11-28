@@ -34,14 +34,14 @@ struct hashmap_t {
     hashmap_entry_t **entries;
 };
 
-static inline hashmap_t *__alloc_hashmap()
+static inline hashmap_t *__alloc_hashmap(void)
 {
     hashmap_t *hashmap = kmalloc(sizeof(hashmap_t));
     memset(hashmap, 0, sizeof(hashmap_t));
     return hashmap;
 }
 
-static inline hashmap_entry_t *__alloc_entry()
+static inline hashmap_entry_t *__alloc_entry(void)
 {
     hashmap_entry_t *entry = kmalloc(sizeof(hashmap_entry_t));
     memset(entry, 0, sizeof(hashmap_entry_t));

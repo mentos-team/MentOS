@@ -132,7 +132,7 @@ static inline int __search_in_path(const char *entry, dirent_t *result)
 }
 
 /// @brief Prints the prompt.
-static inline void __prompt_print()
+static inline void __prompt_print(void)
 {
     // Get the current working directory.
     char CWD[PATH_MAX];
@@ -373,7 +373,7 @@ static char *__hst_fetch(bool_t up)
 }
 
 /// @brief Completely delete the current command.
-static inline void __cmd_clr()
+static inline void __cmd_clr(void)
 {
     // First we need to get back to the end of the line.
     while (cmd[cmd_cursor_index] != 0) {
@@ -449,7 +449,7 @@ static inline void __cmd_sug(dirent_t *suggestion, size_t starting_position)
 }
 
 /// @brief Gets the inserted command.
-static void __cmd_get()
+static void __cmd_get(void)
 {
     // Re-Initialize the cursor index.
     cmd_cursor_index = 0;

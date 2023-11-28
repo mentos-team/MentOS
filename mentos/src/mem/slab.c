@@ -167,7 +167,7 @@ static inline void __kmem_cache_free_slab(kmem_cache_t *cachep, page_t *slab_pag
     __free_pages(slab_page);
 }
 
-void kmem_cache_init()
+void kmem_cache_init(void)
 {
     // Initialize the list of caches.
     list_head_init(&kmem_caches_list);

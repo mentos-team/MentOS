@@ -46,7 +46,7 @@
 //  7  | Must be zero
 
 /// @brief Polling until we can receive bytes from the device.
-static inline void __ps2_wait_read()
+static inline void __ps2_wait_read(void)
 {
     while (!bit_check(inportb(PS2_STATUS), 0)) {
         pause();
@@ -54,7 +54,7 @@ static inline void __ps2_wait_read()
 }
 
 /// @brief Polling until we can send bytes to the device.
-static inline void __ps2_wait_write()
+static inline void __ps2_wait_write(void)
 {
     while (bit_check(inportb(PS2_STATUS), 1)) {
         pause();
@@ -67,7 +67,7 @@ void ps2_write(unsigned char data)
     outportb(PS2_DATA, data);
 }
 
-unsigned char ps2_read()
+unsigned char ps2_read(void)
 {
     __ps2_wait_read();
     return inportb(PS2_DATA);
@@ -79,7 +79,7 @@ static inline void __ps2_write_command(unsigned char command)
     outportb(PS2_COMMAND, command);
 }
 
-static inline unsigned char __ps2_get_controller_status()
+static inline unsigned char __ps2_get_controller_status(void)
 {
     __ps2_write_command(0x20);
     return ps2_read();
@@ -91,27 +91,27 @@ static inline void __ps2_set_controller_status(unsigned char status)
     ps2_write(status);
 }
 
-static inline int __ps2_is_dual_channel()
+static inline int __ps2_is_dual_channel(void)
 {
     return bit_check(__ps2_get_controller_status(), 6) != 0;
 }
 
-static inline void __ps2_enable_first_port()
+static inline void __ps2_enable_first_port(void)
 {
     __ps2_write_command(PS2_CTRL_P1_ENABLE);
 }
 
-static inline void __ps2_enable_second_port()
+static inline void __ps2_enable_second_port(void)
 {
     __ps2_write_command(PS2_CTRL_P2_ENABLE);
 }
 
-static inline void __ps2_disable_first_port()
+static inline void __ps2_disable_first_port(void)
 {
     __ps2_write_command(PS2_CTRL_P1_DISABLE);
 }
 
-static inline void __ps2_disable_second_port()
+static inline void __ps2_disable_second_port(void)
 {
     __ps2_write_command(PS2_CTRL_P2_DISABLE);
 }
@@ -144,7 +144,7 @@ static const char *__ps2_get_response_error_message(unsigned response)
     return "unknown error";
 }
 
-int ps2_initialize()
+int ps2_initialize(void)
 {
     unsigned char status, response;
     bool_t dual;

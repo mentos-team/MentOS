@@ -285,7 +285,7 @@ int pci_get_interrupt(uint32_t device);
 void pci_dump_device_data(uint32_t device, uint16_t vendorid, uint16_t deviceid);
 
 /// @brief Prints all the devices connected to the PCI interfance.
-void pci_debug_scan();
+void pci_debug_scan(void);
 
 /// @}
 /// @}

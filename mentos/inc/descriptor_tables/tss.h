@@ -45,7 +45,7 @@ typedef struct tss_entry {
 } tss_entry_t;
 
 /// @brief Flushes the Task State Segment.
-extern void tss_flush();
+extern void tss_flush(void);
 
 /// @brief We don't need tss to assist task switching, but it's required to
 ///        have one tss for switching back to kernel mode(system call for

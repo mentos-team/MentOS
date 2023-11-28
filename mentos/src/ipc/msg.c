@@ -201,7 +201,7 @@ static inline void __msq_info_remove_message(msq_info_t *msq_info, struct msg *m
 // SYSTEM FUNCTIONS
 // ============================================================================
 
-int msq_init()
+int msq_init(void)
 {
     list_head_init(&msq_list);
     return 0;

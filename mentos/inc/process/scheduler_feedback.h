@@ -9,7 +9,7 @@
 
 /// @brief Initialize the scheduler feedback system.
 /// @return 1 on success, 0 on failure.
-int scheduler_feedback_init();
+int scheduler_feedback_init(void);
 
 /// @brief Add the given task to the feedback system.
 /// @param task the task we need to add.
@@ -25,4 +25,4 @@ void scheduler_feedback_task_update(task_struct *task);
 
 /// @brief Updates the scheduling statistics for the given task.
 /// @param task the task for which we update the statistics.
-void scheduler_feedback_update();
+void scheduler_feedback_update(void);

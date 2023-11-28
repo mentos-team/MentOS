@@ -179,7 +179,7 @@ static inline void __list_remove_sem_info(sem_info_t *sem_info)
 // SYSTEM FUNCTIONS
 // ============================================================================
 
-int sem_init()
+int sem_init(void)
 {
     list_head_init(&semaphores_list);
     return 0;

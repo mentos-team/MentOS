@@ -26,7 +26,7 @@ inline static void irq_enable(uint8_t flags)
 /// shouldn't be activated if they were not activated before calling this
 /// function.
 /// @return 1 if the IRQ is enable for the CPU.
-inline static uint8_t irq_disable()
+inline static uint8_t irq_disable(void)
 {
     size_t flags;
     // We are pushing the entire contents of the EFLAGS register onto the stack,
@@ -41,7 +41,7 @@ inline static uint8_t irq_disable()
 
 /// @brief Determines, if the interrupt flags (IF) is set.
 /// @return 1 if the IRQ is enable for the CPU.
-inline static uint8_t is_irq_enabled()
+inline static uint8_t is_irq_enabled(void)
 {
     size_t flags;
     __asm__ __volatile__("pushf; pop %0;"

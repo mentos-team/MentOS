@@ -91,12 +91,12 @@ void srand(unsigned x)
     rseed = x;
 }
 
-unsigned rand()
+unsigned rand(void)
 {
     return rseed = (rseed * 1103515245U + 12345U) & RAND_MAX;
 }
 
-float randf()
+float randf(void)
 {
     return ((float)rand() / (float)(RAND_MAX));
 }

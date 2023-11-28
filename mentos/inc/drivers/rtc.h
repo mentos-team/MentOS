@@ -19,11 +19,11 @@ extern void gettime(tm_t *time);
 
 /// @brief Initializes the Real Time Clock (RTC).
 /// @return 0 on success, 1 on error.
-int rtc_initialize();
+int rtc_initialize(void);
 
 /// @brief De-initializes the Real Time Clock (RTC).
 /// @return 0 on success, 1 on error.
-int rtc_finalize();
+int rtc_finalize(void);
 
 /// @}
 /// @}

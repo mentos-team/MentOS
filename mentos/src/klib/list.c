@@ -8,7 +8,7 @@
 #include "mem/slab.h"
 #include "string.h"
 
-static inline listnode_t *__node_alloc()
+static inline listnode_t *__node_alloc(void)
 {
     listnode_t *node = kmalloc(sizeof(listnode_t));
     memset(node, 0, sizeof(listnode_t));
@@ -27,7 +27,7 @@ static inline void __list_dealloc(list_t *list)
     kfree(list);
 }
 
-list_t *list_create()
+list_t *list_create(void)
 {
     list_t *list = kmalloc(sizeof(list_t));
     memset(list, 0, sizeof(list_t));

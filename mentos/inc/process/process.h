@@ -165,7 +165,7 @@ typedef struct task_struct {
 
 /// @brief Initialize the task management.
 /// @return 1 success, 0 failure.
-int init_tasking();
+int init_tasking(void);
 
 /// @brief Create and spawn the init process.
 /// @param path Path of the `init` program.

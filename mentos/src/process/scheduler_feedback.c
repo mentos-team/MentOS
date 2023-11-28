@@ -65,20 +65,20 @@ struct statistic {
 } arr_stats[PID_MAX_LIMIT];
 
 /// @brief Updates when the logging should happen.
-static inline void __scheduler_feedback_deadline_advance()
+static inline void __scheduler_feedback_deadline_advance(void)
 {
     next_log = timer_get_ticks() + (LOG_INTERVAL_SEC * TICKS_PER_SECOND);
 }
 
 /// @brief Checks if the deadline is passed.
 /// @return 1 if the deadline is passed, 0 otherwise.
-static inline int __scheduler_feedback_deadline_check()
+static inline int __scheduler_feedback_deadline_check(void)
 {
     return (next_log < timer_get_ticks());
 }
 
 /// @brief Logs the scheduling statistics either on file or on the terminal.
-static inline void __scheduler_feedback_log()
+static inline void __scheduler_feedback_log(void)
 {
     pr_info("Scheduling Statistics (%s)\n", POLICY_NAME);
 #ifdef WRITE_ON_FILE
@@ -119,7 +119,7 @@ static inline void __scheduler_feedback_log()
 #endif
 }
 
-int scheduler_feedback_init()
+int scheduler_feedback_init(void)
 {
 #ifdef WRITE_ON_FILE
     // Create the feedback file, if necessary.
@@ -177,7 +177,7 @@ void scheduler_feedback_task_update(task_struct *task)
     total_occurrences += 1;
 }
 
-void scheduler_feedback_update()
+void scheduler_feedback_update(void)
 {
     // If it is not yet time for the next reset, skip.
     if (!__scheduler_feedback_deadline_check()) {

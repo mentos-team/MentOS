@@ -150,11 +150,11 @@ void paging_init(boot_info_t *info);
 
 /// @brief Provide access to the main page directory.
 /// @return A pointer to the main page directory.
-page_directory_t *paging_get_main_directory();
+page_directory_t *paging_get_main_directory(void);
 
 /// @brief Provide access to the current paging directory.
 /// @return A pointer to the current page directory.
-static inline page_directory_t *paging_get_current_directory()
+static inline page_directory_t *paging_get_current_directory(void)
 {
     return (page_directory_t *)get_cr3();
 }
@@ -175,7 +175,7 @@ void paging_switch_directory_va(page_directory_t *dir);
 void paging_flush_tlb_single(unsigned long addr);
 
 /// @brief Enables paging.
-static inline void paging_enable()
+static inline void paging_enable(void)
 {
     // Clear the PSE bit from cr4.
     set_cr4(bitmask_clear(get_cr4(), CR4_PSE));
@@ -185,7 +185,7 @@ static inline void paging_enable()
 
 /// @brief Returns if paging is enabled.
 /// @return 1 if paging is enables, 0 otherwise.
-static inline int paging_is_enabled()
+static inline int paging_is_enabled(void)
 {
     return bitmask_check(get_cr0(), CR0_PG);
 }

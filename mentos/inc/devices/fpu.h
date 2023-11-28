@@ -119,15 +119,15 @@ typedef union savefpu {
 
 /// @brief Called during a context switch to save the FPU registers status
 /// of the currently running thread.
-void switch_fpu();
+void switch_fpu(void);
 
 /// @brief Called during a context switch to load the FPU registers status
 /// of the currently running thread inside the FPU.
-void unswitch_fpu();
+void unswitch_fpu(void);
 
 /// @brief Enable the FPU context handling.
 /// @return 0 if fails, 1 if succeed.
-int fpu_install();
+int fpu_install(void);
 
 /// @}
 /// @}

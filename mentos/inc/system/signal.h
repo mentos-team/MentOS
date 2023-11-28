@@ -257,7 +257,7 @@ int do_signal(struct pt_regs *f);
 
 /// @brief Initialize the signals.
 /// @return 1 on success, 0 on failure.
-int signals_init();
+int signals_init(void);
 
 /// @brief Send signal to one specific process.
 /// @param pid The PID of the process.

@@ -17,11 +17,11 @@
 
 /// @brief Initializes the mouse.
 /// @return 0 on success, 1 on error.
-int mouse_initialize();
+int mouse_initialize(void);
 
 /// @brief De-initializes the mouse.
 /// @return 0 on success, 1 on error.
-int mouse_finalize();
+int mouse_finalize(void);
 
 /// @}
 /// @}

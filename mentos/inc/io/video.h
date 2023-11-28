@@ -9,10 +9,10 @@
 #include "io/ansi_colors.h"
 
 /// @brief Initialize the video.
-void video_init();
+void video_init(void);
 
 /// @brief Updates the video.
-void video_update();
+void video_update(void);
 
 /// @brief Print the given character on the screen.
 /// @param c The character to print.
@@ -23,7 +23,7 @@ void video_putc(int c);
 void video_puts(const char *str);
 
 /// @brief When something is written in another position, update the cursor.
-void video_set_cursor_auto();
+void video_set_cursor_auto(void);
 
 /// @brief Move the cursor at the position x, y on the screen.
 /// @param x The x coordinate.
@@ -41,20 +41,20 @@ void video_get_cursor_position(unsigned int * x, unsigned int * y);
 void video_get_screen_size(unsigned int * width, unsigned int * height);
 
 /// @brief Clears the screen.
-void video_clear();
+void video_clear(void);
 
 /// @brief Move to the following line (the effect of \n character).
-void video_new_line();
+void video_new_line(void);
 
 /// @brief Move to the up line (the effect of \n character).
-void video_cartridge_return();
+void video_cartridge_return(void);
 
 /// @brief The whole screen is shifted up by one line. Used when the cursor
 ///        reaches the last position of the screen.
-void video_shift_one_line_up();
+void video_shift_one_line_up(void);
 
 /// @brief The whole screen is shifted up by one page.
-void video_shift_one_page_up();
+void video_shift_one_page_up(void);
 
 /// @brief The whole screen is shifted down by one page.
-void video_shift_one_page_down();
+void video_shift_one_page_down(void);

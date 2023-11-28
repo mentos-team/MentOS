@@ -4,6 +4,7 @@
 /// See LICENSE.md for details.
 
 // Setup the logging for this file (do this before any other include).
+#include "stdint.h"
 #include "sys/kernel_levels.h" // Include kernel log levels.
 #include "system/syscall_types.h"
 #define __DEBUG_HEADER__ "[SYSCLL]"      ///< Change header.
@@ -27,7 +28,11 @@
 #include "system/syscall.h"
 
 /// The signature of a function call.
-typedef int (*SystemCall)();
+typedef int (*SystemCall)(void);
+/// The signature of a function call.
+typedef int (*SystemCall5)(uint32_t, uint32_t, uint32_t, uint32_t, uint32_t);
+/// The signature of a function call.
+typedef int (*SystemCall6)(uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t);
 
 /// The list of function call.
 SystemCall sys_call_table[SYSCALL_NUMBER];
@@ -42,12 +47,12 @@ static pt_regs *current_interrupt_stack_frame;
 /// nothing except return ENOSYS, the error corresponding to an invalid
 /// system call. This function is used to "plug the hole" in the rare event that
 /// a syscall is removed or otherwise made unavailable.
-static inline int sys_ni_syscall()
+static inline int sys_ni_syscall(void)
 {
     return -ENOSYS;
 }
 
-void syscall_init()
+void syscall_init(void)
 {
     // Initialize the list of system calls.
     sys_call_table[__NR_exit]                   = (SystemCall)sys_exit;
@@ -242,7 +247,7 @@ void syscall_init()
     isr_install_handler(SYSTEM_CALL, &syscall_handler, "syscall_handler");
 }
 
-pt_regs *get_current_interrupt_stack_frame()
+pt_regs *get_current_interrupt_stack_frame(void)
 {
     return current_interrupt_stack_frame;
 }
@@ -266,8 +271,6 @@ void syscall_handler(pt_regs *f)
     } else {
         uintptr_t ptr = (uintptr_t)sys_call_table[sc_index];
 
-        SystemCall func = (SystemCall)ptr;
-
         uint32_t arg0 = f->ebx;
         uint32_t arg1 = f->ecx;
         uint32_t arg2 = f->edx;
@@ -280,11 +283,13 @@ void syscall_handler(pt_regs *f)
             arg0 = (uintptr_t)f;
         }
         if (sc_index == __NR_mmap) {
+            SystemCall6 func = (SystemCall6)ptr;
             // Get the arguments.
             unsigned *args = (unsigned *)arg0;
             // Call the function.
             ret = func(args[0], args[1], args[2], args[3], args[4], args[5]);
         } else {
+            SystemCall5 func = (SystemCall5)ptr;
             ret = func(arg0, arg1, arg2, arg3, arg4);
         }
     }

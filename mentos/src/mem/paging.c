@@ -57,7 +57,7 @@ typedef struct pg_iter_entry_s {
     uint32_t pfn;
 } pg_iter_entry_t;
 
-page_directory_t *paging_get_main_directory()
+page_directory_t *paging_get_main_directory(void)
 {
     return main_mm->pgd;
 }

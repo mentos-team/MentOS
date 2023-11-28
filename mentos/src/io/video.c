@@ -83,14 +83,14 @@ int scrolled_page = 0;
 
 /// @brief Get the current column number.
 /// @return The column number.
-static inline unsigned __get_x()
+static inline unsigned __get_x(void)
 {
     return ((pointer - ADDR) % (WIDTH * 2)) / 2;
 }
 
 /// @brief Get the current row number.
 /// @return The row number.
-static inline unsigned __get_y()
+static inline unsigned __get_y(void)
 {
     return (pointer - ADDR) / (WIDTH * 2);
 }
@@ -170,12 +170,12 @@ static inline void __video_set_cursor(unsigned int x, unsigned int y)
     outportb(0x3D5, (uint8_t)((position >> 8U) & 0xFFU));
 }
 
-void video_init()
+void video_init(void)
 {
     video_clear();
 }
 
-void video_update()
+void video_update(void)
 {
 #ifndef VGA_TEXT_MODE
     if (vga_is_enabled())
@@ -253,7 +253,7 @@ void video_puts(const char *str)
     }
 }
 
-void video_set_cursor_auto()
+void video_set_cursor_auto(void)
 {
 #ifndef VGA_TEXT_MODE
     if (vga_is_enabled())
@@ -306,7 +306,7 @@ void video_get_screen_size(unsigned int *width, unsigned int *height)
     }
 }
 
-void video_clear()
+void video_clear(void)
 {
 #ifndef VGA_TEXT_MODE
     if (vga_is_enabled()) {
@@ -318,7 +318,7 @@ void video_clear()
     memset(ADDR, 0, TOTAL_SIZE);
 }
 
-void video_new_line()
+void video_new_line(void)
 {
 #ifndef VGA_TEXT_MODE
     if (vga_is_enabled()) {
@@ -331,7 +331,7 @@ void video_new_line()
     video_set_cursor_auto();
 }
 
-void video_cartridge_return()
+void video_cartridge_return(void)
 {
 #ifndef VGA_TEXT_MODE
     if (vga_is_enabled()) {
@@ -363,7 +363,7 @@ void video_shift_one_line_up(void)
     }
 }
 
-void video_shift_one_page_up()
+void video_shift_one_page_up(void)
 {
     if (scrolled_page > 0) {
         // Decrese the number of scrolled pages, and compute which page must be loaded.
@@ -392,7 +392,7 @@ void video_shift_one_page_down(void)
 }
 
 #if 0
-void video_scroll_up()
+void video_scroll_up(void)
 {
     if (is_scrolled)
         return;
@@ -411,7 +411,7 @@ void video_scroll_up()
     video_move_cursor(width, height);
 }
 
-void video_scroll_down()
+void video_scroll_down(void)
 {
     char *ptr = memory;
 

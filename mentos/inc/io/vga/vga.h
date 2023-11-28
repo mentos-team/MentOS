@@ -6,28 +6,28 @@
 #pragma once
 
 /// @brief Initializes the VGA.
-void vga_initialize();
+void vga_initialize(void);
 
 /// @brief Finalizes the VGA.
-void vga_finalize();
+void vga_finalize(void);
 
 /// @brief Updates the graphic elements.
-void vga_update();
+void vga_update(void);
 
 /// @brief Checks if the VGA is enabled.
 /// @return 1 if enabled, 0 otherwise.
-int vga_is_enabled();
+int vga_is_enabled(void);
 
 /// @brief Returns the width of the screen.
 /// @return the width of the screen.
-int vga_width();
+int vga_width(void);
 
 /// @brief Returns the height of the screen.
 /// @return the height of the screen.
-int vga_height();
+int vga_height(void);
 
 /// @brief Clears the screen.
-void vga_clear_screen();
+void vga_clear_screen(void);
 
 /// @brief Draws a pixel at the given position.
 /// @param x x-axis position.
@@ -112,11 +112,11 @@ void vga_get_cursor_position(unsigned int * x, unsigned int * y);
 void vga_get_screen_size(unsigned int * width, unsigned int * height);
 
 /// @brief Move to the following line (the effect of \n character).
-void vga_new_line();
+void vga_new_line(void);
 
 /// @brief Change the color.
 /// @param color the color to set.
 void vga_set_color(unsigned int color);
 
 /// @brief Run some VGA tests.
-void vga_run_test();
+void vga_run_test(void);

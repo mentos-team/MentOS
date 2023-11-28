@@ -38,7 +38,7 @@ int init_modules(multiboot_info_t *header)
     return 1;
 }
 
-int relocate_modules()
+int relocate_modules(void)
 {
     for (int i = 0; i < MAX_MODULES; ++i) {
         // Exit if modules are finished
@@ -68,7 +68,7 @@ int relocate_modules()
     return 1;
 }
 
-uintptr_t get_address_after_modules()
+uintptr_t get_address_after_modules(void)
 {
     // By default the first valid address is end.
     uintptr_t address_after_modules = (uintptr_t)&_kernel_end;

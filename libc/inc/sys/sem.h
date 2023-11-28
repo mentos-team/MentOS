@@ -80,7 +80,7 @@ struct sembuf {
 
 /// @brief Initializes the semaphore system.
 /// @return 0 on success, 1 on failure.
-int sem_init();
+int sem_init(void);
 
 /// @brief Get a System V semaphore set identifier.
 /// @param key can be used either to obtain the identifier of a previously

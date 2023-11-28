@@ -19,11 +19,11 @@
 
 /// @brief Initializes the ATA drivers.
 /// @return 0 on success, 1 on error.
-int ata_initialize();
+int ata_initialize(void);
 
 /// @brief De-initializes the ATA drivers.
 /// @return 0 on success, 1 on error.
-int ata_finalize();
+int ata_finalize(void);
 
 /// @}
 /// @}

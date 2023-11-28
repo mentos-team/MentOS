@@ -200,7 +200,7 @@ static inline int procfs_find_inode(const char *path)
     return -1;
 }
 
-static inline int procfs_get_free_inode()
+static inline int procfs_get_free_inode(void)
 {
     for (int inode = 1; inode < PROCFS_MAX_FILES; ++inode) {
         if (procfs_find_entry_inode(inode) == NULL) {
@@ -336,7 +336,7 @@ static inline vfs_file_t *procfs_create_file_struct(procfs_file_t *procfs_file)
 }
 
 /// @brief Dumps on debugging output the PROCFS.
-static void dump_procfs()
+static void dump_procfs(void)
 {
     procfs_file_t *file;
     if (!list_head_empty(&fs.files)) {
@@ -855,7 +855,7 @@ static file_system_type procfs_file_system_type = {
     .mount    = procfs_mount_callback
 };
 
-int procfs_module_init()
+int procfs_module_init(void)
 {
     // Initialize the procfs.
     memset(&fs, 0, sizeof(struct procfs_t));
@@ -868,7 +868,7 @@ int procfs_module_init()
     return 0;
 }
 
-int procfs_cleanup_module()
+int procfs_cleanup_module(void)
 {
     // Destroy the cache.
     kmem_cache_destroy(fs.procfs_file_cache);

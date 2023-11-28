@@ -116,7 +116,7 @@ static void __setup_pages(uint32_t pfn_virt_start, uint32_t pfn_phys_start, uint
 /// @brief Setup paging mapping all the low memory to two places: one is the
 /// physical address of the memory itself the other is in the virtual kernel
 /// address space.
-static inline void __setup_boot_paging()
+static inline void __setup_boot_paging(void)
 {
     uint32_t kernel_base_phy_page  = boot_info.kernel_phy_start >> 12U;
     uint32_t kernel_base_virt_page = boot_info.kernel_start >> 12U;

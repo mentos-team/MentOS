@@ -92,7 +92,7 @@ static vfs_file_operations_t procs_fs_operations = {
     .readlink_f = NULL,
 };
 
-int procs_module_init()
+int procs_module_init(void)
 {
     proc_dir_entry_t *system_entry;
     // == /proc/uptime ========================================================

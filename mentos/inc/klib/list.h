@@ -31,7 +31,7 @@ typedef struct list_t {
 
 /// @brief Create a list and set head, tail to NULL, and size to 0.
 /// @return The newly created list.
-list_t *list_create();
+list_t *list_create(void);
 
 /// @brief Get list size.
 /// @param list The list.

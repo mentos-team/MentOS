@@ -167,7 +167,7 @@ static inline void __list_remove_shm_info(shm_info_t *shm_info)
 // SYSTEM FUNCTIONS
 // ============================================================================
 
-int shm_init()
+int shm_init(void)
 {
     list_head_init(&shm_list);
     return 0;

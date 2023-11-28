@@ -34,7 +34,7 @@ void puts(const char *str);
 
 /// @brief Returns the next character from the standard input (stdin).
 /// @return The character received from stdin.
-int getchar();
+int getchar(void);
 
 /// @brief Reads characters from the standard input (stdin).
 /// @param str Where the characters are stored.

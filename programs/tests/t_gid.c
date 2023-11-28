@@ -8,7 +8,7 @@
 #include "string.h"
 #include <stdio.h>
 
-static void list_groups()
+static void list_groups(void)
 {
     group_t *iter;
     while ((iter = getgrent()) != NULL) {

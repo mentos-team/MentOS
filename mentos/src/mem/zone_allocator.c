@@ -123,7 +123,7 @@ static int is_memory_clean(gfp_t gfp_mask)
 
 /// @brief  Checks if the physical memory manager is working properly.
 /// @return If the check was done correctly.
-static int pmm_check()
+static int pmm_check(void)
 {
     pr_debug(
         "\n=================== ZONE ALLOCATOR TEST ==================== \n");

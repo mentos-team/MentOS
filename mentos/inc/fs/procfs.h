@@ -21,11 +21,11 @@ typedef struct proc_dir_entry_t {
 
 /// @brief Initialize the procfs filesystem.
 /// @return 0 if fails, 1 if succeed.
-int procfs_module_init();
+int procfs_module_init(void);
 
 /// @brief Clean up the procfs filesystem.
 /// @return 0 if fails, 1 if succeed.
-int procfs_cleanup_module();
+int procfs_cleanup_module(void);
 
 /// @brief Finds the direntry inside `/proc` or under the given `parent`.
 /// @param name   The name of the entry we are searching.

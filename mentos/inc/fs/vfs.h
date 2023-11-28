@@ -25,7 +25,7 @@ struct task_struct;
 super_block_t *vfs_get_superblock(const char *absolute_path);
 
 /// @brief Initialize the Virtual File System (VFS).
-void vfs_init();
+void vfs_init(void);
 
 /// @brief Register a new filesystem.
 /// @param fs A pointer to the information concerning the new filesystem.

@@ -67,7 +67,7 @@ struct msqid_ds {
 
 /// @brief Initializes the message queue system.
 /// @return 0 on success, 1 on failure.
-int msq_init();
+int msq_init(void);
 
 /// @brief Get a System V message queue identifier.
 /// @param key can be used either to obtain the identifier of a previously

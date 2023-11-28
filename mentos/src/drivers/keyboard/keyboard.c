@@ -65,7 +65,7 @@ static inline void keyboard_push_front(unsigned int c)
     spinlock_unlock(&scancodes_lock);
 }
 
-int keyboard_pop_back()
+int keyboard_pop_back(void)
 {
     int c;
     spinlock_lock(&scancodes_lock);
@@ -78,7 +78,7 @@ int keyboard_pop_back()
     return c;
 }
 
-int keyboard_back()
+int keyboard_back(void)
 {
     int c;
     spinlock_lock(&scancodes_lock);
@@ -91,7 +91,7 @@ int keyboard_back()
     return c;
 }
 
-int keyboard_front()
+int keyboard_front(void)
 {
     int c = -1;
     spinlock_lock(&scancodes_lock);
@@ -243,7 +243,7 @@ void keyboard_isr(pt_regs *f)
     pic8259_send_eoi(IRQ_KEYBOARD);
 }
 
-void keyboard_update_leds()
+void keyboard_update_leds(void)
 {
     // Handle scroll_loc & num_loc & caps_loc.
     bitmask_check(kflags, KBD_SCROLL_LOCK) ? (ledstate |= 1) : (ledstate ^= 1);
@@ -255,17 +255,17 @@ void keyboard_update_leds()
     outportb(0x60, ledstate);
 }
 
-void keyboard_enable()
+void keyboard_enable(void)
 {
     outportb(0x60, 0xF4);
 }
 
-void keyboard_disable()
+void keyboard_disable(void)
 {
     outportb(0x60, 0xF5);
 }
 
-int keyboard_initialize()
+int keyboard_initialize(void)
 {
     // Initialize the ring-buffer for the scancodes.
     fs_rb_scancode_init(&scancodes);
@@ -280,7 +280,7 @@ int keyboard_initialize()
     return 0;
 }
 
-int keyboard_finalize()
+int keyboard_finalize(void)
 {
     // Install the IRQ.
     irq_uninstall_handler(IRQ_KEYBOARD, keyboard_isr);

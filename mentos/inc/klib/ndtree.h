@@ -28,7 +28,7 @@ typedef void (*ndtree_tree_node_f)(ndtree_t *tree, ndtree_node_t *node);
 
 /// @brief Allocate memory for a node.
 /// @return Pointer to the allocated node.
-ndtree_node_t *ndtree_node_alloc();
+ndtree_node_t *ndtree_node_alloc(void);
 
 /// @brief Allocate memory for a node and sets its value.
 /// @param value Value to associated node.
@@ -94,7 +94,7 @@ void ndtree_node_dealloc(ndtree_node_t *node);
 
 /// @brief Allocate memory for a tree.
 /// @return Pointer to the allocated tree.
-ndtree_t *ndtree_tree_alloc();
+ndtree_t *ndtree_tree_alloc(void);
 
 /// @brief Allocate memory for a tree and sets the function used to compare nodes.
 /// @param cmp Function used to compare elements of the tree.
@@ -159,7 +159,7 @@ int ndtree_tree_remove_with_cb(ndtree_t *tree, void *value, ndtree_tree_node_f n
 
 /// @brief Allocate the memory for the iterator.
 /// @return Pointer to the allocated iterator.
-ndtree_iter_t *ndtree_iter_alloc();
+ndtree_iter_t *ndtree_iter_alloc(void);
 
 /// @brief Deallocate the memory for the iterator.
 /// @param iter Pointer to the allocated iterator.

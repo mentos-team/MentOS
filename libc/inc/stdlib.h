@@ -44,7 +44,7 @@ void *realloc(void *ptr, size_t size);
 void free(void *ptr);
 
 /// @brief Cause an abnormal program termination with core-dump.
-void abort();
+void abort(void);
 
 /// @brief Tries to adds the variable to the environment.
 /// @param name      Name of the variable.
@@ -74,11 +74,11 @@ void srand(unsigned x);
 
 /// @brief Generates a random unsigned integer between 0 and RAND_MAX.
 /// @return the random value.
-unsigned rand();
+unsigned rand(void);
 
 /// @brief Generates a random floating point number between 0 and 1.
 /// @return the random value.
-float randf();
+float randf(void);
 
 /// @brief Generates a random integer between lb and ub.
 /// @param lb the lower-bound value.

@@ -233,7 +233,7 @@ static vfs_file_operations_t procv_fs_operations = {
     .readlink_f = NULL,
 };
 
-int procv_module_init()
+int procv_module_init(void)
 {
     proc_dir_entry_t *video = proc_create_entry("video", NULL);
     if (video == NULL) {

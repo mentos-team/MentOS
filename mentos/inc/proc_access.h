@@ -36,7 +36,7 @@
 
 /// @brief Reads the Extra Segment (DS).
 /// @return the value we read.
-static inline uint16_t get_es()
+static inline uint16_t get_es(void)
 {
     uint16_t es;
     __asm__ __volatile__("mov %%es, %0"
@@ -55,7 +55,7 @@ static inline void set_es(uint16_t es)
 
 /// @brief Reads the Data Segment (DS).
 /// @return the value we read.
-static inline uint16_t get_ds()
+static inline uint16_t get_ds(void)
 {
     uint16_t ds;
     __asm__ __volatile__("mov %%ds, %0"
@@ -74,7 +74,7 @@ static inline void set_ds(uint16_t ds)
 
 /// @brief Reads FS.
 /// @return the value we read.
-static inline uint16_t get_fs()
+static inline uint16_t get_fs(void)
 {
     uint16_t fs;
     __asm__ __volatile__("mov %%fs, %0"
@@ -93,7 +93,7 @@ static inline void set_fs(uint16_t fs)
 
 /// @brief Reads GS.
 /// @return the value we read.
-static inline uint16_t get_gs()
+static inline uint16_t get_gs(void)
 {
     uint16_t gs;
     __asm__ __volatile__("mov %%gs, %0"
@@ -112,7 +112,7 @@ static inline void set_gs(uint16_t gs)
 
 /// @brief Reads the Stack Segment (SS).
 /// @return the value we read.
-static inline uint16_t get_ss()
+static inline uint16_t get_ss(void)
 {
     uint16_t ss;
     __asm__ __volatile__("mov %%ss, %0"
@@ -131,7 +131,7 @@ static inline void set_ss(uint16_t ss)
 
 /// @brief Reads the current cr0 value.
 /// @return the value we read.
-static inline uintptr_t get_cr0()
+static inline uintptr_t get_cr0(void)
 {
     uintptr_t cr0;
     __asm__ __volatile__("mov %%cr0, %0"
@@ -150,7 +150,7 @@ static inline void set_cr0(uintptr_t cr0)
 
 /// @brief Reads the current cr3 value.
 /// @return the value we read.
-static inline uintptr_t get_cr3()
+static inline uintptr_t get_cr3(void)
 {
     uintptr_t cr3;
     __asm__ __volatile__("mov %%cr3, %0"
@@ -169,7 +169,7 @@ static inline void set_cr3(uintptr_t cr3)
 
 /// @brief Reads the current cr4 value.
 /// @return the value we read.
-static inline uintptr_t get_cr4()
+static inline uintptr_t get_cr4(void)
 {
     uintptr_t cr4;
     __asm__ __volatile__("mov %%cr4, %0"
@@ -189,7 +189,7 @@ static inline void set_cr4(uintptr_t cr4)
 
 /// @brief Reads entire contents of the EFLAGS register.
 /// @return the content of EFLAGS.
-static inline uintptr_t get_eflags()
+static inline uintptr_t get_eflags(void)
 {
     uintptr_t eflags;
     // "=rm" is safe here, because "pop" adjusts the stack before
@@ -203,14 +203,14 @@ static inline uintptr_t get_eflags()
 }
 
 /// @brief Clears the task-switched (TS) flag in the CR0 register.
-static inline void clear_ts()
+static inline void clear_ts(void)
 {
     __asm__ __volatile__("clts");
 }
 
 /// @brief Reads the segment selector from the task register (TR).
 /// @return
-static inline unsigned short get_tr()
+static inline unsigned short get_tr(void)
 {
     unsigned short seg;
     __asm__ __volatile__("str %0"
@@ -229,7 +229,7 @@ static inline void set_tr(unsigned short seg)
 
 /// @brief Reads the segment selector from the local descriptor table register (LDTR).
 /// @return the segment selector.
-static inline unsigned short sldt()
+static inline unsigned short sldt(void)
 {
     unsigned short seg;
     __asm__ __volatile__("sldt %0"
@@ -268,7 +268,7 @@ static inline void lidt(uintptr_t *desc)
 
 /// @brief Set interrupt flag; external, maskable interrupts enabled at the end
 /// of the next instruction.
-static inline void sti()
+static inline void sti(void)
 {
     __asm__ __volatile__("sti"
                          :
@@ -278,7 +278,7 @@ static inline void sti()
 
 /// @brief Clear interrupt flag; interrupts disabled when interrupt flag
 /// cleared.
-static inline void cli()
+static inline void cli(void)
 {
     __asm__ __volatile__("cli"
                          :
@@ -288,19 +288,19 @@ static inline void cli()
 
 /// @brief Exchanges the current GS base register value with the value contained
 /// in MSR address C0000102H.
-static inline void swapgs()
+static inline void swapgs(void)
 {
     __asm__ __volatile__("swapgs");
 }
 
 /// @brief Halts the CPU until the next external interrupt is fired.
-static inline void hlt()
+static inline void hlt(void)
 {
     __asm__ __volatile__("hlt");
 }
 
 /// @brief Gives hint to processor that improves performance of spin-wait loops.
-static inline void pause()
+static inline void pause(void)
 {
     __asm__ __volatile__("pause");
 }

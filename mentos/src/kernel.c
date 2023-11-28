@@ -78,7 +78,7 @@ uintptr_t initial_esp = 0;
 boot_info_t boot_info;
 
 /// @brief Prints [OK] at the current row and column 60.
-static inline void print_ok()
+static inline void print_ok(void)
 {
     unsigned y, width;
     video_get_cursor_position(NULL, &y);
@@ -88,7 +88,7 @@ static inline void print_ok()
 }
 
 /// @brief Prints [FAIL] at the current row and column 60.
-static inline void print_fail()
+static inline void print_fail(void)
 {
     unsigned y, width;
     video_get_cursor_position(NULL, &y);
