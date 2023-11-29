@@ -19,17 +19,16 @@ jobs:
         name: Build
         runs-on: macos-latest
         # Set environment variables
-        #env:
+        env:
             # We globally set CC and CXX.
-        #    CC: x86_64-elf-gcc
-        #    CXX: x86_64-elf-g++
+            CC: x86_64-elf-gcc
+            CXX: x86_64-elf-g++
         steps:
             - name: Clone repository
               uses: actions/checkout@v3
             - name: Install dependencies
               run: |
-                brew install git cmake nasm
-            # x86_64-elf-binutils x86_64-elf-gcc 
+                brew install x86_64-elf-gcc git cmake nasm
             - name: Build
               run: |
                   cmake -B build
