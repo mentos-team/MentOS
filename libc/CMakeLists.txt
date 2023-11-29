@@ -29,6 +29,12 @@ else()
     set(CMAKE_ASM_COMPILE_OBJECT "<CMAKE_ASM_COMPILER> -f elf -g -O3 -o <OBJECT> <SOURCE>")
 endif()
 
+
+if((${CMAKE_HOST_SYSTEM_NAME} STREQUAL "Darwin") OR APPLE)
+    set(CMAKE_C_COMPILER x86_64-elf-gcc)
+    set(CMAKE_CXX_COMPILER x86_64-elf-g++)
+endif()
+
 # =============================================================================
 # C WARNINGs
 # =============================================================================

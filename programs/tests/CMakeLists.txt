@@ -6,6 +6,11 @@ cmake_minimum_required(VERSION 3.1...3.22)
 # Initialize the project.
 project(tests C)
 
+if((${CMAKE_HOST_SYSTEM_NAME} STREQUAL "Darwin") OR APPLE)
+    set(CMAKE_C_COMPILER x86_64-elf-gcc)
+    set(CMAKE_CXX_COMPILER x86_64-elf-g++)
+endif()
+
 # =============================================================================
 # List of programs.
 # =============================================================================
