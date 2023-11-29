@@ -1,8 +1,17 @@
 # =============================================================================
 # Author: Enrico Fraccaroli
 # =============================================================================
+
 # Set the minimum required version of cmake.
 cmake_minimum_required(VERSION 3.1...3.22)
+
+if((${CMAKE_HOST_SYSTEM_NAME} STREQUAL "Darwin") OR APPLE)
+    set(CMAKE_C_COMPILER x86_64-elf-gcc)
+    set(CMAKE_CXX_COMPILER x86_64-elf-g++)
+    set(CMAKE_C_FLAGS  "${CMAKE_C_FLAGS } -nostdlib")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -nostdlib")
+endif()
+
 # Initialize the project.
 project(libc C ASM)
 
@@ -27,12 +36,6 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     set(CMAKE_ASM_COMPILE_OBJECT "<CMAKE_ASM_COMPILER> -f elf -g -O0 -F dwarf -o <OBJECT> <SOURCE>")
 else()
     set(CMAKE_ASM_COMPILE_OBJECT "<CMAKE_ASM_COMPILER> -f elf -g -O3 -o <OBJECT> <SOURCE>")
-endif()
-
-
-if((${CMAKE_HOST_SYSTEM_NAME} STREQUAL "Darwin") OR APPLE)
-    set(CMAKE_C_COMPILER x86_64-elf-gcc)
-    set(CMAKE_CXX_COMPILER x86_64-elf-g++)
 endif()
 
 # =============================================================================
