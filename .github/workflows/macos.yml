@@ -18,6 +18,11 @@ jobs:
     build:
         name: Build
         runs-on: macos-latest
+        # Set environment variables
+        env:
+            # We globally set CC and CXX.
+            CC: /usr/local/bin/x86_64-elf-gcc
+            CXX: /usr/local/bin/x86_64-elf-g++
         steps:
             - name: Clone repository
               uses: actions/checkout@v3
