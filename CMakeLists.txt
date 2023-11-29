@@ -31,6 +31,8 @@ message(STATUS "Kernel version : ${CMAKE_SYSTEM_VERSION}")
 if((${CMAKE_HOST_SYSTEM_NAME} STREQUAL "Darwin") OR APPLE)
     # Specify the linker flags.
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -nostdlib")
+    set(CMAKE_C_COMPILER /usr/local/bin/x86_64-elf-gcc)
+    set(CMAKE_CXX_COMPILER /usr/local/bin/x86_64-elf-g++)
 elseif((${CMAKE_HOST_SYSTEM_NAME} STREQUAL "Windows") OR WIN32)
   # Windows set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -sdl)
 else()
