@@ -140,7 +140,7 @@ Note: Older versions might have `qemu-system-i386` instead of `qemu-system-x86`.
 
 Under **MacOS** you also need to install the i386-elf cross-compiler. The
 simplest installation method is through Homebrew package manager.
-Install [Homebrew](https://brew.sh/index_it) if you don't already have it, and
+Install [Homebrew](https://brew.sh) if you don't already have it, and
 then type the following commands:
 
 ```bash
