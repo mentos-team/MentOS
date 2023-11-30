@@ -3,12 +3,7 @@
 cmake_minimum_required(VERSION 3.1...3.22)
 
 # Initialize the project.
-project(mentos)
-
-enable_language(C)
-enable_language(ASM)
-
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -nostdlib")
+project(mentos C ASM)
 
 # =============================================================================
 # BUILD TYPE (Debug/Release)

@@ -6,44 +6,7 @@
 cmake_minimum_required(VERSION 3.1...3.22)
 
 # Initialize the project.
-project(programs)
-
-enable_language(C)
-
-# =============================================================================
-# List of programs.
-# =============================================================================
-# Add your file in this list.
-set(PROGRAMS
-    init.c
-    cpuid.c
-    clear.c
-    date.c
-    ls.c
-    logo.c
-    nice.c
-    poweroff.c
-    rm.c
-    shell.c
-    uname.c
-    cat.c
-    echo.c
-    login.c
-    mkdir.c
-    pwd.c
-    rmdir.c
-    showpid.c
-    touch.c
-    env.c
-    ps.c
-    kill.c
-    ipcrm.c
-    ipcs.c
-    sleep.c
-    man.c
-    edit.c
-    uptime.c
-)
+project(programs C)
 
 # =============================================================================
 # C WARNINGs

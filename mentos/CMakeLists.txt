@@ -6,10 +6,7 @@
 cmake_minimum_required(VERSION 3.1...3.22)
 
 # Initialize the project.
-project(kernel)
-
-enable_language(C)
-enable_language(ASM)
+project(kernel C ASM)
 
 # =============================================================================
 # Set the main file names.
@@ -35,8 +32,6 @@ option(ENABLE_SCHEDULER_FEEDBACK "Enables scheduling feedback on terminal." OFF)
 # ASSEMBLY
 # =============================================================================
 
-# Enable the assembly language.
-enable_language(ASM)
 # Find the NASM compiler.
 find_program(ASM_COMPILER NAMES nasm HINTS /usr/bin/ /usr/local/bin/)
 # Mark the variable ASM_COMPILER as advanced.

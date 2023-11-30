@@ -25,13 +25,14 @@ jobs:
               run: |
                 brew install x86_64-elf-gcc nasm
             - name: Build
-              env:
-                TOOLPREFIX: x86_64-elf- 
-                CC: x86_64-elf-gcc
-                AS: x86_64-elf-gas
-                LD: x86_64-elf-ld
-                OBJCOPY: x86_64-elf-objcopy
-                OBJDUMP: x86_64-elf-objdump
               run: |
-                  cmake -DCMAKE_ASM_COMPILER=/usr/local/bin/nasm -B build
+                  cmake \
+                    -DCMAKE_C_COMPILER=x86_64-elf-gcc \
+                    -DCMAKE_AR=x86_64-elf-gas \
+                    -DCMAKE_LINKER=x86_64-elf-ld \
+                    -DCMAKE_OBJCOPY=x86_64-elf-objcopy \
+                    -DCMAKE_OBJDUMP=x86_64-elf-objdump \
+                    -DCMAKE_RANLIB=x86_64-elf-ranlib \
+                    -DCMAKE_ASM_COMPILER=/usr/local/bin/nasm \
+                    -B build
                   cmake --build build --parallel 2 --verbose
