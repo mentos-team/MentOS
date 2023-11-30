@@ -6,7 +6,9 @@
 cmake_minimum_required(VERSION 3.1...3.22)
 
 # Initialize the project.
-project(programs C)
+project(programs)
+
+enable_language(C)
 
 # =============================================================================
 # List of programs.

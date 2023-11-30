@@ -6,7 +6,10 @@
 cmake_minimum_required(VERSION 3.1...3.22)
 
 # Initialize the project.
-project(kernel C ASM)
+project(kernel)
+
+enable_language(C)
+enable_language(ASM)
 
 # =============================================================================
 # Set the main file names.

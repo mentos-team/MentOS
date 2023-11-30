@@ -3,7 +3,12 @@
 cmake_minimum_required(VERSION 3.1...3.22)
 
 # Initialize the project.
-project(mentos C ASM)
+project(mentos)
+
+enable_language(C)
+enable_language(ASM)
+
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -nostdlib")
 
 # =============================================================================
 # BUILD TYPE (Debug/Release)
@@ -59,13 +64,6 @@ else()
     endif()
     # Speicfy the linker.
     # set(CMAKE_LINKER ld)
-endif()
-
-if(NOT DEFINED HAVE_FLAG_SEARCH_PATHS_FIRST)
-    set(HAVE_FLAG_SEARCH_PATHS_FIRST 0)
-    if("${DARWIN_MAJOR_VERSION}" GREATER 6)
-        set(HAVE_FLAG_SEARCH_PATHS_FIRST 1)
-    endif()
 endif()
 
 # =============================================================================
