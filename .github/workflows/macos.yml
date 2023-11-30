@@ -34,5 +34,6 @@ jobs:
                     -DCMAKE_OBJDUMP=x86_64-elf-objdump \
                     -DCMAKE_RANLIB=x86_64-elf-ranlib \
                     -DCMAKE_ASM_COMPILER=/usr/local/bin/nasm \
+                    -DCMAKE_SYSTEM_NAME=Linux \
                     -B build
                   cmake --build build --parallel 2 --verbose
