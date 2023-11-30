@@ -27,8 +27,6 @@ jobs:
             - name: Build
               env:
                 TOOLPREFIX: x86_64-elf- 
-                CC: x86_64-elf-gcc
-                CXX: x86_64-elf-g++
                 LD: x86_64-elf-ld
               run: |
                   cmake -DCMAKE_ASM_COMPILER=/usr/local/bin/nasm -B build
