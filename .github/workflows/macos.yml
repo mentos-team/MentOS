@@ -23,8 +23,8 @@ jobs:
               uses: actions/checkout@v3
             - name: Install dependencies
               run: |
-                brew install x86_64-elf-gcc git cmake nasm
+                brew install gcc@11 git cmake nasm
             - name: Build
               run: |
-                  cmake -DCMAKE_C_COMPILER=/usr/local/bin/x86_64-elf-gcc -DCMAKE_CXX_COMPILER=/usr/local/bin/x86_64-elf-g++ -DCMAKE_ASM_COMPILER=/usr/local/bin/nasm -B build
+                  cmake -DCMAKE_C_COMPILER=/opt/homebrew/bin/gcc-11 -DCMAKE_CXX_COMPILER=/opt/homebrew/bin/g++-11 -DCMAKE_ASM_COMPILER=/usr/local/bin/nasm -B build
                   cmake --build build --parallel 2
