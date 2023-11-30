@@ -23,11 +23,11 @@ jobs:
               uses: actions/checkout@v3
             - name: Install dependencies
               run: |
-                brew install git cmake nasm
+                brew install nasm
             - name: Build
               env:
                 CC: gcc-11
                 CXX: g++-11
               run: |
-                  cmake -B build
-                  cmake --build build --parallel 2
+                  cmake -DCMAKE_ASM_COMPILER=/usr/local/bin/nasm -B build
+                  cmake --build build --parallel 2 --verbose
