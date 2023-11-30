@@ -23,12 +23,10 @@ jobs:
               uses: actions/checkout@v3
             - name: Install dependencies
               run: |
-                brew install nasm
+                brew install x86_64-elf-gcc nasm
             - name: Build
               env:
-                CC: gcc-11
-                LD: gcc-11
-                CXX: g++-11
+                TOOLPREFIX: x86_64-elf- 
               run: |
                   cmake -DCMAKE_ASM_COMPILER=/usr/local/bin/nasm -B build
                   cmake --build build --parallel 2 --verbose
