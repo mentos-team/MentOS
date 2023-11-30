@@ -58,7 +58,14 @@ else()
         # set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -sdl)
     endif()
     # Speicfy the linker.
-    set(CMAKE_LINKER ld)
+    # set(CMAKE_LINKER ld)
+endif()
+
+if(NOT DEFINED HAVE_FLAG_SEARCH_PATHS_FIRST)
+    set(HAVE_FLAG_SEARCH_PATHS_FIRST 0)
+    if("${DARWIN_MAJOR_VERSION}" GREATER 6)
+        set(HAVE_FLAG_SEARCH_PATHS_FIRST 1)
+    endif()
 endif()
 
 # =============================================================================
