@@ -27,6 +27,11 @@ jobs:
             - name: Build
               env:
                 TOOLPREFIX: x86_64-elf- 
+                CC: $(TOOLPREFIX)gcc
+                AS: $(TOOLPREFIX)gas
+                LD: $(TOOLPREFIX)ld
+                OBJCOPY: $(TOOLPREFIX)objcopy
+                OBJDUMP: $(TOOLPREFIX)objdump
               run: |
                   cmake -DCMAKE_ASM_COMPILER=/usr/local/bin/nasm -B build
                   cmake --build build --parallel 2 --verbose
