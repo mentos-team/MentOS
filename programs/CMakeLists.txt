@@ -1,5 +1,6 @@
 # List of programs.
 set(PROGRAM_LIST
+    id.c
     stat.c
     false.c
     nice.c
