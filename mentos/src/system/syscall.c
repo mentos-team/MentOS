@@ -13,6 +13,7 @@
 
 #include "descriptor_tables/isr.h"
 #include "devices/fpu.h"
+#include "fs/vfs.h"
 #include "fs/ioctl.h"
 #include "hardware/timer.h"
 #include "kernel.h"
@@ -91,7 +92,7 @@ void syscall_init(void)
     sys_call_table[__NR_rename]                 = (SystemCall)sys_ni_syscall;
     sys_call_table[__NR_mkdir]                  = (SystemCall)sys_mkdir;
     sys_call_table[__NR_rmdir]                  = (SystemCall)sys_rmdir;
-    sys_call_table[__NR_dup]                    = (SystemCall)sys_ni_syscall;
+    sys_call_table[__NR_dup]                    = (SystemCall)sys_dup;
     sys_call_table[__NR_pipe]                   = (SystemCall)sys_ni_syscall;
     sys_call_table[__NR_times]                  = (SystemCall)sys_ni_syscall;
     sys_call_table[__NR_brk]                    = (SystemCall)sys_brk;

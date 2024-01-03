@@ -253,6 +253,12 @@ int fchdir(int fd);
 ///         appropriately.
 ssize_t getdents(int fd, dirent_t *dirp, unsigned int count);
 
+/// @brief Return a new file descriptor
+/// @param fd The fd pointing to the opened file.
+/// @return On success, a new file descriptor is returned.
+///         On error, -1 is returned, and errno is set appropriately.
+int dup(int fd);
+
 /// @brief Send signal to calling thread after desired seconds.
 /// @param seconds the amount of seconds.
 /// @return If there is a previous alarm() request with time remaining, alarm()

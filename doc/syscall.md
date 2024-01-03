@@ -52,7 +52,7 @@ If the column is empty it means that it's not implemented yet.
    | 38  | sys_rename                 |                             | const char *             | const char *                 | -                       | -               | -                |
  2 | 39  | sys_mkdir                  | fs/namei.c                  | const char *             | int                          | -                       | -               | -                |
  2 | 40  | sys_rmdir                  | fs/namei.c                  | const char *             | -                            | -                       | -               | -                |
-   | 41  | sys_dup                    |                             | unsigned int             | -                            | -                       | -               | -                |
+ 1 | 41  | sys_dup                    | fs/vfs.c                    | unsigned int             | -                            | -                       | -               | -                |
    | 42  | sys_pipe                   |                             | unsigned long *          | -                            | -                       | -               | -                |
    | 43  | sys_times                  |                             | struct tms *             | -                            | -                       | -               | -                |
  2 | 45  | sys_brk                    | mem/kheap.c                 | unsigned long            | -                            | -                       | -               | -                |
