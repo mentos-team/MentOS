@@ -671,6 +671,102 @@ static inline void __free_argv(int argc, char **argv)
     free(argv);
 }
 
+static int __execute_cmd(char* command, bool_t add_to_history)
+{
+    int status = 0;
+    // Retrieve the options from the command.
+    // The current number of arguments.
+    int _argc = 1;
+    // The vector of arguments.
+    char **_argv;
+    __alloc_argv(command, &_argc, &_argv);
+    // Check if the command is empty.
+    if (_argc == 0) {
+        return 0;
+    }
+
+    // Add the command to the history.
+    if (add_to_history) {
+        __hst_push(cmd);
+    }
+
+    if (!strcmp(_argv[0], "init")) {
+    } else if (!strcmp(_argv[0], "cd")) {
+        __cd(_argc, _argv);
+    } else if (!strcmp(_argv[0], "..")) {
+        const char *__argv[] = { "cd", "..", NULL };
+        __cd(2, (char **)__argv);
+    } else if (!strcmp(_argv[0], "export")) {
+        __export(_argc, _argv);
+    } else {
+        bool_t blocking = true;
+        if (strcmp(_argv[_argc - 1], "&") == 0) {
+            blocking = false;
+            _argc--;
+            free(_argv[_argc]);
+            _argv[_argc] = NULL;
+        }
+        // Is a shell path, execute it!
+        pid_t cpid = fork();
+        if (cpid == 0) {
+            // Makes the new process a group leader
+            pid_t pid = getpid();
+            setpgid(cpid, pid);
+
+            if (execvp(_argv[0], _argv) == -1) {
+                printf("\nUnknown command: %s\n", _argv[0]);
+                exit(1);
+            }
+        }
+        if (blocking) {
+            waitpid(cpid, &status, 0);
+            if (WIFSIGNALED(status)) {
+                printf(FG_RED "\nExit status %d, killed by signal %d\n" FG_RESET, WEXITSTATUS(status), WTERMSIG(status));
+            } else if (WIFSTOPPED(status)) {
+                printf(FG_YELLOW "\nExit status %d, stopped by signal %d\n" FG_RESET, WEXITSTATUS(status), WSTOPSIG(status));
+            }
+        }
+    }
+    // Free up the memory reserved for the arguments.
+    __free_argv(_argc, _argv);
+    return status;
+}
+
+static void __interactive_mode(void)
+{
+#pragma clang diagnostic push
+#pragma ide diagnostic ignored "EndlessLoop"
+    while (true) {
+        // First print the prompt.
+        __prompt_print();
+        // Get the input command.
+        __cmd_get();
+        __execute_cmd(cmd, true);
+    }
+#pragma clang diagnostic pop
+}
+
+static int __execute_file(char *path)
+{
+    int status = 0;
+    int fd;
+    if ((fd = open(path, O_RDONLY, 0)) == -1) {
+        printf("\n%s: Failed to open file\n", path);
+        exit(1);
+    }
+    while (fgets(cmd, sizeof(cmd), fd)) {
+        if (cmd[0] == '#') {
+            continue;
+        }
+
+        if ((status = __execute_cmd(cmd, false)) != 0) {
+            printf("\n%s: exited with %d\n", cmd, status);
+        }
+    }
+
+    return status;
+}
+
 void wait_for_child(int signum)
 {
     wait(NULL);
@@ -705,77 +801,28 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    // Move inside the home directory.
-    __cd(0, NULL);
-
-#pragma clang diagnostic push
-#pragma ide diagnostic ignored "EndlessLoop"
-    while (true) {
-        // First print the prompt.
-        __prompt_print();
-
-        // Get the input command.
-        __cmd_get();
-
-        // Check if the command is empty.
-        if (strlen(cmd) <= 0) {
-            continue;
-        }
-
-        // Retrieve the options from the command.
-        // The current number of arguments.
-        int _argc = 1;
-        // The vector of arguments.
-        char **_argv;
-        __alloc_argv(cmd, &_argc, &_argv);
-        // Check if the command is empty.
-        if (_argc == 0) {
-            continue;
-        }
-
-        // Add the command to the history.
-        __hst_push(cmd);
-        if (!strcmp(_argv[0], "init")) {
-        } else if (!strcmp(_argv[0], "cd")) {
-            __cd(_argc, _argv);
-        } else if (!strcmp(_argv[0], "..")) {
-            const char *__argv[] = { "cd", "..", NULL };
-            __cd(2, (char **)__argv);
-        } else if (!strcmp(_argv[0], "export")) {
-            __export(_argc, _argv);
-        } else {
-            bool_t blocking = true;
-            if (strcmp(_argv[_argc - 1], "&") == 0) {
-                free(_argv[_argc - 1]);
-                _argv[_argc - 1] = NULL;
-                blocking         = false;
-                _argc -= 1;
+    // Interactive
+    if (argc < 2) {
+        // Move inside the home directory.
+        __cd(0, NULL);
+        __interactive_mode();
+    } else {
+        // check file arguments
+        for (int i = 1; i < argc; ++i) {
+            stat_t buf;
+            if (stat(argv[i], &buf) < 0) {
+                printf("\n%s: No such file\n", argv[i]);
+                exit(1);
             }
-            // Is a shell path, execute it!
+        }
+
+        for (int i = 1; i < argc; ++i) {
             int status;
-            pid_t cpid = fork();
-            if (cpid == 0) {
-                // Makes the new process a group leader
-                pid_t pid = getpid();
-                setpgid(cpid, pid);
-
-                if (execvp(_argv[0], _argv) == -1) {
-                    printf("\nUnknown command: %s\n", _argv[0]);
-                    exit(1);
-                }
-            }
-            if (blocking) {
-                waitpid(cpid, &status, 0);
-                if (WIFSIGNALED(status)) {
-                    printf(FG_RED "\nExit status %d, killed by signal %d\n" FG_RESET, WEXITSTATUS(status), WTERMSIG(status));
-                } else if (WIFSTOPPED(status)) {
-                    printf(FG_YELLOW "\nExit status %d, stopped by signal %d\n" FG_RESET, WEXITSTATUS(status), WSTOPSIG(status));
-                }
+            if (!(status = __execute_file(argv[i]))) {
+                return status;
             }
         }
-        // Free up the memory reserved for the arguments.
-        __free_argv(_argc, _argv);
     }
-#pragma clang diagnostic pop
+
     return 0;
 }
