@@ -106,25 +106,47 @@ pid_t getpgid(pid_t pid);
 /// @return returns zero. On error, -1 is returned, and errno is set appropriately.
 int setpgid(pid_t pid, pid_t pgid);
 
-///@brief returns the group ID of the calling process.
+///@brief returns the real group ID of the calling process.
 ///@return GID of the current process
 extern pid_t getgid(void);
 
-///@brief sets the effective group ID of the calling process.
+///@brief returns the effective group ID of the calling process.
+///@return GID of the current process
+extern gid_t getegid(void);
+
+///@brief sets the group IDs of the calling process.
 ///@param pid process identifier to 
 ///@return On success, zero is returned.
 ///        Otherwise returns -1 with errno set to :EINVAL or EPERM  
 extern int setgid(pid_t pid);
 
-///@brief Returns the User ID of the calling process.
+///@brief sets the real and effective group IDs of the calling process.
+///@param rgid the new real Group ID.
+///@param egid the effective real Group ID.
+///@return On success, zero is returned.
+///        Otherwise returns -1 with errno set EPERM
+extern int setregid(gid_t rgid, gid_t egid);
+
+///@brief Returns the real User ID of the calling process.
 ///@return User ID of the current process.
 extern uid_t getuid(void);
 
-///@brief Sets the effective User ID of the calling process.
+///@brief Returns the effective User ID of the calling process.
+///@return User ID of the current process.
+extern uid_t geteuid(void);
+
+///@brief Sets the User IDs of the calling process.
 ///@param uid the new User ID.
 ///@return On success, zero is returned.
 ///        Otherwise returns -1 with errno set to :EINVAL or EPERM  
 extern int setuid(uid_t uid);
+
+///@brief Sets the effective and real User IDs of the calling process.
+///@param ruid the new real User ID.
+///@param euid the effective real User ID.
+///@return On success, zero is returned.
+///        Otherwise returns -1 with errno set to EPERM
+extern int setreuid(uid_t ruid, uid_t euid);
 
 /// @brief Returns the parent process ID (PPID) of the calling process.
 /// @return pid_t parent process identifier.

@@ -10,7 +10,7 @@
 int main(int argc, char **argv)
 {
     if (argc == 1) {
-        printf("uid=%d gid=%d\n", getuid(), getgid());
+        printf("uid=%d gid=%d\n", geteuid(), getegid());
     } else if (strncmp(argv[1], "--help", 6) == 0) {
         printf("Usage: %s [OPTION]\n", argv[0]);
         printf("Print user and group information\n\n");
@@ -18,9 +18,9 @@ int main(int argc, char **argv)
         printf("  -u, --user   print only the effective user ID");
         printf("      --help   display this help and exit");
     } else if (strncmp(argv[1], "-u", 2) == 0 || strncmp(argv[1], "--user", 6) == 0) {
-        printf("%d\n", getuid());
+        printf("%d\n", geteuid());
     } else if (strncmp(argv[1], "-g", 2) == 0 || strncmp(argv[1], "--group", 7) == 0) {
-        printf("%d\n", getgid());
+        printf("%d\n", getegid());
     } else {
         printf("%s: invalid option '%s'\n", argv[0], argv[1]);
         printf("Try '%s --help' for more information\n", argv[0]);
