@@ -7,18 +7,23 @@
 #include <stdlib.h>
 #include <sys/unistd.h>
 #include <sys/wait.h>
-#include <time.h>
 
 int main(int argc, char *argv[], char *envp[])
 {
     char *_argv[] = { "login", NULL };
     int status;
-    if (fork() == 0) {
-        execv("/bin/login", _argv);
-        printf("This is bad, I should not be here! EXEC NOT WORKING\n");
-    }
+
+#pragma clang diagnostic push
+#pragma ide diagnostic ignored "EndlessLoop"
     while (1) {
-        wait(&status);
+        pid_t login = fork();
+        if (login == 0) {
+            execv("/bin/login", _argv);
+            printf("This is bad, I should not be here! EXEC NOT WORKING\n");
+        }
+
+        while (wait(&status) != login);
     }
+#pragma clang diagnostic pop
     return 0;
 }
