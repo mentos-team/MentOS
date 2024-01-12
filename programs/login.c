@@ -182,12 +182,12 @@ int main(int argc, char **argv)
     do {
         // Get the username.
         do {
-            printf("Username :");
+            printf("Username: ");
         } while (!__get_input(username, sizeof(username), false));
 
         // Get the password.
         do {
-            printf("Password :");
+            printf("Password: ");
         } while (!__get_input(password, sizeof(password), true));
 
         // Check if we can find the user.
