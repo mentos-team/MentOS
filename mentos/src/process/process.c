@@ -124,6 +124,14 @@ static int __load_executable(const char *path, task_struct *task, uint32_t *entr
         pr_err("This is not a valid ELF executable `%s`!\n", path);
         return 0;
     }
+    // Set the effective uid if the setuid bit is present.
+    if (bitmask_check(file->mask, S_ISUID)) {
+        task->uid = file->uid;
+    }
+    // Set the effective gid if the setgid bit is present.
+    if (bitmask_check(file->mask, S_ISGID)) {
+        task->gid = file->gid;
+    }
     // FIXME: When threads will be implemented
     // they should share the mm, so the destroy_process_image must be called
     // only when all the threads are terminated. This can be accomplished by using
