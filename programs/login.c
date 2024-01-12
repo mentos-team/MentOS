@@ -12,6 +12,7 @@
 #include <termios.h>
 #include <bits/ioctls.h>
 #include <pwd.h>
+#include <shadow.h>
 #include <strerror.h>
 #include <stdlib.h>
 #include <io/debug.h>
@@ -196,8 +197,14 @@ int main(int argc, char **argv)
             continue;
         }
 
+        struct spwd *spwd;
+        if ((spwd = getspnam(username)) == NULL) {
+            printf("Could not retrieve the secret password of %s:%s\n", username, strerror(errno));
+            continue;
+        }
+
         // Check if the password is correct.
-        if (strcmp(pwd->pw_passwd, password) != 0) {
+        if (strcmp(spwd->sp_pwdp, password) != 0) {
             printf("Wrong password.\n");
             continue;
         }
