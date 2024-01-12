@@ -671,6 +671,73 @@ static inline void __free_argv(int argc, char **argv)
     free(argv);
 }
 
+static void __setup_redirects(int *argcp, char ***argvp) {
+    char **argv = *argvp;
+    int argc = *argcp;
+
+    char* path;
+    int flags = O_CREAT | O_WRONLY;
+    mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP;
+
+    bool_t rd_stdout, rd_stderr;
+    rd_stdout = rd_stderr = 0;
+
+    for (int i = 1; i < argc - 1; ++i) {
+        if (!strstr(argv[i], ">")) {
+            continue;
+        }
+
+        path = argv[i + 1];
+
+        // Determine stream to redirect
+        switch(*argv[i]) {
+        case '&':
+            rd_stdout = rd_stderr = true;
+            break;
+        case '2':
+            rd_stderr = true;
+            break;
+        case '>':
+            rd_stdout = true;
+            break;
+        default:
+            continue;
+        }
+
+        // Determine open flags
+        if (strstr(argv[i], ">>")) {
+            flags |= O_APPEND;
+        } else {
+            flags |= O_TRUNC;
+        }
+
+        // Remove redirects from argv
+        *argcp -= 2;
+        free(argv[i]);
+        (*argvp)[i] = 0;
+        free(argv[i+1]);
+        (*argvp)[i+1] = 0;
+
+        int fd = open(path, flags, mode);
+        if (fd < 0) {
+            printf("\n%s: Failed to open file\n", path);
+            exit(1);
+        }
+
+        if (rd_stdout) {
+            close(STDOUT_FILENO);
+            dup(fd);
+        }
+
+        if (rd_stderr) {
+            close(STDERR_FILENO);
+            dup(fd);
+        }
+        close(fd);
+        break;
+    }
+}
+
 static int __execute_cmd(char* command, bool_t add_to_history)
 {
     int status = 0;
@@ -712,6 +779,8 @@ static int __execute_cmd(char* command, bool_t add_to_history)
             // Makes the new process a group leader
             pid_t pid = getpid();
             setpgid(cpid, pid);
+
+            __setup_redirects(&_argc, &_argv);
 
             if (execvp(_argv[0], _argv) == -1) {
                 printf("\nUnknown command: %s\n", _argv[0]);
