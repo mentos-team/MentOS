@@ -179,7 +179,9 @@ static inline task_struct *__alloc_task(task_struct *source, task_struct *parent
     }
     // Set the statistics of the process.
     proc->uid                   = 0;
+    proc->ruid                  = 0;
     proc->gid                   = 0;
+    proc->rgid                  = 0;
     proc->sid                   = 0;
     proc->pgid                  = 0;
     proc->se.prio               = DEFAULT_PRIO;
@@ -425,7 +427,9 @@ pid_t sys_fork(pt_regs *f)
     proc->sid  = current->sid;
     proc->pgid = current->pgid;
     proc->uid  = current->uid;
+    proc->ruid  = current->ruid;
     proc->gid  = current->gid;
+    proc->rgid  = current->rgid;
 
     // Active the new process.
     scheduler_enqueue_task(proc);

@@ -376,44 +376,96 @@ int sys_setpgid(pid_t pid, pid_t pgid)
     return 0;
 }
 
-uid_t sys_getuid(void)
-{
-    if (runqueue.curr) {
-        return runqueue.curr->uid;
-    }
+#define RETURN_PROCESS_ATTR_OR_EPERM(attr) \
+    if (runqueue.curr) { return runqueue.curr->attr; } \
     return -EPERM;
-}
+
+uid_t sys_getuid(void) { RETURN_PROCESS_ATTR_OR_EPERM(ruid); }
+uid_t sys_geteuid(void) { RETURN_PROCESS_ATTR_OR_EPERM(uid); }
+
+pid_t sys_getgid(void) { RETURN_PROCESS_ATTR_OR_EPERM(rgid); }
+gid_t sys_getegid(void) { RETURN_PROCESS_ATTR_OR_EPERM(gid); }
+
+#define FAIL_ON_INV_ID(id) \
+    if (id < 0) { return -EINVAL; }
+
+#define FAIL_ON_INV_ID_OR_PROC(id) \
+    FAIL_ON_INV_ID(id)             \
+    if (!runqueue.curr) { return -EPERM; }
+
+#define IF_PRIVILEGED_SET_ALL_AND_RETURN(attr)                 \
+    if (runqueue.curr->uid == 0) {                             \
+        runqueue.curr->r ## attr = runqueue.curr->attr = attr; \
+        return 0;                                              \
+    }
+
+#define IF_RESET_SET_AND_RETURN(attr)        \
+    if (runqueue.curr->r ## attr == attr) {  \
+        runqueue.curr->attr = attr;          \
+        return 0;                            \
+    }
+
+#define SET_IF_PRIVILEGED_OR_FAIL(attr) \
+    if (runqueue.curr->uid == 0) {      \
+        runqueue.curr->attr = attr;     \
+    } else { return -EPERM; }
 
 int sys_setuid(uid_t uid)
 {
-    if (uid < 0) {
-        return -EINVAL;
-    }
-    if (runqueue.curr && (runqueue.curr->uid == 0)) {
-        runqueue.curr->uid = uid;
-        return 0;
-    }
-    return -EPERM;
-}
-
-pid_t sys_getgid(void)
-{
-    if (runqueue.curr) {
-        return runqueue.curr->gid;
-    }
+    FAIL_ON_INV_ID_OR_PROC(uid);
+    IF_PRIVILEGED_SET_ALL_AND_RETURN(uid);
+    IF_RESET_SET_AND_RETURN(uid);
     return -EPERM;
 }
 
 int sys_setgid(pid_t gid)
 {
-    if (gid < 0) {
-        return -EINVAL;
-    }
-    if (runqueue.curr && (runqueue.curr->uid == 0)) {
-        runqueue.curr->gid = gid;
-        return 0;
-    }
+    FAIL_ON_INV_ID_OR_PROC(gid);
+    IF_PRIVILEGED_SET_ALL_AND_RETURN(gid);
+    IF_RESET_SET_AND_RETURN(gid);
     return -EPERM;
+}
+
+int sys_setreuid(uid_t ruid, uid_t euid)
+{
+    if (!runqueue.curr) { return -EPERM; }
+
+    if (euid != -1) {
+        FAIL_ON_INV_ID(euid);
+        // Privileged or reset?
+        if ((runqueue.curr->uid == 0) || (runqueue.curr->ruid == euid)) {
+            runqueue.curr->uid = euid;
+        } else {
+            return -EPERM;
+        }
+    }
+
+    if (ruid != -1) {
+        FAIL_ON_INV_ID(ruid);
+        SET_IF_PRIVILEGED_OR_FAIL(ruid);
+    }
+    return 0;
+}
+
+int sys_setregid(gid_t rgid, gid_t egid)
+{
+    if (!runqueue.curr) { return -EPERM; }
+
+    if (egid != -1) {
+        FAIL_ON_INV_ID(rgid);
+        // Privileged or reset?
+        if ((runqueue.curr->uid == 0) || (runqueue.curr->rgid == egid)) {
+            runqueue.curr->gid = egid;
+        } else {
+            return -EPERM;
+        }
+    }
+
+    if (rgid != -1) {
+        FAIL_ON_INV_ID(rgid);
+        SET_IF_PRIVILEGED_OR_FAIL(rgid);
+    }
+    return 0;
 }
 
 pid_t sys_getppid(void)

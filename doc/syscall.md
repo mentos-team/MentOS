@@ -59,8 +59,8 @@ If the column is empty it means that it's not implemented yet.
  2 | 46  | sys_setgid                 | process/scheduler.c         | gid_t                    | -                            | -                       | -               | -                |
  2 | 47  | sys_getgid                 | process/scheduler.c         | -                        | -                            | -                       | -               | -                |
  1 | 48  | sys_signal                 | system/signal.c             | int                      | __sighandler_t               | -                       | -               | -                |
-   | 49  | sys_geteuid                |                             | -                        | -                            | -                       | -               | -                |
-   | 50  | sys_getegid                |                             | -                        | -                            | -                       | -               | -                |
+ 1 | 49  | sys_geteuid                | process/scheduler.c         | -                        | -                            | -                       | -               | -                |
+ 1 | 50  | sys_getegid                | process/scheduler.c         | -                        | -                            | -                       | -               | -                |
    | 51  | sys_acct                   |                             | const char *             | -                            | -                       | -               | -                |
    | 52  | sys_umount                 |                             | char *                   | int                          | -                       | -               | -                |
  1 | 54  | sys_ioctl                  | fs/ioctl.c                  | unsigned int             | unsigned int                 | unsigned long           | -               | -                |
@@ -77,8 +77,8 @@ If the column is empty it means that it's not implemented yet.
  1 | 67  | sys_sigaction              | system/signal.c             | int                      | const struct old_sigaction * | struct old_sigaction *  | -               | -                |
  X | 68  | sys_sgetmask               |                             | -                        | -                            | -                       | -               | -                |
  X | 69  | sys_ssetmask               |                             | int                      | -                            | -                       | -               | -                |
-   | 70  | sys_setreuid               |                             | uid_t                    | uid_t                        | -                       | -               | -                |
-   | 71  | sys_setregid               |                             | gid_t                    | gid_t                        | -                       | -               | -                |
+ 1 | 70  | sys_setreuid               | process/scheduler.c         | uid_t                    | uid_t                        | -                       | -               | -                |
+ 1 | 71  | sys_setregid               | process/scheduler.c         | gid_t                    | gid_t                        | -                       | -               | -                |
    | 72  | sys_sigsuspend             |                             | int                      | int                          | old_sigset_t            | -               | -                |
    | 73  | sys_sigpending             |                             | old_sigset_t *           | -                            | -                       | -               | -                |
    | 74  | sys_sethostname            |                             | char *                   | int                          | -                       | -               | -                |
