@@ -1,5 +1,6 @@
 # List of programs.
 set(PROGRAM_LIST
+    false.c
     nice.c
     ls.c
     mkdir.c
