@@ -156,7 +156,7 @@ add_custom_target(
     COMMAND echo "break boot.c: boot_main" >> ${CMAKE_BINARY_DIR}/.gdbinit
     COMMAND echo "break kernel.c: kmain" >> ${CMAKE_BINARY_DIR}/.gdbinit
     # Create the GDB connection file.
-    COMMAND echo "target remote localhost:1234" >> ${CMAKE_BINARY_DIR}/gdb.run
+    COMMAND echo "target remote localhost:1234" > ${CMAKE_BINARY_DIR}/gdb.run
     DEPENDS kernel-bootloader.bin
     DEPENDS all_programs
     DEPENDS all_tests
