@@ -1,6 +1,14 @@
 SYNOPSIS
-    echo [STRING]
+    echo [OPTIONS] [STRING]
 
 DESCRIPTION
-    Displays a line of text.
-    
+    echo displays a line of text.
+
+    The following options are available:
+
+    -n    Do not output a newline.
+    -e    Enable interpretation of backslash escapes.
+
+    If -e is in effect, the following sequences are recognized:
+
+    \n     new line
