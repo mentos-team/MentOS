@@ -818,7 +818,7 @@ static int __execute_cmd(char* command, bool_t add_to_history)
 
             if (execvp(_argv[0], _argv) == -1) {
                 printf("\nUnknown command: %s\n", _argv[0]);
-                exit(1);
+                exit(127);
             }
         }
         if (blocking) {
