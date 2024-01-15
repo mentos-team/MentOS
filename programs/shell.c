@@ -46,6 +46,20 @@ static int history_read_index = 0;
 // Boolean used to check if the history is full.
 static bool_t history_full = false;
 
+static sigset_t oldmask;
+
+static void __block_sigchld(void) {
+    sigset_t mask;
+    //sigmask functions only fail on invalid inputs -> no exception handling needed
+    sigemptyset(&mask);
+    sigaddset(&mask, SIGCHLD);
+    sigprocmask(SIG_BLOCK, &mask, &oldmask);
+}
+
+static void __unblock_sigchld(void) {
+    sigprocmask(SIG_SETMASK, &oldmask, NULL);
+}
+
 static inline int __is_separator(char c)
 {
     return ((c == '\0') || (c == ' ') || (c == '\t') || (c == '\n') || (c == '\r'));
@@ -773,12 +787,17 @@ static int __execute_cmd(char* command, bool_t add_to_history)
             free(_argv[_argc]);
             _argv[_argc] = NULL;
         }
+
+        __block_sigchld();
+
         // Is a shell path, execute it!
         pid_t cpid = fork();
         if (cpid == 0) {
             // Makes the new process a group leader
             pid_t pid = getpid();
             setpgid(cpid, pid);
+
+            __unblock_sigchld();
 
             __setup_redirects(&_argc, &_argv);
 
@@ -793,8 +812,11 @@ static int __execute_cmd(char* command, bool_t add_to_history)
                 printf(FG_RED "\nExit status %d, killed by signal %d\n" FG_RESET, WEXITSTATUS(status), WTERMSIG(status));
             } else if (WIFSTOPPED(status)) {
                 printf(FG_YELLOW "\nExit status %d, stopped by signal %d\n" FG_RESET, WEXITSTATUS(status), WSTOPSIG(status));
+            } else if (WEXITSTATUS(status) != 0) {
+                printf(FG_RED "\nExit status %d\n" FG_RESET, WEXITSTATUS(status));
             }
         }
+        __unblock_sigchld();
     }
     // Free up the memory reserved for the arguments.
     __free_argv(_argc, _argv);
