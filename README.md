@@ -13,11 +13,7 @@
   - [What is MentOS](#what-is-mentos)
   - [Implemented features](#implemented-features)
   - [Prerequisites](#prerequisites)
-    - [Generic Prerequisites](#generic-prerequisites)
-      - [Compile](#compile)
-      - [Execute](#execute)
-      - [Debug](#debug)
-    - [installation Prerequisites](#installation-prerequisites)
+    - [Installing the prerequisites](#installing-the-prerequisites)
   - [Compiling MentOS](#compiling-mentos)
   - [Generating the EXT2 filesystem](#generating-the-ext2-filesystem)
   - [Running MentOS](#running-mentos)
@@ -56,6 +52,7 @@ Gualandri.
 *[Back to the Table of Contents](#table-of-contents)*
 
 ## Implemented features
+
 Follows the list of implemented features:
 
 **Processes and Events**
@@ -103,19 +100,15 @@ I will try to keep it updated...
 ## Prerequisites
 
 MentOS is compatible with the main **unix-based** operating systems. It has been
-tested with *Ubuntu*, *WSL1*, *WSL2*, and  *MacOS*.
+tested with *Ubuntu*, and under Windows with *WSL1* and *WSL2*.
 
-### Generic Prerequisites
+For **compiling** the system we need:
 
-#### Compile
-
-For compiling the system:
-
- - nasm
+ - git
  - gcc
+ - nasm
  - make
  - cmake
- - git
  - ccmake (suggested)
  - e2fsprogs (should be already installed)
 
@@ -124,39 +117,25 @@ Under **MacOS**, for compiling, you have additional dependencies:
  - i386-elf-binutils
  - i386-elf-gcc
 
-#### Execute
-
-To execute the operating system, you need to install:
+For **executing** the operating system we need:
 
  - qemu-system-i386 (or qemu-system-x86)
 
-#### Debug
-
-For debugging we suggest using:
+For **debugging** we suggest using:
 
  - gdb or cgdb
 
-### installation Prerequisites
+### Installing the prerequisites
 
 Under **Ubuntu**, you can type the following commands:
 
 ```bash
 sudo apt-get update && sudo apt-get upgrade -y
-sudo apt-get install -y build-essential git cmake qemu-system-x86 nasm e2fsprogs
+sudo apt-get install -y git build-essential nasm make cmake cmake-curses-gui e2fsprogs
+sudo apt-get install -y qemu-system-x86
 sudo apt-get install -y gdb cgdb
 ```
 Note: Older versions might have `qemu-system-i386` instead of `qemu-system-x86`.
-
-Under **MacOS** you also need to install the i386-elf cross-compiler. The
-simplest installation method is through Homebrew package manager.
-Install [Homebrew](https://brew.sh) if you don't already have it, and
-then type the following commands:
-
-```bash
-brew update && brew upgrade
-brew install i386-elf-binutils i386-elf-gcc git cmake qemu nasm e2fsprogs
-brew install gdb cgdb #<- for debug only
-```
 
 *[Back to the Table of Contents](#table-of-contents)*
 
@@ -481,5 +460,9 @@ Developers:
     - Soft IRQs
     - Timer
     - Signals
+* And many other valuable contributors
+  * [rouseabout](https://github.com/rouseabout)
+  * [seekbytes](https://github.com/seekbytes)
+  * [fischerling](https://github.com/fischerling)
 
 *[Back to the Table of Contents](#table-of-contents)*
