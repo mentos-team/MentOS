@@ -517,7 +517,7 @@ pid_t sys_waitpid(pid_t pid, int *status, int options)
     return 0;
 }
 
-void sys_exit(int exit_code)
+void do_exit(int exit_code)
 {
     // Get the current task.
     if (runqueue.curr == NULL) {
@@ -571,6 +571,11 @@ void sys_exit(int exit_code)
     destroy_process_image(runqueue.curr->mm);
     // Debugging message.
     pr_debug("Process %d exited with value %d\n", runqueue.curr->pid, exit_code);
+}
+
+void sys_exit(int exit_code)
+{
+    do_exit(exit_code << 8);
 }
 
 int sys_sched_setparam(pid_t pid, const sched_param_t *param)

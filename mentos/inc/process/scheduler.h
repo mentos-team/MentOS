@@ -112,3 +112,7 @@ int sys_waitperiod(void);
 /// @param gid ID of the group
 /// @return 1 if the group is orphan, 0 otherwise.
 int is_orphaned_pgrp(pid_t gid);
+
+/// @brief Exit the current process with status
+/// @param status The exit status of the current process
+void do_exit(int status);

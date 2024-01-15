@@ -495,38 +495,38 @@ int do_signal(struct pt_regs *f)
 
                 continue;
             case SIGQUIT:
-                sys_exit(GET_EXIT_STATUS(1));
+                do_exit(GET_EXIT_STATUS(1));
                 continue;
             case SIGILL:
-                sys_exit(GET_EXIT_STATUS(132));
+                do_exit(GET_EXIT_STATUS(132));
                 continue;
             case SIGTRAP:
-                sys_exit(GET_EXIT_STATUS(133));
+                do_exit(GET_EXIT_STATUS(133));
                 continue;
             case SIGABRT:
-                sys_exit(GET_EXIT_STATUS(134));
+                do_exit(GET_EXIT_STATUS(134));
                 continue;
             case SIGFPE:
-                sys_exit(GET_EXIT_STATUS(136) | signr);
+                do_exit(GET_EXIT_STATUS(136) | signr);
                 __unlock_task_sighand(current_process);
                 return 1;
             case SIGBUS:
-                sys_exit(GET_EXIT_STATUS(138) | signr);
+                do_exit(GET_EXIT_STATUS(138) | signr);
                 __unlock_task_sighand(current_process);
                 return 1;
             case SIGSEGV:
-                sys_exit(GET_EXIT_STATUS(139) | signr);
+                do_exit(GET_EXIT_STATUS(139) | signr);
                 __unlock_task_sighand(current_process);
                 return 1;
             case SIGXCPU:
-                sys_exit(GET_EXIT_STATUS(158) | signr);
+                do_exit(GET_EXIT_STATUS(158) | signr);
                 __unlock_task_sighand(current_process);
             case SIGXFSZ:
-                sys_exit(GET_EXIT_STATUS(159) | signr);
+                do_exit(GET_EXIT_STATUS(159) | signr);
                 __unlock_task_sighand(current_process);
             case SIGSYS:
             default:
-                sys_exit(GET_EXIT_STATUS(exit_code) | signr);
+                do_exit(GET_EXIT_STATUS(exit_code) | signr);
                 __unlock_task_sighand(current_process);
                 return 1;
             }
