@@ -175,7 +175,7 @@ static inline void __prompt_print(void)
            USER, HOSTNAME, timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec, CWD);
 }
 
-static void __expand_env(char *str, char *buf, size_t buf_len)
+static void ___expand_env(char *str, char *buf, size_t buf_len, size_t str_len, bool_t null_terminate)
 {
     // Buffer where we store the name of the variable.
     char buffer[BUFSIZ] = { 0 };
@@ -186,7 +186,9 @@ static void __expand_env(char *str, char *buf, size_t buf_len)
     // Where we store the retrieved environmental variable value.
     char *ENV = NULL;
     // Get the length of the string.
-    size_t str_len = strlen(str);
+    if (!str_len) {
+        str_len = strlen(str);
+    }
     // Position where we are writing on the buffer.
     int b_pos = 0;
     // Iterate the string.
@@ -253,14 +255,24 @@ static void __expand_env(char *str, char *buf, size_t buf_len)
     }
     if (bit_check(flags, ENV_NORM)) {
         // Copy the environmental variable name.
-        strcpy(buffer, env_start);
+        size_t var_len = str_len - (env_start - str);
+        strncpy(buffer, env_start, var_len);
         // Search for the environmental variable, and print it.
-        if ((ENV = getenv(buffer)))
-            for (int k = 0; k < strlen(ENV); ++k)
+        if ((ENV = getenv(buffer))) {
+            for (int k = 0; k < strlen(ENV); ++k) {
                 buf[b_pos++] = ENV[k];
-        // Remove the flag.
-        bit_clear_assign(flags, ENV_NORM);
+            }
+        }
     }
+
+    if (null_terminate) {
+        buf[b_pos] = 0;
+    }
+}
+
+static void __expand_env(char *str, char *buf, size_t buf_len)
+{
+    ___expand_env(str, buf, buf_len, 0, false);
 }
 
 static int __export(int argc, char *argv[])
@@ -656,22 +668,25 @@ static void __alloc_argv(char *command, int *argc, char ***argv)
     }
     (*argv)         = (char **)malloc(sizeof(char *) * ((*argc) + 1));
     bool_t inword   = false;
-    const char *cit = command;
-    size_t argcIt = 0, argIt = 0;
+    char *cit = command;
+    char *argStart  = command;
+    size_t argcIt   = 0;
     do {
-        if (__is_separator(*cit)) {
-            if (inword) {
-                inword                   = false;
-                (*argv)[argcIt++][argIt] = '\0';
-                argIt                    = 0;
-            }
-        } else {
-            // Allocate string for argument.
+        if (!__is_separator(*cit)) {
             if (!inword) {
-                (*argv)[argcIt] = (char *)malloc(sizeof(char) * CMD_LEN);
+                argStart = cit;
+                inword = true;
             }
-            inword                   = true;
-            (*argv)[argcIt][argIt++] = (*cit);
+            continue;
+        }
+
+        if (inword) {
+            inword = false;
+            // Expand possible environment variables in the current argument
+            char expand_env_buf[BUFSIZ];
+            ___expand_env(argStart, expand_env_buf, BUFSIZ, cit - argStart, true);
+            (*argv)[argcIt] = (char*)malloc(strlen(expand_env_buf) + 1);
+            strcpy((*argv)[argcIt++], expand_env_buf);
         }
     } while (*cit++);
     (*argv)[argcIt] = NULL;
