@@ -1,19 +1,11 @@
 # =============================================================================
-# Author: Enrico Fraccaroli
+# KERNEL COMPILATION SETUP
 # =============================================================================
 
-# Set the minimum required version of cmake.
-cmake_minimum_required(VERSION 3.1...3.22)
-
-# Initialize the project.
-project(kernel C ASM)
-
-# =============================================================================
-# Set the main file names.
+# Set the target naming.
 set(KERNEL_NAME       kernel)
 set(BOOTLOADER_NAME   bootloader)
-set(BUDDY_SYSTEM_NAME kernel_memory)
-set(BUDDY_SYSTEM_FILE ${PROJECT_SOURCE_DIR}/src/mem/libbuddysystem.a)
+set(BUDDY_SYSTEM_FILE ${CMAKE_SOURCE_DIR}/mentos/src/mem/libbuddysystem.a)
 
 # =============================================================================
 # OPTIONS
@@ -29,156 +21,95 @@ option(ENABLE_ALLOC_TRACE "Enables memory allocation tracing." OFF)
 option(ENABLE_SCHEDULER_FEEDBACK "Enables scheduling feedback on terminal." OFF)
 
 # =============================================================================
-# ASSEMBLY
-# =============================================================================
-
-# Find the NASM compiler.
-find_program(ASM_COMPILER NAMES nasm HINTS /usr/bin/ /usr/local/bin/)
-# Mark the variable ASM_COMPILER as advanced.
-mark_as_advanced(ASM_COMPILER)
-# Check that we have found the compiler.
-if(NOT ASM_COMPILER)
-    message(FATAL_ERROR "ASM compiler not found!")
-endif(NOT ASM_COMPILER)
-# Set the asm compiler.
-set(CMAKE_ASM_COMPILER ${ASM_COMPILER})
-# Set the assembly compiler flags.
-if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-    set(CMAKE_ASM_COMPILE_OBJECT "<CMAKE_ASM_COMPILER> -f elf -g -O0 -F dwarf -o <OBJECT> <SOURCE>")
-else()
-    set(CMAKE_ASM_COMPILE_OBJECT "<CMAKE_ASM_COMPILER> -f elf -g -O3 -o <OBJECT> <SOURCE>")
-endif()
-
-# =============================================================================
-# C WARNINGs
-# =============================================================================
-
-# Warning flags.
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Werror")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wpedantic")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -pedantic-errors")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wshadow")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=gnu99")
-
-# Disable some specific warnings.
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-unused-function")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-unused-variable")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-unknown-pragmas")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-missing-braces")
-
-# Set the compiler options.
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -static")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -nostdlib")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -nostdinc")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-builtin")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-stack-protector")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-pic")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fomit-frame-pointer")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -m32")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -march=i686")
-if(CMAKE_C_COMPILER_VERSION VERSION_GREATER_EQUAL 10)
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fcommon")
-endif()
-
-if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g3")
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -ggdb")
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O0")
-elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O3")
-endif(CMAKE_BUILD_TYPE STREQUAL "Debug")
-
-# =============================================================================
 # SOURCES
 # =============================================================================
 
 # Define the list of files.
 set(KERNEL_SOURCES
-    ${PROJECT_SOURCE_DIR}/src/kernel.c
-    ${PROJECT_SOURCE_DIR}/src/multiboot.c
-    ${PROJECT_SOURCE_DIR}/src/devices/pci.c
-    ${PROJECT_SOURCE_DIR}/src/devices/fpu.c
-    ${PROJECT_SOURCE_DIR}/src/drivers/ata.c
-    ${PROJECT_SOURCE_DIR}/src/drivers/rtc.c
-    ${PROJECT_SOURCE_DIR}/src/drivers/fdc.c
-    ${PROJECT_SOURCE_DIR}/src/drivers/mouse.c
-    ${PROJECT_SOURCE_DIR}/src/drivers/ps2.c
-    ${PROJECT_SOURCE_DIR}/src/drivers/keyboard/keyboard.c
-    ${PROJECT_SOURCE_DIR}/src/drivers/keyboard/keymap.c
-    ${PROJECT_SOURCE_DIR}/src/fs/vfs.c
-    ${PROJECT_SOURCE_DIR}/src/fs/read_write.c
-    ${PROJECT_SOURCE_DIR}/src/fs/open.c
-    ${PROJECT_SOURCE_DIR}/src/fs/stat.c
-    ${PROJECT_SOURCE_DIR}/src/fs/readdir.c
-    ${PROJECT_SOURCE_DIR}/src/fs/procfs.c
-    ${PROJECT_SOURCE_DIR}/src/fs/ioctl.c
-    ${PROJECT_SOURCE_DIR}/src/fs/namei.c
-    ${PROJECT_SOURCE_DIR}/src/fs/ext2.c
-    ${PROJECT_SOURCE_DIR}/src/hardware/timer.c
-    ${PROJECT_SOURCE_DIR}/src/hardware/cpuid.c
-    ${PROJECT_SOURCE_DIR}/src/hardware/pic8259.c
-    ${PROJECT_SOURCE_DIR}/src/io/debug.c
-    ${PROJECT_SOURCE_DIR}/src/io/mm_io.c
-    ${PROJECT_SOURCE_DIR}/src/io/video.c
-    ${PROJECT_SOURCE_DIR}/src/io/stdio.c
-    ${PROJECT_SOURCE_DIR}/src/io/proc_video.c
-    ${PROJECT_SOURCE_DIR}/src/io/proc_running.c
-    ${PROJECT_SOURCE_DIR}/src/io/proc_feedback.c
-    ${PROJECT_SOURCE_DIR}/src/io/proc_system.c
-    ${PROJECT_SOURCE_DIR}/src/io/proc_ipc.c
-    ${PROJECT_SOURCE_DIR}/src/io/vga/vga.c
-    ${PROJECT_SOURCE_DIR}/src/ipc/ipc.c
-    ${PROJECT_SOURCE_DIR}/src/ipc/msg.c
-    ${PROJECT_SOURCE_DIR}/src/ipc/sem.c
-    ${PROJECT_SOURCE_DIR}/src/ipc/shm.c
-    ${PROJECT_SOURCE_DIR}/src/kernel/sys.c
-    ${PROJECT_SOURCE_DIR}/src/klib/assert.c
-    ${PROJECT_SOURCE_DIR}/src/klib/ctype.c
-    ${PROJECT_SOURCE_DIR}/src/klib/mutex.c
-    ${PROJECT_SOURCE_DIR}/src/klib/string.c
-    ${PROJECT_SOURCE_DIR}/src/klib/vsprintf.c
-    ${PROJECT_SOURCE_DIR}/src/klib/vscanf.c
-    ${PROJECT_SOURCE_DIR}/src/klib/time.c
-    ${PROJECT_SOURCE_DIR}/src/klib/libgen.c
-    ${PROJECT_SOURCE_DIR}/src/klib/strerror.c
-    ${PROJECT_SOURCE_DIR}/src/klib/math.c
-    ${PROJECT_SOURCE_DIR}/src/klib/fcvt.c
-    ${PROJECT_SOURCE_DIR}/src/klib/spinlock.c
-    ${PROJECT_SOURCE_DIR}/src/klib/stdlib.c
-    ${PROJECT_SOURCE_DIR}/src/klib/rbtree.c
-    ${PROJECT_SOURCE_DIR}/src/klib/ndtree.c
-    ${PROJECT_SOURCE_DIR}/src/klib/hashmap.c
-    ${PROJECT_SOURCE_DIR}/src/klib/list.c
-    ${PROJECT_SOURCE_DIR}/src/mem/kheap.c
-    ${PROJECT_SOURCE_DIR}/src/mem/paging.c
-    ${PROJECT_SOURCE_DIR}/src/mem/slab.c
-    ${PROJECT_SOURCE_DIR}/src/mem/vmem_map.c
-    ${PROJECT_SOURCE_DIR}/src/mem/zone_allocator.c
-    ${PROJECT_SOURCE_DIR}/src/elf/elf.c
-    ${PROJECT_SOURCE_DIR}/src/descriptor_tables/gdt.c
-    ${PROJECT_SOURCE_DIR}/src/descriptor_tables/gdt.S
-    ${PROJECT_SOURCE_DIR}/src/descriptor_tables/interrupt.c
-    ${PROJECT_SOURCE_DIR}/src/descriptor_tables/exception.c
-    ${PROJECT_SOURCE_DIR}/src/descriptor_tables/interrupt.S
-    ${PROJECT_SOURCE_DIR}/src/descriptor_tables/exception.S
-    ${PROJECT_SOURCE_DIR}/src/descriptor_tables/idt.c
-    ${PROJECT_SOURCE_DIR}/src/descriptor_tables/idt.S
-    ${PROJECT_SOURCE_DIR}/src/descriptor_tables/tss.c
-    ${PROJECT_SOURCE_DIR}/src/descriptor_tables/tss.S
-    ${PROJECT_SOURCE_DIR}/src/process/scheduler_algorithm.c
-    ${PROJECT_SOURCE_DIR}/src/process/scheduler_feedback.c
-    ${PROJECT_SOURCE_DIR}/src/process/scheduler.c
-    ${PROJECT_SOURCE_DIR}/src/process/process.c
-    ${PROJECT_SOURCE_DIR}/src/process/wait.c
-    ${PROJECT_SOURCE_DIR}/src/process/user.S
-    ${PROJECT_SOURCE_DIR}/src/sys/utsname.c
-    ${PROJECT_SOURCE_DIR}/src/sys/module.c
-    ${PROJECT_SOURCE_DIR}/src/system/errno.c
-    ${PROJECT_SOURCE_DIR}/src/system/panic.c
-    ${PROJECT_SOURCE_DIR}/src/system/printk.c
-    ${PROJECT_SOURCE_DIR}/src/system/signal.c
-    ${PROJECT_SOURCE_DIR}/src/system/syscall.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/kernel.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/multiboot.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/devices/pci.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/devices/fpu.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/drivers/ata.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/drivers/rtc.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/drivers/fdc.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/drivers/mouse.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/drivers/ps2.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/drivers/keyboard/keyboard.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/drivers/keyboard/keymap.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/fs/vfs.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/fs/read_write.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/fs/open.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/fs/stat.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/fs/readdir.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/fs/procfs.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/fs/ioctl.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/fs/namei.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/fs/ext2.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/hardware/timer.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/hardware/cpuid.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/hardware/pic8259.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/io/debug.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/io/mm_io.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/io/video.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/io/stdio.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/io/proc_video.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/io/proc_running.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/io/proc_feedback.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/io/proc_system.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/io/proc_ipc.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/io/vga/vga.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/ipc/ipc.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/ipc/msg.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/ipc/sem.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/ipc/shm.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/kernel/sys.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/klib/assert.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/klib/ctype.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/klib/mutex.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/klib/string.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/klib/vsprintf.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/klib/vscanf.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/klib/time.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/klib/libgen.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/klib/strerror.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/klib/math.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/klib/fcvt.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/klib/spinlock.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/klib/stdlib.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/klib/rbtree.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/klib/ndtree.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/klib/hashmap.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/klib/list.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/mem/kheap.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/mem/paging.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/mem/slab.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/mem/vmem_map.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/mem/zone_allocator.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/elf/elf.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/descriptor_tables/gdt.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/descriptor_tables/gdt.S
+    ${CMAKE_SOURCE_DIR}/mentos/src/descriptor_tables/interrupt.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/descriptor_tables/exception.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/descriptor_tables/interrupt.S
+    ${CMAKE_SOURCE_DIR}/mentos/src/descriptor_tables/exception.S
+    ${CMAKE_SOURCE_DIR}/mentos/src/descriptor_tables/idt.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/descriptor_tables/idt.S
+    ${CMAKE_SOURCE_DIR}/mentos/src/descriptor_tables/tss.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/descriptor_tables/tss.S
+    ${CMAKE_SOURCE_DIR}/mentos/src/process/scheduler_algorithm.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/process/scheduler_feedback.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/process/scheduler.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/process/process.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/process/wait.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/process/user.S
+    ${CMAKE_SOURCE_DIR}/mentos/src/sys/utsname.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/sys/module.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/system/errno.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/system/panic.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/system/printk.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/system/signal.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/system/syscall.c
 )
 
 # =============================================================================
