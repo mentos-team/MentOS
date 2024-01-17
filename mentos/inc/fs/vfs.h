@@ -1,6 +1,6 @@
 /// @file vfs.h
 /// @brief Headers for Virtual File System (VFS).
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #pragma once
@@ -25,7 +25,7 @@ struct task_struct;
 super_block_t *vfs_get_superblock(const char *absolute_path);
 
 /// @brief Initialize the Virtual File System (VFS).
-void vfs_init();
+void vfs_init(void);
 
 /// @brief Register a new filesystem.
 /// @param fs A pointer to the information concerning the new filesystem.
@@ -64,7 +64,7 @@ ssize_t vfs_read(vfs_file_t *file, void *buf, size_t offset, size_t nbytes);
 /// @param offset The offset from which the function starts to write.
 /// @param nbytes The number of bytes to write.
 /// @return The number of written characters.
-ssize_t vfs_write(vfs_file_t *file, void *buf, size_t offset, size_t nbytes);
+ssize_t vfs_write(vfs_file_t *file, const void *buf, size_t offset, size_t nbytes);
 
 /// @brief Repositions the file offset inside a file.
 /// @param file   The file for which we reposition the offest.
@@ -84,7 +84,7 @@ off_t vfs_lseek(vfs_file_t *file, off_t offset, int whence);
 /// @return On success, the number of bytes read is returned.  On end of
 ///         directory, 0 is returned.  On error, -1 is returned, and errno is set
 ///         appropriately.
-int vfs_getdents(vfs_file_t *file, dirent_t *dirp, off_t off, size_t count);
+ssize_t vfs_getdents(vfs_file_t *file, dirent_t *dirp, off_t off, size_t count);
 
 /// @brief Perform the I/O control operation specified by REQUEST on FD.
 ///   One argument may follow; its presence and type depend on REQUEST.
@@ -118,6 +118,19 @@ int vfs_rmdir(const char *path);
 /// @details
 /// It is equivalent to: open(path, O_WRONLY|O_CREAT|O_TRUNC, mode)
 vfs_file_t *vfs_creat(const char *path, mode_t mode);
+
+/// @brief Read the symbolic link, if present.
+/// @param file the file for which we want to read the symbolic link information.
+/// @param buffer the buffer where we will store the symbolic link path.
+/// @param bufsize the size of the buffer.
+/// @return The number of read characters on success, -1 otherwise and errno is set to indicate the error.
+ssize_t vfs_readlink(vfs_file_t *file, char *buffer, size_t bufsize);
+
+/// @brief Creates a symbolic link.
+/// @param linkname the name of the link.
+/// @param path the entity it is linking to.
+/// @return 0 on success, a negative number if fails and errno is set.
+int vfs_symlink(const char *linkname, const char *path);
 
 /// @brief Stat the file at the given path.
 /// @param path Path to the file for which we are retrieving the statistics.

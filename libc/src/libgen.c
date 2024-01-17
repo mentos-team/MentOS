@@ -1,85 +1,64 @@
 /// @file libgen.c
 /// @brief String routines.
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
+#include "libgen.h"
+#include "io/debug.h"
+#include "limits.h"
+#include "string.h"
 #include <assert.h>
 #include <stdlib.h>
 #include <sys/unistd.h>
-#include "libgen.h"
-#include "string.h"
-#include "limits.h"
 
-int parse_path(char *out, char **cur, char sep, size_t max)
+int dirname(const char *path, char *buffer, size_t buflen)
 {
-    if (**cur == '\0') {
+    if ((path == NULL) || (buffer == NULL) || (buflen == 0)) {
         return 0;
     }
-
-    *out++ = **cur;
-    ++*cur;
-    --max;
-
-    while ((max > 0) && (**cur != '\0') && (**cur != sep)) {
-        *out++ = **cur;
-        ++*cur;
-        --max;
+    // Search for the last slash.
+    const char *last_slash = NULL;
+    for (const char *it = path; *it; it++) {
+        if ((*it) == '/') {
+            last_slash = it;
+        }
     }
-
-    *out = '\0';
-
+    // If we were able to find a slash, and the slash is not in the first
+    // position, copy the substring.
+    if (last_slash) {
+        // Get the length of the substring, if the last slash is at the beginning,
+        // add 1.
+        size_t dirlen = last_slash - path + (last_slash == path);
+        // Check if the path will fit inside the buffer.
+        if (dirlen >= buflen) {
+            return 0;
+        }
+        // Copy the substring.
+        strncpy(buffer, path, dirlen);
+        // Close the buffer.
+        buffer[dirlen] = 0;
+    } else {
+        strcpy(buffer, ".");
+    }
     return 1;
 }
 
-char *dirname(const char *path)
+const char *basename(const char *path)
 {
-    static char s[PATH_MAX];
-
-    static char dot[2] = ".";
-
-    // Check the input path.
-    if (path == NULL) {
-        return dot;
+    // Search for the last slash.
+    const char *last_slash = NULL;
+    for (const char *it = path; *it; it++) {
+        if ((*it) == '/') {
+            last_slash = it;
+        }
     }
-
-    // Copy the path to the support string.
-    strcpy(s, path);
-
-    // Get the last occurrence of '/'.
-    char *last_slash = strrchr(s, '/');
-
-    if (last_slash == s) {
-        // If the slash is acutally the first character of the string, move the
-        // pointer to the last slash after it.
-        ++last_slash;
-    } else if ((last_slash != NULL) && (last_slash[1] == '\0')) {
-        // If the slash is the last character, we need to search before it.
-        last_slash = memchr(s, '/', last_slash - s);
-    }
-
-    if (last_slash != NULL) {
-        // If we have found it, close the string.
-        last_slash[0] = '\0';
-    } else {
-        // Otherwise, return '.'.
-        return dot;
-    }
-
-    return s;
+    return last_slash ? last_slash + 1 : path;
 }
 
-char *basename(const char *path)
-{
-    char *p = strrchr(path, '/');
-
-    return p ? p + 1 : (char *)path;
-}
-
-char *realpath(const char *path, char *resolved)
+char *realpath(const char *path, char *buffer, size_t buflen)
 {
     assert(path && "Provided null path.");
-    if (resolved == NULL)
-        resolved = malloc(sizeof(char) * PATH_MAX);
+    assert(buffer && "Provided null buffer.");
     char abspath[PATH_MAX];
     // Initialize the absolute path.
     memset(abspath, '\0', PATH_MAX);
@@ -119,22 +98,27 @@ char *realpath(const char *path, char *resolved)
         // Go to previous directory if /../ is found
         else if (!strncmp("/../", abspath + absidx, 4)) {
             // Go to a valid path character (pathidx points to the next one)
-            if (pathidx)
+            if (pathidx) {
                 pathidx--;
-            while (pathidx && resolved[pathidx] != '/') {
+            }
+            while (pathidx && buffer[pathidx] != '/') {
                 pathidx--;
             }
             absidx += 3;
         } else if (!strncmp("/./", abspath + absidx, 3)) {
             absidx += 2;
         } else {
-            resolved[pathidx++] = abspath[absidx++];
+            if ((pathidx + 1) >= buflen) {
+                return NULL;
+            }
+            buffer[pathidx++] = abspath[absidx++];
         }
     }
     // Remove the last /
-    if (pathidx > 1)
-        resolved[pathidx - 1] = '\0';
-    else
-        resolved[1] = '\0';
-    return resolved;
+    if (pathidx > 1) {
+        buffer[pathidx - 1] = '\0';
+    } else {
+        buffer[1] = '\0';
+    }
+    return buffer;
 }

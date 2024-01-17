@@ -1,6 +1,6 @@
 /// @file termios-struct.h
 /// @brief Definition of the `termios` structure.
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #pragma once
@@ -43,4 +43,4 @@ typedef struct termios {
 #define IEXTEN  0x00000400 ///< Enables implementation-defined input processing.
 
 /// @brief Mask for extracting control values.
-#define CTRL(x) (x & 037)
+#define CTRL(x) ((x) & 037)

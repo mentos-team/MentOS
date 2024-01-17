@@ -1,20 +1,18 @@
 /// @file mouse.h
 /// @brief  Driver for *PS2* Mouses.
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-// Include the kernel log levels.
-#include "sys/kernel_levels.h"
-/// Change the header.
-#define __DEBUG_HEADER__ "[SLAB  ]"
-/// Set the log level.
-#define __DEBUG_LEVEL__ LOGLEVEL_NOTICE
+// Setup the logging for this file (do this before any other include).
+#include "sys/kernel_levels.h"           // Include kernel log levels.
+#define __DEBUG_HEADER__ "[SLAB  ]"      ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
+#include "io/debug.h"                    // Include debugging functions.
 
-#include "mem/zone_allocator.h"
-#include "mem/paging.h"
 #include "assert.h"
-#include "io/debug.h"
+#include "mem/paging.h"
 #include "mem/slab.h"
+#include "mem/zone_allocator.h"
 
 /// @brief Use it to manage cached pages.
 typedef struct kmem_obj {
@@ -40,45 +38,39 @@ static kmem_cache_t *malloc_blocks[MAX_KMALLOC_CACHE_ORDER];
 
 static int __alloc_slab_page(kmem_cache_t *cachep, gfp_t flags)
 {
+    // ALlocate the required number of pages.
     page_t *page = _alloc_pages(flags, cachep->gfp_order);
     if (!page) {
         pr_crit("Failed to allocate a new page from slab.\n");
         return -1;
     }
-
+    // Initialize the lists.
     list_head_init(&page->slabs);
-
-    // Save in the root page the kmem_cache_t pointer,
-    // to allow freeing arbitrary pointers
+    list_head_init(&page->slab_freelist);
+    // Save in the root page the kmem_cache_t pointer, to allow freeing
+    // arbitrary pointers.
     page[0].container.slab_cache = cachep;
-
-    // Update slab main pages of all child pages, to allow
-    // reconstructing which page handles a specified address
+    // Update slab main pages of all child pages, to allow reconstructing which
+    // page handles a specified address
     for (unsigned int i = 1; i < (1U << cachep->gfp_order); i++) {
         page[i].container.slab_main_page = page;
     }
-
+    // Compute the slab size.
     unsigned int slab_size = PAGE_SIZE * (1U << cachep->gfp_order);
-
-    // Update the page objects counters
+    // Update the page objects counters.
     page->slab_objcnt  = slab_size / cachep->size;
     page->slab_objfree = page->slab_objcnt;
-
+    // Get the page address.
     unsigned int pg_addr = get_lowmem_address_from_page(page);
-
-    list_head_init(&page->slab_freelist);
-
     // Build the objects structures
     for (unsigned int i = 0; i < page->slab_objcnt; i++) {
         kmem_obj *obj = KMEM_OBJ(cachep, pg_addr + cachep->size * i);
         list_head_insert_after(&obj->objlist, &page->slab_freelist);
     }
-
     // Add the page to the slab list and update the counters
     list_head_insert_after(&page->slabs, &cachep->slabs_free);
     cachep->total_num += page->slab_objcnt;
     cachep->free_num += page->slab_objcnt;
-
     return 0;
 }
 
@@ -92,26 +84,28 @@ static void __kmem_cache_refill(kmem_cache_t *cachep, unsigned int free_num, gfp
     }
 }
 
-static unsigned int __find_next_alignment(unsigned int size, unsigned int align)
-{
-    return (size / align + (size % align ? 1 : 0)) * align;
-}
-
 static void __compute_size_and_order(kmem_cache_t *cachep)
 {
-    // Align the whole object to the required padding
-    cachep->size = __find_next_alignment(
+    // Align the whole object to the required padding.
+    cachep->size = round_up(
         max(cachep->object_size, KMEM_OBJ_OVERHEAD),
         max(8, cachep->align));
-
     // Compute the gfp order
-    unsigned int size = __find_next_alignment(cachep->size, PAGE_SIZE) / PAGE_SIZE;
+    unsigned int size = round_up(cachep->size, PAGE_SIZE) / PAGE_SIZE;
     while ((size /= 2) > 0) {
         cachep->gfp_order++;
     }
 }
 
-static void __kmem_cache_create(kmem_cache_t *cachep, const char *name, unsigned int size, unsigned int align, slab_flags_t flags, void (*ctor)(void *), void (*dtor)(void *), unsigned int start_count)
+static void __kmem_cache_create(
+    kmem_cache_t *cachep,
+    const char *name,
+    unsigned int size,
+    unsigned int align,
+    slab_flags_t flags,
+    kmem_fun_t ctor,
+    kmem_fun_t dtor,
+    unsigned int start_count)
 {
     pr_info("Creating new cache `%s` with objects of size `%d`.\n", name, size);
 
@@ -150,8 +144,9 @@ static inline void *__kmem_cache_alloc_slab(kmem_cache_t *cachep, page_t *slab_p
     // Get the element from the kmem_obj object
     void *elem = ADDR_FROM_KMEM_OBJ(cachep, obj);
 
-    if (cachep->ctor)
+    if (cachep->ctor) {
         cachep->ctor(elem);
+    }
 
     return elem;
 }
@@ -172,7 +167,7 @@ static inline void __kmem_cache_free_slab(kmem_cache_t *cachep, page_t *slab_pag
     __free_pages(slab_page);
 }
 
-void kmem_cache_init()
+void kmem_cache_init(void)
 {
     // Initialize the list of caches.
     list_head_init(&kmem_caches_list);
@@ -196,11 +191,18 @@ void kmem_cache_init()
     }
 }
 
-kmem_cache_t *kmem_cache_create(const char *name, unsigned int size, unsigned int align, slab_flags_t flags, void (*ctor)(void *), void (*dtor)(void *))
+kmem_cache_t *kmem_cache_create(
+    const char *name,
+    unsigned int size,
+    unsigned int align,
+    slab_flags_t flags,
+    kmem_fun_t ctor,
+    kmem_fun_t dtor)
 {
     kmem_cache_t *cachep = (kmem_cache_t *)kmem_cache_alloc(&kmem_cache, GFP_KERNEL);
-    if (!cachep)
+    if (!cachep) {
         return cachep;
+    }
 
     __kmem_cache_create(cachep, name, size, align, flags, ctor, dtor, KMEM_START_OBJ_COUNT);
 
@@ -236,8 +238,9 @@ void *kmem_cache_alloc(kmem_cache_t *cachep, gfp_t flags)
 {
     if (list_head_empty(&cachep->slabs_partial)) {
         if (list_head_empty(&cachep->slabs_free)) {
-            if (flags == 0)
+            if (flags == 0) {
                 flags = cachep->flags;
+            }
 
             // Refill the cache in an exponential fashion, capping at KMEM_MAX_REFILL_OBJ_COUNT to avoid
             // too big allocations
@@ -286,8 +289,9 @@ void kmem_cache_free(void *ptr)
 #ifdef ENABLE_CACHE_TRACE
     pr_notice("CHACE-FREE  0x%p in %-20s at %s:%d\n", ptr, cachep->name, file, line);
 #endif
-    if (cachep->dtor)
+    if (cachep->dtor) {
         cachep->dtor(ptr);
+    }
 
     kmem_obj *obj = KMEM_OBJ(cachep, ptr);
 

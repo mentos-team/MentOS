@@ -1,15 +1,15 @@
 /// @file video.c
 /// @brief Video functions and costants.
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #include "io/port_io.h"
-#include "io/video.h"
-#include "io/vga/vga.h"
-#include "stdbool.h"
 #include "ctype.h"
-#include "string.h"
+#include "io/vga/vga.h"
+#include "io/video.h"
+#include "stdbool.h"
 #include "stdio.h"
+#include "string.h"
 
 #define HEIGHT       25                   ///< The height of the
 #define WIDTH        80                   ///< The width of the
@@ -83,14 +83,14 @@ int scrolled_page = 0;
 
 /// @brief Get the current column number.
 /// @return The column number.
-static inline unsigned __get_x()
+static inline unsigned __get_x(void)
 {
     return ((pointer - ADDR) % (WIDTH * 2)) / 2;
 }
 
 /// @brief Get the current row number.
 /// @return The row number.
-static inline unsigned __get_y()
+static inline unsigned __get_y(void)
 {
     return (pointer - ADDR) / (WIDTH * 2);
 }
@@ -170,12 +170,12 @@ static inline void __video_set_cursor(unsigned int x, unsigned int y)
     outportb(0x3D5, (uint8_t)((position >> 8U) & 0xFFU));
 }
 
-void video_init()
+void video_init(void)
 {
     video_clear();
 }
 
-void video_update()
+void video_update(void)
 {
 #ifndef VGA_TEXT_MODE
     if (vga_is_enabled())
@@ -253,7 +253,7 @@ void video_puts(const char *str)
     }
 }
 
-void video_set_cursor_auto()
+void video_set_cursor_auto(void)
 {
 #ifndef VGA_TEXT_MODE
     if (vga_is_enabled())
@@ -282,10 +282,12 @@ void video_get_cursor_position(unsigned int *x, unsigned int *y)
         return;
     }
 #endif
-    if (x)
+    if (x) {
         *x = __get_x();
-    if (y)
+    }
+    if (y) {
         *y = __get_y();
+    }
 }
 
 void video_get_screen_size(unsigned int *width, unsigned int *height)
@@ -296,13 +298,15 @@ void video_get_screen_size(unsigned int *width, unsigned int *height)
         return;
     }
 #endif
-    if (width)
+    if (width) {
         *width = WIDTH;
-    if (height)
+    }
+    if (height) {
         *height = HEIGHT;
+    }
 }
 
-void video_clear()
+void video_clear(void)
 {
 #ifndef VGA_TEXT_MODE
     if (vga_is_enabled()) {
@@ -314,7 +318,7 @@ void video_clear()
     memset(ADDR, 0, TOTAL_SIZE);
 }
 
-void video_new_line()
+void video_new_line(void)
 {
 #ifndef VGA_TEXT_MODE
     if (vga_is_enabled()) {
@@ -327,7 +331,7 @@ void video_new_line()
     video_set_cursor_auto();
 }
 
-void video_cartridge_return()
+void video_cartridge_return(void)
 {
 #ifndef VGA_TEXT_MODE
     if (vga_is_enabled()) {
@@ -359,16 +363,17 @@ void video_shift_one_line_up(void)
     }
 }
 
-void video_shift_one_page_up()
+void video_shift_one_page_up(void)
 {
     if (scrolled_page > 0) {
         // Decrese the number of scrolled pages, and compute which page must be loaded.
         int page_to_load = (STORED_PAGES - (--scrolled_page));
         // If we have reached 0, restore the original page.
-        if (scrolled_page == 0)
+        if (scrolled_page == 0) {
             memcpy(ADDR, original_page, TOTAL_SIZE);
-        else
+        } else {
             memcpy(ADDR, upper_buffer + (page_to_load * TOTAL_SIZE), TOTAL_SIZE);
+        }
     }
 }
 
@@ -378,15 +383,16 @@ void video_shift_one_page_down(void)
         // Increase the number of scrolled pages, and compute which page must be loaded.
         int page_to_load = (STORED_PAGES - (++scrolled_page));
         // If we are loading the first history page, save the original.
-        if (scrolled_page == 1)
+        if (scrolled_page == 1) {
             memcpy(original_page, ADDR, TOTAL_SIZE);
+        }
         // Load the specific page.
         memcpy(ADDR, upper_buffer + (page_to_load * TOTAL_SIZE), TOTAL_SIZE);
     }
 }
 
 #if 0
-void video_scroll_up()
+void video_scroll_up(void)
 {
     if (is_scrolled)
         return;
@@ -405,7 +411,7 @@ void video_scroll_up()
     video_move_cursor(width, height);
 }
 
-void video_scroll_down()
+void video_scroll_down(void)
 {
     char *ptr = memory;
 

@@ -1,27 +1,25 @@
 /// @file elf.c
 /// @brief Function for multiboot support.
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-// Include the kernel log levels.
-#include "sys/kernel_levels.h"
-/// Change the header.
-#define __DEBUG_HEADER__ "[ELF   ]"
-/// Set the log level.
-#define __DEBUG_LEVEL__ LOGLEVEL_NOTICE
+// Setup the logging for this file (do this before any other include).
+#include "sys/kernel_levels.h"           // Include kernel log levels.
+#define __DEBUG_HEADER__ "[ELF   ]"      ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
+#include "io/debug.h"                    // Include debugging functions.
 
+#include "assert.h"
 #include "elf/elf.h"
-
-#include "process/scheduler.h"
+#include "fs/vfs.h"
+#include "mem/paging.h"
+#include "mem/slab.h"
 #include "mem/vmem_map.h"
 #include "process/process.h"
-#include "string.h"
+#include "process/scheduler.h"
 #include "stddef.h"
-#include "io/debug.h"
 #include "stdio.h"
-#include "mem/slab.h"
-#include "fs/vfs.h"
-#include "assert.h"
+#include "string.h"
 
 // ============================================================================
 // GET ELF TABLES
@@ -75,8 +73,9 @@ static inline elf_program_header_t *elf_get_program_header(elf_header_t *header,
 /// @return a pointer to the section header string table, or NULL on failure.
 static inline const char *elf_get_section_header_string_table(elf_header_t *header)
 {
-    if (header->shstrndx == SHT_NULL)
+    if (header->shstrndx == SHT_NULL) {
         return NULL;
+    }
     return (const char *)((uintptr_t)header + elf_get_section_header(header, header->shstrndx)->offset);
 }
 
@@ -85,8 +84,9 @@ static inline const char *elf_get_section_header_string_table(elf_header_t *head
 /// @return a pointer to the section header string table, or NULL on failure.
 static inline const char *elf_get_symbol_string_table(elf_header_t *header, elf_section_header_t *section_header)
 {
-    if (section_header->link == SHT_NULL)
+    if (section_header->link == SHT_NULL) {
         return NULL;
+    }
     return (const char *)((uintptr_t)header + elf_get_section_header(header, section_header->link)->offset);
 }
 
@@ -101,8 +101,9 @@ static inline const char *elf_get_symbol_string_table(elf_header_t *header, elf_
 static inline const char *elf_get_section_header_name(elf_header_t *header, elf_section_header_t *section_header)
 {
     const char *strtab = elf_get_section_header_string_table(header);
-    if (strtab == NULL)
+    if (strtab == NULL) {
         return NULL;
+    }
     return strtab + section_header->name;
 }
 
@@ -112,8 +113,9 @@ static inline const char *elf_get_section_header_name(elf_header_t *header, elf_
 static inline const char *elf_get_symbol_name(elf_header_t *header, elf_section_header_t *section_header, elf_symbol_t *symbol)
 {
     const char *strtab = elf_get_symbol_string_table(header, section_header);
-    if (strtab == NULL)
+    if (strtab == NULL) {
         return NULL;
+    }
     return strtab + symbol->name;
 }
 
@@ -193,8 +195,9 @@ static inline void elf_dump_symbol_table(elf_header_t *header)
     for (unsigned i = 0; i < header->shnum; ++i) {
         // Get the section header.
         elf_section_header_t *section_header = elf_get_section_header(header, i);
-        if (section_header->type != SHT_SYMTAB)
+        if (section_header->type != SHT_SYMTAB) {
             continue;
+        }
         // Count the number of entries.
         uint32_t symtab_entries = section_header->size / section_header->entsize;
         // Get the addresss of the symbol table.
@@ -229,10 +232,15 @@ static inline void elf_dump_symbol_table(elf_header_t *header)
 /// @return The ELF entry.
 static inline int elf_load_exec(elf_header_t *header, task_struct *task)
 {
+    elf_program_header_t *program_header;
+    vm_area_struct_t *segment;
+    virt_map_page_t *vpage;
+    uint32_t dst_addr, zmem_sz;
+
     pr_debug(" Type      | Mem. Size | File Size | VADDR\n");
     for (unsigned i = 0; i < header->phnum; ++i) {
         // Get the header.
-        elf_program_header_t *program_header = elf_get_program_header(header, i);
+        program_header = elf_get_program_header(header, i);
         // Dump the information about the header.
         pr_debug(" %-9s | %9s | %9s | 0x%08x - 0x%08x\n",
                  elf_type_to_string(program_header->type),
@@ -241,15 +249,20 @@ static inline int elf_load_exec(elf_header_t *header, task_struct *task)
                  program_header->vaddr,
                  program_header->vaddr + program_header->memsz);
         if (program_header->type == PT_LOAD) {
-            uint32_t virt_addr     = create_vm_area(task->mm, program_header->vaddr, program_header->memsz, MM_USER | MM_RW | MM_COW, GFP_KERNEL);
-            virt_map_page_t *vpage = virt_map_alloc(program_header->memsz);
-            uint32_t dst_addr      = virt_map_vaddress(task->mm, vpage, virt_addr, program_header->memsz);
+            segment = create_vm_area(
+                task->mm,
+                program_header->vaddr,
+                program_header->memsz,
+                MM_USER | MM_RW | MM_COW,
+                GFP_KERNEL);
+            vpage    = virt_map_alloc(program_header->memsz);
+            dst_addr = virt_map_vaddress(task->mm, vpage, segment->vm_start, program_header->memsz);
 
             // Load the memory area.
             memcpy((void *)dst_addr, (void *)((uintptr_t)header + program_header->offset), program_header->filesz);
 
             if (program_header->memsz > program_header->filesz) {
-                uint32_t zmem_sz = program_header->memsz - program_header->filesz;
+                zmem_sz = program_header->memsz - program_header->filesz;
                 memset((void *)(dst_addr + program_header->filesz), 0, zmem_sz);
             }
             virt_unmap_pg(vpage);
@@ -261,8 +274,9 @@ static inline int elf_load_exec(elf_header_t *header, task_struct *task)
 int elf_load_file(task_struct *task, vfs_file_t *file, uint32_t *entry)
 {
     // Open the file.
-    if (file == NULL)
+    if (file == NULL) {
         return false;
+    }
     // Get the size of the file.
     stat_t stat_buf;
     if (vfs_fstat(file, &stat_buf) < 0) {
@@ -329,9 +343,11 @@ int elf_check_file_type(vfs_file_t *file, Elf_Type type)
     // By default we return failure.
     int ret = 0;
     // Read the header and check the file type.
-    if (vfs_read(file, &header, 0, sizeof(elf_header_t)) != -1)
-        if (elf_check_file_header(&header))
+    if (vfs_read(file, &header, 0, sizeof(elf_header_t)) != -1) {
+        if (elf_check_file_header(&header)) {
             ret = header.type == type;
+        }
+    }
     // Set the reading position at the beginning of the file.
     vfs_lseek(file, 0, SEEK_SET);
     return ret;
@@ -368,8 +384,9 @@ int elf_check_file_header(elf_header_t *header)
 
 int elf_check_magic_number(elf_header_t *header)
 {
-    if (!header)
+    if (!header) {
         return false;
+    }
     if (header->ident[EI_MAG0] != ELFMAG0) {
         pr_err("ELF Header EI_MAG0 incorrect.\n");
         return false;
@@ -391,66 +408,43 @@ int elf_check_magic_number(elf_header_t *header)
 
 const char *elf_type_to_string(int type)
 {
-    if (type == PT_LOAD)
-        return "LOAD";
-    if (type == PT_DYNAMIC)
-        return "DYNAMIC";
-    if (type == PT_INTERP)
-        return "INTERP";
-    if (type == PT_NOTE)
-        return "NOTE";
-    if (type == PT_SHLIB)
-        return "SHLIB";
-    if (type == PT_PHDR)
-        return "PHDR";
-    if (type == PT_EH_FRAME)
-        return "EH_FRAME";
-    if (type == PT_GNU_STACK)
-        return "GNU_STACK";
-    if (type == PT_GNU_RELRO)
-        return "GNU_RELRO";
-    if (type == PT_LOPROC)
-        return "LOPROC";
-    if (type == PT_HIPROC)
-        return "HIPROC";
+    if (type == PT_LOAD) return "LOAD";
+    if (type == PT_DYNAMIC) return "DYNAMIC";
+    if (type == PT_INTERP) return "INTERP";
+    if (type == PT_NOTE) return "NOTE";
+    if (type == PT_SHLIB) return "SHLIB";
+    if (type == PT_PHDR) return "PHDR";
+    if (type == PT_EH_FRAME) return "EH_FRAME";
+    if (type == PT_GNU_STACK) return "GNU_STACK";
+    if (type == PT_GNU_RELRO) return "GNU_RELRO";
+    if (type == PT_LOPROC) return "LOPROC";
+    if (type == PT_HIPROC) return "HIPROC";
     return "NULL";
 }
 
 const char *elf_section_header_type_to_string(int type)
 {
-    if (type == SHT_PROGBITS)
-        return "PROGBITS";
-    if (type == SHT_SYMTAB)
-        return "SYMTAB";
-    if (type == SHT_STRTAB)
-        return "STRTAB";
-    if (type == SHT_RELA)
-        return "RELA";
-    if (type == SHT_NOBITS)
-        return "NOBITS";
-    if (type == SHT_REL)
-        return "REL";
+    if (type == SHT_PROGBITS) return "PROGBITS";
+    if (type == SHT_SYMTAB) return "SYMTAB";
+    if (type == SHT_STRTAB) return "STRTAB";
+    if (type == SHT_RELA) return "RELA";
+    if (type == SHT_NOBITS) return "NOBITS";
+    if (type == SHT_REL) return "REL";
     return "NULL";
 }
 
 const char *elf_symbol_type_to_string(int type)
 {
-    if (type == STT_NOTYPE)
-        return "NOTYPE";
-    if (type == STT_OBJECT)
-        return "OBJECT";
-    if (type == STT_FUNC)
-        return "FUNC";
+    if (type == STT_NOTYPE) return "NOTYPE";
+    if (type == STT_OBJECT) return "OBJECT";
+    if (type == STT_FUNC) return "FUNC";
     return "-1";
 }
 
 const char *elf_symbol_bind_to_string(int bind)
 {
-    if (bind == STB_LOCAL)
-        return "LOCAL";
-    if (bind == STB_GLOBAL)
-        return "GLOBAL";
-    if (bind == STB_WEAK)
-        return "WEAK";
+    if (bind == STB_LOCAL) return "LOCAL";
+    if (bind == STB_GLOBAL) return "GLOBAL";
+    if (bind == STB_WEAK) return "WEAK";
     return "-1";
 }

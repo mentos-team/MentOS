@@ -1,6 +1,6 @@
 /// @file hashmap.h
 /// @brief Functions for managing a structure that can map keys to values.
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #pragma once

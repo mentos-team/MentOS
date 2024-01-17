@@ -1,6 +1,15 @@
 /// @file idt.h
 /// @brief Data structures concerning the Interrupt Descriptor Table (IDT).
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @details
+/// The IDT is used to show the processor what Interrupt Service Routine
+/// (ISR) to call to handle an exception. IDT entries are also called
+/// Interrupt requests whenever a device has completed a request and needs to
+/// be serviced.
+/// ISRs are used to save the current processor state and set up the
+/// appropriate segment registers needed for kernel mode before the kernel’s
+/// C-level interrupt handler is called. To handle the right exception, the
+/// correct entry in the IDT should be pointed to the correct ISR.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 /// @addtogroup descriptor_tables Descriptor Tables
 /// @{
@@ -57,7 +66,7 @@ typedef struct idt_pointer_t {
 } __attribute__((packed)) idt_pointer_t;
 
 /// @brief Initialise the interrupt descriptor table.
-void init_idt();
+void init_idt(void);
 
 /// @}
 /// @}

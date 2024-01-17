@@ -1,14 +1,12 @@
 # =============================================================================
+# PROJECT SETUP
+# =============================================================================
+
 # Set the minimum required version of cmake.
 cmake_minimum_required(VERSION 3.1...3.22)
-# 
-set(HAVE_FLAG_SEARCH_PATHS_FIRST 0)
+
 # Initialize the project.
 project(mentos C ASM)
-
-# =============================================================================
-# BUILD TYPE (Debug/Release)
-# =============================================================================
 
 # Set the default build type to Debug.
 if(NOT CMAKE_BUILD_TYPE)
@@ -17,12 +15,7 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 # =============================================================================
-# DOCUMENTATION
-# =============================================================================
-add_subdirectory(doc)
-
-# =============================================================================
-# OS-SPECIFIC COMPILERS
+# OS-SPECIFIC COMPILERS SETUP
 # =============================================================================
 
 # Add operating system specific option.
@@ -63,7 +56,73 @@ else()
 endif()
 
 # =============================================================================
-# COMPILATION
+# ASSEMBLY COMPILER
+# =============================================================================
+
+# Find the NASM compiler.
+find_program(ASM_COMPILER NAMES nasm HINTS /usr/bin/ /usr/local/bin/)
+# Mark the variable ASM_COMPILER as advanced.
+mark_as_advanced(ASM_COMPILER)
+# Check that we have found the compiler.
+if(NOT ASM_COMPILER)
+    message(FATAL_ERROR "ASM compiler not found!")
+endif(NOT ASM_COMPILER)
+# Set the asm compiler.
+set(CMAKE_ASM_COMPILER ${ASM_COMPILER})
+# Set the assembly compiler flags.
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    set(CMAKE_ASM_COMPILE_OBJECT "<CMAKE_ASM_COMPILER> -f elf -g -O0 -F dwarf -o <OBJECT> <SOURCE>")
+else()
+    set(CMAKE_ASM_COMPILE_OBJECT "<CMAKE_ASM_COMPILER> -f elf -g -O3 -o <OBJECT> <SOURCE>")
+endif()
+
+# =============================================================================
+# GLOBAL COMPILATION FLAGS
+# =============================================================================
+
+# Warning flags.
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Werror")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wpedantic")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -pedantic-errors")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wshadow")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=gnu99")
+
+# Disable some specific warnings.
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-unused-function")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-unused-variable")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-unknown-pragmas")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-missing-braces")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-unused-command-line-argument")
+
+# Set the compiler options.
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -static")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -nostdlib")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -nostdinc")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-builtin")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-stack-protector")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-pic")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fomit-frame-pointer")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -m32")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -march=i686")
+
+if(CMAKE_C_COMPILER_VERSION VERSION_GREATER_EQUAL 10)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fcommon")
+endif()
+
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g3")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -ggdb")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O0")
+elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O3")
+endif(CMAKE_BUILD_TYPE STREQUAL "Debug")
+
+# Set the assembly compiler flags.
+set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -m32")
+
+# =============================================================================
+# SUB-DIRECTORIES SETUP
 # =============================================================================
 
 # Add the sub-directories.
@@ -71,6 +130,7 @@ add_subdirectory(programs)
 add_subdirectory(programs/tests)
 add_subdirectory(mentos)
 add_subdirectory(libc)
+add_subdirectory(doc)
 
 # =============================================================================
 # FILESYSTEM
@@ -89,7 +149,7 @@ add_custom_target(filesystem
     COMMAND echo '============================================================================='
     COMMAND echo 'Done!'
     COMMAND echo '============================================================================='
-    DEPENDS all_programs all_tests
+    DEPENDS programs tests
 )
 
 # =============================================================================
@@ -126,18 +186,18 @@ set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -vga std)
 # Set the amount of memory.
 set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -m 1096M)
 # Set the EXT2 drive.
-set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -drive file=${CMAKE_BINARY_DIR}/rootfs.img,format=raw)
+set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -drive file=${CMAKE_BINARY_DIR}/rootfs.img,format=raw,index=0,media=disk)
 
 # =============================================================================
 # Booting with QEMU for fun
 # =============================================================================
 
-# This first target runs the emualtor passing the kernel binary file.
+# This first target runs the emulator passing the kernel binary file.
 add_custom_target(
     qemu
     COMMAND test -e ${CMAKE_BINARY_DIR}/rootfs.img || ${CMAKE_COMMAND} -E cmake_echo_color --red "No filesystem file detected, you need to run: make filesystem"
-    COMMAND ${EMULATOR} ${EMULATOR_FLAGS} -kernel ${CMAKE_BINARY_DIR}/mentos/kernel-bootloader.bin
-    DEPENDS kernel-bootloader.bin
+    COMMAND ${EMULATOR} ${EMULATOR_FLAGS} -kernel ${CMAKE_BINARY_DIR}/mentos/bootloader.bin
+    DEPENDS bootloader.bin
 )
 
 # =============================================================================
@@ -148,17 +208,19 @@ add_custom_target(
 # executables.
 add_custom_target(
     gdbinit
-    BYPRODUCTS ${CMAKE_BINARY_DIR}/.gdbinit
-    COMMAND bash ${CMAKE_SOURCE_DIR}/scripts/get_text_address.sh ${CMAKE_BINARY_DIR}/mentos/kernel.bin > ${CMAKE_BINARY_DIR}/.gdbinit
-    COMMAND bash ${CMAKE_SOURCE_DIR}/scripts/get_text_address.sh ${CMAKE_BINARY_DIR}/mentos/kernel-bootloader.bin >> ${CMAKE_BINARY_DIR}/.gdbinit
-    COMMAND bash ${CMAKE_SOURCE_DIR}/scripts/get_text_address.sh ${CMAKE_BINARY_DIR}/programs/tests/test_* >> ${CMAKE_BINARY_DIR}/.gdbinit
-    COMMAND bash ${CMAKE_SOURCE_DIR}/scripts/get_text_address.sh ${CMAKE_BINARY_DIR}/programs/prog_* >> ${CMAKE_BINARY_DIR}/.gdbinit
-    COMMAND echo "break boot.c: boot_main" >> ${CMAKE_BINARY_DIR}/.gdbinit
-    COMMAND echo "break kernel.c: kmain" >> ${CMAKE_BINARY_DIR}/.gdbinit
-    COMMAND echo "target remote localhost:1234" >> ${CMAKE_BINARY_DIR}/.gdbinit
-    DEPENDS kernel-bootloader.bin
-    DEPENDS all_programs
-    DEPENDS all_tests
+    BYPRODUCTS ${CMAKE_BINARY_DIR}/gdb.run
+    # Create the generic gdb configuration.
+    COMMAND echo "add-symbol-file ${CMAKE_BINARY_DIR}/mentos/kernel.bin" > ${CMAKE_BINARY_DIR}/gdb.run
+    COMMAND echo "add-symbol-file ${CMAKE_BINARY_DIR}/mentos/bootloader.bin" >> ${CMAKE_BINARY_DIR}/gdb.run
+    COMMAND find ${CMAKE_SOURCE_DIR}/files/bin -type f  | xargs realpath | sed 's/^/add-symbol-file /' >> ${CMAKE_BINARY_DIR}/gdb.run
+    COMMAND echo "break boot.c: boot_main" >> ${CMAKE_BINARY_DIR}/gdb.run
+    COMMAND echo "break kernel.c: kmain" >> ${CMAKE_BINARY_DIR}/gdb.run
+    # Create the GDB connection file.
+    COMMAND echo "target remote localhost:1234" >> ${CMAKE_BINARY_DIR}/gdb.run
+    DEPENDS ${CMAKE_BINARY_DIR}/mentos/bootloader.bin
+    DEPENDS ${CMAKE_BINARY_DIR}/mentos/kernel.bin
+    DEPENDS programs
+    DEPENDS tests
     DEPENDS libc
 )
 
@@ -168,15 +230,17 @@ add_custom_target(
 add_custom_target(
     qemu-gdb
     COMMAND test -e ${CMAKE_BINARY_DIR}/rootfs.img || ${CMAKE_COMMAND} -E cmake_echo_color --red "No filesystem file detected, you need to run: make filesystem"
-    COMMAND echo "\n\n"
-    COMMAND echo "Now, QEMU has loaded the kernel, and it is waiting that you\n"
-    COMMAND echo "remotely connect to it. To start debugging, open a new shell\n"
-    COMMAND echo "in THIS same folder, and just type :\n"
-    COMMAND printf "    cgdb -q -iex %q" "add-auto-load-safe-path ."
-    COMMAND echo "\n\n"
-    COMMAND ${EMULATOR} ${EMULATOR_FLAGS} -s -S -kernel ${CMAKE_BINARY_DIR}/mentos/kernel-bootloader.bin
-    DEPENDS kernel-bootloader.bin
-    DEPENDS .gdbinit
+    COMMAND echo ""
+    COMMAND echo "Now, QEMU has loaded the kernel, and it is waiting that you"
+    COMMAND echo "remotely connect to it. To start debugging, open a new shell"
+    COMMAND echo "in THIS same folder, and just type:"
+    COMMAND echo "    gdb --quiet --command=gdb.run"
+    COMMAND echo "or if you want to use cgdb, type:"
+    COMMAND echo "    cgdb --quiet --command=gdb.run"
+    COMMAND echo ""
+    COMMAND ${EMULATOR} ${EMULATOR_FLAGS} -s -S -kernel ${CMAKE_BINARY_DIR}/mentos/bootloader.bin
+    DEPENDS bootloader.bin
+    DEPENDS gdbinit
 )
 
 # =============================================================================
@@ -187,9 +251,9 @@ add_custom_target(
 add_custom_target(
   cdrom.iso
   COMMAND cp -rf ${CMAKE_SOURCE_DIR}/iso .
-  COMMAND cp ${CMAKE_BINARY_DIR}/mentos/kernel-bootloader.bin ${CMAKE_BINARY_DIR}/iso/boot
+  COMMAND cp ${CMAKE_BINARY_DIR}/mentos/bootloader.bin ${CMAKE_BINARY_DIR}/iso/boot
   COMMAND grub-mkrescue -o ${CMAKE_BINARY_DIR}/cdrom.iso ${CMAKE_BINARY_DIR}/iso
-  DEPENDS kernel-bootloader.bin
+  DEPENDS bootloader.bin
 )
 
 # This third target runs the emualtor, but this time, the kernel binary file is

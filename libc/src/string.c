@@ -1,33 +1,44 @@
 /// @file string.c
 /// @brief String routines.
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include <fcntl.h>
 #include "string.h"
 #include "ctype.h"
+#include "fcntl.h"
 #include "stdio.h"
 #include "stdlib.h"
 
+#ifdef __KERNEL__
+#include "mem/kheap.h"
+#endif
+
 char *strncpy(char *destination, const char *source, size_t num)
 {
-    char *start = destination;
-    while (num && (*destination++ = *source++)) {
-        num--;
-    }
+    // Check if we have a valid number.
     if (num) {
-        while (--num) {
-            *destination++ = '\0';
+        // Copies the first num characters of source to destination.
+        while (num && (*destination++ = *source++)) {
+            num--;
+        }
+        // If the end of the source C string (which is signaled by a null-character)
+        // is found before num characters have been copied, destination is padded
+        // with zeros until a total of num characters have been written to it.
+        if (num) {
+            while (--num) {
+                *destination++ = '\0';
+            }
         }
     }
-
-    return start;
+    // Pointer to destination is returned.
+    return destination;
 }
 
 int strncmp(const char *s1, const char *s2, size_t n)
 {
-    if (!n)
+    if (!n) {
         return 0;
+    }
     while ((--n > 0) && (*s1) && (*s2) && (*s1 == *s2)) {
         s1++;
         s2++;
@@ -66,8 +77,9 @@ char *strchr(const char *s, int ch)
     while (*s && *s != (char)ch) {
         s++;
     }
-    if (*s == (char)ch)
+    if (*s == (char)ch) {
         return (char *)s;
+    }
     {
         return NULL;
     }
@@ -155,8 +167,9 @@ size_t strcspn(const char *string, const char *control)
     size_t n;
 
     // Clear out bit map.
-    for (n = 0; n < 32; n++)
+    for (n = 0; n < 32; n++) {
         map[n] = 0;
+    }
 
     // Set bits in control map.
     while (*ctrl) {
@@ -184,8 +197,9 @@ char *strpbrk(const char *string, const char *control)
     int n;
 
     // Clear out bit map.
-    for (n = 0; n < 32; n++)
+    for (n = 0; n < 32; n++) {
         map[n] = 0;
+    }
 
     // Set bits in control map.
     while (*ctrl) {
@@ -202,6 +216,34 @@ char *strpbrk(const char *string, const char *control)
     }
 
     return NULL;
+}
+
+int tokenize(const char *string, char *separators, size_t *offset, char *buffer, ssize_t buflen)
+{
+    // If we reached the end of the parsed string, stop.
+    if (string[*offset] == 0) {
+        return 0;
+    }
+    // Keep copying character until we either reach 1) the end of the buffer, 2) a
+    // separator, or 3) the end of the string we are parsing.
+    do {
+        for (char *separator = separators; *separator != 0; ++separator) {
+            if (string[*offset] == *separator) {
+                // Skip the character.
+                ++(*offset);
+                // Close the buffer.
+                *buffer = '\0';
+                return 1;
+            }
+        }
+        // Save the character.
+        *buffer = string[*offset];
+        // Advance the offset, decrese the available size in the buffer, and advance the buffer.
+        ++(*offset), --buflen, ++buffer;
+    } while ((buflen > 0) && (string[*offset] != 0));
+    // Close the buffer.
+    *buffer = '\0';
+    return 1;
 }
 
 void *memmove(void *dst, const void *src, size_t n)
@@ -266,31 +308,35 @@ char *strupr(char *s)
     return s;
 }
 
+char *strcat(char *dst, const char *src)
+{
+    char *cp = dst;
+
+    while (*cp) {
+        cp++;
+    }
+
+    while ((*cp++ = *src++) != '\0') {}
+
+    return dst;
+}
+
 char *strncat(char *s1, const char *s2, size_t n)
 {
     char *start = s1;
 
     while (*s1++) {}
-
     s1--;
 
     while (n--) {
-        if (!(*s1++ = *s2++))
+        if (!(*s1++ = *s2++)) {
             return start;
+        }
     }
 
     *s1 = '\0';
 
     return start;
-}
-
-char *strnset(char *s, int c, size_t n)
-{
-    while (n-- && *s) {
-        *s++ = (char)c;
-    }
-
-    return s;
 }
 
 char *strrev(char *s)
@@ -364,11 +410,10 @@ char *strtok_r(char *str, const char *delim, char **saveptr)
     *saveptr = s;
 
     // Determine if a token has been found.
-    if (str == (char *)s) {
+    if (str == s) {
         return NULL;
-    } else {
-        return str;
     }
+    return str;
 }
 
 // Intrinsic functions.
@@ -386,119 +431,100 @@ char *strtok_r(char *str, const char *delim, char **saveptr)
 
 void *memset(void *ptr, int value, size_t num)
 {
-    // Truncate c to 8 bits.
-    value = (value & 0xFF);
-
-    char *dst = (char *)ptr;
-
-    // Initialize the rest of the size.
-    while (num--) {
-        *dst++ = (char)value;
-    }
-
+    // Turn the pointer into a char * pointer. Here, we use the volatile keyword
+    // to prevent the compiler from optimizing away the operations involving the
+    // pointer.
+    unsigned char volatile *dst = (unsigned char volatile *)ptr;
+    // Initialize the content of the memory.
+    while (num--) *dst++ = (unsigned char)value;
+    // Return the pointer.
     return ptr;
 }
 
-int memcmp(const void *ptr1, const void *ptr2, size_t n)
+int memcmp(const void *dst, const void *src, size_t n)
 {
     if (!n) {
         return 0;
     }
 
-    while (--n && *(char *)ptr1 == *(char *)ptr2) {
-        ptr1 = (char *)ptr1 + 1;
-        ptr2 = (char *)ptr2 + 1;
+    while (--n && *(char *)dst == *(char *)src) {
+        dst = (char *)dst + 1;
+        src = (char *)src + 1;
     }
 
-    return *((unsigned char *)ptr1) - *((unsigned char *)ptr2);
+    return *((unsigned char *)dst) - *((unsigned char *)src);
 }
 
-void *memcpy(void *ptr1, const void *ptr2, size_t num)
+void *memcpy(void *dst, const void *src, size_t num)
 {
-    char *_dst       = ptr1;
-    const char *_src = ptr2;
-
-    while (num--) {
-        *_dst++ = *_src++;
-    }
-
-    return ptr1;
+    // Turn the pointer into a char * pointer. Here, we use the volatile keyword
+    // to prevent the compiler from optimizing away the operations involving the
+    // pointer.
+    unsigned char volatile *_dst       = (unsigned char volatile *)dst;
+    const unsigned char volatile *_src = (const unsigned char volatile *)src;
+    // Initialize the content of the memory.
+    while (num--) *_dst++ = *_src++;
+    // Return the pointer.
+    return (void *)dst;
 }
 
-void *memccpy(void *ptr1, const void *ptr2, int c, size_t n)
+void *memccpy(void *dst, const void *src, int c, size_t n)
 {
-    while (n && (*((char *)(ptr1 = (char *)ptr1 + 1) - 1) =
-                     *((char *)(ptr2 = (char *)ptr2 + 1) - 1)) != (char)c) {
+    while (n && (*((char *)(dst = (char *)dst + 1) - 1) =
+                     *((char *)(src = (char *)src + 1) - 1)) != (char)c) {
         n--;
     }
 
-    return n ? ptr1 : NULL;
+    return n ? dst : NULL;
 }
 
 char *strcpy(char *dst, const char *src)
 {
     char *save = dst;
-
     while ((*dst++ = *src++) != '\0') {}
-
     return save;
 }
 
 size_t strlen(const char *s)
 {
-    const char *eos;
-
-    for (eos = s; *eos != 0; ++eos) {}
-
-    long len = eos - s;
-
-    return (len < 0) ? 0 : (size_t)len;
+    const char *it = s;
+    while (*(++it) != 0) {}
+    return ((it - s) < 0) ? 0 : (size_t)(it - s);
 }
 
 size_t strnlen(const char *s, size_t count)
 {
-    const char *sc;
-
-    for (sc = s; *sc != '\0' && count--; ++sc) {}
-
-    long len = sc - s;
-
-    return (len < 0) ? 0 : (size_t)len;
+    const char *it = s;
+    while ((*(++it) != 0) && --count) {}
+    return ((it - s) < 0) ? 0 : (size_t)(it - s);
 }
 
 int strcmp(const char *s1, const char *s2)
 {
-    int ret         = 0;
-    const char *s1t = s1, *s2t = s2;
-
-    for (; !(ret = *s1t - *s2t) && *s2t; ++s1t, ++s2t) {}
-
-    return (ret < 0) ? -1 : (ret > 0) ? 1 :
-                                        0;
-}
-
-char *strcat(char *dst, const char *src)
-{
-    char *cp = dst;
-
-    while (*cp) {
-        cp++;
+    while (*s1 && *s2) {
+        if (*s1 < *s2) break;
+        if (*s1 > *s2) break;
+        s1++, s2++;
     }
-
-    while ((*cp++ = *src++) != '\0') {}
-
-    return dst;
+    return *s1 - *s2;
 }
 
 char *strset(char *s, int c)
 {
-    char *start = s;
-
-    while (*s) {
-        *s++ = (char)c;
+    char *it = s;
+    while (*it) {
+        *it++ = (char)c;
     }
+    return s;
+}
 
-    return start;
+char *strnset(char *s, int c, size_t n)
+{
+    char *it = s;
+    while (*it && n--) {
+        *it++ = (char)c;
+    }
+    return s;
 }
 
 char *strtok(char *str, const char *delim)
@@ -593,9 +619,14 @@ char *trim(char *str)
 char *strdup(const char *s)
 {
     size_t len = strlen(s) + 1;
-    char *new  = malloc(len);
-    if (new == NULL)
+#ifdef __KERNEL__
+    char *new = kmalloc(len);
+#else
+    char *new = malloc(len);
+#endif
+    if (new == NULL) {
         return NULL;
+    }
     new[len] = '\0';
     return (char *)memcpy(new, s, len);
 }
@@ -603,9 +634,14 @@ char *strdup(const char *s)
 char *strndup(const char *s, size_t n)
 {
     size_t len = strnlen(s, n);
-    char *new  = malloc(len);
-    if (new == NULL)
+#ifdef __KERNEL__
+    char *new = kmalloc(len);
+#else
+    char *new = malloc(len);
+#endif
+    if (new == NULL) {
         return NULL;
+    }
     new[len] = '\0';
     return (char *)memcpy(new, s, len);
 }

@@ -1,11 +1,11 @@
 /// @file errno.h
 /// @brief System call errors definition.
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #pragma once
 
-extern int *__geterrno();
+extern int *__geterrno(void);
 
 /// Provide easy access to the error number.
 #define errno (*__geterrno())
@@ -20,7 +20,7 @@ extern int *__geterrno();
 #define ENOEXEC         8 ///< Exec format error.
 #define EBADF           9 ///< Bad file number.
 #define ECHILD          10 ///< No child processes.
-#define EAGAIN          11 ///< Try again.
+#define EAGAIN          11 ///< Resource temporarily unavailable.
 #define ENOMEM          12 ///< Out of memory.
 #define EACCES          13 ///< Permission denied.
 #define EFAULT          14 ///< Bad address.

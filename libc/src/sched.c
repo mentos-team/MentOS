@@ -1,11 +1,11 @@
 /// @file sched.c
 /// @brief Function for managing scheduler.
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #include "system/syscall_types.h"
-#include "sys/errno.h"
 #include "sched.h"
+#include "sys/errno.h"
 
 _syscall2(int, sched_setparam, pid_t, pid, const sched_param_t *, param)
 

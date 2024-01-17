@@ -1,12 +1,12 @@
 /// @file abort.c
 /// @brief
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #include "sys/unistd.h"
-#include "string.h"
 #include "signal.h"
 #include "stdio.h"
+#include "string.h"
 
 /// @brief Since there could be signal handlers listening for the abort, we need
 /// to keep track at which stage of the abort we are.
@@ -28,7 +28,6 @@ void abort(void)
 
     /* Send signal which possibly calls a user handler.  */
     if (stage == 1) {
-
         // We must allow recursive calls of abort
         int save_stage = stage;
 

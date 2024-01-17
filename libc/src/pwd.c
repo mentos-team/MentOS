@@ -1,84 +1,61 @@
 /// @file pwd.c
 /// @brief
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #include "pwd.h"
-#include "sys/unistd.h"
-#include "sys/errno.h"
 #include "assert.h"
-#include "string.h"
-#include "stdio.h"
 #include "fcntl.h"
-#include "debug.h"
+#include "io/debug.h"
+#include "readline.h"
+#include "stdio.h"
+#include "string.h"
+#include "sys/errno.h"
+#include "sys/unistd.h"
 
+/// @brief Parses the input buffer and fills pwd with its details.
+/// @param pwd the structure we need to fill.
+/// @param buf the buffer from which we extract the information.
 static inline void __parse_line(passwd_t *pwd, char *buf)
 {
     assert(pwd && "Received null pwd!");
     char *token, *ch;
     // Parse the username.
-    if ((token = strtok(buf, ":")) != NULL)
+    if ((token = strtok(buf, ":")) != NULL) {
         pwd->pw_name = token;
+    }
     // Parse the password.
-    if ((token = strtok(NULL, ":")) != NULL)
+    if ((token = strtok(NULL, ":")) != NULL) {
         pwd->pw_passwd = token;
+    }
     // Parse the user ID.
-    if ((token = strtok(NULL, ":")) != NULL)
+    if ((token = strtok(NULL, ":")) != NULL) {
         pwd->pw_uid = atoi(token);
+    }
     // Parse the group ID.
-    if ((token = strtok(NULL, ":")) != NULL)
+    if ((token = strtok(NULL, ":")) != NULL) {
         pwd->pw_gid = atoi(token);
+    }
     // Parse the user information.
-    if ((token = strtok(NULL, ":")) != NULL)
+    if ((token = strtok(NULL, ":")) != NULL) {
         pwd->pw_gecos = token;
+    }
     // Parse the dir.
-    if ((token = strtok(NULL, ":")) != NULL)
+    if ((token = strtok(NULL, ":")) != NULL) {
         pwd->pw_dir = token;
+    }
     // Parse the shell.
     if ((token = strtok(NULL, ":")) != NULL) {
         pwd->pw_shell = token;
         // Find carriege return.
-        if ((ch = strchr(pwd->pw_shell, '\r')))
+        if ((ch = strchr(pwd->pw_shell, '\r'))) {
             *ch = 0;
+        }
         // Find newline.
-        if ((ch = strchr(pwd->pw_shell, '\n')))
+        if ((ch = strchr(pwd->pw_shell, '\n'))) {
             *ch = 0;
-    }
-}
-
-/// @brief Reads a line from the file.
-/// @param fd the file descriptor.
-/// @param buffer the buffer where we place the line.
-/// @param buflen the length of the buffer.
-/// @return the amount we read.
-ssize_t __readline(int fd, char *buffer, size_t buflen)
-{
-    memset(buffer, 0, buflen);
-    long num_read = read(fd, buffer, buflen);
-    if (num_read == 0) {
-        return 0;
-    }
-    char *newline = strchr(buffer, '\n');
-    if (newline == NULL) {
-        newline = strchr(buffer, EOF);
-        if (newline == NULL) {
-            newline = strchr(buffer, 0);
-            if (newline == NULL) {
-                return 0;
-            }
         }
     }
-    long newline_len = (int)(newline - buffer);
-    if (newline_len <= 0) {
-        return 0;
-    }
-    buffer[newline_len] = 0;
-    long rollback       = newline_len - num_read + 1;
-    if (rollback > 1) {
-        return 0;
-    }
-    lseek(fd, rollback, SEEK_CUR);
-    return newline_len;
 }
 
 /// @brief Searches for the given entry inside the buffer.
@@ -90,7 +67,7 @@ ssize_t __readline(int fd, char *buffer, size_t buflen)
 /// @return the buffer itself if we have found the entry, NULL otherwise.
 static inline char *__search_entry(int fd, char *buffer, int buflen, const char *name, uid_t uid)
 {
-    while (__readline(fd, buffer, buflen)) {
+    while (readline(fd, buffer, buflen, NULL) != 0) {
         if (name != NULL) {
             char *name_end = strchr(buffer, ':');
             if (name_end) {
@@ -103,17 +80,20 @@ static inline char *__search_entry(int fd, char *buffer, int buflen, const char 
         } else {
             // Name
             char *ptr = strchr(buffer, ':');
-            if (ptr == NULL)
+            if (ptr == NULL) {
                 continue;
+            }
             // Password
             ++ptr;
             char *uid_start = strchr(ptr, ':');
-            if (uid_start == NULL)
+            if (uid_start == NULL) {
                 continue;
+            }
             ++uid_start;
             ptr = strchr(uid_start, ':');
-            if (ptr == NULL)
+            if (ptr == NULL) {
                 continue;
+            }
             *ptr = '\0';
             // Parse the uid.
             int found_uid = atoi(uid_start);
@@ -129,13 +109,15 @@ static inline char *__search_entry(int fd, char *buffer, int buflen, const char 
 
 passwd_t *getpwnam(const char *name)
 {
-    if (name == NULL)
+    if (name == NULL) {
         return NULL;
+    }
     static passwd_t pwd;
     static char buffer[BUFSIZ];
     passwd_t *result;
-    if (!getpwnam_r(name, &pwd, buffer, BUFSIZ, &result))
+    if (!getpwnam_r(name, &pwd, buffer, BUFSIZ, &result)) {
         return NULL;
+    }
     return &pwd;
 }
 
@@ -144,15 +126,17 @@ passwd_t *getpwuid(uid_t uid)
     static passwd_t pwd;
     static char buffer[BUFSIZ];
     passwd_t *result;
-    if (!getpwuid_r(uid, &pwd, buffer, BUFSIZ, &result))
+    if (!getpwuid_r(uid, &pwd, buffer, BUFSIZ, &result)) {
         return NULL;
+    }
     return &pwd;
 }
 
 int getpwnam_r(const char *name, passwd_t *pwd, char *buf, size_t buflen, passwd_t **result)
 {
-    if (name == NULL)
+    if (name == NULL) {
         return 0;
+    }
     int fd = open("/etc/passwd", O_RDONLY, 0);
     if (fd == -1) {
         pr_debug("Cannot open `/etc/passwd`\n");

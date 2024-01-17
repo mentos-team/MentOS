@@ -1,7 +1,9 @@
 /// @file ioctl.h
 /// @brief Declares device controlling operations.
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
+
+#pragma once
 
 /// @brief Manipulates the underlying device parameters of special files, or operating
 /// 		characteristics of character special files (e.g., terminals).

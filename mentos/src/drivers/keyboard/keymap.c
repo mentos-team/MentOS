@@ -1,6 +1,6 @@
 /// @file keymap.c
 /// @brief Keymap for keyboard.
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 /// @addtogroup keyboard
 /// @{
@@ -13,26 +13,28 @@ keymap_type_t keymap_type = KEYMAP_IT;
 /// Contains the different keymaps.
 keymap_t keymaps[KEYMAP_TYPE_MAX][65536];
 
-keymap_type_t get_keymap_type()
+keymap_type_t get_keymap_type(void)
 {
     return keymap_type;
 }
 
 void set_keymap_type(keymap_type_t type)
 {
-    if (type != keymap_type)
+    if (type != keymap_type) {
         keymap_type = type;
+    }
 }
 
-const keymap_t *get_keymap(int scancode)
+const keymap_t *get_keymap(unsigned int scancode)
 {
     return &keymaps[keymap_type][scancode];
 }
 
-void init_keymaps()
+void init_keymaps(void)
 {
-    for (int i = 0; i < KEYMAP_TYPE_MAX; ++i)
+    for (int i = 0; i < KEYMAP_TYPE_MAX; ++i) {
         memset(&keymaps[i], -1, sizeof(keymap_t));
+    }
 
     // == ITALIAN KEY MAPPING =================================================
     //                 Keys                Normal  Shifted Ctrl    Alt

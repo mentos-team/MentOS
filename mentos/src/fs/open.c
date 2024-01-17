@@ -1,19 +1,19 @@
 /// @file open.c
 /// @brief
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #include "process/scheduler.h"
-#include "process/process.h"
-#include "system/printk.h"
 #include "fcntl.h"
-#include "system/syscall.h"
-#include "string.h"
-#include "limits.h"
-#include "io/debug.h"
-#include "sys/errno.h"
-#include "stdio.h"
 #include "fs/vfs.h"
+#include "io/debug.h"
+#include "limits.h"
+#include "process/process.h"
+#include "stdio.h"
+#include "string.h"
+#include "sys/errno.h"
+#include "system/printk.h"
+#include "system/syscall.h"
 
 int sys_open(const char *pathname, int flags, mode_t mode)
 {

@@ -1,28 +1,26 @@
 /// @file   multiboot.c
 /// @brief
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-// Include the kernel log levels.
-#include "sys/kernel_levels.h"
-/// Change the header.
-#define __DEBUG_HEADER__ "[BOOT  ]"
-/// Set the log level.
-#define __DEBUG_LEVEL__ LOGLEVEL_NOTICE
+// Setup the logging for this file (do this before any other include).
+#include "sys/kernel_levels.h"           // Include kernel log levels.
+#define __DEBUG_HEADER__ "[MTBOOT]"      ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
+#include "io/debug.h"                    // Include debugging functions.
 
-#include "multiboot.h"
 #include "kernel.h"
+#include "multiboot.h"
+#include "stddef.h"
+#include "stddef.h"
 #include "sys/bitops.h"
-#include "stddef.h"
-#include "io/debug.h"
 #include "system/panic.h"
-#include "stddef.h"
-
 
 multiboot_memory_map_t *mmap_first_entry(multiboot_info_t *info)
 {
-    if (!bitmask_check(info->flags, MULTIBOOT_FLAG_MMAP))
+    if (!bitmask_check(info->flags, MULTIBOOT_FLAG_MMAP)) {
         return NULL;
+    }
     return (multiboot_memory_map_t *)((uintptr_t)info->mmap_addr);
 }
 
@@ -30,8 +28,9 @@ multiboot_memory_map_t *mmap_first_entry_of_type(multiboot_info_t *info,
                                                  uint32_t type)
 {
     multiboot_memory_map_t *entry = mmap_first_entry(info);
-    if (entry && (entry->type == type))
+    if (entry && (entry->type == type)) {
         return entry;
+    }
     return mmap_next_entry_of_type(info, entry, type);
 }
 
@@ -39,8 +38,9 @@ multiboot_memory_map_t *mmap_next_entry(multiboot_info_t *info,
                                         multiboot_memory_map_t *entry)
 {
     uintptr_t next = ((uintptr_t)entry) + entry->size + sizeof(entry->size);
-    if (next >= (info->mmap_addr + info->mmap_length))
+    if (next >= (info->mmap_addr + info->mmap_length)) {
         return NULL;
+    }
     return (multiboot_memory_map_t *)next;
 }
 
@@ -56,19 +56,23 @@ multiboot_memory_map_t *mmap_next_entry_of_type(multiboot_info_t *info,
 
 char *mmap_type_name(multiboot_memory_map_t *entry)
 {
-    if (entry->type == MULTIBOOT_MEMORY_AVAILABLE)
+    if (entry->type == MULTIBOOT_MEMORY_AVAILABLE) {
         return "AVAILABLE";
-    if (entry->type == MULTIBOOT_MEMORY_RESERVED)
+    }
+    if (entry->type == MULTIBOOT_MEMORY_RESERVED) {
         return "RESERVED";
+    }
     return "NONE";
 }
 
 multiboot_module_t *first_module(multiboot_info_t *info)
 {
-    if (!bitmask_check(info->flags, MULTIBOOT_FLAG_MODS))
+    if (!bitmask_check(info->flags, MULTIBOOT_FLAG_MODS)) {
         return NULL;
-    if (!info->mods_count)
+    }
+    if (!info->mods_count) {
         return NULL;
+    }
     return (multiboot_module_t *)(uintptr_t)info->mods_addr;
 }
 
@@ -77,8 +81,9 @@ multiboot_module_t *next_module(multiboot_info_t *info,
 {
     multiboot_module_t *first = (multiboot_module_t *)((uintptr_t)info->mods_addr);
     ++mod;
-    if ((mod - first) >= info->mods_count)
+    if ((mod - first) >= info->mods_count) {
         return NULL;
+    }
     return mod;
 }
 
@@ -126,13 +131,14 @@ void dump_multiboot(multiboot_info_t *mbi)
         pr_debug("%-16s = %d\n", "mods_count", mbi->mods_count);
         pr_debug("%-16s = 0x%x\n", "mods_addr", mbi->mods_addr);
         multiboot_module_t *mod = first_module(mbi);
-        for (int i = 0; mod; ++i, mod = next_module(mbi, mod)) {
+        do {
             pr_debug("    [%2d] "
                      "mod_start = 0x%x, "
                      "mod_end = 0x%x, "
                      "cmdline = %s\n",
                      i, mod->mod_start, mod->mod_end, (char *)mod->cmdline);
-        }
+            mod = next_module(mbi, mod);
+        } while (mod);
     }
     // Bits 4 and 5 are mutually exclusive!
     if (bitmask_check(mbi->flags, MULTIBOOT_FLAG_AOUT) &&
@@ -167,7 +173,7 @@ void dump_multiboot(multiboot_info_t *mbi)
                  mbi->mmap_length,
                  mbi->mmap_length / sizeof(multiboot_memory_map_t));
         multiboot_memory_map_t *mmap = mmap_first_entry(mbi);
-        for (int i = 0; mmap; ++i, mmap = mmap_next_entry(mbi, mmap)) {
+        do {
             pr_debug("    [%2d] "
                      "base_addr = 0x%09x%09x, "
                      "length = 0x%09x%09x, "
@@ -175,7 +181,8 @@ void dump_multiboot(multiboot_info_t *mbi)
                      i, mmap->base_addr_high, mmap->base_addr_low,
                      mmap->length_high, mmap->length_low, mmap->type,
                      mmap_type_name(mmap));
-        }
+            mmap = mmap_next_entry(mbi, mmap);
+        } while (mmap);
     }
 
     if (bitmask_check(mbi->flags, MULTIBOOT_FLAG_DRIVE_INFO)) {

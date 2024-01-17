@@ -1,56 +1,99 @@
 /// @file pci.c
 /// @brief Routines for PCI initialization.
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 ///! @cond Doxygen_Suppress
 
-// Include the kernel log levels.
-#include "sys/kernel_levels.h"
-/// Change the header.
-#define __DEBUG_HEADER__ "[PCI   ]"
-/// Set the log level.
-#define __DEBUG_LEVEL__ LOGLEVEL_NOTICE
+// Setup the logging for this file (do this before any other include).
+#include "sys/kernel_levels.h"           // Include kernel log levels.
+#define __DEBUG_HEADER__ "[PCI   ]"      ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
+#include "io/debug.h"                    // Include debugging functions.
 
 #include "devices/pci.h"
-#include "io/debug.h"
-#include "string.h"
 #include "io/port_io.h"
+#include "string.h"
 
-void pci_write_field(uint32_t device, int field, int size, uint32_t value)
+/// The configuration bit in I/O location CF8h[31] must be set to 1b.
+#define PCI_ADDR_ENABLE 0x80000000
+/// The device's bus number must be written into bits [23:16] of I/O location CF8h.
+#define PCI_ADDR_BUS(x) (((uint32_t)(x)&0xFF) << 16)
+/// The device's "PCI device number" must be written into bits [15:11] of I/O location CF8h.
+#define PCI_ADDR_DEV(x) (((uint32_t)(x)&0x1F) << 11)
+/// The device's function must be written into bits [10:8] of I/O location CF8h.
+#define PCI_ADDR_FUNC(x) (((uint32_t)(x)&0x03) << 8)
+///
+#define PCI_ADDR_FIELD(x) (((uint32_t)(x)&0xFC))
+
+/// @brief Extracts the bus id from the device.
+#define PCI_GET_BUS(x) ((uint8_t)((x) >> 16U))
+/// @brief Extracts the slot id from the device.
+#define PCI_GET_SLOT(x) ((uint8_t)((x) >> 8U))
+/// @brief Extracts the function id from the device.
+#define PCI_GET_FUNC(x) ((uint8_t)((x)))
+
+/// @brief TODO: Comment.
+/// @param device
+/// @param field
+/// @return
+static inline uint32_t pci_get_addr(uint32_t device, uint32_t field)
 {
-    (void)size;
+    return PCI_ADDR_ENABLE |
+           PCI_ADDR_BUS(PCI_GET_BUS(device)) |
+           PCI_ADDR_DEV(PCI_GET_SLOT(device)) |
+           PCI_ADDR_FUNC(PCI_GET_FUNC(device)) |
+           PCI_ADDR_FIELD(field);
+}
+
+static inline uint32_t pci_box_device(uint8_t bus, uint8_t slot, uint8_t func)
+{
+    return (uint32_t)((bus << 16U) | (slot << 8U) | func);
+}
+
+void pci_write_8(uint32_t device, uint32_t field, uint8_t value)
+{
     outportl(PCI_ADDRESS_PORT, pci_get_addr(device, field));
-#if 0
-    if (size == 4)
-        outportl(PCI_VALUE_PORT, value);
-    else if (size == 2)
-        outports(PCI_VALUE_PORT, value);
-    else if (size == 1)
-        outportb(PCI_VALUE_PORT, value);
-#else
+    outportb(PCI_VALUE_PORT + (field & 0x03), value);
+}
+
+void pci_write_16(uint32_t device, uint32_t field, uint16_t value)
+{
+    outportl(PCI_ADDRESS_PORT, pci_get_addr(device, field));
+    outports(PCI_VALUE_PORT + (field & 0x02), value);
+}
+
+void pci_write_32(uint32_t device, uint32_t field, uint32_t value)
+{
+    outportl(PCI_ADDRESS_PORT, pci_get_addr(device, field));
     outportl(PCI_VALUE_PORT, value);
-#endif
 }
 
-uint32_t pci_read_field(uint32_t device, int field, int size)
+uint8_t pci_read_8(uint32_t device, int field)
 {
     outportl(PCI_ADDRESS_PORT, pci_get_addr(device, field));
-
-    if (size == 4) {
-        return inportl(PCI_VALUE_PORT);
-    } else if (size == 2) {
-        return inports(PCI_VALUE_PORT + (field & 2));
-    } else if (size == 1) {
-        return inportb(PCI_VALUE_PORT + (field & 3));
-    }
-    return 0xFFFF;
+    return inportb(PCI_VALUE_PORT + (field & 0x03));
 }
 
-uint32_t pci_find_type(uint32_t device)
+uint16_t pci_read_16(uint32_t device, int field)
 {
-    return pci_read_field(device, PCI_CLASS, 1) << 16 |
-           pci_read_field(device, PCI_SUBCLASS, 1) << 8 |
-           pci_read_field(device, PCI_PROG_IF, 1);
+    outportl(PCI_ADDRESS_PORT, pci_get_addr(device, field));
+    return inports(PCI_VALUE_PORT + (field & 0x02));
+}
+
+uint32_t pci_read_32(uint32_t device, int field)
+{
+    outportl(PCI_ADDRESS_PORT, pci_get_addr(device, field));
+    return inportl(PCI_VALUE_PORT);
+}
+
+/// @brief Finds the type of the given device.
+/// @param device the device number.
+/// @return the type of the device.
+static inline uint32_t pci_find_type(uint32_t device)
+{
+    return pci_read_8(device, PCI_CLASS) << 16U |
+           pci_read_8(device, PCI_SUBCLASS) << 8U |
+           pci_read_8(device, PCI_PROG_IF);
 }
 
 struct {
@@ -97,7 +140,7 @@ struct {
 struct {
     uint32_t id;
     const char *name;
-} _pci_classes[] = {
+} _pci_types[] = {
     { 0x000000, "Legacy Device" },
     { 0x000100, "VGA-Compatible Device" },
 
@@ -275,103 +318,119 @@ struct {
     { 0x118000, "Data acq./Signal proc." },
 };
 
-const char *pci_vendor_lookup(unsigned short vendor_id)
+/// @brief Searches for the vendor name from the ID.
+/// @param vendor_id the vendor ID.
+/// @return the vendor name.
+static inline const char *pci_vendor_lookup(uint16_t vendor_id)
 {
-    for (int i = 0; i < sizeof(_pci_vendors) / sizeof(_pci_vendors[0]); ++i) {
+    for (size_t i = 0; i < count_of(_pci_vendors); ++i) {
         if (_pci_vendors[i].id == vendor_id) {
             return _pci_vendors[i].name;
         }
     }
-
     return "Unknown";
 }
 
-const char *pci_device_lookup(unsigned short vendor_id, unsigned short device_id)
+/// @brief Searches for the device name from its ID and the vendor id.
+/// @param vendor_id the vendor ID.
+/// @param device_id the device ID.
+/// @return the device name.
+static inline const char *pci_device_lookup(uint16_t vendor_id, uint16_t device_id)
 {
-    for (int i = 0; i < sizeof(_pci_devices) / sizeof(_pci_devices[0]); ++i) {
-        if (_pci_devices[i].ven_id == vendor_id &&
-            _pci_devices[i].dev_id == device_id) {
+    for (size_t i = 0; i < count_of(_pci_devices); ++i) {
+        if ((_pci_devices[i].ven_id == vendor_id) && (_pci_devices[i].dev_id == device_id)) {
             return _pci_devices[i].name;
         }
     }
-
     return "Unknown";
 }
 
-const char *pci_class_lookup(uint32_t class_code)
+static inline const char *pci_type_lookup(uint32_t type_id)
 {
-    for (int i = 0; i < sizeof(_pci_classes) / sizeof(_pci_classes[0]); ++i) {
-        if (_pci_classes[i].id == class_code) {
-            return _pci_classes[i].name;
+    for (size_t i = 0; i < count_of(_pci_types); ++i) {
+        if (_pci_types[i].id == type_id) {
+            return _pci_types[i].name;
         }
     }
-
     return "Unknown";
 }
 
+void pci_scan_bus(pci_scan_func_t f, int type, uint8_t bus, void *extra);
+
+/// @brief Calls the function f on the device if found.
+/// @param f the function to call.
+/// @param device the device number.
+/// @param extra the extra arguemnts.
 void pci_scan_hit(pci_scan_func_t f, uint32_t device, void *extra)
 {
-    uint16_t vendor_id = (uint16_t)pci_read_field(device, PCI_VENDOR_ID, 2);
-    uint16_t device_id = (uint16_t)pci_read_field(device, PCI_DEVICE_ID, 2);
+    uint16_t vendor_id = pci_read_16(device, PCI_VENDOR_ID);
+    uint16_t device_id = pci_read_16(device, PCI_DEVICE_ID);
     f(device, vendor_id, device_id, extra);
 }
 
-void pci_scan_func(pci_scan_func_t f, int type, int bus, int slot, int func, void *extra)
+/// @brief Scans for the given type of device.
+/// @param f the function to call once we have found the device.
+/// @param type the type of device we are searching for.
+/// @param bus bus number.
+/// @param slot slot number.
+/// @param func choose a specific function in a device.
+/// @param extra the extra arguemnts.
+void pci_scan_func(pci_scan_func_t f, int type, uint8_t bus, uint8_t slot, uint8_t func, void *extra)
 {
-    uint32_t device = pci_box_device(bus, slot, func);
-
-    if ((type == -1) || (type == pci_find_type(device))) {
+    uint32_t device      = pci_box_device(bus, slot, func);
+    uint32_t device_type = pci_find_type(device);
+    if ((type == -1) || (type == device_type)) {
         pci_scan_hit(f, device, extra);
     }
-    if (pci_find_type(device) == PCI_TYPE_BRIDGE) {
-        pci_scan_bus(f, type, pci_read_field(device, PCI_SECONDARY_BUS, 1), extra);
+    if (device_type == PCI_TYPE_BRIDGE) {
+        pci_scan_bus(f, type, pci_read_8(device, PCI_SECONDARY_BUS), extra);
     }
 }
 
-void pci_scan_slot(pci_scan_func_t f, int type, int bus, int slot, void *extra)
+/// @brief Scans for the given type of device.
+/// @param f the function to call once we have found the device.
+/// @param type the type of device we are searching for.
+/// @param bus bus number.
+/// @param slot slot number.
+/// @param extra the extra arguemnts.
+void pci_scan_slot(pci_scan_func_t f, int type, uint8_t bus, uint8_t slot, void *extra)
 {
     uint32_t device = pci_box_device(bus, slot, 0);
-
-    if (pci_read_field(device, PCI_VENDOR_ID, 2) == PCI_NONE) {
-        return;
-    }
-
     pci_scan_func(f, type, bus, slot, 0, extra);
-
-    if (!pci_read_field(device, PCI_HEADER_TYPE, 1)) {
-        return;
-    }
-
-    for (int func = 1; func < 8; func++) {
-        device = pci_box_device(bus, slot, func);
-
-        if (pci_read_field(device, PCI_VENDOR_ID, 2) != PCI_NONE) {
-            pci_scan_func(f, type, bus, slot, func, extra);
+    if (pci_read_8(device, PCI_HEADER_TYPE)) {
+        for (uint32_t func = 1; func < 8; func++) {
+            device = pci_box_device(bus, slot, func);
+            if (pci_read_16(device, PCI_VENDOR_ID) != PCI_NONE) {
+                pci_scan_func(f, type, bus, slot, func, extra);
+            }
         }
     }
 }
 
-void pci_scan_bus(pci_scan_func_t f, int type, int bus, void *extra)
+/// @brief Scans for the given type of device.
+/// @param f the function to call once we have found the device.
+/// @param type the type of device we are searching for.
+/// @param bus bus number.
+/// @param extra the extra arguemnts.
+void pci_scan_bus(pci_scan_func_t f, int type, uint8_t bus, void *extra)
 {
-    for (int slot = 0; slot < 32; ++slot) {
+    for (uint8_t slot = 0; slot < 32; ++slot) {
         pci_scan_slot(f, type, bus, slot, extra);
     }
 }
 
 void pci_scan(pci_scan_func_t f, int type, void *extra)
 {
-    if ((pci_read_field(0, PCI_HEADER_TYPE, 1) & 0x80) == 0) {
+    // Single PCI host controller.
+    if ((pci_read_8(0, PCI_HEADER_TYPE) & 0x80) == 0) {
         pci_scan_bus(f, type, 0, extra);
-        return;
-    }
-
-    for (int func = 0; func < 8; ++func) {
-        uint32_t device = pci_box_device(0, 0, func);
-
-        if (pci_read_field(device, PCI_VENDOR_ID, 2) == PCI_NONE) {
-            break;
+    } else {
+        for (uint8_t bus = 0; bus < 8; ++bus) {
+            uint32_t device = pci_box_device(bus, 0, 0);
+            if (pci_read_16(device, PCI_VENDOR_ID) != PCI_NONE) {
+                pci_scan_bus(f, type, bus, extra);
+            }
         }
-        pci_scan_bus(f, type, func, extra);
     }
 }
 
@@ -385,7 +444,7 @@ static void find_isa_bridge(uint32_t device, uint16_t vendorid, uint16_t devicei
 static uint32_t pci_isa       = 0;
 static uint32_t pci_remaps[4] = { 0 };
 
-void pci_remap()
+void pci_remap(void)
 {
     pci_scan(&find_isa_bridge, -1, &pci_isa);
 
@@ -393,48 +452,91 @@ void pci_remap()
         pr_default("PCI-to-ISA interrupt mappings by line:\n");
 
         for (int i = 0; i < 4; ++i) {
-            pci_remaps[i] = pci_read_field(pci_isa, 0x60 + i, 1);
+            pci_remaps[i] = pci_read_8(pci_isa, 0x60 + i);
             pr_default("\tLine %d: 0x%2x\n", i + 1, pci_remaps[i]);
         }
 
         uint32_t out = 0;
         memcpy(&out, &pci_remaps, 4);
-        pci_write_field(pci_isa, 0x60, 4, out);
+        pci_write_32(pci_isa, 0x60, out);
     }
 }
 
 int pci_get_interrupt(uint32_t device)
 {
     if (pci_isa == 0) {
-        return pci_read_field(device, PCI_INTERRUPT_LINE, 1);
+        return pci_read_8(device, PCI_INTERRUPT_LINE);
     }
 
-    uint32_t irq_pin = pci_read_field(device, PCI_INTERRUPT_PIN, 1);
+    uint32_t irq_pin = pci_read_8(device, PCI_INTERRUPT_PIN);
 
     if (irq_pin == 0) {
         pr_default("PCI device does not specific interrupt line\n");
-        return pci_read_field(device, PCI_INTERRUPT_LINE, 1);
+        return pci_read_8(device, PCI_INTERRUPT_LINE);
     }
 
-    int pirq = (irq_pin + pci_extract_slot(device) - 2) % 4;
-
-    uint32_t int_line = pci_read_field(device, PCI_INTERRUPT_LINE, 1);
-
+    int pirq          = (irq_pin + PCI_GET_SLOT(device) - 2) % 4;
+    uint32_t int_line = pci_read_8(device, PCI_INTERRUPT_LINE);
     pr_default("Slot is %d, irq pin is %d, so pirq is %d and that maps to %d?"
                "int_line=%d\n",
-               pci_extract_slot(device), irq_pin, pirq, pci_remaps[pirq],
+               PCI_GET_SLOT(device), irq_pin, pirq, pci_remaps[pirq],
                int_line);
-
     if (pci_remaps[pirq] == 0x80) {
         pr_default("Not mapped, remapping?\n");
         pci_remaps[pirq] = int_line;
         uint32_t out     = 0;
         memcpy(&out, &pci_remaps, 4);
-        pci_write_field(pci_isa, 0x60, 4, out);
-        return pci_read_field(device, PCI_INTERRUPT_LINE, 1);
+        pci_write_32(pci_isa, 0x60, out);
+        return pci_read_8(device, PCI_INTERRUPT_LINE);
     }
-
     return pci_remaps[pirq];
+}
+
+void pci_dump_device_data(uint32_t device, uint16_t vendorid, uint16_t deviceid)
+{
+    uint8_t bus = PCI_GET_BUS(device), slot = PCI_GET_SLOT(device), func = PCI_GET_FUNC(device);
+    pr_debug("%2x:%x.%d (%s, %s)\n",
+             bus, slot, func,
+             pci_vendor_lookup(vendorid),
+             pci_device_lookup(vendorid, deviceid));
+    pr_debug("    %-12s: %s\n",
+             "Type", pci_type_lookup(pci_find_type(device)),
+             "Command", pci_read_16(device, PCI_COMMAND));
+    pr_debug("    %-12s: %8x, %-12s: %8x\n",
+             "Status", pci_read_16(device, PCI_STATUS),
+             "Command", pci_read_16(device, PCI_COMMAND));
+    pr_debug("    %-12s: %08x, %-12s: %08x, %-12s: %08x\n",
+             "BAR0", pci_read_32(device, PCI_BASE_ADDRESS_0),
+             "BAR1", pci_read_32(device, PCI_BASE_ADDRESS_1),
+             "BAR2", pci_read_32(device, PCI_BASE_ADDRESS_2));
+    pr_debug("    %-12s: %08x, %-12s: %08x, %-12s: %08x\n",
+             "BAR3", pci_read_32(device, PCI_BASE_ADDRESS_3),
+             "BAR4", pci_read_32(device, PCI_BASE_ADDRESS_4),
+             "BAR5", pci_read_32(device, PCI_BASE_ADDRESS_5));
+    pr_debug("    %-12s: %8d, %-12s: %8d, %-12s: %8d\n",
+             "Int. Ping", pci_read_8(device, PCI_INTERRUPT_PIN),
+             "Line", pci_read_8(device, PCI_INTERRUPT_LINE),
+             "Number", pci_get_interrupt(device));
+    pr_debug("    %-12s: %8d, %-12s: %8d, %-12s: %8d\n",
+             "Revision", pci_read_8(device, PCI_REVISION_ID),
+             "Cache L. Sz.", pci_read_8(device, PCI_CACHE_LINE_SIZE),
+             "Latency Tmr.", pci_read_8(device, PCI_LATENCY_TIMER));
+    pr_debug("    %-12s: %8d, %-12s: %8d, %-12s: %8d\n",
+             "Header Type", pci_read_8(device, PCI_HEADER_TYPE),
+             "BIST", pci_read_8(device, PCI_BIST),
+             "Cardbus CIS", pci_read_8(device, PCI_CARDBUS_CIS));
+#if 0
+    // pr_default(" Subsystem V. ID : 0x%08x\n", pci_read_field(device, PCI_SUBSYSTEM_VENDOR_ID, 2));
+    // pr_default(" Subsystem ID    : 0x%08x\n", pci_read_field(device, PCI_SUBSYSTEM_ID, 2));
+    // pr_default(" ROM Base Address: 0x%08x\n", pci_read_field(device, PCI_ROM_ADDRESS, 4));
+    // pr_default(" PCI Cp. LinkList: 0x%08x\n", pci_read_field(device, PCI_CAPABILITY_LIST, 1));
+    // pr_default(" Max Latency     : 0x%08x\n", pci_read_field(device, PCI_MAX_LAT, 1));
+    // pr_default(" Min Grant       : 0x%08x\n", pci_read_field(device, PCI_MIN_GNT, 1));
+    // pr_default(" Interrupt Pin   : %2d\n", pci_read_field(device, PCI_INTERRUPT_PIN, 1));
+    // pr_default(" Interrupt Line  : %2d\n", pci_read_field(device, PCI_INTERRUPT_LINE, 1));
+    // pr_default(" Interrupt Number: %2d\n", pci_get_interrupt(device));
+    // pr_default("\n");
+#endif
 }
 
 static void __scan_count(uint32_t device, uint16_t vendorid, uint16_t deviceid, void *extra)
@@ -449,37 +551,11 @@ static void __scan_count(uint32_t device, uint16_t vendorid, uint16_t deviceid, 
 static void __scan_hit_list(uint32_t device, uint16_t vendorid, uint16_t deviceid, void *extra)
 {
     (void)extra;
-    pr_default("%2x:%2x.%d\n", pci_extract_bus(device), pci_extract_slot(device), pci_extract_func(device), deviceid);
-    pr_default(" Vendor          : [0x%06x] %s\n", vendorid, pci_vendor_lookup(vendorid));
-    pr_default(" Device          : [0x%06x] %s\n", deviceid, pci_device_lookup(vendorid, deviceid));
-    pr_default(" Type            : [0x%06x] %s\n", pci_find_type(device), pci_class_lookup(pci_find_type(device)));
-    pr_default(" Status          : 0x%4x\n", pci_read_field(device, PCI_STATUS, 2));
-    pr_default(" Command         : 0x%4x\n", pci_read_field(device, PCI_COMMAND, 2));
-    pr_default(" Revision        : %2d\n", pci_read_field(device, PCI_REVISION_ID, 1));
-    pr_default(" Cache Line Size : %2d\n", pci_read_field(device, PCI_CACHE_LINE_SIZE, 1));
-    pr_default(" Latency Timer   : %2d\n", pci_read_field(device, PCI_LATENCY_TIMER, 1));
-    pr_default(" Header Type     : %2d\n", pci_read_field(device, PCI_HEADER_TYPE, 1));
-    pr_default(" BIST            : %2d\n", pci_read_field(device, PCI_BIST, 1));
-    pr_default(" BAR0 : 0x%08x\n", pci_read_field(device, PCI_BASE_ADDRESS_0, 4));
-    pr_default(" BAR1 : 0x%08x\n", pci_read_field(device, PCI_BASE_ADDRESS_1, 4));
-    pr_default(" BAR2 : 0x%08x\n", pci_read_field(device, PCI_BASE_ADDRESS_2, 4));
-    pr_default(" BAR3 : 0x%08x\n", pci_read_field(device, PCI_BASE_ADDRESS_3, 4));
-    pr_default(" BAR4 : 0x%08x\n", pci_read_field(device, PCI_BASE_ADDRESS_4, 4));
-    pr_default(" BAR6 : 0x%08x\n", pci_read_field(device, PCI_BASE_ADDRESS_5, 4));
-    pr_default(" Cardbus CIS     : 0x%08x\n", pci_read_field(device, PCI_CARDBUS_CIS, 4));
-    pr_default(" Subsystem V. ID : 0x%08x\n", pci_read_field(device, PCI_SUBSYSTEM_VENDOR_ID, 2));
-    pr_default(" Subsystem ID    : 0x%08x\n", pci_read_field(device, PCI_SUBSYSTEM_ID, 2));
-    pr_default(" ROM Base Address: 0x%08x\n", pci_read_field(device, PCI_ROM_ADDRESS, 4));
-    pr_default(" PCI Cp. LinkList: 0x%08x\n", pci_read_field(device, PCI_CAPABILITY_LIST, 1));
-    pr_default(" Max Latency     : 0x%08x\n", pci_read_field(device, PCI_MAX_LAT, 1));
-    pr_default(" Min Grant       : 0x%08x\n", pci_read_field(device, PCI_MIN_GNT, 1));
-    pr_default(" Interrupt Pin   : %2d\n", pci_read_field(device, PCI_INTERRUPT_PIN, 1));
-    pr_default(" Interrupt Line  : %2d\n", pci_read_field(device, PCI_INTERRUPT_LINE, 1));
-    pr_default(" Interrupt Number: %2d\n", pci_get_interrupt(device));
-    pr_default("\n");
+    pci_dump_device_data(device, vendorid, deviceid);
+    pr_debug("\n");
 }
 
-void pci_debug_scan()
+void pci_debug_scan(void)
 {
     pr_default("\n--------------------------------------------------\n");
     pr_default("Counting PCI entities...\n");

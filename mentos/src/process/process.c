@@ -1,30 +1,28 @@
 /// @file process.c
 /// @brief Process data structures and functions.
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-// Include the kernel log levels.
-#include "sys/kernel_levels.h"
-/// Change the header.
-#define __DEBUG_HEADER__ "[PROC  ]"
-/// Set the log level.
-#define __DEBUG_LEVEL__ LOGLEVEL_NOTICE
+// Setup the logging for this file (do this before any other include).
+#include "sys/kernel_levels.h"           // Include kernel log levels.
+#define __DEBUG_HEADER__ "[PROC  ]"      ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
+#include "io/debug.h"                    // Include debugging functions.
 
+#include "assert.h"
+#include "elf/elf.h"
+#include "fcntl.h"
+#include "fs/vfs.h"
+#include "hardware/timer.h"
+#include "klib/stack_helper.h"
+#include "libgen.h"
+#include "process/prio.h"
 #include "process/process.h"
 #include "process/scheduler.h"
-#include "assert.h"
-#include "libgen.h"
-#include "string.h"
-#include "hardware/timer.h"
-#include "sys/errno.h"
-#include "fcntl.h"
-#include "system/panic.h"
-#include "io/debug.h"
 #include "process/wait.h"
-#include "process/prio.h"
-#include "fs/vfs.h"
-#include "elf/elf.h"
-#include "klib/stack_helper.h"
+#include "string.h"
+#include "sys/errno.h"
+#include "system/panic.h"
 
 /// Cache for creating the task structs.
 static kmem_cache_t *task_struct_cache;
@@ -37,8 +35,9 @@ static task_struct *init_proc;
 static inline int __count_args(char **args)
 {
     int argc = 0;
-    while (args[argc] != NULL)
+    while (args[argc] != NULL) {
         ++argc;
+    }
     return argc;
 }
 
@@ -129,8 +128,9 @@ static int __load_executable(const char *path, task_struct *task, uint32_t *entr
     // they should share the mm, so the destroy_process_image must be called
     // only when all the threads are terminated. This can be accomplished by using
     // an internal counter on the mm.
-    if (task->mm)
+    if (task->mm) {
         destroy_process_image(task->mm);
+    }
     // Return code variable.
     int ret = 0;
     // Recreate the memory of the process.
@@ -156,10 +156,11 @@ static inline task_struct *__alloc_task(task_struct *source, task_struct *parent
     // Set the state of the process as running.
     proc->state = TASK_RUNNING;
     // Set the current opened file descriptors and the maximum number of file descriptors.
-    if (source)
+    if (source) {
         vfs_dup_task(proc, source);
-    else
+    } else {
         vfs_init_task(proc);
+    }
     // Set the pointer to process's parent.
     proc->parent = parent;
     // Initialize the list_head.
@@ -173,8 +174,9 @@ static inline task_struct *__alloc_task(task_struct *source, task_struct *parent
         // Set the new_process as child of current.
         list_head_insert_before(&proc->sibling, &parent->children);
     }
-    if (source)
+    if (source) {
         memcpy(&proc->thread, &source->thread, sizeof(thread_struct_t));
+    }
     // Set the statistics of the process.
     proc->uid                   = 0;
     proc->gid                   = 0;
@@ -198,17 +200,19 @@ static inline task_struct *__alloc_task(task_struct *source, task_struct *parent
     // Initialize the exit code of the process.
     proc->exit_code = 0;
     // Copy the name.
-    if (name)
+    if (name) {
         strcpy(proc->name, name);
+    }
     // Do not touch the task's segments.
     proc->mm = NULL;
     // Initialize the error number.
     proc->error_no = 0;
     // Initialize the current working directory.
-    if (source)
+    if (source) {
         strcpy(proc->cwd, source->cwd);
-    else
+    } else {
         strcpy(proc->cwd, "/");
+    }
     // Clear the signal handler.
     memset(&proc->sighand, 0x00, sizeof(sighand_t));
     spinlock_init(&proc->sighand.siglock);
@@ -242,7 +246,7 @@ static inline task_struct *__alloc_task(task_struct *source, task_struct *parent
     return proc;
 }
 
-int init_tasking()
+int init_tasking(void)
 {
     if ((task_struct_cache = KMEM_CREATE(task_struct)) == NULL) {
         return 0;
@@ -350,10 +354,14 @@ int sys_chdir(char const *path)
 {
     task_struct *current = scheduler_get_current_process();
     assert(current && "There is no running process.");
-    if (!path)
+    if (!path) {
         return -EFAULT;
+    }
     char absolute_path[PATH_MAX];
-    realpath(path, absolute_path);
+    if (!realpath(path, absolute_path, sizeof(absolute_path))) {
+        pr_err("Cannot get the absolute path for path `%s`.\n", path);
+        return -ENOENT;
+    }
     // Check that the directory exists.
     vfs_file_t *dir = vfs_open(absolute_path, O_RDONLY | O_DIRECTORY, S_IXUSR);
     if (dir) {
@@ -370,18 +378,24 @@ int sys_fchdir(int fd)
     task_struct *current = scheduler_get_current_process();
     assert(current && "There is no running process.");
     // Check if it is a valid file descriptor.
-    if ((fd < 0) || (fd >= current->max_fd))
+    if ((fd < 0) || (fd >= current->max_fd)) {
         return -EBADF;
+    }
     // Get the file descriptor.
     vfs_file_descriptor_t *vfd = &current->fd_list[fd];
     // Check if the file descriptor file is set.
-    if (vfd->file_struct == NULL)
+    if (vfd->file_struct == NULL) {
         return -ENOENT;
+    }
     // Check that the path points to a directory.
-    if (!bitmask_check(vfd->file_struct->flags, DT_DIR))
+    if (!bitmask_check(vfd->file_struct->flags, DT_DIR)) {
         return -ENOTDIR;
+    }
     char absolute_path[PATH_MAX];
-    realpath(vfd->file_struct->name, absolute_path);
+    if (!realpath(vfd->file_struct->name, absolute_path, sizeof(absolute_path))) {
+        pr_err("Cannot get the absolute path for path `%s`.\n", vfd->file_struct->name);
+        return -ENOENT;
+    }
     strcpy(current->cwd, absolute_path);
     return 0;
 }
@@ -389,8 +403,9 @@ int sys_fchdir(int fd)
 pid_t sys_fork(pt_regs *f)
 {
     task_struct *current = scheduler_get_current_process();
-    if (current == NULL)
+    if (current == NULL) {
         kernel_panic("There is no current process!");
+    }
 
     pr_debug("Forking   '%s' (pid: %d)...\n", current->name, current->pid);
 
@@ -425,8 +440,9 @@ int sys_execve(pt_regs *f)
 {
     // Check the current process.
     task_struct *current = scheduler_get_current_process();
-    if (current == NULL)
+    if (current == NULL) {
         kernel_panic("There is no current process!");
+    }
 
     char **origin_argv, **saved_argv, **final_argv;
     char **origin_envp, **saved_envp, **final_envp;

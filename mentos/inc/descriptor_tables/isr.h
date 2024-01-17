@@ -1,6 +1,6 @@
 /// @file isr.h
 /// @brief Data structures concerning the Interrupt Service Routines (ISRs).
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 /// @addtogroup descriptor_tables Descriptor Tables
 /// @{
@@ -21,11 +21,11 @@ typedef void (*interrupt_handler_t)(pt_regs *f);
 
 /// @brief For each exceptions isrs_init sets a default handler which
 ///        prints the rose exceptions and stops kernel execution.
-void isrs_init();
+void isrs_init(void);
 
 /// @brief For each interrupt irq_init sets a default handler which
 ///        prints the rose IRQ line and stops kernel execution.
-void irq_init();
+void irq_init(void);
 
 /* Even if an interrupt service routine is called for exceptions and
  * interrupts, we use two distinct methods to logically setup an ISR to

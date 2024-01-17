@@ -1,11 +1,11 @@
 /// @file vfs_types.h
 /// @brief Virtual filesystem data types.
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #pragma once
 
-#include "klib/list_head.h"
+#include "sys/list_head.h"
 #include "sys/dirent.h"
 #include "bits/stat.h"
 #include "stdint.h"
@@ -25,7 +25,7 @@ typedef int (*vfs_rmdir_callback)(const char *);
 /// Function used to open a file (or directory).
 typedef vfs_file_t *(*vfs_creat_callback)(const char *, mode_t);
 /// Function used to read the entries of a directory.
-typedef int (*vfs_getdents_callback)(vfs_file_t *, dirent_t *, off_t, size_t);
+typedef ssize_t (*vfs_getdents_callback)(vfs_file_t *, dirent_t *, off_t, size_t);
 /// Function used to open a file (or directory).
 typedef vfs_file_t *(*vfs_open_callback)(const char *, int, mode_t);
 /// Function used to remove a file.
@@ -44,6 +44,10 @@ typedef int (*vfs_stat_callback)(const char *, stat_t *);
 typedef int (*vfs_fstat_callback)(vfs_file_t *, stat_t *);
 /// Function used to perform ioctl on files.
 typedef int (*vfs_ioctl_callback)(vfs_file_t *, int, void *);
+/// Function for creating symbolic links.
+typedef int (*vfs_symlink_callback)(const char *, const char *);
+/// Function that reads the symbolic link data associated with a file.
+typedef ssize_t (*vfs_readlink_callback)(vfs_file_t *, char *, size_t);
 
 /// @brief Filesystem information.
 typedef struct file_system_type {
@@ -65,6 +69,8 @@ typedef struct vfs_sys_operations_t {
     vfs_stat_callback stat_f;
     /// File creation function.
     vfs_creat_callback creat_f;
+    /// Symbolic link creation function.
+    vfs_symlink_callback symlink_f;
 } vfs_sys_operations_t;
 
 /// @brief Set of functions used to perform operations on files.
@@ -87,6 +93,8 @@ typedef struct vfs_file_operations_t {
     vfs_ioctl_callback ioctl_f;
     /// Read entries inside the directory.
     vfs_getdents_callback getdents_f;
+    /// Reads the symbolik link data.
+    vfs_readlink_callback readlink_f;
 } vfs_file_operations_t;
 
 /// @brief Data structure that contains information about the mounted filesystems.

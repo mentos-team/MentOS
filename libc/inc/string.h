@@ -1,6 +1,6 @@
 /// @file string.h
 /// @brief String routines.
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #pragma once
@@ -169,6 +169,15 @@ char *strtok(char *str, const char *delim);
 /// parsed, and the value of saveptr is ignored. In subsequent calls, str
 /// should be NULL, and saveptr should be unchanged since the previous call.
 char *strtok_r(char *str, const char *delim, char **saveptr);
+
+/// @brief Parses the string using the separator, and at each call it saves the
+/// parsed token in buffer. The pointer `string` will be modified.
+/// @param string cursor used to parse the string, it will be modified.
+/// @param separators the list of separators we are using.
+/// @param buffer the buffer where we save the parsed token.
+/// @param buflen the length of the buffer.
+/// @return 1 if we still have things to parse, 0 if we finished parsing.
+int tokenize(const char *string, char *separators, size_t *offset, char *buffer, ssize_t buflen);
 
 /// @brief Copies the values of num bytes from the location pointed by source
 /// to the memory block pointed by destination.

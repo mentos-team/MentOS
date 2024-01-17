@@ -1,15 +1,15 @@
 /// @file time.c
 /// @brief Clock functions.
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #include "io/debug.h"
-#include "time.h"
-#include "stdio.h"
-#include "stddef.h"
-#include "io/port_io.h"
-#include "hardware/timer.h"
 #include "drivers/rtc.h"
+#include "hardware/timer.h"
+#include "io/port_io.h"
+#include "stddef.h"
+#include "stdio.h"
+#include "time.h"
 
 static const char *str_weekdays[] = { "Sunday", "Monday", "Tuesday", "Wednesday",
                                       "Thursday", "Friday", "Saturday" };
@@ -91,7 +91,7 @@ tm_t *localtime(const time_t *time)
     t /= 24;
     // Convert Unix time to date
     a = (unsigned int)((4 * t + 102032) / 146097 + 15);
-    b = (unsigned int)(t + 2442113 + a - (a / 4));
+    b = (t + 2442113 + a - (a / 4));
     c = (20 * b - 2442) / 7305;
     d = b - 365 * c - (c / 4);
     e = d * 1000 / 30601;

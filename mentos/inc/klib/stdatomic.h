@@ -1,12 +1,10 @@
 /// @file stdatomic.h
 /// @brief
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #pragma once
 
-#include "stdint.h"
-#include "stdbool.h"
 #include "klib/compiler.h"
 
 /// @brief Standard structure for atomic operations (see below
@@ -28,87 +26,109 @@ typedef volatile unsigned atomic_t;
                                          :         \
                                          : "memory")
 
-/// @brief Atomically sets the value of ptr with the value of x.
-///
-/// @param ptr Pointer to the atomic variable to set.
-/// @param x   The value to set.
+/// @brief Atomically sets `value` at `ptr`.
+/// @param ptr the pointer we are working with.
+/// @param value the value to set.
 /// @return The final value of the atomic variable.
-inline static int32_t atomic_set_and_test(atomic_t *ptr, int32_t x)
+inline static int atomic_set_and_test(atomic_t *ptr, int value)
 {
-    __asm__ __volatile__("xchgl %0,%1"       // instruction
-                         : "=r"(x)           // outputs
-                         : "m"(*ptr), "0"(x) // inputs
-                         : "memory");        // side effects
-    return x;
+    // The + in "+r" and "+m" denotes a read-modify-write operand.
+    __asm__ __volatile__(LOCK_PREFIX               // Lock
+                         "xchgl %0, %1"            // Instruction
+                         : "+r"(value), "+m"(*ptr) // Input + Output
+                         :                         // No input-only
+                         : "memory");              // Side effects
+    return value;
 }
 
-/// @brief Atomically set ptr equal to i.
-inline static void atomic_set(atomic_t *ptr, int32_t i)
+/// @brief Atomically set the value pointed by `ptr` to `value`.
+/// @param ptr the pointer we are working with.
+/// @param value the value we need to set.
+inline static void atomic_set(atomic_t *ptr, int value)
 {
-    atomic_set_and_test(ptr, i);
+    atomic_set_and_test(ptr, value);
 }
 
-/// @brief Atomically read the integer value of ptr.
-inline static int32_t atomic_read(const atomic_t *ptr)
+/// @brief Atomically read the value pointed by `ptr`.
+/// @param ptr the pointer we are working with.
+/// @return the value we read.
+inline static int atomic_read(const atomic_t *ptr)
 {
     return READ_ONCE(*ptr);
 }
 
-/// @brief Atomically add i to ptr.
-inline static int32_t atomic_add(atomic_t const *ptr, int32_t i)
+/// @brief Atomically add `value` to the value pointed by `ptr`.
+/// @param ptr the pointer we are working with.
+/// @param value the value we need to add.
+/// @return the result of the operation.
+inline static int atomic_add(atomic_t *ptr, int value)
 {
-    int result = i;
-    __asm__ __volatile__(LOCK_PREFIX "xaddl %0, %1"
-                         : "=r"(i)
-                         : "m"(ptr), "0"(i)
-                         : "memory", "cc");
-    return result + i;
+    // The + in "+r" and "+m" denotes a read-modify-write operand.
+    __asm__ __volatile__(LOCK_PREFIX               // Lock
+                         "xaddl %0, %1"            // Instruction
+                         : "+r"(value), "+m"(*ptr) // Input + Output
+                         :                         // No input-only
+                         : "memory");              // Side effects
+    return value;
 }
 
-/// @brief Atomically subtract i from ptr.
-inline static int32_t atomic_sub(atomic_t *ptr, int32_t i)
+/// @brief Atomically subtract `value` from the value pointed by `ptr`.
+/// @param ptr the pointer we are working with.
+/// @param value the value we need to subtract.
+/// @return the result of the operation.
+inline static int atomic_sub(atomic_t *ptr, int value)
 {
-    return atomic_add(ptr, -i);
+    return atomic_add(ptr, -value);
 }
 
-/// @brief Atomically add one to ptr.
-inline static int32_t atomic_inc(atomic_t *ptr)
+/// @brief Atomically increment the value at `ptr`.
+/// @param ptr the pointer we are working with.
+/// @return the result of the operation.
+inline static int atomic_inc(atomic_t *ptr)
 {
     return atomic_add(ptr, 1);
 }
 
-/// @brief Atomically subtract one from ptr.
-inline static int32_t atomic_dec(atomic_t *ptr)
+/// @brief Atomically decrement the value at `ptr`.
+/// @param ptr the pointer we are working with.
+/// @return the result of the operation.
+inline static int atomic_dec(atomic_t *ptr)
 {
     return atomic_add(ptr, -1);
 }
 
-/// @brief Atomically add i to ptr and return true if the result is negative;
-///        otherwise false.
-inline static bool_t atomic_add_negative(atomic_t *ptr, int32_t i)
+/// @brief Atomically add `value` to `ptr` and checks if the result is negative.
+/// @param ptr the pointer we are working with.
+/// @param value the value we need to add.
+/// @return true if the result is negative, false otherwise.
+inline static int atomic_add_negative(atomic_t *ptr, int value)
 {
-    return (bool_t)(atomic_add(ptr, i) < 0);
+    return atomic_add(ptr, value) < 0;
 }
 
-/// @brief Atomically subtract i from ptr and return true if the result is
-///        zero; otherwise false.
-inline static bool_t atomic_sub_and_test(atomic_t *ptr, int32_t i)
+/// @brief Atomically subtract `value` from `ptr` and checks if the result is zero.
+/// @param ptr the pointer we are working with.
+/// @param value the value we need to subtract.
+/// @return true if the result is zero, false otherwise.
+inline static int atomic_sub_and_test(atomic_t *ptr, int value)
 {
-    return (bool_t)(atomic_sub(ptr, i) == 0);
+    return atomic_sub(ptr, value) == 0;
 }
 
-/// @brief Atomically increment ptr by one and return true if the result is
-///        zero; false otherwise.
-inline static int32_t atomic_inc_and_test(atomic_t *ptr)
+/// @brief Atomically increment `ptr` and checks if the result is zero.
+/// @param ptr the pointer we are working with.
+/// @return true if the result is zero, false otherwise.
+inline static int atomic_inc_and_test(atomic_t *ptr)
 {
-    return (bool_t)(atomic_inc(ptr) == 0);
+    return atomic_inc(ptr) == 0;
 }
 
-/// @brief Atomically decrement ptr by one and return true if zero; false
-///        otherwise.
-inline static int32_t atomic_dec_and_test(atomic_t *ptr)
+/// @brief Atomically decrement `ptr` and checks if the result is zero.
+/// @param ptr the pointer we are working with.
+/// @return true if the result is zero, false otherwise.
+inline static int atomic_dec_and_test(atomic_t *ptr)
 {
-    return (bool_t)(atomic_dec(ptr) == 0);
+    return atomic_dec(ptr) == 0;
 }
 
 /// @brief Atomically sets a bit in memory, using Bit Test And Set (bts).
@@ -116,7 +136,7 @@ inline static int32_t atomic_dec_and_test(atomic_t *ptr)
 /// @param base   The base address.
 static inline void set_bit(int offset, volatile unsigned long *base)
 {
-    __asm__ __volatile__("btsl %[offset],%[base]"
+    __asm__ __volatile__("btsl %[offset], %[base]"
                          : [base] "=m"(*(volatile long *)base)
                          : [offset] "Ir"(offset));
 }

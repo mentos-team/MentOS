@@ -1,59 +1,72 @@
 /// @file grp.c
 /// @brief
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #include "grp.h"
-#include "sys/unistd.h"
-#include "sys/errno.h"
 #include "assert.h"
-#include "string.h"
-#include "stdio.h"
-#include "debug.h"
 #include "fcntl.h"
+#include "io/debug.h"
+#include "stdio.h"
+#include "string.h"
+#include "sys/errno.h"
+#include "sys/unistd.h"
 
+/// Holds the file descriptor while we are working with `/etc/group`.
 static int __fd = -1;
 
 /// @brief It parses the line (as string) and saves its content inside the
 /// group_t structure.
 /// @param grp the struct where we store the information.
-/// @param buf the buffer from which we extract the information.
+/// @param buf the line from which we extract the information.
 static inline void __parse_line(group_t *grp, char *buf)
 {
     assert(grp && "Received null grp!");
     char *token;
     // Parse the group name.
-    if ((token = strtok(buf, ":")) != NULL)
+    token = strtok(buf, ":");
+    if (token != NULL) {
         grp->gr_name = token;
+    }
     // Parse the group passwd.
-    if ((token = strtok(NULL, ":")) != NULL)
+    token = strtok(NULL, ":");
+    if (token != NULL) {
         grp->gr_passwd = token;
+    }
     // Parse the group id.
-    if ((token = strtok(NULL, ":")) != NULL)
+    token = strtok(NULL, ":");
+    if (token != NULL) {
         grp->gr_gid = atoi(token);
-
+    }
     size_t found_users = 0;
     while ((token = strtok(NULL, ",\n\0")) != NULL && found_users < MAX_MEMBERS_PER_GROUP) {
         grp->gr_mem[found_users] = token;
         found_users += 1;
     }
-
     // Null terminate array
     grp->gr_mem[found_users] = "\0";
 }
 
-static inline char *__search_entry(int fd, char *buf, int buflen, const char *name, gid_t gid)
+/// @brief Searches an entry in `/etc/group`.
+/// @param fd the file descriptor pointing to `/etc/group`.
+/// @param buf the buffer we are going to use to search the entry.
+/// @param buflen the length of the buffer.
+/// @param name the name we are looking for.
+/// @param gid the group id we must match.
+/// @return 1 on success, 0 on failure.
+static inline int __search_entry(int fd, char *buf, size_t buflen, const char *name, gid_t gid)
 {
     int ret;
     char c;
     int pos = 0;
     while ((ret = read(fd, &c, 1U))) {
         // Skip carriage return.
-        if (c == '\r')
+        if (c == '\r') {
             continue;
+        }
         if (pos >= buflen) {
             errno = ERANGE;
-            return NULL;
+            return 0;
         }
         // If we have found a newline or the EOF, parse the entry.
         if ((c == '\n') || (ret == EOF)) {
@@ -61,8 +74,9 @@ static inline char *__search_entry(int fd, char *buf, int buflen, const char *na
             buf[pos] = 0;
             // Check the entry.
             if (name) {
-                if (strncmp(buf, name, strlen(name)) == 0)
-                    return buf;
+                if (strncmp(buf, name, strlen(name)) == 0) {
+                    return 1;
+                }
             } else {
                 int gid_start = -1, col_count = 0;
                 for (int i = 0; i < pos; ++i) {
@@ -77,21 +91,23 @@ static inline char *__search_entry(int fd, char *buf, int buflen, const char *na
                     // Parse the gid.
                     int found_gid = atoi(&buf[gid_start]);
                     // Check the gid.
-                    if (found_gid == gid)
-                        return buf;
+                    if (found_gid == gid) {
+                        return 1;
+                    }
                 }
             }
             // Reset the index.
             pos = 0;
             // If we have reached the EOF stop.
-            if (ret == EOF)
+            if (ret == EOF) {
                 break;
+            }
         } else {
             buf[pos++] = c;
         }
     }
     errno = ENOENT;
-    return NULL;
+    return 0;
 }
 
 group_t *getgrgid(gid_t gid)
@@ -100,23 +116,26 @@ group_t *getgrgid(gid_t gid)
     static char buffer[BUFSIZ];
 
     group_t *result;
-    if (!getgrgid_r(gid, &grp, buffer, BUFSIZ, &result))
+    if (!getgrgid_r(gid, &grp, buffer, BUFSIZ, &result)) {
         return NULL;
+    }
 
     return &grp;
 }
 
 group_t *getgrnam(const char *name)
 {
-    if (name == NULL)
+    if (name == NULL) {
         return NULL;
+    }
 
     static group_t grp;
     static char buffer[BUFSIZ];
 
     group_t *result;
-    if (!getgrnam_r(name, &grp, buffer, BUFSIZ, &result))
+    if (!getgrnam_r(name, &grp, buffer, BUFSIZ, &result)) {
         return NULL;
+    }
 
     return &grp;
 }
@@ -130,12 +149,11 @@ int getgrgid_r(gid_t gid, group_t *group, char *buf, size_t buflen, group_t **re
         return 0;
     }
 
-    char *entry = __search_entry(fd, buf, buflen, NULL, gid);
-    if (entry != NULL) {
+    if (__search_entry(fd, buf, buflen, NULL, gid)) {
         // Close the file.
         close(fd);
         // Parse the line.
-        __parse_line(group, entry);
+        __parse_line(group, buf);
         // Return success.
         return 1;
     }
@@ -155,12 +173,11 @@ int getgrnam_r(const char *name, group_t *group, char *buf, size_t buflen, group
         return 0;
     }
 
-    char *entry = __search_entry(fd, buf, buflen, name, 0);
-    if (entry != NULL) {
+    if (__search_entry(fd, buf, buflen, name, 0)) {
         // Close the file.
         close(fd);
         // Parse the line.
-        __parse_line(group, entry);
+        __parse_line(group, buf);
         // Return success.
         return 1;
     }
@@ -191,8 +208,9 @@ group_t *getgrent(void)
     static char buffer[BUFSIZ];
     while ((ret = read(__fd, &c, 1U))) {
         // Skip carriage return.
-        if (c == '\r')
+        if (c == '\r') {
             continue;
+        }
 
         if (pos >= BUFSIZ) {
             errno = ERANGE;
@@ -212,8 +230,9 @@ group_t *getgrent(void)
             }
 
             // If we have reached the EOF stop.
-            if (ret == EOF)
+            if (ret == EOF) {
                 break;
+            }
 
         } else {
             buffer[pos++] = c;

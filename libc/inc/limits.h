@@ -1,6 +1,6 @@
 /// @file limits.h
 /// @brief OS numeric limits.
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #pragma once
@@ -52,6 +52,9 @@
 
 /// Maximum number of characters in a path name.
 #define PATH_MAX 4096
+
+/// Maximum length of arguments provided to exec function.
+#define ARG_MAX 256
 
 /// Maximum pid number.
 #define PID_MAX_LIMIT 32768

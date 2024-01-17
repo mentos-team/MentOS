@@ -118,5 +118,5 @@ files/bin/**
 # ISO creation files.
 iso/boot/*.bin
 
-# Visual Studio Code
-.vscode
+# ClangD stuff.
+.cache

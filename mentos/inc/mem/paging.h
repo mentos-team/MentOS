@@ -1,6 +1,6 @@
 /// @file paging.h
 /// @brief Implementation of a memory paging management.
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #pragma once
@@ -10,6 +10,7 @@
 #include "kernel.h"
 #include "stddef.h"
 #include "boot.h"
+#include "stdint.h"
 
 /// Size of a page.
 #define PAGE_SIZE 4096U
@@ -136,17 +137,24 @@ typedef struct mm_struct_t {
 /// @brief Cache used to store page tables.
 extern kmem_cache_t *pgtbl_cache;
 
+static inline int vm_area_compare(const list_head *a, const list_head *b)
+{
+    vm_area_struct_t *_a = list_entry(a, vm_area_struct_t, vm_list);
+    vm_area_struct_t *_b = list_entry(b, vm_area_struct_t, vm_list);
+    return _a->vm_start > _b->vm_end;
+}
+
 /// @brief Initializes paging
 /// @param info Information coming from bootloader.
 void paging_init(boot_info_t *info);
 
 /// @brief Provide access to the main page directory.
 /// @return A pointer to the main page directory.
-page_directory_t *paging_get_main_directory();
+page_directory_t *paging_get_main_directory(void);
 
 /// @brief Provide access to the current paging directory.
 /// @return A pointer to the current page directory.
-static inline page_directory_t *paging_get_current_directory()
+static inline page_directory_t *paging_get_current_directory(void)
 {
     return (page_directory_t *)get_cr3();
 }
@@ -167,7 +175,7 @@ void paging_switch_directory_va(page_directory_t *dir);
 void paging_flush_tlb_single(unsigned long addr);
 
 /// @brief Enables paging.
-static inline void paging_enable()
+static inline void paging_enable(void)
 {
     // Clear the PSE bit from cr4.
     set_cr4(bitmask_clear(get_cr4(), CR4_PSE));
@@ -177,7 +185,7 @@ static inline void paging_enable()
 
 /// @brief Returns if paging is enabled.
 /// @return 1 if paging is enables, 0 otherwise.
-static inline int paging_is_enabled()
+static inline int paging_is_enabled(void)
 {
     return bitmask_check(get_cr0(), CR0_PG);
 }
@@ -221,23 +229,49 @@ void mem_clone_vm_area(page_directory_t *src_pgd,
 /// @param size       The size of the segment.
 /// @param pgflags    The flags for the new memory area.
 /// @param gfpflags   The Get Free Pages flags.
-/// @return The virtual address of the starting point of the segment.
-uint32_t create_vm_area(mm_struct_t *mm,
-                        uint32_t virt_start,
-                        size_t size,
-                        uint32_t pgflags,
-                        uint32_t gfpflags);
+/// @return The newly created virtual memory area descriptor.
+vm_area_struct_t *create_vm_area(mm_struct_t *mm,
+                                 uint32_t virt_start,
+                                 size_t size,
+                                 uint32_t pgflags,
+                                 uint32_t gfpflags);
 
 /// @brief Clone a virtual memory area, using copy on write if specified
-/// @param mm       The memory descriptor which will contain the new segment.
-/// @param area     The area to clone
-/// @param cow      Whether to use copy-on-write or just copy everything.
-/// @param gfpflags The Get Free Pages flags.
+/// @param mm the memory descriptor which will contain the new segment.
+/// @param area the area to clone
+/// @param cow whether to use copy-on-write or just copy everything.
+/// @param gfpflags the Get Free Pages flags.
 /// @return Zero on success.
 uint32_t clone_vm_area(mm_struct_t *mm,
                        vm_area_struct_t *area,
                        int cow,
                        uint32_t gfpflags);
+
+/// @brief Destroys a virtual memory area.
+/// @param mm the memory descriptor from which we will destroy the area.
+/// @param area the are we want to destroy.
+/// @return 0 if the area was destroyed, or 1 if the operation failed.
+int destroy_vm_area(mm_struct_t *mm, vm_area_struct_t *area);
+
+/// @brief Searches for the virtual memory area at the given address.
+/// @param mm the memory descriptor which should contain the area.
+/// @param vm_start the starting address of the area we are looking for.
+/// @return a pointer to the area if we found it, NULL otherwise.
+vm_area_struct_t *find_vm_area(mm_struct_t *mm, uint32_t vm_start);
+
+/// @brief Checks if the given virtual memory area range is valid.
+/// @param mm the memory descriptor which we use to check the range.
+/// @param vm_start the starting address of the area.
+/// @param vm_end the ending address of the area.
+/// @return 1 if it's valid, 0 if it's occupied, -1 if it's outside the memory.
+int is_valid_vm_area(mm_struct_t *mm, uintptr_t vm_start, uintptr_t vm_end);
+
+/// @brief Searches for an empty spot for a new virtual memory area.
+/// @param mm the memory descriptor which should contain the new area.
+/// @param length the size of the empty spot.
+/// @param vm_start where we save the starting address for the new area.
+/// @return 0 on success, 1 on failure.
+int find_free_vm_area(mm_struct_t *mm, size_t length, uintptr_t *vm_start);
 
 /// @brief Creates the main memory descriptor.
 /// @param stack_size The size of the stack in byte.

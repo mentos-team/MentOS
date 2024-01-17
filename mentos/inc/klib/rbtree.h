@@ -1,6 +1,6 @@
 /// @file rbtree.h
 /// @brief Red/Black tree.
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #pragma once
@@ -34,7 +34,7 @@ typedef void (*rbtree_tree_node_f)(rbtree_t *tree, rbtree_node_t *node);
 
 /// @brief Allocate memory for a node.
 /// @return Pointer to the allocated node.
-rbtree_node_t *rbtree_node_alloc();
+rbtree_node_t *rbtree_node_alloc(void);
 
 /// @brief Allocate memory for a node and sets its value.
 /// @param value Value to associated node.
@@ -61,7 +61,7 @@ void rbtree_node_dealloc(rbtree_node_t *node);
 
 /// @brief Allocate memory for a tree.
 /// @return Pointer to the allocated tree.
-rbtree_t *rbtree_tree_alloc();
+rbtree_t *rbtree_tree_alloc(void);
 
 /// @brief Allocate memory for a tree and sets the function used to compare nodes.
 /// @param cmp Function used to compare elements of the tree.
@@ -127,7 +127,7 @@ int rbtree_tree_remove_with_cb(rbtree_t *tree, void *value, rbtree_tree_node_f n
 
 /// @brief Allocate the memory for the iterator.
 /// @return Pointer to the allocated iterator.
-rbtree_iter_t *rbtree_iter_alloc();
+rbtree_iter_t *rbtree_iter_alloc(void);
 
 /// @brief Deallocate the memory for the iterator.
 /// @param iter Pointer to the allocated iterator.
@@ -136,7 +136,7 @@ rbtree_iter_t *rbtree_iter_init(rbtree_iter_t *iter);
 
 /// @brief Allocate the memory for the iterator and initializes it.
 /// @return Pointer to the allocated iterator.
-rbtree_iter_t *rbtree_iter_create();
+rbtree_iter_t *rbtree_iter_create(void);
 
 /// @brief Deallocate the memory for the iterator.
 /// @param iter Pointer to the allocated iterator.

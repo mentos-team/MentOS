@@ -1,24 +1,31 @@
 /// @file utsname.c
 /// @brief Functions used to provide information about the machine & OS.
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "string.h"
-#include "sys/utsname.h"
-#include "version.h"
-#include "io/debug.h"
-#include "sys/errno.h"
+// Setup the logging for this file (do this before any other include).
+#include "sys/kernel_levels.h"           // Include kernel log levels.
+#define __DEBUG_HEADER__ "[UTSNAM]"      ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
+#include "io/debug.h"                    // Include debugging functions.
+
 #include "fcntl.h"
 #include "fs/vfs.h"
+#include "string.h"
+#include "sys/errno.h"
+#include "sys/utsname.h"
+#include "version.h"
 
 static inline int __gethostname(char *name, size_t len)
 {
     // Check if name is an invalid address.
-    if (!name)
+    if (!name) {
         return -EFAULT;
+    }
     // Check if len is negative.
-    if (len < 0)
+    if (len < 0) {
         return -EINVAL;
+    }
     // Open the file.
     vfs_file_t *file = vfs_open("/etc/hostname", O_RDONLY, 0);
     if (file == NULL) {

@@ -1,6 +1,6 @@
 /// @file keymap.h
 /// @brief Keymap for keyboard.
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 /// @addtogroup drivers Device Drivers
 /// @{
@@ -34,7 +34,7 @@ typedef struct keymap_t {
 
 /// @brief Returns the current keymap type.
 /// @return The current keymap type.
-keymap_type_t get_keymap_type();
+keymap_type_t get_keymap_type(void);
 
 /// @brief Changes the current keymap type.
 /// @param type The type to set.
@@ -44,10 +44,10 @@ void set_keymap_type(keymap_type_t type);
 /// @brief Returns the current keymap for the given scancode.
 /// @param scancode the scancode we want.
 /// @return Pointer to the keymap.
-const keymap_t *get_keymap(int scancode);
+const keymap_t *get_keymap(unsigned int scancode);
 
 /// @brief Initializes the supported keymaps.
-void init_keymaps();
+void init_keymaps(void);
 
 /// @name Keyboard Codes
 /// @brief This is the list of keyboard codes.
@@ -157,7 +157,6 @@ void init_keymaps();
 #define KEY_DOWN_ARROW    0xE050U ///< Down Arrow 57424
 #define CODE_BREAK        0x0080U ///< Code break code
 
-#define MULTIMEDIA_SCAN_CODE 0xE0
 /// @}
 
 /// @}

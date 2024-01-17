@@ -1,0 +1,5 @@
+SYNOPSIS
+	ipcs [options]
+
+DESCRIPTION
+	Ipcs shows information on System V inter-process communication facilities.

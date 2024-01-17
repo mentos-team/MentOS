@@ -1,32 +1,26 @@
 /// @file slab.h
 /// @brief Functions and structures for managing memory slabs.
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #pragma once
 
-#include "klib/list_head.h"
+#include "sys/list_head.h"
 #include "stddef.h"
 #include "mem/gfp.h"
 
 /// @brief Type for slab flags.
 typedef unsigned int slab_flags_t;
 
+typedef void (*kmem_fun_t)(void *);
+
 /// Create a new cache.
-#define KMEM_CREATE(objtype) kmem_cache_create(#objtype,          \
-                                               sizeof(objtype),   \
-                                               alignof(objtype), \
-                                               GFP_KERNEL,        \
-                                               NULL,              \
-                                               NULL)
+#define KMEM_CREATE(objtype) \
+    kmem_cache_create(#objtype, sizeof(objtype), alignof(objtype), GFP_KERNEL, NULL, NULL)
 
 /// Creates a new cache and allows to specify the constructor.
-#define KMEM_CREATE_CTOR(objtype, ctor) kmem_cache_create(#objtype,                   \
-                                                          sizeof(objtype),            \
-                                                          alignof(objtype),          \
-                                                          GFP_KERNEL,                 \
-                                                          ((void (*)(void *))(ctor)), \
-                                                          NULL)
+#define KMEM_CREATE_CTOR(objtype, ctor) \
+    kmem_cache_create(#objtype, sizeof(objtype), alignof(objtype), GFP_KERNEL, (kmem_fun_t)(ctor), NULL)
 
 /// @brief Stores the information of a cache.
 typedef struct kmem_cache_t {
@@ -49,9 +43,9 @@ typedef struct kmem_cache_t {
     /// The order for getting free pages.
     unsigned int gfp_order;
     /// Constructor for the elements.
-    void (*ctor)(void *);
+    kmem_fun_t ctor;
     /// Destructor for the elements.
-    void (*dtor)(void *);
+    kmem_fun_t dtor;
     /// Handler for the full slabs list.
     list_head slabs_full;
     /// Handler for the partial slabs list.
@@ -61,7 +55,7 @@ typedef struct kmem_cache_t {
 } kmem_cache_t;
 
 /// Initialize the slab system
-void kmem_cache_init();
+void kmem_cache_init(void);
 
 /// @brief Creates a new slab cache.
 /// @param name  Name of the cache.
@@ -76,8 +70,8 @@ kmem_cache_t *kmem_cache_create(
     unsigned int size,
     unsigned int align,
     slab_flags_t flags,
-    void (*ctor)(void *),
-    void (*dtor)(void *));
+    kmem_fun_t ctor,
+    kmem_fun_t dtor);
 
 /// @brief Deletes the given cache.
 /// @param cachep Pointer to the cache.

@@ -1,6 +1,6 @@
 /// @file module.h
 /// @brief
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #pragma once
@@ -21,8 +21,8 @@ int init_modules(multiboot_info_t *header);
 /// @brief Relocates modules to virtual mapped low memory, to allow physical
 ///        unmapping of the first part of the ram.
 /// @return 1 on success, 0 on failure.
-int relocate_modules();
+int relocate_modules(void);
 
 /// @brief Returns the address where the modules end.
 /// @return Address after the modules.
-uintptr_t get_address_after_modules();
+uintptr_t get_address_after_modules(void);

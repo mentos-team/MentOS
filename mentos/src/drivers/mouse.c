@@ -1,19 +1,18 @@
 /// @file mouse.c
 /// @brief  Driver for *PS2* Mouses.
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.is distributed under the MIT License.
 /// @addtogroup mouse
 /// @{
 
-// Include the kernel log levels.
-#include "sys/kernel_levels.h"
-/// Change the header.
-#define __DEBUG_HEADER__ "[MOUSE ]"
-/// Set the log level.
-#define __DEBUG_LEVEL__ LOGLEVEL_NOTICE
+// Setup the logging for this file (do this before any other include).
+#include "sys/kernel_levels.h"           // Include kernel log levels.
+#define __DEBUG_HEADER__ "[MOUSE ]"      ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
+#include "io/debug.h"                    // Include debugging functions.
 
-#include "drivers/mouse.h"
 #include "descriptor_tables/isr.h"
+#include "drivers/mouse.h"
 #include "hardware/pic8259.h"
 #include "io/port_io.h"
 
@@ -39,21 +38,15 @@ static void __mouse_waitcmd(unsigned char type)
 {
     register unsigned int _time_out = 100000;
     if (type == 0) {
-        // DATA.
+        // DATA
         while (_time_out--) {
-            if ((inportb(0x64) & 1) == 1) {
-                return;
-            }
+            if ((inportb(0x64) & 1) == 1) { break; }
         }
-        return;
     } else {
-        while (_time_out--) // SIGNALS
-        {
-            if ((inportb(0x64) & 2) == 0) {
-                return;
-            }
+        // SIGNALS
+        while (_time_out--) {
+            if ((inportb(0x64) & 2) == 0) { break; }
         }
-        return;
     }
 }
 
@@ -69,7 +62,7 @@ static void __mouse_write(unsigned char data)
 
 /// @brief  Read data from mouse.
 /// @return The data received from mouse.
-static unsigned char __mouse_read()
+static unsigned char __mouse_read(void)
 {
     __mouse_waitcmd(0);
     return inportb(0x60);
@@ -154,7 +147,7 @@ static void __mouse_isr(pt_regs *f)
 }
 
 /// @brief Enable the mouse driver.
-static void __mouse_enable()
+static void __mouse_enable(void)
 {
     // Enable the mouse interrupts.
     pic8259_irq_enable(IRQ_MOUSE);
@@ -165,7 +158,7 @@ static void __mouse_enable()
 }
 
 /// @brief Disable the mouse driver.
-static void __mouse_disable()
+static void __mouse_disable(void)
 {
     // Disable the mouse interrupts.
     pic8259_irq_disable(IRQ_MOUSE);
@@ -175,7 +168,7 @@ static void __mouse_disable()
     __mouse_read();
 }
 
-int mouse_initialize()
+int mouse_initialize(void)
 {
     // Enable the auxiliary mouse device.
     __mouse_waitcmd(1);
@@ -204,11 +197,11 @@ int mouse_initialize()
     return 0;
 }
 
-int mouse_finalize()
+int mouse_finalize(void)
 {
     // Uninstall the IRQ.
     irq_uninstall_handler(IRQ_MOUSE, __mouse_isr);
-    
+
     // Disable the mouse.
     __mouse_disable();
     return 0;

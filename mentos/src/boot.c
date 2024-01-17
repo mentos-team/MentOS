@@ -1,15 +1,14 @@
-///               MentOS, The Mentoring Operating system project
 /// @file boot.c
 /// @brief Bootloader.
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #include "boot.h"
 
-#include "link_access.h"
-#include "sys/module.h"
-#include "mem/paging.h"
 #include "elf/elf.h"
+#include "link_access.h"
+#include "mem/paging.h"
+#include "sys/module.h"
 
 /// @defgroup bootloader Bootloader
 /// @brief Set of functions and variables for booting the kernel.
@@ -42,7 +41,7 @@ static page_directory_t boot_pgdir;
 /// @brief Boot page tables.
 static page_table_t boot_pgtables[1024];
 
-/// @brief      Use this to write to I/O ports to send bytes to devices.
+/// @brief Use this to write to I/O ports to send bytes to devices.
 /// @param port The output port.
 /// @param data The data to write.
 static inline void __outportb(uint16_t port, uint8_t data)
@@ -61,8 +60,9 @@ static inline void __debug_putchar(char c)
 /// @param s the string to send to the debug port.
 static inline void __debug_puts(char *s)
 {
-    while ((*s) != 0)
+    while ((*s) != 0) {
         __outportb(SERIAL_COM1, *s++);
+    }
 }
 
 /// @brief Align memory address to the specified value (round up).
@@ -94,12 +94,12 @@ static void __setup_pages(uint32_t pfn_virt_start, uint32_t pfn_phys_start, uint
     uint32_t base_pgentry = pfn_virt_start % 1024;
 
     uint32_t pg_offset = 0;
-    for (int i = base_pgtable; i < 1024 && pfn_count; i++) {
+    for (uint32_t i = base_pgtable; i < 1024 && pfn_count; i++) {
         page_table_t *table = boot_pgtables + i;
 
         uint32_t pgentry_start = (i == base_pgtable) ? base_pgentry : 0;
 
-        for (int j = pgentry_start; j < 1024 && pfn_count; j++, pfn_count--) {
+        for (uint32_t j = pgentry_start; j < 1024 && pfn_count; j++, pfn_count--) {
             table->pages[j].frame   = pfn_phys_start + pg_offset++;
             table->pages[j].rw      = 1;
             table->pages[j].present = 1;
@@ -116,7 +116,7 @@ static void __setup_pages(uint32_t pfn_virt_start, uint32_t pfn_phys_start, uint
 /// @brief Setup paging mapping all the low memory to two places: one is the
 /// physical address of the memory itself the other is in the virtual kernel
 /// address space.
-static inline void __setup_boot_paging()
+static inline void __setup_boot_paging(void)
 {
     uint32_t kernel_base_phy_page  = boot_info.kernel_phy_start >> 12U;
     uint32_t kernel_base_virt_page = boot_info.kernel_start >> 12U;
@@ -139,7 +139,7 @@ static void __get_kernel_low_high(elf_header_t *elf_hdr, uint32_t *virt_low, uin
     // Prepare a pointer to a program header.
     elf_program_header_t *program_header;
     // Compute the offset for accessing the program headers.
-    uint32_t offset = (uint32_t)elf_hdr + (uint32_t)elf_hdr->phoff;
+    uint32_t offset = (uint32_t)elf_hdr + elf_hdr->phoff;
     // In this two variables we will store the start and end addresses of the segment.
     uint32_t segment_start, segment_end;
     // Iterate for each program header.
@@ -184,7 +184,7 @@ static inline void __relocate_kernel_image(elf_header_t *elf_hdr)
     // Get the elf file starting address.
     kernel_start = (char *)elf_hdr;
     // Compute the offset for accessing the program headers.
-    offset = (uint32_t)kernel_start + (uint32_t)elf_hdr->phoff;
+    offset = (uint32_t)kernel_start + elf_hdr->phoff;
     // Iterate over the program headers.
     for (int i = 0; i < elf_hdr->phnum; i++) {
         // Get the program header.
@@ -192,18 +192,20 @@ static inline void __relocate_kernel_image(elf_header_t *elf_hdr)
         // Get the virtual address of the program header.
         virtual_address = (char *)program_header->vaddr;
         // Get the physical address of the program header.
-        physical_address = (char *)(kernel_start + program_header->offset);
+        physical_address = (kernel_start + program_header->offset);
         // Move only the loadable segments.
         if (program_header->type == PT_LOAD) {
             // Get the valid size of the segment by taking the minimum between
             // the size in bytes of the segment in the file image, in memory.
             valid_size = min(program_header->filesz, program_header->memsz);
             // Copy the physical data of the image to the corresponding virtual address.
-            for (int j = 0; j < valid_size; j++)
+            for (uint32_t j = 0; j < valid_size; j++) {
                 virtual_address[j] = physical_address[j];
+            }
             // Set to 0 parts not present in memory!
-            for (int j = valid_size; j < program_header->memsz; j++)
+            for (uint32_t j = valid_size; j < program_header->memsz; j++) {
                 virtual_address[j] = 0;
+            }
         }
     }
 }

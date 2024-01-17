@@ -1,33 +1,25 @@
 /// @file scheduler.c
 /// @brief Scheduler structures and functions.
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-// Include the kernel log levels.
-#include "sys/kernel_levels.h"
-/// Change the header.
-#define __DEBUG_HEADER__ "[SCHED ]"
-/// Set the log level.
-#define __DEBUG_LEVEL__ LOGLEVEL_NOTICE
+// Setup the logging for this file (do this before any other include).
+#include "sys/kernel_levels.h"          // Include kernel log levels.
+#define __DEBUG_HEADER__ "[SCHED ]"     ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_DEBUG ///< Set log level.
+#include "io/debug.h"                   // Include debugging functions.
 
 #include "assert.h"
-#include "strerror.h"
-#include "fs/vfs.h"
-#include "process/scheduler.h"
 #include "descriptor_tables/tss.h"
-#include "devices/fpu.h"
-#include "process/prio.h"
-#include "process/wait.h"
-#include "mem/kheap.h"
-#include "system/panic.h"
-#include "io/debug.h"
-#include "time.h"
-#include "sys/errno.h"
-#include "klib/list_head.h"
-#include "mem/paging.h"
+#include "fs/vfs.h"
 #include "hardware/timer.h"
-#include "math.h"
-#include "stdio.h"
+#include "process/prio.h"
+#include "process/scheduler.h"
+#include "process/scheduler_feedback.h"
+#include "process/wait.h"
+#include "strerror.h"
+#include "sys/errno.h"
+#include "system/panic.h"
 
 /// @brief          Assembly function setting the kernel stack to jump into
 ///                 location in Ring 3 mode (USER mode).
@@ -38,7 +30,7 @@ extern void enter_userspace(uintptr_t location, uintptr_t stack);
 /// The list of processes.
 runqueue_t runqueue;
 
-void scheduler_initialize()
+void scheduler_initialize(void)
 {
     // Initialize the runqueue list of tasks.
     list_head_init(&runqueue.queue);
@@ -57,34 +49,37 @@ uint32_t scheduler_getpid(void)
     return tid++;
 }
 
-task_struct *scheduler_get_current_process()
+task_struct *scheduler_get_current_process(void)
 {
     return runqueue.curr;
 }
 
-time_t scheduler_get_maximum_vruntime()
+time_t scheduler_get_maximum_vruntime(void)
 {
     time_t vruntime = 0;
     task_struct *entry;
     list_for_each_decl(it, &runqueue.queue)
     {
         // Check if we reached the head of list_head, and skip it.
-        if (it == &runqueue.queue)
+        if (it == &runqueue.queue) {
             continue;
+        }
         // Get the current entry.
         entry = list_entry(it, task_struct, run_list);
         // Skip the process if it is a periodic one, we are issued to skip
         // periodic tasks, and the entry is not a periodic task under
         // analysis.
-        if (entry->se.is_periodic && !entry->se.is_under_analysis)
+        if (entry->se.is_periodic && !entry->se.is_under_analysis) {
             continue;
-        if (entry->se.vruntime > vruntime)
+        }
+        if (entry->se.vruntime > vruntime) {
             vruntime = entry->se.vruntime;
+        }
     }
     return vruntime;
 }
 
-size_t scheduler_get_active_processes()
+size_t scheduler_get_active_processes(void)
 {
     return runqueue.num_active;
 }
@@ -95,14 +90,16 @@ task_struct *scheduler_get_running_process(pid_t pid)
     list_for_each_decl(it, &runqueue.queue)
     {
         entry = list_entry(it, task_struct, run_list);
-        if (entry->pid == pid)
+        if (entry->pid == pid) {
             return entry;
+        }
     }
     return NULL;
 }
 
 void scheduler_enqueue_task(task_struct *process)
 {
+    assert(process && "Received a NULL process.");
     // If current_process is NULL, then process is the current process.
     if (runqueue.curr == NULL) {
         runqueue.curr = process;
@@ -111,23 +108,34 @@ void scheduler_enqueue_task(task_struct *process)
     list_head_insert_before(&process->run_list, &runqueue.queue);
     // Increment the number of active processes.
     ++runqueue.num_active;
+
+#ifdef ENABLE_SCHEDULER_FEEDBACK
+    scheduler_feedback_task_add(process);
+#endif
 }
 
 void scheduler_dequeue_task(task_struct *process)
 {
+    assert(process && "Received a NULL process.");
     // Delete the process from the list of running processes.
     list_head_remove(&process->run_list);
     // Decrement the number of active processes.
     --runqueue.num_active;
-    if (process->se.is_periodic)
+    if (process->se.is_periodic) {
         runqueue.num_periodic--;
+    }
+
+#ifdef ENABLE_SCHEDULER_FEEDBACK
+    scheduler_feedback_task_remove(process->pid);
+#endif
 }
 
 void scheduler_run(pt_regs *f)
 {
     // Check if there is a running process.
-    if (runqueue.curr == NULL)
+    if (runqueue.curr == NULL) {
         return;
+    }
 
     task_struct *next = NULL;
 
@@ -188,7 +196,7 @@ void scheduler_restore_context(task_struct *process, pt_regs *f)
     runqueue.curr = process;
     // Restore the registers.
     *f = process->thread.regs;
-    // TODO: Explain paging switch (ring 0 doesn't need page switching)
+    // TODO(enrico): Explain paging switch (ring 0 doesn't need page switching)
     // Switch to process page directory
     paging_switch_directory_va(process->mm->pgd);
 }
@@ -213,11 +221,11 @@ void scheduler_enter_user_jmp(uintptr_t location, uintptr_t stack)
 /// @param mode The type of wait (TASK_INTERRUPTIBLE or TASK_UNINTERRUPTIBLE).
 /// @param sync Specifies if the wakeup should be synchronous.
 /// @return 1 on success, 0 on failure.
-static inline int try_to_wake_up(task_struct *process, int mode, int sync)
+static inline int try_to_wake_up(task_struct *process, unsigned mode, int sync)
 {
     // Only tasks in the state TASK_UNINTERRUPTIBLE can be woke up
     if (process->state == TASK_UNINTERRUPTIBLE || process->state == TASK_STOPPED) {
-        //TODO: Recalc task priority
+        // TODO(enrico): Recalc task priority
         process->state = TASK_RUNNING;
         return 1;
     }
@@ -234,27 +242,26 @@ wait_queue_entry_t *sleep_on(wait_queue_head_t *wq)
 {
     // Save the sleeping process registers state
     task_struct *sleeping_task = scheduler_get_current_process();
-
+    // Stops task from runqueue making it unrunnable.
+    sleeping_task->state = TASK_UNINTERRUPTIBLE;
 #if 0
-    pt_regs* f = get_current_interrupt_stack_frame();
+    // Get the interrupt registers.
+    pt_regs *f = get_current_interrupt_stack_frame();
+    // Store its context.
     scheduler_store_context(f, sleeping_task);
-
     // Select next process in the runqueue as the current, restore it's context,
     // we assume that the first process is init wich does not sleep (I hope).
     // This is necessary to make the scheduler_run() in syscall_handler work.
-    task_struct *next = list_entry(runqueue.queue.next, task_struct, run_list);
+    task_struct *next = scheduler_pick_next_task(&runqueue);
     assert((next != sleeping_task) && "The next selected process in the runqueue is the sleeping process");
     scheduler_restore_context(next, f);
 #endif
-
-    // Stops task from runqueue making it unrunnable
-    sleeping_task->state = TASK_UNINTERRUPTIBLE;
-
-    // Add sleeping process to sleep wait queue
+    // Allocate the wait_queue entry.
     wait_queue_entry_t *wait_entry = kmalloc(sizeof(struct wait_queue_entry_t));
+    // Initialize the entry.
     init_waitqueue_entry(wait_entry, sleeping_task);
+    // Add sleeping process to sleep wait queue.
     add_wait_queue(wq, wait_entry);
-
     return wait_entry;
 }
 
@@ -283,7 +290,7 @@ int is_orphaned_pgrp(pid_t pgid)
     return 1;
 }
 
-pid_t sys_getpid()
+pid_t sys_getpid(void)
 {
     // Get the current task.
     if (runqueue.curr == NULL) {
@@ -309,8 +316,11 @@ pid_t sys_getsid(pid_t pid)
     list_for_each (it, &runqueue.queue) {
         task_struct *task = list_entry(it, task_struct, run_list);
         if (task->pid == pid) {
-            if (runqueue.curr->sid != task->sid)
-                return -EPERM;
+            if (runqueue.curr->sid != task->sid) {
+                {
+                    return -EPERM;
+                }
+            }
 
             return task->sid;
         }
@@ -318,7 +328,7 @@ pid_t sys_getsid(pid_t pid)
     return -ESRCH;
 }
 
-pid_t sys_setsid()
+pid_t sys_setsid(void)
 {
     task_struct *task = runqueue.curr;
     if (task == NULL) {
@@ -338,34 +348,39 @@ pid_t sys_setsid()
 pid_t sys_getpgid(pid_t pid)
 {
     task_struct *task = NULL;
-    if (pid == 0)
+    if (pid == 0) {
         task = runqueue.curr;
-    else
+    } else {
         task = scheduler_get_running_process(pid);
-    if (task)
+    }
+    if (task) {
         return task->pgid;
+    }
     return 0;
 }
 
 int sys_setpgid(pid_t pid, pid_t pgid)
 {
     task_struct *task = NULL;
-    if (pid == 0)
+    if (pid == 0) {
         task = runqueue.curr;
-    else
+    } else {
         task = scheduler_get_running_process(pid);
+    }
     if (task) {
-        if (task->pgid == task->pid)
+        if (task->pgid == task->pid) {
             pr_debug("Process %d is already a session leader.", task->pid);
+        }
         task->pgid = pgid;
     }
     return 0;
 }
 
-uid_t sys_getuid()
+uid_t sys_getuid(void)
 {
-    if (runqueue.curr)
+    if (runqueue.curr) {
         return runqueue.curr->uid;
+    }
     return -EPERM;
 }
 
@@ -378,7 +393,7 @@ int sys_setuid(uid_t uid)
     return -EPERM;
 }
 
-pid_t sys_getgid()
+pid_t sys_getgid(void)
 {
     if (runqueue.curr) {
         return runqueue.curr->gid;
@@ -395,11 +410,12 @@ int sys_setgid(pid_t gid)
     return -EPERM;
 }
 
-pid_t sys_getppid()
+pid_t sys_getppid(void)
 {
     // Get the current task.
-    if (runqueue.curr && runqueue.curr->parent)
+    if (runqueue.curr && runqueue.curr->parent) {
         return runqueue.curr->parent->pid;
+    }
     return -EPERM;
 }
 
@@ -439,48 +455,54 @@ int sys_nice(int increment)
 
 pid_t sys_waitpid(pid_t pid, int *status, int options)
 {
-    // Get the current task.
-    if (runqueue.curr == NULL) {
+    task_struct *current_process, *entry;
+    // Get the current process.
+    current_process = scheduler_get_current_process();
+    // Check the current task.
+    if (current_process == NULL) {
         kernel_panic("There is no current process!");
     }
-
-    /* For now we do not support waiting for processes inside the given
-     * process group (pid < -1).
-     */
+    // For now we do not support waiting for processes inside the given process
+    // group (pid < -1).
     if ((pid < -1) || (pid == 0)) {
         return -ESRCH;
     }
-    if (pid == runqueue.curr->pid) {
+    // Check if the pid we are waiting for is the process itself.
+    if (pid == current_process->pid) {
         return -ECHILD;
     }
-    if (options != 0 && options != WNOHANG) {
+    // Check if the options are one of: WNOHANG, WUNTRACED.
+    if ((options != 0) && !bit_check(options, WNOHANG) && !bit_check(options, WUNTRACED)) {
         return -EINVAL;
     }
-#if 0
-    if (status == NULL) {
-        return -EFAULT;
-    }
-#endif
-    if (list_head_empty(&runqueue.curr->children)) {
+    // Check if there are children to wait.
+    if (list_head_empty(&current_process->children)) {
         return -ECHILD;
     }
-    list_head *it;
-    list_for_each (it, &runqueue.curr->children) {
-        task_struct *entry = list_entry(it, task_struct, sibling);
+    // Iterate the children.
+    list_for_each_decl(it, &current_process->children)
+    {
+        // Get the entry.
+        entry = list_entry(it, task_struct, sibling);
+        // Check the entry.
         if (entry == NULL) {
             continue;
         }
+        // If the entry is not in a zombie state, keep searching.
         if (entry->state != EXIT_ZOMBIE) {
             continue;
         }
+        // If a pid was provided, and is different from the pid we are
+        // exhamining, skip it.
         if ((pid > 1) && (entry->pid != pid)) {
             continue;
         }
         // Save the pid to return.
         pid_t ppid = entry->pid;
         // Save the state (TODO: Improve status set).
-        if (status)
-            (*status) = entry->state;
+        if (status) {
+            (*status) = entry->exit_code;
+        }
         // Finalize the VFS structures.
         vfs_destroy_task(entry);
         // Remove entry from children of parent.
@@ -489,13 +511,13 @@ pid_t sys_waitpid(pid_t pid, int *status, int options)
         scheduler_dequeue_task(entry);
         // Delete the task_struct.
         kmem_cache_free(entry);
-        pr_debug("Process %d is freeing memory of process %d.\n", runqueue.curr->pid, ppid);
+        pr_debug("Process %d is freeing memory of process %d.\n", current_process->pid, ppid);
         return ppid;
     }
     return 0;
 }
 
-void sys_exit(int exit_code)
+void do_exit(int exit_code)
 {
     // Get the current task.
     if (runqueue.curr == NULL) {
@@ -509,14 +531,14 @@ void sys_exit(int exit_code)
     }
 
     // Set the termination code of the process.
-    runqueue.curr->exit_code = (exit_code << 8) & 0xFF00;
+    runqueue.curr->exit_code = exit_code;
     // Set the state of the process to zombie.
     runqueue.curr->state = EXIT_ZOMBIE;
     // Send a SIGCHLD to the parent process.
     if (runqueue.curr->parent) {
         int ret = sys_kill(runqueue.curr->parent->pid, SIGCHLD);
         if (ret == -1) {
-            printf("[%d] %5d failed sending signal %d : %s\n", ret, runqueue.curr->parent->pid,
+            pr_err("[%d] %5d failed sending signal %d : %s\n", ret, runqueue.curr->parent->pid,
                    SIGCHLD, strerror(errno));
         }
     }
@@ -551,6 +573,11 @@ void sys_exit(int exit_code)
     pr_debug("Process %d exited with value %d\n", runqueue.curr->pid, exit_code);
 }
 
+void sys_exit(int exit_code)
+{
+    do_exit(exit_code << 8);
+}
+
 int sys_sched_setparam(pid_t pid, const sched_param_t *param)
 {
     list_head *it;
@@ -558,10 +585,11 @@ int sys_sched_setparam(pid_t pid, const sched_param_t *param)
     list_for_each (it, &runqueue.queue) {
         task_struct *entry = list_entry(it, task_struct, run_list);
         if (entry->pid == pid) {
-            if (!entry->se.is_periodic && param->is_periodic)
+            if (!entry->se.is_periodic && param->is_periodic) {
                 runqueue.num_periodic++;
-            else if (entry->se.is_periodic && !param->is_periodic)
+            } else if (entry->se.is_periodic && !param->is_periodic) {
                 runqueue.num_periodic--;
+            }
             // Sets the parameters from param to the "se" struct parameters.
             entry->se.prio        = param->sched_priority;
             entry->se.period      = param->period;
@@ -599,7 +627,7 @@ int sys_sched_getparam(pid_t pid, sched_param_t *param)
 /// @brief Performs the response time analysis for the current list of periodic
 /// processes.
 /// @return 1 if scheduling periodic processes is feasible, 0 otherwise.
-static int __response_time_analysis()
+static int __response_time_analysis(void)
 {
     task_struct *entry, *previous;
     time_t r, previous_r = 0;
@@ -608,8 +636,9 @@ static int __response_time_analysis()
         // Get the curent entry in the list.
         entry = list_entry(it, task_struct, run_list);
         // If the process is not periodic we skip it.
-        if (!entry->se.is_periodic)
+        if (!entry->se.is_periodic) {
             continue;
+        }
         // Put r equal to worst case exec because is the first point in time
         // that the task could possibly complete.
         r = entry->se.worst_case_exec, previous_r = 0;
@@ -640,15 +669,16 @@ static int __response_time_analysis()
         }
         // Feasibility of scheduler is guaranteed if and only if response time
         // analysis is lower than deadline.
-        if (r > entry->se.deadline)
+        if (r > entry->se.deadline) {
             return 1;
+        }
     }
     return 0;
 }
 
 /// @brief Computes the total utilization factor.
 /// @return the utilization factor.
-static inline double __compute_utilization_factor()
+static inline double __compute_utilization_factor(void)
 {
     task_struct *entry;
     double U = 0;
@@ -657,13 +687,14 @@ static inline double __compute_utilization_factor()
         // Get the entry.
         entry = list_entry(it, task_struct, run_list);
         // Sum the utilization factor of all periodic tasks.
-        if (entry->se.is_periodic)
+        if (entry->se.is_periodic) {
             U += entry->se.utilization_factor;
+        }
     }
     return U;
 }
 
-int sys_waitperiod()
+int sys_waitperiod(void)
 {
     // Get the current process.
     task_struct *current = scheduler_get_current_process();
@@ -682,8 +713,9 @@ int sys_waitperiod()
 
     // Update the Worst Case Execution Time (WCET).
     time_t wcet = current_time - current->se.exec_start;
-    if (current->se.worst_case_exec < wcet)
+    if (current->se.worst_case_exec < wcet) {
         current->se.worst_case_exec = wcet;
+    }
     // Update the utilization factor.
     current->se.utilization_factor = ((double)current->se.worst_case_exec / (double)current->se.period);
     // If the task is under analysis, we need to test if the process can be
@@ -720,8 +752,9 @@ int sys_waitperiod()
         pr_warning("Utilization factor is : %.2f, Least Upper Bound: %.2f\n", u, ulub);
 #endif
         // If it is not schedulable, we need to tell it to the process.
-        if (is_not_schedulable)
+        if (is_not_schedulable) {
             return -ENOTSCHEDULABLE;
+        }
         // Otherwise, it is schedulable and thus it is not under analysis
         // anymore.
         current->se.is_under_analysis = false;

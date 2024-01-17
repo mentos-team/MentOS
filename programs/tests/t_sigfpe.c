@@ -1,6 +1,6 @@
 /// @file t_sigfpe.c
 /// @brief
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #include <sys/unistd.h>
@@ -12,19 +12,29 @@
 #include <sys/wait.h>
 #include <time.h>
 
-
 void sig_handler(int sig)
 {
     printf("handler(%d) : Starting handler.\n", sig);
     if (sig == SIGFPE) {
         printf("handler(%d) : Correct signal. FPE\n", sig);
         printf("handler(%d) : Exiting\n", sig);
-        exit(1);
-        
+        // exit(1);
     } else {
         printf("handler(%d) : Wrong signal.\n", sig);
     }
     printf("handler(%d) : Ending handler.\n", sig);
+}
+
+long int fact(int n)
+{
+    if (n == 0 || n == 1) {
+        return 1;
+    }
+    long int pro = 1;
+    while (n != 1) {
+        pro *= n--;
+    }
+    return pro;
 }
 
 int main(int argc, char *argv[])
@@ -42,9 +52,9 @@ int main(int argc, char *argv[])
 
     // Should trigger ALU error, fighting the compiler...
     int d = 1, e = 1;
-    while (1) {
-        d /= e;
-        e -= 1;
-    }
+    d /= e;
+    e -= 1;
+    d /= e;
+    e -= 1;
     printf("d: %d, e: %d\n", d, e);
 }

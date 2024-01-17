@@ -1,6 +1,6 @@
 /// @file math.c
 /// @brief
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #include "math.h"
@@ -18,26 +18,30 @@ double round(double x)
 double floor(double x)
 {
     if (x > -1.0 && x < 1.0) {
-        if (x >= 0)
+        if (x >= 0) {
             return 0.0;
+        }
         return -1.0;
     }
     int i = (int)x;
-    if (x < 0)
+    if (x < 0) {
         return (double)(i - 1);
+    }
     return (double)i;
 }
 
 double ceil(double x)
 {
     if (x > -1.0 && x < 1.0) {
-        if (x <= 0)
+        if (x <= 0) {
             return 0.0;
+        }
         return 1.0;
     }
     int i = (int)x;
-    if (x > 0)
+    if (x > 0) {
         return (double)(i + 1);
+    }
     return (double)i;
 }
 
@@ -145,8 +149,9 @@ double ln(double x)
 double logx(double x, double y)
 {
     // Base may not equal 1 or be negative.
-    if (y == 1.f || y < 0.f || ln(y) == 0.f)
+    if (y == 1.f || y < 0.f || ln(y) == 0.f) {
         return 0.f;
+    }
     return ln(x) / ln(y);
 }
 

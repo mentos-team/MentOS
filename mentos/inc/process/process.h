@@ -1,6 +1,6 @@
 /// @file process.h
 /// @brief Process data structures and functions.
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #pragma once
@@ -10,12 +10,13 @@
 #include "system/signal.h"
 #include "devices/fpu.h"
 #include "mem/paging.h"
+#include "stdbool.h"
 
 /// The maximum length of a name for a task_struct.
 #define TASK_NAME_MAX_LENGTH 100
 
 /// The default dimension of the stack of a process (1 MByte).
-#define DEFAULT_STACK_SIZE 0x100000
+#define DEFAULT_STACK_SIZE (1 * M)
 
 /// @brief This structure is used to track the statistics of a process.
 /// @details
@@ -164,7 +165,7 @@ typedef struct task_struct {
 
 /// @brief Initialize the task management.
 /// @return 1 success, 0 failure.
-int init_tasking();
+int init_tasking(void);
 
 /// @brief Create and spawn the init process.
 /// @param path Path of the `init` program.

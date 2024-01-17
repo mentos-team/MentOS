@@ -1,6 +1,6 @@
 /// @file array.h
 /// @brief
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #pragma once
@@ -34,5 +34,5 @@
         ARRAY_FREE(arr->buffer);                                                      \
     }
 
-#undef ARRAY_ALLOC malloc
-#undef ARRAY_FREE free
+#undef ARRAY_ALLOC
+#undef ARRAY_FREE

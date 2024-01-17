@@ -1,13 +1,13 @@
 /// @file ndtree.c
 /// @brief Red/Black tree.
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #include "io/debug.h"
-#include "klib/ndtree.h"
 #include "assert.h"
-#include "klib/list_head.h"
+#include "klib/ndtree.h"
 #include "mem/slab.h"
+#include "sys/list_head.h"
 
 // ============================================================================
 // Tree types.
@@ -54,7 +54,7 @@ static inline int __ndtree_tree_node_cmp_ptr_cb(ndtree_t *self, void *a, void *b
 // ============================================================================
 // Node management functions.
 
-ndtree_node_t *ndtree_node_alloc()
+ndtree_node_t *ndtree_node_alloc(void)
 {
     return kmalloc(sizeof(ndtree_node_t));
 }
@@ -86,8 +86,9 @@ void ndtree_node_set_value(ndtree_node_t *node, void *value)
 
 void *ndtree_node_get_value(ndtree_node_t *node)
 {
-    if (node)
+    if (node) {
         return node->value;
+    }
     return NULL;
 }
 
@@ -137,13 +138,14 @@ unsigned int ndtree_node_count_children(ndtree_node_t *node)
 
 void ndtree_node_dealloc(ndtree_node_t *node)
 {
-    if (node)
+    if (node) {
         kfree(node);
+    }
 }
 
 // ============================================================================
 // Tree management functions.
-ndtree_t *ndtree_tree_alloc()
+ndtree_t *ndtree_tree_alloc(void)
 {
     return kmalloc(sizeof(ndtree_t));
 }
@@ -184,8 +186,9 @@ static void __ndtree_tree_dealloc_rec(ndtree_t *tree, ndtree_node_t *node, ndtre
 
 void ndtree_tree_dealloc(ndtree_t *tree, ndtree_tree_node_f node_cb)
 {
-    if (tree && tree->root && node_cb)
+    if (tree && tree->root && node_cb) {
         __ndtree_tree_dealloc_rec(tree, tree->root, node_cb);
+    }
     kfree(tree);
 }
 
@@ -210,8 +213,9 @@ static ndtree_node_t *__ndtree_tree_find_rec(ndtree_t *tree, ndtree_tree_cmp_f c
 
 ndtree_node_t *ndtree_tree_find(ndtree_t *tree, ndtree_tree_cmp_f cmp, void *value)
 {
-    if (tree && tree->root && value)
+    if (tree && tree->root && value) {
         return __ndtree_tree_find_rec(tree, cmp, value, tree->root);
+    }
     return NULL;
 }
 
@@ -224,14 +228,16 @@ ndtree_node_t *ndtree_node_find(ndtree_t *tree, ndtree_node_t *node, ndtree_tree
             ndtree_tree_cmp_f cmp_fun = cmp ? cmp : tree->cmp;
             // If neither the tree nor the function argument are valid, rollback to the
             // default comparison function.
-            if (cmp_fun == NULL)
+            if (cmp_fun == NULL) {
                 cmp_fun = __ndtree_tree_node_cmp_ptr_cb;
+            }
             // Iterate throught the children.
             list_for_each_decl(it, &node->children)
             {
                 ndtree_node_t *child = list_entry(it, ndtree_node_t, siblings);
-                if (cmp_fun(tree, child->value, value) == 0)
+                if (cmp_fun(tree, child->value, value) == 0) {
                     return child;
+                }
             }
         }
     }
@@ -240,8 +246,9 @@ ndtree_node_t *ndtree_node_find(ndtree_t *tree, ndtree_node_t *node, ndtree_tree
 
 unsigned int ndtree_tree_size(ndtree_t *tree)
 {
-    if (tree)
+    if (tree) {
         return tree->size;
+    }
     return 0;
 }
 
@@ -271,10 +278,11 @@ int ndtree_tree_remove_node_with_cb(ndtree_t *tree, ndtree_node_t *node, ndtree_
             // Merge the lists.
             list_head_append(new_list, &node->children);
         }
-        if (node_cb)
+        if (node_cb) {
             node_cb(tree, node);
-        else
+        } else {
             ndtree_node_dealloc(node);
+        }
         --tree->size;
         return 1;
     }
@@ -292,7 +300,7 @@ int ndtree_tree_remove_with_cb(ndtree_t *tree, void *value, ndtree_tree_node_f n
 
 // ============================================================================
 // Iterators.
-ndtree_iter_t *ndtree_iter_alloc()
+ndtree_iter_t *ndtree_iter_alloc(void)
 {
     ndtree_iter_t *iter = kmalloc(sizeof(ndtree_iter_t));
     iter->head          = NULL;
@@ -302,8 +310,9 @@ ndtree_iter_t *ndtree_iter_alloc()
 
 void ndtree_iter_dealloc(ndtree_iter_t *iter)
 {
-    if (iter)
+    if (iter) {
         kfree(iter);
+    }
 }
 
 ndtree_node_t *ndtree_iter_first(ndtree_node_t *node, ndtree_iter_t *iter)
@@ -361,17 +370,21 @@ static void __ndtree_tree_visitor_iter(ndtree_t *tree,
 {
     assert(tree);
     assert(node);
-    if (enter_fun)
+    if (enter_fun) {
         enter_fun(tree, node);
-    if (!list_head_empty(&node->children))
+    }
+    if (!list_head_empty(&node->children)) {
         list_for_each_decl(it, &node->children)
             __ndtree_tree_visitor_iter(tree, list_entry(it, ndtree_node_t, siblings), enter_fun, exit_fun);
-    if (exit_fun)
+    }
+    if (exit_fun) {
         exit_fun(tree, node);
+    }
 }
 
 void ndtree_tree_visitor(ndtree_t *tree, ndtree_tree_node_f enter_fun, ndtree_tree_node_f exit_fun)
 {
-    if (tree && tree->root)
+    if (tree && tree->root) {
         __ndtree_tree_visitor_iter(tree, tree->root, enter_fun, exit_fun);
+    }
 }

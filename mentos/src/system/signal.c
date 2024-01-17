@@ -1,25 +1,25 @@
 /// @file signal.c
 /// @brief Signals definition.
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-// Include the kernel log levels.
-#include "sys/kernel_levels.h"
-/// Change the header.
-#define __DEBUG_HEADER__ "[SIGNAL]"
-/// Set the log level.
-#define __DEBUG_LEVEL__ LOGLEVEL_NOTICE
+// Setup the logging for this file (do this before any other include).
+#include "sys/kernel_levels.h"           // Include kernel log levels.
+#define __DEBUG_HEADER__ "[SIGNAL]"      ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
+#include "io/debug.h"                    // Include debugging functions.
 
-#include "system/signal.h"
-#include "process/wait.h"
-#include "process/scheduler.h"
-#include "process/process.h"
-#include "sys/errno.h"
 #include "assert.h"
-#include "io/debug.h"
-#include "string.h"
 #include "klib/irqflags.h"
 #include "klib/stack_helper.h"
+#include "process/process.h"
+#include "process/scheduler.h"
+#include "process/wait.h"
+#include "string.h"
+#include "sys/errno.h"
+#include "system/signal.h"
+
+#define GET_EXIT_STATUS(status) (((status)&0x00FF) << 8)
 
 /// SLAB caches for signal bits.
 static kmem_cache_t *sigqueue_cachep;
@@ -62,14 +62,24 @@ static const char *sys_siglist[] = {
     NULL,
 };
 
+static inline void __copy_sigaction(sigaction_t *to, const sigaction_t *from)
+{
+    memcpy(to, from, sizeof(sigaction_t));
+}
+
+static inline void __copy_sigset(sigset_t *to, const sigset_t *from)
+{
+    memcpy(to, from, sizeof(sigset_t));
+}
+
 static inline void __copy_siginfo(siginfo_t *to, const siginfo_t *from)
 {
-    memcpy(to, from, sizeof(*to));
+    memcpy(to, from, sizeof(siginfo_t));
 }
 
 static inline void __clear_siginfo(siginfo_t *info)
 {
-    memset(info, 0, sizeof(*info));
+    memset(info, 0, sizeof(siginfo_t));
 }
 
 static inline void __lock_task_sighand(struct task_struct *t)
@@ -95,13 +105,14 @@ static int __sig_is_ignored(struct task_struct *t, int sig)
     // Blocked signals are never ignored, since the
     // signal handler may change by the time it is
     // unblocked.
-    if (sigismember(&t->blocked, sig) || sigismember(&t->real_blocked, sig))
+    if (sigismember(&t->blocked, sig) || sigismember(&t->real_blocked, sig)) {
         return 0;
+    }
     // Get the signal handler.
     sighandler_t handler = __get_handler(t, sig);
     // Check the type of the handler.
     return (handler == SIG_IGN) && (sig != SIGCHLD);
-    // TODO: do_signal() specifically checks if the handler is IGN and the signal
+    // TODO(enrico): do_signal() specifically checks if the handler is IGN and the signal
     //        is SIGCHLD, in that case it forces a wait for the parent, that's why
     //        here I'm also accepting as not-ignored a SIG_IGN which is a SIGCHLD.
 }
@@ -110,21 +121,22 @@ static int __sig_is_ignored(struct task_struct *t, int sig)
 /// @param t     The task to which the signal belongs.
 /// @param sig   The signal to set.
 /// @param flags Flags identifying from where we are going to take the memory.
-static sigqueue_t *__sigqueue_alloc(struct task_struct *t, int sig, gfp_t flags)
+static inline sigqueue_t *__sigqueue_alloc(struct task_struct *t, int sig, gfp_t flags)
 {
-    sigqueue_t *q = NULL;
-    if ((q = kmem_cache_alloc(sigqueue_cachep, flags)) == NULL)
-        return NULL;
-    // Initiliaze the values.
-    q->flags = 0;
-    list_head_init(&q->list);
-    return q;
+    sigqueue_t *sigqueue = kmem_cache_alloc(sigqueue_cachep, flags);
+    // If we successfully allocated the signal queue, initiliaze the values.
+    if (sigqueue) {
+        sigqueue->flags = 0;
+        list_head_init(&sigqueue->list);
+    }
+    return sigqueue;
 }
 
-static void __sigqueue_free(sigqueue_t *q)
+static inline void __sigqueue_free(sigqueue_t *sigqueue)
 {
-    if (q)
-        kmem_cache_free(q);
+    if (sigqueue) {
+        kmem_cache_free(sigqueue);
+    }
 }
 
 /// @brief
@@ -136,18 +148,18 @@ static int __send_signal(int sig, siginfo_t *info, struct task_struct *t)
 {
     // Lock the signal handling for the given task.
     __lock_task_sighand(t);
-    pr_debug("Trying to add signal (%2d)`%s` to task (%2d)`%s`, currently pending `%d, %d`.\n",
+    pr_debug("Trying to add signal (%2d:%s) to task (%2d:%s), currently pending `%d, %d`.\n",
              sig, strsignal(sig), t->pid, t->name, t->pending.signal.sig[0], t->pending.signal.sig[1]);
     // Check if the signal is ignored.
     if (__sig_is_ignored(t, sig)) {
-        pr_debug("Trying to send signal (%2d)`%s` to task (%2d)`%s`: ignored.\n",
+        pr_debug("Trying to send signal (%2d:%s) to task (%2d:%s): ignored.\n",
                  sig, strsignal(sig), t->pid, t->name);
         __unlock_task_sighand(t);
         return 0;
     }
     // Check if the process is in an invalid status.
     if ((t->state == EXIT_ZOMBIE) || (t->state == EXIT_DEAD)) {
-        pr_debug("Trying to send signal (%2d)`%s` to task (%2d)`%s`: zombie or dead.\n",
+        pr_debug("Trying to send signal (%2d:%s) to task (%2d:%s): zombie or dead.\n",
                  sig, strsignal(sig), t->pid, t->name);
         __unlock_task_sighand(t);
         return -EINVAL;
@@ -158,11 +170,12 @@ static int __send_signal(int sig, siginfo_t *info, struct task_struct *t)
         return -EAGAIN;
     }
     list_head_insert_before(&q->list, &t->pending.list);
-    if (info != SEND_SIG_NOINFO)
-        memcpy(&q->info, info, sizeof(siginfo_t));
+    if (info != SEND_SIG_NOINFO) {
+        __copy_siginfo(&q->info, info);
+    }
     // Set that there is a signal pending.
     sigaddset(&t->pending.signal, sig);
-    pr_debug("Added pending signal (%2d)`%s` to task (%2d)`%s`, pending `%d, %d`.\n",
+    pr_debug("Added pending signal (%2d:%s) to task (%2d:%s), pending `%d, %d`.\n",
              sig, strsignal(sig), t->pid, t->name, t->pending.signal.sig[0], t->pending.signal.sig[1]);
     __unlock_task_sighand(t);
     return 0;
@@ -174,16 +187,20 @@ static inline int __next_signal(sigpending_t *pending, sigset_t *mask)
     assert(pending && "Null `pending` structure.");
     assert(mask && "Null `mask` structure.");
     unsigned long x;
-    if ((x = bitmask_clear(pending->signal.sig[0], mask->sig[0])) != 0)
+    x = bitmask_clear(pending->signal.sig[0], mask->sig[0]);
+    if (x != 0) {
         return 1 + find_first_non_zero(x);
-    if ((x = bitmask_clear(pending->signal.sig[1], mask->sig[1])) != 0)
+    }
+    x = bitmask_clear(pending->signal.sig[1], mask->sig[1]);
+    if (x != 0) {
         return 33 + find_first_non_zero(x);
+    }
     return 0;
 }
 
 static inline void __collect_signal(int sig, sigpending_t *list, siginfo_t *info)
 {
-    pr_debug("__collect_signal(%d, %p, %p)\n", sig, list, info);
+    pr_debug("__collect_signal(%2d:%s, %p, %p)\n", sig, strsignal(sig), list, info);
     assert(list && "Null `list` structure.");
     assert(info && "Null `info` structure.");
 
@@ -194,13 +211,13 @@ static inline void __collect_signal(int sig, sigpending_t *list, siginfo_t *info
     list_for_each_decl(it, &list->list)
     {
         sigqueue_t *q = list_entry(it, sigqueue_t, list);
-        pr_debug("__collect_signal(%d, %p, %p) : Signal in queue : %p(%d : %s).\n", sig, list, info,
+        pr_debug("__collect_signal(%2d:%s, %p, %p) : Signal in queue : %p(%d : %s).\n", sig, strsignal(sig), list, info,
                  q, q->info.si_signo, strsignal(q->info.si_signo));
         if (q->info.si_signo == sig) {
             // If the entry is already set, this means that there are several handlers
             // pending for this particular signal.
             if (queue_entry) {
-                pr_debug("__collect_signal(%d, %p, %p) : Still pending, do not remove from set.\n", sig, list, info);
+                pr_debug("__collect_signal(%2d:%s, %p, %p) : Still pending, do not remove from set.\n", sig, strsignal(sig), list, info);
                 still_pending = true;
                 break;
             }
@@ -212,12 +229,12 @@ static inline void __collect_signal(int sig, sigpending_t *list, siginfo_t *info
     // remove the signal from the set.
     if (!still_pending) {
         sigdelset(&list->signal, sig);
-        pr_debug("__collect_signal(%d, %p, %p) : Remove signal from set: %d.\n", sig, list, info,
+        pr_debug("__collect_signal(%2d:%s, %p, %p) : Remove signal from set: %d.\n", sig, strsignal(sig), list, info,
                  list->signal.sig[0]);
     }
     // If we have found an entry.
     if (queue_entry) {
-        pr_debug("__collect_signal(%d, %p, %p) : Remove and delete sigqueue entry : %p.\n", sig, list, info, queue_entry);
+        pr_debug("__collect_signal(%2d:%s, %p, %p) : Remove and delete sigqueue entry : %p.\n", sig, strsignal(sig), list, info, queue_entry);
         // Remove the entry from the queue.
         list_head_remove(&queue_entry->list);
         // Copy the details about the entry inside the info structure.
@@ -225,19 +242,20 @@ static inline void __collect_signal(int sig, sigpending_t *list, siginfo_t *info
         // Free the memory for the queue entry.
         __sigqueue_free(queue_entry);
     } else {
-        pr_debug("__collect_signal(%d, %p, %p) : Cannot find the signal in the queue.\n", sig, list, info);
+        pr_debug("__collect_signal(%2d:%s, %p, %p) : Cannot find the signal in the queue.\n", sig, strsignal(sig), list, info);
         // Ok, it wasn't in the queue, zero out the info.
         __clear_siginfo(info);
         // Get the current process.
-        struct task_struct *current = scheduler_get_current_process();
-        assert(current && "There is no running process.");
+        task_struct *current_process = scheduler_get_current_process();
+        // Check the current task.
+        assert(current_process && "There is no current process!");
         // Initialize the info.
         info->si_signo           = sig;
         info->si_code            = SI_USER;
         info->si_value.sival_int = 0;
         info->si_errno           = 0;
-        info->si_pid             = current->pid;
-        info->si_uid             = current->uid;
+        info->si_pid             = current_process->pid;
+        info->si_uid             = current_process->uid;
         info->si_addr            = NULL;
         info->si_status          = 0;
         info->si_band            = 0;
@@ -260,26 +278,26 @@ static inline int __dequeue_signal(sigpending_t *pending, sigset_t *mask, siginf
 static inline int __handle_signal(int signr, siginfo_t *info, sigaction_t *ka, struct pt_regs *regs)
 {
     pr_debug("__handle_signal(%d, %p, %p, %p)\n", signr, info, ka, regs);
-    // The do_signal() function is usually only invoked when the CPU is going
-    // to return in User Mode.
-    struct task_struct *current = scheduler_get_current_process();
-    assert(current && "There is no running process.");
+    // Get the current process.
+    task_struct *current_process = scheduler_get_current_process();
+    // Check the current task.
+    assert(current_process && "There is no current process!");
     // Skip the `init` process, always.
-    if (current->pid == 1) {
+    if (current_process->pid == 1) {
         errno = ESRCH;
         return 0;
     }
     // Save the previous signal mask.
-    memcpy(&current->saved_sigmask, &current->blocked, sizeof(sigset_t));
+    __copy_sigset(&current_process->saved_sigmask, &current_process->blocked);
 
     // Add the signal to the list of blocked signals.
-    sigaddset(&current->blocked, signr);
+    sigaddset(&current_process->blocked, signr);
 
     // Store the registers before setting the ones required by the signal handling.
-    current->thread.signal_regs = *regs;
+    current_process->thread.signal_regs = *regs;
 
     // Restore the registers for the process that has set the signal.
-    *regs = current->thread.regs;
+    *regs = current_process->thread.regs;
 
     // Set the instruction pointer.
     regs->eip = (uintptr_t)ka->sa_handler;
@@ -300,7 +318,7 @@ static inline int __handle_signal(int signr, siginfo_t *info, sigaction_t *ka, s
     PUSH_VALUE_ON_STACK(regs->useresp, signr);
 
     // Push on the stack the function required to handle the signal return.
-    PUSH_VALUE_ON_STACK(regs->useresp, current->sigreturn_addr);
+    PUSH_VALUE_ON_STACK(regs->useresp, current_process->sigreturn_addr);
 
     return 1;
 }
@@ -308,14 +326,16 @@ static inline int __handle_signal(int signr, siginfo_t *info, sigaction_t *ka, s
 long sys_sigreturn(struct pt_regs *f)
 {
     pr_debug("sys_sigreturn(%p)\n", f);
-    struct task_struct *current = scheduler_get_current_process();
-    assert(current && "There is no running process.");
+    // Get the current process.
+    task_struct *current_process = scheduler_get_current_process();
+    // Check the current task.
+    assert(current_process && "There is no current process!");
     // Restore the registers before the signal handling.
-    *f = current->thread.signal_regs;
+    *f = current_process->thread.signal_regs;
     // Restore the previous signal mask.
-    memcpy(&current->blocked, &current->saved_sigmask, sizeof(sigset_t));
+    __copy_sigset(&current_process->blocked, &current_process->saved_sigmask);
     // Switch to process page directory
-    paging_switch_directory_va(current->mm->pgd);
+    paging_switch_directory_va(current_process->mm->pgd);
     pr_debug("sys_sigreturn(%p) : done!\n", f);
     return 0;
 }
@@ -336,38 +356,43 @@ static int __notify_parent(struct task_struct *current, int signr)
     return __send_signal(signr, &info, current->parent);
 }
 
-// Removes from the pending signal queue q the pending signals corresponding to
-// the bit mask mask
+/// @brief Removes from the pending signal queue q the pending signals
+/// corresponding to the bit mask mask.
+/// @param mask the mask we use to guide signals removal.
+/// @param q pensing signals.
 static void __rm_from_queue(sigset_t *mask, sigpending_t *q)
 {
+    struct sigqueue_t *entry;
     list_head *it, *tmp;
     list_for_each_safe (it, tmp, &q->list) {
-        struct sigqueue_t *entry = list_entry(it, struct sigqueue_t, list);
-        int sig                  = entry->info.si_signo;
-
-        if (sigismember(mask, sig)) {
+        // Get the entry.
+        entry = list_entry(it, struct sigqueue_t, list);
+        // Remove the signal.
+        if (sigismember(mask, entry->info.si_signo)) {
             list_head_remove(it);
             kfree(entry);
         }
     }
 }
 
-// We do not consider group stopping because for now we don't have thread groups
+/// @brief We do not consider group stopping because for now we don't have thread groups.
+/// @param current the current process.
+/// @param f the stack frame.
+/// @param signr signal number.
 static void __do_signal_stop(struct task_struct *current, struct pt_regs *f, int signr)
 {
     // The do_signal( ) function also sends a SIGCHLD signal to
     // the parent process of current, unless the parent has set
     // the SA_NOCLDSTOP flag of SIGCHLD.
-    if (!(SA_NOCLDSTOP & current->parent->sighand.action[SIGCHLD - 1].sa_flags))
-        if (__notify_parent(current, SIGCHLD) != 0)
+    if (!(SA_NOCLDSTOP & current->parent->sighand.action[SIGCHLD - 1].sa_flags)) {
+        if (__notify_parent(current, SIGCHLD) != 0) {
             pr_warning("Failed to notify parent with signal: %d", signr);
-
+        }
+    }
     // The state is now TASK_UNINTERRUPTABLE
     sleep_on(&stopped_queue);
-
     current->state     = TASK_STOPPED;
     current->exit_code = signr;
-
     scheduler_run(f);
 }
 
@@ -375,16 +400,17 @@ int do_signal(struct pt_regs *f)
 {
     // The do_signal() function is usually only invoked when the CPU is going
     // to return in User Mode.
-    struct task_struct *current = scheduler_get_current_process();
-    if (current == NULL)
-        return 0;
-
+    // Get the current process.
+    task_struct *current_process = scheduler_get_current_process();
+    // Check the current task.
+    assert(current_process && "There is no current process!");
     // First, checks whether the function itself was triggered by an interrupt;
     // if so, it simply returns. Otherwise, if the function was triggered by an
     // exception that was raised while the process was running in User Mode,
     // the function continues executing.
-    if ((f->cs & 3) != 3)
+    if ((f->cs & 3) != 3) {
         return 0;
+    }
 
     // Create a siginfo.
     siginfo_t info;
@@ -392,14 +418,14 @@ int do_signal(struct pt_regs *f)
     int signr, exit_code;
 
     // Lock the signal handling for the given task.
-    __lock_task_sighand(current);
+    __lock_task_sighand(current_process);
 
     // The heart of the do_signal( ) function consists of a loop that
     // repeatedly invokes the __dequeue_signal( ) function until no
     // non-blocked pending signals are left.
-    while (!list_head_empty(&current->pending.list)) {
+    while (!list_head_empty(&current_process->pending.list)) {
         // Get the signal to deliver.
-        signr = exit_code = __dequeue_signal(&current->pending, &current->blocked, &info);
+        signr = exit_code = __dequeue_signal(&current_process->pending, &current_process->blocked, &info);
 
         // Check the signal that we want to send.
         if ((signr < 0) || (signr >= NSIG)) {
@@ -411,24 +437,26 @@ int do_signal(struct pt_regs *f)
         // handled and do_signal( ) can finish.
         if (signr == 0) {
             pr_debug("There are no more signals to handle.\n");
-            __unlock_task_sighand(current);
+            __unlock_task_sighand(current_process);
             return 0;
         }
 
         // Get the associated signal action.
-        sigaction_t *ka = &current->sighand.action[signr - 1];
+        sigaction_t *ka = &current_process->sighand.action[signr - 1];
 
         // The only exception comes when the receiving process is init, in
         // which case the signal is discarded.
-        if (current->pid == 1)
+        if (current_process->pid == 1) {
             continue;
+        }
 
         // When a delivered signal is explicitly ignored, the do_signal( )
         // function normally just continues with a new execution of the loop
         // and therefore considers another pending signal.
         if (ka->sa_handler == SIG_IGN) {
-            if (signr == SIGCHLD)
+            if (signr == SIGCHLD) {
                 while (sys_waitpid(-1, NULL, WNOHANG) > 0) {}
+            }
             continue;
         }
 
@@ -456,59 +484,70 @@ int do_signal(struct pt_regs *f)
             case SIGTSTP:
             case SIGTTIN:
             case SIGTTOU:
-                if (is_orphaned_pgrp(current->pgid))
+                if (is_orphaned_pgrp(current_process->pgid)) {
                     continue;
+                }
 
             case SIGSTOP:
-                __unlock_task_sighand(current);
-                __do_signal_stop(current, f, signr);
-                __lock_task_sighand(current);
+                __unlock_task_sighand(current_process);
+                __do_signal_stop(current_process, f, signr);
+                __lock_task_sighand(current_process);
 
                 continue;
             case SIGQUIT:
+                do_exit(GET_EXIT_STATUS(1));
+                continue;
             case SIGILL:
+                do_exit(GET_EXIT_STATUS(132));
+                continue;
             case SIGTRAP:
-
+                do_exit(GET_EXIT_STATUS(133));
+                continue;
             case SIGABRT:
-                sys_exit(3);
-
+                do_exit(GET_EXIT_STATUS(134));
                 continue;
             case SIGFPE:
-            case SIGSEGV:
+                do_exit(GET_EXIT_STATUS(136) | signr);
+                __unlock_task_sighand(current_process);
+                return 1;
             case SIGBUS:
-            case SIGSYS:
+                do_exit(GET_EXIT_STATUS(138) | signr);
+                __unlock_task_sighand(current_process);
+                return 1;
+            case SIGSEGV:
+                do_exit(GET_EXIT_STATUS(139) | signr);
+                __unlock_task_sighand(current_process);
+                return 1;
             case SIGXCPU:
+                do_exit(GET_EXIT_STATUS(158) | signr);
+                __unlock_task_sighand(current_process);
             case SIGXFSZ:
-#if 0
-                if (do_coredump(signr, f))
-                    exit_code |= 0x80;
-#endif
+                do_exit(GET_EXIT_STATUS(159) | signr);
+                __unlock_task_sighand(current_process);
+            case SIGSYS:
             default:
-#if 0
-                current->flags |= PF_SIGNALED;
-#endif
-                sys_exit(exit_code);
-                __unlock_task_sighand(current);
+                do_exit(GET_EXIT_STATUS(exit_code) | signr);
+                __unlock_task_sighand(current_process);
                 return 1;
             }
         }
         if (__handle_signal(signr, &info, ka, f) == 1) {
-            __unlock_task_sighand(current);
+            __unlock_task_sighand(current_process);
             return 1;
         }
         pr_emerg("Failed to handle signal.\n");
     }
-    __unlock_task_sighand(current);
+    __unlock_task_sighand(current_process);
     return 0;
 }
 
-int signals_init()
+int signals_init(void)
 {
-    if ((sigqueue_cachep = KMEM_CREATE(sigqueue_t)) == NULL) {
+    sigqueue_cachep = KMEM_CREATE(sigqueue_t);
+    if (sigqueue_cachep == NULL) {
         pr_emerg("Failed to allocate cache for signals.\n");
         return 0;
     }
-
     list_head_init(&stopped_queue.task_list);
     return 1;
 }
@@ -524,7 +563,7 @@ void handle_stop_signal(int sig, siginfo_t *info, struct task_struct *p)
     // pending signal queue p->signal->shared_pending and from the private
     // queues of all members of the thread group.
     if (sig == SIGSTOP || sig == SIGTSTP || sig == SIGTTIN || sig == SIGTTOU) {
-        // TODO: shared and thread group
+        // TODO(enrico): shared and thread group.
 
         sigset_t mask;
         sigemptyset(&mask);
@@ -576,19 +615,21 @@ void handle_stop_signal(int sig, siginfo_t *info, struct task_struct *p)
 /// @return Returns 0 if there is no error, otherwise returns an error code
 int __send_sig_info(int sig, siginfo_t *info, struct task_struct *p)
 {
-    if (sig < 0 || sig > NSIG)
+    if (sig < 0 || sig > NSIG) {
         return -EINVAL;
+    }
 
     // If the signal is being sent by a User Mode process,
     // it checks whether the operation is allowed.
     if (info->si_code == SI_USER) {
-        // TODO
+        // TODO(enrico):
     }
 
     // If the sig parameter has the value 0,
     // it returns immediately without generating any signal
-    if (!sig)
+    if (!sig) {
         return 0;
+    }
 
     __lock_task_sighand(p);
 
@@ -610,41 +651,43 @@ int __send_sig_info(int sig, siginfo_t *info, struct task_struct *p)
 
 int sys_kill(pid_t pid, int sig)
 {
-    pr_debug("sys_kill(%d, %d)\n", pid, sig);
-    struct task_struct *current = scheduler_get_running_process(pid);
+    pr_debug("sys_kill(%d, %2d:%s)\n", pid, sig, strsignal(sig));
+    struct task_struct *process = scheduler_get_running_process(pid);
     // Check the task associated with the pid.
-    if (!current)
+    if (!process) {
         return -ESRCH;
+    }
     // Check the signal that we want to send.
-    if ((sig < 0) || (sig >= NSIG))
+    if ((sig < 0) || (sig >= NSIG)) {
         return -EINVAL;
+    }
     siginfo_t info;
     info.si_signo           = sig;
     info.si_code            = SI_USER;
     info.si_value.sival_int = 0;
     info.si_errno           = 0;
-    info.si_pid             = current->pid;
-    info.si_uid             = current->uid;
+    info.si_pid             = process->pid;
+    info.si_uid             = process->uid;
     info.si_addr            = NULL;
     info.si_status          = 0;
     info.si_band            = 0;
-    return __send_sig_info(sig, &info, current);
+    return __send_sig_info(sig, &info, process);
 }
 
 sighandler_t sys_signal(int signum, sighandler_t handler, uint32_t sigreturn_addr)
 {
-    pr_debug("sys_signal(%d, %p, %p)\n", signum, handler, sigreturn_ptr);
+    pr_debug("sys_signal(%d, %p, %p)\n", signum, handler, sigreturn_addr);
     // Check the signal that we want to send.
     if ((signum < 0) || (signum >= NSIG)) {
         pr_err("sys_signal(%d, %p): Wrong signal number!\n", signum, handler);
         return SIG_ERR;
     }
-    // The do_signal() function is usually only invoked when the CPU is going
-    // to return in User Mode.
-    struct task_struct *current = scheduler_get_current_process();
-    assert(current && "There is no running process.");
+    // Get the current process.
+    task_struct *current_process = scheduler_get_current_process();
+    // Check the current task.
+    assert(current_process && "There is no current process!");
     // Skip the `init` process, always.
-    if (current->pid == 1) {
+    if (current_process->pid == 1) {
         pr_err("sys_signal(%d, %p): Cannot signal init!\n", signum, handler);
         return SIG_ERR;
     }
@@ -657,55 +700,55 @@ sighandler_t sys_signal(int signum, sighandler_t handler, uint32_t sigreturn_add
     // Reset the set for the signal action.
     sigemptyset(&new_sigaction.sa_mask);
     // Lock the signal handling for the given task.
-    __lock_task_sighand(current);
+    __lock_task_sighand(current_process);
     // Set the address of the sigreturn.
-    current->sigreturn_addr = sigreturn_addr;
+    current_process->sigreturn_addr = sigreturn_addr;
     // Get the old sigaction.
-    sigaction_t *old_sigaction = &current->sighand.action[signum - 1];
+    sigaction_t *old_sigaction = &current_process->sighand.action[signum - 1];
     pr_err("sys_signal(%d, %p): Signal action ptr %p\n", signum, handler, old_sigaction);
     pr_err("sys_signal(%d, %p): Old signal handler %p\n", signum, handler, old_sigaction->sa_handler);
     // Get the old handler (to return).
-    sighandler_t old_handler = current->sighand.action[signum - 1].sa_handler;
+    sighandler_t old_handler = current_process->sighand.action[signum - 1].sa_handler;
     // Set the new action.
-    memcpy(old_sigaction, &new_sigaction, sizeof(sigaction_t));
+    __copy_sigaction(old_sigaction, &new_sigaction);
     // Unlock the signal handling for the given task.
-    __unlock_task_sighand(current);
+    __unlock_task_sighand(current_process);
     // Return the old sighandler.
     return old_handler;
 }
 
 int sys_sigaction(int signum, const sigaction_t *act, sigaction_t *oldact, uint32_t sigreturn_addr)
 {
-    pr_debug("sys_sigaction(%d, %p, %p, %p)\n", signum, act, oldact, sigreturn_ptr);
+    pr_debug("sys_sigaction(%d, %p, %p, %p)\n", signum, act, oldact, sigreturn_addr);
     // Check the signal that we want to send.
     if ((signum < 0) || (signum >= NSIG)) {
         pr_err("sys_sigaction(%d, %p, %p): Wrong signal number!\n", signum, act, oldact);
         return -EINVAL;
     }
-    // The do_signal() function is usually only invoked when the CPU is going
-    // to return in User Mode.
-    struct task_struct *current = scheduler_get_current_process();
-    assert(current && "There is no running process.");
+    // Get the current process.
+    task_struct *current_process = scheduler_get_current_process();
+    // Check the current task.
+    assert(current_process && "There is no current process!");
     // Skip the `init` process, always.
-    if (current->pid == 1) {
+    if (current_process->pid == 1) {
         pr_err("sys_sigaction(%d, %p, %p): Cannot set signal for init!\n", signum, act, oldact);
         return -EINVAL;
     }
     // Lock the signal handling for the given task.
-    __lock_task_sighand(current);
+    __lock_task_sighand(current_process);
     // Set the address of the sigreturn.
-    current->sigreturn_addr = sigreturn_addr;
+    current_process->sigreturn_addr = sigreturn_addr;
     // Get a pointer to the entry in the sighand.action array.
-    sigaction_t *current_sigaction = &current->sighand.action[signum - 1];
-    pr_debug("sys_sigaction(%d, %p, %p): : Signal old action ptr %p\n", signum, act, oldact, current_sigaction);
+    sigaction_t *current_process_sigaction = &current_process->sighand.action[signum - 1];
+    pr_debug("sys_sigaction(%d, %p, %p): : Signal old action ptr %p\n", signum, act, oldact, current_process_sigaction);
     // If requested, get the old sigaction.
     if (oldact) {
-        memcpy(oldact, current_sigaction, sizeof(sigaction_t));
+        __copy_sigaction(oldact, current_process_sigaction);
     }
     // Set the new action.
-    memcpy(current_sigaction, act, sizeof(sigaction_t));
+    __copy_sigaction(current_process_sigaction, act);
     // Unlock the signal handling for the given task.
-    __unlock_task_sighand(current);
+    __unlock_task_sighand(current_process);
     // Return the old sighandler.
     return 0;
 }
@@ -719,46 +762,62 @@ int sys_sigprocmask(int how, const sigset_t *set, sigset_t *oldset)
     if ((how < SIG_BLOCK) || (how > SIG_SETMASK)) {
         return -EINVAL;
     }
-    // The do_signal() function is usually only invoked when the CPU is going
-    // to return in User Mode.
-    struct task_struct *current = scheduler_get_current_process();
-    assert(current && "There is no running process.");
+    // Get the current process.
+    task_struct *current_process = scheduler_get_current_process();
+    // Check the current task.
+    assert(current_process && "There is no current process!");
     // Skip the `init` process, always.
-    if (current->pid == 1) {
+    if (current_process->pid == 1) {
         pr_warning("sys_sigprocmask(%d, %p, %p): Cannot set signal for init!\n", how, set, oldset);
         return -EINVAL;
     }
     // If `oldset` is not, return the old set.
     if (oldset) {
-        oldset->sig[0] = current->blocked.sig[0];
-        oldset->sig[1] = current->blocked.sig[1];
+        oldset->sig[0] = current_process->blocked.sig[0];
+        oldset->sig[1] = current_process->blocked.sig[1];
     }
     // Set the new signal mask.
     if (set) {
         if (how == SIG_BLOCK) {
             // The set of blocked signals is the union of the current set
             // and the set argument.
-            current->blocked.sig[0] |= set->sig[0];
-            current->blocked.sig[1] |= set->sig[1];
+            current_process->blocked.sig[0] |= set->sig[0];
+            current_process->blocked.sig[1] |= set->sig[1];
         } else if (how == SIG_UNBLOCK) {
             // The signals in set are removed from the current set of
             // blocked signals.  It is permissible to attempt to unblock
             // a signal which is not blocked.
-            current->blocked.sig[0] &= ~(set->sig[0]);
-            current->blocked.sig[1] &= ~(set->sig[1]);
+            current_process->blocked.sig[0] &= ~(set->sig[0]);
+            current_process->blocked.sig[1] &= ~(set->sig[1]);
         } else if (how == SIG_SETMASK) {
             // The set of blocked signals is set to the argument set.
-            current->blocked.sig[0] = set->sig[0];
-            current->blocked.sig[1] = set->sig[1];
+            current_process->blocked.sig[0] = set->sig[0];
+            current_process->blocked.sig[1] = set->sig[1];
         }
     }
     return 0;
 }
 
+int sys_sigpending(sigset_t *set)
+{
+    // Get the current process.
+    task_struct *current_process = scheduler_get_current_process();
+    // Check the current task.
+    assert(current_process && "There is no current process!");
+    // Check the pointer we were provided with.
+    if (set == NULL) {
+        return -EFAULT;
+    }
+    // Copy the pending set.
+    __copy_sigset(set, &current_process->pending.signal);
+    return 0;
+}
+
 const char *strsignal(int sig)
 {
-    if ((sig >= SIGHUP) && (sig < NSIG))
+    if ((sig >= SIGHUP) && (sig < NSIG)) {
         return sys_siglist[sig - 1];
+    }
     return NULL;
 }
 
@@ -800,7 +859,8 @@ int sigdelset(sigset_t *set, int signum)
 
 int sigismember(sigset_t *set, int signum)
 {
-    if (set)
+    if (set) {
         return bit_check(set->sig[(signum - 1) / 32], (signum - 1) % 32);
+    }
     return -1;
 }

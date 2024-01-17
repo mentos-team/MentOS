@@ -1,6 +1,6 @@
 /// @file t_kill.c
 /// @brief
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #include <sys/unistd.h>
@@ -29,7 +29,7 @@ void child_sigusr1_handler(int sig)
     printf("handler(sig: %d) : Ending handler (pid: %d).\n", sig, getpid());
 }
 
-void child_process()
+void child_process(void)
 {
     while (1) {
         printf("I'm the child (%d): I'm playing around!\n", getpid());

@@ -1,6 +1,6 @@
 /// @file ls.c
 /// @brief Command 'ls'.
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #include <sys/dirent.h>
@@ -14,7 +14,7 @@
 #include <sys/stat.h>
 #include <libgen.h>
 #include <sys/bitops.h>
-#include <debug.h>
+#include <io/debug.h>
 
 #define FLAG_L (1U << 0U)
 #define FLAG_A (1U << 1U)
@@ -111,7 +111,7 @@ static void print_ls(int fd, const char *path, unsigned int flags)
     printf("\n");
 
     if (bitmask_check(flags, FLAG_L)) {
-        printf("Total: %d byte\n", total_size);
+        printf("Total: %s\n", to_human_size(total_size));
     }
     printf("\n");
 }

@@ -1,15 +1,15 @@
 /// @file stat.c
 /// @brief Stat functions.
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #include "io/debug.h"
-#include "sys/errno.h"
 #include "fs/vfs.h"
+#include "limits.h"
 #include "mem/kheap.h"
 #include "stdio.h"
 #include "string.h"
-#include "limits.h"
+#include "sys/errno.h"
 
 int sys_stat(const char *path, stat_t *buf)
 {

@@ -1,11 +1,11 @@
 /// @file buddysystem.h
 /// @brief Buddy System.
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #pragma once
 
-#include "klib/list_head.h"
+#include "sys/list_head.h"
 #include "klib/stdatomic.h"
 #include "stdint.h"
 

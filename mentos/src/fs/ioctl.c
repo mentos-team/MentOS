@@ -1,14 +1,14 @@
 /// @file ioctl.c
 /// @brief
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #include "fs/ioctl.h"
+#include "fs/vfs.h"
 #include "process/scheduler.h"
-#include "system/printk.h"
 #include "stdio.h"
 #include "sys/errno.h"
-#include "fs/vfs.h"
+#include "system/printk.h"
 
 int sys_ioctl(int fd, int request, void *data)
 {

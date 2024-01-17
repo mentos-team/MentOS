@@ -1,6 +1,6 @@
 /// @file tss.h
 /// @brief Data structures concerning the Task State Segment (TSS).
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 /// @addtogroup descriptor_tables Descriptor Tables
 /// @{
@@ -45,7 +45,7 @@ typedef struct tss_entry {
 } tss_entry_t;
 
 /// @brief Flushes the Task State Segment.
-extern void tss_flush();
+extern void tss_flush(void);
 
 /// @brief We don't need tss to assist task switching, but it's required to
 ///        have one tss for switching back to kernel mode(system call for

@@ -1,14 +1,13 @@
 /// @file vmem_map.c
 /// @brief Virtual memory mapping routines.
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-// Include the kernel log levels.
-#include "sys/kernel_levels.h"
-/// Change the header.
-#define __DEBUG_HEADER__ "[VMEM  ]"
-/// Set the log level.
-#define __DEBUG_LEVEL__ LOGLEVEL_NOTICE
+// Setup the logging for this file (do this before any other include).
+#include "sys/kernel_levels.h"           // Include kernel log levels.
+#define __DEBUG_HEADER__ "[VMEM  ]"      ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
+#include "io/debug.h"                    // Include debugging functions.
 
 #include "mem/vmem_map.h"
 #include "string.h"
@@ -81,7 +80,7 @@ void virt_init(void)
 
 static virt_map_page_t *_alloc_virt_pages(uint32_t pfn_count)
 {
-    int order              = find_nearest_order_greater(0, pfn_count << 12);
+    unsigned order         = find_nearest_order_greater(0, pfn_count << 12);
     virt_map_page_t *vpage = PG_FROM_BBSTRUCT(bb_alloc_pages(&virt_default_mapping.bb_instance, order), virt_map_page_t, bbpage);
     return vpage;
 }
@@ -89,8 +88,9 @@ static virt_map_page_t *_alloc_virt_pages(uint32_t pfn_count)
 uint32_t virt_map_physical_pages(page_t *page, int pfn_count)
 {
     virt_map_page_t *vpage = _alloc_virt_pages(pfn_count);
-    if (!vpage)
+    if (!vpage) {
         return 0;
+    }
 
     uint32_t virt_address = VIRT_PAGE_TO_ADDRESS(vpage);
     uint32_t phy_address  = get_physical_address_from_page(page);

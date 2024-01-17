@@ -1,32 +1,29 @@
 /// @file timer.c
 /// @brief Timer implementation.
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-// Include the kernel log levels.
-#include "sys/kernel_levels.h"
-/// Change the header.
-#define __DEBUG_HEADER__ "[TIMER ]"
-/// Set the log level.
-#define __DEBUG_LEVEL__ LOGLEVEL_NOTICE
+// Setup the logging for this file (do this before any other include).
+#include "sys/kernel_levels.h"           // Include kernel log levels.
+#define __DEBUG_HEADER__ "[TIMER ]"      ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
+#include "io/debug.h"                    // Include debugging functions.
 
-#include "hardware/timer.h"
-
-#include "klib/irqflags.h"
-#include "process/scheduler.h"
-#include "hardware/pic8259.h"
-#include "io/port_io.h"
-#include "io/debug.h"
-#include "io/video.h"
-#include "stdint.h"
-#include "mem/kheap.h"
-#include "process/wait.h"
-#include "drivers/rtc.h"
+#include "assert.h"
 #include "descriptor_tables/isr.h"
 #include "devices/fpu.h"
-#include "system/signal.h"
-#include "assert.h"
+#include "drivers/rtc.h"
+#include "hardware/pic8259.h"
+#include "hardware/timer.h"
+#include "io/port_io.h"
+#include "io/video.h"
+#include "klib/irqflags.h"
+#include "mem/kheap.h"
+#include "process/scheduler.h"
+#include "process/wait.h"
+#include "stdint.h"
 #include "sys/errno.h"
+#include "system/signal.h"
 
 /// @defgroup picregs Programmable Interval Timer Registers
 /// @brief The list of registers used to set the PIT.
@@ -116,7 +113,7 @@ void timer_handler(pt_regs *reg)
     pic8259_send_eoi(IRQ_TIMER);
 }
 
-void timer_install()
+void timer_install(void)
 {
     dynamic_timers_install();
 
@@ -128,12 +125,12 @@ void timer_install()
     pic8259_irq_enable(IRQ_TIMER);
 }
 
-uint64_t timer_get_seconds()
+uint64_t timer_get_seconds(void)
 {
     return timer_ticks / TICKS_PER_SECOND;
 }
 
-unsigned long timer_get_ticks()
+unsigned long timer_get_ticks(void)
 {
     return timer_ticks;
 }
@@ -148,7 +145,7 @@ static tvec_base_t cpu_base = { 0 };
 static wait_queue_head_t sleep_queue;
 
 /// @brief Initialize dynamic timer system
-void dynamic_timers_install()
+void dynamic_timers_install(void)
 {
 #ifndef ENABLE_REAL_TIMER_SYSTEM
     list_head_init(&cpu_base.list);
@@ -158,8 +155,9 @@ void dynamic_timers_install()
     tvec_base_t *base = &cpu_base;
     base->timer_ticks = 0;
 
-    for (int i = 0; i < TVR_SIZE; ++i)
+    for (int i = 0; i < TVR_SIZE; ++i) {
         list_head_init(base->tv1.vec + i);
+    }
 
     for (int i = 0; i < TVN_SIZE; ++i) {
         list_head_init(base->tv2.vec + i);
@@ -176,8 +174,9 @@ void dynamic_timers_install()
 /// Prints used slots of timer vector
 static void __print_tvec_slots(tvec_base_t *base, int tv_index)
 {
-    if (tv_index < 0 || tv_index > 5)
+    if (tv_index < 0 || tv_index > 5) {
         return;
+    }
 
     // Write buffer
     char result[TVN_SIZE + 1];
@@ -191,13 +190,15 @@ static void __print_tvec_slots(tvec_base_t *base, int tv_index)
         for (int i = 0; i < TVR_SIZE; ++i) {
             // New line in order to not clutter the screen
             int index = i % TVN_SIZE;
-            if (i != 0 && index == 0)
+            if (i != 0 && index == 0) {
                 pr_debug("\n\t%s", result);
+            }
 
-            if (!list_head_empty(base->tv1.vec + i))
+            if (!list_head_empty(base->tv1.vec + i)) {
                 result[index] = '1';
-            else
+            } else {
                 result[index] = '0';
+            }
         }
 
         // The last line
@@ -222,14 +223,15 @@ static void __print_tvec_slots(tvec_base_t *base, int tv_index)
     }
 
     for (int i = 0; i < TVN_SIZE; ++i) {
-        if (list_head_empty(tv->vec + i))
+        if (list_head_empty(tv->vec + i)) {
             result[i] = '0';
-        else
+        } else {
             result[i] = '1';
+        }
     }
 
     pr_debug("base->tv%d.vec:\n\t%s\n", tv_index, result);
-    (void) result;
+    (void)result;
 }
 
 /// Dump all timer vector in base
@@ -244,7 +246,7 @@ static inline void __dump_all_tvec_slots(tvec_base_t *base)
 
 /// Select correct timer vector and position inside of it for the input timer
 /// index contains the position inside of the tv_index timer vector
-static void __find_tvec(tvec_base_t *base, struct timer_list *timer, int *index, int *tv_index)
+static void __find_tvec(tvec_base_t *base, struct timer_list *timer, uint32_t *index, uint32_t *tv_index)
 {
     assert(index && "index is NULL");
     assert(tv_index && "tv_index is NULL");
@@ -292,7 +294,7 @@ static void __find_tvec(tvec_base_t *base, struct timer_list *timer, int *index,
 /// Add timers into different lists based on their expire time
 static void __add_timer_tvec_base(tvec_base_t *base, struct timer_list *timer)
 {
-    int index = 0, tv_index = 0;
+    uint32_t index = 0, tv_index = 0;
     __find_tvec(base, timer, &index, &tv_index);
 
     struct list_head *vec;
@@ -325,7 +327,7 @@ static void __add_timer_tvec_base(tvec_base_t *base, struct timer_list *timer)
 /// Remove timer from tvec_base
 static void __rem_timer_tvec_base(tvec_base_t *base, struct timer_list *timer)
 {
-    int index = 0, tv_index = 0;
+    uint32_t index = 0, tv_index = 0;
     __find_tvec(base, timer, &index, &tv_index);
 
     // TODO: Check why we do not use vec.
@@ -358,7 +360,7 @@ static void __rem_timer_tvec_base(tvec_base_t *base, struct timer_list *timer)
 }
 
 /// Move all timers from tv up one level
-static int cascate(tvec_base_t *base, timer_vec *tv, int time_index, int tv_index)
+static uint32_t cascate(tvec_base_t *base, timer_vec *tv, uint32_t time_index, int tv_index)
 {
     if (!list_head_empty(tv->vec + time_index)) {
         pr_debug("Relocating timers in tv%d.vec[%d]\n", tv_index, time_index);
@@ -375,7 +377,7 @@ static int cascate(tvec_base_t *base, timer_vec *tv, int time_index, int tv_inde
     return time_index;
 }
 
-void run_timer_softirq()
+void run_timer_softirq(void)
 {
     tvec_base_t *base = &cpu_base;
     spinlock_lock(&base->lock);
@@ -386,7 +388,7 @@ void run_timer_softirq()
     unsigned long current_ticks = timer_get_ticks();
     while (base->timer_ticks <= current_ticks) {
         // Index of the current timer to execute
-        int current_time_index = base->timer_ticks & TVR_MASK;
+        uint32_t current_time_index = base->timer_ticks & TVR_MASK;
 
         // If the index is zero then all lists in base->tv1 have been checked, so they are empty
         if (!current_time_index) {
@@ -399,16 +401,15 @@ void run_timer_softirq()
             // lists are now empty. If so, cascade() is invoked once more to replenish
             // base->tv2 with the timers included in a list of base->tv3, and so on.
 
-            int tv2_index = (base->timer_ticks >> TIMER_TICKS_BITS(0)) & TVN_MASK;
-            int tv3_index = (base->timer_ticks >> TIMER_TICKS_BITS(1)) & TVN_MASK;
-            int tv4_index = (base->timer_ticks >> TIMER_TICKS_BITS(2)) & TVN_MASK;
-            int tv5_index = (base->timer_ticks >> TIMER_TICKS_BITS(3)) & TVN_MASK;
+            uint32_t tv2_index = (base->timer_ticks >> TIMER_TICKS_BITS(0)) & TVN_MASK;
+            uint32_t tv3_index = (base->timer_ticks >> TIMER_TICKS_BITS(1)) & TVN_MASK;
+            uint32_t tv4_index = (base->timer_ticks >> TIMER_TICKS_BITS(2)) & TVN_MASK;
+            uint32_t tv5_index = (base->timer_ticks >> TIMER_TICKS_BITS(3)) & TVN_MASK;
 
             if (!cascate(base, &base->tv2, tv2_index, 2) &&
                 !cascate(base, &base->tv3, tv3_index, 3) &&
                 !cascate(base, &base->tv4, tv4_index, 4) &&
-                !cascate(base, &base->tv5, tv5_index, 5))
-                ;
+                !cascate(base, &base->tv5, tv5_index, 5)) {}
         }
 
         // If there are timers to execute in this instant
@@ -521,14 +522,17 @@ typedef struct sleep_data_t {
 /// @param data Custom data stored in the timer
 void sleep_timeout(unsigned long data)
 {
-    // NOTE: We could modify the sleep_on and make it return the wait_queue_entry_t
-    //       and then store it in the dynamic timer data member instead of the task pid,
-    //       this would remove the need to iterate the sleep queue list.
+    // TODO: We could modify the sleep_on and make it return the
+    // wait_queue_entry_t and then store it in the dynamic timer data member
+    // instead of the task pid, this would remove the need to iterate the sleep
+    // queue list.
 
+    // Cast the data.
     sleep_data_t *sleep_data = (sleep_data_t *)data;
-
+    // Get the entry.
     wait_queue_entry_t *entry = sleep_data->entry;
-    task_struct *task         = entry->task;
+    // Get the task.
+    task_struct *task = entry->task;
 
     // Executed entry's wakeup test function
     int res = entry->func(entry, 0, 0);
@@ -543,9 +547,9 @@ void sleep_timeout(unsigned long data)
 
 int sys_nanosleep(const timespec *req, timespec *rem)
 {
-    // Probabilmente devi salvare rem da qualche parte, perche' dentro ci va
-    // messo quanto tempo mancava allo scadere del timer nel caso in cui il
-    // timer venga interrotto prima da un segnale.
+    // You probably have to save rem somewhere, because it contains how much
+    // time left until the timer expires, when the timer is stopped early by a
+    // signal.
     pr_debug("sys_nanosleep([s:%d; ns:%d],...)\n", req->tv_sec, req->tv_nsec);
 
     // Saves pid and rem timespec
@@ -574,13 +578,14 @@ int sys_nanosleep(const timespec *req, timespec *rem)
 /// @param pid PID of the process whos associated timer has expired
 void alarm_timeout(unsigned long pid)
 {
-    sys_kill(pid, SIGALRM);
-
-    struct task_struct *cur = scheduler_get_current_process();
-    cur->real_timer         = NULL;
+    sys_kill((pid_t)pid, SIGALRM);
+    // Get the current task.
+    struct task_struct *task = scheduler_get_current_process();
+    // Remove the timer.
+    task->real_timer = NULL;
 }
 
-int sys_alarm(int seconds)
+unsigned sys_alarm(int seconds)
 {
     pr_debug("sys_alarm(seconds:%d)\n", seconds);
 
@@ -588,7 +593,7 @@ int sys_alarm(int seconds)
     struct timer_list *timer;
 
     // If there is already a timer running
-    int result = 0;
+    unsigned result = 0;
     if (current->real_timer != NULL) {
         del_timer(current->real_timer);
         result = (current->real_timer->expires - timer_get_ticks()) / TICKS_PER_SECOND;
@@ -601,8 +606,9 @@ int sys_alarm(int seconds)
             return result;
         }
     } else {
-        if (seconds == 0)
+        if (seconds == 0) {
             return 0;
+        }
 
         // Allocate new timer
         timer = (struct timer_list *)kmalloc(sizeof(struct timer_list));
@@ -659,8 +665,9 @@ static void update_task_itimerval(int which, const struct itimerval *val)
 int sys_getitimer(int which, struct itimerval *curr_value)
 {
     // Invalid time domain
-    if (which < 0 || which > 3)
+    if (which < 0 || which > 3) {
         return EINVAL;
+    }
 
     struct task_struct *curr = scheduler_get_current_process();
     switch (which) {
@@ -681,39 +688,44 @@ int sys_getitimer(int which, struct itimerval *curr_value)
 }
 
 // Real timer interval timemout
-static void it_real_fn(unsigned long pid)
+static void it_real_fn(unsigned long data)
 {
-    struct task_struct *cur = scheduler_get_running_process(pid);
+    pid_t pid = (pid_t)data;
+    // Get the current task.
+    struct task_struct *task = scheduler_get_running_process(pid);
+    // Send the signal.
     sys_kill(pid, SIGALRM);
 
     // If the real incr is not 0 then restart
-    if (cur->it_real_incr != 0) {
+    if (task->it_real_incr != 0) {
         // Create new timer for process
         struct timer_list *real_timer = (struct timer_list *)kmalloc(sizeof(struct timer_list));
-        cur->real_timer               = real_timer;
+        task->real_timer              = real_timer;
         init_timer(real_timer);
 
-        real_timer->expires  = timer_get_ticks() + cur->it_real_incr;
+        real_timer->expires  = timer_get_ticks() + task->it_real_incr;
         real_timer->function = &it_real_fn;
-        real_timer->data     = cur->pid;
+        real_timer->data     = task->pid;
 
         add_timer(real_timer);
         return;
     }
 
     // No more timer
-    cur->real_timer = NULL;
+    task->real_timer = NULL;
 }
 
 int sys_setitimer(int which, const struct itimerval *new_value, struct itimerval *old_value)
 {
     // Invalid time domain
-    if (which < 0 || which > 3)
+    if (which < 0 || which > 3) {
         return EINVAL;
+    }
 
     // Returns old timer interval
-    if (old_value != NULL)
+    if (old_value != NULL) {
         sys_getitimer(which, old_value);
+    }
 
     // Get ticks of interval
     unsigned long interval_ticks = new_value->it_interval.tv_sec * TICKS_PER_SECOND;
@@ -723,8 +735,9 @@ int sys_setitimer(int which, const struct itimerval *new_value, struct itimerval
     struct task_struct *cur = scheduler_get_current_process();
     if (interval_ticks == 0) {
         // Removes real_timer
-        if (which == ITIMER_REAL && cur->real_timer != NULL)
+        if (which == ITIMER_REAL && cur->real_timer != NULL) {
             cur->real_timer = NULL;
+        }
 
         update_task_itimerval(which, new_value);
         return -1;

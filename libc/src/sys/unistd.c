@@ -1,12 +1,12 @@
 /// @file unistd.c
 /// @brief Functions used to manage files.
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #include "sys/unistd.h"
-#include "string.h"
 #include "limits.h"
 #include "stdio.h"
+#include "string.h"
 
 #if 0
 #include "vfs.h"

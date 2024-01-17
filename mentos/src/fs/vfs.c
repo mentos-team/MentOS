@@ -1,29 +1,26 @@
 /// @file vfs.c
 /// @brief Headers for Virtual File System (VFS).
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "fs/vfs.h"
+// Setup the logging for this file (do this before any other include).
+#include "sys/kernel_levels.h"           // Include kernel log levels.
+#define __DEBUG_HEADER__ "[VFS   ]"      ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
+#include "io/debug.h"                    // Include debugging functions.
 
-// Include the kernel log levels.
-#include "sys/kernel_levels.h"
-/// Change the header.
-#define __DEBUG_HEADER__ "[VFS   ]"
-/// Set the log level.
-#define __DEBUG_LEVEL__ LOGLEVEL_NOTICE
-
-#include "process/scheduler.h"
-#include "klib/spinlock.h"
-#include "strerror.h"
-#include "system/syscall.h"
-#include "klib/hashmap.h"
-#include "string.h"
-#include "fs/procfs.h"
 #include "assert.h"
+#include "fs/procfs.h"
+#include "fs/vfs.h"
+#include "klib/hashmap.h"
+#include "klib/spinlock.h"
 #include "libgen.h"
-#include "io/debug.h"
-#include "system/panic.h"
+#include "process/scheduler.h"
 #include "stdio.h"
+#include "strerror.h"
+#include "string.h"
+#include "system/panic.h"
+#include "system/syscall.h"
 
 /// The hashmap that associates a type of Filesystem `name` to its `mount` function;
 static hashmap_t *vfs_filesystems;
@@ -41,7 +38,7 @@ static kmem_cache_t *vfs_superblock_cache;
 /// VFS memory cache for files.
 kmem_cache_t *vfs_file_cache;
 
-void vfs_init()
+void vfs_init(void)
 {
     // Initialize the list of superblocks.
     list_head_init(&vfs_super_blocks);
@@ -97,7 +94,7 @@ super_block_t *vfs_get_superblock(const char *absolute_path)
             }
         }
 #else
-        int len = strlen(superblock->path);
+        size_t len = strlen(superblock->path);
         if (!strncmp(absolute_path, superblock->path, len)) {
             if (len > last_sb_len) {
                 last_sb_len = len;
@@ -114,7 +111,7 @@ vfs_file_t *vfs_open(const char *path, int flags, mode_t mode)
     // Allocate a variable for the path.
     char absolute_path[PATH_MAX];
     // If the first character is not the '/' then get the absolute path.
-    if (!realpath(path, absolute_path)) {
+    if (!realpath(path, absolute_path, sizeof(absolute_path))) {
         pr_err("vfs_open(%s): Cannot get the absolute path!\n", path);
         errno = ENODEV;
         return NULL;
@@ -175,7 +172,7 @@ ssize_t vfs_read(vfs_file_t *file, void *buf, size_t offset, size_t nbytes)
     return file->fs_operations->read_f(file, buf, offset, nbytes);
 }
 
-ssize_t vfs_write(vfs_file_t *file, void *buf, size_t offset, size_t nbytes)
+ssize_t vfs_write(vfs_file_t *file, const void *buf, size_t offset, size_t nbytes)
 {
     if (file->fs_operations->write_f == NULL) {
         pr_err("No WRITE function found for the current filesystem.\n");
@@ -193,7 +190,7 @@ off_t vfs_lseek(vfs_file_t *file, off_t offset, int whence)
     return file->fs_operations->lseek_f(file, offset, whence);
 }
 
-int vfs_getdents(vfs_file_t *file, dirent_t *dirp, off_t off, size_t count)
+ssize_t vfs_getdents(vfs_file_t *file, dirent_t *dirp, off_t off, size_t count)
 {
     if (file->fs_operations->getdents_f == NULL) {
         pr_err("No GETDENTS function found for the current filesystem.\n");
@@ -216,7 +213,7 @@ int vfs_unlink(const char *path)
     // Allocate a variable for the path.
     char absolute_path[PATH_MAX];
     // If the first character is not the '/' then get the absolute path.
-    if (!realpath(path, absolute_path)) {
+    if (!realpath(path, absolute_path, sizeof(absolute_path))) {
         pr_err("vfs_unlink(%s): Cannot get the absolute path.", path);
         return -ENODEV;
     }
@@ -243,7 +240,7 @@ int vfs_mkdir(const char *path, mode_t mode)
     // Allocate a variable for the path.
     char absolute_path[PATH_MAX];
     // If the first character is not the '/' then get the absolute path.
-    if (!realpath(path, absolute_path)) {
+    if (!realpath(path, absolute_path, sizeof(absolute_path))) {
         pr_err("vfs_mkdir(%s): Cannot get the absolute path.", path);
         return -ENODEV;
     }
@@ -270,7 +267,7 @@ int vfs_rmdir(const char *path)
     // Allocate a variable for the path.
     char absolute_path[PATH_MAX];
     // If the first character is not the '/' then get the absolute path.
-    if (!realpath(path, absolute_path)) {
+    if (!realpath(path, absolute_path, sizeof(absolute_path))) {
         pr_err("vfs_rmdir(%s): Cannot get the absolute path.", path);
         return -ENODEV;
     }
@@ -298,7 +295,7 @@ vfs_file_t *vfs_creat(const char *path, mode_t mode)
     // Allocate a variable for the path.
     char absolute_path[PATH_MAX];
     // If the first character is not the '/' then get the absolute path.
-    if (!realpath(path, absolute_path)) {
+    if (!realpath(path, absolute_path, sizeof(absolute_path))) {
         pr_err("vfs_creat(%s): Cannot get the absolute path.", path);
         errno = ENODEV;
         return NULL;
@@ -324,7 +321,7 @@ vfs_file_t *vfs_creat(const char *path, mode_t mode)
     // Retrieve the file.
     vfs_file_t *file = sb_root->sys_operations->creat_f(absolute_path, mode);
     if (file == NULL) {
-        pr_err("vfs_open(%s): Cannot find the given file (%s)!\n", path, strerror(errno));
+        pr_err("vfs_creat(%s): Cannot find the given file (%s)!\n", path, strerror(errno));
         errno = ENOENT;
         return NULL;
     }
@@ -334,12 +331,54 @@ vfs_file_t *vfs_creat(const char *path, mode_t mode)
     return file;
 }
 
+ssize_t vfs_readlink(vfs_file_t *file, char *buffer, size_t bufsize)
+{
+    if (file == NULL) {
+        pr_err("vfs_readlink: received a null pointer for file.\n");
+        return -ENOENT;
+    }
+    if (file->fs_operations->readlink_f == NULL) {
+        pr_err("vfs_readlink(%s): Function not supported in current filesystem.", file->name);
+        return -ENOSYS;
+    }
+    // Perform the read.
+    return file->fs_operations->readlink_f(file, buffer, bufsize);
+}
+
+int vfs_symlink(const char *linkname, const char *path)
+{
+    // Allocate a variable for the path.
+    char absolute_path[PATH_MAX];
+    // If the first character is not the '/' then get the absolute path.
+    if (!realpath(linkname, absolute_path, sizeof(absolute_path))) {
+        pr_err("vfs_symlink(%s, %s): Cannot get the absolute path.", linkname, path);
+        return -ENODEV;
+    }
+    super_block_t *sb = vfs_get_superblock(absolute_path);
+    if (sb == NULL) {
+        pr_err("vfs_symlink(%s, %s): Cannot find the superblock!\n");
+        return -ENODEV;
+    }
+    vfs_file_t *sb_root = sb->root;
+    if (sb_root == NULL) {
+        pr_err("vfs_symlink(%s, %s): Cannot find the superblock root.", linkname, path);
+        return -ENOENT;
+    }
+    // Check if the function is implemented.
+    if (sb_root->sys_operations->symlink_f == NULL) {
+        pr_err("vfs_symlink(%s, %s): Function not supported in current filesystem.", linkname, path);
+        return -ENOSYS;
+    }
+    pr_alert("vfs_symlink(%s, %s)", linkname, path);
+    return 0;
+}
+
 int vfs_stat(const char *path, stat_t *buf)
 {
     // Allocate a variable for the path.
     char absolute_path[PATH_MAX];
     // If the first character is not the '/' then get the absolute path.
-    if (!realpath(path, absolute_path)) {
+    if (!realpath(path, absolute_path, sizeof(absolute_path))) {
         pr_err("vfs_stat(%s): Cannot get the absolute path.", path);
         return -ENODEV;
     }
@@ -547,8 +586,9 @@ int vfs_destroy_task(task_struct *task)
             // Decrease the counter.
             --task->fd_list[fd].file_struct->count;
             // If counter is zero, close the file.
-            if (task->fd_list[fd].file_struct->count == 0)
+            if (task->fd_list[fd].file_struct->count == 0) {
                 task->fd_list[fd].file_struct->fs_operations->close_f(task->fd_list[fd].file_struct);
+            }
             // Clear the pointer to the file structure.
             task->fd_list[fd].file_struct = NULL;
         }

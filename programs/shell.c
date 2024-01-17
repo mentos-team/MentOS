@@ -1,6 +1,6 @@
 /// @file shell.c
 /// @brief Implement shell functions.
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #include <sys/unistd.h>
@@ -9,22 +9,22 @@
 #include <libgen.h>
 #include <sys/stat.h>
 #include <signal.h>
-#include <debug.h>
+#include <io/debug.h>
+#include <io/ansi_colors.h>
 #include <sys/bitops.h>
-#include "stdbool.h"
-#include "stddef.h"
-#include "string.h"
-#include "stdio.h"
-#include "stdlib.h"
-#include "strerror.h"
-#include "termios.h"
-#include "limits.h"
-#include "sys/utsname.h"
-#include "ctype.h"
-#include "ansi_colors.h"
+#include <stdbool.h>
+#include <stddef.h>
+#include <string.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <strerror.h>
+#include <termios.h>
+#include <limits.h>
+#include <sys/utsname.h>
+#include <ctype.h>
 
 /// Maximum length of commands.
-#define CMD_LEN 32
+#define CMD_LEN 64
 /// Maximum lenght of the history.
 #define HISTORY_MAX 10
 
@@ -88,15 +88,17 @@ static inline int __folder_contains(
     dirent_t *result)
 {
     int fd = open(folder, O_RDONLY | O_DIRECTORY, 0);
-    if (fd == -1)
+    if (fd == -1) {
         return 0;
+    }
     // Prepare the variables for the search.
     dirent_t dent;
     size_t entry_len = strlen(entry);
     int found        = 0;
     while (getdents(fd, &dent, sizeof(dirent_t)) == sizeof(dirent_t)) {
-        if (accepted_type && (accepted_type != dent.d_type))
+        if (accepted_type && (accepted_type != dent.d_type)) {
             continue;
+        }
         if (strncmp(entry, dent.d_name, entry_len) == 0) {
             *result = dent;
             found   = 1;
@@ -130,7 +132,7 @@ static inline int __search_in_path(const char *entry, dirent_t *result)
 }
 
 /// @brief Prints the prompt.
-static inline void __prompt_print()
+static inline void __prompt_print(void)
 {
     // Get the current working directory.
     char CWD[PATH_MAX];
@@ -155,7 +157,7 @@ static inline void __prompt_print()
     } else {
         HOSTNAME = buffer.nodename;
     }
-    printf(FG_GREEN "%s" FG_WHITE "@" FG_CYAN "%s " FG_BLUE_BRIGHT "[%02d:%02d:%02d]" FG_WHITE " [%s] " FG_WHITE_BRIGHT "%% ",
+    printf(FG_GREEN "%s" FG_WHITE "@" FG_CYAN "%s " FG_BLUE_BRIGHT "[%02d:%02d:%02d]" FG_WHITE " [%s] " FG_WHITE_BRIGHT "\n-> %% ",
            USER, HOSTNAME, timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec, CWD);
 }
 
@@ -289,7 +291,7 @@ static int __cd(int argc, char *argv[])
     } else {
         path = getenv("HOME");
         if (path == NULL) {
-            printf("cd: There is no home directory set.\n");
+            printf("cd: There is no home directory set.\n\n");
             return 1;
         }
     }
@@ -309,6 +311,7 @@ static int __cd(int argc, char *argv[])
         printf("cd: Failed to set current working directory.\n");
         return 1;
     }
+    putchar('\n');
     return 0;
 }
 
@@ -370,7 +373,7 @@ static char *__hst_fetch(bool_t up)
 }
 
 /// @brief Completely delete the current command.
-static inline void __cmd_clr()
+static inline void __cmd_clr(void)
 {
     // First we need to get back to the end of the line.
     while (cmd[cmd_cursor_index] != 0) {
@@ -446,7 +449,7 @@ static inline void __cmd_sug(dirent_t *suggestion, size_t starting_position)
 }
 
 /// @brief Gets the inserted command.
-static void __cmd_get()
+static void __cmd_get(void)
 {
     // Re-Initialize the cursor index.
     cmd_cursor_index = 0;
@@ -462,7 +465,9 @@ static void __cmd_get()
             putchar('\n');
             // Break the while loop.
             break;
-        } else if (c == '\033') {
+        }
+        // It is a special character.
+        if (c == '\033') {
             c = getchar();
             if (c == '[') {
                 c = getchar(); // Get the char.
@@ -512,11 +517,13 @@ static void __cmd_get()
             // Count the number of words.
             int words = __count_words(cmd);
             // If there are no words, skip.
-            if (words == 0)
+            if (words == 0) {
                 continue;
+            }
             // Determines if we are at the beginning of a new argument, last character is space.
-            if (__is_separator(cmd[cmd_len - 1]))
+            if (__is_separator(cmd[cmd_len - 1])) {
                 continue;
+            }
             // If the last two characters are two dots `..` append a slash `/`,
             // and continue.
             if ((cmd_len >= 2) && ((cmd[cmd_len - 2] == '.') && (cmd[cmd_len - 1] == '.'))) {
@@ -533,19 +540,28 @@ static void __cmd_get()
             dirent_t dent;
             // If there is only one word, we are searching for a command.
             if (is_run_cmd) {
-                if (__folder_contains(cwd, cmd + 2, 0, &dent))
+                if (__folder_contains(cwd, cmd + 2, 0, &dent)) {
                     __cmd_sug(&dent, cmd_len - 2);
+                }
             } else if (is_abs_path) {
-                const char *_dirname = dirname(cmd), *_basename = basename(cmd);
-                if (!_dirname || !_basename)
+                char _dirname[PATH_MAX];
+                if (!dirname(cmd, _dirname, sizeof(_dirname))) {
                     continue;
-                if ((*_dirname == 0) || (*_basename == 0))
+                }
+                const char *_basename = basename(cmd);
+                if (!_basename) {
                     continue;
-                if (__folder_contains(_dirname, _basename, 0, &dent))
+                }
+                if ((*_dirname == 0) || (*_basename == 0)) {
+                    continue;
+                }
+                if (__folder_contains(_dirname, _basename, 0, &dent)) {
                     __cmd_sug(&dent, strlen(_basename));
+                }
             } else if (words == 1) {
-                if (__search_in_path(cmd, &dent))
+                if (__search_in_path(cmd, &dent)) {
                     __cmd_sug(&dent, cmd_len);
+                }
             } else {
                 // Search the last occurrence of a space, from there on
                 // we will have the last argument.
@@ -553,17 +569,25 @@ static void __cmd_get()
                 // We need to move ahead of one character if we found the space.
                 last_argument = last_argument ? last_argument + 1 : NULL;
                 // If there is no last argument.
-                if (last_argument == NULL)
+                if (last_argument == NULL) {
                     continue;
-                const char *_dirname = dirname(last_argument), *_basename = basename(last_argument);
-                if (!_dirname || !_basename)
+                }
+                char _dirname[PATH_MAX];
+                if (!dirname(last_argument, _dirname, sizeof(_dirname))) {
                     continue;
+                }
+                const char *_basename = basename(last_argument);
+                if (!_basename) {
+                    continue;
+                }
                 if ((*_dirname != 0) && (*_basename != 0)) {
-                    if (__folder_contains(_dirname, _basename, 0, &dent))
+                    if (__folder_contains(_dirname, _basename, 0, &dent)) {
                         __cmd_sug(&dent, strlen(_basename));
+                    }
                 } else if (*_basename != 0) {
-                    if (__folder_contains(cwd, _basename, 0, &dent))
+                    if (__folder_contains(cwd, _basename, 0, &dent)) {
                         __cmd_sug(&dent, strlen(_basename));
+                    }
                 }
             }
         } else if (c == 127) {
@@ -609,10 +633,11 @@ static void __cmd_get()
 
 /// @brief Gets the options from the command.
 /// @param command The executed command.
-static void __cmd_opt(char *command, int *argc, char ***argv)
+static void __alloc_argv(char *command, int *argc, char ***argv)
 {
+    (*argc) = __count_words(command);
     // Get the number of arguments, return if zero.
-    if (((*argc) = __count_words(command)) == 0) {
+    if ((*argc) == 0) {
         return;
     }
     (*argv)         = (char **)malloc(sizeof(char *) * ((*argc) + 1));
@@ -636,6 +661,14 @@ static void __cmd_opt(char *command, int *argc, char ***argv)
         }
     } while (*cit++);
     (*argv)[argcIt] = NULL;
+}
+
+static inline void __free_argv(int argc, char **argv)
+{
+    for (int i = 0; i < argc; ++i) {
+        free(argv[i]);
+    }
+    free(argv);
 }
 
 void wait_for_child(int signum)
@@ -671,7 +704,7 @@ int main(int argc, char *argv[])
         printf("Failed to set signal handler (%s).\n", SIGCHLD, strerror(errno));
         return 1;
     }
-    
+
     // Move inside the home directory.
     __cd(0, NULL);
 
@@ -694,7 +727,7 @@ int main(int argc, char *argv[])
         int _argc = 1;
         // The vector of arguments.
         char **_argv;
-        __cmd_opt(cmd, &_argc, &_argv);
+        __alloc_argv(cmd, &_argc, &_argv);
         // Check if the command is empty.
         if (_argc == 0) {
             continue;
@@ -716,6 +749,7 @@ int main(int argc, char *argv[])
                 free(_argv[_argc - 1]);
                 _argv[_argc - 1] = NULL;
                 blocking         = false;
+                _argc -= 1;
             }
             // Is a shell path, execute it!
             int status;
@@ -732,16 +766,15 @@ int main(int argc, char *argv[])
             }
             if (blocking) {
                 waitpid(cpid, &status, 0);
+                if (WIFSIGNALED(status)) {
+                    printf(FG_RED "\nExit status %d, killed by signal %d\n" FG_RESET, WEXITSTATUS(status), WTERMSIG(status));
+                } else if (WIFSTOPPED(status)) {
+                    printf(FG_YELLOW "\nExit status %d, stopped by signal %d\n" FG_RESET, WEXITSTATUS(status), WSTOPSIG(status));
+                }
             }
         }
         // Free up the memory reserved for the arguments.
-        for (int it = 0; it < _argc; ++it) {
-            // Check if the argument is not empty.
-            if (_argv[it] != NULL) {
-                // Free up its memory.
-                free(_argv[it]);
-            }
-        }
+        __free_argv(_argc, _argv);
     }
 #pragma clang diagnostic pop
     return 0;

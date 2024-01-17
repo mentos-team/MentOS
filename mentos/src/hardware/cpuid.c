@@ -1,6 +1,6 @@
 /// @file cpuid.c
 /// @brief CPUID-based function to detect CPU type.
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #include "hardware/cpuid.h"
@@ -146,7 +146,7 @@ char *cpuid_brand_index(pt_regs *f)
                           "Mobile Intel Celeron",
                           NULL };
 
-    int bx = (f->ebx & 0xFF);
+    uint32_t bx = (f->ebx & 0xFF);
 
     if (bx > 0x17) {
         bx = 0;

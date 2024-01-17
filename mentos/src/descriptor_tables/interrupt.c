@@ -1,23 +1,20 @@
 /// @file interrupt.c
 /// @brief Functions which manage the Interrupt Service Routines (ISRs).
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-// Include the kernel log levels.
-#include "sys/kernel_levels.h"
-/// Change the header.
-#define __DEBUG_HEADER__ "[IRQ   ]"
-/// Set the log level.
-#define __DEBUG_LEVEL__ LOGLEVEL_NOTICE
+// Setup the logging for this file (do this before any other include).
+#include "sys/kernel_levels.h"           // Include kernel log levels.
+#define __DEBUG_HEADER__ "[IRQ   ]"      ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
+#include "io/debug.h"                    // Include debugging functions.
 
 #include "descriptor_tables/isr.h"
-
 #include "process/scheduler.h"
 #include "hardware/pic8259.h"
 #include "system/printk.h"
 #include "assert.h"
 #include "stdio.h"
-#include "io/debug.h"
 #include "descriptor_tables/idt.h"
 
 /// @brief Shared interrupt handlers, stored into a double-linked list.
@@ -36,7 +33,7 @@ static list_head shared_interrupt_handlers[IRQ_NUM];
 static kmem_cache_t *irq_cache;
 
 /// @brief Creates a new irq struct.
-static inline irq_struct_t *__irq_struct_alloc()
+static inline irq_struct_t *__irq_struct_alloc(void)
 {
     // Allocate the structure.
     irq_struct_t *irq_struct = kmem_cache_alloc(irq_cache, GFP_KERNEL);
@@ -55,7 +52,7 @@ static inline void __irq_struct_dealloc(irq_struct_t *irq_struct)
     kmem_cache_free(irq_struct);
 }
 
-void irq_init()
+void irq_init(void)
 {
     // Initialize the cache.
     irq_cache = KMEM_CREATE(irq_struct_t);

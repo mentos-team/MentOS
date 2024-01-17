@@ -1,47 +1,42 @@
 /// @file   kernel.c
 /// @brief  Kernel main function.
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-// Include the kernel log levels.
-#include "sys/kernel_levels.h"
-/// Change the header.
-#define __DEBUG_HEADER__ "[KERNEL]"
-/// Set the log level.
-#define __DEBUG_LEVEL__ LOGLEVEL_NOTICE
+// Setup the logging for this file (do this before any other include).
+#include "sys/kernel_levels.h"           // Include kernel log levels.
+#define __DEBUG_HEADER__ "[KERNEL]"      ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
+#include "io/debug.h"                    // Include debugging functions.
 
-#include "io/proc_modules.h"
-#include "mem/vmem_map.h"
-#include "fs/procfs.h"
-#include "devices/pci.h"
-#include "drivers/ata.h"
-#include "descriptor_tables/idt.h"
 #include "kernel.h"
-#include "mem/zone_allocator.h"
+
 #include "descriptor_tables/gdt.h"
-#include "system/syscall.h"
-#include "version.h"
-#include "io/video.h"
-#include "hardware/pic8259.h"
-#include "io/debug.h"
-#include "drivers/fdc.h"
-#include "fs/ext2.h"
-#include "klib/irqflags.h"
+#include "descriptor_tables/idt.h"
+#include "drivers/ata/ata.h"
 #include "drivers/keyboard/keyboard.h"
 #include "drivers/keyboard/keymap.h"
 #include "drivers/ps2.h"
-#include "process/scheduler.h"
-#include "hardware/timer.h"
-#include "fs/vfs.h"
-#include "devices/fpu.h"
-#include "system/printk.h"
-#include "sys/module.h"
 #include "drivers/rtc.h"
-#include "stdio.h"
-#include "assert.h"
+#include "fs/ext2.h"
+#include "fs/procfs.h"
+#include "fs/vfs.h"
+#include "hardware/pic8259.h"
+#include "hardware/timer.h"
+#include "io/proc_modules.h"
 #include "io/vga/vga.h"
-#include "string.h"
-#include "fcntl.h"
+#include "io/video.h"
+#include "mem/vmem_map.h"
+#include "mem/zone_allocator.h"
+#include "process/scheduler.h"
+#include "process/scheduler_feedback.h"
+#include "stdio.h"
+#include "sys/module.h"
+#include "sys/msg.h"
+#include "sys/sem.h"
+#include "sys/shm.h"
+#include "system/syscall.h"
+#include "version.h"
 
 /// Describe start address of grub multiboot modules.
 char *module_start[MAX_MODULES];
@@ -83,7 +78,7 @@ uintptr_t initial_esp = 0;
 boot_info_t boot_info;
 
 /// @brief Prints [OK] at the current row and column 60.
-static inline void print_ok()
+static inline void print_ok(void)
 {
     unsigned y, width;
     video_get_cursor_position(NULL, &y);
@@ -93,7 +88,7 @@ static inline void print_ok()
 }
 
 /// @brief Prints [FAIL] at the current row and column 60.
-static inline void print_fail()
+static inline void print_fail(void)
 {
     unsigned y, width;
     video_get_cursor_position(NULL, &y);
@@ -112,18 +107,13 @@ int kmain(boot_info_t *boot_informations)
     boot_info = *boot_informations;
     // Am I booted by a Multiboot-compliant boot loader?
     if (boot_info.magic != MULTIBOOT_BOOTLOADER_MAGIC) {
-        printf("Invalid magic number: 0x%x\n", (unsigned)boot_info.magic);
+        printf("Invalid magic number: 0x%x\n", boot_info.magic);
         return 1;
     }
     // Set the initial esp.
     initial_esp = boot_info.stack_base;
     // Dump the multiboot structure.
     dump_multiboot(boot_info.multiboot_header);
-
-    //==========================================================================
-    // First, disable the keyboard, otherwise the PS/2 initialization does not
-    // work properly.
-    keyboard_disable();
 
     //==========================================================================
     pr_notice("Initialize the video...\n");
@@ -161,24 +151,12 @@ int kmain(boot_info_t *boot_informations)
     print_ok();
 
     //==========================================================================
-    // The Global Descriptor Table (GDT) is a data structure used by Intel
-    // x86-family processors starting with the 80286 in order to define the
-    // characteristics of the various memory areas used during program execution,
-    // including the base address, the size, and access privileges like
-    // executability and writability. These memory areas are called segments in
-    // Intel terminology.
     pr_notice("Initialize Global Descriptor Table (GDT)...\n");
     printf("Initialize GDT...");
     init_gdt();
     print_ok();
-    // The IDT is used to show the processor what Interrupt Service Routine
-    // (ISR) to call to handle an exception. IDT entries are also called
-    // Interrupt requests whenever a device has completed a request and needs to
-    // be serviced.
-    // ISRs are used to save the current processor state and set up the
-    // appropriate segment registers needed for kernel mode before the kernel’s
-    // C-level interrupt handler is called. To handle the right exception, the
-    // correct entry in the IDT should be pointed to the correct ISR.
+
+    //==========================================================================
     pr_notice("Initialize Interrupt Service Routine(ISR)...\n");
     printf("Initialize IDT...");
     init_idt();
@@ -300,6 +278,51 @@ int kmain(boot_info_t *boot_informations)
     print_ok();
 
     //==========================================================================
+    pr_notice("Initialize IPC information system...\n");
+    printf("Initialize IPC information system...");
+    if (procipc_module_init()) {
+        print_fail();
+        pr_emerg("Failed to initialize the IPC information system!\n");
+        return 1;
+    }
+    print_ok();
+
+    //==========================================================================
+    pr_notice("Initialize IPC/SEM system...\n");
+    printf("Initialize IPC/SEM system...");
+    if (sem_init()) {
+        print_fail();
+        pr_emerg("Failed to initialize the IPC/SEM system!\n");
+        return 1;
+    }
+    print_ok();
+
+    //==========================================================================
+    pr_notice("Initialize IPC/MSQ system...\n");
+    printf("Initialize IPC/MSQ system...");
+    if (msq_init()) {
+        print_fail();
+        pr_emerg("Failed to initialize the IPC/MSQ system!\n");
+        return 1;
+    }
+    print_ok();
+
+    //==========================================================================
+    pr_notice("Initialize IPC/SHM system...\n");
+    printf("Initialize IPC/SHM system...");
+    if (shm_init()) {
+        print_fail();
+        pr_emerg("Failed to initialize the IPC/SHM system!\n");
+        return 1;
+    }
+    print_ok();
+
+    //==========================================================================
+    // First, disable the keyboard, otherwise the PS/2 initialization does not
+    // work properly.
+    keyboard_disable();
+
+    //==========================================================================
     pr_notice("Setting up PS/2 driver...\n");
     printf("Setting up PS/2 driver...");
     if (ps2_initialize()) {
@@ -321,6 +344,8 @@ int kmain(boot_info_t *boot_informations)
     set_keymap_type(KEYMAP_IT);
 #endif
 
+    keyboard_enable();
+
     //==========================================================================
 #if 0
      pr_notice("Install the mouse.\n");
@@ -339,6 +364,26 @@ int kmain(boot_info_t *boot_informations)
     pr_notice("Init process management...\n");
     printf("Init process management...");
     if (!init_tasking()) {
+        print_fail();
+        return 1;
+    }
+    print_ok();
+
+    //==========================================================================
+#ifdef ENABLE_SCHEDULER_FEEDBACK
+    pr_notice("Initialize scheduler feedback system...\n");
+    printf("Initialize scheduler feedback system...");
+    if (!scheduler_feedback_init()) {
+        print_fail();
+        return 1;
+    }
+    print_ok();
+#endif
+
+    //==========================================================================
+    pr_notice("Initialize scheduler feedback system (2)...\n");
+    printf("Initialize scheduler feedback system (2)...");
+    if (procfb_module_init()) {
         print_fail();
         return 1;
     }

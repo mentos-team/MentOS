@@ -1,15 +1,15 @@
 /// @file read_write.c
 /// @brief Read and write functions.
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #include "process/scheduler.h"
-#include "fs/vfs_types.h"
-#include "system/panic.h"
-#include "sys/errno.h"
 #include "fcntl.h"
-#include "stdio.h"
 #include "fs/vfs.h"
+#include "fs/vfs_types.h"
+#include "stdio.h"
+#include "sys/errno.h"
+#include "system/panic.h"
 
 ssize_t sys_read(int fd, void *buf, size_t nbytes)
 {
@@ -46,7 +46,7 @@ ssize_t sys_read(int fd, void *buf, size_t nbytes)
     return read;
 }
 
-ssize_t sys_write(int fd, void *buf, size_t nbytes)
+ssize_t sys_write(int fd, const void *buf, size_t nbytes)
 {
     // Get the current task.
     task_struct *task = scheduler_get_current_process();

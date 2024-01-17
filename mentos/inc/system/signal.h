@@ -1,13 +1,13 @@
 /// @file signal.h
 /// @brief Signals definition.
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #pragma once
 
 #include "klib/stdatomic.h"
 #include "klib/spinlock.h"
-#include "klib/list_head.h"
+#include "sys/list_head.h"
 #include "system/syscall.h"
 
 /// @brief Signal codes.
@@ -257,7 +257,7 @@ int do_signal(struct pt_regs *f);
 
 /// @brief Initialize the signals.
 /// @return 1 on success, 0 on failure.
-int signals_init();
+int signals_init(void);
 
 /// @brief Send signal to one specific process.
 /// @param pid The PID of the process.
@@ -285,11 +285,15 @@ int sys_sigaction(int signum, const sigaction_t *act, sigaction_t *oldact, uint3
 /// @param set    The set of signals to manage by the function.
 /// @param oldset If non-NULL, the previous value of the signal mask is stored here.
 /// @return returns 0 on success, and -1 on error (errno is set to indicate the cause).
-/// @details
-/// If set is NULL, then the signal mask is unchanged (i.e., how is
-///  ignored), but the current value of the signal mask is
-///  nevertheless returned in oldset (if it is not NULL).
+/// @details If set is NULL, then the signal mask is unchanged (i.e., how is
+/// ignored), but the current value of the signal mask is nevertheless returned
+/// in oldset (if it is not NULL).
 int sys_sigprocmask(int how, const sigset_t *set, sigset_t *oldset);
+
+/// @brief Provides a snapshot of pending signals.
+/// @param set where the set of pending signals is returned.
+/// @return 0 on success, -1 on failure and errno is set to indicate the error.
+int sys_sigpending(sigset_t *set);
 
 /// @brief Returns the string describing the given signal.
 /// @param sig The signal to inquire.

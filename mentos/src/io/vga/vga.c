@@ -1,31 +1,24 @@
 /// @file vga.c
 /// @brief Implementation of Video Graphics Array (VGA) drivers.
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-// Include the kernel log levels.
-#include "sys/kernel_levels.h"
-/// Change the header.
-#define __DEBUG_HEADER__ "[VGA   ]"
-/// Set the log level.
-#define __DEBUG_LEVEL__ LOGLEVEL_NOTICE
-
-#include "io/vga/vga.h"
-
-#include "io/vga/vga_palette.h"
-#include "io/vga/vga_mode.h"
-#include "io/vga/vga_font.h"
+// Setup the logging for this file (do this before any other include).
+#include "sys/kernel_levels.h"           // Include kernel log levels.
+#define __DEBUG_HEADER__ "[VGA   ]"      ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
+#include "io/debug.h"                    // Include debugging functions.
 
 #include "hardware/timer.h"
 #include "io/port_io.h"
-#include "io/debug.h"
+#include "io/vga/vga.h"
+#include "io/vga/vga_font.h"
+#include "io/vga/vga_mode.h"
+#include "io/vga/vga_palette.h"
 #include "io/video.h"
+#include "math.h"
 #include "stdbool.h"
 #include "string.h"
-#include "math.h"
-
-/// Counts the number of elements of an array.
-#define COUNT_OF(x) ((sizeof(x) / sizeof(0 [x])) / ((size_t)(!(sizeof(x) % sizeof(0 [x])))))
 
 /// Attribute Controller index port.
 #define AC_INDEX 0x03C0
@@ -118,12 +111,15 @@ static inline char *__get_seg(void)
     unsigned int seg;
     outportb(GC_INDEX, 6);
     seg = (inportb(GC_DATA) >> 2) & 3;
-    if ((seg == 0) || (seg == 1))
+    if ((seg == 0) || (seg == 1)) {
         return (char *)0xA0000;
-    if (seg == 2)
+    }
+    if (seg == 2) {
         return (char *)0xB0000;
-    if (seg == 3)
+    }
+    if (seg == 3) {
         return (char *)0xB8000;
+    }
     return (char *)seg;
 }
 
@@ -190,8 +186,9 @@ static inline void __set_plane(unsigned int plane)
     static unsigned __current_plane = -1u;
     unsigned char pmask;
     plane &= 3;
-    if (__current_plane == plane)
+    if (__current_plane == plane) {
         return;
+    }
     // Store the current plane.
     __current_plane = plane;
     // Compute the plane mask.
@@ -211,7 +208,7 @@ static inline void __set_plane(unsigned int plane)
 
 /// @brief Returns the current plane.
 /// @return the current plane.
-static inline unsigned __get_plane()
+static inline unsigned __get_plane(void)
 {
     // Set read plane.
     outportb(GC_INDEX, 4);
@@ -391,8 +388,9 @@ static inline unsigned int __reverse_bits(char num)
     unsigned int reverse_num = 0;
     int i;
     for (i = 0; i < NO_OF_BITS; i++) {
-        if ((num & (1 << i)))
+        if ((num & (1 << i))) {
             reverse_num |= 1 << ((NO_OF_BITS - 1) - i);
+        }
     }
     return reverse_num;
 }
@@ -468,10 +466,11 @@ static inline void __write_pixel_4(int x, int y, unsigned char color)
     pmask = 1;
     for (plane = 0; plane < 4; ++plane) {
         __set_plane(plane);
-        if (pmask & color)
+        if (pmask & color) {
             __write_byte(off, __read_byte(off) | mask);
-        else
+        } else {
             __write_byte(off, __read_byte(off) & ~mask);
+        }
         pmask <<= 1;
     }
 }
@@ -511,22 +510,24 @@ static inline unsigned __read_pixel_8(int x, int y)
 // = VGA PUBLIC FUNCTIONS
 // ============================================================================
 
-int vga_is_enabled()
+int vga_is_enabled(void)
 {
     return vga_enable;
 }
 
-int vga_width()
+int vga_width(void)
 {
-    if (vga_enable)
+    if (vga_enable) {
         return driver->width;
+    }
     return 0;
 }
 
-int vga_height()
+int vga_height(void)
 {
-    if (vga_enable)
+    if (vga_enable) {
         return driver->height;
+    }
     return 0;
 }
 
@@ -578,19 +579,22 @@ void vga_draw_line(int x0, int y0, int x1, int y1, unsigned char color)
     int err = (dx > dy ? dx : -dy) / 2;
     while (true) {
         vga_draw_pixel(x0, y0, color);
-        if ((x0 == x1) && (y0 == y1))
+        if ((x0 == x1) && (y0 == y1)) {
             break;
+        }
         if (dx > dy) {
             x0 += sx;
             err -= dy;
-            if (err < 0)
+            if (err < 0) {
                 err += dx;
+            }
             y0 += sy;
         } else {
             y0 += sy;
             err -= dx;
-            if (err < 0)
+            if (err < 0) {
                 err += dy;
+            }
             x0 += sx;
         }
     }
@@ -609,8 +613,9 @@ void vga_draw_circle(int xc, int yc, int r, unsigned char color)
     int x = 0;
     int y = r;
     int p = 3 - 2 * r;
-    if (!r)
+    if (!r) {
         return;
+    }
     while (y >= x) // only formulate 1/8 of circle
     {
         vga_draw_pixel(xc - x, yc - y, color); //upper left left
@@ -736,7 +741,7 @@ static vga_driver_t driver_320_200_256 = {
 
 // == INITIALIZE and FINALIZE =================================================
 
-void vga_initialize()
+void vga_initialize(void)
 {
     // Save the current palette.
     __save_palette(stored_palette, 256);
@@ -783,7 +788,7 @@ void vga_initialize()
     vga_enable = true;
 }
 
-void vga_finalize()
+void vga_finalize(void)
 {
     memcpy(driver->address, vidmem, 256 * 1024);
     __set_mode(&_mode_80_25_text);
@@ -796,32 +801,38 @@ static int _y               = 0;
 static unsigned char _color = 7;
 static int _cursor_state    = 0;
 
-inline static void __vga_clear_cursor()
+inline static void __vga_clear_cursor(void)
 {
-    for (unsigned cy = 0; cy < driver->font->height; ++cy)
-        for (unsigned cx = 0; cx < driver->font->width; ++cx)
+    for (unsigned cy = 0; cy < driver->font->height; ++cy) {
+        for (unsigned cx = 0; cx < driver->font->width; ++cx) {
             vga_draw_pixel(_x + cx, _y + cy, 0);
+        }
+    }
 }
 
-inline static void __vga_draw_cursor()
+inline static void __vga_draw_cursor(void)
 {
     unsigned char color = (_cursor_state = (_cursor_state == 0)) * _color;
-    for (unsigned cy = 0; cy < driver->font->height; ++cy)
-        for (unsigned cx = 0; cx < driver->font->width; ++cx)
+    for (unsigned cy = 0; cy < driver->font->height; ++cy) {
+        for (unsigned cx = 0; cx < driver->font->width; ++cx) {
             vga_draw_pixel(_x + cx, _y + cy, color);
+        }
+    }
 }
 
 void vga_putc(int c)
 {
     if (_cursor_state)
+
         __vga_clear_cursor();
     // If the character is '\n' go the new line.
     if (c == '\n') {
         vga_new_line();
     } else if ((c >= 0x20) && (c <= 0x7E)) {
         vga_draw_char(_x, _y, c, _color);
-        if ((_x += driver->font->width) >= driver->width)
+        if ((_x += driver->font->width) >= driver->width) {
             vga_new_line();
+        }
     } else {
         return;
     }
@@ -843,21 +854,25 @@ void vga_move_cursor(unsigned int x, unsigned int y)
 
 void vga_get_cursor_position(unsigned int *x, unsigned int *y)
 {
-    if (x)
+    if (x) {
         *x = _x / driver->font->width;
-    if (y)
+    }
+    if (y) {
         *y = _y / driver->font->height;
+    }
 }
 
 void vga_get_screen_size(unsigned int *width, unsigned int *height)
 {
-    if (width)
+    if (width) {
         *width = driver->width / driver->font->width;
-    if (height)
+    }
+    if (height) {
         *height = driver->height / driver->font->height;
+    }
 }
 
-void vga_clear_screen()
+void vga_clear_screen(void)
 {
     unsigned original_plane = __get_plane();
     for (unsigned plane = 0; plane < 4; ++plane) {
@@ -868,7 +883,7 @@ void vga_clear_screen()
     _x = 0, _y = 0;
 }
 
-void vga_new_line()
+void vga_new_line(void)
 {
     // Just the 5x6 font needs some space.
     const unsigned int vertical_space = (driver->font == &font_5x6);
@@ -880,7 +895,7 @@ void vga_new_line()
     }
 }
 
-void vga_update()
+void vga_update(void)
 {
     if ((timer_get_ticks() % (TICKS_PER_SECOND / 2)) == 0) {
         __vga_draw_cursor();

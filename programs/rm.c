@@ -1,6 +1,6 @@
 /// @file rm.c
 /// @brief
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #include <stdio.h>
@@ -48,7 +48,10 @@ int main(int argc, char **argv)
         if (strcmp(argv[argc - 1], "*") == 0) {
             getcwd(directory, PATH_MAX);
         } else {
-            strcpy(directory, dirname(argv[argc - 1]));
+            // Get the parent directory.
+            if (!dirname(argv[argc - 1], directory, sizeof(directory))) {
+                return 1;
+            }
         }
 
         if ((fd = open(directory, O_RDONLY | O_DIRECTORY, 0)) != -1) {

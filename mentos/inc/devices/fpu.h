@@ -1,6 +1,6 @@
 /// @file fpu.h
 /// @brief Floating Point Unit (FPU).
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 /// @addtogroup devices Hardware Interfaces
 /// @brief Data structures and functions for managing hardware devices.
@@ -119,15 +119,15 @@ typedef union savefpu {
 
 /// @brief Called during a context switch to save the FPU registers status
 /// of the currently running thread.
-void switch_fpu();
+void switch_fpu(void);
 
 /// @brief Called during a context switch to load the FPU registers status
 /// of the currently running thread inside the FPU.
-void unswitch_fpu();
+void unswitch_fpu(void);
 
 /// @brief Enable the FPU context handling.
 /// @return 0 if fails, 1 if succeed.
-int fpu_install();
+int fpu_install(void);
 
 /// @}
 /// @}

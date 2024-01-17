@@ -1,6 +1,6 @@
 /// @file rbtree.c
 /// @brief Red/Black tree.
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #include "klib/rbtree.h"
@@ -41,7 +41,7 @@ struct rbtree_iter_t {
     unsigned int top;
 };
 
-rbtree_node_t *rbtree_node_alloc()
+rbtree_node_t *rbtree_node_alloc(void)
 {
     return kmalloc(sizeof(rbtree_node_t));
 }
@@ -63,15 +63,17 @@ rbtree_node_t *rbtree_node_create(void *value)
 
 void *rbtree_node_get_value(rbtree_node_t *node)
 {
-    if (node)
+    if (node) {
         return node->value;
+    }
     return NULL;
 }
 
 void rbtree_node_dealloc(rbtree_node_t *node)
 {
-    if (node)
+    if (node) {
         kfree(node);
+    }
 }
 
 static int rbtree_node_is_red(const rbtree_node_t *node)
@@ -115,14 +117,16 @@ static int rbtree_tree_node_cmp_ptr_cb(
 
 static void rbtree_tree_node_dealloc_cb(rbtree_t *tree, rbtree_node_t *node)
 {
-    if (tree)
-        if (node)
+    if (tree) {
+        if (node) {
             rbtree_node_dealloc(node);
+        }
+    }
 }
 
 // rbtree_t
 
-rbtree_t *rbtree_tree_alloc()
+rbtree_t *rbtree_tree_alloc(void)
 {
     return kmalloc(sizeof(rbtree_t));
 }
@@ -404,7 +408,7 @@ unsigned int rbtree_tree_size(rbtree_t *tree)
 
 // rbtree_iter_t
 
-rbtree_iter_t *rbtree_iter_alloc()
+rbtree_iter_t *rbtree_iter_alloc(void)
 {
     return kmalloc(sizeof(rbtree_iter_t));
 }
@@ -419,7 +423,7 @@ rbtree_iter_t *rbtree_iter_init(rbtree_iter_t *iter)
     return iter;
 }
 
-rbtree_iter_t *rbtree_iter_create()
+rbtree_iter_t *rbtree_iter_create(void)
 {
     return rbtree_iter_init(rbtree_iter_alloc());
 }
@@ -504,41 +508,40 @@ int rbtree_tree_test(rbtree_t *tree, rbtree_node_t *root)
 {
     int lh, rh;
 
-    if (root == NULL)
+    if (root == NULL) {
         return 1;
-    else {
-        rbtree_node_t *ln = root->link[0];
-        rbtree_node_t *rn = root->link[1];
-
-        /* Consecutive red links */
-        if (rbtree_node_is_red(root)) {
-            if (rbtree_node_is_red(ln) || rbtree_node_is_red(rn)) {
-                pr_err("Red violation");
-                return 0;
-            }
-        }
-
-        lh = rbtree_tree_test(tree, ln);
-        rh = rbtree_tree_test(tree, rn);
-
-        /* Invalid binary search tree */
-        if ((ln != NULL && tree->cmp(tree, ln, root) >= 0) || (rn != NULL && tree->cmp(tree, rn, root) <= 0)) {
-            pr_err("Binary tree violation");
-            return 0;
-        }
-
-        /* Black height mismatch */
-        if (lh != 0 && rh != 0 && lh != rh) {
-            pr_err("Black violation");
-            return 0;
-        }
-
-        /* Only count black links */
-        if (lh != 0 && rh != 0)
-            return rbtree_node_is_red(root) ? lh : lh + 1;
-        else
-            return 0;
     }
+    rbtree_node_t *ln = root->link[0];
+    rbtree_node_t *rn = root->link[1];
+
+    /* Consecutive red links */
+    if (rbtree_node_is_red(root)) {
+        if (rbtree_node_is_red(ln) || rbtree_node_is_red(rn)) {
+            pr_err("Red violation");
+            return 0;
+        }
+    }
+
+    lh = rbtree_tree_test(tree, ln);
+    rh = rbtree_tree_test(tree, rn);
+
+    /* Invalid binary search tree */
+    if ((ln != NULL && tree->cmp(tree, ln, root) >= 0) || (rn != NULL && tree->cmp(tree, rn, root) <= 0)) {
+        pr_err("Binary tree violation");
+        return 0;
+    }
+
+    /* Black height mismatch */
+    if (lh != 0 && rh != 0 && lh != rh) {
+        pr_err("Black violation");
+        return 0;
+    }
+
+    /* Only count black links */
+    if (lh != 0 && rh != 0) {
+        return rbtree_node_is_red(root) ? lh : lh + 1;
+    }
+    return 0;
 }
 
 static void rbtree_tree_print_iter(rbtree_t *tree,
@@ -549,10 +552,12 @@ static void rbtree_tree_print_iter(rbtree_t *tree,
     assert(node);
     assert(fun);
     fun(tree, node);
-    if (node->link[0])
+    if (node->link[0]) {
         rbtree_tree_print_iter(tree, node->link[0], fun);
-    if (node->link[1])
+    }
+    if (node->link[1]) {
         rbtree_tree_print_iter(tree, node->link[1], fun);
+    }
 }
 
 void rbtree_tree_print(rbtree_t *tree, rbtree_tree_node_f fun)

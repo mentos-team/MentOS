@@ -1,23 +1,23 @@
 /// @file sys.c
 /// @brief
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #include "stdio.h"
+#include "klib/mutex.h"
+#include "klib/stdatomic.h"
 #include "sys/errno.h"
 #include "sys/reboot.h"
-#include "klib/stdatomic.h"
-#include "klib/mutex.h"
 
-static void machine_power_off()
+static void machine_power_off(void)
 {
-    while (true) {
+    while (1) {
         cpu_relax();
     }
 }
 
 /// @brief Shutdown everything and perform a clean system power_off.
-static void kernel_power_off()
+static void kernel_power_off(void)
 {
     //    kernel_shutdown_prepare(SYSTEM_POWER_OFF);
     //    if (pm_power_off_prepare)

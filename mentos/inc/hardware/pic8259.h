@@ -3,7 +3,7 @@
 /// @details
 /// The Intel 8259 is a Programmable Interrupt Controller (PIC) designed
 /// for the Intel 8085 and Intel 8086 microprocessors.
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #pragma once
@@ -78,7 +78,7 @@
 
 /// @brief Function that initializes the processor pic 8259 that will manage the
 ///        interruptions.
-void pic8259_init_irq();
+void pic8259_init_irq(void);
 
 /// @brief     This function, enable irqs on the pic.
 /// @details   This function provide a tool for enabling irq from the pic
@@ -101,4 +101,4 @@ void pic8259_send_eoi(uint32_t irq);
 
 /// @brief  This Function return the number of current IRQ Request.
 /// @return Number of IRQ + 1 currently serving. If 0 there are no IRQ.
-//int pic8259_irq_get_current();
+//int pic8259_irq_get_current(void);

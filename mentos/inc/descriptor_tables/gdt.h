@@ -1,6 +1,13 @@
 /// @file gdt.h
 /// @brief Data structures concerning the Global Descriptor Table (GDT).
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @details
+/// The Global Descriptor Table (GDT) is a data structure used by Intel
+/// x86-family processors starting with the 80286 in order to define the
+/// characteristics of the various memory areas used during program execution,
+/// including the base address, the size, and access privileges like
+/// executability and writability. These memory areas are called segments in
+/// Intel terminology.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 /// @addtogroup descriptor_tables Descriptor Tables
 /// @brief GDT, IDT and TSS are all data structures specified by Intel x86
@@ -127,7 +134,7 @@ typedef struct gdt_pointer_t {
 ///          finally call gdt_flush() in our assembler file in order
 ///          to tell the processor where the new GDT is and update the
 ///          new segment registers.
-void init_gdt();
+void init_gdt(void);
 
 /// @brief          Sets the value of one GDT entry.
 /// @param index    The index inside the GDT.

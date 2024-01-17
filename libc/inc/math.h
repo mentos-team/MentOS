@@ -1,6 +1,6 @@
 /// @file math.h
 /// @brief Mathematical constants and functions.
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #pragma once
@@ -16,6 +16,9 @@
 
 /// @brief The sign the the passed value.
 #define sign(x) ((x < 0) ? -1 : ((x > 0) ? 1 : 0))
+
+/// @brief Returns a rounded up, away from zero, to the nearest multiple of b.
+#define round_up(number, base) (((number) + (base)-1) & ~((base)-1))
 
 /// @brief e
 #define M_E 2.7182818284590452354

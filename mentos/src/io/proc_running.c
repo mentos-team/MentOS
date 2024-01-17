@@ -1,17 +1,17 @@
 /// @file proc_running.c
 /// @brief Implementaiton of procr filesystem.
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #include "fs/procfs.h"
 
-#include "process/process.h"
-#include "string.h"
-#include "libgen.h"
-#include "stdio.h"
-#include "sys/errno.h"
 #include "io/debug.h"
+#include "libgen.h"
 #include "process/prio.h"
+#include "process/process.h"
+#include "stdio.h"
+#include "string.h"
+#include "sys/errno.h"
 
 /// @brief Returns the character identifying the process state.
 /// @details
@@ -24,20 +24,13 @@
 ///     X  Dead
 static inline char __procr_get_task_state_char(int state)
 {
-    if (state == 0x00) // TASK_RUNNING
-        return 'R';
-    if (state == (1 << 0)) // TASK_INTERRUPTIBLE
-        return 'S';
-    if (state == (1 << 1)) // TASK_UNINTERRUPTIBLE
-        return 'D';
-    if (state == (1 << 2)) // TASK_STOPPED
-        return 'T';
-    if (state == (1 << 3)) // TASK_TRACED
-        return 't';
-    if (state == (1 << 4)) // EXIT_ZOMBIE
-        return 'Z';
-    if (state == (1 << 5)) // EXIT_DEAD
-        return 'X';
+    if (state == 0x00) { return 'R'; }     // TASK_RUNNING
+    if (state == (1 << 0)) { return 'S'; } // TASK_INTERRUPTIBLE
+    if (state == (1 << 1)) { return 'D'; } // TASK_UNINTERRUPTIBLE
+    if (state == (1 << 2)) { return 'T'; } // TASK_STOPPED
+    if (state == (1 << 3)) { return 't'; } // TASK_TRACED
+    if (state == (1 << 4)) { return 'Z'; } // EXIT_ZOMBIE
+    if (state == (1 << 5)) { return 'X'; } // EXIT_DEAD
     return '?';
 }
 
@@ -84,10 +77,11 @@ static inline ssize_t __procr_do_stat(char *buffer, size_t bufsize, task_struct 
     //(4) ppid  %d
     //     The PID of the parent of this process.
     //
-    if (task->parent)
+    if (task->parent) {
         sprintf(buffer, "%s %d", buffer, task->parent->pid);
-    else
+    } else {
         strcat(buffer, " 0");
+    }
     //(5) TODO: pgrp  %d
     //      The process group ID of the process.
     //
@@ -305,10 +299,11 @@ static inline ssize_t __procr_do_stat(char *buffer, size_t bufsize, task_struct 
     //      or 0, for non-real-time processes (see
     //      sched_setscheduler(2)).
     //
-    if (task->se.prio >= 100)
+    if (task->se.prio >= 100) {
         strcat(buffer, " 0");
-    else
+    } else {
         sprintf(buffer, "%s %u", buffer, task->se.prio);
+    }
     //(41) TODO: policy  %u  (since Linux 2.5.19)
     //      Scheduling policy (see sched_setscheduler(2)).  Decode
     //      using the SCHED_* constants in linux/sched.h.
@@ -379,37 +374,44 @@ static inline ssize_t __procr_do_stat(char *buffer, size_t bufsize, task_struct 
 /// @return The number of bytes we read.
 static inline ssize_t __procr_read(vfs_file_t *file, char *buffer, off_t offset, size_t nbyte)
 {
-    if (file == NULL)
+    if (file == NULL) {
         return -EFAULT;
+    }
     // Get the entry.
     proc_dir_entry_t *entry = (proc_dir_entry_t *)file->device;
-    if (entry == NULL)
+    if (entry == NULL) {
         return -EFAULT;
+    }
     // Get the task.
     task_struct *task = (task_struct *)entry->data;
-    if (task == NULL)
+    if (task == NULL) {
         return -EFAULT;
+    }
     // Prepare a support buffer.
     char support[BUFSIZ];
     memset(support, 0, BUFSIZ);
     // Call the specific function.
-    if (strcmp(entry->name, "cmdline") == 0)
+    if (strcmp(entry->name, "cmdline") == 0) {
         __procr_do_cmdline(support, BUFSIZ, task);
-    else if (strcmp(entry->name, "stat") == 0)
+    } else if (strcmp(entry->name, "stat") == 0) {
         __procr_do_stat(support, BUFSIZ, task);
+    }
     // Copmute the amounts of bytes we want (and can) read.
     ssize_t bytes_to_read = max(0, min(strlen(support) - offset, nbyte));
     // Perform the read.
-    if (bytes_to_read > 0)
+    if (bytes_to_read > 0) {
         memcpy(buffer, support + offset, bytes_to_read);
+    }
     return bytes_to_read;
 }
 
 /// Filesystem general operations.
 static vfs_sys_operations_t procr_sys_operations = {
-    .mkdir_f = NULL,
-    .rmdir_f = NULL,
-    .stat_f  = NULL
+    .mkdir_f   = NULL,
+    .rmdir_f   = NULL,
+    .stat_f    = NULL,
+    .creat_f   = NULL,
+    .symlink_f = NULL,
 };
 
 /// Filesystem file operations.
@@ -422,7 +424,8 @@ static vfs_file_operations_t procr_fs_operations = {
     .lseek_f    = NULL,
     .stat_f     = NULL,
     .ioctl_f    = NULL,
-    .getdents_f = NULL
+    .getdents_f = NULL,
+    .readlink_f = NULL,
 };
 
 int procr_create_entry_pid(task_struct *entry)

@@ -1,6 +1,6 @@
 /// @file t_gid.c
 /// @brief
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #include "grp.h"
@@ -8,7 +8,7 @@
 #include "string.h"
 #include <stdio.h>
 
-static void list_groups()
+static void list_groups(void)
 {
     group_t *iter;
     while ((iter = getgrent()) != NULL) {

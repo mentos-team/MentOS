@@ -1,6 +1,6 @@
 /// @file spinlock.c
 /// @brief
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #include "klib/spinlock.h"
@@ -16,8 +16,9 @@ void spinlock_lock(spinlock_t *spinlock)
         if (atomic_set_and_test(spinlock, SPINLOCK_BUSY) == 0) {
             break;
         }
-        while (*spinlock)
+        while (*spinlock) {
             cpu_relax();
+        }
     }
 }
 

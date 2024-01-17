@@ -1,6 +1,6 @@
 /// @file list.h
 /// @brief An implementation for generic list.
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #pragma once
@@ -31,7 +31,7 @@ typedef struct list_t {
 
 /// @brief Create a list and set head, tail to NULL, and size to 0.
 /// @return The newly created list.
-list_t *list_create();
+list_t *list_create(void);
 
 /// @brief Get list size.
 /// @param list The list.

@@ -1,17 +1,17 @@
 /// @file vsprintf.c
 /// @brief Print formatting routines.
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #include "math.h"
 #include "ctype.h"
-#include "string.h"
+#include "fcvt.h"
+#include "io/video.h"
 #include "stdarg.h"
 #include "stdbool.h"
 #include "stdint.h"
 #include "stdio.h"
-#include "io/video.h"
-#include "fcvt.h"
+#include "string.h"
 
 /// Size of the buffer used to call cvt functions.
 #define CVTBUFSIZE 500
@@ -34,8 +34,9 @@ static char *_upper_digits = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 static inline int skip_atoi(const char **s)
 {
     int i = 0;
-    while (isdigit(**s))
+    while (isdigit(**s)) {
         i = i * 10 + *((*s)++) - '0';
+    }
     return i;
 }
 
@@ -97,16 +98,17 @@ static char *number(char *str, long num, int base, int size, int32_t precision, 
     }
     size -= precision;
     if (!(flags & (FLAGS_ZEROPAD | FLAGS_LEFT))) {
-        while (size-- > 0)
+        while (size-- > 0) {
             *str++ = ' ';
+        }
     }
     if (sign) {
         *str++ = sign;
     }
     if (flags & FLAGS_HASH) {
-        if (base == 8)
+        if (base == 8) {
             *str++ = '0';
-        else if (base == 16) {
+        } else if (base == 16) {
             *str++ = '0';
             *str++ = _digits[33];
         }
@@ -368,8 +370,9 @@ static char *flt(char *str, double num, int size, int precision, char fmt, unsig
     int n, i;
 
     // Left align means no zero padding.
-    if (flags & FLAGS_LEFT)
+    if (flags & FLAGS_LEFT) {
         flags &= ~FLAGS_ZEROPAD;
+    }
 
     // Determine padding and sign char.
     c    = (flags & FLAGS_ZEROPAD) ? '0' : ' ';
@@ -580,10 +583,11 @@ int vsprintf(char *str, const char *fmt, va_list args)
             flags |= FLAGS_UPPERCASE;
             break;
         case 'a':
-            if (qualifier == 'l')
+            if (qualifier == 'l') {
                 tmp = eaddr(tmp, va_arg(args, unsigned char *), field_width, precision, flags);
-            else
+            } else {
                 tmp = iaddr(tmp, va_arg(args, unsigned char *), field_width, precision, flags);
+            }
             continue;
             // Integer number formats - set up the flags and "break".
         case 'o':
@@ -612,12 +616,14 @@ int vsprintf(char *str, const char *fmt, va_list args)
             tmp = flt(tmp, va_arg(args, double), field_width, precision, *fmt, flags | FLAGS_SIGN);
             continue;
         default:
-            if (*fmt != '%')
+            if (*fmt != '%') {
                 *tmp++ = '%';
-            if (*fmt)
+            }
+            if (*fmt) {
                 *tmp++ = *fmt;
-            else
+            } else {
                 --fmt;
+            }
             continue;
         }
 

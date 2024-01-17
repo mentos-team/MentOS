@@ -1,6 +1,6 @@
 /// @file stddef.h
 /// @brief Define basic data types.
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #pragma once
@@ -68,3 +68,13 @@ typedef unsigned int pgprot_t;
 /// Returns the alignment, in bytes, of the specified type.
 #define alignof(type) offsetof( \
     struct { char c; type member; }, member)
+
+/// Counts the number of elements of an array.
+#define count_of(x) ((sizeof(x) / sizeof((x)[0])) / ((size_t)(!(sizeof(x) % sizeof((x)[0])))))
+
+#define swap(a, b)             \
+    do {                       \
+        typeof(a) temp = (a);  \
+        (a)            = (b);  \
+        (b)            = temp; \
+    } while (0)

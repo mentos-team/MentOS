@@ -1,6 +1,6 @@
 /// @file fdc.h
 /// @brief Definitions about the floppy.
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 /// @addtogroup drivers Device Drivers
 /// @{
@@ -12,11 +12,11 @@
 
 /// @brief Initializes the floppy disk controller.
 /// @return 0 on success, 1 on error.
-int fdc_initialize();
+int fdc_initialize(void);
 
 /// @brief De-initializes the floppy disk controller.
 /// @return 0 on success, 1 on error.
-int fdc_finalize();
+int fdc_finalize(void);
 
 /// @}
 /// @}

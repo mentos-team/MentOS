@@ -1,6 +1,6 @@
 /// @file ioctl.c
 /// @brief Input/Output ConTroL (IOCTL) functions implementation.
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #include "sys/ioctl.h"

@@ -1,6 +1,6 @@
 /// @file   syscall.h
 /// @brief  System Call handler definition.
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #pragma once
@@ -12,7 +12,7 @@
 #include "sys/types.h"
 
 /// @brief Initialize the system calls.
-void syscall_init();
+void syscall_init(void);
 
 /// @brief Handler for the system calls.
 /// @param f The interrupt stack frame.
@@ -20,7 +20,7 @@ void syscall_handler(pt_regs *f);
 
 /// @brief Returns the current interrupt stack frame.
 /// @return Pointer to the stack frame.
-pt_regs *get_current_interrupt_stack_frame();
+pt_regs *get_current_interrupt_stack_frame(void);
 
 /// The exit() function causes normal process termination.
 /// @param exit_code The exit code.
@@ -38,7 +38,7 @@ ssize_t sys_read(int fd, void *buf, size_t nbytes);
 /// @param buf    The buffer collecting data to written.
 /// @param nbytes The number of bytes to write.
 /// @return The number of written bytes.
-ssize_t sys_write(int fd, void *buf, size_t nbytes);
+ssize_t sys_write(int fd, const void *buf, size_t nbytes);
 
 /// @brief Repositions the file offset inside a file.
 /// @param fd     The file descriptor of the file.
@@ -98,7 +98,7 @@ int sys_fchdir(int fd);
 
 /// @brief Returns the process ID (PID) of the calling process.
 /// @return The process ID.
-pid_t sys_getpid();
+pid_t sys_getpid(void);
 
 ///@brief  Return session id of the given process.
 ///        If pid == 0 return the SID of the calling process
@@ -116,7 +116,7 @@ pid_t sys_getsid(pid_t pid);
 ///       is made the same as its process ID).
 ///@return On success return SID of the session just created
 ///        Otherwise return -1 with errno : EPERM
-pid_t sys_setsid();
+pid_t sys_setsid(void);
 
 ///@brief returns the Process Group ID (PGID) of the process specified by pid.
 /// If pid is zero, the process ID of the calling process is used.
@@ -133,7 +133,7 @@ int sys_setpgid(pid_t pid, pid_t pgid);
 
 ///@brief returns the group ID of the calling process.
 ///@return GID of the current process
-pid_t sys_getgid();
+pid_t sys_getgid(void);
 
 ///@brief sets the effective group ID of the calling process.
 ///@param pid process identifier to
@@ -143,11 +143,11 @@ int sys_setgid(pid_t pid);
 
 /// @brief Returns the parent process ID (PPID) of the calling process.
 /// @return The parent process ID.
-pid_t sys_getppid();
+pid_t sys_getppid(void);
 
 /// @brief Returns the User ID (UID) of the calling process.
 /// @return The User ID.
-uid_t sys_getuid();
+uid_t sys_getuid(void);
 
 /// @brief Tries to set the User ID (UID) of the calling process.
 /// @param uid the new User ID.
@@ -217,6 +217,19 @@ int sys_rmdir(const char *path);
 /// It is equivalent to: open(path, O_WRONLY|O_CREAT|O_TRUNC, mode)
 int sys_creat(const char *path, mode_t mode);
 
+/// @brief Read the symbolic link, if present.
+/// @param file the file for which we want to read the symbolic link information.
+/// @param buffer the buffer where we will store the symbolic link path.
+/// @param bufsize the size of the buffer.
+/// @return The number of read characters on success, -1 otherwise and errno is set to indicate the error.
+int sys_readlink(const char *path, char *buffer, size_t bufsize);
+
+/// @brief Creates a symbolic link.
+/// @param linkname the name of the link.
+/// @param path the entity it is linking to.
+/// @return 0 on success, a negative number if fails and errno is set.
+int sys_symlink(const char *linkname, const char *path);
+
 /// Provide access to the directory entries.
 /// @param fd    The file descriptor of the directory for which we accessing
 ///              the entries.
@@ -225,7 +238,7 @@ int sys_creat(const char *path, mode_t mode);
 /// @return On success, the number of bytes read is returned.  On end of
 ///         directory, 0 is returned.  On error, -1 is returned, and errno is set
 ///         appropriately.
-int sys_getdents(int fd, dirent_t *dirp, unsigned int count);
+ssize_t sys_getdents(int fd, dirent_t *dirp, unsigned int count);
 
 /// @brief Returns the current time.
 /// @param time Where the time should be stored.

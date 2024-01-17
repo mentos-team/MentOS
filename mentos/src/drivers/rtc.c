@@ -1,24 +1,22 @@
 /// @file   rtc.c
 /// @brief  Real Time Clock (RTC) driver.
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 /// @addtogroup rtc
 /// @{
 
-// Include the kernel log levels.
-#include "sys/kernel_levels.h"
-/// Change the header.
-#define __DEBUG_HEADER__ "[RTC   ]"
-/// Set the log level.
-#define __DEBUG_LEVEL__ LOGLEVEL_NOTICE
+// Setup the logging for this file (do this before any other include).
+#include "sys/kernel_levels.h"           // Include kernel log levels.
+#define __DEBUG_HEADER__ "[RTC   ]"      ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
+#include "io/debug.h"                    // Include debugging functions.
 
+#include "descriptor_tables/isr.h"
 #include "drivers/rtc.h"
-
 #include "hardware/pic8259.h"
-#include "string.h"
 #include "io/port_io.h"
 #include "kernel.h"
-#include "descriptor_tables/isr.h"
+#include "string.h"
 
 #define CMOS_ADDR 0x70 ///< Addess where we need to write the Address.
 #define CMOS_DATA 0x71 ///< Addess where we need to write the Data.
@@ -32,25 +30,18 @@ int is_bcd;
 
 static inline unsigned int rtc_are_different(tm_t *t0, tm_t *t1)
 {
-    if (t0->tm_sec != t1->tm_sec)
-        return 1;
-    if (t0->tm_min != t1->tm_min)
-        return 1;
-    if (t0->tm_hour != t1->tm_hour)
-        return 1;
-    if (t0->tm_mon != t1->tm_mon)
-        return 1;
-    if (t0->tm_year != t1->tm_year)
-        return 1;
-    if (t0->tm_wday != t1->tm_wday)
-        return 1;
-    if (t0->tm_mday != t1->tm_mday)
-        return 1;
+    if (t0->tm_sec != t1->tm_sec) { return 1; }
+    if (t0->tm_min != t1->tm_min) { return 1; }
+    if (t0->tm_hour != t1->tm_hour) { return 1; }
+    if (t0->tm_mon != t1->tm_mon) { return 1; }
+    if (t0->tm_year != t1->tm_year) { return 1; }
+    if (t0->tm_wday != t1->tm_wday) { return 1; }
+    if (t0->tm_mday != t1->tm_mday) { return 1; }
     return 0;
 }
 
 /// @brief Check if rtc is updating time currently.
-static inline unsigned int is_updating_rtc()
+static inline unsigned int is_updating_rtc(void)
 {
     outportb(CMOS_ADDR, 0x0A);
     uint32_t status = inportb(CMOS_DATA);
@@ -74,7 +65,7 @@ static inline unsigned char bcd2bin(unsigned char bcd)
     return ((bcd >> 4u) * 10) + (bcd & 0x0Fu);
 }
 
-static inline void rtc_read_datetime()
+static inline void rtc_read_datetime(void)
 {
     if (read_register(0x0Cu) & 0x10u) {
         if (is_bcd) {
@@ -97,7 +88,7 @@ static inline void rtc_read_datetime()
     }
 }
 
-static inline void rtc_update_datetime()
+static inline void rtc_update_datetime(void)
 {
     static unsigned int first_update = 1;
     // Wait until rtc is not updating.
@@ -128,7 +119,7 @@ void gettime(tm_t *time)
     memcpy(time, &global_time, sizeof(tm_t));
 }
 
-int rtc_initialize()
+int rtc_initialize(void)
 {
     unsigned char status;
 
@@ -151,7 +142,7 @@ int rtc_initialize()
     return 0;
 }
 
-int rtc_finalize()
+int rtc_finalize(void)
 {
     // Uninstall the IRQ.
     irq_uninstall_handler(IRQ_REAL_TIME_CLOCK, rtc_handler_isr);

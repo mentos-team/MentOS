@@ -1,6 +1,6 @@
 /// @file strerror.c
 /// @brief
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #include "strerror.h"
@@ -76,7 +76,7 @@ char *strerror(int errnum)
 #endif
 #ifdef EAGAIN
     case EAGAIN:
-        strcpy(error, "No more processes");
+        strcpy(error, "Resource temporarily unavailable");
         break;
 #endif
 #ifdef ENOMEM

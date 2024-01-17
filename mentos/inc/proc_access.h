@@ -1,14 +1,11 @@
 /// @file   proc_access.h
 /// @brief  Set of functions and flags used to manage processors registers.
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #pragma once
 
 #include "stdint.h"
-
-/// Macro that encapsulate asm and volatile directives.
-#define ASM(a) __asm__ __volatile__(a)
 
 #define CR0_PE 0x00000001u ///< Protected mode Enable.
 #define CR0_MP 0x00000002u ///< "Math" Present (e.g. npx), wait for it.
@@ -37,218 +34,275 @@
 #define CR4_PVI      0x00000002u ///< Protected-mode Virtual Interrupts.
 #define CR4_VME      0x00000001u ///< Virtual-8086 Mode Extensions.
 
+/// @brief Reads the Extra Segment (DS).
+/// @return the value we read.
 static inline uint16_t get_es(void)
 {
     uint16_t es;
-    ASM("mov %%es, %0"
-        : "=r"(es));
+    __asm__ __volatile__("mov %%es, %0"
+                         : "=r"(es));
     return es;
 }
 
+/// @brief Sets the Extra Segment (DS).
+/// @param es the value we set.
 static inline void set_es(uint16_t es)
 {
-    ASM("mov %0, %%es"
-        :
-        : "r"(es));
+    __asm__ __volatile__("mov %0, %%es"
+                         :
+                         : "r"(es));
 }
 
+/// @brief Reads the Data Segment (DS).
+/// @return the value we read.
 static inline uint16_t get_ds(void)
 {
     uint16_t ds;
-    ASM("mov %%ds, %0"
-        : "=r"(ds));
+    __asm__ __volatile__("mov %%ds, %0"
+                         : "=r"(ds));
     return ds;
 }
 
+/// @brief Sets the Data Segment (DS).
+/// @param ds the value we set.
 static inline void set_ds(uint16_t ds)
 {
-    ASM("mov %0, %%ds"
-        :
-        : "r"(ds));
+    __asm__ __volatile__("mov %0, %%ds"
+                         :
+                         : "r"(ds));
 }
 
+/// @brief Reads FS.
+/// @return the value we read.
 static inline uint16_t get_fs(void)
 {
     uint16_t fs;
-    ASM("mov %%fs, %0"
-        : "=r"(fs));
+    __asm__ __volatile__("mov %%fs, %0"
+                         : "=r"(fs));
     return fs;
 }
 
+/// @brief Sets FS.
+/// @param fs the value we set.
 static inline void set_fs(uint16_t fs)
 {
-    ASM("mov %0, %%fs"
-        :
-        : "r"(fs));
+    __asm__ __volatile__("mov %0, %%fs"
+                         :
+                         : "r"(fs));
 }
 
+/// @brief Reads GS.
+/// @return the value we read.
 static inline uint16_t get_gs(void)
 {
     uint16_t gs;
-    ASM("mov %%gs, %0"
-        : "=r"(gs));
+    __asm__ __volatile__("mov %%gs, %0"
+                         : "=r"(gs));
     return gs;
 }
 
+/// @brief Sets GS.
+/// @param gs the value we set.
 static inline void set_gs(uint16_t gs)
 {
-    ASM("mov %0, %%gs"
-        :
-        : "r"(gs));
+    __asm__ __volatile__("mov %0, %%gs"
+                         :
+                         : "r"(gs));
 }
 
+/// @brief Reads the Stack Segment (SS).
+/// @return the value we read.
 static inline uint16_t get_ss(void)
 {
     uint16_t ss;
-    ASM("mov %%ss, %0"
-        : "=r"(ss));
+    __asm__ __volatile__("mov %%ss, %0"
+                         : "=r"(ss));
     return ss;
 }
 
+/// @brief Sets the Stack Segment (SS).
+/// @param ss the value we set.
 static inline void set_ss(uint16_t ss)
 {
-    ASM("mov %0, %%ss"
-        :
-        : "r"(ss));
+    __asm__ __volatile__("mov %0, %%ss"
+                         :
+                         : "r"(ss));
 }
 
+/// @brief Reads the current cr0 value.
+/// @return the value we read.
 static inline uintptr_t get_cr0(void)
 {
     uintptr_t cr0;
-    ASM("mov %%cr0, %0"
-        : "=r"(cr0));
+    __asm__ __volatile__("mov %%cr0, %0"
+                         : "=r"(cr0));
     return (cr0);
 }
 
+/// @brief Sets the cr0 value.
+/// @param cr0 the value we want to set.
 static inline void set_cr0(uintptr_t cr0)
 {
-    ASM("mov %0, %%cr0"
-        :
-        : "r"(cr0));
+    __asm__ __volatile__("mov %0, %%cr0"
+                         :
+                         : "r"(cr0));
 }
 
+/// @brief Reads the current cr3 value.
+/// @return the value we read.
 static inline uintptr_t get_cr3(void)
 {
     uintptr_t cr3;
-    ASM("mov %%cr3, %0"
-        : "=r"(cr3));
+    __asm__ __volatile__("mov %%cr3, %0"
+                         : "=r"(cr3));
     return (cr3);
 }
 
+/// @brief Sets the cr3 value.
+/// @param cr3 the value we want to set.
 static inline void set_cr3(uintptr_t cr3)
 {
-    ASM("mov %0, %%cr3"
-        :
-        : "r"(cr3));
+    __asm__ __volatile__("mov %0, %%cr3"
+                         :
+                         : "r"(cr3));
 }
 
+/// @brief Reads the current cr4 value.
+/// @return the value we read.
 static inline uintptr_t get_cr4(void)
 {
     uintptr_t cr4;
-    ASM("mov %%cr4, %0"
-        : "=r"(cr4));
+    __asm__ __volatile__("mov %%cr4, %0"
+                         : "=r"(cr4));
     return (cr4);
 }
 
+/// @brief Sets the cr4 value.
+/// @param cr4 the value we want to set.
 static inline void set_cr4(uintptr_t cr4)
 {
-    ASM("mov %0, %%cr4"
-        :
-        : "r"(cr4)
-        : "memory");
+    __asm__ __volatile__("mov %0, %%cr4"
+                         :
+                         : "r"(cr4)
+                         : "memory");
 }
 
+/// @brief Reads entire contents of the EFLAGS register.
+/// @return the content of EFLAGS.
 static inline uintptr_t get_eflags(void)
 {
     uintptr_t eflags;
-    /* "=rm" is safe here, because "pop" adjusts the stack before
-     * it evaluates its effective address -- this is part of the
-     * documented behavior of the "pop" instruction.
-     */
-    ASM("pushf ; pop %0"
-        : "=rm"(eflags)
-        : /* no input */
-        : "memory");
+    // "=rm" is safe here, because "pop" adjusts the stack before
+    // it evaluates its effective address -- this is part of the
+    // documented behavior of the "pop" instruction.
+    __asm__ __volatile__("pushf; pop %0"
+                         : "=rm"(eflags)
+                         : // no input
+                         : "memory");
     return eflags;
 }
 
+/// @brief Clears the task-switched (TS) flag in the CR0 register.
 static inline void clear_ts(void)
 {
-    ASM("clts");
+    __asm__ __volatile__("clts");
 }
 
+/// @brief Reads the segment selector from the task register (TR).
+/// @return
 static inline unsigned short get_tr(void)
 {
     unsigned short seg;
-    ASM("str %0"
-        : "=rm"(seg));
+    __asm__ __volatile__("str %0"
+                         : "=rm"(seg));
     return (seg);
 }
 
-static inline void set_tr(unsigned int seg)
+/// @brief Loads the source operand into the segment selector field of the task register.
+/// @param seg the segment selector we want to set.
+static inline void set_tr(unsigned short seg)
 {
-    ASM("ltr %0"
-        :
-        : "rm"((unsigned short)(seg)));
+    __asm__ __volatile__("ltr %0"
+                         :
+                         : "rm"(seg));
 }
 
+/// @brief Reads the segment selector from the local descriptor table register (LDTR).
+/// @return the segment selector.
 static inline unsigned short sldt(void)
 {
     unsigned short seg;
-    ASM("sldt %0"
-        : "=rm"(seg));
+    __asm__ __volatile__("sldt %0"
+                         : "=rm"(seg));
     return (seg);
 }
 
-static inline void lldt(unsigned int seg)
+/// @brief Loads the source operand into the segment selector field of the local descriptor table register (LDTR).
+/// @param seg The segment selector we need to set.
+static inline void lldt(unsigned short seg)
 {
-    ASM("lldt %0"
-        :
-        : "rm"((unsigned short)(seg)));
+    __asm__ __volatile__("lldt %0"
+                         :
+                         : "rm"(seg));
 }
 
+/// @brief Loads the values in the source operand into the global descriptor
+/// table register (GDTR) or the interrupt descriptor table register (IDTR).
+/// @param desc the value we need to load.
 static inline void lgdt(uintptr_t *desc)
 {
-    ASM("lgdt %0"
-        :
-        : "m"(*desc));
+    __asm__ __volatile__("lgdt %0"
+                         :
+                         : "m"(*desc));
 }
 
+/// @brief Loads the values in the source operand into the global descriptor
+/// table register (GDTR) or the interrupt descriptor table register (IDTR).
+/// @param desc the value we need to load.
 static inline void lidt(uintptr_t *desc)
 {
-    ASM("lidt %0"
-        :
-        : "m"(*desc));
+    __asm__ __volatile__("lidt %0"
+                         :
+                         : "m"(*desc));
 }
 
-/// @brief Enable IRQs.
-static inline void sti()
+/// @brief Set interrupt flag; external, maskable interrupts enabled at the end
+/// of the next instruction.
+static inline void sti(void)
 {
-    ASM("sti" ::
-            : "memory");
+    __asm__ __volatile__("sti"
+                         :
+                         :
+                         : "memory");
 }
 
-/// @brief Disable IRQs.
-static inline void cli()
+/// @brief Clear interrupt flag; interrupts disabled when interrupt flag
+/// cleared.
+static inline void cli(void)
 {
-    ASM("cli" ::
-            : "memory");
+    __asm__ __volatile__("cli"
+                         :
+                         :
+                         : "memory");
 }
 
+/// @brief Exchanges the current GS base register value with the value contained
+/// in MSR address C0000102H.
 static inline void swapgs(void)
 {
-    ASM("swapgs");
+    __asm__ __volatile__("swapgs");
 }
 
+/// @brief Halts the CPU until the next external interrupt is fired.
 static inline void hlt(void)
 {
-    ASM("hlt");
+    __asm__ __volatile__("hlt");
 }
 
-/// @brief Pause.
-static inline void pause()
+/// @brief Gives hint to processor that improves performance of spin-wait loops.
+static inline void pause(void)
 {
-    ASM("pause");
+    __asm__ __volatile__("pause");
 }
 
 // == Memory clobbers =========================================================
@@ -266,6 +320,6 @@ static inline void pause()
 // Making an inline asm block "volatile" as in this example, ensures that,
 // as it optimizes, the compiler does not move any instructions above or
 // below the block of asm statements.
-//  ASM("  addic. %0,%1,%2\n" : "=r"(res): "=r"(a),"r"(a))
+//  __asm__ __volatile__("  addic. %0,%1,%2\n" : "=r"(res): "=r"(a),"r"(a))
 // This can be particularly important in cases when the code is accessing
 // shared memory.

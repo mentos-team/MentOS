@@ -1,14 +1,14 @@
 /// @file list.c
 /// @brief
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #include "klib/list.h"
 #include "assert.h"
-#include "string.h"
 #include "mem/slab.h"
+#include "string.h"
 
-static inline listnode_t *__node_alloc()
+static inline listnode_t *__node_alloc(void)
 {
     listnode_t *node = kmalloc(sizeof(listnode_t));
     memset(node, 0, sizeof(listnode_t));
@@ -27,7 +27,7 @@ static inline void __list_dealloc(list_t *list)
     kfree(list);
 }
 
-list_t *list_create()
+list_t *list_create(void)
 {
     list_t *list = kmalloc(sizeof(list_t));
     memset(list, 0, sizeof(list_t));
@@ -105,7 +105,8 @@ void *list_remove_node(list_t *list, listnode_t *node)
 
     if (list->head == node) {
         return list_remove_front(list);
-    } else if (list->tail == node) {
+    }
+    if (list->tail == node) {
         return list_remove_back(list);
     }
 
