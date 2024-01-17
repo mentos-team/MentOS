@@ -1,6 +1,6 @@
 /// @file proc_ipc.c
 /// @brief Contains callbacks for procfs system files.
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #include "process/process.h"
