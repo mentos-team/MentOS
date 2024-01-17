@@ -1,6 +1,6 @@
 /// @file scheduler_feedback.c
 /// @brief Manage the current PID for the scheduler feedback session
-/// @copyright (c) 2014-2022 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #include "process/scheduler_feedback.h"

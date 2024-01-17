@@ -1,6 +1,6 @@
 /// @file sem.h
 /// @brief Definition of structure for managing semaphores.
-/// @copyright (c) 2014-2023 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 #pragma once

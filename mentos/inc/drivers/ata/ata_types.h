@@ -1,6 +1,6 @@
 /// @file ata_types.h
 /// @brief Data types for managing Advanced Technology Attachment (ATA) devices.
-/// @copyright (c) 2014-2023 This file is distributed under the MIT License.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 /// @addtogroup ata
 /// @{
