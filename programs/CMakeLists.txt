@@ -56,7 +56,7 @@ endif(CMAKE_BUILD_TYPE STREQUAL "Debug")
 # BUILD
 # =============================================================================
 # Add the executables (manually).
-set(PROGRAMS
+set(PROGRAM_LIST
     nice.c
     ls.c
     mkdir.c
@@ -89,7 +89,7 @@ set(PROGRAMS
 # Set the directory where the compiled binaries will be placed.
 set(MENTOS_BIN_DIR ${CMAKE_SOURCE_DIR}/files/bin)
 
-foreach(FILE_NAME ${PROGRAMS})
+foreach(FILE_NAME ${PROGRAM_LIST})
     # Prepare the program name.
     string(REPLACE ".c" "" EXECUTABLE_NAME ${FILE_NAME})
 
@@ -133,4 +133,4 @@ foreach(FILE_NAME ${PROGRAMS})
 endforeach()
 
 # Add the overall target that builds all the programs.
-add_custom_target(all_programs ALL DEPENDS ${ALL_EXECUTABLES})
+add_custom_target(programs ALL DEPENDS ${ALL_EXECUTABLES})

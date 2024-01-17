@@ -11,7 +11,7 @@ project(kernel C ASM)
 # =============================================================================
 # Set the main file names.
 set(KERNEL_NAME       kernel)
-set(BOOTLOADER_NAME   kernel_bootloader)
+set(BOOTLOADER_NAME   bootloader)
 set(BUDDY_SYSTEM_NAME kernel_memory)
 set(BUDDY_SYSTEM_FILE ${PROJECT_SOURCE_DIR}/src/mem/libbuddysystem.a)
 
@@ -298,12 +298,10 @@ target_compile_definitions(
 # =============================================================================
 # Build the kernel.
 add_custom_target(
-    kernel-bootloader.bin ALL
-    COMMAND ${CMAKE_LINKER} -melf_i386 -static --oformat elf32-i386 --output kernel.bin --script ${CMAKE_CURRENT_SOURCE_DIR}/kernel.lds -Map kernel.map -u kmain
-            $<TARGET_FILE_NAME:${KERNEL_NAME}> ${BUDDY_SYSTEM_FILE}
+    ${BOOTLOADER_NAME}.bin ALL
+    COMMAND ${CMAKE_LINKER} -melf_i386 -static --oformat elf32-i386 --output kernel.bin --script ${CMAKE_CURRENT_SOURCE_DIR}/kernel.lds -Map kernel.map -u kmain $<TARGET_FILE_NAME:${KERNEL_NAME}> ${BUDDY_SYSTEM_FILE}
     COMMAND objcopy -I binary -O elf32-i386 -B i386 kernel.bin kernel.bin.o
-    COMMAND ${CMAKE_LINKER} -melf_i386 -static --oformat elf32-i386 --output kernel-bootloader.bin --script ${CMAKE_CURRENT_SOURCE_DIR}/boot.lds -Map kernel-bootloader.map
-            kernel.bin.o $<TARGET_FILE_NAME:${BOOTLOADER_NAME}>
+    COMMAND ${CMAKE_LINKER} -melf_i386 -static --oformat elf32-i386 --output ${BOOTLOADER_NAME}.bin --script ${CMAKE_CURRENT_SOURCE_DIR}/boot.lds -Map bootloader.map kernel.bin.o $<TARGET_FILE_NAME:${BOOTLOADER_NAME}>
     DEPENDS ${KERNEL_NAME}
     DEPENDS ${BOOTLOADER_NAME}
 )

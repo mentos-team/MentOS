@@ -56,7 +56,7 @@ endif(CMAKE_BUILD_TYPE STREQUAL "Debug")
 # BUILD
 # =============================================================================
 # Add your file in this list.
-set(TESTS
+set(TEST_LIST
     t_gid.c
     t_alarm.c
     t_periodic3.c
@@ -91,7 +91,7 @@ set(TESTS
 # Set the directory where the compiled binaries will be placed.
 set(MENTOS_TESTS_DIR ${CMAKE_SOURCE_DIR}/files/bin/tests)
 
-foreach(FILE_NAME ${TESTS})
+foreach(FILE_NAME ${TEST_LIST})
     # Prepare the program name.
     string(REPLACE ".c" "" EXECUTABLE_NAME ${FILE_NAME})
     
@@ -131,8 +131,8 @@ foreach(FILE_NAME ${TESTS})
     set_target_properties(${TARGET_NAME} PROPERTIES OUTPUT_NAME "${EXECUTABLE_NAME}")
 
     # Append the program name to the list of all the executables.
-    list(APPEND ALL_TESTS ${TARGET_NAME})
+    list(APPEND ALL_EXECUTABLES ${TARGET_NAME})
 endforeach()
 
 # Add the overall target that builds all the programs.
-add_custom_target(all_tests ALL DEPENDS ${ALL_TESTS})
+add_custom_target(tests ALL DEPENDS ${ALL_EXECUTABLES})
