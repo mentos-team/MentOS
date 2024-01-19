@@ -37,10 +37,10 @@ typedef unsigned int ino_t;
 typedef unsigned int dev_t;
 
 /// The type of user-id.
-typedef unsigned int uid_t;
+typedef int uid_t;
 
 /// The type of group-id.
-typedef unsigned int gid_t;
+typedef int gid_t;
 
 /// The type of offset.
 typedef long int off_t;

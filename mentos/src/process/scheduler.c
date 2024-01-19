@@ -386,6 +386,9 @@ uid_t sys_getuid(void)
 
 int sys_setuid(uid_t uid)
 {
+    if (uid < 0) {
+        return -EINVAL;
+    }
     if (runqueue.curr && (runqueue.curr->uid == 0)) {
         runqueue.curr->uid = uid;
         return 0;
@@ -403,6 +406,9 @@ pid_t sys_getgid(void)
 
 int sys_setgid(pid_t gid)
 {
+    if (gid < 0) {
+        return -EINVAL;
+    }
     if (runqueue.curr && (runqueue.curr->uid == 0)) {
         runqueue.curr->gid = gid;
         return 0;
