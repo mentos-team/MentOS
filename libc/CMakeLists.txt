@@ -33,6 +33,8 @@ add_library(
     ${CMAKE_SOURCE_DIR}/libc/src/sys/utsname.c
     ${CMAKE_SOURCE_DIR}/libc/src/sys/mman.c
     ${CMAKE_SOURCE_DIR}/libc/src/sys/ioctl.c
+    ${CMAKE_SOURCE_DIR}/libc/src/unistd/chmod.c
+    ${CMAKE_SOURCE_DIR}/libc/src/unistd/chown.c
     ${CMAKE_SOURCE_DIR}/libc/src/unistd/creat.c
     ${CMAKE_SOURCE_DIR}/libc/src/unistd/getppid.c
     ${CMAKE_SOURCE_DIR}/libc/src/unistd/getpid.c
