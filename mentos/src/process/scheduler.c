@@ -383,7 +383,7 @@ int sys_setpgid(pid_t pid, pid_t pgid)
 uid_t sys_getuid(void) { RETURN_PROCESS_ATTR_OR_EPERM(ruid); }
 uid_t sys_geteuid(void) { RETURN_PROCESS_ATTR_OR_EPERM(uid); }
 
-pid_t sys_getgid(void) { RETURN_PROCESS_ATTR_OR_EPERM(rgid); }
+gid_t sys_getgid(void) { RETURN_PROCESS_ATTR_OR_EPERM(rgid); }
 gid_t sys_getegid(void) { RETURN_PROCESS_ATTR_OR_EPERM(gid); }
 
 #define FAIL_ON_INV_ID(id) \
@@ -418,7 +418,7 @@ int sys_setuid(uid_t uid)
     return -EPERM;
 }
 
-int sys_setgid(pid_t gid)
+int sys_setgid(gid_t gid)
 {
     FAIL_ON_INV_ID_OR_PROC(gid);
     IF_PRIVILEGED_SET_ALL_AND_RETURN(gid);

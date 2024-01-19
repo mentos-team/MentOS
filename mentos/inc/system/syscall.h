@@ -133,13 +133,13 @@ int sys_setpgid(pid_t pid, pid_t pgid);
 
 ///@brief returns the real group ID of the calling process.
 ///@return GID of the current process
-pid_t sys_getgid(void);
+gid_t sys_getgid(void);
 
 ///@brief sets the group ID of the calling process.
-///@param pid process identifier to
+///@param gid group id
 ///@return On success, zero is returned.
 ///        Otherwise returns -1 with errno set to :EINVAL or EPERM.
-int sys_setgid(pid_t pid);
+int sys_setgid(gid_t gid);
 
 ///@brief returns the effective group ID of the calling process.
 ///@return GID of the current process

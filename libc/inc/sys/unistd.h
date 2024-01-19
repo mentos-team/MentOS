@@ -108,17 +108,17 @@ int setpgid(pid_t pid, pid_t pgid);
 
 ///@brief returns the real group ID of the calling process.
 ///@return GID of the current process
-extern pid_t getgid(void);
+extern gid_t getgid(void);
 
 ///@brief returns the effective group ID of the calling process.
 ///@return GID of the current process
 extern gid_t getegid(void);
 
 ///@brief sets the group IDs of the calling process.
-///@param pid process identifier to 
+///@param gid the Group ID to set
 ///@return On success, zero is returned.
 ///        Otherwise returns -1 with errno set to :EINVAL or EPERM  
-extern int setgid(pid_t pid);
+extern int setgid(gid_t gid);
 
 ///@brief sets the real and effective group IDs of the calling process.
 ///@param rgid the new real Group ID.
