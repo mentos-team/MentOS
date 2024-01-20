@@ -1,5 +1,6 @@
 # List of programs.
 set(PROGRAM_LIST
+    chown.c
     id.c
     stat.c
     false.c
