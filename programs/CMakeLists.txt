@@ -1,5 +1,6 @@
 # List of programs.
 set(PROGRAM_LIST
+    chmod.c
     chown.c
     id.c
     stat.c
