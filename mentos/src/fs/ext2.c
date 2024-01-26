@@ -379,10 +379,12 @@ static int ext2_fstat(vfs_file_t *file, stat_t *stat);
 static int ext2_ioctl(vfs_file_t *file, int request, void *data);
 static ssize_t ext2_getdents(vfs_file_t *file, dirent_t *dirp, off_t doff, size_t count);
 static ssize_t ext2_readlink(vfs_file_t *file, char *buffer, size_t bufsize);
+static int ext2_fsetattr(vfs_file_t *file, struct iattr *attr);
 
 static int ext2_mkdir(const char *path, mode_t mode);
 static int ext2_rmdir(const char *path);
 static int ext2_stat(const char *path, stat_t *stat);
+static int ext2_setattr(const char *path, struct iattr *attr);
 static vfs_file_t *ext2_creat(const char *path, mode_t permission);
 static vfs_file_t *ext2_mount(vfs_file_t *block_device, const char *path);
 
@@ -397,6 +399,7 @@ static vfs_sys_operations_t ext2_sys_operations = {
     .stat_f    = ext2_stat,
     .creat_f   = ext2_creat,
     .symlink_f = NULL,
+    .setattr_f = ext2_setattr,
 };
 
 /// Filesystem file operations.
@@ -411,6 +414,7 @@ static vfs_file_operations_t ext2_fs_operations = {
     .ioctl_f    = ext2_ioctl,
     .getdents_f = ext2_getdents,
     .readlink_f = ext2_readlink,
+    .setattr_f  = ext2_fsetattr,
 };
 
 // ============================================================================
@@ -3009,6 +3013,107 @@ static int ext2_stat(const char *path, stat_t *stat)
     stat->st_ino = direntry.inode;
     // Set the rest of the structure.
     return __ext2_stat(&inode, stat);
+}
+
+/// @brief Sets the attributes of an inode and saves it
+/// @param inode The inode to set the attributes
+/// @param stat The structure where the attributes are stored.
+/// @return 0 if success.
+static int __ext2_setattr(ext2_inode_t *inode, struct iattr *attr)
+{
+    if (attr->ia_valid & ATTR_MODE) {
+        inode->mode = (inode->mode & ~0xfff) | attr->ia_mode;
+    }
+    if (attr->ia_valid & ATTR_UID) {
+        inode->uid = attr->ia_uid;
+    }
+    if (attr->ia_valid & ATTR_GID) {
+        inode->gid = attr->ia_gid;
+    }
+    if (attr->ia_valid & ATTR_ATIME) {
+        inode->atime = attr->ia_atime;
+    }
+    if (attr->ia_valid & ATTR_MTIME) {
+        inode->mtime = attr->ia_mtime;
+    }
+    if (attr->ia_valid & ATTR_CTIME) {
+        inode->ctime = attr->ia_ctime;
+    }
+    return 0;
+}
+
+static int __ext2_check_setattr_permission(uid_t file_owner) {
+    task_struct *task = scheduler_get_current_process();
+    return task->uid == 0 || task->uid == file_owner;
+}
+
+/// @brief Set attributes of the file at the given position.
+/// @param file The file struct.
+/// @param stat The structure where the attributes are stored.
+/// @return 0 if success.
+static int ext2_fsetattr(vfs_file_t *file, struct iattr *attr)
+{
+    if (!__ext2_check_setattr_permission(file->uid)) {
+        return -EPERM;
+    }
+    // Get the filesystem.
+    ext2_filesystem_t *fs = (ext2_filesystem_t *)file->device;
+    if (fs == NULL) {
+        pr_err("The file does not belong to an EXT2 filesystem `%s`.\n", file->name);
+        return -EPERM;
+    }
+    // Get the inode associated with the file.
+    ext2_inode_t inode;
+    if (ext2_read_inode(fs, &inode, file->ino) == -1) {
+        pr_err("Failed to read the inode `%s`.\n", file->name);
+        return -ENOENT;
+    }
+
+    __ext2_setattr(&inode, attr);
+    return ext2_write_inode(fs, &inode, file->ino);
+}
+
+/// @brief Set attributes of a file
+/// @param path The path where the file resides.
+/// @param stat The structure where the information are stored.
+/// @return 0 if success.
+static int ext2_setattr(const char *path, struct iattr *attr)
+{
+    pr_debug("ext2_setattr(%s, %p)\n", path, stat);
+    // Get the absolute path.
+    char absolute_path[PATH_MAX];
+    // If the first character is not the '/' then get the absolute path.
+    if (!realpath(path, absolute_path, sizeof(absolute_path))) {
+        pr_err("Cannot get the absolute path for path `%s`.\n", path);
+        return -ENOENT;
+    }
+    // Get the EXT2 filesystem.
+    ext2_filesystem_t *fs = get_ext2_filesystem(absolute_path);
+    if (fs == NULL) {
+        pr_err("Failed to get the EXT2 filesystem for absolute path `%s`.\n", absolute_path);
+        return -ENOENT;
+    }
+    // Prepare the structure for the direntry.
+    ext2_dirent_t direntry;
+    memset(&direntry, 0, sizeof(ext2_dirent_t));
+    // Resolve the path.
+    if (ext2_resolve_path_direntry(fs->root, absolute_path, &direntry)) {
+        pr_err("Failed to resolve path `%s`.\n", absolute_path);
+        return -ENOENT;
+    }
+    // Get the inode associated with the directory entry.
+    ext2_inode_t inode;
+    if (ext2_read_inode(fs, &inode, direntry.inode) == -1) {
+        pr_err("ext2_stat(%s): Failed to read the inode of `%s`.\n", path, direntry.name);
+        return -ENOENT;
+    }
+
+    if (!__ext2_check_setattr_permission(inode.uid)) {
+        return -EPERM;
+    }
+
+    __ext2_setattr(&inode, attr);
+    return ext2_write_inode(fs, &inode, direntry.inode);
 }
 
 /// @brief Mounts the block device as an EXT2 filesystem.
