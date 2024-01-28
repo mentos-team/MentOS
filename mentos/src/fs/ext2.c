@@ -2267,7 +2267,7 @@ static vfs_file_t *ext2_creat(const char *path, mode_t permission)
         return NULL;
     }
     // Get the parent VFS node.
-    vfs_file_t *parent = vfs_open(parent_path, O_RDONLY, 0);
+    vfs_file_t *parent = vfs_open(parent_path, O_WRONLY, 0);
     if (parent == NULL) {
         errno = ENOENT;
         return NULL;
