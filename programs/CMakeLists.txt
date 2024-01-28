@@ -4,6 +4,7 @@ set(PROGRAM_LIST
     chmod.c
     chown.c
     clear.c
+    cp.c
     cpuid.c
     date.c
     echo.c
