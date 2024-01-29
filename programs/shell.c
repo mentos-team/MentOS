@@ -838,20 +838,6 @@ static int __execute_cmd(char* command, bool_t add_to_history)
     return status;
 }
 
-static void __interactive_mode(void)
-{
-#pragma clang diagnostic push
-#pragma ide diagnostic ignored "EndlessLoop"
-    while (true) {
-        // First print the prompt.
-        __prompt_print();
-        // Get the input command.
-        __cmd_get();
-        __execute_cmd(cmd, true);
-    }
-#pragma clang diagnostic pop
-}
-
 static int __execute_file(char *path)
 {
     int status = 0;
@@ -872,6 +858,28 @@ static int __execute_file(char *path)
 
     return status;
 }
+
+static void __interactive_mode(void)
+{
+    stat_t buf;
+    if (stat(".shellrc", &buf) == 0) {
+        int ret = __execute_file(".shellrc");
+        if (ret < 0) {
+            printf("%s: .shellrc: %s\n", strerror(-ret));
+        }
+    }
+#pragma clang diagnostic push
+#pragma ide diagnostic ignored "EndlessLoop"
+    while (true) {
+        // First print the prompt.
+        __prompt_print();
+        // Get the input command.
+        __cmd_get();
+        __execute_cmd(cmd, true);
+    }
+#pragma clang diagnostic pop
+}
+
 
 void wait_for_child(int signum)
 {
