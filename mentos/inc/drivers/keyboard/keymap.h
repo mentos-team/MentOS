@@ -15,6 +15,7 @@
 typedef enum {
     KEYMAP_IT,      ///< Identifies the IT keyboard mapping.
     KEYMAP_US,      ///< Identifies the US keyboard mapping.
+    KEYMAP_DE,      ///< Identifies the DE keyboard mapping.
     KEYMAP_TYPE_MAX ///< The delimiter for the keyboard types.
 } keymap_type_t;
 

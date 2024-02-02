@@ -191,7 +191,7 @@ endif()
 
 # =============================================================================
 # Set the list of valid keyboard mappings.
-set(KEYMAP_TYPES KEYMAP_US KEYMAP_IT)
+set(KEYMAP_TYPES KEYMAP_US KEYMAP_IT KEYMAP_DE)
 # Add the keyboard mapping.
 set(KEYMAP_TYPE "KEYMAP_US" CACHE STRING "Chose the type of keyboard mapping: ${KEYMAP_TYPES}")
 # List of keyboard mappings.
