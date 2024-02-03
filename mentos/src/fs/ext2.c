@@ -471,60 +471,6 @@ static const char *time_to_string(uint32_t time)
     return s;
 }
 
-static inline int __ext2_valid_permissions(
-    const task_struct *task,
-    const mode_t mask,
-    const uid_t uid,
-    const gid_t gid,
-    const int usr,
-    const int grp,
-    const int oth)
-{
-    // The task is the owner.
-    if ((mask & usr) && (task->uid == uid)) {
-        return 1;
-    }
-    // The task belongs to the correct group.
-    if ((mask & grp) && (task->gid == gid)) {
-        return 1;
-    }
-    // The task is not the owner and does not belong to the correct group.
-    if ((mask & oth) && (task->uid != uid) && (task->gid != gid)) {
-        return 1;
-    }
-    return 0;
-}
-
-/// @brief Checks if the requests in flags are valid.
-/// @param flags the flags to check.
-/// @param mask the mask to check against.
-/// @param uid the uid of the owner.
-/// @param gid the gid of the owner.
-/// @return 1 on success, 0 otherwise.
-static int ext2_valid_permissions(int flags, mode_t mask, uid_t uid, gid_t gid)
-{
-    // Check the permissions.
-    task_struct *task = scheduler_get_current_process();
-    if (task == NULL) {
-        pr_warning("Failed to get the current running process, assuming we are booting.\n");
-        return 1;
-    }
-    // Init, and all root processes have full permissions.
-    if ((task->pid == 0) || (task->uid == 0) || (task->gid == 0)) {
-        return 1;
-    }
-    if (((flags & O_RDONLY) == O_RDONLY) && __ext2_valid_permissions(task, mask, uid, gid, S_IRUSR, S_IRGRP, S_IROTH)) {
-        return 1;
-    }
-    if (((flags & O_WRONLY) == O_WRONLY) && __ext2_valid_permissions(task, mask, uid, gid, S_IWUSR, S_IWGRP, S_IWOTH)) {
-        return 1;
-    }
-    if (((flags & O_RDWR) == O_RDWR) && __ext2_valid_permissions(task, mask, uid, gid, S_IRUSR | S_IWUSR, S_IRGRP | S_IWGRP, S_IROTH | S_IWOTH)) {
-        return 1;
-    }
-    return 0;
-}
-
 /// @brief Dumps on debugging output the superblock.
 /// @param sb the object to dump.
 static void ext2_dump_superblock(ext2_superblock_t *sb)
@@ -2441,7 +2387,7 @@ static vfs_file_t *ext2_open(const char *path, int flags, mode_t mode)
 
     ext2_dump_inode(&inode);
 
-    if (!ext2_valid_permissions(flags, inode.mode, inode.uid, inode.gid)) {
+    if (!vfs_valid_open_permissions(flags, inode.mode, inode.uid, inode.gid)) {
         pr_err("Task does not have access permission.\n");
         errno = EACCES;
         return NULL;

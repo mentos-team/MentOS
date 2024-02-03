@@ -195,3 +195,17 @@ int get_unused_fd(void);
 /// @brief Return new smallest available file desriptor.
 /// @return -errno on fail, fd on success.
 int sys_dup(int fd);
+
+/// @brief Check if the requested open flags against the file mask
+/// @param flags The requested open flags.
+/// @param mode The permissions of the file.
+/// @param uid The owner of the task opening the file.
+/// @param gid The group of the task opening the file.
+/// @return 0 on fail, 1 on success.
+int vfs_valid_open_permissions(int flags, mode_t mask, uid_t uid, gid_t gid);
+
+/// @brief Check if the file is exectuable
+/// @param task The task to execute the file.
+/// @param file The file to execute.
+/// @return 0 on fail, 1 on success.
+int vfs_valid_exec_permission(struct task_struct *task, vfs_file_t *file);

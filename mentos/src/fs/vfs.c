@@ -9,6 +9,7 @@
 #define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
 #include "io/debug.h"                    // Include debugging functions.
 
+#include "fcntl.h"
 #include "assert.h"
 #include "fs/procfs.h"
 #include "fs/vfs.h"
@@ -665,4 +666,74 @@ int sys_dup(int fd)
     task->fd_list[fd].flags_mask = vfd->flags_mask;
 
     return fd;
+}
+
+static inline int __valid_open_permissions(
+    const mode_t mask,
+    const int flags,
+    const int read,
+    const int write)
+{
+    if ((flags & O_ACCMODE) == O_RDONLY) {
+        return mask & read;
+    }
+    if ((flags & O_ACCMODE) == O_WRONLY) {
+        return mask & write;
+    }
+    if ((flags & O_ACCMODE) == O_RDWR) {
+        return mask & (write | read);
+    }
+    return 0;
+}
+
+/// @brief Checks if the requests in flags are valid.
+/// @param flags the flags to check.
+/// @param mask the mask to check against.
+/// @param uid the uid of the owner.
+/// @param gid the gid of the owner.
+/// @return 1 on success, 0 otherwise.
+int vfs_valid_open_permissions(int flags, mode_t mask, uid_t uid, gid_t gid)
+{
+    // Check the permissions.
+    task_struct *task = scheduler_get_current_process();
+    if (task == NULL) {
+        pr_warning("Failed to get the current running process, assuming we are booting.\n");
+        return 1;
+    }
+    // Init, and all root processes have full permissions.
+    if ((task->pid == 0) || (task->uid == 0)) {
+        return 1;
+    }
+    // Check the owners permission
+    if (task->uid == uid) {
+        return __valid_open_permissions(mask, flags, S_IRUSR, S_IWUSR);
+    // Check the groups permission
+    } else if (task->gid == gid) {
+        return __valid_open_permissions(mask, flags, S_IRGRP, S_IWGRP);
+    }
+
+    // Check the others permission
+    return __valid_open_permissions(mask, flags, S_IROTH, S_IWOTH);
+}
+
+/// @brief Checks if the task is allowed to execute the file
+/// @param task the task to execute the file.
+/// @param file the file to execute.
+/// @return 1 on success, 0 otherwise.
+int vfs_valid_exec_permission(task_struct *task, vfs_file_t *file) {
+    // Init, and all root processes may execute any file with an execute bit set
+    if ((task->pid == 0) || (task->uid == 0)) {
+        return file->mask & (S_IXUSR | S_IXGRP | S_IXOTH);
+    }
+
+    // Check the owners permission
+    if (task->uid == file->uid) {
+        return file->mask & S_IXUSR;
+    // Check the groups permission
+    } else if (task->gid == file->gid) {
+        return file->mask & S_IXGRP;
+    }
+
+    // Check the others permission
+    return file->mask & S_IXOTH;
 }
