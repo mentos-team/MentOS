@@ -72,6 +72,15 @@ int sys_readlink(const char *path, char *buffer, size_t bufsize)
     return nbytes;
 }
 
+char *realpath(const char *path, char *buffer, size_t buflen) {
+    int ret = resolve_path(path, buffer, buflen, REMOVE_TRAILING_SLASH);
+    if (ret < 0) {
+        errno = -ret;
+        return NULL;
+    }
+    return buffer;
+}
+
 #define APPEND_PATH_SEP_OR_FAIL(b, remaining) \
 {                                             \
     strncat(b, "/", remaining);               \
