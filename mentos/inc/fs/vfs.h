@@ -37,7 +37,14 @@ int vfs_register_filesystem(file_system_type *fs);
 /// @return The outcome of the operation, 0 if fails.
 int vfs_unregister_filesystem(file_system_type *fs);
 
-/// @brief Given a pathname for a file, kopen() returns a file struct, used to access the file.
+/// @brief Given an absolute path to a file, vfs_open_abspath() returns a file struct, used to access the file.
+/// @param abspath  An absolute path to a file.
+/// @param flags    Used to set the file status flags and file access modes of the open file description.
+/// @param mode     Specifies the file mode bits be applied when a new file is created.
+/// @return Returns a file struct, or NULL.
+vfs_file_t *vfs_open_abspath(const char *pathname, int flags, mode_t mode);
+
+/// @brief Given a pathname for a file, vfs_open() returns a file struct, used to access the file.
 /// @param pathname A pathname for a file.
 /// @param flags    Used to set the file status flags and file access modes of the open file description.
 /// @param mode     Specifies the file mode bits be applied when a new file is created.
