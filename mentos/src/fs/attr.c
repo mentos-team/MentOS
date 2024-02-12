@@ -6,6 +6,7 @@
 #include "libgen.h"
 #include "process/scheduler.h"
 #include "fcntl.h"
+#include "fs/namei.h"
 #include "fs/vfs.h"
 #include "io/debug.h"
 #include "limits.h"
@@ -19,9 +20,10 @@
 static int __setattr(const char *path, struct iattr* attr, bool_t follow_links) {
     // Allocate a variable for the path.
     char absolute_path[PATH_MAX];
-    if (!realpath(path, absolute_path, sizeof(absolute_path))) {
-        pr_err("sys_chown(%s): Cannot get the absolute path.", path);
-        return -ENOENT;
+    int ret = resolve_path(path, absolute_path, sizeof(absolute_path), follow_links ? FOLLOW_LINKS: 0);
+    if (ret < 0) {
+        pr_err("__setattr(%s): Cannot get the absolute path.", path);
+        return ret;
     }
 
     super_block_t *sb = vfs_get_superblock(absolute_path);
@@ -34,8 +36,6 @@ static int __setattr(const char *path, struct iattr* attr, bool_t follow_links) 
         pr_err("do_chown(%s): Cannot find the superblock root!\n", absolute_path);
         return -ENOENT;
     }
-
-    // TODO: resolve links
 
     // Check if the function is implemented.
     if (sb_root->sys_operations->setattr_f == NULL) {
