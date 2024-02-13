@@ -2589,7 +2589,10 @@ static ssize_t ext2_write(vfs_file_t *file, const void *buffer, off_t offset, si
         pr_err("Failed to read the inode `%s`.\n", file->name);
         return -1;
     }
-    return ext2_write_inode_data(fs, &inode, file->ino, offset, nbyte, (char *)buffer);
+    ssize_t written = ext2_write_inode_data(fs, &inode, file->ino, offset, nbyte, (char *)buffer);
+    // Update the file length
+    file->length = inode.size;
+    return written;
 }
 
 /// @brief Repositions the file offset inside a file.
