@@ -40,6 +40,7 @@ int main(int argc, char *argv[])
     }
     else if (argc == 2)
     {
+        char *pager = "cat";
         char filepath[PATH_MAX];
         strcpy(filepath, "/usr/share/man/");
         strcat(filepath, argv[1]);
@@ -47,23 +48,11 @@ int main(int argc, char *argv[])
         int fd = open(filepath, O_RDONLY, 42);
         if (fd < 0)
         {
-            printf("%s: No manual entry for %s\n\n", argv[0], argv[1]);
+            printf("%s: No manual entry for %s\n", argv[0], argv[1]);
+            exit(1);
         }
-        else
-        {
-            // Prepare the buffer for reading the man file.
-            char buffer[BUFSIZ];
-            // Put on the standard output the characters.
-            while (read(fd, buffer, BUFSIZ) > 0)
-            {
-                puts(buffer);
-            }
-            // Close the file descriptor.
-            close(fd);
-            // Terminate with a pair of newlines.
-            putchar('\n');
-            putchar('\n');
-        }
+        close(fd);
+        execlp(pager, pager, filepath);
     }
     return 0;
 }
