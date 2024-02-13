@@ -18,9 +18,10 @@ static inline void print_content(const char *path, char *buffer, unsigned buflen
     // Open the file.
     int fd = open(path, O_RDONLY, 42);
     if (fd >= 0) {
+        ssize_t bytes_read = 0;
         // Put on the standard output the characters.
-        while (read(fd, buffer, buflen) > 0) {
-            puts(buffer);
+        while ((bytes_read = read(fd, buffer, buflen)) > 0) {
+            write(STDOUT_FILENO, buffer, bytes_read);
         }
         // Close the file descriptor.
         close(fd);
