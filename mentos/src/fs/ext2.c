@@ -1413,8 +1413,6 @@ static int ext2_allocate_inode_block(ext2_filesystem_t *fs, ext2_inode_t *inode,
     if (inode->blocks_count < blocks_count) {
         // Set the blocks count.
         inode->blocks_count = blocks_count;
-        // Update the size.
-        inode->size = (blocks_count / fs->blocks_per_block_count) * fs->block_size;
         pr_debug("Setting the block count for inode `%d` to `%d` blocks.\n", inode_index, blocks_count / fs->blocks_per_block_count);
     }
     // Update the inode.
