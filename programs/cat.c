@@ -46,6 +46,7 @@ int main(int argc, char **argv)
             return 0;
         }
     }
+    int status = 0;
     // Prepare the buffer for reading.
     char buffer[BUFSIZ];
     // Iterate the arguments.
@@ -61,16 +62,18 @@ int main(int argc, char **argv)
 
         } else if (S_ISDIR(statbuf.st_mode)) {
             printf("cat: %s: Is a directory\n\n", argv[i]);
+            status = 1;
 
         } else if (S_ISLNK(statbuf.st_mode)) {
             if (readlink(argv[i], buffer, BUFSIZ)) {
                 print_content(buffer, buffer, BUFSIZ);
             } else {
                 printf("cat: %s: %s\n\n", argv[i], strerror(errno));
+                status = 1;
             }
         }
     }
     putchar('\n');
     putchar('\n');
-    return 0;
+    return status;
 }
