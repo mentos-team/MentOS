@@ -1,0 +1,19 @@
+SYNOPSIS
+    chown [OWNER][:[GROUP]] FILE
+
+DESCRIPTION
+    chown changes the user and/or group ownership of the given file.
+    If only a owner is given the file's group is not changed. If the owner
+    is followed by a colon and a group name (or numeric group ID), the group
+    ownership is changed as well.  If the colon and group are given, but the
+    owner is omitted, only the group of the file is changed.
+
+    chown never changes the ownership of symbolic links; the chown system call
+    cannot change their ownership.
+
+EXAMPLES
+    chown root /u
+           Change the owner of /u to "root".
+
+    chown root:staff /u
+           Likewise, but also change its group to "staff".
