@@ -1555,6 +1555,10 @@ static ssize_t ext2_write_inode_data(ext2_filesystem_t *fs, ext2_inode_t *inode,
     uint32_t end = offset + nbyte;
     if (end > inode->size) {
         inode->size = end;
+        if (ext2_write_inode(fs, inode, inode_index) == -1) {
+            pr_err("Failed to write the inode `%d`\n", inode_index);
+            return -1;
+        }
     }
     uint32_t start_block   = offset / fs->block_size;
     uint32_t end_block     = end / fs->block_size;
