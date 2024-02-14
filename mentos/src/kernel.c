@@ -79,6 +79,9 @@ uintptr_t initial_esp = 0;
 /// The boot info.
 boot_info_t boot_info;
 
+/// Flag indicating if we are running tests instead of an interactive session
+int runtests = 0;
+
 /// @brief Prints [OK] at the current row and column 60.
 static inline void print_ok(void)
 {
@@ -404,12 +407,13 @@ int kmain(boot_info_t *boot_informations)
     print_ok();
 
     //==========================================================================
-    task_struct *init_p;
     // TODO: fix the hardcoded check for the flags set by GRUB
-    if (boot_info.multiboot_header->flags == 0x1a67 &&
+    runtests = boot_info.multiboot_header->flags == 0x1a67 &&
         bitmask_check(boot_info.multiboot_header->flags, MULTIBOOT_FLAG_CMDLINE) &&
-        strcmp((char *)boot_info.multiboot_header->cmdline, "runtests") == 0)
-    {
+        strcmp((char *)boot_info.multiboot_header->cmdline, "runtests") == 0;
+
+    task_struct *init_p;
+    if (runtests) {
         pr_notice("Creating runtests process...\n");
         printf("Creating runtests process...");
         init_p = process_create_init("/bin/runtests");
