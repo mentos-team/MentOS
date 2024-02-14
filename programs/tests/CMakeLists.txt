@@ -15,7 +15,6 @@ set(TEST_LIST
     t_sigmask.c
     t_getenv.c
     t_sigusr.c
-    t_exec_callee.c
     t_shmget.c
     t_stopcont.c
     t_semop.c
