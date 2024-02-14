@@ -22,7 +22,7 @@ void sig_handler(int sig)
         counter += 1;
 
         if (counter == 2)
-            exit(1);
+            exit(0);
 
     } else {
         printf("handler(%d) : Wrong signal.\n", sig);
@@ -51,5 +51,5 @@ int main(int argc, char *argv[])
     kill(getpid(), SIGUSR2);
 
     while(1) { };
-    return 0;
+    return 1;
 }
