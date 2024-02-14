@@ -4,6 +4,7 @@
 /// See LICENSE.md for details.
 
 #include <fcntl.h>
+#include <io/port_io.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -12,6 +13,10 @@
 #include <sys/errno.h>
 #include <sys/unistd.h>
 #include <sys/wait.h>
+
+#define SHUTDOWN_PORT 0x604
+/// Second serial port for QEMU.
+#define SERIAL_COM2 0x02F8
 
 static char *all_tests[] = {
     "t_abort",
@@ -63,6 +68,8 @@ static char* bufpos = buf;
 static int test_out_fd;
 static int test_err_fd;
 
+static int init;
+
 #define append(...)                         \
 do {                                        \
     bufpos += sprintf(bufpos, __VA_ARGS__); \
@@ -72,7 +79,15 @@ do {                                        \
 } while(0);
 
 static int test_out_flush(void) {
-    int ret = printf("%s\n", buf);
+    int ret = 0;
+    if (!init) {
+        ret = printf("%s\n", buf);
+    } else {
+        char *s = buf;
+        while((*s) != 0)
+            outportb(SERIAL_COM2, *s++);
+        outportb(SERIAL_COM2, '\n');
+    }
     bufpos = buf;
     *bufpos = 0;
     return ret;
@@ -165,8 +180,7 @@ static void run_test(int n, char *test_cmd_line) {
     }
 }
 
-int main(int argc, char **argv)
-{
+int runtests_main(int argc, char **argv) {
     for (int i = 1; i < argc; i++) {
         if (strncmp(argv[i], "--help", 6) == 0) {
             printf("Usage: %s [--help] [TEST]...\n", argv[0]);
@@ -196,5 +210,24 @@ int main(int argc, char **argv)
         run_test(i + 1, tests[i]);
     }
 
+    // We are running as init
+    if (init) {
+        outports(SHUTDOWN_PORT, 0x2000);
+    }
+
     return 0;
+}
+
+int main(int argc, char **argv)
+{
+    // Are we the init process
+    init = getpid() == 1;
+    if (init) {
+        pid_t runtests = fork();
+        if (runtests) {
+            while (1) { wait(NULL); }
+        }
+    }
+
+    return runtests_main(argc, argv);
 }
