@@ -40,7 +40,7 @@ int main(int argc, char *argv[])
     }
     else if (argc == 2)
     {
-        char *pager = "cat";
+        char *pager = "more";
         char filepath[PATH_MAX];
         strcpy(filepath, "/usr/share/man/");
         strcat(filepath, argv[1]);
