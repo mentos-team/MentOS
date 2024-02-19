@@ -1,0 +1,13 @@
+SYNOPSIS
+    more [FILE]
+
+DESCRIPTION
+    more is a filter for paging through text one screenful at a time.
+
+OPTIONS
+    -h, --help: shows command help.
+
+KEY BINDINGS
+    q       Exit from more
+    space   Display next screen size
+    return  Display next line
