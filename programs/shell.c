@@ -640,8 +640,6 @@ static void __cmd_get(void)
             } else if (c == CTRL('U')) {
                 // Clear the current command.
                 __cmd_clr();
-                // Re-set the index to the beginning.
-                cmd_cursor_index = 0;
                 // Sets the command.
                 __cmd_set("\0");
             } else if (c == CTRL('D')) {
