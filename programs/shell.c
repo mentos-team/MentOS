@@ -474,6 +474,89 @@ static inline void __cmd_sug(dirent_t *suggestion, size_t starting_position)
     }
 }
 
+static void __cmd_complete(void) {
+    // Get the lenght of the command.
+    size_t cmd_len = strlen(cmd);
+    // Count the number of words.
+    int words = __count_words(cmd);
+    // If there are no words, skip.
+    if (words == 0) {
+        return;
+    }
+    // Determines if we are at the beginning of a new argument, last character is space.
+    if (__is_separator(cmd[cmd_len - 1])) {
+        return;
+    }
+    // If the last two characters are two dots `..` append a slash `/`,
+    // and continue.
+    if ((cmd_len >= 2) && ((cmd[cmd_len - 2] == '.') && (cmd[cmd_len - 1] == '.'))) {
+        if (__cmd_app('/')) {
+            putchar('/');
+            return;
+        }
+    }
+    char cwd[PATH_MAX];
+    getcwd(cwd, PATH_MAX);
+    // Determines if we are executing a command from current directory.
+    int is_run_cmd = (words == 1) && (cmd[0] == '.') && (cmd_len > 3) && (cmd[1] == '/');
+    // Determines if we are entering an absolute path.
+    int is_abs_path = (words == 1) && (cmd[0] == '/');
+    // Prepare the dirent variable.
+    dirent_t dent;
+    // If there is only one word, we are searching for a command.
+    if (is_run_cmd) {
+        if (__folder_contains(cwd, cmd + 2, 0, &dent)) {
+            __cmd_sug(&dent, cmd_len - 2);
+        }
+    } else if (is_abs_path) {
+        char _dirname[PATH_MAX];
+        if (!dirname(cmd, _dirname, sizeof(_dirname))) {
+            return;
+        }
+        const char *_basename = basename(cmd);
+        if (!_basename) {
+            return;
+        }
+        if ((*_dirname == 0) || (*_basename == 0)) {
+            return;
+        }
+        if (__folder_contains(_dirname, _basename, 0, &dent)) {
+            __cmd_sug(&dent, strlen(_basename));
+        }
+    } else if (words == 1) {
+        if (__search_in_path(cmd, &dent)) {
+            __cmd_sug(&dent, cmd_len);
+        }
+    } else {
+        // Search the last occurrence of a space, from there on
+        // we will have the last argument.
+        char *last_argument = strrchr(cmd, ' ');
+        // We need to move ahead of one character if we found the space.
+        last_argument = last_argument ? last_argument + 1 : NULL;
+        // If there is no last argument.
+        if (last_argument == NULL) {
+            return;
+        }
+        char _dirname[PATH_MAX];
+        if (!dirname(last_argument, _dirname, sizeof(_dirname))) {
+            return;
+        }
+        const char *_basename = basename(last_argument);
+        if (!_basename) {
+            return;
+        }
+        if ((*_dirname != 0) && (*_basename != 0)) {
+            if (__folder_contains(_dirname, _basename, 0, &dent)) {
+                __cmd_sug(&dent, strlen(_basename));
+            }
+        } else if (*_basename != 0) {
+            if (__folder_contains(cwd, _basename, 0, &dent)) {
+                __cmd_sug(&dent, strlen(_basename));
+            }
+        }
+    }
+}
+
 /// @brief Gets the inserted command.
 static void __cmd_get(void)
 {
@@ -481,8 +564,6 @@ static void __cmd_get(void)
     cmd_cursor_index = 0;
     // Initializing the current command line buffer
     memset(cmd, '\0', CMD_LEN);
-    char cwd[PATH_MAX];
-    getcwd(cwd, PATH_MAX);
     __set_echo(false);
     do {
         int c = getchar();
@@ -538,84 +619,7 @@ static void __cmd_get(void)
         } else if (c == '\b') {
             __cmd_ers('\b');
         } else if (c == '\t') {
-            // Get the lenght of the command.
-            size_t cmd_len = strlen(cmd);
-            // Count the number of words.
-            int words = __count_words(cmd);
-            // If there are no words, skip.
-            if (words == 0) {
-                continue;
-            }
-            // Determines if we are at the beginning of a new argument, last character is space.
-            if (__is_separator(cmd[cmd_len - 1])) {
-                continue;
-            }
-            // If the last two characters are two dots `..` append a slash `/`,
-            // and continue.
-            if ((cmd_len >= 2) && ((cmd[cmd_len - 2] == '.') && (cmd[cmd_len - 1] == '.'))) {
-                if (__cmd_app('/')) {
-                    putchar('/');
-                    continue;
-                }
-            }
-            // Determines if we are executing a command from current directory.
-            int is_run_cmd = (words == 1) && (cmd[0] == '.') && (cmd_len > 3) && (cmd[1] == '/');
-            // Determines if we are entering an absolute path.
-            int is_abs_path = (words == 1) && (cmd[0] == '/');
-            // Prepare the dirent variable.
-            dirent_t dent;
-            // If there is only one word, we are searching for a command.
-            if (is_run_cmd) {
-                if (__folder_contains(cwd, cmd + 2, 0, &dent)) {
-                    __cmd_sug(&dent, cmd_len - 2);
-                }
-            } else if (is_abs_path) {
-                char _dirname[PATH_MAX];
-                if (!dirname(cmd, _dirname, sizeof(_dirname))) {
-                    continue;
-                }
-                const char *_basename = basename(cmd);
-                if (!_basename) {
-                    continue;
-                }
-                if ((*_dirname == 0) || (*_basename == 0)) {
-                    continue;
-                }
-                if (__folder_contains(_dirname, _basename, 0, &dent)) {
-                    __cmd_sug(&dent, strlen(_basename));
-                }
-            } else if (words == 1) {
-                if (__search_in_path(cmd, &dent)) {
-                    __cmd_sug(&dent, cmd_len);
-                }
-            } else {
-                // Search the last occurrence of a space, from there on
-                // we will have the last argument.
-                char *last_argument = strrchr(cmd, ' ');
-                // We need to move ahead of one character if we found the space.
-                last_argument = last_argument ? last_argument + 1 : NULL;
-                // If there is no last argument.
-                if (last_argument == NULL) {
-                    continue;
-                }
-                char _dirname[PATH_MAX];
-                if (!dirname(last_argument, _dirname, sizeof(_dirname))) {
-                    continue;
-                }
-                const char *_basename = basename(last_argument);
-                if (!_basename) {
-                    continue;
-                }
-                if ((*_dirname != 0) && (*_basename != 0)) {
-                    if (__folder_contains(_dirname, _basename, 0, &dent)) {
-                        __cmd_sug(&dent, strlen(_basename));
-                    }
-                } else if (*_basename != 0) {
-                    if (__folder_contains(cwd, _basename, 0, &dent)) {
-                        __cmd_sug(&dent, strlen(_basename));
-                    }
-                }
-            }
+            __cmd_complete();
         } else if (c == 127) {
             if ((cmd_cursor_index + 1) <= strlen(cmd)) {
                 strcpy(cmd + cmd_cursor_index, cmd + cmd_cursor_index + 1);
