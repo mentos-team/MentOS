@@ -489,15 +489,14 @@ char *strcpy(char *dst, const char *src)
 size_t strlen(const char *s)
 {
     const char *it = s;
-    while (*(++it) != 0) {}
-    return ((it - s) < 0) ? 0 : (size_t)(it - s);
+    for (; *it; it++);
+    return (size_t)(it - s);
 }
 
 size_t strnlen(const char *s, size_t count)
 {
-    const char *it = s;
-    while ((*(++it) != 0) && --count) {}
-    return ((it - s) < 0) ? 0 : (size_t)(it - s);
+    const char *p = memchr(s, 0, count);
+    return p ? (size_t)(p-s) : count;
 }
 
 int strcmp(const char *s1, const char *s2)
