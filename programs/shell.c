@@ -571,6 +571,7 @@ static void __cmd_get(void)
         if (c == '\n') {
             putchar('\n');
             // Break the while loop.
+            __cmd_app(0);
             break;
         }
         // It is a special character.
