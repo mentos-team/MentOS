@@ -406,6 +406,7 @@ static inline void __cmd_clr(void)
         ++cmd_cursor_index;
         puts("\033[1C");
     }
+    memset(cmd, '\0', CMD_LEN);
     // Then we delete all the character.
     for (size_t it = 0; it < cmd_cursor_index; ++it) {
         putchar('\b');
