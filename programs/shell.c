@@ -558,6 +558,16 @@ static void __cmd_complete(void) {
     }
 }
 
+static void __move_cursor_back(int n) {
+    printf("\033[%dD", n);
+    cmd_cursor_index -= n;
+}
+
+static void __move_cursor_forward(int n) {
+    printf("\033[%dC", n);
+    cmd_cursor_index += n;
+}
+
 /// @brief Gets the inserted command.
 static void __cmd_get(void)
 {
@@ -590,26 +600,19 @@ static void __cmd_get(void)
                     }
                 } else if (c == 'D') {
                     if (cmd_cursor_index > 0) {
-                        --cmd_cursor_index;
-                        puts("\033[1D");
+                        __move_cursor_back(1);
                     }
                 } else if (c == 'C') {
                     if ((cmd_cursor_index + 1) < CMD_LEN && (cmd_cursor_index + 1) <= strlen(cmd)) {
-                        ++cmd_cursor_index;
-                        puts("\033[1C");
+                        __move_cursor_forward(1);
                     }
                 } else if (c == 'H') {
-                    // Move the cursor back to the beginning.
-                    printf("\033[%dD", cmd_cursor_index);
-                    // Reset the cursor position.
-                    cmd_cursor_index = 0;
+                    __move_cursor_back(cmd_cursor_index);
                 } else if (c == 'F') {
                     // Compute the offest to the end of the line, and move only if necessary.
                     size_t offset = strlen(cmd) - cmd_cursor_index;
                     if (offset > 0) {
-                        printf("\033[%dC", offset);
-                        // Reset the cursor position.
-                        cmd_cursor_index += offset;
+                        __move_cursor_forward(offset);
                     }
                 } else if (c == '3') {
                     c = getchar(); // Get the char.
@@ -642,6 +645,14 @@ static void __cmd_get(void)
                 __cmd_clr();
                 // Sets the command.
                 __cmd_set("\0");
+            } else if (c == CTRL('A')) {
+                __move_cursor_back(cmd_cursor_index);
+            } else if (c == CTRL('E')) {
+                // Compute the offest to the end of the line, and move only if necessary.
+                size_t offset = strlen(cmd) - cmd_cursor_index;
+                if (offset > 0) {
+                    __move_cursor_forward(offset);
+                }
             } else if (c == CTRL('D')) {
                 // Go to the new line.
                 printf("\n");
