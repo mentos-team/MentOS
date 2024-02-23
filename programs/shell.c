@@ -45,6 +45,10 @@ static int history_write_index = 0;
 static int history_read_index = 0;
 // Boolean used to check if the history is full.
 static bool_t history_full = false;
+// Store the last command status
+static int status = 0;
+// Store the last command status as string
+static char status_buf[4] = { 0 };
 
 static sigset_t oldmask;
 
@@ -175,13 +179,32 @@ static inline void __prompt_print(void)
            USER, HOSTNAME, timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec, CWD);
 }
 
+static char* __getenv(const char* var) {
+    if (strlen(var) > 1) {
+        return getenv(var);
+    }
+
+    if (var[0] == '?') {
+        sprintf(status_buf, "%d", status);
+        return status_buf;
+    }
+
+    // TODO: implement access to argv
+    /* int arg = strtol(var, NULL, 10); */
+    /* if (arg < argc) { */
+        /* return argv[arg]; */
+    /* } */
+
+    return NULL;
+}
+
 static void ___expand_env(char *str, char *buf, size_t buf_len, size_t str_len, bool_t null_terminate)
 {
     // Buffer where we store the name of the variable.
     char buffer[BUFSIZ] = { 0 };
     // Flags used to keep track of the special characters.
     unsigned flags = 0;
-    // We keep track of where teh
+    // We keep track of where the variable names starts
     char *env_start = NULL;
     // Where we store the retrieved environmental variable value.
     char *ENV = NULL;
@@ -228,7 +251,7 @@ static void ___expand_env(char *str, char *buf, size_t buf_len, size_t str_len, 
                 // Copy the environmental variable name.
                 strncpy(buffer, env_start, &str[s_pos] - env_start);
                 // Search for the environmental variable, and print it.
-                if ((ENV = getenv(buffer)))
+                if ((ENV = __getenv(buffer)))
                     for (int k = 0; k < strlen(ENV); ++k)
                         buf[b_pos++] = ENV[k];
                 // Remove the flag.
@@ -241,7 +264,7 @@ static void ___expand_env(char *str, char *buf, size_t buf_len, size_t str_len, 
                 // Copy the environmental variable name.
                 strncpy(buffer, env_start, &str[s_pos] - env_start);
                 // Search for the environmental variable, and print it.
-                if ((ENV = getenv(buffer)))
+                if ((ENV = __getenv(buffer)))
                     for (int k = 0; k < strlen(ENV); ++k)
                         buf[b_pos++] = ENV[k];
                 // Copy the `:`.
@@ -258,7 +281,7 @@ static void ___expand_env(char *str, char *buf, size_t buf_len, size_t str_len, 
         size_t var_len = str_len - (env_start - str);
         strncpy(buffer, env_start, var_len);
         // Search for the environmental variable, and print it.
-        if ((ENV = getenv(buffer))) {
+        if ((ENV = __getenv(buffer))) {
             for (int k = 0; k < strlen(ENV); ++k) {
                 buf[b_pos++] = ENV[k];
             }
@@ -784,7 +807,7 @@ static void __setup_redirects(int *argcp, char ***argvp) {
 
 static int __execute_cmd(char* command, bool_t add_to_history)
 {
-    int status = 0;
+    int _status = 0;
     // Retrieve the options from the command.
     // The current number of arguments.
     int _argc = 1;
@@ -837,25 +860,27 @@ static int __execute_cmd(char* command, bool_t add_to_history)
             }
         }
         if (blocking) {
-            waitpid(cpid, &status, 0);
-            if (WIFSIGNALED(status)) {
-                printf(FG_RED "\nExit status %d, killed by signal %d\n" FG_RESET, WEXITSTATUS(status), WTERMSIG(status));
-            } else if (WIFSTOPPED(status)) {
-                printf(FG_YELLOW "\nExit status %d, stopped by signal %d\n" FG_RESET, WEXITSTATUS(status), WSTOPSIG(status));
-            } else if (WEXITSTATUS(status) != 0) {
-                printf(FG_RED "\nExit status %d\n" FG_RESET, WEXITSTATUS(status));
+            waitpid(cpid, &_status, 0);
+            if (WIFSIGNALED(_status)) {
+                printf(FG_RED "\nExit status %d, killed by signal %d\n" FG_RESET,
+                       WEXITSTATUS(_status), WTERMSIG(_status));
+            } else if (WIFSTOPPED(_status)) {
+                printf(FG_YELLOW "\nExit status %d, stopped by signal %d\n" FG_RESET,
+                       WEXITSTATUS(_status), WSTOPSIG(_status));
+            } else if (WEXITSTATUS(_status) != 0) {
+                printf(FG_RED "\nExit status %d\n" FG_RESET, WEXITSTATUS(_status));
             }
         }
         __unblock_sigchld();
     }
     // Free up the memory reserved for the arguments.
     __free_argv(_argc, _argv);
+    status = WEXITSTATUS(_status);
     return status;
 }
 
 static int __execute_file(char *path)
 {
-    int status = 0;
     int fd;
     if ((fd = open(path, O_RDONLY, 0)) == -1) {
         printf("\n%s: Failed to open file\n", path);
@@ -946,7 +971,6 @@ int main(int argc, char *argv[])
         }
 
         for (int i = 1; i < argc; ++i) {
-            int status;
             if (!(status = __execute_file(argv[i]))) {
                 return status;
             }
