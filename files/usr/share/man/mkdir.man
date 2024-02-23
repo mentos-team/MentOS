@@ -5,4 +5,4 @@ DESCRIPTION
     Create the DIRECTORY, if it does not exist.
 
 OPTIONS
-    --help : shows command help.
+    --help  shows command help.

@@ -5,7 +5,7 @@ DESCRIPTION
     more is a filter for paging through text one screenful at a time.
 
 OPTIONS
-    -h, --help: shows command help.
+    -h, --help  shows command help.
 
 KEY BINDINGS
     q       Exit from more
