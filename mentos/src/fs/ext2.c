@@ -707,6 +707,28 @@ static void ext2_set_bitmap_bit(uint8_t *buffer, uint32_t linear_index, ext2_blo
     }
 }
 
+/// @brief Checks if the task has x-permission for a given inode
+/// @param task the task to check permission for.
+/// @param inode the inode to check permission.
+/// @return 1 on success, 0 otherwise.
+static int __valid_x_permission(task_struct *task, ext2_inode_t *inode) {
+    // Init, and all root processes always have permission
+    if (!task || (task->pid == 0) || (task->uid == 0)) {
+        return 1;
+    }
+
+    // Check the owners permission
+    if (task->uid == inode->uid) {
+        return inode->mode & S_IXUSR;
+    // Check the groups permission
+    } else if (task->gid == inode->gid) {
+        return inode->mode & S_IXGRP;
+    }
+
+    // Check the others permission
+    return inode->mode & S_IXOTH;
+}
+
 /// @brief Searches for a free inode inside the group data loaded inside the cache.
 /// @param fs the ext2 filesystem structure.
 /// @param cache the cache from which we read the bgdt data.
@@ -1852,7 +1874,7 @@ free_cache_return_error:
 /// @param directory the directory in which we perform the search.
 /// @param name the name of the entry we are looking for.
 /// @param search the output variable where we save the info about the entry.
-/// @return 0 on success, -1 on failure.
+/// @return 0 on success, -errno on failure.
 static int ext2_find_direntry(ext2_filesystem_t *fs, ino_t ino, const char *name, ext2_direntry_search_t *search)
 {
     if (fs == NULL) {
@@ -1883,6 +1905,13 @@ static int ext2_find_direntry(ext2_filesystem_t *fs, ino_t ino, const char *name
         pr_err("The parent inode is not a directory (ino: %d, mode: %d).\n", ino, inode.mode);
         return -1;
     }
+
+    // Check that we are allowed to reach through the directory
+    if (!__valid_x_permission(scheduler_get_current_process(), &inode)) {
+        pr_err("The parent inode has no x permission (ino: %d, mode: %d).\n", ino, inode.mode);
+        return -EPERM;
+    }
+
     // Allocate the cache.
     uint8_t *cache = kmem_cache_alloc(fs->ext2_buffer_cache, GFP_KERNEL);
     // Clean the cache.
@@ -1943,7 +1972,7 @@ static int ext2_find_direntry_simple(ext2_filesystem_t *fs, ino_t ino, const cha
 
 /// @brief Searches the entry specified in `path` starting from `directory`.
 /// @param directory the directory from which we start performing the search.
-/// @param path the path of the entry we are looking for, it cna be a relative path.
+/// @param path the path of the entry we are looking for, it can be a relative path.
 /// @param search the output variable where we save the entry information.
 /// @return 0 on success, -1 on failure.
 static int ext2_resolve_path(vfs_file_t *directory, char *path, ext2_direntry_search_t *search)
