@@ -58,6 +58,7 @@ int sys_creat(const char *path, mode_t mode)
 
     // Set the file descriptor id.
     task->fd_list[fd].file_struct = file;
+    task->fd_list[fd].flags_mask = O_WRONLY|O_CREAT|O_TRUNC;
 
     // Return the file descriptor and increment it.
     return fd;

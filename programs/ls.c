@@ -77,7 +77,7 @@ static inline void print_dir_entry(dirent_t *dirent, const char *path, unsigned 
         // Add a space.
         putchar(' ');
         // Print the rest.
-        printf("%4d %4d %11s %2d/%2d %2d:%2d %s\n",
+        printf("%4d %4d %11s %02d/%02d %02d:%02d %s\n",
                dstat.st_uid,
                dstat.st_gid,
                to_human_size(dstat.st_size),

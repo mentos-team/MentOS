@@ -72,21 +72,7 @@ int execv(const char *path, char *const argv[])
 
 int execvp(const char *file, char *const argv[])
 {
-    if (!file || !argv || !environ) {
-        errno = ENOENT;
-        return -1;
-    }
-    if (file[0] == '/') {
-        return execve(file, argv, environ);
-    }
-    // Prepare a buffer for the absolute path.
-    char absolute_path[PATH_MAX] = { 0 };
-    // Find the file inside the entries of the PATH variable.
-    if (__find_in_path(file, absolute_path, PATH_MAX) == 0) {
-        return execve(absolute_path, argv, environ);
-    }
-    errno = ENOENT;
-    return -1;
+    return execvpe(file, argv, environ);
 }
 
 int execvpe(const char *file, char *const argv[], char *const envp[])
@@ -95,7 +81,7 @@ int execvpe(const char *file, char *const argv[], char *const envp[])
         errno = ENOENT;
         return -1;
     }
-    if (file[0] == '/') {
+    if (strchr(file, '/')) {
         return execve(file, argv, envp);
     }
     // Prepare a buffer for the absolute path.

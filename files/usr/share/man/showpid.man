@@ -1,0 +1,5 @@
+SYNOPSIS
+    showpid
+
+DESCRIPTION
+    showpid uses getppid() to print the ID of the parent process.
