@@ -1413,8 +1413,6 @@ static int ext2_allocate_inode_block(ext2_filesystem_t *fs, ext2_inode_t *inode,
     if (inode->blocks_count < blocks_count) {
         // Set the blocks count.
         inode->blocks_count = blocks_count;
-        // Update the size.
-        inode->size = (blocks_count / fs->blocks_per_block_count) * fs->block_size;
         pr_debug("Setting the block count for inode `%d` to `%d` blocks.\n", inode_index, blocks_count / fs->blocks_per_block_count);
     }
     // Update the inode.
@@ -1557,6 +1555,10 @@ static ssize_t ext2_write_inode_data(ext2_filesystem_t *fs, ext2_inode_t *inode,
     uint32_t end = offset + nbyte;
     if (end > inode->size) {
         inode->size = end;
+        if (ext2_write_inode(fs, inode, inode_index) == -1) {
+            pr_err("Failed to write the inode `%d`\n", inode_index);
+            return -1;
+        }
     }
     uint32_t start_block   = offset / fs->block_size;
     uint32_t end_block     = end / fs->block_size;
@@ -2587,7 +2589,10 @@ static ssize_t ext2_write(vfs_file_t *file, const void *buffer, off_t offset, si
         pr_err("Failed to read the inode `%s`.\n", file->name);
         return -1;
     }
-    return ext2_write_inode_data(fs, &inode, file->ino, offset, nbyte, (char *)buffer);
+    ssize_t written = ext2_write_inode_data(fs, &inode, file->ino, offset, nbyte, (char *)buffer);
+    // Update the file length
+    file->length = inode.size;
+    return written;
 }
 
 /// @brief Repositions the file offset inside a file.
