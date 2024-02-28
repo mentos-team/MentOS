@@ -1455,7 +1455,6 @@ static ssize_t ext2_write_inode_block(ext2_filesystem_t *fs, ext2_inode_t *inode
 {
     while (block_index >= (inode->blocks_count / fs->blocks_per_block_count)) {
         ext2_allocate_inode_block(fs, inode, inode_index, (inode->blocks_count / fs->blocks_per_block_count));
-        ext2_write_inode(fs, inode, inode_index);
     }
     // Get the real index.
     uint32_t real_index = ext2_get_real_block_index(fs, inode, block_index);
