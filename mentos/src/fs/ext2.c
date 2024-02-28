@@ -2831,6 +2831,8 @@ static int ext2_mkdir(const char *path, mode_t permission)
         vfs_close(parent);
         return -ENOENT;
     }
+    // Initialize the size of the inode to the block size.
+    inode.size = fs->block_size;
     // Increase the number of directories inside the group.
     fs->block_groups[group_index].used_dirs_count += 1;
     // Update the bgdt.
