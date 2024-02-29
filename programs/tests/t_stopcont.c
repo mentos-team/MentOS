@@ -42,7 +42,7 @@ int main(int argc, char *argv[])
         printf("Sending stop sig to child\n");
 
         if (kill(child_pid, SIGSTOP) == -1)
-            printf("Errore invio stop\n");
+            printf("Error sending signal\n");
 
         wait(NULL);
     } else {
