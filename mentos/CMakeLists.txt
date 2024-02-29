@@ -31,6 +31,7 @@ set(KERNEL_SOURCES
     ${CMAKE_SOURCE_DIR}/mentos/src/devices/pci.c
     ${CMAKE_SOURCE_DIR}/mentos/src/devices/fpu.c
     ${CMAKE_SOURCE_DIR}/mentos/src/drivers/ata.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/drivers/mem.c
     ${CMAKE_SOURCE_DIR}/mentos/src/drivers/rtc.c
     ${CMAKE_SOURCE_DIR}/mentos/src/drivers/fdc.c
     ${CMAKE_SOURCE_DIR}/mentos/src/drivers/mouse.c

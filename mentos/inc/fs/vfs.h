@@ -187,3 +187,11 @@ int vfs_dup_task(struct task_struct *new_task, struct task_struct *old_task);
 /// @param task The task for which we destroy the file descriptor list.
 /// @return 0 on fail, 1 on success.
 int vfs_destroy_task(struct task_struct *task);
+
+/// @brief Find the smallest available fd.
+/// @return -errno on fail, fd on success.
+int get_unused_fd(void);
+
+/// @brief Return new smallest available file desriptor.
+/// @return -errno on fail, fd on success.
+int sys_dup(int fd);
