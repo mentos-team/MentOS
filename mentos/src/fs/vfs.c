@@ -604,3 +604,65 @@ int vfs_destroy_task(task_struct *task)
     }
     return 1;
 }
+
+int get_unused_fd(void)
+{
+    // Get the current task.
+    task_struct *task = scheduler_get_current_process();
+
+    // Search for an unused fd.
+    int fd;
+    for (fd = 0; fd < task->max_fd; ++fd) {
+        if (!task->fd_list[fd].file_struct) {
+            break;
+        }
+    }
+
+    // Check if there is not fd available.
+    if (fd >= MAX_OPEN_FD) {
+        return -EMFILE;
+    }
+
+    // If fd limit is reached, try to allocate more
+    if (fd == task->max_fd) {
+        if (!vfs_extend_task_fd_list(task)) {
+            pr_err("Failed to extend the file descriptor list.\n");
+            return -EMFILE;
+        }
+    }
+
+    return fd;
+}
+
+int sys_dup(int fd)
+{
+    // Get the current task.
+    task_struct *task = scheduler_get_current_process();
+
+    // Check the current FD.
+    if (fd < 0 || fd >= task->max_fd) {
+        return -EMFILE;
+    }
+
+    // Get the file descriptor.
+    vfs_file_descriptor_t *vfd = &task->fd_list[fd];
+    vfs_file_t *file = vfd->file_struct;
+
+    // Check the file.
+    if (file == NULL) {
+        return -ENOSYS;
+    }
+
+    fd = get_unused_fd();
+    if (fd < 0)
+        return fd;
+
+    // Increment file reference counter.
+    file->count += 1;
+
+    // Install the new fd
+    task->fd_list[fd].file_struct = file;
+    task->fd_list[fd].flags_mask = vfd->flags_mask;
+
+    return fd;
+}

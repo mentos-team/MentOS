@@ -5,6 +5,7 @@
 # Add the library.
 add_library(
     libc
+    ${CMAKE_SOURCE_DIR}/libc/src/unistd/dup.c
     ${CMAKE_SOURCE_DIR}/libc/src/stdio.c
     ${CMAKE_SOURCE_DIR}/libc/src/ctype.c
     ${CMAKE_SOURCE_DIR}/libc/src/string.c

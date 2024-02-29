@@ -30,25 +30,9 @@ int sys_creat(const char *path, mode_t mode)
     task_struct *task = scheduler_get_current_process();
 
     // Search for an unused fd.
-    int fd;
-    for (fd = 0; fd < task->max_fd; ++fd) {
-        if (!task->fd_list[fd].file_struct) {
-            break;
-        }
-    }
-
-    // Check if there is not fd available.
-    if (fd >= MAX_OPEN_FD) {
-        return -EMFILE;
-    }
-
-    // If fd limit is reached, try to allocate more
-    if (fd == task->max_fd) {
-        if (!vfs_extend_task_fd_list(task)) {
-            pr_err("Failed to extend the file descriptor list.\n");
-            return -EMFILE;
-        }
-    }
+    int fd = get_unused_fd();
+    if (fd < 0)
+        return fd;
 
     // Try to open the file.
     vfs_file_t *file = vfs_creat(path, mode);
