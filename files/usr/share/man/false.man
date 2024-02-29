@@ -1,0 +1,5 @@
+SYNOPSIS
+    false
+
+DESCRIPTION
+    false sets the exit status to 1.
