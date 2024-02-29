@@ -17,10 +17,6 @@ int main(int argc, char *argv[])
     union semun arg;
     long ret, semid;
 
-    op[0].sem_num = 0;
-    op[0].sem_op  = -2;
-    op[0].sem_flg = IPC_NOWAIT;
-
     // ========================================================================
     // Create the first semaphore.
     semid = semget(IPC_PRIVATE, 1, IPC_CREAT | IPC_EXCL | S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
@@ -78,21 +74,16 @@ int main(int argc, char *argv[])
         }
         printf("[child] Get semaphore value (id : %d, value : %d == 1)\n", semid, ret);
         printf("[child] Exit, now.\n", semid, ret);
-
-        // ========================================================================
-        // Delete the semaphore set.
-        ret = semctl(semid, 0, IPC_RMID, 0);
-        if (ret < 0) {
-            perror("Failed to remove semaphore set");
-        }
-        printf("[child] Correctly removed semaphore set.\n");
-
         return 0;
     }
 
+    op[0].sem_num = 0;
+    op[0].sem_op  = -2;
+    op[0].sem_flg = 0;
+
     // ========================================================================
-    // Perform the operations.
-    if (semop(semid, op, 2) < 0) {
+    // Perform the operation.
+    if (semop(semid, op, 1) < 0) {
         perror("Failed to perform operation");
         return 1;
     }
