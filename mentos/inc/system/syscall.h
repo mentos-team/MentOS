@@ -218,7 +218,7 @@ int sys_rmdir(const char *path);
 int sys_creat(const char *path, mode_t mode);
 
 /// @brief Read the symbolic link, if present.
-/// @param file the file for which we want to read the symbolic link information.
+/// @param path the file for which we want to read the symbolic link information.
 /// @param buffer the buffer where we will store the symbolic link path.
 /// @param bufsize the size of the buffer.
 /// @return The number of read characters on success, -1 otherwise and errno is set to indicate the error.

@@ -12,6 +12,7 @@
 /// @brief Type for slab flags.
 typedef unsigned int slab_flags_t;
 
+/// @brief Type of function used as constructor/destructor for cache creation and destruction.
 typedef void (*kmem_fun_t)(void *);
 
 /// Create a new cache.

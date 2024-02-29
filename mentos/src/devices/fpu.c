@@ -60,6 +60,7 @@ static inline void __disable_fpu(void)
 }
 
 /// @brief Restore the FPU for a process.
+/// @param proc the process for which we are restoring the FPU registers.
 static inline void __restore_fpu(task_struct *proc)
 {
     assert(proc && "Trying to restore FPU of NULL process.");
@@ -69,7 +70,8 @@ static inline void __restore_fpu(task_struct *proc)
     __asm__ __volatile__("fxrstor (%0)" ::"r"(saves));
 }
 
-/// Save the FPU for a process.
+/// @brief Save the FPU for a process.
+/// @param proc the process for which we are saving the FPU registers.
 static inline void __save_fpu(task_struct *proc)
 {
     assert(proc && "Trying to save FPU of NULL process.");
@@ -129,6 +131,7 @@ static inline void __sigfpe_handler(pt_regs *f)
 /// @details
 /// For processors without a FPU, this tests that maths libraries link
 /// correctly.
+/// @return 1 on success, 0 on failure.
 static int __fpu_test(void)
 {
     double a = M_PI;
