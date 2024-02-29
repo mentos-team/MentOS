@@ -4,10 +4,10 @@
 /// See LICENSE.md for details.
 
 // Setup the logging for this file (do this before any other include).
-#include "sys/kernel_levels.h"          // Include kernel log levels.
-#define __DEBUG_HEADER__ "[EXT2  ]"     ///< Change header.
+#include "sys/kernel_levels.h"         // Include kernel log levels.
+#define __DEBUG_HEADER__ "[EXT2  ]"    ///< Change header.
 #define __DEBUG_LEVEL__  LOGLEVEL_INFO ///< Set log level.
-#include "io/debug.h"                   // Include debugging functions.
+#include "io/debug.h"                  // Include debugging functions.
 
 #include "assert.h"
 #include "fcntl.h"
@@ -1717,6 +1717,30 @@ static inline int ext2_directory_is_empty(ext2_filesystem_t *fs, uint8_t *cache,
     return 1;
 }
 
+static int ext2_clean_inode_content(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t inode_index)
+{
+    // Check the type of operation.
+    if ((inode->mode & EXT2_S_IFREG) != EXT2_S_IFREG) {
+        pr_alert("Trying to clean the content of a non-regular file.\n");
+        return 1;
+    }
+    // Allocate the cache.
+    uint8_t *cache = kmem_cache_alloc(fs->ext2_buffer_cache, GFP_KERNEL);
+    // Get the cache size.
+    size_t cache_size = fs->ext2_buffer_cache->size;
+    // Clean the cache.
+    memset(cache, 0, cache_size);
+    for (ssize_t offset = 0, to_write; offset < inode->size;) {
+        // We do not want to extend the size of the inode.
+        to_write = max(min(offset + cache_size, inode->size), 0);
+        // Override the content.
+        offset += ext2_write_inode_data(fs, inode, inode_index, offset, to_write, (char *)cache);
+    }
+    // Free the cache.
+    kmem_cache_free(cache);
+    return 0;
+}
+
 // ============================================================================
 // Directory Entry Management Functions
 // ============================================================================
@@ -2256,7 +2280,7 @@ static int ext2_create_inode(
 /// @return file descriptor number, -1 otherwise and errno is set to indicate the error.
 /// @details
 /// It is equivalent to: open(path, O_WRONLY|O_CREAT|O_TRUNC, mode)
-static vfs_file_t *ext2_creat(const char *path, mode_t permission)
+static vfs_file_t *ext2_creat(const char *path, mode_t mode)
 {
     // Get the name of the directory.
     char parent_path[PATH_MAX];
@@ -2308,8 +2332,7 @@ static vfs_file_t *ext2_creat(const char *path, mode_t permission)
         return file;
     }
     // Set the inode mode.
-    uint32_t mode = EXT2_S_IFREG;
-    mode |= 0xFFF & permission;
+    mode = EXT2_S_IFREG | (0xFFF & mode);
     // Get the group index of the parent.
     uint32_t group_index = ext2_get_group_index_from_inode(fs, parent->ino);
     // Create and initialize the new inode.
@@ -2323,6 +2346,10 @@ static vfs_file_t *ext2_creat(const char *path, mode_t permission)
         pr_err("Failed to write the newly created inode.\n");
         goto close_parent_return_null;
     }
+
+    // Clean the content of the newly created file.
+    ext2_clean_inode_content(fs, &inode, inode_index);
+
     // Initialize the file.
     if (ext2_allocate_direntry(fs, parent->ino, inode_index, file_name, ext2_file_type_regular_file) == -1) {
         pr_err("Failed to allocate a new direntry for the inode.\n");
@@ -2414,6 +2441,11 @@ static vfs_file_t *ext2_open(const char *path, int flags, mode_t mode)
         pr_err("Task does not have access permission.\n");
         errno = EACCES;
         return NULL;
+    }
+
+    // Check if the file is a regular file, and the user wants to write and truncate.
+    if (bitmask_exact(inode.mode, EXT2_S_IFREG) && (bitmask_exact(flags, O_RDWR | O_TRUNC) || bitmask_exact(flags, O_RDONLY | O_TRUNC))) {
+        ext2_clean_inode_content(fs, &inode, direntry.inode);
     }
 
     vfs_file_t *file = ext2_find_vfs_file_with_inode(fs, direntry.inode);
