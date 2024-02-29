@@ -340,6 +340,8 @@ int kmain(boot_info_t *boot_informations)
     // Set the keymap type.
 #ifdef USE_KEYMAP_US
     set_keymap_type(KEYMAP_US);
+#elif USE_KEYMAP_DE
+    set_keymap_type(KEYMAP_DE);
 #else
     set_keymap_type(KEYMAP_IT);
 #endif
