@@ -44,17 +44,19 @@ void *malloc(unsigned int size)
     if (size == 0) {
         return NULL;
     }
-    size_t *ptr;
-    // Compute the real size we need to allocate.
-    size_t real_size = size + sizeof(malloc_header_t);
+    void *ptr;
     // Allocate the memory.
-    __inline_syscall1(ptr, brk, real_size);
+    __inline_syscall1(ptr, brk, size + sizeof(malloc_header_t));
+    // Check for errors from the brk.
+    if (ptr == 0) {
+        return NULL;
+    }
     // Initialize the malloc header.
-    malloc_header_t *malloc_header = (malloc_header_t *)ptr;
-    malloc_header->magic           = MALLOC_MAGIC_NUMBER;
-    malloc_header->size            = size;
+    malloc_header_t *header = (malloc_header_t *)ptr;
+    header->magic           = MALLOC_MAGIC_NUMBER;
+    header->size            = size;
     // Return the allocated memory.
-    return (void *)((char *)ptr + sizeof(malloc_header_t));
+    return malloc_header_to_ptr(header);
 }
 
 void *calloc(size_t num, size_t size)
