@@ -82,11 +82,11 @@ void *realloc(void *ptr, size_t size)
         return NULL;
     }
     // Get the malloc header.
-    malloc_header_t *malloc_header = (malloc_header_t *)((char *)ptr - sizeof(malloc_header_t));
+    malloc_header_t *header = ptr_to_malloc_header(ptr);
     // Check the header.
-    assert(malloc_header->magic == MALLOC_MAGIC_NUMBER && "This is not a valid pointer.");
+    assert(header->magic == MALLOC_MAGIC_NUMBER && "This is not a valid pointer.");
     // Get the old size.
-    size_t old_size = malloc_header->size;
+    size_t old_size = header->size;
     // Create the new pointer.
     void *newp = malloc(size);
     memset(newp, 0, size);
@@ -98,14 +98,13 @@ void *realloc(void *ptr, size_t size)
 void free(void *ptr)
 {
     // Get the malloc header.
-    malloc_header_t *malloc_header = (malloc_header_t *)((char *)ptr - sizeof(malloc_header_t));
+    malloc_header_t *header = ptr_to_malloc_header(ptr);
     // Check the header.
-    assert(malloc_header->magic == MALLOC_MAGIC_NUMBER && "This is not a valid pointer.");
-    // Get the real pointer.
+    assert(header->magic == MALLOC_MAGIC_NUMBER && "This is not a valid pointer.");
     ptr = (char *)ptr - sizeof(malloc_header_t);
     // Call the free.
     int _res;
-    __inline_syscall1(_res, brk, ptr);
+    __inline_syscall1(_res, brk, (char *)header);
 }
 
 /// Seed used to generate random numbers.
