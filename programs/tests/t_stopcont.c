@@ -41,18 +41,16 @@ int main(int argc, char *argv[])
         sleep(2);
         printf("Sending stop sig to child\n");
 
-#if 1
         if (kill(child_pid, SIGSTOP) == -1)
             printf("Errore invio stop\n");
-#endif
 
         wait(NULL);
     } else {
-        int c = 0;
-        for (;;) {
-            printf("c: %d\n", c++);
+        for (int c = 0; c < 5; c++) {
+            printf("c: %d\n", c);
             sleep(3);
         }
+        exit(0);
     }
 
     return 0;
