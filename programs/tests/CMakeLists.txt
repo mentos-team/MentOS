@@ -1,5 +1,6 @@
 # List of programs.
 set(TEST_LIST
+    t_creat.c
     t_write_read.c
     t_gid.c
     t_alarm.c
