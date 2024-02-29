@@ -137,11 +137,15 @@ typedef struct mm_struct_t {
 /// @brief Cache used to store page tables.
 extern kmem_cache_t *pgtbl_cache;
 
-static inline int vm_area_compare(const list_head *a, const list_head *b)
+/// @brief Comparison function between virtual memory areas.
+/// @param vma0 the first vm_area.
+/// @param vma1 the second vm_area.
+/// @return true if vma0 is after vma1.
+static inline int vm_area_compare(const list_head *vma0, const list_head *vma1)
 {
-    vm_area_struct_t *_a = list_entry(a, vm_area_struct_t, vm_list);
-    vm_area_struct_t *_b = list_entry(b, vm_area_struct_t, vm_list);
-    return _a->vm_start > _b->vm_end;
+    vm_area_struct_t *_vma0 = list_entry(vma0, vm_area_struct_t, vm_list);
+    vm_area_struct_t *_vma1 = list_entry(vma1, vm_area_struct_t, vm_list);
+    return _vma0->vm_start > _vma1->vm_end;
 }
 
 /// @brief Initializes paging
