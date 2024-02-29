@@ -22,12 +22,12 @@ int main(int argc, char *argv[])
     sched_setparam(cpid, &param);
     int counter   = 0;
     if (fork() == 0) {
-        char *_argv[] = { "/bin/periodic2", NULL };
+        char *_argv[] = { "/bin/tests/t_periodic2", NULL };
         execv(_argv[0], _argv);
         printf("This is bad, I should not be here! EXEC NOT WORKING\n");
     }
     if (fork() == 0) {
-        char *_argv[] = { "/bin/periodic3", NULL };
+        char *_argv[] = { "/bin/tests/t_periodic3", NULL };
         execv(_argv[0], _argv);
         printf("This is bad, I should not be here! EXEC NOT WORKING\n");
     }
