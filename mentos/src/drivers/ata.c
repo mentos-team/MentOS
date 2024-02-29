@@ -253,7 +253,7 @@ static int cdrom_number = 0;
 static uint32_t ata_pci = 0x00000000;
 
 /// @brief The ATA primary master control register locations.
-static const ata_device_t ata_primary_master = {
+static ata_device_t ata_primary_master = {
     .io_base = 0x1F0,
     .io_reg  = {
          .data         = 0x1F0 + 0x00,
@@ -275,7 +275,7 @@ static const ata_device_t ata_primary_master = {
 };
 
 /// @brief The ATA primary slave control register locations.
-static const ata_device_t ata_primary_slave = {
+static ata_device_t ata_primary_slave = {
     .io_base = 0x1F0,
     .io_reg  = {
          .data         = 0x1F0 + 0x00,
@@ -297,7 +297,7 @@ static const ata_device_t ata_primary_slave = {
 };
 
 /// @brief The ATA secondary master control register locations.
-static const ata_device_t ata_secondary_master = {
+static ata_device_t ata_secondary_master = {
     .io_base = 0x170,
     .io_reg  = {
          .data         = 0x170 + 0x00,
@@ -319,7 +319,7 @@ static const ata_device_t ata_secondary_master = {
 };
 
 /// @brief The ATA secondary slave control register locations.
-static const ata_device_t ata_secondary_slave = {
+static ata_device_t ata_secondary_slave = {
     .io_base = 0x170,
     .io_reg  = {
          .data         = 0x170 + 0x00,
