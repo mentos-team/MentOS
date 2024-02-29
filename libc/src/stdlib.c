@@ -41,7 +41,9 @@ static inline malloc_header_t *ptr_to_malloc_header(void *ptr)
 
 void *malloc(unsigned int size)
 {
-    assert(size && "Zero size requested.");
+    if (size == 0) {
+        return NULL;
+    }
     size_t *ptr;
     // Compute the real size we need to allocate.
     size_t real_size = size + sizeof(malloc_header_t);
