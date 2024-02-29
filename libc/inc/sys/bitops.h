@@ -15,13 +15,14 @@
 #define bit_flip_assign(V, B)      ((V) ^= (1U << (B)))                                  ///< Flips the given bit, permanently.
 #define bit_toggle_assign(V, B, C) ((C) ? bit_set_assign(V, B) : bit_clear_assign(V, B)) ///< Sets the given bit based on control bit C.
 
-#define bitmask_set(V, M)          ((V) | (M))   ///< Sets the bits identified by the mask.
-#define bitmask_clear(V, M)        ((V) & ~(M))  ///< Clears the bits identified by the mask.
-#define bitmask_flip(V, M)         ((V) ^ (M))   ///< Flips the bits identified by the mask.
-#define bitmask_check(V, M)        ((V) & (M))   ///< Checks if the bits identified by the mask are all 1.
-#define bitmask_set_assign(V, M)   ((V) |= (M))  ///< Sets the bits identified by the mask, permanently.
-#define bitmask_clear_assign(V, M) ((V) &= ~(M)) ///< Clears the bits identified by the mask, permanently.
-#define bitmask_flip_assign(V, M)  ((V) ^= (M))  ///< Flips the bits identified by the mask, permanently.
+#define bitmask_set(V, M)          ((V) | (M))          ///< Sets the bits identified by the mask.
+#define bitmask_clear(V, M)        ((V) & ~(M))         ///< Clears the bits identified by the mask.
+#define bitmask_flip(V, M)         ((V) ^ (M))          ///< Flips the bits identified by the mask.
+#define bitmask_check(V, M)        ((V) & (M))          ///< Checks if the bits identified by the mask are all 1.
+#define bitmask_exact(V, M)        (((V) & (M)) == (M)) ///< Checks if all the bits identified by the mask are all 1.
+#define bitmask_set_assign(V, M)   ((V) |= (M))         ///< Sets the bits identified by the mask, permanently.
+#define bitmask_clear_assign(V, M) ((V) &= ~(M))        ///< Clears the bits identified by the mask, permanently.
+#define bitmask_flip_assign(V, M)  ((V) ^= (M))         ///< Flips the bits identified by the mask, permanently.
 
 /// @brief Finds the first bit at zero, starting from the less significative bit.
 /// @param value the value we need to analyze.
