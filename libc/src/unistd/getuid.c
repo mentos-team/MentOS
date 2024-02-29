@@ -8,3 +8,4 @@
 #include "system/syscall_types.h"
 
 _syscall0(uid_t, getuid)
+_syscall0(uid_t, geteuid)

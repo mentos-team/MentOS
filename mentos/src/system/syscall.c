@@ -99,8 +99,8 @@ void syscall_init(void)
     sys_call_table[__NR_setgid]                 = (SystemCall)sys_setgid;
     sys_call_table[__NR_getgid]                 = (SystemCall)sys_getgid;
     sys_call_table[__NR_signal]                 = (SystemCall)sys_signal;
-    sys_call_table[__NR_geteuid]                = (SystemCall)sys_ni_syscall;
-    sys_call_table[__NR_getegid]                = (SystemCall)sys_ni_syscall;
+    sys_call_table[__NR_geteuid]                = (SystemCall)sys_geteuid;
+    sys_call_table[__NR_getegid]                = (SystemCall)sys_getegid;
     sys_call_table[__NR_acct]                   = (SystemCall)sys_ni_syscall;
     sys_call_table[__NR_umount]                 = (SystemCall)sys_ni_syscall;
     sys_call_table[__NR_ioctl]                  = (SystemCall)sys_ioctl;
@@ -117,8 +117,8 @@ void syscall_init(void)
     sys_call_table[__NR_sigaction]              = (SystemCall)sys_sigaction;
     sys_call_table[__NR_sgetmask]               = (SystemCall)sys_ni_syscall;
     sys_call_table[__NR_ssetmask]               = (SystemCall)sys_ni_syscall;
-    sys_call_table[__NR_setreuid]               = (SystemCall)sys_ni_syscall;
-    sys_call_table[__NR_setregid]               = (SystemCall)sys_ni_syscall;
+    sys_call_table[__NR_setreuid]               = (SystemCall)sys_setreuid;
+    sys_call_table[__NR_setregid]               = (SystemCall)sys_setregid;
     sys_call_table[__NR_sigsuspend]             = (SystemCall)sys_ni_syscall;
     sys_call_table[__NR_sigpending]             = (SystemCall)sys_ni_syscall;
     sys_call_table[__NR_sethostname]            = (SystemCall)sys_ni_syscall;

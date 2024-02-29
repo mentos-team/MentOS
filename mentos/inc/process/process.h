@@ -87,9 +87,13 @@ typedef struct task_struct {
     /// The Process Group Id of the process
     pid_t pgid;
     /// The Group ID (GID) of the process
+    pid_t rgid;
+    /// The effective Group ID (GID) of the process
     pid_t gid;
     /// The User ID (UID) of the user owning the process.
-    pid_t uid;
+    uid_t ruid;
+    /// The effective User ID (UID) of the process.
+    uid_t uid;
     // -1 unrunnable, 0 runnable, >0 stopped.
     /// The current state of the process:
     __volatile__ long state;

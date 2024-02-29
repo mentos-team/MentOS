@@ -1,0 +1,15 @@
+SYNOPSIS
+    id [OPTIONS]
+
+DESCRIPTION
+    Print user and group information for the current process.
+
+    The following options are available:
+
+    -g, --group
+           print only the effective group ID
+
+    -u, --user
+           print only the effective user ID
+
+    --help display a help message and exit

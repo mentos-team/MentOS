@@ -124,6 +124,14 @@ static int __load_executable(const char *path, task_struct *task, uint32_t *entr
         pr_err("This is not a valid ELF executable `%s`!\n", path);
         return 0;
     }
+    // Set the effective uid if the setuid bit is present.
+    if (bitmask_check(file->mask, S_ISUID)) {
+        task->uid = file->uid;
+    }
+    // Set the effective gid if the setgid bit is present.
+    if (bitmask_check(file->mask, S_ISGID)) {
+        task->gid = file->gid;
+    }
     // FIXME: When threads will be implemented
     // they should share the mm, so the destroy_process_image must be called
     // only when all the threads are terminated. This can be accomplished by using
@@ -179,7 +187,9 @@ static inline task_struct *__alloc_task(task_struct *source, task_struct *parent
     }
     // Set the statistics of the process.
     proc->uid                   = 0;
+    proc->ruid                  = 0;
     proc->gid                   = 0;
+    proc->rgid                  = 0;
     proc->sid                   = 0;
     proc->pgid                  = 0;
     proc->se.prio               = DEFAULT_PRIO;
@@ -425,7 +435,9 @@ pid_t sys_fork(pt_regs *f)
     proc->sid  = current->sid;
     proc->pgid = current->pgid;
     proc->uid  = current->uid;
+    proc->ruid  = current->ruid;
     proc->gid  = current->gid;
+    proc->rgid  = current->rgid;
 
     // Active the new process.
     scheduler_enqueue_task(proc);
