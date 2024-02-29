@@ -60,7 +60,7 @@ ssize_t sys_write(int fd, const void *buf, size_t nbytes)
     vfs_file_descriptor_t *vfd = &task->fd_list[fd];
 
     // Check the permissions.
-    if (!(vfd->flags_mask & O_WRONLY)) {
+    if (!bitmask_check(vfd->flags_mask, O_WRONLY | O_RDWR)) {
         return -EROFS;
     }
 
