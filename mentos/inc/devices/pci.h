@@ -282,6 +282,10 @@ void pci_remap(void);
 /// @return interrupt number.
 int pci_get_interrupt(uint32_t device);
 
+/// @brief Dumps on DEBUG, the information about the given device.
+/// @param device the device.
+/// @param vendorid the ID of the vendor.
+/// @param deviceid the ID of the device.
 void pci_dump_device_data(uint32_t device, uint16_t vendorid, uint16_t deviceid);
 
 /// @brief Prints all the devices connected to the PCI interfance.
