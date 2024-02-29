@@ -13,10 +13,31 @@
 /// malloc(), calloc() or realloc().
 #define MALLOC_MAGIC_NUMBER 0x600DC0DE
 
+/// @brief A structure that holds the information about an allocated chunk of
+/// memory through malloc.
 typedef struct {
+    /// @brief A magic number that is used to check if the passed pointer is
+    /// actually a malloc allocated memory.
     unsigned magic;
+    /// @brief The size of the allocated memory, useful when doing a realloc.
     size_t size;
 } malloc_header_t;
+
+/// @brief Extract the actual pointer to the allocated memory from the malloc header.
+/// @param header the header we are using.
+/// @return a pointer to the allocated memory.
+static inline void *malloc_header_to_ptr(malloc_header_t *header)
+{
+    return (void *)((char *)header + sizeof(malloc_header_t));
+}
+
+/// @brief Extract the malloc header, from the actual pointer to the allocated memory.
+/// @param ptr the pointer we use.
+/// @return the malloc header.
+static inline malloc_header_t *ptr_to_malloc_header(void *ptr)
+{
+    return (malloc_header_t *)((char *)ptr - sizeof(malloc_header_t));
+}
 
 void *malloc(unsigned int size)
 {
