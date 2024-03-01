@@ -5,6 +5,7 @@
 
 #pragma once
 
+#define O_ACCMODE   0003      ///< Bits defining the open mode
 #define O_RDONLY    00000000U ///< Open for reading only.
 #define O_WRONLY    00000001U ///< Open for writing only.
 #define O_RDWR      00000002U ///< Open for reading and writing.

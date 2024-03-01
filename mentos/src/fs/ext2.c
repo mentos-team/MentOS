@@ -471,60 +471,6 @@ static const char *time_to_string(uint32_t time)
     return s;
 }
 
-static inline int __ext2_valid_permissions(
-    const task_struct *task,
-    const mode_t mask,
-    const uid_t uid,
-    const gid_t gid,
-    const int usr,
-    const int grp,
-    const int oth)
-{
-    // The task is the owner.
-    if ((mask & usr) && (task->uid == uid)) {
-        return 1;
-    }
-    // The task belongs to the correct group.
-    if ((mask & grp) && (task->gid == gid)) {
-        return 1;
-    }
-    // The task is not the owner and does not belong to the correct group.
-    if ((mask & oth) && (task->uid != uid) && (task->gid != gid)) {
-        return 1;
-    }
-    return 0;
-}
-
-/// @brief Checks if the requests in flags are valid.
-/// @param flags the flags to check.
-/// @param mask the mask to check against.
-/// @param uid the uid of the owner.
-/// @param gid the gid of the owner.
-/// @return 1 on success, 0 otherwise.
-static int ext2_valid_permissions(int flags, mode_t mask, uid_t uid, gid_t gid)
-{
-    // Check the permissions.
-    task_struct *task = scheduler_get_current_process();
-    if (task == NULL) {
-        pr_warning("Failed to get the current running process, assuming we are booting.\n");
-        return 1;
-    }
-    // Init, and all root processes have full permissions.
-    if ((task->pid == 0) || (task->uid == 0) || (task->gid == 0)) {
-        return 1;
-    }
-    if (((flags & O_RDONLY) == O_RDONLY) && __ext2_valid_permissions(task, mask, uid, gid, S_IRUSR, S_IRGRP, S_IROTH)) {
-        return 1;
-    }
-    if (((flags & O_WRONLY) == O_WRONLY) && __ext2_valid_permissions(task, mask, uid, gid, S_IWUSR, S_IWGRP, S_IWOTH)) {
-        return 1;
-    }
-    if (((flags & O_RDWR) == O_RDWR) && __ext2_valid_permissions(task, mask, uid, gid, S_IRUSR | S_IWUSR, S_IRGRP | S_IWGRP, S_IROTH | S_IWOTH)) {
-        return 1;
-    }
-    return 0;
-}
-
 /// @brief Dumps on debugging output the superblock.
 /// @param sb the object to dump.
 static void ext2_dump_superblock(ext2_superblock_t *sb)
@@ -759,6 +705,28 @@ static void ext2_set_bitmap_bit(uint8_t *buffer, uint32_t linear_index, ext2_blo
     } else {
         bit_clear_assign(buffer[linear_index / 8], linear_index % 8);
     }
+}
+
+/// @brief Checks if the task has x-permission for a given inode
+/// @param task the task to check permission for.
+/// @param inode the inode to check permission.
+/// @return 1 on success, 0 otherwise.
+static int __valid_x_permission(task_struct *task, ext2_inode_t *inode) {
+    // Init, and all root processes always have permission
+    if (!task || (task->pid == 0) || (task->uid == 0)) {
+        return 1;
+    }
+
+    // Check the owners permission
+    if (task->uid == inode->uid) {
+        return inode->mode & S_IXUSR;
+    // Check the groups permission
+    } else if (task->gid == inode->gid) {
+        return inode->mode & S_IXGRP;
+    }
+
+    // Check the others permission
+    return inode->mode & S_IXOTH;
 }
 
 /// @brief Searches for a free inode inside the group data loaded inside the cache.
@@ -1906,7 +1874,7 @@ free_cache_return_error:
 /// @param directory the directory in which we perform the search.
 /// @param name the name of the entry we are looking for.
 /// @param search the output variable where we save the info about the entry.
-/// @return 0 on success, -1 on failure.
+/// @return 0 on success, -errno on failure.
 static int ext2_find_direntry(ext2_filesystem_t *fs, ino_t ino, const char *name, ext2_direntry_search_t *search)
 {
     if (fs == NULL) {
@@ -1937,6 +1905,13 @@ static int ext2_find_direntry(ext2_filesystem_t *fs, ino_t ino, const char *name
         pr_err("The parent inode is not a directory (ino: %d, mode: %d).\n", ino, inode.mode);
         return -1;
     }
+
+    // Check that we are allowed to reach through the directory
+    if (!__valid_x_permission(scheduler_get_current_process(), &inode)) {
+        pr_err("The parent inode has no x permission (ino: %d, mode: %d).\n", ino, inode.mode);
+        return -EPERM;
+    }
+
     // Allocate the cache.
     uint8_t *cache = kmem_cache_alloc(fs->ext2_buffer_cache, GFP_KERNEL);
     // Clean the cache.
@@ -1997,7 +1972,7 @@ static int ext2_find_direntry_simple(ext2_filesystem_t *fs, ino_t ino, const cha
 
 /// @brief Searches the entry specified in `path` starting from `directory`.
 /// @param directory the directory from which we start performing the search.
-/// @param path the path of the entry we are looking for, it cna be a relative path.
+/// @param path the path of the entry we are looking for, it can be a relative path.
 /// @param search the output variable where we save the entry information.
 /// @return 0 on success, -1 on failure.
 static int ext2_resolve_path(vfs_file_t *directory, char *path, ext2_direntry_search_t *search)
@@ -2441,7 +2416,7 @@ static vfs_file_t *ext2_open(const char *path, int flags, mode_t mode)
 
     ext2_dump_inode(&inode);
 
-    if (!ext2_valid_permissions(flags, inode.mode, inode.uid, inode.gid)) {
+    if (!vfs_valid_open_permissions(flags, inode.mode, inode.uid, inode.gid)) {
         pr_err("Task does not have access permission.\n");
         errno = EACCES;
         return NULL;
