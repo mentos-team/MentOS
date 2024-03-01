@@ -13,11 +13,12 @@
 #include <strerror.h>
 #include <sys/stat.h>
 #include <termios.h>
+#include <limits.h>
 
 // Video dimensions defined in mentos/src/io/video.c
-#define HEIGHT       25
-#define WIDTH        80
-#define LAST_LINE    (HEIGHT - 1)
+#define HEIGHT    25
+#define WIDTH     80
+#define LAST_LINE (HEIGHT - 1)
 
 static void erase_backwards(int n)
 {
@@ -31,10 +32,10 @@ static void page_content(int fd)
     int lines = 0;
     char line[WIDTH + 2];
     char *lineend;
-    while((lineend = fgets(line, WIDTH, fd))) {
-        if (lineend - line == WIDTH && line[WIDTH-1] != '\n') {
+    while ((lineend = fgets(line, WIDTH, fd))) {
+        if (lineend - line == WIDTH && line[WIDTH - 1] != '\n') {
             line[WIDTH - 1] = '+';
-            line[WIDTH] = '\n';
+            line[WIDTH]     = '\n';
             line[WIDTH + 1] = 0;
         }
 
@@ -58,7 +59,7 @@ static void page_content(int fd)
                 }
 
                 break;
-            } while(1);
+            } while (1);
             erase_backwards(prompt);
             if (quit)
                 exit(EXIT_SUCCESS);
@@ -77,6 +78,8 @@ int main(int argc, char **argv)
             return 0;
         }
     }
+    char buffer[PATH_MAX];
+    char *filepath = argv[1];
 
     struct termios _termios;
     tcgetattr(STDIN_FILENO, &_termios);
@@ -85,9 +88,41 @@ int main(int argc, char **argv)
 
     int fd = STDOUT_FILENO;
     if (argc > 1) {
-        fd = open(argv[1], O_RDONLY, 0);
+        // State the file.
+        stat_t statbuf;
+        if (stat(filepath, &statbuf) == -1) {
+            printf("more: %s: %s\n", filepath, strerror(errno));
+            exit(EXIT_FAILURE);
+        }
+
+        // Check if it is a link.
+        if (S_ISLNK(statbuf.st_mode)) {
+            // Read the content of the link.
+            if (readlink(filepath, buffer, BUFSIZ) < 0) {
+                printf("more: %s: %s\n\n", filepath, strerror(errno));
+                exit(EXIT_FAILURE);
+            }
+            // Change the filepath.
+            filepath = buffer;
+            // Run the stat again, with the real file.
+            if (stat(filepath, &statbuf) == -1) {
+                printf("more: %s: %s\n", filepath, strerror(errno));
+                exit(EXIT_FAILURE);
+            }
+        }
+
+        // Check if it is a directory.
+        if (S_ISDIR(statbuf.st_mode)) {
+            printf("more: %s: Is a directory\n", filepath);
+            exit(EXIT_FAILURE);
+        }
+        // If it is a regular file, open the file in read-only.
+        if (S_ISREG(statbuf.st_mode)) {
+            fd = open(filepath, O_RDONLY, 0);
+        }
+
         if (fd < 0) {
-            printf("more: %s: %s\n", argv[1], strerror(errno));
+            printf("more: %s: %s\n", filepath, strerror(errno));
             exit(EXIT_FAILURE);
         }
     }
