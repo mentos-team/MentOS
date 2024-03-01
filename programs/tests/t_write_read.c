@@ -151,12 +151,12 @@ int main(int argc, char *argv[])
 {
     char *filename = "test.txt";
 
-    // printf("Running `test_write_read`...\n");
-    // if (test_write_read(filename)) {
-    //     unlink(filename);
-    //     return EXIT_FAILURE;
-    // }
-    // unlink(filename);
+    printf("Running `test_write_read`...\n");
+    if (test_write_read(filename)) {
+        unlink(filename);
+        return EXIT_FAILURE;
+    }
+    unlink(filename);
 
     printf("Running `test_truncate`...\n");
     if (test_truncate(filename)) {
