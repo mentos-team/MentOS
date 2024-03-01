@@ -12,24 +12,6 @@
 #include <strerror.h>
 #include <sys/stat.h>
 
-static inline void print_content(const char *path, char *buffer, unsigned buflen)
-{
-    pr_warning("Printing content of %s\n", path);
-    // Open the file.
-    int fd = open(path, O_RDONLY, 42);
-    if (fd >= 0) {
-        ssize_t bytes_read = 0;
-        // Put on the standard output the characters.
-        while ((bytes_read = read(fd, buffer, buflen)) > 0) {
-            write(STDOUT_FILENO, buffer, bytes_read);
-        }
-        // Close the file descriptor.
-        close(fd);
-    } else {
-        printf("cat: %s: %s\n\n", path, strerror(errno));
-    }
-}
-
 int main(int argc, char **argv)
 {
     if (argc < 2) {
@@ -46,34 +28,58 @@ int main(int argc, char **argv)
             return 0;
         }
     }
-    int status = 0;
+    int fd;
     // Prepare the buffer for reading.
     char buffer[BUFSIZ];
     // Iterate the arguments.
     for (int i = 1; i < argc; ++i) {
+        // Create the stat buffer.
         stat_t statbuf;
+        // Initialize the file path.
+        char *filepath = argv[i];
+
+        // Stat the file.
         if (stat(argv[i], &statbuf) == -1) {
             printf("cat: %s: %s\n\n", argv[i], strerror(errno));
             continue;
         }
-        // If it is a regular file, just print the content.
-        if (S_ISREG(statbuf.st_mode)) {
-            print_content(argv[i], buffer, BUFSIZ);
 
-        } else if (S_ISDIR(statbuf.st_mode)) {
-            printf("cat: %s: Is a directory\n\n", argv[i]);
-            status = 1;
-
-        } else if (S_ISLNK(statbuf.st_mode)) {
-            if (readlink(argv[i], buffer, BUFSIZ) >= 0) {
-                print_content(buffer, buffer, BUFSIZ);
-            } else {
-                printf("cat: %s: %s\n\n", argv[i], strerror(errno));
-                status = 1;
+        // Check if it is a link.
+        if (S_ISLNK(statbuf.st_mode)) {
+            // Read the content of the link.
+            if (readlink(filepath, buffer, BUFSIZ) < 0) {
+                printf("cat: %s: %s\n\n", filepath, strerror(errno));
+                continue;
+            }
+            // Change the filepath.
+            filepath = buffer;
+            // Run the stat again, with the real file.
+            if (stat(filepath, &statbuf) == -1) {
+                printf("cat: %s: %s\n", filepath, strerror(errno));
+                continue;
             }
         }
+
+        // Check if it is a directory.
+        if (S_ISDIR(statbuf.st_mode)) {
+            printf("cat: %s: Is a directory\n", filepath);
+            continue;
+        }
+        // If it is a regular file, open the file in read-only.
+        if (S_ISREG(statbuf.st_mode)) {
+            fd = open(filepath, O_RDONLY, 0);
+        }
+        if (fd < 0) {
+            printf("cat: %s: %s\n", filepath, strerror(errno));
+            continue;
+        }
+        ssize_t bytes_read = 0;
+        // Put on the standard output the characters.
+        while ((bytes_read = read(fd, buffer, BUFSIZ)) > 0) {
+            write(STDOUT_FILENO, buffer, bytes_read);
+        }
+        close(fd);
     }
     putchar('\n');
-    putchar('\n');
-    return status;
+    return 0;
 }
