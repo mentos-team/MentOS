@@ -30,8 +30,8 @@ If the column is empty it means that it's not implemented yet.
  2 | 12  | sys_chdir                  | process/process.c           | const char *             | -                            | -                       | -               | -                |
  2 | 13  | sys_time                   | klib/time.c                 | int *                    | -                            | -                       | -               | -                |
    | 14  | sys_mknod                  |                             | const char *             | int                          | dev_t                   | -               | -                |
-   | 15  | sys_chmod                  |                             | const char *             | mode_t                       | -                       | -               | -                |
-   | 16  | sys_lchown                 |                             | const char *             | uid_t                        | gid_t                   | -               | -                |
+ 1 | 15  | sys_chmod                  | fs/attr.c                   | const char *             | mode_t                       | -                       | -               | -                |
+   | 16  | sys_lchown                 | fs/attr.c                   | const char *             | uid_t                        | gid_t                   | -               | -                |
  2 | 18  | sys_stat                   | fs/stat.c                   | char *                   | struct __old_kernel_stat *   | -                       | -               | -                |
  2 | 19  | sys_lseek                  | fs/read_write.c             | unsigned int             | off_t                        | unsigned int            | -               | -                |
  2 | 20  | sys_getpid                 | process/scheduler.c         | -                        | -                            | -                       | -               | -                |
@@ -101,7 +101,7 @@ If the column is empty it means that it's not implemented yet.
    | 92  | sys_truncate               |                             | const char *             | unsigned long                | -                       | -               | -                |
    | 93  | sys_ftruncate              |                             | unsigned int             | unsigned long                | -                       | -               | -                |
    | 94  | sys_fchmod                 |                             | unsigned int             | mode_t                       | -                       | -               | -                |
-   | 95  | sys_fchown                 |                             | unsigned int             | uid_t                        | gid_t                   | -               | -                |
+ 1 | 95  | sys_fchown                 | fs/attr.c                   | unsigned int             | uid_t                        | gid_t                   | -               | -                |
    | 96  | sys_getpriority            |                             | int                      | int                          | -                       | -               | -                |
    | 97  | sys_setpriority            |                             | int                      | int                          | int                     | -               | -                |
    | 99  | sys_statfs                 |                             | const char *             | struct statfs *              | -                       | -               | -                |
@@ -186,7 +186,7 @@ If the column is empty it means that it's not implemented yet.
    | 179 | sys_rt_sigsuspend          |                             | sigset_t *               | size_t                       | -                       | -               | -                |
    | 180 | sys_pread                  |                             | unsigned int             | char *                       | size_t                  | loff_t          | -                |
    | 181 | sys_pwrite                 |                             | unsigned int             | const char *                 | size_t                  | loff_t          | -                |
-   | 182 | sys_chown                  |                             | const char *             | uid_t                        | gid_t                   | -               | -                |
+ 1 | 182 | sys_chown                  | vfs/attr.c                   | const char *             | uid_t                        | gid_t                   | -               | -                |
  1 | 183 | sys_getcwd                 | process/process.c           | char *                   | unsigned long                | -                       | -               | -                |
    | 184 | sys_capget                 |                             | cap_user_header_t        | cap_user_data_t              | -                       | -               | -                |
    | 185 | sys_capset                 |                             | cap_user_header_t        | const cap_user_data_t        | -                       | -               | -                |

@@ -38,6 +38,7 @@ set(KERNEL_SOURCES
     ${CMAKE_SOURCE_DIR}/mentos/src/drivers/ps2.c
     ${CMAKE_SOURCE_DIR}/mentos/src/drivers/keyboard/keyboard.c
     ${CMAKE_SOURCE_DIR}/mentos/src/drivers/keyboard/keymap.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/fs/attr.c
     ${CMAKE_SOURCE_DIR}/mentos/src/fs/vfs.c
     ${CMAKE_SOURCE_DIR}/mentos/src/fs/read_write.c
     ${CMAKE_SOURCE_DIR}/mentos/src/fs/open.c
