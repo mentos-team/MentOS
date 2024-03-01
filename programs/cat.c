@@ -65,7 +65,7 @@ int main(int argc, char **argv)
             status = 1;
 
         } else if (S_ISLNK(statbuf.st_mode)) {
-            if (readlink(argv[i], buffer, BUFSIZ)) {
+            if (readlink(argv[i], buffer, BUFSIZ) >= 0) {
                 print_content(buffer, buffer, BUFSIZ);
             } else {
                 printf("cat: %s: %s\n\n", argv[i], strerror(errno));
