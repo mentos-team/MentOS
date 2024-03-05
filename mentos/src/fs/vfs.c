@@ -107,6 +107,41 @@ super_block_t *vfs_get_superblock(const char *absolute_path)
     return last_sb;
 }
 
+vfs_file_t *vfs_open_abspath(const char *absolute_path, int flags, mode_t mode)
+{
+    super_block_t *sb = vfs_get_superblock(absolute_path);
+    if (sb == NULL) {
+        pr_err("vfs_open(%s): Cannot find the superblock!\n", absolute_path);
+        errno = ENOENT;
+        return NULL;
+    }
+    vfs_file_t *sb_root = sb->root;
+    if (sb_root == NULL) {
+        pr_err("vfs_open(%s): Cannot find the superblock root!\n", absolute_path);
+        errno = ENOENT;
+        return NULL;
+    }
+    // Rebase the absolute path.
+    //size_t name_offset = (strcmp(mp->name, "/") == 0) ? 0 : strlen(mp->name);
+    // Check if the function is implemented.
+    if (sb_root->fs_operations->open_f == NULL) {
+        pr_err("vfs_open(%s): Function not supported in current filesystem.", absolute_path);
+        errno = ENOSYS;
+        return NULL;
+    }
+    // Retrieve the file.
+    vfs_file_t *file = sb_root->fs_operations->open_f(absolute_path, flags, mode);
+    if (file == NULL) {
+        pr_debug("vfs_open(%s): Filesystem open returned NULL file (errno: %d, %s)!\n",
+                 absolute_path, errno, strerror(errno));
+        return NULL;
+    }
+    // Increment file reference counter.
+    file->count += 1;
+    // Return the file.
+    return file;
+}
+
 vfs_file_t *vfs_open(const char *path, int flags, mode_t mode)
 {
     // Allocate a variable for the path.
@@ -117,36 +152,7 @@ vfs_file_t *vfs_open(const char *path, int flags, mode_t mode)
         errno = ENODEV;
         return NULL;
     }
-    super_block_t *sb = vfs_get_superblock(absolute_path);
-    if (sb == NULL) {
-        pr_err("vfs_open(%s): Cannot find the superblock!\n", path);
-        errno = ENOENT;
-        return NULL;
-    }
-    vfs_file_t *sb_root = sb->root;
-    if (sb_root == NULL) {
-        pr_err("vfs_open(%s): Cannot find the superblock root!\n", path);
-        errno = ENOENT;
-        return NULL;
-    }
-    // Rebase the absolute path.
-    //size_t name_offset = (strcmp(mp->name, "/") == 0) ? 0 : strlen(mp->name);
-    // Check if the function is implemented.
-    if (sb_root->fs_operations->open_f == NULL) {
-        pr_err("vfs_open(%s): Function not supported in current filesystem.", path);
-        errno = ENOSYS;
-        return NULL;
-    }
-    // Retrieve the file.
-    vfs_file_t *file = sb_root->fs_operations->open_f(absolute_path, flags, mode);
-    if (file == NULL) {
-        pr_debug("vfs_open(%s): Filesystem open returned NULL file (errno: %d, %s)!\n", path, errno, strerror(errno));
-        return NULL;
-    }
-    // Increment file reference counter.
-    file->count += 1;
-    // Return the file.
-    return file;
+    return vfs_open_abspath(absolute_path, flags, mode);
 }
 
 int vfs_close(vfs_file_t *file)
