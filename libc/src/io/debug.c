@@ -44,7 +44,9 @@ static inline void __debug_print_header(const char *file, const char *fun, int l
         log_level = 8;
     }
     // Set the color.
+#ifndef EMULATOR_OUTPUT_LOG
     dbg_puts(log_level_color[log_level]);
+#endif
     dbg_putchar('[');
     // Set the label.
     dbg_puts(log_level_label[log_level]);

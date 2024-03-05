@@ -136,6 +136,11 @@ target_compile_definitions(
     ${KERNEL_NAME} PUBLIC
     __KERNEL__
 )
+# If the emulator is set to output on a log file, tell that to the C code.
+if(${EMULATOR_OUTPUT_TYPE} STREQUAL OUTPUT_LOG)
+    target_compile_definitions(${KERNEL_NAME} PUBLIC EMULATOR_OUTPUT_LOG)
+endif()
+
 
 # =============================================================================
 # Enables cache tracing.
