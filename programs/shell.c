@@ -45,6 +45,24 @@ static int history_write_index = 0;
 static int history_read_index = 0;
 // Boolean used to check if the history is full.
 static bool_t history_full = false;
+// Store the last command status
+static int status = 0;
+// Store the last command status as string
+static char status_buf[4] = { 0 };
+
+static sigset_t oldmask;
+
+static void __block_sigchld(void) {
+    sigset_t mask;
+    //sigmask functions only fail on invalid inputs -> no exception handling needed
+    sigemptyset(&mask);
+    sigaddset(&mask, SIGCHLD);
+    sigprocmask(SIG_BLOCK, &mask, &oldmask);
+}
+
+static void __unblock_sigchld(void) {
+    sigprocmask(SIG_SETMASK, &oldmask, NULL);
+}
 
 static inline int __is_separator(char c)
 {
@@ -161,18 +179,39 @@ static inline void __prompt_print(void)
            USER, HOSTNAME, timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec, CWD);
 }
 
-static void __expand_env(char *str, char *buf, size_t buf_len)
+static char* __getenv(const char* var) {
+    if (strlen(var) > 1) {
+        return getenv(var);
+    }
+
+    if (var[0] == '?') {
+        sprintf(status_buf, "%d", status);
+        return status_buf;
+    }
+
+    // TODO: implement access to argv
+    /* int arg = strtol(var, NULL, 10); */
+    /* if (arg < argc) { */
+        /* return argv[arg]; */
+    /* } */
+
+    return NULL;
+}
+
+static void ___expand_env(char *str, char *buf, size_t buf_len, size_t str_len, bool_t null_terminate)
 {
     // Buffer where we store the name of the variable.
     char buffer[BUFSIZ] = { 0 };
     // Flags used to keep track of the special characters.
     unsigned flags = 0;
-    // We keep track of where teh
+    // We keep track of where the variable names starts
     char *env_start = NULL;
     // Where we store the retrieved environmental variable value.
     char *ENV = NULL;
     // Get the length of the string.
-    size_t str_len = strlen(str);
+    if (!str_len) {
+        str_len = strlen(str);
+    }
     // Position where we are writing on the buffer.
     int b_pos = 0;
     // Iterate the string.
@@ -212,7 +251,7 @@ static void __expand_env(char *str, char *buf, size_t buf_len)
                 // Copy the environmental variable name.
                 strncpy(buffer, env_start, &str[s_pos] - env_start);
                 // Search for the environmental variable, and print it.
-                if ((ENV = getenv(buffer)))
+                if ((ENV = __getenv(buffer)))
                     for (int k = 0; k < strlen(ENV); ++k)
                         buf[b_pos++] = ENV[k];
                 // Remove the flag.
@@ -225,7 +264,7 @@ static void __expand_env(char *str, char *buf, size_t buf_len)
                 // Copy the environmental variable name.
                 strncpy(buffer, env_start, &str[s_pos] - env_start);
                 // Search for the environmental variable, and print it.
-                if ((ENV = getenv(buffer)))
+                if ((ENV = __getenv(buffer)))
                     for (int k = 0; k < strlen(ENV); ++k)
                         buf[b_pos++] = ENV[k];
                 // Copy the `:`.
@@ -239,14 +278,24 @@ static void __expand_env(char *str, char *buf, size_t buf_len)
     }
     if (bit_check(flags, ENV_NORM)) {
         // Copy the environmental variable name.
-        strcpy(buffer, env_start);
+        size_t var_len = str_len - (env_start - str);
+        strncpy(buffer, env_start, var_len);
         // Search for the environmental variable, and print it.
-        if ((ENV = getenv(buffer)))
-            for (int k = 0; k < strlen(ENV); ++k)
+        if ((ENV = __getenv(buffer))) {
+            for (int k = 0; k < strlen(ENV); ++k) {
                 buf[b_pos++] = ENV[k];
-        // Remove the flag.
-        bit_clear_assign(flags, ENV_NORM);
+            }
+        }
     }
+
+    if (null_terminate) {
+        buf[b_pos] = 0;
+    }
+}
+
+static void __expand_env(char *str, char *buf, size_t buf_len)
+{
+    ___expand_env(str, buf, buf_len, 0, false);
 }
 
 static int __export(int argc, char *argv[])
@@ -380,6 +429,7 @@ static inline void __cmd_clr(void)
         ++cmd_cursor_index;
         puts("\033[1C");
     }
+    memset(cmd, '\0', CMD_LEN);
     // Then we delete all the character.
     for (size_t it = 0; it < cmd_cursor_index; ++it) {
         putchar('\b');
@@ -448,6 +498,99 @@ static inline void __cmd_sug(dirent_t *suggestion, size_t starting_position)
     }
 }
 
+static void __cmd_complete(void) {
+    // Get the lenght of the command.
+    size_t cmd_len = strlen(cmd);
+    // Count the number of words.
+    int words = __count_words(cmd);
+    // If there are no words, skip.
+    if (words == 0) {
+        return;
+    }
+    // Determines if we are at the beginning of a new argument, last character is space.
+    if (__is_separator(cmd[cmd_len - 1])) {
+        return;
+    }
+    // If the last two characters are two dots `..` append a slash `/`,
+    // and continue.
+    if ((cmd_len >= 2) && ((cmd[cmd_len - 2] == '.') && (cmd[cmd_len - 1] == '.'))) {
+        if (__cmd_app('/')) {
+            putchar('/');
+            return;
+        }
+    }
+    char cwd[PATH_MAX];
+    getcwd(cwd, PATH_MAX);
+    // Determines if we are executing a command from current directory.
+    int is_run_cmd = (words == 1) && (cmd[0] == '.') && (cmd_len > 3) && (cmd[1] == '/');
+    // Determines if we are entering an absolute path.
+    int is_abs_path = (words == 1) && (cmd[0] == '/');
+    // Prepare the dirent variable.
+    dirent_t dent;
+    // If there is only one word, we are searching for a command.
+    if (is_run_cmd) {
+        if (__folder_contains(cwd, cmd + 2, 0, &dent)) {
+            __cmd_sug(&dent, cmd_len - 2);
+        }
+    } else if (is_abs_path) {
+        char _dirname[PATH_MAX];
+        if (!dirname(cmd, _dirname, sizeof(_dirname))) {
+            return;
+        }
+        const char *_basename = basename(cmd);
+        if (!_basename) {
+            return;
+        }
+        if ((*_dirname == 0) || (*_basename == 0)) {
+            return;
+        }
+        if (__folder_contains(_dirname, _basename, 0, &dent)) {
+            __cmd_sug(&dent, strlen(_basename));
+        }
+    } else if (words == 1) {
+        if (__search_in_path(cmd, &dent)) {
+            __cmd_sug(&dent, cmd_len);
+        }
+    } else {
+        // Search the last occurrence of a space, from there on
+        // we will have the last argument.
+        char *last_argument = strrchr(cmd, ' ');
+        // We need to move ahead of one character if we found the space.
+        last_argument = last_argument ? last_argument + 1 : NULL;
+        // If there is no last argument.
+        if (last_argument == NULL) {
+            return;
+        }
+        char _dirname[PATH_MAX];
+        if (!dirname(last_argument, _dirname, sizeof(_dirname))) {
+            return;
+        }
+        const char *_basename = basename(last_argument);
+        if (!_basename) {
+            return;
+        }
+        if ((*_dirname != 0) && (*_basename != 0)) {
+            if (__folder_contains(_dirname, _basename, 0, &dent)) {
+                __cmd_sug(&dent, strlen(_basename));
+            }
+        } else if (*_basename != 0) {
+            if (__folder_contains(cwd, _basename, 0, &dent)) {
+                __cmd_sug(&dent, strlen(_basename));
+            }
+        }
+    }
+}
+
+static void __move_cursor_back(int n) {
+    printf("\033[%dD", n);
+    cmd_cursor_index -= n;
+}
+
+static void __move_cursor_forward(int n) {
+    printf("\033[%dC", n);
+    cmd_cursor_index += n;
+}
+
 /// @brief Gets the inserted command.
 static void __cmd_get(void)
 {
@@ -455,8 +598,6 @@ static void __cmd_get(void)
     cmd_cursor_index = 0;
     // Initializing the current command line buffer
     memset(cmd, '\0', CMD_LEN);
-    char cwd[PATH_MAX];
-    getcwd(cwd, PATH_MAX);
     __set_echo(false);
     do {
         int c = getchar();
@@ -464,6 +605,7 @@ static void __cmd_get(void)
         if (c == '\n') {
             putchar('\n');
             // Break the while loop.
+            __cmd_app(0);
             break;
         }
         // It is a special character.
@@ -481,26 +623,19 @@ static void __cmd_get(void)
                     }
                 } else if (c == 'D') {
                     if (cmd_cursor_index > 0) {
-                        --cmd_cursor_index;
-                        puts("\033[1D");
+                        __move_cursor_back(1);
                     }
                 } else if (c == 'C') {
                     if ((cmd_cursor_index + 1) < CMD_LEN && (cmd_cursor_index + 1) <= strlen(cmd)) {
-                        ++cmd_cursor_index;
-                        puts("\033[1C");
+                        __move_cursor_forward(1);
                     }
                 } else if (c == 'H') {
-                    // Move the cursor back to the beginning.
-                    printf("\033[%dD", cmd_cursor_index);
-                    // Reset the cursor position.
-                    cmd_cursor_index = 0;
+                    __move_cursor_back(cmd_cursor_index);
                 } else if (c == 'F') {
                     // Compute the offest to the end of the line, and move only if necessary.
                     size_t offset = strlen(cmd) - cmd_cursor_index;
                     if (offset > 0) {
-                        printf("\033[%dC", offset);
-                        // Reset the cursor position.
-                        cmd_cursor_index += offset;
+                        __move_cursor_forward(offset);
                     }
                 } else if (c == '3') {
                     c = getchar(); // Get the char.
@@ -512,84 +647,7 @@ static void __cmd_get(void)
         } else if (c == '\b') {
             __cmd_ers('\b');
         } else if (c == '\t') {
-            // Get the lenght of the command.
-            size_t cmd_len = strlen(cmd);
-            // Count the number of words.
-            int words = __count_words(cmd);
-            // If there are no words, skip.
-            if (words == 0) {
-                continue;
-            }
-            // Determines if we are at the beginning of a new argument, last character is space.
-            if (__is_separator(cmd[cmd_len - 1])) {
-                continue;
-            }
-            // If the last two characters are two dots `..` append a slash `/`,
-            // and continue.
-            if ((cmd_len >= 2) && ((cmd[cmd_len - 2] == '.') && (cmd[cmd_len - 1] == '.'))) {
-                if (__cmd_app('/')) {
-                    putchar('/');
-                    continue;
-                }
-            }
-            // Determines if we are executing a command from current directory.
-            int is_run_cmd = (words == 1) && (cmd[0] == '.') && (cmd_len > 3) && (cmd[1] == '/');
-            // Determines if we are entering an absolute path.
-            int is_abs_path = (words == 1) && (cmd[0] == '/');
-            // Prepare the dirent variable.
-            dirent_t dent;
-            // If there is only one word, we are searching for a command.
-            if (is_run_cmd) {
-                if (__folder_contains(cwd, cmd + 2, 0, &dent)) {
-                    __cmd_sug(&dent, cmd_len - 2);
-                }
-            } else if (is_abs_path) {
-                char _dirname[PATH_MAX];
-                if (!dirname(cmd, _dirname, sizeof(_dirname))) {
-                    continue;
-                }
-                const char *_basename = basename(cmd);
-                if (!_basename) {
-                    continue;
-                }
-                if ((*_dirname == 0) || (*_basename == 0)) {
-                    continue;
-                }
-                if (__folder_contains(_dirname, _basename, 0, &dent)) {
-                    __cmd_sug(&dent, strlen(_basename));
-                }
-            } else if (words == 1) {
-                if (__search_in_path(cmd, &dent)) {
-                    __cmd_sug(&dent, cmd_len);
-                }
-            } else {
-                // Search the last occurrence of a space, from there on
-                // we will have the last argument.
-                char *last_argument = strrchr(cmd, ' ');
-                // We need to move ahead of one character if we found the space.
-                last_argument = last_argument ? last_argument + 1 : NULL;
-                // If there is no last argument.
-                if (last_argument == NULL) {
-                    continue;
-                }
-                char _dirname[PATH_MAX];
-                if (!dirname(last_argument, _dirname, sizeof(_dirname))) {
-                    continue;
-                }
-                const char *_basename = basename(last_argument);
-                if (!_basename) {
-                    continue;
-                }
-                if ((*_dirname != 0) && (*_basename != 0)) {
-                    if (__folder_contains(_dirname, _basename, 0, &dent)) {
-                        __cmd_sug(&dent, strlen(_basename));
-                    }
-                } else if (*_basename != 0) {
-                    if (__folder_contains(cwd, _basename, 0, &dent)) {
-                        __cmd_sug(&dent, strlen(_basename));
-                    }
-                }
-            }
+            __cmd_complete();
         } else if (c == 127) {
             if ((cmd_cursor_index + 1) <= strlen(cmd)) {
                 strcpy(cmd + cmd_cursor_index, cmd + cmd_cursor_index + 1);
@@ -608,10 +666,16 @@ static void __cmd_get(void)
             } else if (c == CTRL('U')) {
                 // Clear the current command.
                 __cmd_clr();
-                // Re-set the index to the beginning.
-                cmd_cursor_index = 0;
                 // Sets the command.
                 __cmd_set("\0");
+            } else if (c == CTRL('A')) {
+                __move_cursor_back(cmd_cursor_index);
+            } else if (c == CTRL('E')) {
+                // Compute the offest to the end of the line, and move only if necessary.
+                size_t offset = strlen(cmd) - cmd_cursor_index;
+                if (offset > 0) {
+                    __move_cursor_forward(offset);
+                }
             } else if (c == CTRL('D')) {
                 // Go to the new line.
                 printf("\n");
@@ -642,22 +706,25 @@ static void __alloc_argv(char *command, int *argc, char ***argv)
     }
     (*argv)         = (char **)malloc(sizeof(char *) * ((*argc) + 1));
     bool_t inword   = false;
-    const char *cit = command;
-    size_t argcIt = 0, argIt = 0;
+    char *cit = command;
+    char *argStart  = command;
+    size_t argcIt   = 0;
     do {
-        if (__is_separator(*cit)) {
-            if (inword) {
-                inword                   = false;
-                (*argv)[argcIt++][argIt] = '\0';
-                argIt                    = 0;
-            }
-        } else {
-            // Allocate string for argument.
+        if (!__is_separator(*cit)) {
             if (!inword) {
-                (*argv)[argcIt] = (char *)malloc(sizeof(char) * CMD_LEN);
+                argStart = cit;
+                inword = true;
             }
-            inword                   = true;
-            (*argv)[argcIt][argIt++] = (*cit);
+            continue;
+        }
+
+        if (inword) {
+            inword = false;
+            // Expand possible environment variables in the current argument
+            char expand_env_buf[BUFSIZ];
+            ___expand_env(argStart, expand_env_buf, BUFSIZ, cit - argStart, true);
+            (*argv)[argcIt] = (char*)malloc(strlen(expand_env_buf) + 1);
+            strcpy((*argv)[argcIt++], expand_env_buf);
         }
     } while (*cit++);
     (*argv)[argcIt] = NULL;
@@ -670,6 +737,189 @@ static inline void __free_argv(int argc, char **argv)
     }
     free(argv);
 }
+
+static void __setup_redirects(int *argcp, char ***argvp) {
+    char **argv = *argvp;
+    int argc = *argcp;
+
+    char* path;
+    int flags = O_CREAT | O_WRONLY;
+    mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP;
+
+    bool_t rd_stdout, rd_stderr;
+    rd_stdout = rd_stderr = 0;
+
+    for (int i = 1; i < argc - 1; ++i) {
+        if (!strstr(argv[i], ">")) {
+            continue;
+        }
+
+        path = argv[i + 1];
+
+        // Determine stream to redirect
+        switch(*argv[i]) {
+        case '&':
+            rd_stdout = rd_stderr = true;
+            break;
+        case '2':
+            rd_stderr = true;
+            break;
+        case '>':
+            rd_stdout = true;
+            break;
+        default:
+            continue;
+        }
+
+        // Determine open flags
+        if (strstr(argv[i], ">>")) {
+            flags |= O_APPEND;
+        } else {
+            flags |= O_TRUNC;
+        }
+
+        // Remove redirects from argv
+        *argcp -= 2;
+        free(argv[i]);
+        (*argvp)[i] = 0;
+        free(argv[i+1]);
+        (*argvp)[i+1] = 0;
+
+        int fd = open(path, flags, mode);
+        if (fd < 0) {
+            printf("\n%s: Failed to open file\n", path);
+            exit(1);
+        }
+
+        if (rd_stdout) {
+            close(STDOUT_FILENO);
+            dup(fd);
+        }
+
+        if (rd_stderr) {
+            close(STDERR_FILENO);
+            dup(fd);
+        }
+        close(fd);
+        break;
+    }
+}
+
+static int __execute_cmd(char* command, bool_t add_to_history)
+{
+    int _status = 0;
+    // Retrieve the options from the command.
+    // The current number of arguments.
+    int _argc = 1;
+    // The vector of arguments.
+    char **_argv;
+    __alloc_argv(command, &_argc, &_argv);
+    // Check if the command is empty.
+    if (_argc == 0) {
+        return 0;
+    }
+
+    // Add the command to the history.
+    if (add_to_history) {
+        __hst_push(cmd);
+    }
+
+    if (!strcmp(_argv[0], "init")) {
+    } else if (!strcmp(_argv[0], "cd")) {
+        __cd(_argc, _argv);
+    } else if (!strcmp(_argv[0], "..")) {
+        const char *__argv[] = { "cd", "..", NULL };
+        __cd(2, (char **)__argv);
+    } else if (!strcmp(_argv[0], "export")) {
+        __export(_argc, _argv);
+    } else {
+        bool_t blocking = true;
+        if (strcmp(_argv[_argc - 1], "&") == 0) {
+            blocking = false;
+            _argc--;
+            free(_argv[_argc]);
+            _argv[_argc] = NULL;
+        }
+
+        __block_sigchld();
+
+        // Is a shell path, execute it!
+        pid_t cpid = fork();
+        if (cpid == 0) {
+            // Makes the new process a group leader
+            pid_t pid = getpid();
+            setpgid(cpid, pid);
+
+            __unblock_sigchld();
+
+            __setup_redirects(&_argc, &_argv);
+
+            if (execvp(_argv[0], _argv) == -1) {
+                printf("\nUnknown command: %s\n", _argv[0]);
+                exit(127);
+            }
+        }
+        if (blocking) {
+            waitpid(cpid, &_status, 0);
+            if (WIFSIGNALED(_status)) {
+                printf(FG_RED "\nExit status %d, killed by signal %d\n" FG_RESET,
+                       WEXITSTATUS(_status), WTERMSIG(_status));
+            } else if (WIFSTOPPED(_status)) {
+                printf(FG_YELLOW "\nExit status %d, stopped by signal %d\n" FG_RESET,
+                       WEXITSTATUS(_status), WSTOPSIG(_status));
+            } else if (WEXITSTATUS(_status) != 0) {
+                printf(FG_RED "\nExit status %d\n" FG_RESET, WEXITSTATUS(_status));
+            }
+        }
+        __unblock_sigchld();
+    }
+    // Free up the memory reserved for the arguments.
+    __free_argv(_argc, _argv);
+    status = WEXITSTATUS(_status);
+    return status;
+}
+
+static int __execute_file(char *path)
+{
+    int fd;
+    if ((fd = open(path, O_RDONLY, 0)) == -1) {
+        printf("\n%s: Failed to open file\n", path);
+        exit(1);
+    }
+    while (fgets(cmd, sizeof(cmd), fd)) {
+        if (cmd[0] == '#') {
+            continue;
+        }
+
+        if ((status = __execute_cmd(cmd, false)) != 0) {
+            printf("\n%s: exited with %d\n", cmd, status);
+        }
+    }
+
+    return status;
+}
+
+static void __interactive_mode(void)
+{
+    stat_t buf;
+    if (stat(".shellrc", &buf) == 0) {
+        int ret = __execute_file(".shellrc");
+        if (ret < 0) {
+            printf("%s: .shellrc: %s\n", strerror(-ret));
+        }
+    }
+#pragma clang diagnostic push
+#pragma ide diagnostic ignored "EndlessLoop"
+    while (true) {
+        // First print the prompt.
+        __prompt_print();
+        // Get the input command.
+        __cmd_get();
+        __execute_cmd(cmd, true);
+    }
+#pragma clang diagnostic pop
+}
+
 
 void wait_for_child(int signum)
 {
@@ -705,77 +955,27 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    // Move inside the home directory.
-    __cd(0, NULL);
-
-#pragma clang diagnostic push
-#pragma ide diagnostic ignored "EndlessLoop"
-    while (true) {
-        // First print the prompt.
-        __prompt_print();
-
-        // Get the input command.
-        __cmd_get();
-
-        // Check if the command is empty.
-        if (strlen(cmd) <= 0) {
-            continue;
-        }
-
-        // Retrieve the options from the command.
-        // The current number of arguments.
-        int _argc = 1;
-        // The vector of arguments.
-        char **_argv;
-        __alloc_argv(cmd, &_argc, &_argv);
-        // Check if the command is empty.
-        if (_argc == 0) {
-            continue;
-        }
-
-        // Add the command to the history.
-        __hst_push(cmd);
-        if (!strcmp(_argv[0], "init")) {
-        } else if (!strcmp(_argv[0], "cd")) {
-            __cd(_argc, _argv);
-        } else if (!strcmp(_argv[0], "..")) {
-            const char *__argv[] = { "cd", "..", NULL };
-            __cd(2, (char **)__argv);
-        } else if (!strcmp(_argv[0], "export")) {
-            __export(_argc, _argv);
-        } else {
-            bool_t blocking = true;
-            if (strcmp(_argv[_argc - 1], "&") == 0) {
-                free(_argv[_argc - 1]);
-                _argv[_argc - 1] = NULL;
-                blocking         = false;
-                _argc -= 1;
-            }
-            // Is a shell path, execute it!
-            int status;
-            pid_t cpid = fork();
-            if (cpid == 0) {
-                // Makes the new process a group leader
-                pid_t pid = getpid();
-                setpgid(cpid, pid);
-
-                if (execvp(_argv[0], _argv) == -1) {
-                    printf("\nUnknown command: %s\n", _argv[0]);
-                    exit(1);
-                }
-            }
-            if (blocking) {
-                waitpid(cpid, &status, 0);
-                if (WIFSIGNALED(status)) {
-                    printf(FG_RED "\nExit status %d, killed by signal %d\n" FG_RESET, WEXITSTATUS(status), WTERMSIG(status));
-                } else if (WIFSTOPPED(status)) {
-                    printf(FG_YELLOW "\nExit status %d, stopped by signal %d\n" FG_RESET, WEXITSTATUS(status), WSTOPSIG(status));
-                }
+    // Interactive
+    if (argc < 2) {
+        // Move inside the home directory.
+        __cd(0, NULL);
+        __interactive_mode();
+    } else {
+        // check file arguments
+        for (int i = 1; i < argc; ++i) {
+            stat_t buf;
+            if (stat(argv[i], &buf) < 0) {
+                printf("\n%s: No such file\n", argv[i]);
+                exit(1);
             }
         }
-        // Free up the memory reserved for the arguments.
-        __free_argv(_argc, _argv);
+
+        for (int i = 1; i < argc; ++i) {
+            if (!(status = __execute_file(argv[i]))) {
+                return status;
+            }
+        }
     }
-#pragma clang diagnostic pop
+
     return 0;
 }
