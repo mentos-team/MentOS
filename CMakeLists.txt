@@ -56,6 +56,23 @@ else()
 endif()
 
 # =============================================================================
+# EMULATION SERIAL OUTPUT OPTION
+# =============================================================================
+# Set the list of valid emulator output options.
+set(EMULATOR_OUTPUT_TYPES OUTPUT_STDIO OUTPUT_LOG)
+# Add the emulator output option.
+set(EMULATOR_OUTPUT_TYPE "OUTPUT_STDIO" CACHE STRING "Chose the type of emulator output: ${EMULATOR_OUTPUT_TYPES}")
+# List of emulator output options.
+set_property(CACHE EMULATOR_OUTPUT_TYPE PROPERTY STRINGS ${EMULATOR_OUTPUT_TYPES})
+# Check which emulator output option is currently active.
+list(FIND EMULATOR_OUTPUT_TYPES ${EMULATOR_OUTPUT_TYPE} INDEX)
+if(index EQUAL -1)
+    message(FATAL_ERROR "Emulator output type ${EMULATOR_OUTPUT_TYPE} is not valid.")
+else()
+    message(STATUS "Setting emulator output type to ${EMULATOR_OUTPUT_TYPE}.")
+endif()
+
+# =============================================================================
 # ASSEMBLY COMPILER
 # =============================================================================
 
@@ -151,23 +168,6 @@ add_custom_target(filesystem
     COMMAND echo '============================================================================='
     DEPENDS programs tests
 )
-
-# =============================================================================
-# EMULATION SERIAL OUTPUT OPTION
-# =============================================================================
-# Set the list of valid emulator output options.
-set(EMULATOR_OUTPUT_TYPES OUTPUT_STDIO OUTPUT_LOG)
-# Add the emulator output option.
-set(EMULATOR_OUTPUT_TYPE "OUTPUT_STDIO" CACHE STRING "Chose the type of emulator output: ${EMULATOR_OUTPUT_TYPES}")
-# List of emulator output options.
-set_property(CACHE EMULATOR_OUTPUT_TYPE PROPERTY STRINGS ${EMULATOR_OUTPUT_TYPES})
-# Check which emulator output option is currently active.
-list(FIND EMULATOR_OUTPUT_TYPES ${EMULATOR_OUTPUT_TYPE} INDEX)
-if(index EQUAL -1)
-    message(FATAL_ERROR "Emulator output type ${EMULATOR_OUTPUT_TYPE} is not valid.")
-else()
-    message(STATUS "Setting emulator output type to ${EMULATOR_OUTPUT_TYPE}.")
-endif()
 
 # =============================================================================
 # EMULATOR CONFIGURATION
