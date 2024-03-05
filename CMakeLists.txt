@@ -265,3 +265,27 @@ add_custom_target(
     COMMAND ${EMULATOR} ${EMULATOR_FLAGS} -boot d -cdrom ${CMAKE_BINARY_DIR}/cdrom.iso
     DEPENDS cdrom.iso
 )
+
+# =============================================================================
+# Booting with QEMU+GRUB for testing
+# =============================================================================
+
+# First, we need to build the ISO for the cdrom. It has a slightly different
+# kernel command line including 'test'.
+add_custom_target(
+  cdrom_test.iso
+  COMMAND cp -rf ${CMAKE_SOURCE_DIR}/iso .
+  COMMAND mv ${CMAKE_BINARY_DIR}/iso/boot/grub/grub.cfg.runtests ${CMAKE_BINARY_DIR}/iso/boot/grub/grub.cfg
+  COMMAND cp ${CMAKE_BINARY_DIR}/mentos/bootloader.bin ${CMAKE_BINARY_DIR}/iso/boot
+  COMMAND grub-mkrescue -o ${CMAKE_BINARY_DIR}/cdrom_test.iso ${CMAKE_BINARY_DIR}/iso
+  DEPENDS bootloader.bin
+)
+
+# This target runs the emulator, and executes the runtests binary as init process.
+# Additionally it passes the '-device isa-debug-exit' option to shutdown qemu
+# after the tests are done.
+add_custom_target(
+    qemu-test
+    COMMAND ${EMULATOR} ${EMULATOR_FLAGS} -serial file:${CMAKE_BINARY_DIR}/test.log -nographic -device isa-debug-exit -boot d -cdrom ${CMAKE_BINARY_DIR}/cdrom_test.iso
+    DEPENDS cdrom_test.iso
+)
