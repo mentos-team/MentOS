@@ -18,6 +18,8 @@
 
 #define FLAG_L (1U << 0U)
 #define FLAG_A (1U << 1U)
+#define FLAG_I (1U << 2U)
+#define FLAG_1 (1U << 3U)
 
 #define FG_BRIGHT_GREEN  "\033[92m"
 #define FG_BRIGHT_CYAN   "\033[96m"
@@ -62,6 +64,10 @@ static inline void print_dir_entry(dirent_t *dirent, const char *path, unsigned 
     if (bitmask_check(flags, FLAG_L)) {
         // Get the broken down time from the creation time of the file.
         timeinfo = localtime(&dstat.st_ctime);
+        // Print the inode if required.
+        if (bitmask_check(flags, FLAG_I)) {
+            printf("%6d ", dirent->d_ino);
+        }
         // Print the file type.
         putchar(dt_char_array[dirent->d_type]);
         // Print the access permissions.
@@ -88,7 +94,17 @@ static inline void print_dir_entry(dirent_t *dirent, const char *path, unsigned 
                dirent->d_name);
         (*total_size) += dstat.st_size;
     } else {
-        printf("%s ", dirent->d_name);
+        // Print the inode if required.
+        if (bitmask_check(flags, FLAG_I)) {
+            printf("%d ", dirent->d_ino);
+        }
+        puts(dirent->d_name);
+        // Print in 1 column if requested.
+        if (bitmask_check(flags, FLAG_1)) {
+            putchar('\n');
+        } else {
+            putchar(' ');
+        }
     }
 
     // Reset the color.
@@ -101,11 +117,11 @@ static void print_ls(int fd, const char *path, unsigned int flags)
     memset(&dents, 0, DENTS_NUM * sizeof(dirent_t));
 
     size_t total_size = 0;
-    while (getdents(fd, dents, DENTS_NUM * sizeof(dirent_t))) {
+    while (getdents(fd, dents, sizeof(dents))) {
         for (size_t i = 0; i < DENTS_NUM; ++i) {
-            if (dents[i].d_ino == 0)
-                break;
-            print_dir_entry(&dents[i], path, flags, &total_size);
+            if (dents[i].d_ino != 0) {
+                print_dir_entry(&dents[i], path, flags, &total_size);
+            }
         }
     }
     printf("\n");
@@ -128,10 +144,23 @@ int main(int argc, char *argv[])
             printf("    ls [options] [directory]\n\n");
             return 0;
         } else if (argv[i][0] == '-') {
-            if ((strcmp(argv[i], "-l") == 0) || (strcmp(argv[i], "--long") == 0))
-                bitmask_set_assign(flags, FLAG_L);
-            else if ((strcmp(argv[i], "-a") == 0) || (strcmp(argv[i], "--all") == 0))
-                bitmask_set_assign(flags, FLAG_A);
+            for (int j = 1; j < strlen(argv[i]); ++j) {
+                if (argv[i][j] == 'l') {
+                    bitmask_set_assign(flags, FLAG_L);
+                } else if (argv[i][j] == 'a') {
+                    bitmask_set_assign(flags, FLAG_A);
+                } else if (argv[i][j] == 'i') {
+                    bitmask_set_assign(flags, FLAG_I);
+                } else if (argv[i][j] == '1') {
+                    bitmask_set_assign(flags, FLAG_1);
+                }
+            }
+        } else if (!strcmp(argv[i], "--long")) {
+            bitmask_set_assign(flags, FLAG_L);
+        } else if (!strcmp(argv[i], "--all")) {
+            bitmask_set_assign(flags, FLAG_A);
+        } else if (!strcmp(argv[i], "--inode")) {
+            bitmask_set_assign(flags, FLAG_I);
         }
     }
 
