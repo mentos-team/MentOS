@@ -88,39 +88,7 @@ int main(int argc, char **argv)
 
     int fd = STDOUT_FILENO;
     if (argc > 1) {
-        // State the file.
-        stat_t statbuf;
-        if (stat(filepath, &statbuf) == -1) {
-            printf("more: %s: %s\n", filepath, strerror(errno));
-            exit(EXIT_FAILURE);
-        }
-
-        // Check if it is a link.
-        if (S_ISLNK(statbuf.st_mode)) {
-            // Read the content of the link.
-            if (readlink(filepath, buffer, BUFSIZ) < 0) {
-                printf("more: %s: %s\n\n", filepath, strerror(errno));
-                exit(EXIT_FAILURE);
-            }
-            // Change the filepath.
-            filepath = buffer;
-            // Run the stat again, with the real file.
-            if (stat(filepath, &statbuf) == -1) {
-                printf("more: %s: %s\n", filepath, strerror(errno));
-                exit(EXIT_FAILURE);
-            }
-        }
-
-        // Check if it is a directory.
-        if (S_ISDIR(statbuf.st_mode)) {
-            printf("more: %s: Is a directory\n", filepath);
-            exit(EXIT_FAILURE);
-        }
-        // If it is a regular file, open the file in read-only.
-        if (S_ISREG(statbuf.st_mode)) {
-            fd = open(filepath, O_RDONLY, 0);
-        }
-
+        fd = open(filepath, O_RDONLY, 0);
         if (fd < 0) {
             printf("more: %s: %s\n", filepath, strerror(errno));
             exit(EXIT_FAILURE);
