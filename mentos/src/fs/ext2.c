@@ -2576,6 +2576,11 @@ static ssize_t ext2_read(vfs_file_t *file, char *buffer, off_t offset, size_t nb
         pr_err("Failed to read the inode `%s`.\n", file->name);
         return -1;
     }
+    // Disallow reading directories using read
+    if ((inode.mode & EXT2_S_IFDIR) == EXT2_S_IFDIR) {
+        pr_err("Reading a directory `%s` is not allowed.\n", file->name);
+        return -EISDIR;
+    }
     return ext2_read_inode_data(fs, &inode, file->ino, offset, nbyte, buffer);
 }
 
