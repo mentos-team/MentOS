@@ -7,6 +7,7 @@
 #include "stddef.h"
 #include <fcntl.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/unistd.h>
 #include <strerror.h>
@@ -28,47 +29,16 @@ int main(int argc, char **argv)
             return 0;
         }
     }
+    int ret = 0;
     int fd;
     // Prepare the buffer for reading.
     char buffer[BUFSIZ];
     // Iterate the arguments.
     for (int i = 1; i < argc; ++i) {
-        // Create the stat buffer.
-        stat_t statbuf;
         // Initialize the file path.
         char *filepath = argv[i];
 
-        // Stat the file.
-        if (stat(argv[i], &statbuf) == -1) {
-            printf("cat: %s: %s\n\n", argv[i], strerror(errno));
-            continue;
-        }
-
-        // Check if it is a link.
-        if (S_ISLNK(statbuf.st_mode)) {
-            // Read the content of the link.
-            if (readlink(filepath, buffer, BUFSIZ) < 0) {
-                printf("cat: %s: %s\n\n", filepath, strerror(errno));
-                continue;
-            }
-            // Change the filepath.
-            filepath = buffer;
-            // Run the stat again, with the real file.
-            if (stat(filepath, &statbuf) == -1) {
-                printf("cat: %s: %s\n", filepath, strerror(errno));
-                continue;
-            }
-        }
-
-        // Check if it is a directory.
-        if (S_ISDIR(statbuf.st_mode)) {
-            printf("cat: %s: Is a directory\n", filepath);
-            continue;
-        }
-        // If it is a regular file, open the file in read-only.
-        if (S_ISREG(statbuf.st_mode)) {
-            fd = open(filepath, O_RDONLY, 0);
-        }
+        fd = open(filepath, O_RDONLY, 0);
         if (fd < 0) {
             printf("cat: %s: %s\n", filepath, strerror(errno));
             continue;
@@ -79,7 +49,11 @@ int main(int argc, char **argv)
             write(STDOUT_FILENO, buffer, bytes_read);
         }
         close(fd);
+        if (bytes_read < 0) {
+            printf("%s: %s: %s\n", argv[0], filepath, strerror(errno));
+            ret = EXIT_FAILURE;
+        }
     }
     putchar('\n');
-    return 0;
+    return ret;
 }

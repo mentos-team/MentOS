@@ -191,7 +191,13 @@ static ssize_t procv_write(vfs_file_t *file, const void *buf, off_t offset, size
 
 static int procv_fstat(vfs_file_t *file, stat_t *stat)
 {
-    return -ENOSYS;
+    stat->st_dev = 0;
+    stat->st_mode = 0666;
+    stat->st_uid = 0;
+    stat->st_gid = 0;
+    stat->st_size = 0;
+    stat->st_mtime = sys_time(NULL);
+    return 0;
 }
 
 static int procv_ioctl(vfs_file_t *file, int request, void *data)

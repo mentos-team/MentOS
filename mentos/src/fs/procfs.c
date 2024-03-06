@@ -492,12 +492,6 @@ static vfs_file_t *procfs_open(const char *path, int flags, mode_t mode)
             list_head_insert_before(&vfs_file->siblings, &procfs_file->files);
             return vfs_file;
         }
-        // Check if the user did not want to open a directory, but it is.
-        if (bitmask_check(procfs_file->flags, DT_DIR)) {
-            pr_err("Is a directory `%s` but access requested did not involved a directory.\n", path);
-            errno = EISDIR;
-            return NULL;
-        }
         // Create the associated file.
         vfs_file_t *vfs_file = procfs_create_file_struct(procfs_file);
         if (!vfs_file) {

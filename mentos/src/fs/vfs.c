@@ -12,6 +12,7 @@
 #include "fcntl.h"
 #include "assert.h"
 #include "fs/procfs.h"
+#include "fs/namei.h"
 #include "fs/vfs.h"
 #include "klib/hashmap.h"
 #include "klib/spinlock.h"
@@ -147,9 +148,10 @@ vfs_file_t *vfs_open(const char *path, int flags, mode_t mode)
     // Allocate a variable for the path.
     char absolute_path[PATH_MAX];
     // If the first character is not the '/' then get the absolute path.
-    if (!realpath(path, absolute_path, sizeof(absolute_path))) {
-        pr_err("vfs_open(%s): Cannot get the absolute path!\n", path);
-        errno = ENODEV;
+    int ret = resolve_path(path, absolute_path, sizeof(absolute_path), FOLLOW_LINKS);
+    if (ret < 0) {
+        pr_err("vfs_open(%s): Cannot resolve path!\n", path);
+        errno = -ret;
         return NULL;
     }
     return vfs_open_abspath(absolute_path, flags, mode);
