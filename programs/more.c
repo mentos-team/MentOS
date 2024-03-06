@@ -95,6 +95,11 @@ int main(int argc, char **argv)
         }
     }
 
+    errno = 0;
     page_content(fd);
+    if (errno) {
+        printf("%s: %s: %s\n", argv[0], argc > 1 ? filepath : "stdin", strerror(errno));
+        exit(EXIT_FAILURE);
+    }
     return 0;
 }

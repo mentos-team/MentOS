@@ -7,6 +7,7 @@
 #include "stddef.h"
 #include <fcntl.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/unistd.h>
 #include <strerror.h>
@@ -28,6 +29,7 @@ int main(int argc, char **argv)
             return 0;
         }
     }
+    int ret = 0;
     int fd;
     // Prepare the buffer for reading.
     char buffer[BUFSIZ];
@@ -47,7 +49,11 @@ int main(int argc, char **argv)
             write(STDOUT_FILENO, buffer, bytes_read);
         }
         close(fd);
+        if (bytes_read < 0) {
+            printf("%s: %s: %s\n", argv[0], filepath, strerror(errno));
+            ret = EXIT_FAILURE;
+        }
     }
     putchar('\n');
-    return 0;
+    return ret;
 }
