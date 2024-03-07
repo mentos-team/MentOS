@@ -16,7 +16,9 @@ int main(int argc, char** argv)
         return -1;
     }
 
-    if (!(strcmp(argv[1], "-a")) || !(strcmp(argv[1], "--all"))) {
+    if (!(strcmp(argv[1], "-a")) || !(strcmp(argv[1], "--all"))||
+        !(strcmp(argv[1], "-i")) || !(strcmp(argv[1], "--info")))
+    {
         printf("%s %s \n", utsname.sysname, utsname.version);
     } else if (!(strcmp(argv[1], "-r")) || !(strcmp(argv[1], "--rev"))) {
         printf("%s\n", utsname.version);

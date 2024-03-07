@@ -1,0 +1,8 @@
+SYNOPSIS
+    cp SOURCE DEST
+
+DESCRIPTION
+    Copy SOURCE to DEST.
+
+OPTIONS
+    -h, --help   shows command help.
