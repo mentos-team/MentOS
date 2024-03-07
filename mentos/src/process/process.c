@@ -111,18 +111,28 @@ static int __reset_process(task_struct *task)
     return 1;
 }
 
+/// @brief Replace the current process with a loaded exectuable
+/// @param path the path to the executable to load.
+/// @param task the task to laod the exectuable.
+/// @param entry
+/// @return -errno or 0 on failure, 1 on success
 static int __load_executable(const char *path, task_struct *task, uint32_t *entry)
 {
     pr_debug("__load_executable(`%s`, %p `%s`, %p)\n", path, task, task->name, entry);
     vfs_file_t *file = vfs_open(path, O_RDONLY, 0);
     if (file == NULL) {
         pr_err("Cannot find executable!\n");
-        return 0;
+        return -errno;
+    }
+    // Check that the file has the execute permission set
+    if (!vfs_valid_exec_permission(task, file)) {
+        pr_err("This is not executable `%s`!\n", path);
+        return -EACCES;
     }
     // Check that the file is actually an executable before destroying the `mm`.
     if (!elf_check_file_type(file, ET_EXEC)) {
         pr_err("This is not a valid ELF executable `%s`!\n", path);
-        return 0;
+        return -ENOEXEC;
     }
     // Set the effective uid if the setuid bit is present.
     if (bitmask_check(file->mask, S_ISUID)) {
@@ -299,7 +309,7 @@ task_struct *process_create_init(const char *path)
 
     // == INITIALIZE TASK MEMORY ==============================================
     // Load the executable.
-    if (!__load_executable(path, init_proc, &init_proc->thread.regs.eip)) {
+    if (__load_executable(path, init_proc, &init_proc->thread.regs.eip) <= 0) {
         pr_err("Entry for init: %d\n", init_proc->thread.regs.eip);
         kernel_panic("Init not valid (%d)!");
     }
@@ -513,11 +523,12 @@ int sys_execve(pt_regs *f)
     // ------------------------------------------------------------------------
 
     // == INITIALIZE TASK MEMORY ==============================================
-    if (!__load_executable(filename, current, &current->thread.regs.eip)) {
+    int ret = __load_executable(filename, current, &current->thread.regs.eip);
+    if (ret <= 0) {
         pr_err("Failed to load executable!\n");
         // Free the temporary args memory.
         kfree(args_mem);
-        return -1;
+        return ret;
     }
     // ------------------------------------------------------------------------
 
