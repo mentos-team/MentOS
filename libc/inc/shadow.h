@@ -7,15 +7,15 @@
 #define SHADOW "/etc/shadow"
 
 struct spwd {
-	char *sp_namp;
-	char *sp_pwdp;
-	long sp_lstchg;
-	long sp_min;
-	long sp_max;
-	long sp_warn;
-	long sp_inact;
-	long sp_expire;
-	unsigned long sp_flag;
+    char *sp_namp;             ///< user login name.
+    char *sp_pwdp;             ///< encrypted password.
+    long int sp_lstchg;        ///< last password change.
+    long int sp_min;           ///< days until change allowed.
+    long int sp_max;           ///< days before change required.
+    long int sp_warn;          ///< days warning for expiration.
+    long int sp_inact;         ///< days before account inactive.
+    long int sp_expire;        ///< date when account expires.
+    unsigned long int sp_flag; ///< reserved for future use.
 };
 
 struct spwd *getspnam(const char *);
