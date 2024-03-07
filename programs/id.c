@@ -13,10 +13,10 @@ int main(int argc, char **argv)
         printf("uid=%d gid=%d\n", geteuid(), getegid());
     } else if (strncmp(argv[1], "--help", 6) == 0) {
         printf("Usage: %s [OPTION]\n", argv[0]);
-        printf("Print user and group information\n\n");
-        printf("  -g, --group  print only the effective group ID");
-        printf("  -u, --user   print only the effective user ID");
-        printf("      --help   display this help and exit");
+        printf("Print user and group information\n");
+        printf("  -g, --group  print only the effective group ID\n");
+        printf("  -u, --user   print only the effective user ID\n");
+        printf("      --help   display this help and exit\n");
     } else if (strncmp(argv[1], "-u", 2) == 0 || strncmp(argv[1], "--user", 6) == 0) {
         printf("%d\n", geteuid());
     } else if (strncmp(argv[1], "-g", 2) == 0 || strncmp(argv[1], "--group", 7) == 0) {

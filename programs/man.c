@@ -17,7 +17,7 @@ int main(int argc, char *argv[])
         int fd = open("/bin", O_RDONLY | O_DIRECTORY, 0);
         if (fd == -1)
         {
-            printf("%s: cannot access '/bin': %s\n\n", argv[0], strerror(errno));
+            printf("%s: cannot access '/bin': %s\n", argv[0], strerror(errno));
             return 1;
         }
         dirent_t dent;

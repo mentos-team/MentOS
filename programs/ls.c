@@ -129,7 +129,6 @@ static void print_ls(int fd, const char *path, unsigned int flags)
     if (bitmask_check(flags, FLAG_L)) {
         printf("Total: %s\n", to_human_size(total_size));
     }
-    printf("\n");
 }
 
 int main(int argc, char *argv[])
@@ -141,7 +140,7 @@ int main(int argc, char *argv[])
         if ((strcmp(argv[i], "--help") == 0) || (strcmp(argv[i], "-h") == 0)) {
             printf("List information about files inside a given directory.\n");
             printf("Usage:\n");
-            printf("    ls [options] [directory]\n\n");
+            printf("    ls [options] [directory]\n");
             return 0;
         } else if (argv[i][0] == '-') {
             for (int j = 1; j < strlen(argv[i]); ++j) {
@@ -171,7 +170,7 @@ int main(int argc, char *argv[])
         no_directory = false;
         int fd       = open(argv[i], O_RDONLY | O_DIRECTORY, 0);
         if (fd == -1) {
-            printf("ls: cannot access '%s': %s\n\n", argv[i], strerror(errno));
+            printf("ls: cannot access '%s': %s\n", argv[i], strerror(errno));
         } else {
             printf("%s:\n", argv[i]);
             print_ls(fd, argv[i], flags);
@@ -183,7 +182,7 @@ int main(int argc, char *argv[])
         getcwd(cwd, PATH_MAX);
         int fd = open(cwd, O_RDONLY | O_DIRECTORY, 0);
         if (fd == -1) {
-            printf("ls: cannot access '%s': %s\n\n", cwd, strerror(errno));
+            printf("ls: cannot access '%s': %s\n", cwd, strerror(errno));
         } else {
             print_ls(fd, cwd, flags);
             close(fd);
