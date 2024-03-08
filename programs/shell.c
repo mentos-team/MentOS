@@ -955,8 +955,13 @@ int main(int argc, char *argv[])
         return 1;
     }
 
+    // We have been executed as script interpreter
+    if (!strstr(argv[0], "shell")) {
+        return __execute_file(argv[0]);
+    }
+
     // Interactive
-    if (argc < 2) {
+    if (argc == 1) {
         // Move inside the home directory.
         __cd(0, NULL);
         __interactive_mode();
