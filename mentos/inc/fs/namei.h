@@ -9,6 +9,7 @@
 
 #define REMOVE_TRAILING_SLASH 1 << 0
 #define FOLLOW_LINKS 1 << 1
+#define CREAT_LAST_COMPONENT 1 << 2
 
 /// @brief Resolve the path by following all symbolic links.
 /// @param path The path to resolve.

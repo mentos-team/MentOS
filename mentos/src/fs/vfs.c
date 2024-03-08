@@ -147,8 +147,13 @@ vfs_file_t *vfs_open(const char *path, int flags, mode_t mode)
 {
     // Allocate a variable for the path.
     char absolute_path[PATH_MAX];
-    // If the first character is not the '/' then get the absolute path.
-    int ret = resolve_path(path, absolute_path, sizeof(absolute_path), FOLLOW_LINKS);
+    // Resolve all symbolic links in the path before opening the file.
+    int resolve_flags = FOLLOW_LINKS;
+    // Allow the last component to be non existing when attempting to create it.
+    if (bitmask_check(flags, O_CREAT)) {
+        resolve_flags |= CREAT_LAST_COMPONENT;
+    }
+    int ret = resolve_path(path, absolute_path, sizeof(absolute_path), resolve_flags);
     if (ret < 0) {
         pr_err("vfs_open(%s): Cannot resolve path!\n", path);
         errno = -ret;
