@@ -4,10 +4,10 @@
 /// See LICENSE.md for details.
 
 // Setup the logging for this file (do this before any other include).
-#include "sys/kernel_levels.h"         // Include kernel log levels.
-#define __DEBUG_HEADER__ "[EXT2  ]"    ///< Change header.
-#define __DEBUG_LEVEL__  LOGLEVEL_INFO ///< Set log level.
-#include "io/debug.h"                  // Include debugging functions.
+#include "sys/kernel_levels.h"          // Include kernel log levels.
+#define __DEBUG_HEADER__ "[EXT2  ]"     ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_DEBUG ///< Set log level.
+#include "io/debug.h"                   // Include debugging functions.
 
 #include "assert.h"
 #include "fcntl.h"
@@ -23,7 +23,7 @@
 #include "sys/errno.h"
 
 #define EXT2_SUPERBLOCK_MAGIC  0xEF53 ///< Magic value used to identify an ext2 filesystem.
-#define EXT2_INDIRECT_BLOCKS   12     ///< Amount of indirect blocks in an inode.
+#define EXT2_DIRECT_BLOCKS     12     ///< Amount of indirect blocks in an inode.
 #define EXT2_PATH_MAX          4096   ///< Maximum length of a pathname.
 #define EXT2_MAX_SYMLINK_COUNT 8      ///< Maximum nesting of symlinks, used to prevent a loop.
 #define EXT2_NAME_LEN          255    ///< The lenght of names inside directory entries.
@@ -260,7 +260,7 @@ typedef struct ext2_inode_t {
         /// [60 byte] Blocks indices.
         struct {
             /// [48 byte]
-            uint32_t dir_blocks[EXT2_INDIRECT_BLOCKS];
+            uint32_t dir_blocks[EXT2_DIRECT_BLOCKS];
             /// [ 4 byte]
             uint32_t indir_block;
             /// [ 4 byte]
@@ -330,13 +330,6 @@ typedef struct ext2_filesystem_t {
     /// The number of blocks containing the BGDT
     uint32_t bgdt_length;
 
-    /// Index of indirect blocks.
-    uint32_t indirect_blocks_index;
-    /// Index of doubly-indirect blocks.
-    uint32_t doubly_indirect_blocks_index;
-    /// Index of trebly-indirect blocks.
-    uint32_t trebly_indirect_blocks_index;
-
     /// Spinlock for protecting filesystem operations.
     spinlock_t spinlock;
 } ext2_filesystem_t;
@@ -387,6 +380,8 @@ static int ext2_stat(const char *path, stat_t *stat);
 static int ext2_setattr(const char *path, struct iattr *attr);
 static vfs_file_t *ext2_creat(const char *path, mode_t permission);
 static vfs_file_t *ext2_mount(vfs_file_t *block_device, const char *path);
+
+static uint32_t ext2_get_real_block_index(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t block_index);
 
 // ============================================================================
 // Virtual FileSystem (VFS) Operaions
@@ -536,7 +531,7 @@ static void ext2_dump_group_descriptor(ext2_group_descriptor_t *gd)
 
 /// @brief Dumps on debugging output the inode.
 /// @param inode the object to dump.
-static void ext2_dump_inode(ext2_inode_t *inode)
+static void ext2_dump_inode(ext2_filesystem_t *fs, ext2_inode_t *inode)
 {
     char mask[32];
     tm_t *timeinfo;
@@ -561,13 +556,22 @@ static void ext2_dump_inode(ext2_inode_t *inode)
              timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec, inode->dtime);
     pr_debug("  Links : %2u Flags : %d\n", inode->links_count, inode->flags);
     pr_debug(" Blocks : [ ");
-    for (int i = 0; i < EXT2_INDIRECT_BLOCKS; ++i) {
+    for (int i = 0; i < EXT2_DIRECT_BLOCKS; ++i) {
         if (inode->data.blocks.dir_blocks[i]) {
             pr_debug("%u ", inode->data.blocks.dir_blocks[i]);
         }
     }
     pr_debug("]\n");
-    pr_debug("IBlocks : %u\n", inode->data.blocks.indir_block);
+    pr_debug("IBlocks : %u", inode->data.blocks.indir_block);
+    if (inode->data.blocks.indir_block) {
+        pr_debug(" [ ");
+        for (uint32_t it = EXT2_DIRECT_BLOCKS; it < (inode->size / fs->block_size); ++it) {
+            pr_debug("%u ", ext2_get_real_block_index(fs, inode, it));
+        }
+        pr_debug("]");
+    }
+    pr_debug("\n", inode->data.blocks.indir_block);
+
     pr_debug("DBlocks : %u\n", inode->data.blocks.doubly_indir_block);
     pr_debug("TBlocks : %u\n", inode->data.blocks.trebly_indir_block);
     pr_debug("Symlink : %s\n", inode->data.symlink);
@@ -1110,16 +1114,18 @@ static uint32_t ext2_allocate_block(ext2_filesystem_t *fs)
 /// @return 0 on success, a negative value on failure.
 static int ext2_set_real_block_index(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t inode_index, uint32_t block_index, uint32_t real_index)
 {
+    unsigned int p = fs->block_size / 4;
+
     // Set the direct block pointer.
-    if (block_index < EXT2_INDIRECT_BLOCKS) {
+    if (block_index < EXT2_DIRECT_BLOCKS) {
         inode->data.blocks.dir_blocks[block_index] = real_index;
         return 0;
     }
 
     // Check if the index is among the indirect blocks.
-    if (block_index < fs->indirect_blocks_index) {
+    if (block_index < (EXT2_DIRECT_BLOCKS + p)) {
         // Compute the indirect indices.
-        uint32_t a = block_index - EXT2_INDIRECT_BLOCKS;
+        uint32_t a = block_index - EXT2_DIRECT_BLOCKS;
 
         // Check that the indirect block points to a valid block.
         if (!inode->data.blocks.indir_block) {
@@ -1155,9 +1161,9 @@ static int ext2_set_real_block_index(ext2_filesystem_t *fs, ext2_inode_t *inode,
     uint32_t p1 = fs->pointers_per_block, p2 = fs->pointers_per_block * fs->pointers_per_block;
 
     // Check if the index is among the doubly-indirect blocks.
-    if (block_index < fs->doubly_indirect_blocks_index) {
+    if (block_index < (EXT2_DIRECT_BLOCKS + p + p * p)) {
         // Compute the indirect indices.
-        uint32_t a = block_index - EXT2_INDIRECT_BLOCKS;
+        uint32_t a = block_index - EXT2_DIRECT_BLOCKS;
         uint32_t b = a - p1;
         uint32_t c = b / p1;
         uint32_t d = b - (c * p1);
@@ -1211,9 +1217,9 @@ static int ext2_set_real_block_index(ext2_filesystem_t *fs, ext2_inode_t *inode,
     }
 
     // Check if the index is among the trebly-indirect blocks.
-    if (block_index < fs->trebly_indirect_blocks_index) {
+    if (block_index < (EXT2_DIRECT_BLOCKS + p + p * p + p)) {
         // Compute the indirect indices.
-        uint32_t a = block_index - EXT2_INDIRECT_BLOCKS;
+        uint32_t a = block_index - EXT2_DIRECT_BLOCKS;
         uint32_t b = a - p1;
         uint32_t c = b - p2;
         uint32_t d = c / p2;
@@ -1301,64 +1307,68 @@ static int ext2_set_real_block_index(ext2_filesystem_t *fs, ext2_inode_t *inode,
 /// @return the real block number.
 static uint32_t ext2_get_real_block_index(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t block_index)
 {
-    // Return the direct block pointer.
-    if (block_index < EXT2_INDIRECT_BLOCKS) {
-        return inode->data.blocks.dir_blocks[block_index];
-    }
-    // Create a variable for the real index.
+    // Get the number of pointers per block.
+    unsigned int p = fs->pointers_per_block;
+    // Help compute the indices.
+    int a, b, c, d, e, f, g;
+    // The real index.
     uint32_t real_index = 0;
-    // For simplicity.
-    uint32_t p1 = fs->pointers_per_block;
-    uint32_t p2 = fs->pointers_per_block * fs->pointers_per_block;
+
     // Allocate the cache.
     uint8_t *cache = kmem_cache_alloc(fs->ext2_buffer_cache, GFP_KERNEL);
     // Clean the cache.
     memset(cache, 0, fs->block_size);
-    // Check if the index is among the indirect blocks.
-    if (block_index < fs->indirect_blocks_index) {
-        // Compute the indirect indices.
-        uint32_t a = block_index - EXT2_INDIRECT_BLOCKS;
-        // Read the indirect block (which contains pointers to the next set of blocks).
-        ext2_read_block(fs, inode->data.blocks.indir_block, cache);
-        // Compute the index inside the final block.
-        real_index = ((uint32_t *)cache)[a];
-    } else if (block_index < fs->doubly_indirect_blocks_index) {
-        // The index is among the doubly-indirect blocks.
-        // Compute the indirect indices.
-        uint32_t a = block_index - EXT2_INDIRECT_BLOCKS;
-        uint32_t b = a - p1;
-        uint32_t c = b / p1;
-        uint32_t d = b - (c * p1);
-        // Read the doubly-indirect block (which contains pointers to indirect blocks).
-        ext2_read_block(fs, inode->data.blocks.doubly_indir_block, cache);
-        // Compute the index inside the indirect block.
-        ext2_read_block(fs, ((uint32_t *)cache)[c], cache);
-        // Compute the index inside the final block.
-        real_index = ((uint32_t *)cache)[d];
-    } else if (block_index < fs->trebly_indirect_blocks_index) {
-        // The index is among the trebly-indirect blocks.
-        // Compute the indirect indices.
-        uint32_t a = block_index - EXT2_INDIRECT_BLOCKS;
-        uint32_t b = a - p1;
-        uint32_t c = b - p2;
-        uint32_t d = c / p2;
-        uint32_t e = c - (d * p2);
-        uint32_t f = e / p1;
-        uint32_t g = e - (f * p1);
-        // Read the trebly-indirect block (which contains pointers to doubly-indirect blocks).
-        ext2_read_block(fs, inode->data.blocks.trebly_indir_block, cache);
-        // Read the doubly-indirect block (which contains pointers to indirect blocks).
-        ext2_read_block(fs, ((uint32_t *)cache)[d], cache);
-        // Read the indirect block (which contains pointers to the next set of blocks).
-        ext2_read_block(fs, ((uint32_t *)cache)[f], cache);
-        // Compute the index inside the final block.
-        real_index = ((uint32_t *)cache)[g];
+
+    // Check if the index is among the DIRECT blocks.
+    a = block_index - EXT2_DIRECT_BLOCKS;
+    if (a < 0) {
+        real_index = inode->data.blocks.dir_blocks[block_index];
     } else {
-        pr_err("We failed to retrieve the real block number of the block with index `%d`\n", block_index);
+        // Check if the index is among the INDIRECT blocks.
+        b = a - p;
+        if (b < 0) {
+            // Read the indirect block (which contains pointers to the next set of blocks).
+            ext2_read_block(fs, inode->data.blocks.indir_block, cache);
+            // Compute the index inside the final block.
+            real_index = ((uint32_t *)cache)[a];
+
+        } else {
+            // Check if the index is among the DOUBLY-INDIRECT blocks.
+            c = b - p * p;
+            if (c < 0) {
+                // Compute the indirect indices.
+                c = b / p;
+                d = b - c * p;
+                // Read the doubly-indirect block (which contains pointers to indirect blocks).
+                ext2_read_block(fs, inode->data.blocks.doubly_indir_block, cache);
+                // Compute the index inside the indirect block.
+                ext2_read_block(fs, cache[c], cache);
+                // Compute the index inside the final block.
+                real_index = cache[d];
+
+            } else {
+                // Check if the index is among the TREBLY-INDIRECT blocks.
+                d = c - p * p * p;
+                if (d < 0) {
+                    e = c / (p * p);
+                    f = (c - e * p * p) / p;
+                    g = (c - e * p * p - f * p);
+                    // Read the trebly-indirect block (which contains pointers to doubly-indirect blocks).
+                    ext2_read_block(fs, inode->data.blocks.trebly_indir_block, cache);
+                    // Read the doubly-indirect block (which contains pointers to indirect blocks).
+                    ext2_read_block(fs, cache[e], cache);
+                    // Read the indirect block (which contains pointers to the next set of blocks).
+                    ext2_read_block(fs, cache[f], cache);
+                    // Compute the index inside the final block.
+                    real_index = cache[g];
+                } else {
+                    pr_err("We failed to retrieve the real block number of the block with index `%d`\n", block_index);
+                }
+            }
+        }
     }
     // Free the cache.
     kmem_cache_free(cache);
-    // Return the real index.
     return real_index;
 }
 
@@ -1449,68 +1459,43 @@ static ssize_t ext2_write_inode_block(ext2_filesystem_t *fs, ext2_inode_t *inode
 /// @return the amount we read.
 static ssize_t ext2_read_inode_data(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t inode_index, off_t offset, size_t nbyte, char *buffer)
 {
-    // Check if the file is empty.
-    if (inode->size == 0) {
-        return 0;
-    }
-
-    uint32_t end;
-    if ((offset + nbyte) > inode->size) {
-        end = inode->size;
-    } else {
-        end = offset + nbyte;
-    }
-    uint32_t start_block  = offset / fs->block_size;
-    uint32_t end_block    = end / fs->block_size;
-    uint32_t end_size     = end - end_block * fs->block_size;
-    uint32_t size_to_read = end - offset;
+    //
+    uint32_t end_offset = (inode->size >= offset + nbyte) ? (offset + nbyte) : (inode->size);
+    // Convert the offset/size to some starting/end iblock numbers.
+    uint32_t start_block = offset / fs->block_size;
+    uint32_t end_block   = end_offset / fs->block_size;
+    // What's the offset into the start block.
+    uint32_t start_off = offset % fs->block_size;
+    // How much bytes to read for the end block.
+    uint32_t end_size = end_offset - end_block * fs->block_size;
 
     // Allocate the cache.
     uint8_t *cache = kmem_cache_alloc(fs->ext2_buffer_cache, GFP_KERNEL);
     // Clean the cache.
     memset(cache, 0, fs->block_size);
 
-    if (start_block == end_block) {
+    uint32_t curr_off = 0, left, right;
+    for (uint32_t block_index = start_block; block_index <= end_block; ++block_index) {
+        left = 0, right = fs->block_size - 1;
         // Read the real block.
-        if (ext2_read_inode_block(fs, inode, start_block, cache) == -1) {
+        if (ext2_read_inode_block(fs, inode, block_index, cache) == -1) {
             pr_err("Failed to read the inode block `%d`\n", start_block);
-            goto free_cache_return_error;
+            break;
+        }
+        if (block_index == start_block) {
+            left = start_off;
+        }
+        if (block_index == end_block) {
+            right = end_size - 1;
         }
         // Copy the content back to the buffer.
-        memcpy(buffer, (uint8_t *)(((uintptr_t)cache) + ((uintptr_t)offset % fs->block_size)), size_to_read);
-    } else {
-        uint32_t block_offset;
-        uint32_t blocks_read = 0;
-        for (block_offset = start_block; block_offset < end_block; block_offset++, blocks_read++) {
-            // Read the real block.
-            if (ext2_read_inode_block(fs, inode, block_offset, cache) == -1) {
-                pr_err("Failed to read the inode block `%d`\n", block_offset);
-                goto free_cache_return_error;
-            }
-            // Copy the content back to the buffer.
-            if (block_offset == start_block) {
-                memcpy(buffer, (uint8_t *)(((uintptr_t)cache) + ((uintptr_t)offset % fs->block_size)), fs->block_size - (offset % fs->block_size));
-            } else {
-                memcpy(buffer + fs->block_size * blocks_read - (offset % fs->block_size), cache, fs->block_size);
-            }
-        }
-        if (end_size) {
-            // Read the real block.
-            if (ext2_read_inode_block(fs, inode, end_block, cache) == -1) {
-                pr_err("Failed to read the inode block `%d`\n", block_offset);
-                goto free_cache_return_error;
-            }
-            // Copy the content back to the buffer.
-            memcpy(buffer + fs->block_size * blocks_read - (offset % fs->block_size), cache, end_size);
-        }
+        memcpy(buffer + curr_off, cache + left, (right - left + 1));
+        //
+        curr_off = curr_off + (right - left + 1);
     }
     // Free the cache.
     kmem_cache_free(cache);
-    return size_to_read;
-free_cache_return_error:
-    // Free the cache.
-    kmem_cache_free(cache);
-    return -1;
+    return end_offset - offset;
 }
 
 /// @brief Writes the data on the given inode.
@@ -2414,7 +2399,7 @@ static vfs_file_t *ext2_open(const char *path, int flags, mode_t mode)
         return NULL;
     }
 
-    ext2_dump_inode(&inode);
+    ext2_dump_inode(fs, &inode);
 
     if (!vfs_valid_open_permissions(flags, inode.mode, inode.uid, inode.gid)) {
         pr_err("Task does not have access permission.\n");
@@ -3054,7 +3039,8 @@ static int __ext2_setattr(ext2_inode_t *inode, struct iattr *attr)
     return 0;
 }
 
-static int __ext2_check_setattr_permission(uid_t file_owner) {
+static int __ext2_check_setattr_permission(uid_t file_owner)
+{
     task_struct *task = scheduler_get_current_process();
     return task->uid == 0 || task->uid == file_owner;
 }
@@ -3091,7 +3077,7 @@ static int ext2_fsetattr(vfs_file_t *file, struct iattr *attr)
 /// @return 0 if success.
 static int ext2_setattr(const char *path, struct iattr *attr)
 {
-    pr_debug("ext2_setattr(%s, %p)\n", path, stat);
+    pr_debug("ext2_setattr(%s, %p)\n", path, attr);
     // Get the absolute path.
     char absolute_path[PATH_MAX];
     // If the first character is not the '/' then get the absolute path.
@@ -3185,11 +3171,6 @@ static vfs_file_t *ext2_mount(vfs_file_t *block_device, const char *path)
     fs->blocks_per_block_count = fs->block_size / 512U;
     // Compute the number of block pointers per block.
     fs->pointers_per_block = fs->block_size / 4U;
-    // Compute the index of indirect blocks.
-    fs->indirect_blocks_index        = EXT2_INDIRECT_BLOCKS + fs->pointers_per_block;
-    fs->doubly_indirect_blocks_index = EXT2_INDIRECT_BLOCKS + fs->pointers_per_block * (fs->pointers_per_block + 1);
-    fs->trebly_indirect_blocks_index = fs->doubly_indirect_blocks_index +
-                                       (fs->pointers_per_block * fs->pointers_per_block) * (fs->pointers_per_block + 1);
     // Compute the number of block groups.
     fs->block_groups_count = fs->superblock.blocks_count / fs->superblock.blocks_per_group;
     if (fs->superblock.blocks_per_group * fs->block_groups_count < fs->superblock.blocks_count) {
