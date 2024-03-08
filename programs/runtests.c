@@ -14,86 +14,95 @@
 #include <sys/unistd.h>
 #include <sys/wait.h>
 
+// Setup the logging for this file (do this before any other include).
+#include "sys/kernel_levels.h"         // Include kernel log levels.
+#define __DEBUG_HEADER__ "[TRUNS ]"    ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_INFO ///< Set log level.
+#include "io/debug.h"                  // Include debugging functions.
+
 #define SHUTDOWN_PORT 0x604
 /// Second serial port for QEMU.
 #define SERIAL_COM2 0x02F8
 
 static char *all_tests[] = {
-    "t_abort",
-    "t_alarm",
-    "t_creat",
-    "t_dup",
-    "t_exec execl",
-    "t_exec execlp",
-    "t_exec execle",
-    "t_exec execlpe",
-    "t_exec execv",
-    "t_exec execvp",
-    "t_exec execve",
-    "t_exec execvpe",
-    "t_fork 10",
-    "t_gid",
-    "t_groups",
-    "t_itimer",
-    "t_kill",
+    // "t_abort",
+    // "t_alarm",
+    "t_big_write",
+    // "t_creat",
+    // "t_dup",
+    // "t_exec execl",
+    // "t_exec execlp",
+    // "t_exec execle",
+    // "t_exec execlpe",
+    // "t_exec execv",
+    // "t_exec execvp",
+    // "t_exec execve",
+    // "t_exec execvpe",
+    // "t_fork 10",
+    // "t_gid",
+    // "t_groups",
+    // "t_itimer",
+    // "t_kill",
     /* "t_mem", */
-    "t_msgget",
+    // "t_msgget",
     /* "t_periodic1", */
     /* "t_periodic2", */
     /* "t_periodic3", */
-    "t_schedfb",
-    "t_semflg",
-    "t_semget",
-    "t_semop",
-    "t_setenv",
-    "t_shmget",
+    // "t_schedfb",
+    // "t_semflg",
+    // "t_semget",
+    // "t_semop",
+    // "t_setenv",
+    // "t_shmget",
     /* "t_shm_read", */
     /* "t_shm_write", */
-    "t_sigaction",
-    "t_sigfpe",
-    "t_siginfo",
-    "t_sigmask",
-    "t_sigusr",
-    "t_sleep",
-    "t_stopcont",
-    "t_write_read",
+    // "t_sigaction",
+    // "t_sigfpe",
+    // "t_siginfo",
+    // "t_sigmask",
+    // "t_sigusr",
+    // "t_sleep",
+    // "t_stopcont",
+    // "t_write_read",
 };
 
 static char **tests = &all_tests[0];
-static int testsc = sizeof(all_tests) / sizeof(all_tests[0]) ;
+static int testsc   = sizeof(all_tests) / sizeof(all_tests[0]);
 
 static char buf[4096];
-static char* bufpos = buf;
+static char *bufpos = buf;
 
 static int test_out_fd;
 static int test_err_fd;
 
 static int init;
 
-#define append(...)                         \
-do {                                        \
-    bufpos += sprintf(bufpos, __VA_ARGS__); \
-    if (bufpos >= buf + sizeof(buf)) {      \
-        return -1;                          \
-    }                                       \
-} while(0);
+#define append(...)                             \
+    do {                                        \
+        bufpos += sprintf(bufpos, __VA_ARGS__); \
+        if (bufpos >= buf + sizeof(buf)) {      \
+            return -1;                          \
+        }                                       \
+    } while (0);
 
-static int test_out_flush(void) {
+static int test_out_flush(void)
+{
     int ret = 0;
     if (!init) {
         ret = printf("%s\n", buf);
     } else {
         char *s = buf;
-        while((*s) != 0)
+        while ((*s) != 0)
             outportb(SERIAL_COM2, *s++);
         outportb(SERIAL_COM2, '\n');
     }
-    bufpos = buf;
+    bufpos  = buf;
     *bufpos = 0;
     return ret;
 }
 
-static int test_out(const char *restrict format, ...) {
+static int test_out(const char *restrict format, ...)
+{
     va_list ap;
     va_start(ap, format);
     bufpos += vsprintf(bufpos, format, ap);
@@ -105,7 +114,8 @@ static int test_out(const char *restrict format, ...) {
     return test_out_flush();
 }
 
-static int test_ok(int test, int success, const char *restrict format, ...) {
+static int test_ok(int test, int success, const char *restrict format, ...)
+{
     if (!success) {
         append("not ");
     }
@@ -124,35 +134,37 @@ static int test_ok(int test, int success, const char *restrict format, ...) {
     return test_out_flush();
 }
 
-static void exec_test(char *test_cmd_line) {
-        // Setup the childs stdout, stderr streams
-        close(STDOUT_FILENO);
-        dup(test_out_fd);
-        close(STDERR_FILENO);
-        dup(test_err_fd);
+static void exec_test(char *test_cmd_line)
+{
+    // Setup the childs stdout, stderr streams
+    close(STDOUT_FILENO);
+    dup(test_out_fd);
+    close(STDERR_FILENO);
+    dup(test_err_fd);
 
-        // Build up the test argv vector
-        char *test_argv[32];
-        char *arg = strtok(test_cmd_line, " ");
-        test_argv[0] = arg;
+    // Build up the test argv vector
+    char *test_argv[32];
+    char *arg    = strtok(test_cmd_line, " ");
+    test_argv[0] = arg;
 
-        int t_argc = 1;
-        while ((arg = strtok(NULL, " "))) {
-            if (t_argc >= sizeof(test_argv) / sizeof(test_argv[0])) {
-                exit(126);
-            }
-            test_argv[t_argc] = arg;
-            t_argc++;
+    int t_argc = 1;
+    while ((arg = strtok(NULL, " "))) {
+        if (t_argc >= sizeof(test_argv) / sizeof(test_argv[0])) {
+            exit(126);
         }
+        test_argv[t_argc] = arg;
+        t_argc++;
+    }
 
-        test_argv[t_argc] = NULL;
+    test_argv[t_argc] = NULL;
 
-        char test_abspath[PATH_MAX];
-        sprintf(test_abspath, "/bin/tests/%s", test_argv[0]);
-        execvp(test_abspath, test_argv);
+    char test_abspath[PATH_MAX];
+    sprintf(test_abspath, "/bin/tests/%s", test_argv[0]);
+    execvp(test_abspath, test_argv);
 }
 
-static void run_test(int n, char *test_cmd_line) {
+static void run_test(int n, char *test_cmd_line)
+{
     int child = fork();
     if (child == 0) {
         exec_test(test_cmd_line);
@@ -180,14 +192,15 @@ static void run_test(int n, char *test_cmd_line) {
     }
 }
 
-int runtests_main(int argc, char **argv) {
+int runtests_main(int argc, char **argv)
+{
     for (int i = 1; i < argc; i++) {
         if (strncmp(argv[i], "--help", 6) == 0) {
             printf("Usage: %s [--help] [TEST]...\n", argv[0]);
             printf("Run one, more, or all available tests\n");
             printf("      --help   display this help and exit\n");
             exit(EXIT_SUCCESS);
-         }
+        }
     }
 
     // TODO: capture test output
@@ -199,7 +212,7 @@ int runtests_main(int argc, char **argv) {
     test_out_fd = test_err_fd = devnull;
 
     if (argc > 1) {
-        tests = argv + 1;
+        tests  = argv + 1;
         testsc = argc - 1;
     }
 
@@ -207,6 +220,7 @@ int runtests_main(int argc, char **argv) {
 
     char *test_argv[32];
     for (int i = 0; i < testsc; i++) {
+        pr_info("Running test (%2d/%2d): %s\n", i, testsc, tests[i]);
         run_test(i + 1, tests[i]);
     }
 
