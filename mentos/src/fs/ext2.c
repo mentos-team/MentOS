@@ -715,7 +715,8 @@ static void ext2_set_bitmap_bit(uint8_t *buffer, uint32_t linear_index, ext2_blo
 /// @param task the task to check permission for.
 /// @param inode the inode to check permission.
 /// @return 1 on success, 0 otherwise.
-static int __valid_x_permission(task_struct *task, ext2_inode_t *inode) {
+static int __valid_x_permission(task_struct *task, ext2_inode_t *inode)
+{
     // Init, and all root processes always have permission
     if (!task || (task->pid == 0) || (task->uid == 0)) {
         return 1;
@@ -724,7 +725,7 @@ static int __valid_x_permission(task_struct *task, ext2_inode_t *inode) {
     // Check the owners permission
     if (task->uid == inode->uid) {
         return inode->mode & S_IXUSR;
-    // Check the groups permission
+        // Check the groups permission
     } else if (task->gid == inode->gid) {
         return inode->mode & S_IXGRP;
     }
@@ -1106,198 +1107,174 @@ static uint32_t ext2_allocate_block(ext2_filesystem_t *fs)
     return block_index;
 }
 
+/// @brief Allocates a new block for storing block indices, for an inode.
+/// @param fs the filesystem.
+/// @param current_index the current index, or if 0, where we store the new one.
+/// @return 0 on success, -1 on failure.
+static int __ext2_allocate_indexing_block_for_inode(ext2_filesystem_t *fs, uint32_t *current_index)
+{
+    if (!(*current_index)) {
+        // Allocate a new block.
+        uint32_t block_index = ext2_allocate_block(fs);
+        if (block_index == 0) {
+            pr_err("We failed to allocate a new block for inode block indexing.\n");
+            return -1;
+        }
+        // Update the index.
+        *current_index = block_index;
+    }
+    return 0;
+}
+
+/// @brief Allocates a new block for storing block indices, for a block containing block indices.
+/// @param fs the filesystem.
+/// @param indexing_block the index of block that contains the indices.
+/// @param cache the cache were we load the block content.
+/// @param index the index inside the list of indices.
+/// @return 0 on success, -1 on failure.
+static int __ext2_read_and_allocate_indexing_block(
+    ext2_filesystem_t *fs,
+    uint32_t indexing_block,
+    uint8_t *cache,
+    uint32_t index)
+{
+    // Read the doubly-indirect block (which contains pointers to indirect blocks).
+    ext2_read_block(fs, indexing_block, cache);
+    // Check if we need to allocate a new block.
+    if (!((uint32_t *)cache)[index]) {
+        // Allocate a new block.
+        uint32_t block_index = ext2_allocate_block(fs);
+        if (block_index == 0) {
+            pr_err("We failed to allocate a new block for inode block indexing.\n");
+            return -1;
+        }
+        // Update the index.
+        ((uint32_t *)cache)[index] = block_index;
+        // Write the indexing block.
+        if (ext2_write_block(fs, indexing_block, cache) < 0) {
+            pr_err("We failed to write back the indexing block, after generating a new block for inode block indexing.\n");
+            return -1;
+        }
+    }
+    return 0;
+}
+
 /// @brief Sets the real block index based on the block index inside an inode.
 /// @param fs the filesystem.
 /// @param inode the inode which we are working with.
 /// @param block_index the block index inside the inode.
 /// @param real_index the real block number.
 /// @return 0 on success, a negative value on failure.
-static int ext2_set_real_block_index(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t inode_index, uint32_t block_index, uint32_t real_index)
+static int ext2_set_real_block_index(
+    ext2_filesystem_t *fs,
+    ext2_inode_t *inode,
+    uint32_t inode_index,
+    uint32_t block_index,
+    uint32_t real_index)
 {
-    unsigned int p = fs->block_size / 4;
+    // Get the number of pointers per block.
+    unsigned int p = fs->pointers_per_block;
+    // Help compute the indices.
+    int a, b, c, d, e, f, g;
+    // We save intermediate indices here.
+    uint32_t index_save;
+    // Result of the operation.
+    int ret = 0;
 
-    // Set the direct block pointer.
-    if (block_index < EXT2_DIRECT_BLOCKS) {
+    // Allocate the cache.
+    uint8_t *cache = kmem_cache_alloc(fs->ext2_buffer_cache, GFP_KERNEL);
+    // Clean the cache.
+    memset(cache, 0, fs->block_size);
+
+    // Are we setting a DIRECT block pointer.
+    a = ((int)block_index) - EXT2_DIRECT_BLOCKS;
+    if (a <= 0) {
         inode->data.blocks.dir_blocks[block_index] = real_index;
-        return 0;
+    } else {
+        // Are we setting an INDIRECT block pointer.
+        b = a - p;
+        if (b <= 0) {
+            // Check that the indirect block points to a valid block.
+            if (__ext2_allocate_indexing_block_for_inode(fs, &inode->data.blocks.indir_block)) {
+                ret = -1;
+                goto early_exit;
+            }
+            // Read the indirect block (which contains pointers to the next set of blocks).
+            ext2_read_block(fs, inode->data.blocks.indir_block, cache);
+            // Write the index inside the final block.
+            ((uint32_t *)cache)[a] = real_index;
+            // Write back the indirect block.
+            ext2_write_block(fs, inode->data.blocks.indir_block, cache);
+
+        } else {
+            // Are we setting a DOUBLY-INDIRECT block.
+            c = b - p * p;
+            if (c <= 0) {
+                c = b / p;
+                d = b - c * p;
+                // Check that the indirect block points to a valid block.
+                if (__ext2_allocate_indexing_block_for_inode(fs, &inode->data.blocks.doubly_indir_block)) {
+                    ret = -1;
+                    goto early_exit;
+                }
+                // Read the doubly-indirect block (which contains pointers to indirect blocks).
+                if (__ext2_read_and_allocate_indexing_block(fs, inode->data.blocks.doubly_indir_block, cache, c)) {
+                    ret = -1;
+                    goto early_exit;
+                }
+                // Save the index.
+                index_save = ((uint32_t *)cache)[c];
+                // Compute the index inside the indirect block.
+                ext2_read_block(fs, index_save, cache);
+                // Write the index inside the final block.
+                ((uint32_t *)cache)[d] = real_index;
+                // Write back the indirect block.
+                ext2_write_block(fs, index_save, cache);
+
+            } else {
+                d = c - p * p * p;
+                if (d <= 0) {
+                    e = c / (p * p);
+                    f = (c - e * p * p) / p;
+                    g = (c - e * p * p - f * p);
+
+                    // Check that the indirect block points to a valid block.
+                    if (__ext2_allocate_indexing_block_for_inode(fs, &inode->data.blocks.trebly_indir_block)) {
+                        ret = -1;
+                        goto early_exit;
+                    }
+                    // Read the doubly-indirect block (which contains pointers to indirect blocks).
+                    if (__ext2_read_and_allocate_indexing_block(fs, inode->data.blocks.trebly_indir_block, cache, e)) {
+                        ret = -1;
+                        goto early_exit;
+                    }
+                    // Save the index.
+                    index_save = ((uint32_t *)cache)[e];
+                    // Read the doubly-indirect block (which contains pointers to indirect blocks).
+                    if (__ext2_read_and_allocate_indexing_block(fs, index_save, cache, f)) {
+                        ret = -1;
+                        goto early_exit;
+                    }
+                    // Save the index.
+                    index_save = ((uint32_t *)cache)[f];
+                    // Read the indirect block (which contains pointers to the next set of blocks).
+                    ext2_read_block(fs, index_save, cache);
+                    // Write the index inside the final block.
+                    ((uint32_t *)cache)[g] = real_index;
+                    // Write back the indirect block.
+                    ext2_write_block(fs, index_save, cache);
+
+                } else {
+                    pr_err("We failed to write the real block number of the block with index `%d`\n", block_index);
+                    ret = -1;
+                }
+            }
+        }
     }
-
-    // Check if the index is among the indirect blocks.
-    if (block_index < (EXT2_DIRECT_BLOCKS + p)) {
-        // Compute the indirect indices.
-        uint32_t a = block_index - EXT2_DIRECT_BLOCKS;
-
-        // Check that the indirect block points to a valid block.
-        if (!inode->data.blocks.indir_block) {
-            // Allocate a new block.
-            uint32_t new_block_index = ext2_allocate_block(fs);
-            if (new_block_index == 0) {
-                return -1;
-            }
-            // Update the index.
-            inode->data.blocks.indir_block = new_block_index;
-            // Update the inode.
-            if (ext2_write_inode(fs, inode, inode_index) == -1) {
-                return -1;
-            }
-        }
-
-        // Allocate the cache.
-        uint8_t *cache = kmem_cache_alloc(fs->ext2_buffer_cache, GFP_KERNEL);
-        // Clean the cache.
-        memset(cache, 0, fs->block_size);
-        // Read the indirect block (which contains pointers to the next set of blocks).
-        ext2_read_block(fs, inode->data.blocks.indir_block, cache);
-        // Write the index inside the final block.
-        ((uint32_t *)cache)[a] = real_index;
-        // Write back the indirect block.
-        ext2_read_block(fs, inode->data.blocks.indir_block, cache);
-        // Free the cache.
-        kmem_cache_free(cache);
-        return 0;
-    }
-
-    // For simplicity.
-    uint32_t p1 = fs->pointers_per_block, p2 = fs->pointers_per_block * fs->pointers_per_block;
-
-    // Check if the index is among the doubly-indirect blocks.
-    if (block_index < (EXT2_DIRECT_BLOCKS + p + p * p)) {
-        // Compute the indirect indices.
-        uint32_t a = block_index - EXT2_DIRECT_BLOCKS;
-        uint32_t b = a - p1;
-        uint32_t c = b / p1;
-        uint32_t d = b - (c * p1);
-
-        // Check that the indirect block points to a valid block.
-        if (!inode->data.blocks.doubly_indir_block) {
-            // Allocate a new block.
-            uint32_t new_block_index = ext2_allocate_block(fs);
-            if (new_block_index == 0) {
-                return -1;
-            }
-            // Update the index.
-            inode->data.blocks.doubly_indir_block = new_block_index;
-            // Update the inode.
-            if (ext2_write_inode(fs, inode, inode_index) == -1) {
-                return -1;
-            }
-        }
-
-        // Allocate the cache.
-        uint8_t *cache = kmem_cache_alloc(fs->ext2_buffer_cache, GFP_KERNEL);
-        // Clean the cache.
-        memset(cache, 0, fs->block_size);
-
-        // Read the doubly-indirect block (which contains pointers to indirect blocks).
-        ext2_read_block(fs, inode->data.blocks.doubly_indir_block, cache);
-        // Check that the indirect block points to a valid block.
-        if (!((uint32_t *)cache)[c]) {
-            // Allocate a new block.
-            uint32_t new_block_index = ext2_allocate_block(fs);
-            if (new_block_index == 0) {
-                // Free the cache.
-                kmem_cache_free(cache);
-                return -1;
-            }
-            // Update the index.
-            ((uint32_t *)cache)[c] = new_block_index;
-            // Write the doubly-indirect block back.
-            ext2_write_block(fs, inode->data.blocks.doubly_indir_block, cache);
-        }
-
-        // Compute the index inside the indirect block.
-        ext2_read_block(fs, ((uint32_t *)cache)[c], cache);
-        // Write the index inside the final block.
-        ((uint32_t *)cache)[d] = real_index;
-        // Write back the indirect block.
-        ext2_read_block(fs, ((uint32_t *)cache)[c], cache);
-        // Free the cache.
-        kmem_cache_free(cache);
-        return 0;
-    }
-
-    // Check if the index is among the trebly-indirect blocks.
-    if (block_index < (EXT2_DIRECT_BLOCKS + p + p * p + p)) {
-        // Compute the indirect indices.
-        uint32_t a = block_index - EXT2_DIRECT_BLOCKS;
-        uint32_t b = a - p1;
-        uint32_t c = b - p2;
-        uint32_t d = c / p2;
-        uint32_t e = c - (d * p2);
-        uint32_t f = e / p1;
-        uint32_t g = e - (f * p1);
-        uint32_t block_index_save;
-
-        // Check that the indirect block points to a valid block.
-        if (!inode->data.blocks.trebly_indir_block) {
-            // Allocate a new block.
-            uint32_t new_block_index = ext2_allocate_block(fs);
-            if (new_block_index == 0) {
-                return -1;
-            }
-            // Update the index.
-            inode->data.blocks.trebly_indir_block = new_block_index;
-            // Update the inode.
-            if (ext2_write_inode(fs, inode, inode_index) == -1) {
-                return -1;
-            }
-        }
-
-        // Allocate the cache.
-        uint8_t *cache = kmem_cache_alloc(fs->ext2_buffer_cache, GFP_KERNEL);
-        // Clean the cache.
-        memset(cache, 0, fs->block_size);
-
-        // Read the trebly-indirect block (which contains pointers to doubly-indirect blocks).
-        ext2_read_block(fs, inode->data.blocks.trebly_indir_block, cache);
-        // Check that the indirect block points to a valid block.
-        if (!((uint32_t *)cache)[d]) {
-            // Allocate a new block.
-            uint32_t new_block_index = ext2_allocate_block(fs);
-            if (new_block_index == 0) {
-                // Free the cache.
-                kmem_cache_free(cache);
-                return -1;
-            }
-            // Update the index.
-            ((uint32_t *)cache)[d] = new_block_index;
-            // Write the doubly-indirect block back.
-            ext2_write_block(fs, inode->data.blocks.trebly_indir_block, cache);
-        }
-        // Save the block index, otherwise with the next read we lose the block index list [d].
-        block_index_save = ((uint32_t *)cache)[d];
-
-        // Read the doubly-indirect block (which contains pointers to indirect blocks).
-        ext2_read_block(fs, block_index_save, cache);
-        // Check that the indirect block points to a valid block.
-        if (!((uint32_t *)cache)[f]) {
-            // Allocate a new block.
-            uint32_t new_block_index = ext2_allocate_block(fs);
-            if (new_block_index == 0) {
-                // Free the cache.
-                kmem_cache_free(cache);
-                return -1;
-            }
-            // Update the index.
-            ((uint32_t *)cache)[f] = new_block_index;
-            // Write the doubly-indirect block back.
-            ext2_write_block(fs, block_index_save, cache);
-        }
-
-        // Get the next group index.
-        block_index_save = ((uint32_t *)cache)[f];
-        // Read the indirect block (which contains pointers to the next set of blocks).
-        ext2_read_block(fs, block_index_save, cache);
-        // Write the index inside the final block.
-        ((uint32_t *)cache)[g] = real_index;
-        // Write back the indirect block.
-        ext2_read_block(fs, block_index_save, cache);
-        // Free the cache.
-        kmem_cache_free(cache);
-        return 0;
-    }
-    pr_err("We failed to write the real block number of the block with index `%d`\n", block_index);
-    return -1;
+early_exit:
+    // Free the cache.
+    kmem_cache_free(cache);
+    return ret;
 }
 
 /// @brief Returns the real block index starting from a block index inside an inode.
@@ -1395,7 +1372,7 @@ static int ext2_allocate_inode_block(ext2_filesystem_t *fs, ext2_inode_t *inode,
     if (inode->blocks_count < blocks_count) {
         // Set the blocks count.
         inode->blocks_count = blocks_count;
-        pr_debug("Setting the block count for inode `%d` to `%d` blocks.\n", inode_index, blocks_count / fs->blocks_per_block_count);
+        pr_debug("The new block count for inode %d is %d blocks.\n", inode_index, inode->blocks_count);
     }
     // Update the inode.
     if (ext2_write_inode(fs, inode, inode_index) == -1) {
@@ -1436,7 +1413,12 @@ static ssize_t ext2_read_inode_block(ext2_filesystem_t *fs, ext2_inode_t *inode,
 static ssize_t ext2_write_inode_block(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t inode_index, uint32_t block_index, uint8_t *buffer)
 {
     while (block_index >= (inode->blocks_count / fs->blocks_per_block_count)) {
-        ext2_allocate_inode_block(fs, inode, inode_index, (inode->blocks_count / fs->blocks_per_block_count));
+        pr_crit("ext2_write_inode_block: %u >= %u (%u / %u)\n",
+                block_index, inode->blocks_count / fs->blocks_per_block_count,
+                inode->blocks_count, fs->blocks_per_block_count);
+        if (ext2_allocate_inode_block(fs, inode, inode_index, (inode->blocks_count / fs->blocks_per_block_count)) < 0) {
+            pr_crit("Failed to write allocate inode block\n");
+        }
     }
     // Get the real index.
     uint32_t real_index = ext2_get_real_block_index(fs, inode, block_index);
