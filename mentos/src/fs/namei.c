@@ -160,8 +160,19 @@ resolve_abspath:
                 }
 
                 vfs_file_t *file;
-                file = vfs_open_abspath(abspath, O_RDONLY, 0);
-                if (!file) { return -errno; }
+                // No permissions are required for path resolution.
+                // Correct permissions of all path components must be
+                // checked by the filesystem implementation.
+                file = vfs_open_abspath(abspath, 0, 0);
+                if (!file) {
+                    // This is the last path component and we want to create
+                    // it anyway.
+                    if (!sep_after_cur && (flags & CREAT_LAST_COMPONENT)) {
+                        // Just copy the component into the buffer
+                        goto copy_path_component;
+                    }
+                    return -errno;
+                }
 
                 stat_t statbuf;
                 int ret = vfs_fstat(file, &statbuf);

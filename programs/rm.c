@@ -32,7 +32,7 @@ int main(int argc, char **argv)
 {
     if (argc <= 1) {
         printf("%s: missing operand.\n", argv[0]);
-        printf("Try '%s --help' for more information.\n\n", argv[0]);
+        printf("Try '%s --help' for more information.\n", argv[0]);
         return 1;
     }
     if (strcmp(argv[1], "--help") == 0) {
@@ -71,7 +71,7 @@ int main(int argc, char **argv)
         }
     } else {
         if (unlink(argv[argc - 1]) < 0) {
-            printf("%s: cannot remove '%s': %s\n\n", argv[0], argv[argc - 1], strerror(errno));
+            printf("%s: cannot remove '%s': %s\n", argv[0], argv[argc - 1], strerror(errno));
             return 1;
         }
     }

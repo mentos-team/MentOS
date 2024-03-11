@@ -1,0 +1,17 @@
+SYNOPSIS
+    man [PAGE]
+
+DESCRIPTION
+    man is the system's manual pager.  The page argument given to man is
+    normally the name of a program or utility.
+
+    Conventional section names include SYNOPSIS, CONFIGURATION, DESCRIPTION,
+    OPTIONS, EXIT STATUS and EXAMPLE.
+
+    The following conventions apply to the SYNOPSIS section and can be used as
+    a guide in other sections.
+
+    [-abc]             any or all arguments within [ ] are optional.
+    -a|-b              options delimited by | cannot be used together.
+    argument ...       argument is repeatable.
+    [expression] ...   entire expression within [ ] is repeatable.

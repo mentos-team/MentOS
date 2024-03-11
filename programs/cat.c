@@ -17,7 +17,7 @@ int main(int argc, char **argv)
 {
     if (argc < 2) {
         printf("cat: missing operand.\n");
-        printf("Try 'cat --help' for more information.\n\n");
+        printf("Try 'cat --help' for more information.\n");
         return 1;
     }
     // Check if `--help` is provided.
@@ -25,7 +25,7 @@ int main(int argc, char **argv)
         if ((strcmp(argv[i], "--help") == 0) || (strcmp(argv[i], "-h") == 0)) {
             printf("Prints the content of the given file.\n");
             printf("Usage:\n");
-            printf("    cat <file>\n\n");
+            printf("    cat <file>\n");
             return 0;
         }
     }
@@ -41,6 +41,7 @@ int main(int argc, char **argv)
         fd = open(filepath, O_RDONLY, 0);
         if (fd < 0) {
             printf("cat: %s: %s\n", filepath, strerror(errno));
+            ret = EXIT_FAILURE;
             continue;
         }
         ssize_t bytes_read = 0;

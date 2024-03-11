@@ -23,7 +23,7 @@ int main(int argc, char *argv[])
         return 0;
     }
     if (rmdir(argv[1]) == -1) {
-        printf("%s: failed to remove '%s': %s\n\n", argv[0], argv[1], strerror(errno));
+        printf("%s: failed to remove '%s': %s\n", argv[0], argv[1], strerror(errno));
         return 1;
     }
     return 0;

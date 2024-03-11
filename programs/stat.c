@@ -40,7 +40,7 @@ int main(int argc, char** argv)
 {
     if (argc != 2) {
         printf("%s: missing operand.\n", argv[0]);
-        printf("Try '%s --help' for more information.\n\n", argv[0]);
+        printf("Try '%s --help' for more information.\n", argv[0]);
         exit(1);
     }
     if (strcmp(argv[1], "--help") == 0) {

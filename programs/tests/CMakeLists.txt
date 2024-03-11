@@ -33,6 +33,7 @@ set(TEST_LIST
     t_mem.c
     t_shm_read.c
     t_spwd.c
+    t_big_write.c
 )
 
 # Set the directory where the compiled binaries will be placed.

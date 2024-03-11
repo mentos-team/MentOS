@@ -1,0 +1,5 @@
+SYNOPSIS
+    sleep NUMBER
+
+DESCRIPTION
+    Pause for NUMBER seconds.
