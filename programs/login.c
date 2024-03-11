@@ -21,6 +21,8 @@
 #include <sys/mman.h>
 #include <sys/wait.h>
 
+#include <crypt/sha256.h>
+
 /// Maximum length of credentials.
 #define CREDENTIALS_LENGTH 50
 
@@ -62,10 +64,13 @@ static inline void __print_message_file(const char *file)
     int fd;
 
     // Try to open the file.
-    if ((fd = open(file, O_RDONLY, 0600)) == -1)
+    if ((fd = open(file, O_RDONLY, 0600)) == -1) {
         return;
+    }
     // Read the lines of the file.
     while ((nbytes = read(fd, buffer, sizeof(char) * 256)) > 0) {
+        // Tap the string.
+        buffer[nbytes] = 0;
         // TODO: Parsing message files for special characters (such as `\t` for time).
         printf("%s\n", buffer);
         total += nbytes;
@@ -203,8 +208,17 @@ int main(int argc, char **argv)
             continue;
         }
 
+        unsigned char hash[SHA256_BLOCK_SIZE]       = { 0 };
+        char hash_string[SHA256_BLOCK_SIZE * 2 + 1] = { 0 };
+        SHA256_ctx_t ctx;
+        sha256_init(&ctx);
+        for (unsigned i = 0; i < 100000; ++i)
+            sha256_update(&ctx, (unsigned char *)password, strlen(password));
+        sha256_final(&ctx, hash);
+        sha256_bytes_to_hex(hash, SHA256_BLOCK_SIZE, hash_string, SHA256_BLOCK_SIZE * 2 + 1);
+
         // Check if the password is correct.
-        if (strcmp(spwd->sp_pwdp, password) != 0) {
+        if (strcmp(spwd->sp_pwdp, hash_string) != 0) {
             printf("Wrong password.\n");
             continue;
         }
