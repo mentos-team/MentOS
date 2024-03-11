@@ -574,7 +574,7 @@ static void ext2_dump_inode(ext2_filesystem_t *fs, ext2_inode_t *inode)
 
     pr_debug("DBlocks : %u\n", inode->data.blocks.doubly_indir_block);
     pr_debug("TBlocks : %u\n", inode->data.blocks.trebly_indir_block);
-    pr_debug("Symlink : %s\n", inode->data.symlink);
+    pr_debug("Symlink : %s\n", inode->data.symlink ? inode->data.symlink : "");
     pr_debug("Generation : %u file_acl : %u dir_acl : %u\n",
              inode->generation, inode->file_acl, inode->dir_acl);
     (void)timeinfo;
@@ -594,7 +594,7 @@ static void ext2_dump_bgdt(ext2_filesystem_t *fs)
     // Allocate the cache.
     uint8_t *cache = kmem_cache_alloc(fs->ext2_buffer_cache, GFP_KERNEL);
     // Clean the cache.
-    memset(cache, 0, fs->block_size);
+    memset(cache, 0, fs->ext2_buffer_cache->size);
     for (uint32_t i = 0; i < fs->block_groups_count; ++i) {
         // Get the pointer to the current group descriptor.
         ext2_group_descriptor_t *gd = &(fs->block_groups[i]);
@@ -664,6 +664,16 @@ static uint32_t ext2_get_group_index_from_inode(ext2_filesystem_t *fs, uint32_t 
 {
     assert(inode_index != 0 && "Your are trying to access inode 0.");
     return (inode_index - 1) / fs->superblock.inodes_per_group;
+}
+
+/// @brief Determining which block group contains a given block.
+/// @param fs the ext2 filesystem structure.
+/// @param block_index the block index.
+/// @return the group index.
+/// @details Remember that inode addressing starts from 1.
+static uint32_t ext2_get_group_index_from_block_index(ext2_filesystem_t *fs, uint32_t block_index)
+{
+    return block_index / fs->superblock.blocks_per_group;
 }
 
 /// @brief Determining the offest of the inode inside the block group.
@@ -822,7 +832,7 @@ static inline int ext2_find_free_block_in_group(ext2_filesystem_t *fs, uint8_t *
 /// @param fs the ext2 filesystem structure.
 /// @param cache the cache from which we read the bgdt data.
 /// @param linear_index the output variable where we store the linear indes to the free block.
-/// @return 1 if we found a free block, 0 otherwise.
+/// @return 1 if we found a free block abd chace contains the block_bitmap, 0 otherwise.
 static inline int ext2_find_free_block(
     ext2_filesystem_t *fs,
     uint8_t *cache,
@@ -962,7 +972,7 @@ static int ext2_read_inode(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t 
     // Allocate the cache.
     uint8_t *cache = kmem_cache_alloc(fs->ext2_buffer_cache, GFP_KERNEL);
     // Clean the cache.
-    memset(cache, 0, fs->block_size);
+    memset(cache, 0, fs->ext2_buffer_cache->size);
     // Read the block containing the inode table.
     ext2_read_block(fs, fs->block_groups[group_index].inode_table + block_index, cache);
     // Save the inode content.
@@ -1001,7 +1011,7 @@ static int ext2_write_inode(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t
     // Allocate the cache.
     uint8_t *cache = kmem_cache_alloc(fs->ext2_buffer_cache, GFP_KERNEL);
     // Clean the cache.
-    memset(cache, 0, fs->block_size);
+    memset(cache, 0, fs->ext2_buffer_cache->size);
     // Read the block containing the inode table.
     ext2_read_block(fs, fs->block_groups[group_index].inode_table + block_index, cache);
     // Write the inode.
@@ -1030,10 +1040,10 @@ static int ext2_allocate_inode(ext2_filesystem_t *fs, unsigned preferred_group)
     // Allocate the cache.
     uint8_t *cache = kmem_cache_alloc(fs->ext2_buffer_cache, GFP_KERNEL);
     // Clean the cache.
-    memset(cache, 0, fs->block_size);
+    memset(cache, 0, fs->ext2_buffer_cache->size);
     // Search for a free inode.
     if (!ext2_find_free_inode(fs, cache, &group_index, &linear_index, preferred_group)) {
-        pr_warning("Failed to find a free inode.\n");
+        pr_err("Failed to find a free inode.\n");
         // Unlock the filesystem.
         spinlock_unlock(&fs->spinlock);
         // Free the cache.
@@ -1042,20 +1052,28 @@ static int ext2_allocate_inode(ext2_filesystem_t *fs, unsigned preferred_group)
     }
     // Compute the inode index.
     inode_index = (group_index * fs->superblock.inodes_per_group) + linear_index + 1U;
+    // Log the allocation of the inode.
+    pr_debug("Allocate inode(group_index:%u, linear_index:%4u, inode_index:%4u) : %u\n", group_index, linear_index, inode_index);
     // Set the inode as occupied.
     ext2_set_bitmap_bit(cache, linear_index, ext2_block_status_occupied);
     // Write back the inode bitmap.
-    ext2_write_block(fs, fs->block_groups[group_index].inode_bitmap, cache);
+    if (ext2_write_block(fs, fs->block_groups[group_index].inode_bitmap, cache) < 0) {
+        pr_warning("We failed to write back the block_bitmap.\n");
+    }
     // Free the cache.
     kmem_cache_free(cache);
     // Reduce the number of free inodes.
     fs->block_groups[group_index].free_inodes_count -= 1;
     // Update the bgdt.
-    ext2_write_bgdt(fs);
+    if (ext2_write_bgdt(fs) < 0) {
+        pr_warning("Failed to write BGDT.\n");
+    }
     // Reduce the number of inodes inside the superblock.
     fs->superblock.free_inodes_count -= 1;
     // Update the superblock.
-    ext2_write_superblock(fs);
+    if (ext2_write_superblock(fs) < 0) {
+        pr_warning("Failed to write superblock.\n");
+    }
     // Unlock the filesystem.
     spinlock_unlock(&fs->spinlock);
     // Return the inode.
@@ -1073,10 +1091,10 @@ static uint32_t ext2_allocate_block(ext2_filesystem_t *fs)
     // Allocate the cache.
     uint8_t *cache = kmem_cache_alloc(fs->ext2_buffer_cache, GFP_KERNEL);
     // Clean the cache.
-    memset(cache, 0, fs->block_size);
+    memset(cache, 0, fs->ext2_buffer_cache->size);
     // Search for a free block.
     if (!ext2_find_free_block(fs, cache, &group_index, &linear_index)) {
-        pr_warning("Failed to find a free block.\n");
+        pr_err("Failed to find a free block.\n");
         // Unlock the filesystem.
         spinlock_unlock(&fs->spinlock);
         // Free the cache.
@@ -1088,18 +1106,27 @@ static uint32_t ext2_allocate_block(ext2_filesystem_t *fs)
     // Set the block as occupied.
     ext2_set_bitmap_bit(cache, linear_index, ext2_block_status_occupied);
     // Update the bitmap.
-    ext2_write_block(fs, fs->block_groups[group_index].block_bitmap, cache);
+    if (ext2_write_block(fs, fs->block_groups[group_index].block_bitmap, cache) < 0) {
+        pr_err("We failed to write back the block_bitmap.\n");
+    }
     // Decrease the number of free blocks inside the BGDT entry.
     fs->block_groups[group_index].free_blocks_count -= 1;
     // Update the BGDT.
-    ext2_write_bgdt(fs);
+    if (ext2_write_bgdt(fs) < 0) {
+        pr_warning("Failed to write BGDT.\n");
+    }
     // Decrease the number of free blocks inside the superblock.
-    fs->superblock.free_blocks_count -= 1;
+    fs->superblock.free_blocks_count--;
     // Update the superblock.
-    ext2_write_superblock(fs);
-    // Empty out the new block.
-    memset(cache, 0, fs->block_size);
-    ext2_write_block(fs, block_index, cache);
+    if (ext2_write_superblock(fs) < 0) {
+        pr_warning("Failed to write superblock.\n");
+    }
+    // Empty out the new block content.
+    memset(cache, 0, fs->ext2_buffer_cache->size);
+    // Write the empty content of the new block.
+    if (ext2_write_block(fs, block_index, cache) < 0) {
+        pr_err("We failed to clean the content of the newly allocated block.\n");
+    }
     // Free the cache.
     kmem_cache_free(cache);
     // Unlock the spinlock.
@@ -1184,7 +1211,7 @@ static int ext2_set_real_block_index(
     // Allocate the cache.
     uint8_t *cache = kmem_cache_alloc(fs->ext2_buffer_cache, GFP_KERNEL);
     // Clean the cache.
-    memset(cache, 0, fs->block_size);
+    memset(cache, 0, fs->ext2_buffer_cache->size);
 
     // Are we setting a DIRECT block pointer.
     a = ((int)block_index) - EXT2_DIRECT_BLOCKS;
@@ -1294,7 +1321,7 @@ static uint32_t ext2_get_real_block_index(ext2_filesystem_t *fs, ext2_inode_t *i
     // Allocate the cache.
     uint8_t *cache = kmem_cache_alloc(fs->ext2_buffer_cache, GFP_KERNEL);
     // Clean the cache.
-    memset(cache, 0, fs->block_size);
+    memset(cache, 0, fs->ext2_buffer_cache->size);
 
     // Check if the index is among the DIRECT blocks.
     a = block_index - EXT2_DIRECT_BLOCKS;
@@ -1338,6 +1365,7 @@ static uint32_t ext2_get_real_block_index(ext2_filesystem_t *fs, ext2_inode_t *i
                     ext2_read_block(fs, cache[f], cache);
                     // Compute the index inside the final block.
                     real_index = cache[g];
+
                 } else {
                     pr_err("We failed to retrieve the real block number of the block with index `%d`\n", block_index);
                 }
@@ -1398,7 +1426,7 @@ static ssize_t ext2_read_inode_block(ext2_filesystem_t *fs, ext2_inode_t *inode,
         return -1;
     }
     // Log the address to the inode block.
-    pr_debug("Read inode block  (block:%4u real:%4u)\n", block_index, real_index);
+    pr_debug("Read inode block (block:%4u, real:%4u)\n", block_index, real_index);
     // Read the block.
     return ext2_read_block(fs, real_index, buffer);
 }
@@ -1413,9 +1441,9 @@ static ssize_t ext2_read_inode_block(ext2_filesystem_t *fs, ext2_inode_t *inode,
 static ssize_t ext2_write_inode_block(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t inode_index, uint32_t block_index, uint8_t *buffer)
 {
     while (block_index >= (inode->blocks_count / fs->blocks_per_block_count)) {
-        pr_crit("ext2_write_inode_block: %u >= %u (%u / %u)\n",
-                block_index, inode->blocks_count / fs->blocks_per_block_count,
-                inode->blocks_count, fs->blocks_per_block_count);
+        pr_debug("ext2_write_inode_block: %u >= %u (%u / %u)\n",
+                 block_index, inode->blocks_count / fs->blocks_per_block_count,
+                 inode->blocks_count, fs->blocks_per_block_count);
         if (ext2_allocate_inode_block(fs, inode, inode_index, (inode->blocks_count / fs->blocks_per_block_count)) < 0) {
             pr_crit("Failed to write allocate inode block\n");
         }
@@ -1441,7 +1469,7 @@ static ssize_t ext2_write_inode_block(ext2_filesystem_t *fs, ext2_inode_t *inode
 /// @return the amount we read.
 static ssize_t ext2_read_inode_data(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t inode_index, off_t offset, size_t nbyte, char *buffer)
 {
-    //
+    // Get the offset to the end of the portion we are reading.
     uint32_t end_offset = (inode->size >= offset + nbyte) ? (offset + nbyte) : (inode->size);
     // Convert the offset/size to some starting/end iblock numbers.
     uint32_t start_block = offset / fs->block_size;
@@ -1454,14 +1482,15 @@ static ssize_t ext2_read_inode_data(ext2_filesystem_t *fs, ext2_inode_t *inode, 
     // Allocate the cache.
     uint8_t *cache = kmem_cache_alloc(fs->ext2_buffer_cache, GFP_KERNEL);
     // Clean the cache.
-    memset(cache, 0, fs->block_size);
+    memset(cache, 0, fs->ext2_buffer_cache->size);
 
-    uint32_t curr_off = 0, left, right;
+    uint32_t curr_off = 0, left, right, ret = end_offset - offset;
     for (uint32_t block_index = start_block; block_index <= end_block; ++block_index) {
         left = 0, right = fs->block_size - 1;
         // Read the real block.
         if (ext2_read_inode_block(fs, inode, block_index, cache) == -1) {
-            pr_err("Failed to read the inode block `%d`\n", start_block);
+            pr_err("Failed to read the inode block %u of inode %u\n", block_index, inode_index);
+            ret = -1;
             break;
         }
         if (block_index == start_block) {
@@ -1472,12 +1501,12 @@ static ssize_t ext2_read_inode_data(ext2_filesystem_t *fs, ext2_inode_t *inode, 
         }
         // Copy the content back to the buffer.
         memcpy(buffer + curr_off, cache + left, (right - left + 1));
-        //
-        curr_off = curr_off + (right - left + 1);
+        // Move the offset.
+        curr_off += (right - left + 1);
     }
     // Free the cache.
     kmem_cache_free(cache);
-    return end_offset - offset;
+    return ret;
 }
 
 /// @brief Writes the data on the given inode.
@@ -1490,69 +1519,53 @@ static ssize_t ext2_read_inode_data(ext2_filesystem_t *fs, ext2_inode_t *inode, 
 /// @return the amount written.
 static ssize_t ext2_write_inode_data(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t inode_index, off_t offset, size_t nbyte, char *buffer)
 {
-    uint32_t end = offset + nbyte;
-    if (end > inode->size) {
-        inode->size = end;
+    if ((offset + nbyte) > inode->size) {
+        inode->size = offset + nbyte;
         if (ext2_write_inode(fs, inode, inode_index) == -1) {
             pr_err("Failed to write the inode `%d`\n", inode_index);
             return -1;
         }
     }
-    uint32_t start_block   = offset / fs->block_size;
-    uint32_t end_block     = end / fs->block_size;
-    uint32_t end_size      = end - end_block * fs->block_size;
-    uint32_t size_to_write = end - offset;
+    // Get the offset to the end of the portion we are writing.
+    uint32_t end_offset = (inode->size >= offset + nbyte) ? (offset + nbyte) : (inode->size);
+    // Convert the offset/size to some starting/end iblock numbers.
+    uint32_t start_block = offset / fs->block_size;
+    uint32_t end_block   = end_offset / fs->block_size;
+    // What's the offset into the start block.
+    uint32_t start_off = offset % fs->block_size;
+    // How much bytes to read for the end block.
+    uint32_t end_size = end_offset - end_block * fs->block_size;
 
     // Allocate the cache.
     uint8_t *cache = kmem_cache_alloc(fs->ext2_buffer_cache, GFP_KERNEL);
     // Clean the cache.
-    memset(cache, 0, fs->block_size);
+    memset(cache, 0, fs->ext2_buffer_cache->size);
 
-    if (start_block == end_block) {
-        // Read the real block, if we fail is not a problem.
-        ext2_read_inode_block(fs, inode, start_block, cache);
+    uint32_t curr_off = 0, left, right, ret = end_offset - offset;
+    for (uint32_t block_index = start_block; block_index <= end_block; ++block_index) {
+        left = 0, right = fs->block_size;
+        // Read the real block. Do not check for
+        ext2_read_inode_block(fs, inode, block_index, cache);
+        if (block_index == start_block) {
+            left = start_off;
+        }
+        if (block_index == end_block) {
+            right = end_size - 1;
+        }
         // Copy the content back to the buffer.
-        memcpy((uint8_t *)(((uintptr_t)cache) + ((uintptr_t)offset % fs->block_size)), buffer, size_to_write);
+        memcpy(cache + left, buffer + curr_off, (right - left + 1));
+        // Move the offset.
+        curr_off += (right - left + 1);
         // Write the block back.
-        if (!ext2_write_inode_block(fs, inode, inode_index, start_block, cache)) {
-            pr_err("Failed to write the inode block `%d`\n", start_block);
-            goto free_cache_return_error;
-        }
-    } else {
-        uint32_t block_offset, blocks_read = 0;
-        for (block_offset = start_block; block_offset < end_block; ++block_offset, ++blocks_read) {
-            // Read the real block, if we fail is not a problem.
-            ext2_read_inode_block(fs, inode, block_offset, cache);
-            if (block_offset == start_block) {
-                // Copy the content back to the buffer.
-                memcpy((uint8_t *)(((uintptr_t)cache) + ((uintptr_t)offset % fs->block_size)), buffer, fs->block_size - (offset % fs->block_size));
-            } else {
-                // Copy the content back to the buffer.
-                memcpy(cache, buffer + fs->block_size * blocks_read - (offset % fs->block_size), fs->block_size);
-            }
-            // Write the block back.
-            if (!ext2_write_inode_block(fs, inode, inode_index, block_offset, cache)) {
-                pr_err("Failed to write the inode block `%d`\n", start_block);
-                goto free_cache_return_error;
-            }
-        }
-        if (end_size) {
-            // Read the real block, if we fail is not a problem.
-            ext2_read_inode_block(fs, inode, end_block, cache);
-            // Copy the content back to the buffer.
-            memcpy(cache, buffer + fs->block_size * blocks_read - (offset % fs->block_size), end_size);
-            // Write the block back.
-            if (ext2_write_inode_block(fs, inode, inode_index, end_block, cache)) {
-                pr_err("Failed to write the inode block `%d`\n", start_block);
-                goto free_cache_return_error;
-            }
+        if (!ext2_write_inode_block(fs, inode, inode_index, block_index, cache)) {
+            pr_err("Failed to write the inode block %u of inode %u\n", block_index, inode_index);
+            ret = -1;
+            break;
         }
     }
-    return size_to_write;
-free_cache_return_error:
     // Free the cache.
     kmem_cache_free(cache);
-    return -1;
+    return ret;
 }
 
 // ============================================================================
@@ -1669,15 +1682,23 @@ static int ext2_clean_inode_content(ext2_filesystem_t *fs, ext2_inode_t *inode, 
     size_t cache_size = fs->ext2_buffer_cache->size;
     // Clean the cache.
     memset(cache, 0, cache_size);
+    //
+    int ret = 0;
     for (ssize_t offset = 0, to_write; offset < inode->size;) {
         // We do not want to extend the size of the inode.
         to_write = max(min(offset + cache_size, inode->size), 0);
         // Override the content.
-        offset += ext2_write_inode_data(fs, inode, inode_index, offset, to_write, (char *)cache);
+        ssize_t written = ext2_write_inode_data(fs, inode, inode_index, offset, to_write, (char *)cache);
+        if (written < 0) {
+            pr_err("Failed to clean content of inode %d\n", inode_index);
+            ret = -1;
+            break;
+        }
+        offset += written;
     }
     // Free the cache.
     kmem_cache_free(cache);
-    return 0;
+    return ret;
 }
 
 // ============================================================================
@@ -1744,7 +1765,7 @@ static int ext2_allocate_direntry(
     // Allocate the cache.
     uint8_t *cache = kmem_cache_alloc(fs->ext2_buffer_cache, GFP_KERNEL);
     // Clean the cache.
-    memset(cache, 0, fs->block_size);
+    memset(cache, 0, fs->ext2_buffer_cache->size);
     // Save the previous direntry.
     ext2_dirent_t *previous = NULL;
     // Iterate the directory entries.
@@ -1882,7 +1903,7 @@ static int ext2_find_direntry(ext2_filesystem_t *fs, ino_t ino, const char *name
     // Allocate the cache.
     uint8_t *cache = kmem_cache_alloc(fs->ext2_buffer_cache, GFP_KERNEL);
     // Clean the cache.
-    memset(cache, 0, fs->block_size);
+    memset(cache, 0, fs->ext2_buffer_cache->size);
     ext2_direntry_iterator_t it = ext2_direntry_iterator_begin(fs, cache, &inode);
     for (; ext2_direntry_iterator_valid(&it); ext2_direntry_iterator_next(&it)) {
         // Skip unused inode.
@@ -2228,6 +2249,7 @@ static int ext2_create_inode(
 /// It is equivalent to: open(path, O_WRONLY|O_CREAT|O_TRUNC, mode)
 static vfs_file_t *ext2_creat(const char *path, mode_t mode)
 {
+    pr_debug("ext2_creat(path: \"%s\", mode: %d)\n", path, mode);
     // Get the name of the directory.
     char parent_path[PATH_MAX];
     if (!dirname(path, parent_path, sizeof(parent_path))) {
@@ -2294,7 +2316,10 @@ static vfs_file_t *ext2_creat(const char *path, mode_t mode)
     }
 
     // Clean the content of the newly created file.
-    ext2_clean_inode_content(fs, &inode, inode_index);
+    if (ext2_clean_inode_content(fs, &inode, inode_index) < 0) {
+        pr_err("Failed to clean the content of the newly created inode.\n");
+        goto close_parent_return_null;
+    }
 
     // Initialize the file.
     if (ext2_allocate_direntry(fs, parent->ino, inode_index, file_name, ext2_file_type_regular_file) == -1) {
@@ -2381,8 +2406,6 @@ static vfs_file_t *ext2_open(const char *path, int flags, mode_t mode)
         return NULL;
     }
 
-    ext2_dump_inode(fs, &inode);
-
     if (!vfs_valid_open_permissions(flags, inode.mode, inode.uid, inode.gid)) {
         pr_err("Task does not have access permission.\n");
         errno = EACCES;
@@ -2391,7 +2414,11 @@ static vfs_file_t *ext2_open(const char *path, int flags, mode_t mode)
 
     // Check if the file is a regular file, and the user wants to write and truncate.
     if (bitmask_exact(inode.mode, EXT2_S_IFREG) && (bitmask_exact(flags, O_RDWR | O_TRUNC) || bitmask_exact(flags, O_RDONLY | O_TRUNC))) {
-        ext2_clean_inode_content(fs, &inode, direntry.inode);
+        // Clean the content of the newly created file.
+        if (ext2_clean_inode_content(fs, &inode, direntry.inode) < 0) {
+            pr_err("Failed to clean the content of the newly created inode.\n");
+            return NULL;
+        }
     }
 
     vfs_file_t *file = ext2_find_vfs_file_with_inode(fs, direntry.inode);
@@ -2458,7 +2485,7 @@ static int ext2_unlink(const char *path)
     }
     // Allocate the cache and clean it.
     uint8_t *cache = kmem_cache_alloc(fs->ext2_buffer_cache, GFP_KERNEL);
-    memset(cache, 0, fs->block_size);
+    memset(cache, 0, fs->ext2_buffer_cache->size);
     // Read the block where the direntry resides.
     if (ext2_read_inode_block(fs, &parent_inode, search.block_index, cache) == -1) {
         pr_err("Failed to read the parent inode block `%d`\n", search.block_index);
@@ -2572,8 +2599,12 @@ static ssize_t ext2_write(vfs_file_t *file, const void *buffer, off_t offset, si
         return -1;
     }
     ssize_t written = ext2_write_inode_data(fs, &inode, file->ino, offset, nbyte, (char *)buffer);
-    // Update the file length
-    file->length = inode.size;
+    if (written < 0) {
+        pr_err("Failed to write on file %s.\n", file->name);
+    } else {
+        // Update the file length.
+        file->length = inode.size;
+    }
     return written;
 }
 
@@ -2707,7 +2738,7 @@ static ssize_t ext2_getdents(vfs_file_t *file, dirent_t *dirp, off_t doff, size_
     // Allocate the cache.
     uint8_t *cache = kmem_cache_alloc(fs->ext2_buffer_cache, GFP_KERNEL);
     // Clean the cache.
-    memset(cache, 0, fs->block_size);
+    memset(cache, 0, fs->ext2_buffer_cache->size);
     // Initialize the iterator.
     ext2_direntry_iterator_t it = ext2_direntry_iterator_begin(fs, cache, &inode);
     for (; ext2_direntry_iterator_valid(&it) && (written < count); ext2_direntry_iterator_next(&it)) {
@@ -2819,7 +2850,9 @@ static int ext2_mkdir(const char *path, mode_t permission)
     // Increase the number of directories inside the group.
     fs->block_groups[group_index].used_dirs_count += 1;
     // Update the bgdt.
-    ext2_write_bgdt(fs);
+    if (ext2_write_bgdt(fs) < 0) {
+        pr_warning("Failed to write BGDT.\n");
+    }
     // Write the inode.
     if (ext2_write_inode(fs, &inode, inode_index) == -1) {
         pr_err("Failed to write the newly created inode.\n");
@@ -2900,7 +2933,7 @@ static int ext2_rmdir(const char *path)
 
     // Allocate the cache and clean it.
     uint8_t *cache = kmem_cache_alloc(fs->ext2_buffer_cache, GFP_KERNEL);
-    memset(cache, 0, fs->block_size);
+    memset(cache, 0, fs->ext2_buffer_cache->size);
 
     // Read the inode of the direntry we want to unlink.
     ext2_inode_t inode;
