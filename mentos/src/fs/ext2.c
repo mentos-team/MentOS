@@ -287,8 +287,8 @@ typedef struct ext2_dirent_t {
     uint8_t name_len;
     /// File type code.
     uint8_t file_type;
-    /// File name.
-    char *name;
+    /// File name, of maximum EXT2_NAME_LEN length.
+    char name[];
 } ext2_dirent_t;
 
 /// @brief The details regarding the filesystem.
@@ -330,14 +330,25 @@ typedef struct ext2_filesystem_t {
 
 /// @brief Structure used when searching for a directory entry.
 typedef struct ext2_direntry_search_t {
-    /// Pointer to the direntry where we store the search results.
-    ext2_dirent_t *direntry;
     /// The inode of the parent directory.
     ino_t parent_inode;
     /// The index of the block where the direntry resides.
     uint32_t block_index;
     /// The offest of the direntry inside the block.
     uint32_t block_offset;
+    /// The direntry where we store the search results, this one has a name of maximum size.
+    struct {
+        /// Number of the inode that this directory entry points to.
+        uint32_t inode;
+        /// Length of this directory entry. Must be a multiple of 4.
+        uint16_t rec_len;
+        /// Length of the file name.
+        uint8_t name_len;
+        /// File type code.
+        uint8_t file_type;
+        /// File name of maximum size.
+        char name[EXT2_NAME_LEN];
+    } direntry;
 } ext2_direntry_search_t;
 
 // ============================================================================
@@ -839,7 +850,7 @@ static inline int ext2_find_free_block_in_group(ext2_filesystem_t *fs, uint8_t *
 /// @param fs the ext2 filesystem structure.
 /// @param cache the cache from which we read the bgdt data.
 /// @param block_offset the output variable where we store the linear indes to the free block.
-/// @return 1 if we found a free block abd chace contains the block_bitmap, 0 otherwise.
+/// @return 1 if we found a free block, 0 otherwise.
 static inline int ext2_find_free_block(
     ext2_filesystem_t *fs,
     uint8_t *cache,
@@ -1930,15 +1941,12 @@ static int ext2_allocate_direntry(
             goto free_cache_return_error;
         }
     }
-
     ext2_dirent_t *new_direntry = (ext2_dirent_t *)((uintptr_t)cache + it.block_offset);
-
-    new_direntry->inode     = inode_index;
-    new_direntry->rec_len   = fs->block_size - it.block_offset;
-    new_direntry->name_len  = strlen(name);
-    new_direntry->file_type = file_type;
-    memcpy(new_direntry->name, name, strlen(name));
-
+    new_direntry->inode         = inode_index;
+    new_direntry->rec_len       = fs->block_size - it.block_offset;
+    new_direntry->name_len      = strlen(name);
+    new_direntry->file_type     = file_type;
+    memcpy(new_direntry->name, name, new_direntry->name_len);
     if (ext2_write_inode_block(fs, &parent_inode, parent_inode_index, it.block_index, cache) == -1) {
         pr_err("Failed to update the block of the father directory.\n");
         goto free_cache_return_error;
@@ -1974,11 +1982,6 @@ static int ext2_find_direntry(ext2_filesystem_t *fs, ino_t ino, const char *name
         pr_err("You provided a NULL search.\n");
         return -1;
     }
-    if (search->direntry == NULL) {
-        pr_err("You provided a NULL direntry.\n");
-        return -1;
-    }
-    //pr_debug("ext2_find_direntry(ino: %d, name: \"%s\")\n", ino, name);
     // Get the inode associated with the file.
     ext2_inode_t inode;
     if (ext2_read_inode(fs, &inode, ino) == -1) {
@@ -2008,12 +2011,14 @@ static int ext2_find_direntry(ext2_filesystem_t *fs, ino_t ino, const char *name
             continue;
         }
         // Chehck the name.
-        if (!strcmp(it.direntry->name, ".") && !strcmp(name, "/")) {
+        if (!strncmp(it.direntry->name, ".", 1) && !strncmp(name, "/", 1)) {
             break;
         }
         // Check if the entry has the same name.
         if (strlen(name) == it.direntry->name_len) {
+            pr_crit("Compare `%s` with `%s` for %u.\n", it.direntry->name, name, it.direntry->name_len);
             if (!strncmp(it.direntry->name, name, it.direntry->name_len)) {
+                pr_crit("Found it!\n");
                 break;
             }
         }
@@ -2024,35 +2029,23 @@ static int ext2_find_direntry(ext2_filesystem_t *fs, ino_t ino, const char *name
     if (it.direntry == NULL)
         goto free_cache_return_error;
     // Copy the direntry.
-    memcpy(search->direntry, it.direntry, sizeof(ext2_dirent_t));
-    // Close the name.
-    search->direntry->name[search->direntry->name_len] = 0;
+    search->direntry.inode     = it.direntry->inode;
+    search->direntry.rec_len   = it.direntry->rec_len;
+    search->direntry.name_len  = it.direntry->name_len;
+    search->direntry.file_type = it.direntry->file_type;
+    strncpy(search->direntry.name, it.direntry->name, it.direntry->name_len);
+    search->direntry.name[it.direntry->name_len] = 0;
     // Copy the index of the block containing the direntry.
     search->block_index = it.block_index;
     // Copy the offset of the direntry inside the block.
     search->block_offset = it.block_offset;
     // Free the cache.
     kmem_cache_free(cache);
-
-    //pr_debug("ext2_find_direntry(ino: %d, name: \"%s\") -> (ino: %d, name: \"%s\")\n",
-    //         ino, name, search->direntry->inode, search->direntry->name);
     return 0;
 free_cache_return_error:
     // Free the cache.
     kmem_cache_free(cache);
     return -1;
-}
-
-/// @brief Finds the entry with the given `name` inside the `directory`.
-/// @param directory the directory in which we perform the search.
-/// @param name the name of the entry we are looking for.
-/// @param search the output variable where we save the info about the entry.
-/// @return 0 on success, -1 on failure.
-static int ext2_find_direntry_simple(ext2_filesystem_t *fs, ino_t ino, const char *name, ext2_dirent_t *direntry)
-{
-    // Prepare the structure for the search.
-    ext2_direntry_search_t search = { .direntry = direntry, .block_index = 0, .block_offset = 0, .parent_inode = 0 };
-    return ext2_find_direntry(fs, ino, name, &search);
 }
 
 /// @brief Searches the entry specified in `path` starting from `directory`.
@@ -2075,10 +2068,6 @@ static int ext2_resolve_path(vfs_file_t *directory, char *path, ext2_direntry_se
         pr_err("You provided a NULL search.\n");
         return -1;
     }
-    if (search->direntry == NULL) {
-        pr_err("You provided a NULL direntry.\n");
-        return -1;
-    }
     // Get the filesystem.
     ext2_filesystem_t *fs = (ext2_filesystem_t *)directory->device;
     if (fs == NULL) {
@@ -2094,9 +2083,8 @@ static int ext2_resolve_path(vfs_file_t *directory, char *path, ext2_direntry_se
     char *token    = strtok(tmp_path, "/");
     while (token) {
         if (!ext2_find_direntry(fs, ino, token, search)) {
-            ino = search->direntry->inode;
+            ino = search->direntry.inode;
         } else {
-            memset(search->direntry, 0, sizeof(ext2_dirent_t));
             kfree(tmp_path);
             return -1;
         }
@@ -2104,37 +2092,6 @@ static int ext2_resolve_path(vfs_file_t *directory, char *path, ext2_direntry_se
     }
     kfree(tmp_path);
     return 0;
-}
-
-/// @brief Searches the entry specified in `path` starting from `directory`.
-/// @param directory the directory from which we start performing the search.
-/// @param path the path of the entry we are looking for, it cna be a relative path.
-/// @param direntry the output variable where we save the found entry.
-/// @return 0 on success, -1 on failure.
-static int ext2_resolve_path_direntry(vfs_file_t *directory, char *path, ext2_dirent_t *direntry)
-{
-    // Check the pointers.
-    if (directory == NULL) {
-        pr_err("You provided a NULL directory.\n");
-        return -1;
-    }
-    if (path == NULL) {
-        pr_err("You provided a NULL path.\n");
-        return -1;
-    }
-    if (direntry == NULL) {
-        pr_err("You provided a NULL direntry.\n");
-        return -1;
-    }
-    // Prepare the structure for the search.
-    ext2_direntry_search_t search;
-    memset(&search, 0, sizeof(ext2_direntry_search_t));
-    // Initialize the search structure.
-    search.direntry     = direntry;
-    search.block_index  = 0;
-    search.block_offset = 0;
-    search.parent_inode = 0;
-    return ext2_resolve_path(directory, path, &search);
 }
 
 /// @brief Get the ext2 filesystem object starting from a path.
@@ -2369,17 +2326,18 @@ static vfs_file_t *ext2_creat(const char *path, mode_t mode)
         pr_err("The parent does not belong to an EXT2 filesystem `%s`.\n", parent->name);
         goto close_parent_return_null;
     }
-    // Prepare the structure for the direntry.
-    ext2_dirent_t direntry;
     // Prepare an inode, it will come in handy either way.
     ext2_inode_t inode;
+    // Prepare the structure for the search.
+    ext2_direntry_search_t search;
+    memset(&search, 0, sizeof(ext2_direntry_search_t));
     // Search if the entry already exists.
-    if (!ext2_find_direntry_simple(fs, parent->ino, file_name, &direntry)) {
-        if (ext2_read_inode(fs, &inode, direntry.inode) == -1) {
-            pr_err("Failed to read the inode of `%s`.\n", direntry.name);
+    if (!ext2_find_direntry(fs, parent->ino, file_name, &search)) {
+        if (ext2_read_inode(fs, &inode, search.direntry.inode) == -1) {
+            pr_err("Failed to read the inode of `%s`.\n", search.direntry.name);
             goto close_parent_return_null;
         }
-        vfs_file_t *file = ext2_find_vfs_file_with_inode(fs, direntry.inode);
+        vfs_file_t *file = ext2_find_vfs_file_with_inode(fs, search.direntry.inode);
         if (file == NULL) {
             // Allocate the memory for the file.
             file = kmem_cache_alloc(vfs_file_cache, GFP_KERNEL);
@@ -2387,7 +2345,7 @@ static vfs_file_t *ext2_creat(const char *path, mode_t mode)
                 pr_err("Failed to allocate memory for the EXT2 file.\n");
                 goto close_parent_return_null;
             }
-            if (ext2_init_vfs_file(fs, file, &inode, direntry.inode, direntry.name, direntry.name_len) == -1) {
+            if (ext2_init_vfs_file(fs, file, &inode, search.direntry.inode, search.direntry.name, search.direntry.name_len) == -1) {
                 pr_err("Failed to properly set the VFS file.\n");
                 goto close_parent_return_null;
             }
@@ -2460,25 +2418,17 @@ static vfs_file_t *ext2_open(const char *path, int flags, mode_t mode)
         pr_err("Failed to get the EXT2 filesystem for absolute path `%s`.\n", absolute_path);
         return NULL;
     }
-    // Prepare the structure for the direntry.
-    ext2_dirent_t direntry;
-    memset(&direntry, 0, sizeof(ext2_dirent_t));
     // Prepare the structure for the search.
     ext2_direntry_search_t search;
     memset(&search, 0, sizeof(ext2_direntry_search_t));
-    // Initialize the search structure.
-    search.direntry     = &direntry;
-    search.block_index  = 0;
-    search.block_offset = 0;
-    search.parent_inode = 0;
     // First check, if a file with the given name already exists.
     if (!ext2_resolve_path(fs->root, absolute_path, &search)) {
         if (bitmask_check(flags, O_CREAT) && bitmask_check(flags, O_EXCL)) {
             pr_err("A file or directory already exists at `%s` (O_CREAT | O_EXCL).\n", absolute_path);
             return NULL;
         }
-        if (bitmask_check(flags, O_DIRECTORY) && (direntry.file_type != ext2_file_type_directory)) {
-            pr_err("Directory entry `%s` is not a directory.\n", direntry.name);
+        if (bitmask_check(flags, O_DIRECTORY) && (search.direntry.file_type != ext2_file_type_directory)) {
+            pr_err("Directory entry `%s` is not a directory.\n", search.direntry.name);
             errno = ENOTDIR;
             return NULL;
         }
@@ -2491,15 +2441,15 @@ static vfs_file_t *ext2_open(const char *path, int flags, mode_t mode)
         errno = ENOENT;
         return NULL;
     }
-    if (direntry.file_type == ext2_file_type_symbolic_link) {
+    if (search.direntry.file_type == ext2_file_type_symbolic_link) {
         pr_alert("Beware, it is a symbolic link.\n");
     }
     // Prepare the structure for the inode.
     ext2_inode_t inode;
     memset(&inode, 0, sizeof(ext2_inode_t));
     // Get the inode associated with the directory entry.
-    if (ext2_read_inode(fs, &inode, direntry.inode) == -1) {
-        pr_err("Failed to read the inode of `%s`.\n", direntry.name);
+    if (ext2_read_inode(fs, &inode, search.direntry.inode) == -1) {
+        pr_err("Failed to read the inode of `%s`.\n", search.direntry.name);
         return NULL;
     }
 
@@ -2512,13 +2462,13 @@ static vfs_file_t *ext2_open(const char *path, int flags, mode_t mode)
     // Check if the file is a regular file, and the user wants to write and truncate.
     if (bitmask_exact(inode.mode, EXT2_S_IFREG) && (bitmask_exact(flags, O_RDWR | O_TRUNC) || bitmask_exact(flags, O_RDONLY | O_TRUNC))) {
         // Clean the content of the newly created file.
-        if (ext2_clean_inode_content(fs, &inode, direntry.inode) < 0) {
+        if (ext2_clean_inode_content(fs, &inode, search.direntry.inode) < 0) {
             pr_err("Failed to clean the content of the newly created inode.\n");
             return NULL;
         }
     }
 
-    vfs_file_t *file = ext2_find_vfs_file_with_inode(fs, direntry.inode);
+    vfs_file_t *file = ext2_find_vfs_file_with_inode(fs, search.direntry.inode);
     if (file == NULL) {
         // Allocate the memory for the file.
         file = kmem_cache_alloc(vfs_file_cache, GFP_KERNEL);
@@ -2526,7 +2476,7 @@ static vfs_file_t *ext2_open(const char *path, int flags, mode_t mode)
             pr_err("Failed to allocate memory for the EXT2 file.\n");
             return NULL;
         }
-        if (ext2_init_vfs_file(fs, file, &inode, direntry.inode, direntry.name, direntry.name_len) == -1) {
+        if (ext2_init_vfs_file(fs, file, &inode, search.direntry.inode, search.direntry.name, search.direntry.name_len) == -1) {
             pr_err("Failed to properly set the VFS file.\n");
             return NULL;
         }
@@ -2558,17 +2508,9 @@ static int ext2_unlink(const char *path)
         pr_err("Failed to get the EXT2 filesystem for absolute path `%s`.\n", absolute_path);
         return -ENOENT;
     }
-    // Prepare the structure for the direntry.
-    ext2_dirent_t direntry;
-    memset(&direntry, 0, sizeof(ext2_dirent_t));
     // Prepare the structure for the search.
     ext2_direntry_search_t search;
     memset(&search, 0, sizeof(ext2_direntry_search_t));
-    // Initialize the search structure.
-    search.direntry     = &direntry;
-    search.block_index  = 0;
-    search.block_offset = 0;
-    search.parent_inode = 0;
     // Resolve the path to the directory entry.
     if (ext2_resolve_path(fs->root, absolute_path, &search)) {
         pr_err("Failed to resolve path `%s`.\n", absolute_path);
@@ -2577,7 +2519,7 @@ static int ext2_unlink(const char *path)
     // Get the inode associated with the parent directory entry.
     ext2_inode_t parent_inode;
     if (ext2_read_inode(fs, &parent_inode, search.parent_inode) == -1) {
-        pr_err("ext2_stat(%s): Failed to read the inode of parent of `%s`.\n", path, direntry.name);
+        pr_err("ext2_stat(%s): Failed to read the inode of parent of `%s`.\n", path, search.direntry.name);
         return -ENOENT;
     }
     // Allocate the cache and clean it.
@@ -2606,17 +2548,17 @@ static int ext2_unlink(const char *path)
     }
     // Read the inode of the direntry we want to unlink.
     ext2_inode_t inode;
-    if (ext2_read_inode(fs, &inode, direntry.inode) == -1) {
-        pr_err("Failed to read the inode of `%s`.\n", direntry.name);
+    if (ext2_read_inode(fs, &inode, search.direntry.inode) == -1) {
+        pr_err("Failed to read the inode of `%s`.\n", search.direntry.name);
         goto free_cache_return_error;
     }
     if (--inode.links_count == 0) {
         // Free the inode.
-        ext2_free_inode(fs, &inode, direntry.inode);
+        ext2_free_inode(fs, &inode, search.direntry.inode);
     } else {
         // Update the inode.
-        if (ext2_write_inode(fs, &inode, direntry.inode) == -1) {
-            pr_err("Failed to update the inode of `%s`.\n", direntry.name);
+        if (ext2_write_inode(fs, &inode, search.direntry.inode) == -1) {
+            pr_err("Failed to update the inode of `%s`.\n", search.direntry.name);
             goto free_cache_return_error;
         }
     }
@@ -2909,13 +2851,12 @@ static int ext2_mkdir(const char *path, mode_t permission)
         pr_err("Failed to get the EXT2 filesystem for absolute path `%s`.\n", absolute_path);
         return -ENOENT;
     }
-    // Prepare the structure for the direntry.
-    ext2_dirent_t direntry;
-    memset(&direntry, 0, sizeof(ext2_dirent_t));
+    // Prepare the structure for the search.
+    ext2_direntry_search_t search;
     // Prepare an inode, it will come in handy either way.
     ext2_inode_t inode;
     // Search if the entry already exists.
-    if (!ext2_resolve_path_direntry(fs->root, absolute_path, &direntry)) {
+    if (!ext2_resolve_path(fs->root, absolute_path, &search)) {
         pr_err("Directory already exists.\n");
         return -EEXIST;
     }
@@ -3011,17 +2952,9 @@ static int ext2_rmdir(const char *path)
         pr_err("Failed to get the EXT2 filesystem for absolute path `%s`.\n", absolute_path);
         return -ENOENT;
     }
-    // Prepare the structure for the direntry.
-    ext2_dirent_t direntry;
-    memset(&direntry, 0, sizeof(ext2_dirent_t));
     // Prepare the structure for the search.
     ext2_direntry_search_t search;
     memset(&search, 0, sizeof(ext2_direntry_search_t));
-    // Initialize the search structure.
-    search.direntry     = &direntry;
-    search.block_index  = 0;
-    search.block_offset = 0;
-    search.parent_inode = 0;
     // Resolve the path to the directory entry.
     if (ext2_resolve_path(fs->root, absolute_path, &search)) {
         pr_err("Failed to resolve path `%s`.\n", absolute_path);
@@ -3030,7 +2963,7 @@ static int ext2_rmdir(const char *path)
     // Get the inode associated with the parent directory entry.
     ext2_inode_t parent_inode;
     if (ext2_read_inode(fs, &parent_inode, search.parent_inode) == -1) {
-        pr_err("ext2_stat(%s): Failed to read the inode of parent of `%s`.\n", path, direntry.name);
+        pr_err("ext2_stat(%s): Failed to read the inode of parent of `%s`.\n", path, search.direntry.name);
         return -ENOENT;
     }
 
@@ -3040,13 +2973,13 @@ static int ext2_rmdir(const char *path)
 
     // Read the inode of the direntry we want to unlink.
     ext2_inode_t inode;
-    if (ext2_read_inode(fs, &inode, direntry.inode) == -1) {
-        pr_err("Failed to read the inode of `%s`.\n", direntry.name);
+    if (ext2_read_inode(fs, &inode, search.direntry.inode) == -1) {
+        pr_err("Failed to read the inode of `%s`.\n", search.direntry.name);
         goto free_cache_return_error;
     }
     // Check if the directory is empty, if it enters the loop then it means it is not empty.
     if (!ext2_directory_is_empty(fs, cache, &inode)) {
-        pr_err("The directory is not empty `%s`.\n", direntry.name);
+        pr_err("The directory is not empty `%s`.\n", search.direntry.name);
         kmem_cache_free(cache);
         return -ENOTEMPTY;
     }
@@ -3054,8 +2987,8 @@ static int ext2_rmdir(const char *path)
     if (inode.links_count > 0) {
         inode.links_count--;
         // Update the inode.
-        if (ext2_write_inode(fs, &inode, direntry.inode) == -1) {
-            pr_err("Failed to update the inode of `%s`.\n", direntry.name);
+        if (ext2_write_inode(fs, &inode, search.direntry.inode) == -1) {
+            pr_err("Failed to update the inode of `%s`.\n", search.direntry.name);
             goto free_cache_return_error;
         }
     }
@@ -3108,24 +3041,24 @@ static int ext2_stat(const char *path, stat_t *stat)
         pr_err("Failed to get the EXT2 filesystem for absolute path `%s`.\n", absolute_path);
         return -ENOENT;
     }
-    // Prepare the structure for the direntry.
-    ext2_dirent_t direntry;
-    memset(&direntry, 0, sizeof(ext2_dirent_t));
+    // Prepare the structure for the search.
+    ext2_direntry_search_t search;
+    memset(&search, 0, sizeof(ext2_direntry_search_t));
     // Resolve the path.
-    if (ext2_resolve_path_direntry(fs->root, absolute_path, &direntry)) {
+    if (ext2_resolve_path(fs->root, absolute_path, &search)) {
         pr_err("Failed to resolve path `%s`.\n", absolute_path);
         return -ENOENT;
     }
     // Get the inode associated with the directory entry.
     ext2_inode_t inode;
-    if (ext2_read_inode(fs, &inode, direntry.inode) == -1) {
-        pr_err("ext2_stat(%s): Failed to read the inode of `%s`.\n", path, direntry.name);
+    if (ext2_read_inode(fs, &inode, search.direntry.inode) == -1) {
+        pr_err("ext2_stat(%s): Failed to read the inode of `%s`.\n", path, search.direntry.name);
         return -ENOENT;
     }
     /// ID of device containing file.
     stat->st_dev = fs->block_device->ino;
     // Set the inode.
-    stat->st_ino = direntry.inode;
+    stat->st_ino = search.direntry.inode;
     // Set the rest of the structure.
     return __ext2_stat(&inode, stat);
 }
@@ -3209,18 +3142,18 @@ static int ext2_setattr(const char *path, struct iattr *attr)
         pr_err("Failed to get the EXT2 filesystem for absolute path `%s`.\n", absolute_path);
         return -ENOENT;
     }
-    // Prepare the structure for the direntry.
-    ext2_dirent_t direntry;
-    memset(&direntry, 0, sizeof(ext2_dirent_t));
+    // Prepare the structure for the search.
+    ext2_direntry_search_t search;
+    memset(&search, 0, sizeof(ext2_direntry_search_t));
     // Resolve the path.
-    if (ext2_resolve_path_direntry(fs->root, absolute_path, &direntry)) {
+    if (ext2_resolve_path(fs->root, absolute_path, &search)) {
         pr_err("Failed to resolve path `%s`.\n", absolute_path);
         return -ENOENT;
     }
     // Get the inode associated with the directory entry.
     ext2_inode_t inode;
-    if (ext2_read_inode(fs, &inode, direntry.inode) == -1) {
-        pr_err("ext2_stat(%s): Failed to read the inode of `%s`.\n", path, direntry.name);
+    if (ext2_read_inode(fs, &inode, search.direntry.inode) == -1) {
+        pr_err("ext2_stat(%s): Failed to read the inode of `%s`.\n", path, search.direntry.name);
         return -ENOENT;
     }
 
@@ -3229,7 +3162,7 @@ static int ext2_setattr(const char *path, struct iattr *attr)
     }
 
     __ext2_setattr(&inode, attr);
-    return ext2_write_inode(fs, &inode, direntry.inode);
+    return ext2_write_inode(fs, &inode, search.direntry.inode);
 }
 
 /// @brief Mounts the block device as an EXT2 filesystem.

@@ -149,7 +149,7 @@ int test_append(const char *filename)
 
 int main(int argc, char *argv[])
 {
-    char *filename = "test.txt";
+    char *filename = "/home/user/test.txt";
 
     printf("Running `test_write_read`...\n");
     if (test_write_read(filename)) {
@@ -170,5 +170,7 @@ int main(int argc, char *argv[])
         unlink(filename);
         return EXIT_FAILURE;
     }
+    unlink(filename);
+
     return EXIT_SUCCESS;
 }
