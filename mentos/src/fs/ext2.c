@@ -4,10 +4,10 @@
 /// See LICENSE.md for details.
 
 // Setup the logging for this file (do this before any other include).
-#include "sys/kernel_levels.h"           // Include kernel log levels.
-#define __DEBUG_HEADER__ "[EXT2  ]"      ///< Change header.
-#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
-#include "io/debug.h"                    // Include debugging functions.
+#include "sys/kernel_levels.h"          // Include kernel log levels.
+#define __DEBUG_HEADER__ "[EXT2  ]"     ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_DEBUG ///< Set log level.
+#include "io/debug.h"                   // Include debugging functions.
 
 #include "assert.h"
 #include "fcntl.h"
@@ -666,17 +666,7 @@ static uint32_t ext2_get_group_index_from_inode(ext2_filesystem_t *fs, uint32_t 
     return (inode_index - 1) / fs->superblock.inodes_per_group;
 }
 
-/// @brief Determining which block group contains a given block.
-/// @param fs the ext2 filesystem structure.
-/// @param block_index the block index.
-/// @return the group index.
-/// @details Remember that inode addressing starts from 1.
-static uint32_t ext2_get_group_index_from_block_index(ext2_filesystem_t *fs, uint32_t block_index)
-{
-    return block_index / fs->superblock.blocks_per_group;
-}
-
-/// @brief Determining the offest of the inode inside the block group.
+/// @brief Determining the offest of the inode inside the inode group.
 /// @param fs the ext2 filesystem structure.
 /// @param inode_index the inode index.
 /// @return the offset of the inode inside the group.
@@ -685,6 +675,24 @@ static uint32_t ext2_get_inode_offest_in_group(ext2_filesystem_t *fs, uint32_t i
 {
     assert(inode_index != 0 && "Your are trying to access inode 0.");
     return (inode_index - 1) % fs->superblock.inodes_per_group;
+}
+
+/// @brief Determining which block group contains a given block.
+/// @param fs the ext2 filesystem structure.
+/// @param block_index the block index.
+/// @return the block group index.
+static uint32_t ext2_get_group_index_from_block(ext2_filesystem_t *fs, uint32_t block_index)
+{
+    return block_index / fs->superblock.blocks_per_group;
+}
+
+/// @brief Determining the offest of the block inside the block group.
+/// @param fs the ext2 filesystem structure.
+/// @param block_index the block index.
+/// @return the offset of the block inside the group.
+static uint32_t ext2_get_block_offset_in_group(ext2_filesystem_t *fs, uint32_t block_index)
+{
+    return block_index % fs->superblock.blocks_per_group;
 }
 
 /// @brief Determines which block contains our inode.
@@ -1058,7 +1066,7 @@ static int ext2_allocate_inode(ext2_filesystem_t *fs, unsigned preferred_group)
     ext2_set_bitmap_bit(cache, linear_index, ext2_block_status_occupied);
     // Write back the inode bitmap.
     if (ext2_write_block(fs, fs->block_groups[group_index].inode_bitmap, cache) < 0) {
-        pr_warning("We failed to write back the block_bitmap.\n");
+        pr_err("We failed to write back the block_bitmap.\n");
     }
     // Free the cache.
     kmem_cache_free(cache);
@@ -1132,6 +1140,80 @@ static uint32_t ext2_allocate_block(ext2_filesystem_t *fs)
     // Unlock the spinlock.
     spinlock_unlock(&fs->spinlock);
     return block_index;
+}
+
+/// @brief Frees a block.
+/// @param fs the filesystem.
+/// @param block_index the index of the block we are freeing.
+/// @return 0 on failure, or the index of the new block on success.
+static void ext2_free_block(ext2_filesystem_t *fs, uint32_t block_index)
+{
+    uint32_t group_index  = ext2_get_group_index_from_block(fs, block_index);
+    uint32_t block_offset = ext2_get_block_offset_in_group(fs, block_index);
+    uint32_t bitmap_index = fs->block_groups[group_index].block_bitmap;
+
+    // Allocate the cache.
+    uint8_t *cache = kmem_cache_alloc(fs->ext2_buffer_cache, GFP_KERNEL);
+    // Clean the cache.
+    memset(cache, 0, fs->ext2_buffer_cache->size);
+
+    ext2_read_block(fs, fs->block_groups[group_index].block_bitmap, cache);
+
+    cache[block_offset / 8] &= ~(1 << (block_offset % 8));
+
+    // Update the bitmap.
+    if (ext2_write_block(fs, fs->block_groups[group_index].block_bitmap, cache) < 0) {
+        pr_err("We failed to clean the content of the newly allocated block.\n");
+    }
+
+    // Increase the number of free blocks inside the superblock.
+    fs->superblock.free_blocks_count++;
+    // Increase the number of free blocks inside the BGDT entry.
+    fs->block_groups[group_index].free_blocks_count++;
+    // Update the superblock.
+    if (ext2_write_superblock(fs) < 0) {
+        pr_warning("Failed to write superblock.\n");
+    }
+    // Update the BGDT.
+    if (ext2_write_bgdt(fs) < 0) {
+        pr_warning("Failed to write BGDT.\n");
+    }
+}
+
+static int ext2_free_inode(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t inode_index)
+{
+    // Lock the filesystem.
+    spinlock_lock(&fs->spinlock);
+    // Allocate the cache.
+    uint8_t *cache = kmem_cache_alloc(fs->ext2_buffer_cache, GFP_KERNEL);
+    // Clean the cache.
+    memset(cache, 0, fs->ext2_buffer_cache->size);
+
+    for (uint32_t block_index = 0; block_index < (inode->size / fs->block_size); ++block_index) {
+        // Get the real index.
+        uint32_t real_index = ext2_get_real_block_index(fs, inode, block_index);
+        if (real_index == 0) {
+            continue;
+        }
+        ext2_free_block(fs, real_index);
+    }
+    // Retrieve the group index.
+    uint32_t group_index = ext2_get_group_index_from_inode(fs, inode_index);
+    if (group_index > fs->block_groups_count) {
+        pr_err("Invalid group index computed from inode index `%d`.\n", inode_index);
+    }
+    // Get the index of the inode inside the group.
+    uint32_t inode_offset = ext2_get_inode_offest_in_group(fs, inode_index);
+
+    // Retrieve the group index.
+    uint32_t bitmap_index = fs->block_groups[group_index].block_bitmap;
+
+    // Free the cache.
+    kmem_cache_free(cache);
+    // Unlock the filesystem.
+    spinlock_unlock(&fs->spinlock);
+    // Return the error code.
+    return 0;
 }
 
 /// @brief Allocates a new block for storing block indices, for an inode.
