@@ -5,6 +5,7 @@
 # Add the library.
 add_library(
     libc
+    ${CMAKE_SOURCE_DIR}/libc/src/err.c
     ${CMAKE_SOURCE_DIR}/libc/src/shadow.c
     ${CMAKE_SOURCE_DIR}/libc/src/unistd/dup.c
     ${CMAKE_SOURCE_DIR}/libc/src/stdio.c
