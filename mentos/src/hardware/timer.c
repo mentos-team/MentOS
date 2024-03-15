@@ -422,10 +422,14 @@ void run_timer_softirq(void)
             list_for_each_safe (it, tmp, &base->tv1.vec[current_time_index]) {
                 struct timer_list *timer = list_entry(it, struct timer_list, entry);
 
-                // Executes timer function
                 spinlock_unlock(&base->lock);
-                pr_debug("Executing dynamic timer function...\n");
-                timer->function(timer->data);
+                // Executes timer function
+                if (timer->function) {
+                    pr_debug("Executing dynamic timer function...\n");
+                    timer->function(timer->data);
+                } else {
+                    pr_alert("Dynamic timer function is NULL...\n");
+                }
                 spinlock_lock(&base->lock);
 
                 // Removes timer from list
