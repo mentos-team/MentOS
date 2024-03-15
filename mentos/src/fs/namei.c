@@ -159,28 +159,19 @@ resolve_abspath:
                     *sep_after_cur = 0;
                 }
 
-                vfs_file_t *file;
-                // No permissions are required for path resolution.
-                // Correct permissions of all path components must be
-                // checked by the filesystem implementation.
-                file = vfs_open_abspath(abspath, 0, 0);
-                if (!file) {
-                    // This is the last path component and we want to create
-                    // it anyway.
-                    if (!sep_after_cur && (flags & CREAT_LAST_COMPONENT)) {
+                stat_t statbuf;
+                int ret = vfs_stat(abspath, &statbuf);
+                if (ret < 0) {
+                    // This is the last path component and we want to create it anyway.
+                    if (ret == -ENOENT && !sep_after_cur && (flags & CREAT_LAST_COMPONENT)) {
                         // Just copy the component into the buffer
                         goto copy_path_component;
                     }
-                    return -errno;
+                    return ret;
                 }
-
-                stat_t statbuf;
-                int ret = vfs_fstat(file, &statbuf);
-                if (ret < 0) { vfs_close(file); return ret; }
 
                 // The path component is no symbolic link
                 if (!S_ISLNK(statbuf.st_mode)) {
-                    vfs_close(file);
                     // Restore replaced path separator
                     *sep_after_cur = '/';
                     // Just copy the component into the buffer
@@ -191,8 +182,7 @@ resolve_abspath:
                 if (symlinks > SYMLOOP_MAX) { return -ELOOP; }
 
                 char link[PATH_MAX];
-                ssize_t nbytes = vfs_readlink(file, link, sizeof(link));
-                vfs_close(file);
+                ssize_t nbytes = sys_readlink(abspath, link, sizeof(link));
                 if (nbytes == -1) { return -errno; }
 
                 // Null-terminate link
