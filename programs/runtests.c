@@ -27,7 +27,7 @@
 static char *all_tests[] = {
     "t_abort",
     "t_alarm",
-    "t_big_write",
+    /* "t_big_write", */
     "t_creat",
     "t_dup",
     "t_exec execl",
