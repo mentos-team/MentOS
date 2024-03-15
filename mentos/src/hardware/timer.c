@@ -319,7 +319,7 @@ static void __add_timer_tvec_base(tvec_base_t *base, struct timer_list *timer)
     pr_debug("Adding timer at time_index: %d in tv%d\n", index, tv_index);
     list_head_insert_before(&timer->entry, vec);
 
-#ifdef ENABLE_REAL_TIMER_SYSTEM_DUMP
+#if defined(ENABLE_REAL_TIMER_SYSTEM_DUMP) && (__DEBUG_LEVEL__ == LOGLEVEL_DEBUG)
     __dump_all_tvec_slots(base);
 #endif
 }
@@ -353,7 +353,7 @@ static void __rem_timer_tvec_base(tvec_base_t *base, struct timer_list *timer)
     pr_debug("Removing timer at time_index: %d in tv%d\n", index, tv_index);
     list_head_remove(&timer->entry);
 
-#ifdef ENABLE_REAL_TIMER_SYSTEM_DUMP
+#if defined(ENABLE_REAL_TIMER_SYSTEM_DUMP) && (__DEBUG_LEVEL__ == LOGLEVEL_DEBUG)
     __dump_all_tvec_slots(base);
 #endif
     (void)vec;
