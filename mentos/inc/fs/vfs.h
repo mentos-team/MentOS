@@ -142,13 +142,13 @@ int vfs_symlink(const char *linkname, const char *path);
 /// @brief Stat the file at the given path.
 /// @param path Path to the file for which we are retrieving the statistics.
 /// @param buf  Buffer where we are storing the statistics.
-/// @return 0 on success, a negative number if fails and errno is set.
+/// @return 0 on success, -errno on failure.
 int vfs_stat(const char *path, stat_t *buf);
 
 /// @brief Stat the given file.
 /// @param file Pointer to the file for which we are retrieving the statistics.
 /// @param buf  Buffer where we are storing the statistics.
-/// @return 0 on success, a negative number if fails and errno is set.
+/// @return 0 on success, -errno on failure.
 int vfs_fstat(vfs_file_t *file, stat_t *buf);
 
 /// @brief Mount a file system to the specified path.
