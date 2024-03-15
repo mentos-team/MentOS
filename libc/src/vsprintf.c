@@ -690,14 +690,10 @@ int sprintf(char *str, const char *fmt, ...)
     return len;
 }
 
-int fprintf(int fd, const char *fmt, ...)
+int vfprintf(int fd, const char *fmt, va_list args)
 {
     char buffer[4096];
-    va_list ap;
-
-    va_start(ap, fmt);
-    int len = vsprintf(buffer, fmt, ap);
-    va_end(ap);
+    int len = vsprintf(buffer, fmt, args);
 
     if (len > 0) {
         if (write(fd, buffer, len) <= 0) {
@@ -706,4 +702,14 @@ int fprintf(int fd, const char *fmt, ...)
         return len;
     }
     return -1;
+}
+
+int fprintf(int fd, const char *fmt, ...)
+{
+    va_list ap;
+    va_start(ap, fmt);
+    int ret = vfprintf(fd, fmt, ap);
+    va_end(ap);
+
+    return ret;
 }
