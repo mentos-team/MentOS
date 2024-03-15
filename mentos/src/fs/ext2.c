@@ -2077,19 +2077,16 @@ static int ext2_resolve_path(vfs_file_t *directory, char *path, ext2_direntry_se
     if (strcmp(path, "/") == 0) {
         return ext2_find_direntry(fs, directory->ino, path, search);
     }
-    ino_t ino      = directory->ino;
-    char *tmp_path = strdup(path);
-    char *token    = strtok(tmp_path, "/");
+    ino_t ino = directory->ino;
+    char *saveptr, *token = strtok_r(path, "/", &saveptr);
     while (token) {
         if (!ext2_find_direntry(fs, ino, token, search)) {
             ino = search->direntry.inode;
         } else {
-            kfree(tmp_path);
             return -1;
         }
-        token = strtok(NULL, "/");
+        token = strtok_r(NULL, "/", &saveptr);
     }
-    kfree(tmp_path);
     return 0;
 }
 
