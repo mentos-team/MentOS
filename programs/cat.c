@@ -55,6 +55,5 @@ int main(int argc, char **argv)
             ret = EXIT_FAILURE;
         }
     }
-    putchar('\n');
     return ret;
 }
