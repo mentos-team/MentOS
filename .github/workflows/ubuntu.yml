@@ -86,6 +86,7 @@ jobs:
                   cmake --build build --parallel 2
     test:
         runs-on: ubuntu-latest
+        timeout-minutes: 10
         steps:
             - name: Clone repository
               uses: actions/checkout@v4
