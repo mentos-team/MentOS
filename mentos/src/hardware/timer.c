@@ -503,15 +503,9 @@ void del_timer(struct timer_list *timer)
 #endif
 }
 
-//======================================================================================
-// Sleep
-
-/// @brief Debugging function.
-/// @param data The data.
-static inline void debug_timeout(unsigned long data)
-{
-    pr_debug("The timer has been successfully deactivated: %d, ticks: %d, seconds: %d\n", data, timer_ticks, timer_get_seconds());
-}
+// ============================================================================
+// STANDARD TIMEOUT FUNCTIONS
+// ============================================================================
 
 /// @brief Contains the entry of a wait queue and timespec which keeps trakc of
 ///        the remaining time.
@@ -522,9 +516,16 @@ typedef struct sleep_data_t {
     timespec *rem;
 } sleep_data_t;
 
+/// @brief Debugging function.
+/// @param data The data.
+static inline void debug_timeout(unsigned long data)
+{
+    pr_debug("The timer has been successfully deactivated: %d, ticks: %d, seconds: %d\n", data, timer_ticks, timer_get_seconds());
+}
+
 /// @brief Callback for when a sleep timer expires
 /// @param data Custom data stored in the timer
-void sleep_timeout(unsigned long data)
+static inline void sleep_timeout(unsigned long data)
 {
     // TODO: We could modify the sleep_on and make it return the
     // wait_queue_entry_t and then store it in the dynamic timer data member
@@ -549,6 +550,49 @@ void sleep_timeout(unsigned long data)
         pr_debug("Process (pid: %d) restored from sleep\n", task->pid);
     }
 }
+
+/// @brief Function executed when the real_timer of a process expires, sends SIGALRM to process.
+/// @param pid PID of the process whos associated timer has expired
+static inline void alarm_timeout(unsigned long pid)
+{
+    sys_kill((pid_t)pid, SIGALRM);
+    // Get the current task.
+    struct task_struct *task = scheduler_get_current_process();
+    // Remove the timer.
+    task->real_timer = NULL;
+}
+
+// Real timer interval timemout
+static inline void real_timer_timeout(unsigned long data)
+{
+    pid_t pid = (pid_t)data;
+    // Get the current task.
+    struct task_struct *task = scheduler_get_running_process(pid);
+    // Send the signal.
+    sys_kill(pid, SIGALRM);
+
+    // If the real incr is not 0 then restart
+    if (task->it_real_incr != 0) {
+        // Create new timer for process
+        struct timer_list *real_timer = (struct timer_list *)kmalloc(sizeof(struct timer_list));
+        task->real_timer              = real_timer;
+        init_timer(real_timer);
+
+        real_timer->expires  = timer_get_ticks() + task->it_real_incr;
+        real_timer->function = &real_timer_timeout;
+        real_timer->data     = task->pid;
+
+        add_timer(real_timer);
+        return;
+    }
+
+    // No more timer
+    task->real_timer = NULL;
+}
+
+// ============================================================================
+// TIMING FUNCTIONS
+// ============================================================================
 
 int sys_nanosleep(const timespec *req, timespec *rem)
 {
@@ -577,17 +621,6 @@ int sys_nanosleep(const timespec *req, timespec *rem)
 
     add_timer(sleep_timer);
     return -1;
-}
-
-/// @brief Function executed when the real_timer of a process expires, sends SIGALRM to process.
-/// @param pid PID of the process whos associated timer has expired
-void alarm_timeout(unsigned long pid)
-{
-    sys_kill((pid_t)pid, SIGALRM);
-    // Get the current task.
-    struct task_struct *task = scheduler_get_current_process();
-    // Remove the timer.
-    task->real_timer = NULL;
 }
 
 unsigned sys_alarm(int seconds)
@@ -692,34 +725,6 @@ int sys_getitimer(int which, struct itimerval *curr_value)
     return 0;
 }
 
-// Real timer interval timemout
-static void it_real_fn(unsigned long data)
-{
-    pid_t pid = (pid_t)data;
-    // Get the current task.
-    struct task_struct *task = scheduler_get_running_process(pid);
-    // Send the signal.
-    sys_kill(pid, SIGALRM);
-
-    // If the real incr is not 0 then restart
-    if (task->it_real_incr != 0) {
-        // Create new timer for process
-        struct timer_list *real_timer = (struct timer_list *)kmalloc(sizeof(struct timer_list));
-        task->real_timer              = real_timer;
-        init_timer(real_timer);
-
-        real_timer->expires  = timer_get_ticks() + task->it_real_incr;
-        real_timer->function = &it_real_fn;
-        real_timer->data     = task->pid;
-
-        add_timer(real_timer);
-        return;
-    }
-
-    // No more timer
-    task->real_timer = NULL;
-}
-
 int sys_setitimer(int which, const struct itimerval *new_value, struct itimerval *old_value)
 {
     // Invalid time domain
@@ -763,7 +768,7 @@ int sys_setitimer(int which, const struct itimerval *new_value, struct itimerval
         init_timer(timer);
 
         timer->expires  = timer_get_ticks() + interval_ticks;
-        timer->function = &it_real_fn;
+        timer->function = &real_timer_timeout;
         timer->data     = cur->pid;
 
         add_timer(timer);

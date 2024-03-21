@@ -19,7 +19,7 @@
 
 /// This enables the system dump tvec_base timer vectors content on
 /// the console.
-#define ENABLE_REAL_TIMER_SYSTEM_DUMP
+//#define ENABLE_REAL_TIMER_SYSTEM_DUMP
 
 /// Counts down in real (i.e., wall clock) time.
 #define ITIMER_REAL 0
