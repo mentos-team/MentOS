@@ -544,6 +544,7 @@ void sleep_timeout(unsigned long data)
         // Removes entry from list and memory
         remove_wait_queue(&sleep_queue, entry);
         kfree(entry);
+        kfree(sleep_data);
 
         pr_debug("Process (pid: %d) restored from sleep\n", task->pid);
     }
