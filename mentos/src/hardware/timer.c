@@ -24,6 +24,7 @@
 #include "stdint.h"
 #include "sys/errno.h"
 #include "system/signal.h"
+#include "system/panic.h"
 
 /// @defgroup picregs Programmable Interval Timer Registers
 /// @brief The list of registers used to set the PIT.
@@ -573,16 +574,19 @@ static inline void real_timer_timeout(unsigned long data)
 
     // If the real incr is not 0 then restart
     if (task->it_real_incr != 0) {
+        if (!task->real_timer) {
+            kernel_panic("Timer not set!");
+        }
         // Create new timer for process
-        struct timer_list *real_timer = (struct timer_list *)kmalloc(sizeof(struct timer_list));
-        task->real_timer              = real_timer;
-        init_timer(real_timer);
-
-        real_timer->expires  = timer_get_ticks() + task->it_real_incr;
-        real_timer->function = &real_timer_timeout;
-        real_timer->data     = task->pid;
-
-        add_timer(real_timer);
+        task->real_timer = (struct timer_list *)kmalloc(sizeof(struct timer_list));
+        // Initialize the timer.
+        init_timer(task->real_timer);
+        // Setup the timer.
+        task->real_timer->expires  = timer_get_ticks() + task->it_real_incr;
+        task->real_timer->function = &real_timer_timeout;
+        task->real_timer->data     = task->pid;
+        // Add the timer.
+        add_timer(task->real_timer);
         return;
     }
 
@@ -607,19 +611,21 @@ int sys_nanosleep(const timespec *req, timespec *rem)
 
     // Create a dinamic timer to wake up the process after some time
     struct timer_list *sleep_timer = kmalloc(sizeof(struct timer_list));
-    init_timer(sleep_timer);
 
+    // Initialize the timer.
+    init_timer(sleep_timer);
+    // Setup the timer.
     sleep_timer->expires  = timer_get_ticks() + TICKS_PER_SECOND * req->tv_sec;
     sleep_timer->function = &sleep_timeout;
     sleep_timer->data     = (unsigned long)data;
+    // Add the timer.
+    add_timer(sleep_timer);
 
     // Removes current process from runqueue and stores it in the waiting queue,
     // this must be done at the end, because it changes the current active page
     // and invalidates the req and rem pointers (?)
     wait_queue_entry_t *entry = sleep_on(&sleep_queue);
     data->entry               = entry;
-
-    add_timer(sleep_timer);
     return -1;
 }
 
@@ -627,39 +633,35 @@ unsigned sys_alarm(int seconds)
 {
     pr_debug("sys_alarm(seconds:%d)\n", seconds);
 
-    struct task_struct *current = scheduler_get_current_process();
-    struct timer_list *timer;
+    struct task_struct *task = scheduler_get_current_process();
 
     // If there is already a timer running
     unsigned result = 0;
-    if (current->real_timer != NULL) {
-        del_timer(current->real_timer);
-        result = (current->real_timer->expires - timer_get_ticks()) / TICKS_PER_SECOND;
-        timer  = current->real_timer;
-
+    if (task->real_timer) {
+        del_timer(task->real_timer);
+        result = (task->real_timer->expires - timer_get_ticks()) / TICKS_PER_SECOND;
         // Returns only the amount of seconds remaining
         if (seconds == 0) {
-            kfree(current->real_timer);
-            current->real_timer = NULL;
+            kfree(task->real_timer);
+            task->real_timer = NULL;
             return result;
         }
     } else {
         if (seconds == 0) {
             return 0;
         }
-
         // Allocate new timer
-        timer = (struct timer_list *)kmalloc(sizeof(struct timer_list));
+        task->real_timer = (struct timer_list *)kmalloc(sizeof(struct timer_list));
     }
 
-    current->real_timer = timer;
-    init_timer(timer);
-
-    timer->expires  = timer_get_ticks() + TICKS_PER_SECOND * seconds;
-    timer->function = &alarm_timeout;
-    timer->data     = current->pid;
-
-    add_timer(timer);
+    // Initialize the timer.
+    init_timer(task->real_timer);
+    // Setup the timer.
+    task->real_timer->expires  = timer_get_ticks() + TICKS_PER_SECOND * seconds;
+    task->real_timer->function = &alarm_timeout;
+    task->real_timer->data     = task->pid;
+    // Add the timer.
+    add_timer(task->real_timer);
 
     return result;
 }
@@ -742,11 +744,11 @@ int sys_setitimer(int which, const struct itimerval *new_value, struct itimerval
     interval_ticks += new_value->it_interval.tv_usec * TICKS_PER_SECOND / 1000;
 
     // If interval is 0 removes timer
-    struct task_struct *cur = scheduler_get_current_process();
+    struct task_struct *task = scheduler_get_current_process();
     if (interval_ticks == 0) {
         // Removes real_timer
-        if (which == ITIMER_REAL && cur->real_timer != NULL) {
-            cur->real_timer = NULL;
+        if (which == ITIMER_REAL && task->real_timer != NULL) {
+            task->real_timer = NULL;
         }
 
         update_task_itimerval(which, new_value);
@@ -756,23 +758,21 @@ int sys_setitimer(int which, const struct itimerval *new_value, struct itimerval
     switch (which) {
     // Uses Dynamic Timers
     case ITIMER_REAL: {
-        // Remove real_timer if already in use
-        struct timer_list *timer = cur->real_timer;
-        if (timer != NULL) {
-            del_timer(timer); // Recycle memory
+        // Remove real_timer if already in use.
+        if (task->real_timer) {
+            del_timer(task->real_timer);
         } else {
             // Alloc new timer
-            timer = (struct timer_list *)kmalloc(sizeof(struct timer_list));
+            task->real_timer = (struct timer_list *)kmalloc(sizeof(struct timer_list));
         }
-
-        init_timer(timer);
-
-        timer->expires  = timer_get_ticks() + interval_ticks;
-        timer->function = &real_timer_timeout;
-        timer->data     = cur->pid;
-
-        add_timer(timer);
-
+        // Initialize the timer.
+        init_timer(task->real_timer);
+        // Setup the timer.
+        task->real_timer->expires  = timer_get_ticks() + interval_ticks;
+        task->real_timer->function = &real_timer_timeout;
+        task->real_timer->data     = task->pid;
+        // Add the timer.
+        add_timer(task->real_timer);
     } break;
 
     case ITIMER_VIRTUAL:
