@@ -370,8 +370,9 @@ static uint32_t cascate(tvec_base_t *base, timer_vec *tv, uint32_t time_index, i
         struct list_head *it, *tmp;
         list_for_each_safe (it, tmp, tv->vec + time_index) {
             struct timer_list *timer = list_entry(it, struct timer_list, entry);
+            // Remove the timer.
             list_head_remove(it);
-
+            // Add the timer.
             __add_timer_tvec_base(base, timer);
         }
     }
@@ -386,9 +387,8 @@ void run_timer_softirq(void)
 #ifdef ENABLE_REAL_TIMER_SYSTEM
 
     // While we are not up to date with current ticks
-    unsigned long current_ticks = timer_get_ticks();
-    while (base->timer_ticks <= current_ticks) {
-        // Index of the current timer to execute
+    while (base->timer_ticks <= timer_get_ticks()) {
+        // Index of the current timer to execute.
         uint32_t current_time_index = base->timer_ticks & TVR_MASK;
 
         // If the index is zero then all lists in base->tv1 have been checked, so they are empty
@@ -541,8 +541,7 @@ static inline void sleep_timeout(unsigned long data)
     task_struct *task = entry->task;
 
     // Executed entry's wakeup test function
-    int res = entry->func(entry, 0, 0);
-    if (res == 1) {
+    if (entry->func(entry, 0, 0) == 1) {
         // Removes entry from list and memory
         remove_wait_queue(&sleep_queue, entry);
         kfree(entry);
@@ -572,12 +571,9 @@ static inline void real_timer_timeout(unsigned long data)
     // Send the signal.
     sys_kill(pid, SIGALRM);
 
-    // If the real incr is not 0 then restart
+    // If the real incr is not 0 then restart.
     if (task->it_real_incr != 0) {
-        if (!task->real_timer) {
-            kernel_panic("Timer not set!");
-        }
-        // Create new timer for process
+        // Create new timer for process, the old one is going to be deleted.
         task->real_timer = (struct timer_list *)kmalloc(sizeof(struct timer_list));
         // Initialize the timer.
         init_timer(task->real_timer);
@@ -624,8 +620,7 @@ int sys_nanosleep(const timespec *req, timespec *rem)
     // Removes current process from runqueue and stores it in the waiting queue,
     // this must be done at the end, because it changes the current active page
     // and invalidates the req and rem pointers (?)
-    wait_queue_entry_t *entry = sleep_on(&sleep_queue);
-    data->entry               = entry;
+    data->entry = sleep_on(&sleep_queue);
     return -1;
 }
 
@@ -666,38 +661,34 @@ unsigned sys_alarm(int seconds)
     return result;
 }
 
-static void calc_itimerval(unsigned long incr, unsigned long value, struct itimerval *result)
+static void __calc_itimerval(unsigned long interval, unsigned long value, struct itimerval *result)
 {
-    result->it_interval.tv_sec  = incr / TICKS_PER_SECOND;
-    result->it_interval.tv_usec = incr / TICKS_PER_SECOND * 1000;
-
-    result->it_value.tv_sec  = value / TICKS_PER_SECOND;
-    result->it_value.tv_usec = value / TICKS_PER_SECOND * 1000;
+    result->it_interval.tv_sec  = interval / TICKS_PER_SECOND;
+    result->it_interval.tv_usec = (interval * 1000) / TICKS_PER_SECOND;
+    result->it_value.tv_sec     = value / TICKS_PER_SECOND;
+    result->it_value.tv_usec    = (value * 1000) / TICKS_PER_SECOND;
 }
 
-static void update_task_itimerval(int which, const struct itimerval *val)
+static void __update_task_itimerval(int which, const struct itimerval *timer)
 {
-    unsigned long interval_ticks = val->it_interval.tv_sec * TICKS_PER_SECOND;
-    interval_ticks += val->it_interval.tv_usec * TICKS_PER_SECOND / 1000;
+    time_t interval = (timer->it_interval.tv_sec * TICKS_PER_SECOND) +
+                      (timer->it_interval.tv_usec * TICKS_PER_SECOND) / 1000;
+    time_t value = (timer->it_value.tv_sec * TICKS_PER_SECOND) +
+                   (timer->it_value.tv_usec * TICKS_PER_SECOND) / 1000;
 
-    unsigned long value_ticks = val->it_value.tv_sec * TICKS_PER_SECOND;
-    value_ticks += val->it_value.tv_usec * TICKS_PER_SECOND / 1000;
-
-    struct task_struct *curr = scheduler_get_current_process();
+    struct task_struct *task = scheduler_get_current_process();
     switch (which) {
     case ITIMER_REAL:
-        curr->it_real_incr  = interval_ticks;
-        curr->it_real_value = value_ticks;
+        task->it_real_incr  = interval;
+        task->it_real_value = value;
         break;
-
     case ITIMER_VIRTUAL:
-        curr->it_virt_incr  = interval_ticks;
-        curr->it_virt_value = value_ticks;
+        task->it_virt_incr  = interval;
+        task->it_virt_value = value;
         break;
-
     case ITIMER_PROF:
-        curr->it_prof_incr  = interval_ticks;
-        curr->it_prof_value = value_ticks;
+        task->it_prof_incr  = interval;
+        task->it_prof_value = value;
         break;
     }
 }
@@ -708,20 +699,21 @@ int sys_getitimer(int which, struct itimerval *curr_value)
     if (which < 0 || which > 3) {
         return EINVAL;
     }
-
-    struct task_struct *curr = scheduler_get_current_process();
+    struct task_struct *task = scheduler_get_current_process();
     switch (which) {
     case ITIMER_REAL: {
-        // Extract remaining time in dynamic timer
-        unsigned long value = curr->real_timer->expires - timer_get_ticks();
-        curr->it_real_value = value;
-        calc_itimerval(curr->it_real_incr, curr->it_real_value, curr_value);
+        // Extract remaining time in dynamic timer.
+        task->it_real_value = task->real_timer->expires - timer_get_ticks();
+        // Compute the interval.
+        __calc_itimerval(task->it_real_incr, task->it_real_value, curr_value);
     } break;
     case ITIMER_VIRTUAL:
-        calc_itimerval(curr->it_virt_incr, curr->it_virt_value, curr_value);
+        // Compute the interval.
+        __calc_itimerval(task->it_virt_incr, task->it_virt_value, curr_value);
         break;
     case ITIMER_PROF:
-        calc_itimerval(curr->it_prof_incr, curr->it_prof_value, curr_value);
+        // Compute the interval.
+        __calc_itimerval(task->it_prof_incr, task->it_prof_value, curr_value);
         break;
     }
     return 0;
@@ -733,28 +725,24 @@ int sys_setitimer(int which, const struct itimerval *new_value, struct itimerval
     if (which < 0 || which > 3) {
         return EINVAL;
     }
-
     // Returns old timer interval
     if (old_value != NULL) {
         sys_getitimer(which, old_value);
     }
-
-    // Get ticks of interval
-    unsigned long interval_ticks = new_value->it_interval.tv_sec * TICKS_PER_SECOND;
-    interval_ticks += new_value->it_interval.tv_usec * TICKS_PER_SECOND / 1000;
-
+    // Get ticks of interval.
+    time_t new_interval = (new_value->it_interval.tv_sec * TICKS_PER_SECOND) +
+                          (new_value->it_interval.tv_usec * TICKS_PER_SECOND) / 1000;
     // If interval is 0 removes timer
     struct task_struct *task = scheduler_get_current_process();
-    if (interval_ticks == 0) {
-        // Removes real_timer
-        if (which == ITIMER_REAL && task->real_timer != NULL) {
+    if (new_interval == 0) {
+        // Removes real_timer.
+        if ((which == ITIMER_REAL) && (task->real_timer != NULL)) {
+            kfree(task->real_timer);
             task->real_timer = NULL;
         }
-
-        update_task_itimerval(which, new_value);
+        __update_task_itimerval(which, new_value);
         return -1;
     }
-
     switch (which) {
     // Uses Dynamic Timers
     case ITIMER_REAL: {
@@ -768,7 +756,7 @@ int sys_setitimer(int which, const struct itimerval *new_value, struct itimerval
         // Initialize the timer.
         init_timer(task->real_timer);
         // Setup the timer.
-        task->real_timer->expires  = timer_get_ticks() + interval_ticks;
+        task->real_timer->expires  = timer_get_ticks() + new_interval;
         task->real_timer->function = &real_timer_timeout;
         task->real_timer->data     = task->pid;
         // Add the timer.
@@ -780,7 +768,7 @@ int sys_setitimer(int which, const struct itimerval *new_value, struct itimerval
         break;
     }
 
-    update_task_itimerval(which, new_value);
+    __update_task_itimerval(which, new_value);
     return -1;
 }
 
