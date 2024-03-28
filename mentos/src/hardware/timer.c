@@ -136,247 +136,118 @@ unsigned long timer_get_ticks(void)
     return timer_ticks;
 }
 
+// ============================================================================
+// SUPPORT FUNCTIONS (tvec_base_t)
+// ============================================================================
+
+static inline void __tvec_base_init(tvec_base_t *base)
+{
+    spinlock_init(&base->lock);
+    base->running_timer = NULL;
+#ifdef ENABLE_REAL_TIMER_SYSTEM
+    base->timer_ticks = timer_get_ticks();
+    for (int i = 0; i < TVR_SIZE; ++i) {
+        list_head_init(&base->tvr[i]);
+    }
+    for (int j = 0; j < TVN_COUNT; ++j) {
+        for (int i = 0; i < TVN_SIZE; ++i) {
+            list_head_init(&base->tvn[j][i]);
+        }
+    }
+#else
+    list_head_init(&base.list);
+#endif
+}
+
 //======================================================================================
 // Dynamics timers
 
 /// Contains timer for each CPU (for now only one)
 static tvec_base_t cpu_base = { 0 };
-
-/// Contains all process waiting for a sleep
+/// Contains all process waiting for a sleep.
 static wait_queue_head_t sleep_queue;
 
 /// @brief Initialize dynamic timer system
 void dynamic_timers_install(void)
 {
-#ifndef ENABLE_REAL_TIMER_SYSTEM
-    list_head_init(&cpu_base.list);
-#endif
-
-    // Initialize tvec_base structure
-    tvec_base_t *base = &cpu_base;
-    base->timer_ticks = 0;
-
-    for (int i = 0; i < TVR_SIZE; ++i) {
-        list_head_init(base->tv1.vec + i);
-    }
-
-    for (int i = 0; i < TVN_SIZE; ++i) {
-        list_head_init(base->tv2.vec + i);
-        list_head_init(base->tv3.vec + i);
-        list_head_init(base->tv4.vec + i);
-        list_head_init(base->tv5.vec + i);
-    }
-
+    // Initialize the timer structure for each CPU.
+    __tvec_base_init(&cpu_base);
     // Initialize sleeping process list
     list_head_init(&sleep_queue.task_list);
     spinlock_init(&sleep_queue.lock);
 }
 
 /// Prints used slots of timer vector
-static void __print_tvec_slots(tvec_base_t *base, int tv_index)
+static void __print_tvec_slots(list_head *vector, size_t size)
 {
-    if (tv_index < 0 || tv_index > 5) {
-        return;
-    }
-
-    // Write buffer
-    char result[TVN_SIZE + 1];
-    result[TVN_SIZE] = '\0';
-
-    struct timer_vec *tv = NULL;
-    switch (tv_index) {
-    // Root
-    case 1: {
-        pr_debug("base->tv1.vec:");
-        for (int i = 0; i < TVR_SIZE; ++i) {
-            // New line in order to not clutter the screen
-            int index = i % TVN_SIZE;
-            if (i != 0 && index == 0) {
-                pr_debug("\n\t%s", result);
-            }
-
-            if (!list_head_empty(base->tv1.vec + i)) {
-                result[index] = '1';
-            } else {
-                result[index] = '0';
-            }
+#if defined(ENABLE_REAL_TIMER_SYSTEM_DUMP) && (__DEBUG_LEVEL__ == LOGLEVEL_DEBUG)
+    char str[TVR_SIZE + 1] = { 0 };
+    for (size_t i = 0; i < size; ++i) {
+        // New line in order to not clutter the screen
+        if ((i != 0) && !(i % TVN_SIZE)) {
+            pr_debug("%s", str);
         }
-
-        // The last line
-        pr_debug("\n\t%s\n", result);
-        return;
-
-    } break;
-
-    // Normal
-    case 2:
-        tv = &base->tv2;
-        break;
-    case 3:
-        tv = &base->tv3;
-        break;
-    case 4:
-        tv = &base->tv4;
-        break;
-    case 5:
-        tv = &base->tv5;
-        break;
-    }
-
-    for (int i = 0; i < TVN_SIZE; ++i) {
-        if (list_head_empty(tv->vec + i)) {
-            result[i] = '0';
+        if (list_head_empty(vector + i)) {
+            str[i] = '0';
         } else {
-            result[i] = '1';
+            str[i] = '1';
         }
     }
-
-    pr_debug("base->tv%d.vec:\n\t%s\n", tv_index, result);
-    (void)result;
+    pr_debug("%s\n", str);
+#endif
 }
 
 /// Dump all timer vector in base
 static inline void __dump_all_tvec_slots(tvec_base_t *base)
 {
-    __print_tvec_slots(base, 1);
-    __print_tvec_slots(base, 2);
-    __print_tvec_slots(base, 3);
-    __print_tvec_slots(base, 4);
-    __print_tvec_slots(base, 5);
+#if defined(ENABLE_REAL_TIMER_SYSTEM_DUMP) && (__DEBUG_LEVEL__ == LOGLEVEL_DEBUG)
+    __print_tvec_slots(base->tvr, TVR_SIZE);
+    __print_tvec_slots(base->tvn[0], TVN_SIZE);
+    __print_tvec_slots(base->tvn[1], TVN_SIZE);
+    __print_tvec_slots(base->tvn[2], TVN_SIZE);
+    __print_tvec_slots(base->tvn[3], TVN_SIZE);
+#endif
 }
 
 /// Select correct timer vector and position inside of it for the input timer
 /// index contains the position inside of the tv_index timer vector
-static void __find_tvec(tvec_base_t *base, struct timer_list *timer, uint32_t *index, uint32_t *tv_index)
+static list_head *__timer_get_vector(tvec_base_t *base, struct timer_list *timer)
 {
-    assert(index && "index is NULL");
-    assert(tv_index && "tv_index is NULL");
-
-    unsigned long expires = timer->expires;
-    unsigned long ticks   = expires - base->timer_ticks;
-
-    unsigned long tv1_ticks = TIMER_TICKS(0);
-    unsigned long tv2_ticks = TIMER_TICKS(1);
-    unsigned long tv3_ticks = TIMER_TICKS(2);
-    unsigned long tv4_ticks = TIMER_TICKS(3);
-
+    time_t expires = timer->expires;
+    long ticks     = expires - base->timer_ticks;
     // Can happen if you add a timer with expires == ticks, or in the past
-    if ((signed long)ticks < 0) {
-        *index    = base->timer_ticks & TVR_MASK;
-        *tv_index = 1;
+    if (ticks < 0) {
+        return base->tvr + (base->timer_ticks & TVR_MASK);
     }
-    // tv1
-    else if (ticks < tv1_ticks) {
-        *index    = expires & TVR_MASK;
-        *tv_index = 1;
+    if (ticks < TIMER_TICKS(0)) {
+        return base->tvr + (expires & TVR_MASK);
     }
-    // tv2
-    else if (ticks < tv2_ticks) {
-        *index    = (expires >> TIMER_TICKS_BITS(0)) & TVN_MASK;
-        *tv_index = 2;
+    if (ticks < TIMER_TICKS(1)) {
+        return base->tvn[0] + ((expires >> TIMER_TICKS_BITS(0)) & TVN_MASK);
     }
-    // tv3
-    else if (ticks < tv3_ticks) {
-        *index    = (expires >> TIMER_TICKS_BITS(1)) & TVN_MASK;
-        *tv_index = 3;
+    if (ticks < TIMER_TICKS(2)) {
+        return base->tvn[1] + ((expires >> TIMER_TICKS_BITS(1)) & TVN_MASK);
     }
-    // tv4
-    else if (ticks < tv4_ticks) {
-        *index    = (expires >> TIMER_TICKS_BITS(2)) & TVN_MASK;
-        *tv_index = 4;
+    if (ticks < TIMER_TICKS(3)) {
+        return base->tvn[2] + ((expires >> TIMER_TICKS_BITS(2)) & TVN_MASK);
     }
-    // tv5
-    else {
-        *index    = (expires >> TIMER_TICKS_BITS(3)) & TVN_MASK;
-        *tv_index = 5;
-    }
-}
-
-/// Add timers into different lists based on their expire time
-static void __add_timer_tvec_base(tvec_base_t *base, struct timer_list *timer)
-{
-    uint32_t index = 0, tv_index = 0;
-    __find_tvec(base, timer, &index, &tv_index);
-
-    struct list_head *vec;
-    switch (tv_index) {
-    case 1:
-        vec = base->tv1.vec + index;
-        break;
-    case 2:
-        vec = base->tv2.vec + index;
-        break;
-    case 3:
-        vec = base->tv3.vec + index;
-        break;
-    case 4:
-        vec = base->tv4.vec + index;
-        break;
-    case 5:
-        vec = base->tv5.vec + index;
-        break;
-    }
-
-    pr_debug("Adding timer at time_index: %d in tv%d\n", index, tv_index);
-    list_head_insert_before(&timer->entry, vec);
-
-#if defined(ENABLE_REAL_TIMER_SYSTEM_DUMP) && (__DEBUG_LEVEL__ == LOGLEVEL_DEBUG)
-    __dump_all_tvec_slots(base);
-#endif
-}
-
-/// Remove timer from tvec_base
-static void __rem_timer_tvec_base(tvec_base_t *base, struct timer_list *timer)
-{
-    uint32_t index = 0, tv_index = 0;
-    __find_tvec(base, timer, &index, &tv_index);
-
-    // TODO: Check why we do not use vec.
-    struct list_head *vec;
-    switch (tv_index) {
-    case 1:
-        vec = base->tv1.vec + index;
-        break;
-    case 2:
-        vec = base->tv2.vec + index;
-        break;
-    case 3:
-        vec = base->tv3.vec + index;
-        break;
-    case 4:
-        vec = base->tv4.vec + index;
-        break;
-    case 5:
-        vec = base->tv5.vec + index;
-        break;
-    }
-
-    pr_debug("Removing timer at time_index: %d in tv%d\n", index, tv_index);
-    list_head_remove(&timer->entry);
-
-#if defined(ENABLE_REAL_TIMER_SYSTEM_DUMP) && (__DEBUG_LEVEL__ == LOGLEVEL_DEBUG)
-    __dump_all_tvec_slots(base);
-#endif
-    (void)vec;
+    return base->tvn[3] + ((expires >> TIMER_TICKS_BITS(3)) & TVN_MASK);
 }
 
 /// Move all timers from tv up one level
-static uint32_t cascate(tvec_base_t *base, timer_vec *tv, uint32_t time_index, int tv_index)
+static void __timer_cascate(tvec_base_t *base, size_t vector_list_index, size_t vector_index)
 {
-    if (!list_head_empty(tv->vec + time_index)) {
-        pr_debug("Relocating timers in tv%d.vec[%d]\n", tv_index, time_index);
-
+    if (!list_head_empty(&base->tvn[vector_list_index][vector_index])) {
         // Reinsert all timers into base in the new correct list
-        struct list_head *it, *tmp;
-        list_for_each_safe (it, tmp, tv->vec + time_index) {
+        list_for_each_safe_decl(it, save, &base->tvn[vector_list_index][vector_index])
+        {
             struct timer_list *timer = list_entry(it, struct timer_list, entry);
             // Remove the timer.
-            list_head_remove(it);
+            remove_timer(timer);
             // Add the timer.
-            __add_timer_tvec_base(base, timer);
+            add_timer(timer);
         }
     }
-    return time_index;
 }
 
 void run_timer_softirq(void)
@@ -391,36 +262,31 @@ void run_timer_softirq(void)
         // Index of the current timer to execute.
         uint32_t current_time_index = base->timer_ticks & TVR_MASK;
 
-        // If the index is zero then all lists in base->tv1 have been checked, so they are empty
+        // If the index is zero then all lists in base->tvr have been checked, so they are empty
         if (!current_time_index) {
             // Consider the first invocation of the cascade() function: it receives as arguments
             // the address in base, the address of base->tv2, and the index of the list
             // in base->tv2 including the timers that will decay in the next 256 ticks. This
             // index is determined by looking at the proper bits of the base->timer_ticks value.
             // cascade() moves all dynamic timers in the base->tv2 list into the
-            // proper lists of base->tv1; then, it returns a positive value, unless all base->tv2
+            // proper lists of base->tvr; then, it returns a positive value, unless all base->tv2
             // lists are now empty. If so, cascade() is invoked once more to replenish
             // base->tv2 with the timers included in a list of base->tv3, and so on.
 
-            uint32_t tv2_index = (base->timer_ticks >> TIMER_TICKS_BITS(0)) & TVN_MASK;
-            uint32_t tv3_index = (base->timer_ticks >> TIMER_TICKS_BITS(1)) & TVN_MASK;
-            uint32_t tv4_index = (base->timer_ticks >> TIMER_TICKS_BITS(2)) & TVN_MASK;
-            uint32_t tv5_index = (base->timer_ticks >> TIMER_TICKS_BITS(3)) & TVN_MASK;
-
-            if (!cascate(base, &base->tv2, tv2_index, 2) &&
-                !cascate(base, &base->tv3, tv3_index, 3) &&
-                !cascate(base, &base->tv4, tv4_index, 4) &&
-                !cascate(base, &base->tv5, tv5_index, 5)) {}
+            __timer_cascate(base, 3, (base->timer_ticks >> TIMER_TICKS_BITS(3)) & TVN_MASK);
+            __timer_cascate(base, 2, (base->timer_ticks >> TIMER_TICKS_BITS(2)) & TVN_MASK);
+            __timer_cascate(base, 1, (base->timer_ticks >> TIMER_TICKS_BITS(1)) & TVN_MASK);
+            __timer_cascate(base, 0, (base->timer_ticks >> TIMER_TICKS_BITS(0)) & TVN_MASK);
         }
 
         // If there are timers to execute in this instant
-        if (!list_head_empty(&base->tv1.vec[current_time_index])) {
-            pr_debug("Executing dynamic timers at %d ticks from start inside of tv1.vec[%d]\n",
+        if (!list_head_empty(&base->tvr[current_time_index])) {
+            pr_debug("Executing dynamic timers at %d ticks from start inside of tvr[%d]\n",
                      base->timer_ticks, current_time_index);
 
             // Trigger all timers
             struct list_head *it, *tmp;
-            list_for_each_safe (it, tmp, &base->tv1.vec[current_time_index]) {
+            list_for_each_safe (it, tmp, &base->tvr[current_time_index]) {
                 struct timer_list *timer = list_entry(it, struct timer_list, entry);
 
                 spinlock_unlock(&base->lock);
@@ -482,26 +348,22 @@ void init_timer(struct timer_list *timer)
 
 void add_timer(struct timer_list *timer)
 {
-    tvec_base_t *base = &cpu_base;
-    timer->base       = base;
-
 #ifdef ENABLE_REAL_TIMER_SYSTEM
-    __add_timer_tvec_base(base, timer);
+    // Get the vector.
+    list_head *vector = __timer_get_vector(&cpu_base, timer);
+    // Insert the timer inside the vector.
+    list_head_insert_before(&timer->entry, vector);
 #else
     list_head_insert_before(&timer->entry, &base->list);
 #endif
 }
 
-void del_timer(struct timer_list *timer)
+void remove_timer(struct timer_list *timer)
 {
-    tvec_base_t *base = &cpu_base;
-    timer->base       = NULL;
-
-#ifdef ENABLE_REAL_TIMER_SYSTEM
-    __rem_timer_tvec_base(base, timer);
-#else
+    // First, remove the timer from the current list.
     list_head_remove(&timer->entry);
-#endif
+    // Then, re-initialize the timer.
+    init_timer(timer);
 }
 
 // ============================================================================
@@ -633,7 +495,7 @@ unsigned sys_alarm(int seconds)
     // If there is already a timer running
     unsigned result = 0;
     if (task->real_timer) {
-        del_timer(task->real_timer);
+        remove_timer(task->real_timer);
         result = (task->real_timer->expires - timer_get_ticks()) / TICKS_PER_SECOND;
         // Returns only the amount of seconds remaining
         if (seconds == 0) {
@@ -748,7 +610,7 @@ int sys_setitimer(int which, const struct itimerval *new_value, struct itimerval
     case ITIMER_REAL: {
         // Remove real_timer if already in use.
         if (task->real_timer) {
-            del_timer(task->real_timer);
+            remove_timer(task->real_timer);
         } else {
             // Alloc new timer
             task->real_timer = (struct timer_list *)kmalloc(sizeof(struct timer_list));
