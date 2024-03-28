@@ -3,10 +3,10 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include <sys/unistd.h>
-#include <string.h>
-#include <stdio.h>
 #include <fcntl.h>
+#include <stdio.h>
+#include <string.h>
+#include <sys/unistd.h>
 
 int main(int argc, char** argv)
 {
