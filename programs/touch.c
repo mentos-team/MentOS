@@ -3,9 +3,11 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
+#include <err.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 #include <sys/unistd.h>
 
 int main(int argc, char** argv)
@@ -24,10 +26,10 @@ int main(int argc, char** argv)
     int fd = open(argv[1], O_RDONLY, 0);
     if (fd < 0) {
         fd = open(argv[1], O_CREAT, S_IWUSR | S_IRUSR | S_IRGRP | S_IROTH);
-        if (fd >= 0) {
-            close(fd);
+        if (fd < 0) {
+            err(EXIT_FAILURE, "cannot touch %s", argv[1]);
         }
+        close(fd);
     }
-    printf("\n");
     return 0;
 }
