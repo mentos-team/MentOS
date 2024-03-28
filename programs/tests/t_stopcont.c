@@ -17,7 +17,7 @@ int child_pid;
 void wait_for_child(int signr)
 {
     printf("Signal received: %s\n", strsignal(signr));
-    sleep(10);
+    sleep(8);
 
     printf("Sending continue sig to child\n");
     if (kill(child_pid, SIGCONT) == -1)
@@ -48,7 +48,7 @@ int main(int argc, char *argv[])
     } else {
         for (int c = 0; c < 5; c++) {
             printf("c: %d\n", c);
-            sleep(3);
+            sleep(1);
         }
         exit(0);
     }

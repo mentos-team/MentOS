@@ -4,10 +4,10 @@
 /// See LICENSE.md for details.
 
 // Setup the logging for this file (do this before any other include).
-#include "sys/kernel_levels.h"          // Include kernel log levels.
-#define __DEBUG_HEADER__ "[SCHED ]"     ///< Change header.
-#define __DEBUG_LEVEL__  LOGLEVEL_DEBUG ///< Set log level.
-#include "io/debug.h"                   // Include debugging functions.
+#include "sys/kernel_levels.h"           // Include kernel log levels.
+#define __DEBUG_HEADER__ "[SCHED ]"      ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
+#include "io/debug.h"                    // Include debugging functions.
 
 #include "assert.h"
 #include "descriptor_tables/tss.h"
@@ -376,15 +376,27 @@ int sys_setpgid(pid_t pid, pid_t pgid)
     return 0;
 }
 
-#define RETURN_PROCESS_ATTR_OR_EPERM(attr) \
+#define RETURN_PROCESS_ATTR_OR_EPERM(attr)             \
     if (runqueue.curr) { return runqueue.curr->attr; } \
     return -EPERM;
 
-uid_t sys_getuid(void) { RETURN_PROCESS_ATTR_OR_EPERM(ruid); }
-uid_t sys_geteuid(void) { RETURN_PROCESS_ATTR_OR_EPERM(uid); }
+uid_t sys_getuid(void)
+{
+    RETURN_PROCESS_ATTR_OR_EPERM(ruid);
+}
+uid_t sys_geteuid(void)
+{
+    RETURN_PROCESS_ATTR_OR_EPERM(uid);
+}
 
-gid_t sys_getgid(void) { RETURN_PROCESS_ATTR_OR_EPERM(rgid); }
-gid_t sys_getegid(void) { RETURN_PROCESS_ATTR_OR_EPERM(gid); }
+gid_t sys_getgid(void)
+{
+    RETURN_PROCESS_ATTR_OR_EPERM(rgid);
+}
+gid_t sys_getegid(void)
+{
+    RETURN_PROCESS_ATTR_OR_EPERM(gid);
+}
 
 #define FAIL_ON_INV_ID(id) \
     if (id < 0) { return -EINVAL; }
@@ -393,22 +405,24 @@ gid_t sys_getegid(void) { RETURN_PROCESS_ATTR_OR_EPERM(gid); }
     FAIL_ON_INV_ID(id)             \
     if (!runqueue.curr) { return -EPERM; }
 
-#define IF_PRIVILEGED_SET_ALL_AND_RETURN(attr)                 \
-    if (runqueue.curr->uid == 0) {                             \
-        runqueue.curr->r ## attr = runqueue.curr->attr = attr; \
-        return 0;                                              \
+#define IF_PRIVILEGED_SET_ALL_AND_RETURN(attr)               \
+    if (runqueue.curr->uid == 0) {                           \
+        runqueue.curr->r##attr = runqueue.curr->attr = attr; \
+        return 0;                                            \
     }
 
-#define IF_RESET_SET_AND_RETURN(attr)        \
-    if (runqueue.curr->r ## attr == attr) {  \
-        runqueue.curr->attr = attr;          \
-        return 0;                            \
+#define IF_RESET_SET_AND_RETURN(attr)     \
+    if (runqueue.curr->r##attr == attr) { \
+        runqueue.curr->attr = attr;       \
+        return 0;                         \
     }
 
 #define SET_IF_PRIVILEGED_OR_FAIL(attr) \
     if (runqueue.curr->uid == 0) {      \
         runqueue.curr->attr = attr;     \
-    } else { return -EPERM; }
+    } else {                            \
+        return -EPERM;                  \
+    }
 
 int sys_setuid(uid_t uid)
 {

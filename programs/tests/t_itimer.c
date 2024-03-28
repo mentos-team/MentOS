@@ -53,7 +53,7 @@ int main(int argc, char *argv[])
     }
 
     itimerval interval = { 0 };
-    interval.it_interval.tv_sec = 4;
+    interval.it_interval.tv_sec = 1;
     setitimer(ITIMER_REAL, &interval, NULL);
 
     while(1) { }
