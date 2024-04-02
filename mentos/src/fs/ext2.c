@@ -3042,7 +3042,7 @@ static int ext2_stat(const char *path, stat_t *stat)
     memset(&search, 0, sizeof(ext2_direntry_search_t));
     // Resolve the path.
     if (ext2_resolve_path(fs->root, absolute_path, &search)) {
-        pr_err("Failed to resolve path `%s`.\n", absolute_path);
+        pr_err("Failed to resolve path `%s`.\n", path);
         return -ENOENT;
     }
     // Get the inode associated with the directory entry.
