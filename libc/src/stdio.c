@@ -228,5 +228,4 @@ void perror(const char *s)
     }
     puts(strerror(errno));
     putchar('\n');
-    putchar('\n');
 }
