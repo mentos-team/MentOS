@@ -67,12 +67,12 @@ static inline void __print_message_file(const char *file)
     if ((fd = open(file, O_RDONLY, 0600)) == -1) {
         return;
     }
-    // Read the lines of the file.
+    // Print the file.
     while ((nbytes = read(fd, buffer, sizeof(char) * 256)) > 0) {
         // Tap the string.
         buffer[nbytes] = 0;
         // TODO: Parsing message files for special characters (such as `\t` for time).
-        printf("%s\n", buffer);
+        write(STDOUT_FILENO, buffer, nbytes);
         total += nbytes;
     }
     close(fd);
@@ -182,12 +182,12 @@ int main(int argc, char **argv)
     do {
         // Get the username.
         do {
-            printf("Username :");
+            printf("Username: ");
         } while (!__get_input(username, sizeof(username), false));
 
         // Get the password.
         do {
-            printf("Password :");
+            printf("Password: ");
         } while (!__get_input(password, sizeof(password), true));
 
         // Check if we can find the user.
