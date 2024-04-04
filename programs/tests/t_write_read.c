@@ -11,7 +11,6 @@
 #include <sys/stat.h>
 #include <sys/unistd.h>
 #include <math.h>
-#include <io/debug.h>
 
 int create_file(const char *filename, mode_t mode)
 {
@@ -26,8 +25,6 @@ int create_file(const char *filename, mode_t mode)
 
 int check_content(const char *filename, const char *content, int length)
 {
-    pr_notice("Check content(%s, %s, %d)\n", filename, content, length);
-
     char buffer[256];
     memset(buffer, 0, 256);
     // Open the file.
@@ -52,8 +49,6 @@ int check_content(const char *filename, const char *content, int length)
 
 int write_content(const char *filename, const char *content, int length, int truncate, int append)
 {
-    pr_notice("Write content(%s, %s, %d, TRUNC: %d, APP: %d)\n", filename, content, length, truncate, append);
-
     int flags = O_WRONLY | (truncate ? O_TRUNC : append ? O_APPEND :
                                                           0);
     // Open the file.

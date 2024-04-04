@@ -41,6 +41,14 @@ typedef struct list_head {
 #define list_for_each_decl(pos, head) \
     for (list_head * (pos) = (head)->next; (pos) != (head); (pos) = (pos)->next)
 
+/// @brief Iterates over a list safe against removal of list entry.
+/// @param pos the name of the iterator used to visit the list.
+/// @param store another list iterator to use as temporary storage.
+/// @param head the head for your list.
+#define list_for_each_safe_decl(pos, store, head)                                   \
+    for (list_head * (pos) = (head)->next, *(store) = (pos)->next; (pos) != (head); \
+         (pos) = (store), (store) = (pos)->next)
+
 /// @brief Iterates over a list backwards.
 /// @param pos the name of the iterator used to visit the list.
 /// @param head the head for your list.

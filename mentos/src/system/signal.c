@@ -19,7 +19,7 @@
 #include "sys/errno.h"
 #include "system/signal.h"
 
-#define GET_EXIT_STATUS(status) (((status)&0x00FF) << 8)
+#define GET_EXIT_STATUS(status) (((status) & 0x00FF) << 8)
 
 /// SLAB caches for signal bits.
 static kmem_cache_t *sigqueue_cachep;
@@ -521,9 +521,11 @@ int do_signal(struct pt_regs *f)
             case SIGXCPU:
                 do_exit(GET_EXIT_STATUS(158) | signr);
                 __unlock_task_sighand(current_process);
+                return 1;
             case SIGXFSZ:
                 do_exit(GET_EXIT_STATUS(159) | signr);
                 __unlock_task_sighand(current_process);
+                return 1;
             case SIGSYS:
             default:
                 do_exit(GET_EXIT_STATUS(exit_code) | signr);
@@ -586,19 +588,19 @@ void handle_stop_signal(int sig, siginfo_t *info, struct task_struct *p)
 
         __rm_from_queue(&mask, &p->pending);
 
-        struct list_head *it, *tmp;
-        list_for_each_safe (it, tmp, &stopped_queue.task_list) {
-            struct wait_queue_entry_t *entry = list_entry(it, struct wait_queue_entry_t, task_list);
+        list_for_each_safe_decl(it, store, &stopped_queue.task_list)
+        {
+            struct wait_queue_entry_t *wait_queue_entry = list_entry(it, struct wait_queue_entry_t, task_list);
 
             // Select only the waiting entry for the timer task pid
-            task_struct *task = entry->task;
+            task_struct *task = wait_queue_entry->task;
             if (task->pid == p->pid) {
                 // Executed entry's wakeup test function
-                int res = entry->func(entry, 0, 0);
-                if (res == 1) {
+                if (wait_queue_entry->func(wait_queue_entry, 0, 0)) {
                     // Removes entry from list and memory
-                    remove_wait_queue(&stopped_queue, entry);
-                    kfree(entry);
+                    remove_wait_queue(&stopped_queue, wait_queue_entry);
+                    // Free its memory.
+                    wait_queue_entry_dealloc(wait_queue_entry);
 
                     pr_debug("Process (pid: %d) restored from stop\n", p->pid);
                 }

@@ -4,12 +4,15 @@
 /// See LICENSE.md for details.
 
 // Setup the logging for this file (do this before any other include).
-#include "sys/kernel_levels.h"           // Include kernel log levels.
-#define __DEBUG_HEADER__ "[WAIT  ]"      ///< Change header.
+#include "sys/kernel_levels.h"          // Include kernel log levels.
+#define __DEBUG_HEADER__ "[WAIT  ]"     ///< Change header.
 #define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
-#include "io/debug.h"                    // Include debugging functions.
+#include "io/debug.h"                   // Include debugging functions.
 
 #include "process/wait.h"
+#include "mem/slab.h"
+#include "assert.h"
+#include "string.h"
 
 static inline void __add_wait_queue(wait_queue_head_t *head, wait_queue_entry_t *wq)
 {
@@ -19,6 +22,32 @@ static inline void __add_wait_queue(wait_queue_head_t *head, wait_queue_entry_t 
 static inline void __remove_wait_queue(wait_queue_head_t *head, wait_queue_entry_t *wq)
 {
     list_head_remove(&wq->task_list);
+}
+
+wait_queue_entry_t *wait_queue_entry_alloc()
+{
+    // Allocate the memory.
+    wait_queue_entry_t *wait_queue_entry = (wait_queue_entry_t *)kmalloc(sizeof(wait_queue_entry_t));
+    pr_debug("ALLOCATE wait_queue_entry_t 0x%p\n", wait_queue_entry);
+    // Check the allocated memory.
+    assert(wait_queue_entry && "Failed to allocate memory for a wait_queue_entry_t.");
+    // Clean the memory.
+    memset(wait_queue_entry, 0, sizeof(wait_queue_entry_t));
+    // Initialize the element.
+    wait_queue_entry->flags = 0;
+    wait_queue_entry->task  = NULL;
+    wait_queue_entry->func  = NULL;
+    list_head_init(&wait_queue_entry->task_list);
+    // Return the element.
+    return wait_queue_entry;
+}
+
+void wait_queue_entry_dealloc(wait_queue_entry_t *wait_queue_entry)
+{
+    assert(wait_queue_entry && "Received a NULL pointer.");
+    pr_debug("FREE     wait_queue_entry_t 0x%p\n", wait_queue_entry);
+    // Deallocate the memory.
+    kfree(wait_queue_entry);
 }
 
 void init_waitqueue_entry(wait_queue_entry_t *wq, struct task_struct *task)

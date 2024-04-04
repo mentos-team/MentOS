@@ -18,21 +18,21 @@ int main(int argc, char **argv)
     printf("pid: %d, gid: %d, sid: %d\n\n", pid, gid, sid);
     for (int i = 0; i < 5; ++i) {
         if (fork() == 0) {
-            pid_t gid_child  = getgid();
-            pid_t pid_child  = getpid();
-            
+            pid_t gid_child = getgid();
+            pid_t pid_child = getpid();
+
             pid_t ppid_child = getppid();
             pid_t sid_child  = getsid(ppid_child);
 
+            sleep(i + 1);
+            
             printf("%d) pid_child: %d, gid_child: %d, ppid_child: %d, sid_child: %d\n",
                    i, pid_child, gid_child, ppid_child, sid_child);
-            sleep(5);
             exit(0);
         }
     }
-    //int status;
-    //while (wait(&status) > 0)
-    //    ;
+
+    while (wait(NULL) != -1) {}
 
     return 0;
 }
