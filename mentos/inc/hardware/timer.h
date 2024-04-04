@@ -143,9 +143,6 @@ void add_timer(struct timer_list *timer);
 /// @param timer The timer to remove.
 void remove_timer(struct timer_list *timer);
 
-/// @brief Updates and executes dynamics timers
-void run_timer_softirq(void);
-
 /// @brief Suspends the execution of the calling thread.
 /// @param req The amount of time we want to sleep.
 /// @param rem The remaining time we did not sleep.
