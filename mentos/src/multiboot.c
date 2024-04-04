@@ -132,11 +132,11 @@ void dump_multiboot(multiboot_info_t *mbi)
         pr_debug("%-16s = 0x%x\n", "mods_addr", mbi->mods_addr);
         multiboot_module_t *mod = first_module(mbi);
         do {
-            pr_debug("    [%2d] "
+            pr_debug("    "
                      "mod_start = 0x%x, "
                      "mod_end = 0x%x, "
                      "cmdline = %s\n",
-                     i, mod->mod_start, mod->mod_end, (char *)mod->cmdline);
+                     mod->mod_start, mod->mod_end, (char *)mod->cmdline);
             mod = next_module(mbi, mod);
         } while (mod);
     }
@@ -174,11 +174,11 @@ void dump_multiboot(multiboot_info_t *mbi)
                  mbi->mmap_length / sizeof(multiboot_memory_map_t));
         multiboot_memory_map_t *mmap = mmap_first_entry(mbi);
         do {
-            pr_debug("    [%2d] "
+            pr_debug("    "
                      "base_addr = 0x%09x%09x, "
                      "length = 0x%09x%09x, "
                      "type = 0x%x (%s)\n",
-                     i, mmap->base_addr_high, mmap->base_addr_low,
+                     mmap->base_addr_high, mmap->base_addr_low,
                      mmap->length_high, mmap->length_low, mmap->type,
                      mmap_type_name(mmap));
             mmap = mmap_next_entry(mbi, mmap);
