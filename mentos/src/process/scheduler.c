@@ -257,12 +257,12 @@ wait_queue_entry_t *sleep_on(wait_queue_head_t *wq)
     scheduler_restore_context(next, f);
 #endif
     // Allocate the wait_queue entry.
-    wait_queue_entry_t *wait_entry = kmalloc(sizeof(struct wait_queue_entry_t));
+    wait_queue_entry_t *wait_queue_entry = wait_queue_entry_alloc();
     // Initialize the entry.
-    init_waitqueue_entry(wait_entry, sleeping_task);
+    init_waitqueue_entry(wait_queue_entry, sleeping_task);
     // Add sleeping process to sleep wait queue.
-    add_wait_queue(wq, wait_entry);
-    return wait_entry;
+    add_wait_queue(wq, wait_queue_entry);
+    return wait_queue_entry;
 }
 
 int is_orphaned_pgrp(pid_t pgid)
