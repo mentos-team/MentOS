@@ -32,7 +32,8 @@ static list_head shared_interrupt_handlers[IRQ_NUM];
 /// Cache where we will store the data regarding an irq service.
 static kmem_cache_t *irq_cache;
 
-/// @brief Creates a new irq struct.
+/// @brief Creates a new irq structure.
+/// @return a pointer to the newly created irq structure.
 static inline irq_struct_t *__irq_struct_alloc(void)
 {
     // Allocate the structure.
@@ -46,6 +47,7 @@ static inline irq_struct_t *__irq_struct_alloc(void)
 }
 
 /// @brief Destroys an irq struct.
+/// @param irq_struct the structure we need to destroy.
 static inline void __irq_struct_dealloc(irq_struct_t *irq_struct)
 {
     list_head_remove(&irq_struct->siblings);

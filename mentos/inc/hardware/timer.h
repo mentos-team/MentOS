@@ -19,7 +19,7 @@
 
 /// This enables the system dump tvec_base timer vectors content on
 /// the console.
-#define ENABLE_REAL_TIMER_SYSTEM_DUMP
+//#define ENABLE_REAL_TIMER_SYSTEM_DUMP
 
 /// Counts down in real (i.e., wall clock) time.
 #define ITIMER_REAL 0
@@ -61,6 +61,8 @@ void timer_phase(const uint32_t hz);
 
 #ifdef ENABLE_REAL_TIMER_SYSTEM
 
+/// Number of normal timer vectors.
+#define TVN_COUNT 4
 /// Number of bits for the normal timer vector.
 #define TVN_BITS 6
 /// Number of bits for the root timer vector.
@@ -78,18 +80,6 @@ void timer_phase(const uint32_t hz);
 /// Expiration ticks of timer based on position inside tvec_base structure
 #define TIMER_TICKS(tv) (1 << TIMER_TICKS_BITS(tv))
 
-/// @brief Root timer vector.
-typedef struct timer_vec_root {
-    /// Array of lists of timers
-    list_head vec[TVR_SIZE];
-} timer_vec_root;
-
-/// @brief Normal timer vector.
-typedef struct timer_vec {
-    /// Array of lists of timers
-    list_head vec[TVN_SIZE];
-} timer_vec;
-
 #endif
 
 /// @brief Contains all the timers of a single CPU
@@ -102,16 +92,14 @@ typedef struct tvec_base_s {
     /// The earliest expiration time of the dynamic timers yet to be checked
     unsigned long timer_ticks;
 
-    /// Lists of timers that will expires in the next 255 ticks
-    struct timer_vec_root tv1;
-    /// Lists of timers that will expires in the next 2^14 - 1 ticks
-    struct timer_vec tv2;
-    /// Lists of timers that will expires in the next 2^20 - 1 ticks
-    struct timer_vec tv3;
-    /// Lists of timers that will expires in the next 2^26 - 1 ticks
-    struct timer_vec tv4;
-    /// Lists of timers with extremely large expires fields (2^32 - 1 ticks)
-    struct timer_vec tv5;
+    /// Lists of root timers that will expires in the next 255 ticks.
+    list_head tvr[TVR_SIZE];
+    /// Lists of normal timers that will expires in the next:
+    ///     tv[0] : 2^14 - 1 ticks
+    ///     tv[1] : 2^20 - 1 ticks
+    ///     tv[2] : 2^26 - 1 ticks
+    ///     tv[3] : 2^32 - 1 ticks
+    list_head tvn[TVN_COUNT][TVN_SIZE];
 
 #else
     /// List of all the timers
@@ -153,10 +141,7 @@ void add_timer(struct timer_list *timer);
 
 /// @brief Removes a timer from the current CPU.
 /// @param timer The timer to remove.
-void del_timer(struct timer_list *timer);
-
-/// @brief Updates and executes dynamics timers
-void run_timer_softirq(void);
+void remove_timer(struct timer_list *timer);
 
 /// @brief Suspends the execution of the calling thread.
 /// @param req The amount of time we want to sleep.

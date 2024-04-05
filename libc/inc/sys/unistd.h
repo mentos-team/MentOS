@@ -61,7 +61,7 @@ int unlink(const char *path);
 int symlink(const char *linkname, const char *path);
 
 /// @brief Read the symbolic link, if present.
-/// @param file the file for which we want to read the symbolic link information.
+/// @param path the file for which we want to read the symbolic link information.
 /// @param buffer the buffer where we will store the symbolic link path.
 /// @param bufsize the size of the buffer.
 /// @return The number of read characters on success, -1 otherwise and errno is set to indicate the error.
@@ -106,25 +106,47 @@ pid_t getpgid(pid_t pid);
 /// @return returns zero. On error, -1 is returned, and errno is set appropriately.
 int setpgid(pid_t pid, pid_t pgid);
 
-///@brief returns the group ID of the calling process.
+///@brief returns the real group ID of the calling process.
 ///@return GID of the current process
-extern pid_t getgid(void);
+extern gid_t getgid(void);
 
-///@brief sets the effective group ID of the calling process.
-///@param pid process identifier to 
+///@brief returns the effective group ID of the calling process.
+///@return GID of the current process
+extern gid_t getegid(void);
+
+///@brief sets the group IDs of the calling process.
+///@param gid the Group ID to set
 ///@return On success, zero is returned.
 ///        Otherwise returns -1 with errno set to :EINVAL or EPERM  
-extern int setgid(pid_t pid);
+extern int setgid(gid_t gid);
 
-///@brief Returns the User ID of the calling process.
+///@brief sets the real and effective group IDs of the calling process.
+///@param rgid the new real Group ID.
+///@param egid the effective real Group ID.
+///@return On success, zero is returned.
+///        Otherwise returns -1 with errno set EPERM
+extern int setregid(gid_t rgid, gid_t egid);
+
+///@brief Returns the real User ID of the calling process.
 ///@return User ID of the current process.
 extern uid_t getuid(void);
 
-///@brief Sets the effective User ID of the calling process.
+///@brief Returns the effective User ID of the calling process.
+///@return User ID of the current process.
+extern uid_t geteuid(void);
+
+///@brief Sets the User IDs of the calling process.
 ///@param uid the new User ID.
 ///@return On success, zero is returned.
 ///        Otherwise returns -1 with errno set to :EINVAL or EPERM  
 extern int setuid(uid_t uid);
+
+///@brief Sets the effective and real User IDs of the calling process.
+///@param ruid the new real User ID.
+///@param euid the effective real User ID.
+///@return On success, zero is returned.
+///        Otherwise returns -1 with errno set to EPERM
+extern int setreuid(uid_t ruid, uid_t euid);
 
 /// @brief Returns the parent process ID (PPID) of the calling process.
 /// @return pid_t parent process identifier.
@@ -253,6 +275,12 @@ int fchdir(int fd);
 ///         appropriately.
 ssize_t getdents(int fd, dirent_t *dirp, unsigned int count);
 
+/// @brief Return a new file descriptor
+/// @param fd The fd pointing to the opened file.
+/// @return On success, a new file descriptor is returned.
+///         On error, -1 is returned, and errno is set appropriately.
+int dup(int fd);
+
 /// @brief Send signal to calling thread after desired seconds.
 /// @param seconds the amount of seconds.
 /// @return If there is a previous alarm() request with time remaining, alarm()
@@ -260,3 +288,41 @@ ssize_t getdents(int fd, dirent_t *dirp, unsigned int count);
 /// previous request would have generated a SIGALRM signal. Otherwise, alarm()
 /// shall return 0.
 unsigned alarm(int seconds);
+
+/// @brief Change the file's mode bits.
+/// @param pathname The pathname of the file to change mode.
+/// @param mode The mode bits to set.
+/// @return On success, 0 is returned.
+///         On error, -1 is returned, and errno is set appropriately.
+int chmod(const char *pathname, mode_t mode);
+
+/// @brief Change the file's mode bits.
+/// @param fd The fd pointing to the opened file.
+/// @param mode The mode bits to set.
+/// @return On success, 0 is returned.
+///         On error, -1 is returned, and errno is set appropriately.
+int fchmod(int fd, mode_t mode);
+
+/// @brief Change the owner and group of a file.
+/// @param pathname The pathname of the file to change.
+/// @param owner The new owner to set.
+/// @param owner The new group to set.
+/// @return On success, 0 is returned.
+///         On error, -1 is returned, and errno is set appropriately.
+int chown(const char *pathname, uid_t owner, gid_t group);
+
+/// @brief Change the owner and group of a file.
+/// @param fd The fd pointing to the opened file.
+/// @param owner The new owner to set.
+/// @param owner The new group to set.
+/// @return On success, 0 is returned.
+///         On error, -1 is returned, and errno is set appropriately.
+int fchown(int fd, uid_t owner, gid_t group);
+
+/// @brief Change the owner and group of a file.
+/// @param pathname The pathname of the file to change.
+/// @param owner The new owner to set.
+/// @param owner The new group to set.
+/// @return On success, 0 is returned.
+///         On error, -1 is returned, and errno is set appropriately.
+int lchown(const char *pathname, uid_t owner, gid_t group);

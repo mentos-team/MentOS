@@ -37,7 +37,14 @@ int vfs_register_filesystem(file_system_type *fs);
 /// @return The outcome of the operation, 0 if fails.
 int vfs_unregister_filesystem(file_system_type *fs);
 
-/// @brief Given a pathname for a file, kopen() returns a file struct, used to access the file.
+/// @brief Given an absolute path to a file, vfs_open_abspath() returns a file struct, used to access the file.
+/// @param abspath  An absolute path to a file.
+/// @param flags    Used to set the file status flags and file access modes of the open file description.
+/// @param mode     Specifies the file mode bits be applied when a new file is created.
+/// @return Returns a file struct, or NULL.
+vfs_file_t *vfs_open_abspath(const char *pathname, int flags, mode_t mode);
+
+/// @brief Given a pathname for a file, vfs_open() returns a file struct, used to access the file.
 /// @param pathname A pathname for a file.
 /// @param flags    Used to set the file status flags and file access modes of the open file description.
 /// @param mode     Specifies the file mode bits be applied when a new file is created.
@@ -135,13 +142,13 @@ int vfs_symlink(const char *linkname, const char *path);
 /// @brief Stat the file at the given path.
 /// @param path Path to the file for which we are retrieving the statistics.
 /// @param buf  Buffer where we are storing the statistics.
-/// @return 0 on success, a negative number if fails and errno is set.
+/// @return 0 on success, -errno on failure.
 int vfs_stat(const char *path, stat_t *buf);
 
 /// @brief Stat the given file.
 /// @param file Pointer to the file for which we are retrieving the statistics.
 /// @param buf  Buffer where we are storing the statistics.
-/// @return 0 on success, a negative number if fails and errno is set.
+/// @return 0 on success, -errno on failure.
 int vfs_fstat(vfs_file_t *file, stat_t *buf);
 
 /// @brief Mount a file system to the specified path.
@@ -187,3 +194,25 @@ int vfs_dup_task(struct task_struct *new_task, struct task_struct *old_task);
 /// @param task The task for which we destroy the file descriptor list.
 /// @return 0 on fail, 1 on success.
 int vfs_destroy_task(struct task_struct *task);
+
+/// @brief Find the smallest available fd.
+/// @return -errno on fail, fd on success.
+int get_unused_fd(void);
+
+/// @brief Return new smallest available file desriptor.
+/// @return -errno on fail, fd on success.
+int sys_dup(int fd);
+
+/// @brief Check if the requested open flags against the file mask
+/// @param flags The requested open flags.
+/// @param mode The permissions of the file.
+/// @param uid The owner of the task opening the file.
+/// @param gid The group of the task opening the file.
+/// @return 0 on fail, 1 on success.
+int vfs_valid_open_permissions(int flags, mode_t mask, uid_t uid, gid_t gid);
+
+/// @brief Check if the file is exectuable
+/// @param task The task to execute the file.
+/// @param file The file to execute.
+/// @return 0 on fail, 1 on success.
+int vfs_valid_exec_permission(struct task_struct *task, vfs_file_t *file);

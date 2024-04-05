@@ -1,0 +1,12 @@
+SYNOPSIS
+    shell [FILE]
+
+DESCRIPTION
+    shell reads and executes commands from a file or from standard input.
+
+INVOCATION
+    An interactive shell is one started without arguments, whose standard
+    input and error are both connected to terminals.
+
+    When shell is started as interactive shell it first reads and executes
+    commands from the file ~/.shellrc.

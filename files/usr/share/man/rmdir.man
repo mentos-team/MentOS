@@ -5,4 +5,4 @@ DESCRIPTION
     Remove the DIRECTORY, if it is empty.
 
 OPTIONS
-    --help : shows command help.
+    -h, --help  shows command help.

@@ -10,31 +10,12 @@
 #include <string.h>
 #include <strerror.h>
 #include <sys/wait.h>
-
-#define cpu_relax() __asm__ __volatile__("pause\n" \
-                                 :         \
-                                 :         \
-                                 : "memory")
-
-static inline void fake_sleep(int times)
-{
-    for (int j = 0; j < times; ++j)
-        for (long i = 1; i < 1024000; ++i)
-            cpu_relax();
-}
+#include <time.h>
 
 void child_sigusr1_handler(int sig)
 {
     printf("handler(sig: %d) : Starting handler (pid: %d).\n", sig, getpid());
     printf("handler(sig: %d) : Ending handler (pid: %d).\n", sig, getpid());
-}
-
-void child_process(void)
-{
-    while (1) {
-        printf("I'm the child (%d): I'm playing around!\n", getpid());
-        fake_sleep(1);
-    }
 }
 
 int main(int argc, char *argv[])
@@ -50,16 +31,18 @@ int main(int argc, char *argv[])
             printf("Failed to set signal handler (%s).\n", SIGUSR1, strerror(errno));
             return 1;
         }
-        child_process();
+        while (1) {
+            printf("I'm the child (%d): I'm playing around!\n", getpid());
+            sleep(1);
+        }
     } else {
         printf("I'm the parent (%d)!\n", ppid);
     }
-    fake_sleep(9);
+    sleep(2);
     kill(ppid, SIGUSR1);
-    fake_sleep(9);
+    sleep(2);
     kill(ppid, SIGTERM);
-    int status;
-    wait(&status);
-    printf("main : end (%d)\n", status);
+    wait(NULL);
+    printf("main : end\n");
     return 0;
 }

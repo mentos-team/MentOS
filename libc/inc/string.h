@@ -174,6 +174,7 @@ char *strtok_r(char *str, const char *delim, char **saveptr);
 /// parsed token in buffer. The pointer `string` will be modified.
 /// @param string cursor used to parse the string, it will be modified.
 /// @param separators the list of separators we are using.
+/// @param offset the offset character from which we start extracting the next token.
 /// @param buffer the buffer where we save the parsed token.
 /// @param buflen the length of the buffer.
 /// @return 1 if we still have things to parse, 0 if we finished parsing.

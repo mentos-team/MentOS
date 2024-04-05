@@ -33,29 +33,29 @@ int main(int argc, char *argv[])
 {
     if (argc != 2) {
         printf("edit: missing operand.\n");
-        printf("Try 'edit --help' for more information.\n\n");
+        printf("Try 'edit --help' for more information.\n");
         return 1;
     }
     if (strcmp(argv[1], "--help") == 0) {
         printf("Prints the content of the given file.\n");
         printf("Usage:\n");
-        printf("    edit <file>\n\n");
+        printf("    edit <file>\n");
         return 0;
     }
     int fd = open(argv[1], O_RDONLY, 42);
     if (fd < 0) {
-        printf("edit: %s: %s\n\n", argv[0], strerror(errno));
+        printf("edit: %s: %s\n", argv[1], strerror(errno));
         return 1;
     }
     stat_t statbuf;
     if (fstat(fd, &statbuf) == -1) {
-        printf("edit: %s: %s\n\n", argv[0], strerror(errno));
+        printf("edit: %s: %s\n", argv[1], strerror(errno));
         // Close the file descriptor.
         close(fd);
         return 1;
     }
     if (S_ISDIR(statbuf.st_mode)) {
-        printf("edit: %s: %s\n\n", argv[0], strerror(EISDIR));
+        printf("edit: %s: %s\n", argv[1], strerror(EISDIR));
         // Close the file descriptor.
         close(fd);
         return 1;

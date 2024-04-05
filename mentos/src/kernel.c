@@ -18,6 +18,7 @@
 #include "drivers/keyboard/keymap.h"
 #include "drivers/ps2.h"
 #include "drivers/rtc.h"
+#include "drivers/mem.h"
 #include "fs/ext2.h"
 #include "fs/procfs.h"
 #include "fs/vfs.h"
@@ -31,6 +32,7 @@
 #include "process/scheduler.h"
 #include "process/scheduler_feedback.h"
 #include "stdio.h"
+#include "string.h"
 #include "sys/module.h"
 #include "sys/msg.h"
 #include "sys/sem.h"
@@ -76,6 +78,9 @@ extern uint32_t end;
 uintptr_t initial_esp = 0;
 /// The boot info.
 boot_info_t boot_info;
+
+/// Flag indicating if we are running tests instead of an interactive session
+int runtests = 0;
 
 /// @brief Prints [OK] at the current row and column 60.
 static inline void print_ok(void)
@@ -239,6 +244,16 @@ int kmain(boot_info_t *boot_informations)
     print_ok();
 
     //==========================================================================
+    pr_notice("    Initialize memory devices...\n");
+    printf("    Initialize memory devices...");
+    if (mem_devs_initialize()) {
+        print_fail();
+        pr_emerg("Failed to initialize memory devices!\n");
+        return 1;
+    }
+    print_ok();
+
+    //==========================================================================
     pr_notice("    Initialize 'procfs'...\n");
     printf("    Initialize 'procfs'...");
     if (procfs_module_init()) {
@@ -340,6 +355,8 @@ int kmain(boot_info_t *boot_informations)
     // Set the keymap type.
 #ifdef USE_KEYMAP_US
     set_keymap_type(KEYMAP_US);
+#elif USE_KEYMAP_DE
+    set_keymap_type(KEYMAP_DE);
 #else
     set_keymap_type(KEYMAP_IT);
 #endif
@@ -390,9 +407,21 @@ int kmain(boot_info_t *boot_informations)
     print_ok();
 
     //==========================================================================
-    pr_notice("Creating init process...\n");
-    printf("Creating init process...");
-    task_struct *init_p = process_create_init("/bin/init");
+    // TODO: fix the hardcoded check for the flags set by GRUB
+    runtests = boot_info.multiboot_header->flags == 0x1a67 &&
+        bitmask_check(boot_info.multiboot_header->flags, MULTIBOOT_FLAG_CMDLINE) &&
+        strcmp((char *)boot_info.multiboot_header->cmdline, "runtests") == 0;
+
+    task_struct *init_p;
+    if (runtests) {
+        pr_notice("Creating runtests process...\n");
+        printf("Creating runtests process...");
+        init_p = process_create_init("/bin/runtests");
+    } else {
+        pr_notice("Creating init process...\n");
+        printf("Creating init process...");
+        init_p = process_create_init("/bin/init");
+    }
     if (!init_p) {
         print_fail();
         return 1;

@@ -245,10 +245,14 @@ typedef struct ata_device_t {
 #define ATA_SECTOR_SIZE 512 ///< The sector size.
 #define ATA_DMA_SIZE    512 ///< The size of the DMA area.
 
+/// @brief Keeps track of the incremental letters for the ATA drives.
 static char ata_drive_char = 'a';
-static int cdrom_number    = 0;
-static uint32_t ata_pci    = 0x00000000;
+/// @brief Keeps track of the incremental number for removable media.
+static int cdrom_number = 0;
+/// @brief We store the ATA pci address here.
+static uint32_t ata_pci = 0x00000000;
 
+/// @brief The ATA primary master control register locations.
 static ata_device_t ata_primary_master = {
     .io_base = 0x1F0,
     .io_reg  = {
@@ -270,6 +274,7 @@ static ata_device_t ata_primary_master = {
     .slave      = 0
 };
 
+/// @brief The ATA primary slave control register locations.
 static ata_device_t ata_primary_slave = {
     .io_base = 0x1F0,
     .io_reg  = {
@@ -291,6 +296,7 @@ static ata_device_t ata_primary_slave = {
     .slave      = 1
 };
 
+/// @brief The ATA secondary master control register locations.
 static ata_device_t ata_secondary_master = {
     .io_base = 0x170,
     .io_reg  = {
@@ -312,6 +318,7 @@ static ata_device_t ata_secondary_master = {
     .slave      = 0
 };
 
+/// @brief The ATA secondary slave control register locations.
 static ata_device_t ata_secondary_slave = {
     .io_base = 0x170,
     .io_reg  = {
@@ -335,6 +342,9 @@ static ata_device_t ata_secondary_slave = {
 
 // == SUPPORT FUNCTIONS =======================================================
 
+/// @brief Returns the set of ATA errors as a string.
+/// @param error the variable containing all the error flags.
+/// @return the string with the list of errors.
 static inline const char *ata_get_device_error_str(uint8_t error)
 {
     static char str[50] = { 0 };
@@ -366,6 +376,9 @@ static inline const char *ata_get_device_error_str(uint8_t error)
     return str;
 }
 
+/// @brief Returns the device status as a string.
+/// @param status the device status.
+/// @return the device status as string.
 static inline const char *ata_get_device_status_str(uint8_t status)
 {
     static char str[50] = { 0 };
@@ -397,11 +410,17 @@ static inline const char *ata_get_device_status_str(uint8_t status)
     return str;
 }
 
+/// @brief Returns the device configuration as string.
+/// @param dev the devce.
+/// @return the device configuration as string.
 static inline const char *ata_get_device_settings_str(ata_device_t *dev)
 {
     return (dev->primary) ? ((dev->master) ? "Primary Master" : "Primary Slave") : ((dev->master) ? "Secondary Master" : "Secondary Slave");
 }
 
+/// @brief Returns the device type as string.
+/// @param type the device type value.
+/// @return the device type as string.
 static inline const char *ata_get_device_type_str(ata_device_type_t type)
 {
     if (type == ata_dev_type_pata) {
@@ -496,6 +515,7 @@ static inline void ata_io_wait(ata_device_t *dev)
 /// @param dev the device we need to wait for.
 /// @param mask the mask we use to access those bits.
 /// @param timeout the maximum number of cycles we are going to wait.
+/// @return 1 on success, 0 if it times out.
 static inline int ata_status_wait_not(ata_device_t *dev, long mask, long timeout)
 {
     uint8_t status;
@@ -511,6 +531,8 @@ static inline int ata_status_wait_not(ata_device_t *dev, long mask, long timeout
 /// @brief Wait until the status bits selected through the mask are one.
 /// @param dev the device we need to wait for.
 /// @param mask the mask we use to access those bits.
+/// @param timeout the maximum number of cycles we are going to wait.
+/// @return 1 on success, 0 if it times out.
 static inline int ata_status_wait_for(ata_device_t *dev, long mask, long timeout)
 {
     uint8_t status;
@@ -608,7 +630,6 @@ static inline uintptr_t ata_dma_malloc(size_t size, uintptr_t *physical)
 }
 
 /// @brief Emables bus mastering, allowing Direct Memory Access (DMA) transactions.
-/// @param dev the device for which we enable bus mastering.
 static inline void ata_dma_enable_bus_mastering(void)
 {
     uint32_t pci_cmd = pci_read_32(ata_pci, PCI_COMMAND);
@@ -662,7 +683,9 @@ static inline void ata_dma_initialize_bus_mastering_address(ata_device_t *dev)
 
 // == ATA DEVICE MANAGEMENT ===================================================
 
-/* on Primary bus: ctrl->base =0x1F0, ctrl->dev_ctl =0x3F6. REG_CYL_LO=4, REG_CYL_HI=5, REG_DEVSEL=6 */
+/// @brief Detects the type of device.
+/// @param dev the device for which we are checking the type.
+/// @return the device type.
 static inline ata_device_type_t ata_detect_device_type(ata_device_t *dev)
 {
     pr_debug("[%s] Detecting device type...\n", ata_get_device_settings_str(dev));
@@ -730,6 +753,9 @@ static inline ata_device_type_t ata_detect_device_type(ata_device_t *dev)
     return ata_dev_type_unknown;
 }
 
+/// @brief Initialises the given device.
+/// @param dev the device to initialize.
+/// @return 0 on success, 1 on error.
 static bool_t ata_device_init(ata_device_t *dev)
 {
     pr_debug("[%s] Initializing ATA device...\n", ata_get_device_settings_str(dev));
@@ -761,6 +787,11 @@ static bool_t ata_device_init(ata_device_t *dev)
 }
 
 // == ATA SECTOR READ/WRITE FUNCTIONS =========================================
+
+/// @brief Reads an ATA sector.
+/// @param dev the device on which we perform the read.
+/// @param lba_sector the sector where we write.
+/// @param buffer the buffer we are writing.
 static void ata_device_read_sector(ata_device_t *dev, uint32_t lba_sector, uint8_t *buffer)
 {
     // Check if we are trying to perform the read on the correct drive type.
@@ -843,6 +874,10 @@ static void ata_device_read_sector(ata_device_t *dev, uint32_t lba_sector, uint8
     spinlock_unlock(&dev->lock);
 }
 
+/// @brief Writs an ATA sector.
+/// @param dev the device on which we perform the write.
+/// @param lba_sector the sector where we read.
+/// @param buffer the buffer where we store what we read.
 static void ata_device_write_sector(ata_device_t *dev, uint32_t lba_sector, uint8_t *buffer)
 {
     spinlock_lock(&dev->lock);
@@ -912,6 +947,12 @@ static void ata_device_write_sector(ata_device_t *dev, uint32_t lba_sector, uint
 }
 
 // == VFS CALLBACKS ===========================================================
+
+/// @brief Implements the open function for an ATA device.
+/// @param path the phat to the device we want to open.
+/// @param flags we ignore these.
+/// @param mode we currently ignore this.
+/// @return the VFS file associated with the device.
 static vfs_file_t *ata_open(const char *path, int flags, mode_t mode)
 {
     pr_debug("ata_open(%s, %d, %d)\n", path, flags, mode);
@@ -934,6 +975,9 @@ static vfs_file_t *ata_open(const char *path, int flags, mode_t mode)
     return NULL;
 }
 
+/// @brief Closes an ATA device.
+/// @param file the VFS file associated with the ATA device.
+/// @return 0 on success, it panics on failure.
 static int ata_close(vfs_file_t *file)
 {
     pr_debug("ata_close(%p)\n", file);
@@ -951,6 +995,12 @@ static int ata_close(vfs_file_t *file)
     return 0;
 }
 
+/// @brief Reads from an ATA device.
+/// @param file the VFS file associated with the ATA device.
+/// @param buffer the buffer where we store what we read.
+/// @param offset the offset where we want to read.
+/// @param size the size of the buffer.
+/// @return the number of read characters.
 static ssize_t ata_read(vfs_file_t *file, char *buffer, off_t offset, size_t size)
 {
     // pr_debug("ata_read(file: 0x%p, buffer: 0x%p, offest: %8d, size: %8d)\n", file, buffer, offset, size);
@@ -1014,6 +1064,12 @@ static ssize_t ata_read(vfs_file_t *file, char *buffer, off_t offset, size_t siz
     return size;
 }
 
+/// @brief Writes on an ATA device.
+/// @param file the VFS file associated with the ATA device.
+/// @param buffer the buffer we use to write.
+/// @param offset the offset where we want to write.
+/// @param size the size of the buffer.
+/// @return the number of written characters.
 static ssize_t ata_write(vfs_file_t *file, const void *buffer, off_t offset, size_t size)
 {
     pr_debug("ata_write(%p, %p, %d, %d)\n", file, buffer, offset, size);
@@ -1072,6 +1128,10 @@ static ssize_t ata_write(vfs_file_t *file, const void *buffer, off_t offset, siz
     return size;
 }
 
+/// @brief Stats an ATA device.
+/// @param dev the ATA device.
+/// @param stat the stat buffer.
+/// @return 0 on success.
 static int _ata_stat(const ata_device_t *dev, stat_t *stat)
 {
     if (dev && dev->fs_root) {
@@ -1089,19 +1149,19 @@ static int _ata_stat(const ata_device_t *dev, stat_t *stat)
     return 0;
 }
 
-/// @brief      Retrieves information concerning the file at the given position.
-/// @param fid  The file struct.
-/// @param stat The structure where the information are stored.
-/// @return     0 if success.
+/// @brief Retrieves information concerning the file at the given position.
+/// @param file the file.
+/// @param stat the structure where the information are stored.
+/// @return 0 if success.
 static int ata_fstat(vfs_file_t *file, stat_t *stat)
 {
     return _ata_stat(file->device, stat);
 }
 
-/// @brief      Retrieves information concerning the file at the given position.
-/// @param path The path where the file resides.
-/// @param stat The structure where the information are stored.
-/// @return     0 if success.
+/// @brief Retrieves information concerning the file at the given position.
+/// @param path the path where the file resides.
+/// @param stat the structure where the information are stored.
+/// @return 0 if success.
 static int ata_stat(const char *path, stat_t *stat)
 {
     super_block_t *sb = vfs_get_superblock(path);
@@ -1135,6 +1195,9 @@ static vfs_file_operations_t ata_fs_operations = {
     .readlink_f = NULL,
 };
 
+/// @brief Creates a VFS file, starting from an ATA device.
+/// @param dev the ATA device.
+/// @return a pointer to the VFS file on success, NULL on failure.
 static vfs_file_t *ata_device_create(ata_device_t *dev)
 {
     // Create the file.
@@ -1155,6 +1218,9 @@ static vfs_file_t *ata_device_create(ata_device_t *dev)
     return file;
 }
 
+/// @brief Detects and mount the given ATA device.
+/// @param dev the device we want to handle.
+/// @return the type of device.
 static ata_device_type_t ata_device_detect(ata_device_t *dev)
 {
     // Perform a soft reset.
@@ -1232,6 +1298,12 @@ static void ata_irq_handler_slave(pt_regs *f)
 }
 
 // == PCI FUNCTIONS ===========================================================
+
+/// @brief Used while scanning the PCI interface.
+/// @param device the device we want to find.
+/// @param vendorid its vendor ID.
+/// @param deviceid its device ID.
+/// @param extra the devoce once we find it.
 static void pci_find_ata(uint32_t device, uint16_t vendorid, uint16_t deviceid, void *extra)
 {
     // Intel Corporation AND (IDE Interface OR PIIX4 IDE)

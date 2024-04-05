@@ -83,13 +83,21 @@ int printf(const char *fmt, ...);
 int sprintf(char *str, const char *fmt, ...);
 
 #ifndef __KERNEL__
-/// @brief The same as sprintf, but it putput on file.
+/// @brief Write formatted output to a file.
 /// @param fd  The file descriptor associated with the file.
 /// @param fmt  Format string, following the same specifications as printf.
 /// @param ... The list of arguments.
 /// @return On success, the total number of characters written is returned.
 ///         On failure, a negative number is returned.
 int fprintf(int fd, const char *fmt, ...);
+
+/// @brief Write formatted data from variable argument list to a file.
+/// @param fd  The file descriptor associated with the file.
+/// @param fmt  Format string, following the same specifications as printf.
+/// @param args A variable arguments list.
+/// @return On success, the total number of characters written is returned.
+///         On failure, a negative number is returned.
+int vfprintf(int fd, const char *fmt, va_list args);
 #endif
 
 /// @brief Write formatted data from variable argument list to string.

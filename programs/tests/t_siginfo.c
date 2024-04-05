@@ -19,7 +19,7 @@ void sig_handler_info(int sig, siginfo_t *siginfo)
         printf("handler(%d, %p) : Correct signal.\n", sig, siginfo);
         printf("handler(%d, %p) : Code : %d\n", sig, siginfo, siginfo->si_code);
         printf("handler(%d, %p) : Exiting\n", sig, siginfo);
-        exit(1);
+        exit(0);
     } else {
         printf("handler(%d, %p) : Wrong signal.\n", sig, siginfo);
     }

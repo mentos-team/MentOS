@@ -9,8 +9,10 @@
 #define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
 #include "io/debug.h"                    // Include debugging functions.
 
+#include "fcntl.h"
 #include "assert.h"
 #include "fs/procfs.h"
+#include "fs/namei.h"
 #include "fs/vfs.h"
 #include "klib/hashmap.h"
 #include "klib/spinlock.h"
@@ -106,25 +108,17 @@ super_block_t *vfs_get_superblock(const char *absolute_path)
     return last_sb;
 }
 
-vfs_file_t *vfs_open(const char *path, int flags, mode_t mode)
+vfs_file_t *vfs_open_abspath(const char *absolute_path, int flags, mode_t mode)
 {
-    // Allocate a variable for the path.
-    char absolute_path[PATH_MAX];
-    // If the first character is not the '/' then get the absolute path.
-    if (!realpath(path, absolute_path, sizeof(absolute_path))) {
-        pr_err("vfs_open(%s): Cannot get the absolute path!\n", path);
-        errno = ENODEV;
-        return NULL;
-    }
     super_block_t *sb = vfs_get_superblock(absolute_path);
     if (sb == NULL) {
-        pr_err("vfs_open(%s): Cannot find the superblock!\n", path);
+        pr_err("vfs_open(%s): Cannot find the superblock!\n", absolute_path);
         errno = ENOENT;
         return NULL;
     }
     vfs_file_t *sb_root = sb->root;
     if (sb_root == NULL) {
-        pr_err("vfs_open(%s): Cannot find the superblock root!\n", path);
+        pr_err("vfs_open(%s): Cannot find the superblock root!\n", absolute_path);
         errno = ENOENT;
         return NULL;
     }
@@ -132,20 +126,45 @@ vfs_file_t *vfs_open(const char *path, int flags, mode_t mode)
     //size_t name_offset = (strcmp(mp->name, "/") == 0) ? 0 : strlen(mp->name);
     // Check if the function is implemented.
     if (sb_root->fs_operations->open_f == NULL) {
-        pr_err("vfs_open(%s): Function not supported in current filesystem.", path);
+        pr_err("vfs_open(%s): Function not supported in current filesystem.", absolute_path);
         errno = ENOSYS;
         return NULL;
     }
     // Retrieve the file.
     vfs_file_t *file = sb_root->fs_operations->open_f(absolute_path, flags, mode);
     if (file == NULL) {
-        pr_debug("vfs_open(%s): Filesystem open returned NULL file (errno: %d, %s)!\n", path, errno, strerror(errno));
+        pr_debug("vfs_open(%s): Filesystem open returned NULL file (errno: %d, %s)!\n",
+                 absolute_path, errno, strerror(errno));
         return NULL;
     }
     // Increment file reference counter.
     file->count += 1;
     // Return the file.
     return file;
+}
+
+vfs_file_t *vfs_open(const char *path, int flags, mode_t mode)
+{
+    pr_debug("vfs_open(path: %s, flags: %d, mode: %d)\n", path, flags, mode);
+    assert(path && "Provided null path.");
+    if (path[0] != '/') {
+        // Allocate a variable for the path.
+        char absolute_path[PATH_MAX];
+        // Resolve all symbolic links in the path before opening the file.
+        int resolve_flags = FOLLOW_LINKS;
+        // Allow the last component to be non existing when attempting to create it.
+        if (bitmask_check(flags, O_CREAT)) {
+            resolve_flags |= CREAT_LAST_COMPONENT;
+        }
+        int ret = resolve_path(path, absolute_path, sizeof(absolute_path), resolve_flags);
+        if (ret < 0) {
+            pr_err("vfs_open(%s): Cannot resolve path!\n", path);
+            errno = -ret;
+            return NULL;
+        }
+        return vfs_open_abspath(absolute_path, flags, mode);
+    }
+    return vfs_open_abspath(path, flags, mode);
 }
 
 int vfs_close(vfs_file_t *file)
@@ -603,4 +622,137 @@ int vfs_destroy_task(task_struct *task)
         return 0;
     }
     return 1;
+}
+
+int get_unused_fd(void)
+{
+    // Get the current task.
+    task_struct *task = scheduler_get_current_process();
+
+    // Search for an unused fd.
+    int fd;
+    for (fd = 0; fd < task->max_fd; ++fd) {
+        if (!task->fd_list[fd].file_struct) {
+            break;
+        }
+    }
+
+    // Check if there is not fd available.
+    if (fd >= MAX_OPEN_FD) {
+        return -EMFILE;
+    }
+
+    // If fd limit is reached, try to allocate more
+    if (fd == task->max_fd) {
+        if (!vfs_extend_task_fd_list(task)) {
+            pr_err("Failed to extend the file descriptor list.\n");
+            return -EMFILE;
+        }
+    }
+
+    return fd;
+}
+
+int sys_dup(int fd)
+{
+    // Get the current task.
+    task_struct *task = scheduler_get_current_process();
+
+    // Check the current FD.
+    if (fd < 0 || fd >= task->max_fd) {
+        return -EMFILE;
+    }
+
+    // Get the file descriptor.
+    vfs_file_descriptor_t *vfd = &task->fd_list[fd];
+    vfs_file_t *file           = vfd->file_struct;
+
+    // Check the file.
+    if (file == NULL) {
+        return -ENOSYS;
+    }
+
+    fd = get_unused_fd();
+    if (fd < 0)
+        return fd;
+
+    // Increment file reference counter.
+    file->count += 1;
+
+    // Install the new fd
+    task->fd_list[fd].file_struct = file;
+    task->fd_list[fd].flags_mask  = vfd->flags_mask;
+
+    return fd;
+}
+
+static inline int __valid_open_permissions(
+    const mode_t mask,
+    const int flags,
+    const int read,
+    const int write)
+{
+    if ((flags & O_ACCMODE) == O_RDONLY) {
+        return mask & read;
+    }
+    if ((flags & O_ACCMODE) == O_WRONLY) {
+        return mask & write;
+    }
+    if ((flags & O_ACCMODE) == O_RDWR) {
+        return mask & (write | read);
+    }
+    return 0;
+}
+
+/// @brief Checks if the requests in flags are valid.
+/// @param flags the flags to check.
+/// @param mask the mask to check against.
+/// @param uid the uid of the owner.
+/// @param gid the gid of the owner.
+/// @return 1 on success, 0 otherwise.
+int vfs_valid_open_permissions(int flags, mode_t mask, uid_t uid, gid_t gid)
+{
+    // Check the permissions.
+    task_struct *task = scheduler_get_current_process();
+    if (task == NULL) {
+        pr_warning("Failed to get the current running process, assuming we are booting.\n");
+        return 1;
+    }
+    // Init, and all root processes have full permissions.
+    if ((task->pid == 0) || (task->uid == 0)) {
+        return 1;
+    }
+    // Check the owners permission
+    if (task->uid == uid) {
+        return __valid_open_permissions(mask, flags, S_IRUSR, S_IWUSR);
+        // Check the groups permission
+    } else if (task->gid == gid) {
+        return __valid_open_permissions(mask, flags, S_IRGRP, S_IWGRP);
+    }
+
+    // Check the others permission
+    return __valid_open_permissions(mask, flags, S_IROTH, S_IWOTH);
+}
+
+/// @brief Checks if the task is allowed to execute the file
+/// @param task the task to execute the file.
+/// @param file the file to execute.
+/// @return 1 on success, 0 otherwise.
+int vfs_valid_exec_permission(task_struct *task, vfs_file_t *file)
+{
+    // Init, and all root processes may execute any file with an execute bit set
+    if ((task->pid == 0) || (task->uid == 0)) {
+        return file->mask & (S_IXUSR | S_IXGRP | S_IXOTH);
+    }
+
+    // Check the owners permission
+    if (task->uid == file->uid) {
+        return file->mask & S_IXUSR;
+        // Check the groups permission
+    } else if (task->gid == file->gid) {
+        return file->mask & S_IXGRP;
+    }
+
+    // Check the others permission
+    return file->mask & S_IXOTH;
 }

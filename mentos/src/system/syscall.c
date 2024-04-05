@@ -13,6 +13,8 @@
 
 #include "descriptor_tables/isr.h"
 #include "devices/fpu.h"
+#include "fs/attr.h"
+#include "fs/vfs.h"
 #include "fs/ioctl.h"
 #include "hardware/timer.h"
 #include "kernel.h"
@@ -69,8 +71,8 @@ void syscall_init(void)
     sys_call_table[__NR_chdir]                  = (SystemCall)sys_chdir;
     sys_call_table[__NR_time]                   = (SystemCall)sys_time;
     sys_call_table[__NR_mknod]                  = (SystemCall)sys_ni_syscall;
-    sys_call_table[__NR_chmod]                  = (SystemCall)sys_ni_syscall;
-    sys_call_table[__NR_lchown]                 = (SystemCall)sys_ni_syscall;
+    sys_call_table[__NR_chmod]                  = (SystemCall)sys_chmod;
+    sys_call_table[__NR_lchown]                 = (SystemCall)sys_lchown;
     sys_call_table[__NR_stat]                   = (SystemCall)sys_stat;
     sys_call_table[__NR_lseek]                  = (SystemCall)sys_lseek;
     sys_call_table[__NR_getpid]                 = (SystemCall)sys_getpid;
@@ -91,15 +93,15 @@ void syscall_init(void)
     sys_call_table[__NR_rename]                 = (SystemCall)sys_ni_syscall;
     sys_call_table[__NR_mkdir]                  = (SystemCall)sys_mkdir;
     sys_call_table[__NR_rmdir]                  = (SystemCall)sys_rmdir;
-    sys_call_table[__NR_dup]                    = (SystemCall)sys_ni_syscall;
+    sys_call_table[__NR_dup]                    = (SystemCall)sys_dup;
     sys_call_table[__NR_pipe]                   = (SystemCall)sys_ni_syscall;
     sys_call_table[__NR_times]                  = (SystemCall)sys_ni_syscall;
     sys_call_table[__NR_brk]                    = (SystemCall)sys_brk;
     sys_call_table[__NR_setgid]                 = (SystemCall)sys_setgid;
     sys_call_table[__NR_getgid]                 = (SystemCall)sys_getgid;
     sys_call_table[__NR_signal]                 = (SystemCall)sys_signal;
-    sys_call_table[__NR_geteuid]                = (SystemCall)sys_ni_syscall;
-    sys_call_table[__NR_getegid]                = (SystemCall)sys_ni_syscall;
+    sys_call_table[__NR_geteuid]                = (SystemCall)sys_geteuid;
+    sys_call_table[__NR_getegid]                = (SystemCall)sys_getegid;
     sys_call_table[__NR_acct]                   = (SystemCall)sys_ni_syscall;
     sys_call_table[__NR_umount]                 = (SystemCall)sys_ni_syscall;
     sys_call_table[__NR_ioctl]                  = (SystemCall)sys_ioctl;
@@ -116,8 +118,8 @@ void syscall_init(void)
     sys_call_table[__NR_sigaction]              = (SystemCall)sys_sigaction;
     sys_call_table[__NR_sgetmask]               = (SystemCall)sys_ni_syscall;
     sys_call_table[__NR_ssetmask]               = (SystemCall)sys_ni_syscall;
-    sys_call_table[__NR_setreuid]               = (SystemCall)sys_ni_syscall;
-    sys_call_table[__NR_setregid]               = (SystemCall)sys_ni_syscall;
+    sys_call_table[__NR_setreuid]               = (SystemCall)sys_setreuid;
+    sys_call_table[__NR_setregid]               = (SystemCall)sys_setregid;
     sys_call_table[__NR_sigsuspend]             = (SystemCall)sys_ni_syscall;
     sys_call_table[__NR_sigpending]             = (SystemCall)sys_ni_syscall;
     sys_call_table[__NR_sethostname]            = (SystemCall)sys_ni_syscall;
@@ -139,8 +141,8 @@ void syscall_init(void)
     sys_call_table[__NR_munmap]                 = (SystemCall)sys_munmap;
     sys_call_table[__NR_truncate]               = (SystemCall)sys_ni_syscall;
     sys_call_table[__NR_ftruncate]              = (SystemCall)sys_ni_syscall;
-    sys_call_table[__NR_fchmod]                 = (SystemCall)sys_ni_syscall;
-    sys_call_table[__NR_fchown]                 = (SystemCall)sys_ni_syscall;
+    sys_call_table[__NR_fchmod]                 = (SystemCall)sys_fchmod;
+    sys_call_table[__NR_fchown]                 = (SystemCall)sys_fchown;
     sys_call_table[__NR_getpriority]            = (SystemCall)sys_ni_syscall;
     sys_call_table[__NR_setpriority]            = (SystemCall)sys_ni_syscall;
     sys_call_table[__NR_statfs]                 = (SystemCall)sys_ni_syscall;
@@ -225,7 +227,7 @@ void syscall_init(void)
     sys_call_table[__NR_rt_sigsuspend]          = (SystemCall)sys_ni_syscall;
     sys_call_table[__NR_pread]                  = (SystemCall)sys_ni_syscall;
     sys_call_table[__NR_pwrite]                 = (SystemCall)sys_ni_syscall;
-    sys_call_table[__NR_chown]                  = (SystemCall)sys_ni_syscall;
+    sys_call_table[__NR_chown]                  = (SystemCall)sys_chown;
     sys_call_table[__NR_getcwd]                 = (SystemCall)sys_getcwd;
     sys_call_table[__NR_capget]                 = (SystemCall)sys_ni_syscall;
     sys_call_table[__NR_capset]                 = (SystemCall)sys_ni_syscall;

@@ -56,6 +56,23 @@ else()
 endif()
 
 # =============================================================================
+# EMULATION SERIAL OUTPUT OPTION
+# =============================================================================
+# Set the list of valid emulator output options.
+set(EMULATOR_OUTPUT_TYPES OUTPUT_STDIO OUTPUT_LOG)
+# Add the emulator output option.
+set(EMULATOR_OUTPUT_TYPE "OUTPUT_STDIO" CACHE STRING "Chose the type of emulator output: ${EMULATOR_OUTPUT_TYPES}")
+# List of emulator output options.
+set_property(CACHE EMULATOR_OUTPUT_TYPE PROPERTY STRINGS ${EMULATOR_OUTPUT_TYPES})
+# Check which emulator output option is currently active.
+list(FIND EMULATOR_OUTPUT_TYPES ${EMULATOR_OUTPUT_TYPE} INDEX)
+if(index EQUAL -1)
+    message(FATAL_ERROR "Emulator output type ${EMULATOR_OUTPUT_TYPE} is not valid.")
+else()
+    message(STATUS "Setting emulator output type to ${EMULATOR_OUTPUT_TYPE}.")
+endif()
+
+# =============================================================================
 # ASSEMBLY COMPILER
 # =============================================================================
 
@@ -153,23 +170,6 @@ add_custom_target(filesystem
 )
 
 # =============================================================================
-# EMULATION SERIAL OUTPUT OPTION
-# =============================================================================
-# Set the list of valid emulator output options.
-set(EMULATOR_OUTPUT_TYPES OUTPUT_STDIO OUTPUT_LOG)
-# Add the emulator output option.
-set(EMULATOR_OUTPUT_TYPE "OUTPUT_STDIO" CACHE STRING "Chose the type of emulator output: ${EMULATOR_OUTPUT_TYPES}")
-# List of emulator output options.
-set_property(CACHE EMULATOR_OUTPUT_TYPE PROPERTY STRINGS ${EMULATOR_OUTPUT_TYPES})
-# Check which emulator output option is currently active.
-list(FIND EMULATOR_OUTPUT_TYPES ${EMULATOR_OUTPUT_TYPE} INDEX)
-if(index EQUAL -1)
-    message(FATAL_ERROR "Emulator output type ${EMULATOR_OUTPUT_TYPE} is not valid.")
-else()
-    message(STATUS "Setting emulator output type to ${EMULATOR_OUTPUT_TYPE}.")
-endif()
-
-# =============================================================================
 # EMULATOR CONFIGURATION
 # =============================================================================
 
@@ -264,4 +264,28 @@ add_custom_target(
     qemu-grub
     COMMAND ${EMULATOR} ${EMULATOR_FLAGS} -boot d -cdrom ${CMAKE_BINARY_DIR}/cdrom.iso
     DEPENDS cdrom.iso
+)
+
+# =============================================================================
+# Booting with QEMU+GRUB for testing
+# =============================================================================
+
+# First, we need to build the ISO for the cdrom. It has a slightly different
+# kernel command line including 'test'.
+add_custom_target(
+  cdrom_test.iso
+  COMMAND cp -rf ${CMAKE_SOURCE_DIR}/iso .
+  COMMAND mv ${CMAKE_BINARY_DIR}/iso/boot/grub/grub.cfg.runtests ${CMAKE_BINARY_DIR}/iso/boot/grub/grub.cfg
+  COMMAND cp ${CMAKE_BINARY_DIR}/mentos/bootloader.bin ${CMAKE_BINARY_DIR}/iso/boot
+  COMMAND grub-mkrescue -o ${CMAKE_BINARY_DIR}/cdrom_test.iso ${CMAKE_BINARY_DIR}/iso
+  DEPENDS bootloader.bin
+)
+
+# This target runs the emulator, and executes the runtests binary as init process.
+# Additionally it passes the '-device isa-debug-exit' option to shutdown qemu
+# after the tests are done.
+add_custom_target(
+    qemu-test
+    COMMAND ${EMULATOR} ${EMULATOR_FLAGS} -serial file:${CMAKE_BINARY_DIR}/test.log -nographic -device isa-debug-exit -boot d -cdrom ${CMAKE_BINARY_DIR}/cdrom_test.iso
+    DEPENDS cdrom_test.iso
 )

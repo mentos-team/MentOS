@@ -55,7 +55,7 @@ int main(int argc, char *argv[])
 
     // ========================================================================
     // Generating a key using ftok
-    key = ftok("/home/user/test7.txt", 5);
+    key = ftok("/README", 5);
     if (key < 0) {
         perror("Failed to generate key using ftok");
         return 1;

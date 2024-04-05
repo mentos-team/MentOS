@@ -13,6 +13,8 @@
 #include "string.h"
 #include "descriptor_tables/gdt.h"
 
+/// @brief The kernel 
+/// 
 static tss_entry_t kernel_tss;
 
 void tss_init(uint8_t idx, uint32_t ss0)

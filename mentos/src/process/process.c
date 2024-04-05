@@ -111,18 +111,48 @@ static int __reset_process(task_struct *task)
     return 1;
 }
 
+static int __has_shebang(vfs_file_t *file) {
+    char buf[2];
+    vfs_read(file, buf, 0, sizeof(buf));
+    return buf[0] == '#' && buf[1] == '!';
+}
+
+/// @brief Replace the current process with a loaded exectuable
+/// @param path the path to the executable to load.
+/// @param task the task to laod the exectuable.
+/// @param entry
+/// @return -errno or 0 on failure, 1 on success
 static int __load_executable(const char *path, task_struct *task, uint32_t *entry)
 {
+    // Return code variable.
+    int ret = 0;
+    int interpreter_loop = 0;
+start:
     pr_debug("__load_executable(`%s`, %p `%s`, %p)\n", path, task, task->name, entry);
     vfs_file_t *file = vfs_open(path, O_RDONLY, 0);
     if (file == NULL) {
         pr_err("Cannot find executable!\n");
-        return 0;
+        return -errno;
+    }
+    // Check that the file has the execute permission set
+    if (!vfs_valid_exec_permission(task, file)) {
+        pr_err("This is not executable `%s`!\n", path);
+        ret = -EACCES;
+        goto close_and_return;
     }
     // Check that the file is actually an executable before destroying the `mm`.
-    if (!elf_check_file_type(file, ET_EXEC)) {
-        pr_err("This is not a valid ELF executable `%s`!\n", path);
-        return 0;
+    if (!(elf_check_file_type(file, ET_EXEC) || __has_shebang(file))) {
+        pr_debug("This is not a valid executable `%s`!\n", path);
+        ret = -ENOEXEC;
+        goto close_and_return;
+    }
+    // Set the effective uid if the setuid bit is present.
+    if (bitmask_check(file->mask, S_ISUID)) {
+        task->uid = file->uid;
+    }
+    // Set the effective gid if the setgid bit is present.
+    if (bitmask_check(file->mask, S_ISGID)) {
+        task->gid = file->gid;
     }
     // FIXME: When threads will be implemented
     // they should share the mm, so the destroy_process_image must be called
@@ -131,15 +161,53 @@ static int __load_executable(const char *path, task_struct *task, uint32_t *entr
     if (task->mm) {
         destroy_process_image(task->mm);
     }
-    // Return code variable.
-    int ret = 0;
     // Recreate the memory of the process.
-    if (__reset_process(task)) {
-        // Load the elf file, check if 0 is returned and print the error.
-        if (!(ret = elf_load_file(task, file, entry))) {
-            pr_err("Failed to load ELF file `%s`!\n", path);
-        }
+    if (!__reset_process(task)) {
+        ret = -ENOMEM;
+        goto close_and_return;
     }
+
+    // Load potential interpreter specified by a shebang line
+    if (__has_shebang(file)) {
+        // Disallow interpreter loops
+        if (interpreter_loop) {
+            ret = -ELOOP;
+            // Free interpreter buffer
+            kfree((void*)path);
+            goto close_and_return;
+        }
+
+        // Read shebang line
+        char buf[PATH_MAX];
+        ssize_t bytes_read = vfs_read(file, buf, 2, sizeof(buf));
+        buf[bytes_read] = 0;
+        vfs_close(file);
+
+        // Find end of the line
+        char *lineend = strchr(buf, '\n');
+        if (!lineend) {
+            ret = -ENAMETOOLONG;
+            goto close_and_return;
+        }
+        *lineend = 0;
+
+        path = strdup(buf);
+        interpreter_loop++;
+        goto start;
+    }
+
+    // Load the elf file, check if 0 is returned and print the error.
+    if (!(ret = elf_load_file(task, file, entry))) {
+        pr_err("Failed to load ELF file `%s`!\n", path);
+    }
+
+    // Free potential interpreter path
+    if (interpreter_loop) {
+        // Free interpreter buffer
+        kfree((void*)path);
+    }
+
+close_and_return:
     // Close the file.
     vfs_close(file);
     return ret;
@@ -179,7 +247,9 @@ static inline task_struct *__alloc_task(task_struct *source, task_struct *parent
     }
     // Set the statistics of the process.
     proc->uid                   = 0;
+    proc->ruid                  = 0;
     proc->gid                   = 0;
+    proc->rgid                  = 0;
     proc->sid                   = 0;
     proc->pgid                  = 0;
     proc->se.prio               = DEFAULT_PRIO;
@@ -289,7 +359,7 @@ task_struct *process_create_init(const char *path)
 
     // == INITIALIZE TASK MEMORY ==============================================
     // Load the executable.
-    if (!__load_executable(path, init_proc, &init_proc->thread.regs.eip)) {
+    if (__load_executable(path, init_proc, &init_proc->thread.regs.eip) <= 0) {
         pr_err("Entry for init: %d\n", init_proc->thread.regs.eip);
         kernel_panic("Init not valid (%d)!");
     }
@@ -425,7 +495,9 @@ pid_t sys_fork(pt_regs *f)
     proc->sid  = current->sid;
     proc->pgid = current->pgid;
     proc->uid  = current->uid;
+    proc->ruid  = current->ruid;
     proc->gid  = current->gid;
+    proc->rgid  = current->rgid;
 
     // Active the new process.
     scheduler_enqueue_task(proc);
@@ -501,11 +573,12 @@ int sys_execve(pt_regs *f)
     // ------------------------------------------------------------------------
 
     // == INITIALIZE TASK MEMORY ==============================================
-    if (!__load_executable(filename, current, &current->thread.regs.eip)) {
+    int ret = __load_executable(filename, current, &current->thread.regs.eip);
+    if (ret <= 0) {
         pr_err("Failed to load executable!\n");
         // Free the temporary args memory.
         kfree(args_mem);
-        return -1;
+        return ret;
     }
     // ------------------------------------------------------------------------
 

@@ -14,7 +14,7 @@
 #include "descriptor_tables/idt.h"
 #include "stdio.h"
 
-// Default error messages for exceptions.
+/// @brief Default error messages for exceptions.
 static const char *exception_messages[32] = {
     "Division by zero",
     "Debug",

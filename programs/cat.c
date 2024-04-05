@@ -7,34 +7,17 @@
 #include "stddef.h"
 #include <fcntl.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/unistd.h>
 #include <strerror.h>
 #include <sys/stat.h>
 
-static inline void print_content(const char *path, char *buffer, unsigned buflen)
-{
-    pr_warning("Printing content of %s\n", path);
-    // Open the file.
-    int fd = open(path, O_RDONLY, 42);
-    if (fd >= 0) {
-        ssize_t bytes_read = 0;
-        // Put on the standard output the characters.
-        while ((bytes_read = read(fd, buffer, buflen)) > 0) {
-            write(STDOUT_FILENO, buffer, bytes_read);
-        }
-        // Close the file descriptor.
-        close(fd);
-    } else {
-        printf("cat: %s: %s\n\n", path, strerror(errno));
-    }
-}
-
 int main(int argc, char **argv)
 {
     if (argc < 2) {
         printf("cat: missing operand.\n");
-        printf("Try 'cat --help' for more information.\n\n");
+        printf("Try 'cat --help' for more information.\n");
         return 1;
     }
     // Check if `--help` is provided.
@@ -42,38 +25,35 @@ int main(int argc, char **argv)
         if ((strcmp(argv[i], "--help") == 0) || (strcmp(argv[i], "-h") == 0)) {
             printf("Prints the content of the given file.\n");
             printf("Usage:\n");
-            printf("    cat <file>\n\n");
+            printf("    cat <file>\n");
             return 0;
         }
     }
-    int status = 0;
+    int ret = 0;
+    int fd;
     // Prepare the buffer for reading.
     char buffer[BUFSIZ];
     // Iterate the arguments.
     for (int i = 1; i < argc; ++i) {
-        stat_t statbuf;
-        if (stat(argv[i], &statbuf) == -1) {
-            printf("cat: %s: %s\n\n", argv[i], strerror(errno));
+        // Initialize the file path.
+        char *filepath = argv[i];
+
+        fd = open(filepath, O_RDONLY, 0);
+        if (fd < 0) {
+            printf("cat: %s: %s\n", filepath, strerror(errno));
+            ret = EXIT_FAILURE;
             continue;
         }
-        // If it is a regular file, just print the content.
-        if (S_ISREG(statbuf.st_mode)) {
-            print_content(argv[i], buffer, BUFSIZ);
-
-        } else if (S_ISDIR(statbuf.st_mode)) {
-            printf("cat: %s: Is a directory\n\n", argv[i]);
-            status = 1;
-
-        } else if (S_ISLNK(statbuf.st_mode)) {
-            if (readlink(argv[i], buffer, BUFSIZ)) {
-                print_content(buffer, buffer, BUFSIZ);
-            } else {
-                printf("cat: %s: %s\n\n", argv[i], strerror(errno));
-                status = 1;
-            }
+        ssize_t bytes_read = 0;
+        // Put on the standard output the characters.
+        while ((bytes_read = read(fd, buffer, BUFSIZ)) > 0) {
+            write(STDOUT_FILENO, buffer, bytes_read);
+        }
+        close(fd);
+        if (bytes_read < 0) {
+            printf("%s: %s: %s\n", argv[0], filepath, strerror(errno));
+            ret = EXIT_FAILURE;
         }
     }
-    putchar('\n');
-    putchar('\n');
-    return status;
+    return ret;
 }

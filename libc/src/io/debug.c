@@ -16,18 +16,12 @@
 /// Determines the log level.
 static int max_log_level = LOGLEVEL_DEBUG;
 
-void dbg_putchar(char c)
-{
-    outportb(SERIAL_COM1, (unsigned char)c);
-}
-
-void dbg_puts(const char *s)
-{
-    while ((*s) != 0) {
-        dbg_putchar(*s++);
-    }
-}
-
+/// @brief Prints the correct header for the given debug level.
+/// @param file the file origin of the debug message.
+/// @param fun the function where the debug message was called.
+/// @param line the line in the file where debug message was called.
+/// @param log_level the log level.
+/// @param header the header we want to show.
 static inline void __debug_print_header(const char *file, const char *fun, int line, short log_level, char *header)
 {
     // "EMERG  ", "ALERT  ", "CRIT   ", "ERR    ", "WARNING", "NOTICE ", "INFO   ", "DEBUG  ", "DEFAULT",
@@ -50,7 +44,9 @@ static inline void __debug_print_header(const char *file, const char *fun, int l
         log_level = 8;
     }
     // Set the color.
+#ifndef EMULATOR_OUTPUT_LOG
     dbg_puts(log_level_color[log_level]);
+#endif
     dbg_putchar('[');
     // Set the label.
     dbg_puts(log_level_label[log_level]);
@@ -72,6 +68,18 @@ static inline void __debug_print_header(const char *file, const char *fun, int l
     if (header) {
         dbg_puts(header);
         dbg_putchar(' ');
+    }
+}
+
+void dbg_putchar(char c)
+{
+    outportb(SERIAL_COM1, (unsigned char)c);
+}
+
+void dbg_puts(const char *s)
+{
+    while ((*s) != 0) {
+        dbg_putchar(*s++);
     }
 }
 

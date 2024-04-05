@@ -5,6 +5,9 @@
 # Add the library.
 add_library(
     libc
+    ${CMAKE_SOURCE_DIR}/libc/src/err.c
+    ${CMAKE_SOURCE_DIR}/libc/src/shadow.c
+    ${CMAKE_SOURCE_DIR}/libc/src/unistd/dup.c
     ${CMAKE_SOURCE_DIR}/libc/src/stdio.c
     ${CMAKE_SOURCE_DIR}/libc/src/ctype.c
     ${CMAKE_SOURCE_DIR}/libc/src/string.c
@@ -24,6 +27,7 @@ add_library(
     ${CMAKE_SOURCE_DIR}/libc/src/setenv.c
     ${CMAKE_SOURCE_DIR}/libc/src/assert.c
     ${CMAKE_SOURCE_DIR}/libc/src/abort.c
+    ${CMAKE_SOURCE_DIR}/libc/src/crypt/sha256.c
     ${CMAKE_SOURCE_DIR}/libc/src/io/mm_io.c
     ${CMAKE_SOURCE_DIR}/libc/src/io/debug.c
     ${CMAKE_SOURCE_DIR}/libc/src/sys/ipc.c
@@ -32,6 +36,8 @@ add_library(
     ${CMAKE_SOURCE_DIR}/libc/src/sys/utsname.c
     ${CMAKE_SOURCE_DIR}/libc/src/sys/mman.c
     ${CMAKE_SOURCE_DIR}/libc/src/sys/ioctl.c
+    ${CMAKE_SOURCE_DIR}/libc/src/unistd/chmod.c
+    ${CMAKE_SOURCE_DIR}/libc/src/unistd/chown.c
     ${CMAKE_SOURCE_DIR}/libc/src/unistd/creat.c
     ${CMAKE_SOURCE_DIR}/libc/src/unistd/getppid.c
     ${CMAKE_SOURCE_DIR}/libc/src/unistd/getpid.c
@@ -75,3 +81,8 @@ target_include_directories(libc PUBLIC inc)
 
 # Remove the 'lib' prefix.
 set_target_properties(libc PROPERTIES PREFIX "")
+
+# If the emulator is set to output on a log file, tell that to the C code.
+if(${EMULATOR_OUTPUT_TYPE} STREQUAL OUTPUT_LOG)
+    target_compile_definitions(libc PUBLIC EMULATOR_OUTPUT_LOG)
+endif()

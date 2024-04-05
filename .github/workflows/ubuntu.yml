@@ -84,3 +84,23 @@ jobs:
               run: |
                   cmake -B build
                   cmake --build build --parallel 2
+    test:
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
+        steps:
+            - name: Clone repository
+              uses: actions/checkout@v4
+
+            - name: Install test dependencies
+              run: |
+                  sudo apt-get update
+                  sudo apt-get install -y nasm qemu-system-x86 mtools
+
+            - name: Run tests
+              run: |
+                  cmake -B build -DEMULATOR_OUTPUT_TYPE=OUTPUT_LOG 
+                  cmake --build build --parallel 2 --target filesystem cdrom_test.iso qemu-test
+
+            - name: Check
+              run: |
+                  cat build/test.log | scripts/tapview || cat build/test.log build/serial.log

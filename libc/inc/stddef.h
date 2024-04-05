@@ -37,10 +37,10 @@ typedef unsigned int ino_t;
 typedef unsigned int dev_t;
 
 /// The type of user-id.
-typedef unsigned int uid_t;
+typedef int uid_t;
 
 /// The type of group-id.
-typedef unsigned int gid_t;
+typedef int gid_t;
 
 /// The type of offset.
 typedef long int off_t;
@@ -72,6 +72,13 @@ typedef unsigned int pgprot_t;
 /// Counts the number of elements of an array.
 #define count_of(x) ((sizeof(x) / sizeof((x)[0])) / ((size_t)(!(sizeof(x) % sizeof((x)[0])))))
 
+/// @brief Swaps two values.
+/// @details
+/// do { ... } while (0) allows to place multistatement operations, for
+/// instance, inside the following if stantement:
+/// if (condition)
+///     swap(var1, var2)
+/// which otherwise would be wrong.
 #define swap(a, b)             \
     do {                       \
         typeof(a) temp = (a);  \

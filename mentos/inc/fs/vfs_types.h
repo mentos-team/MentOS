@@ -18,6 +18,9 @@
 /// Forward declaration of the VFS file.
 typedef struct vfs_file_t vfs_file_t;
 
+/// Forward declaration of the inode attributes.
+struct iattr;
+
 /// Function used to create a directory.
 typedef int (*vfs_mkdir_callback)(const char *, mode_t);
 /// Function used to remove a directory.
@@ -48,6 +51,10 @@ typedef int (*vfs_ioctl_callback)(vfs_file_t *, int, void *);
 typedef int (*vfs_symlink_callback)(const char *, const char *);
 /// Function that reads the symbolic link data associated with a file.
 typedef ssize_t (*vfs_readlink_callback)(vfs_file_t *, char *, size_t);
+/// Function used to modify the attributes of an fs entry.
+typedef int (*vfs_setattr_callback)(const char *, struct iattr *);
+/// Function used to modify the attributes of a file.
+typedef int (*vfs_fsetattr_callback)(vfs_file_t *, struct iattr *);
 
 /// @brief Filesystem information.
 typedef struct file_system_type {
@@ -71,6 +78,8 @@ typedef struct vfs_sys_operations_t {
     vfs_creat_callback creat_f;
     /// Symbolic link creation function.
     vfs_symlink_callback symlink_f;
+    /// Modifies the attributes of a file.
+    vfs_setattr_callback setattr_f;
 } vfs_sys_operations_t;
 
 /// @brief Set of functions used to perform operations on files.
@@ -95,6 +104,8 @@ typedef struct vfs_file_operations_t {
     vfs_getdents_callback getdents_f;
     /// Reads the symbolik link data.
     vfs_readlink_callback readlink_f;
+    /// Modifies the attributes of a file.
+    vfs_fsetattr_callback setattr_f;
 } vfs_file_operations_t;
 
 /// @brief Data structure that contains information about the mounted filesystems.
@@ -162,3 +173,30 @@ typedef struct vfs_file_descriptor_t {
     /// Flags for file opening modes.
     int flags_mask;
 } vfs_file_descriptor_t;
+
+/// @brief Data structure containing attributes of a file.
+struct iattr {
+    unsigned int ia_valid;
+    mode_t ia_mode;
+    uid_t ia_uid;
+    gid_t ia_gid;
+    uint32_t ia_atime;
+    uint32_t ia_mtime;
+    uint32_t ia_ctime;
+};
+
+#define ATTR_MODE  (1 << 0)
+#define ATTR_UID   (1 << 1)
+#define ATTR_GID   (1 << 2)
+#define ATTR_ATIME (1 << 3)
+#define ATTR_MTIME (1 << 4)
+#define ATTR_CTIME (1 << 5)
+
+#define IATTR_CHOWN(user, group)       \
+    { .ia_valid = ATTR_UID | ATTR_GID, \
+      .ia_uid = user,                  \
+      .ia_gid = group }
+
+#define IATTR_CHMOD(mode)    \
+    { .ia_valid = ATTR_MODE, \
+      .ia_mode = mode }

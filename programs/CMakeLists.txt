@@ -1,5 +1,12 @@
 # List of programs.
 set(PROGRAM_LIST
+    runtests.c
+    more.c
+    chmod.c
+    chown.c
+    id.c
+    stat.c
+    false.c
     nice.c
     ls.c
     mkdir.c

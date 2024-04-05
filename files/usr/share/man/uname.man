@@ -1,0 +1,19 @@
+SYNOPSIS
+    uname [-a|-r|-i]
+
+DESCRIPTION
+    Uname prints kernel and system information.
+
+    The following options are available:
+
+    -a, --all
+           Print kernel version and processor type
+
+    -r, --rev
+           Print only the kernel version
+
+    -i, --info
+           Print all info of system and kernel
+
+    -h, --help
+           Display a help message and exit

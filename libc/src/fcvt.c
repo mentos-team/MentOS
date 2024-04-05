@@ -2,6 +2,7 @@
 /// @brief Define the functions required to turn double values into a string.
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
+//! @cond Doxygen_Suppress
 
 #include "fcvt.h"
 #include "math.h"
@@ -102,3 +103,5 @@ void fcvtbuf(double arg, int decimals, int *decpt, int *sign, char *buf, unsigne
 {
     cvt(arg, decimals, decpt, sign, buf, buf_size, 0);
 }
+
+/// @endcond

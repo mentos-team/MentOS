@@ -1,0 +1,290 @@
+#! /bin/sh
+# tapview - a TAP (Test Anything Protocol) viewer in pure POSIX shell
+#
+# This code is intended to be embedded in your project. The author
+# grants permission for it to be distributed under the prevailing
+# license of your project if you choose, provided that license is
+# OSD-compliant; otherwise the following SPDX tag incorporates the
+# MIT No Attribution license by reference.
+#
+# SPDX-FileCopyrightText: (C) Eric S. Raymond <esr@thyrsus.com>
+# SPDX-License-Identifier: MIT-0
+#
+# This version shipped on 2024-02-05.
+#
+# A newer version may be available at https://gitlab.com/esr/tapview;
+# check the ship date oagainst the commit list there to see if it
+# might be a good idea to update.
+
+OK="."
+FAIL="F"
+SKIP="s"
+TODO_NOT_OK="x"
+TODO_OK="u"
+LF='
+'
+
+ship_char() {
+    # shellcheck disable=SC2039
+    printf '%s' "$1"	# https://www.etalabs.net/sh_tricks.html
+}
+
+ship_line() {
+    report="${report}${1}$LF"
+}
+
+ship_error() {
+    # Terminate dot display and bail out with error
+    if [ "${testcount}" -gt 0 ]
+    then
+	echo ""
+    fi
+    report="${report}${1}$LF"
+    echo "${report}"
+    exit 1
+}
+
+testcount=0
+failcount=0
+skipcount=0
+todocount=0
+status=0
+report=""
+ln=0
+state=plaintext
+
+# shellcheck disable=SC2086
+context_get () { printenv "ctx_${1}${depth}"; }
+context_set () { export "ctx_${1}${depth}=${2}"; }
+
+context_push () {
+    context_set plan ""
+    context_set count 0
+    context_set test_before_plan no
+    context_set test_after_plan no
+    context_set expect ""
+    context_set bail no
+    context_set strict no
+}
+
+context_pop () {
+    if [ "$(context_get count)" -gt 0 ] && [ -z "$(context_get plan)" ]
+    then
+	ship_line "Missing a plan at line ${ln}."
+	status=1
+    elif [ "$(context_get test_before_plan)" = "yes" ] && [ "$(context_get test_after_plan)" = "yes" ] 
+    then
+	ship_line "A plan line may only be placed before or after all tests."
+	status=1
+    elif [ "$(context_get plan)" != "" ] && [ "$(context_get expect)" -gt "$(context_get count)" ]
+    then
+	ship_line "Expected $(context_get expect) tests but only ${testcount} ran."
+	status=1
+    elif [ "$(context_get plan)" != "" ] && [ "$(context_get expect)" -lt "$(context_get count)" ]
+    then
+	ship_line "${testcount} ran but $(context_get expect) expected."
+	status=1
+    fi
+}
+
+directive () {
+   case "$1" in
+      *[[:space:]]#[[:space:]]*$2*) return 0;;
+      *) return 1;;
+   esac
+}
+
+depth=0
+context_push
+while read -r line
+do
+    ln=$((ln + 1))
+    IFS=" "
+    # shellcheck disable=SC2086
+    set -- $line
+    tok1="$1"
+    tok2="$2"
+    tok3="$3"
+    IFS=""
+    # Ignore blank lines and comments
+    if [ -z "$tok1" ] || [ "$tok1" = '#' ]
+    then
+	continue
+    fi
+    # Process bailout
+    if [ "$tok1" = "Bail" ] && [ "$tok2" = "out!" ]
+    then
+	ship_line "$line"
+	status=2
+	break
+    fi
+    # Use the current indent to choose a scope level
+    leading_spaces="${line%%[! ]*}"
+    indent=${#leading_spaces}
+    if [ "${indent}" -lt "${depth}" ]
+    then
+	context_pop
+        depth="${indent}"
+    elif [ "${indent}" -gt "${depth}" ]
+    then
+	depth="${indent}"
+	context_push
+    fi
+    # Process a plan line
+    case "$tok1" in
+	[0123456789]*)
+	    case "$tok1" in
+		1[.][.]*) 
+		    if [ "$(context_get plan)" != "" ]
+		    then
+			ship_error "tapview: cannot have more than one plan line."
+		    fi
+		    if directive "$line" [Ss][Kk][Ii][Pp]
+		    then
+			ship_line "$line"
+			echo "${report}"
+			exit 1	# Not specified in the standard whether this should exit 1 or 0
+		    fi
+		    context_set plan "${line}"
+		    context_set expect "${tok1##[1][.][.]}"
+		    continue
+		    ;;
+		*)
+		    echo "Ill-formed plan line at ${ln}"
+		    exit 1
+		    ;;
+	    esac
+    ;; esac
+    # Check for test point numbers out-of-order with the sequence (TAP 14)
+    testpoint=""
+    case "$tok1" in
+	ok) testpoint="$tok2";;
+	not) testpoint="$tok3";;
+    esac
+    case "$testpoint" in
+	*[0123456789]*)
+	    if [ "${testpoint}" != "" ] && [ "$(context_get expect)" != "" ] && [ "${testpoint}" -gt "$(context_get expect)" ]
+	    then
+		ship_error "tapview: testpoint number ${testpoint} is out of range for plan $(context_get plan)."
+	    fi
+    ;; esac
+    # Process an ok line
+    if [ "$tok1" = "ok" ]
+    then
+	context_set count $(($(context_get count) + 1)) 
+	testcount=$((testcount + 1))
+	if [ "$(context_get plan)" = "" ]
+	then
+	    context_set test_before_plan yes
+	else
+	    context_set test_after_plan yes
+	fi
+	if directive "$line" [Tt][Oo][Dd][Oo]
+	then
+	    ship_char ${TODO_OK}
+	    ship_line "$line"
+	    todocount=$((todocount + 1))
+	elif directive "$line" [Ss][Kk][Ii][Pp]
+	then
+	    ship_char ${SKIP}
+	    ship_line "$line"
+	    skipcount=$((skipcount + 1))
+	else
+	    ship_char ${OK}
+	fi
+	state=plaintext
+	continue
+    fi
+    # Process a not-ok line
+    if [ "$tok1" = "not" ] && [ "$tok2" = "ok" ] 
+    then
+	context_set count $(($(context_get count) + 1)) 
+	testcount=$((testcount + 1))
+	if [ "$(context_get plan)" = "" ]
+	then
+	    context_set test_before_plan yes
+	else
+	    context_set test_after_plan yes
+	fi
+	if directive "$line" [Ss][Kk][Ii][Pp]
+	then
+	    ship_char "${SKIP}"
+	    state=plaintext
+	    skipcount=$((skipcount + 1))
+	    continue
+	fi
+	if directive "$line" [Tt][Oo][Dd][Oo]
+	then
+	    ship_char ${TODO_NOT_OK}
+	    state=plaintext
+	    todocount=$((todocount + 1))
+	    continue
+	fi
+	ship_char "${FAIL}"
+	ship_line "$line"
+	state=plaintext
+	failcount=$((failcount + 1))
+	status=1
+	if [ "$(context_get bail)" = yes ]
+	then
+	    ship_line "Bailing out on line ${ln} due to +bail pragma."
+	    break
+	fi
+	continue
+    fi
+    # Process a TAP 14 pragma
+    case "$line" in
+    pragma*)
+	case "$line" in
+	    *+bail*) context_set bail yes;;
+	    *-bail*) context_set bail yes;;
+	    *+strict*) context_set strict yes;;
+	    *-strict*) context_set strict yes;;
+	    *) ship_line "Pragma '$line' ignored";;
+	esac
+	continue
+	;;
+    esac
+    # shellcheck disable=SC2166
+    if [ "${state}" = "yaml" ]
+    then
+	ship_line "$line"
+	if [ "$tok1" = "..." ]
+	then
+	    state=plaintext
+	else
+	    continue
+	fi
+    elif [ "$tok1" = "---" ]
+    then
+	ship_line "$line"
+	state=yaml
+	continue
+    fi
+    # Any line that is not a valid plan, test result, pragma,
+    # or comment lands here.
+    if [ "$(context_get strict)" = yes ]
+    then
+	ship_line "Bailing out on line ${ln} due to +strict pragma"
+	status=1
+	break
+    fi
+done
+
+/bin/echo ""
+depth=0
+context_pop
+report="${report}${testcount} tests, ${failcount} failures"
+if [ "$todocount" != 0 ]
+then
+    report="${report}, ${todocount} TODOs"
+fi
+if [ "$skipcount" != 0 ]
+then
+    report="${report}, ${skipcount} SKIPs"
+fi
+
+echo "${report}."
+exit "${status}"
+
+# end

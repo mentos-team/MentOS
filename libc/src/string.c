@@ -221,7 +221,7 @@ char *strpbrk(const char *string, const char *control)
 int tokenize(const char *string, char *separators, size_t *offset, char *buffer, ssize_t buflen)
 {
     // If we reached the end of the parsed string, stop.
-    if (string[*offset] == 0) {
+    if ((*offset >= buflen) || (string[*offset] == 0)) {
         return 0;
     }
     // Keep copying character until we either reach 1) the end of the buffer, 2) a
@@ -238,7 +238,8 @@ int tokenize(const char *string, char *separators, size_t *offset, char *buffer,
         }
         // Save the character.
         *buffer = string[*offset];
-        // Advance the offset, decrese the available size in the buffer, and advance the buffer.
+        // Advance the offset, decrese the available size in the buffer, and advance
+        // the buffer.
         ++(*offset), --buflen, ++buffer;
     } while ((buflen > 0) && (string[*offset] != 0));
     // Close the buffer.
@@ -488,15 +489,14 @@ char *strcpy(char *dst, const char *src)
 size_t strlen(const char *s)
 {
     const char *it = s;
-    while (*(++it) != 0) {}
-    return ((it - s) < 0) ? 0 : (size_t)(it - s);
+    for (; *it; it++);
+    return (size_t)(it - s);
 }
 
 size_t strnlen(const char *s, size_t count)
 {
-    const char *it = s;
-    while ((*(++it) != 0) && --count) {}
-    return ((it - s) < 0) ? 0 : (size_t)(it - s);
+    const char *p = memchr(s, 0, count);
+    return p ? (size_t)(p-s) : count;
 }
 
 int strcmp(const char *s1, const char *s2)

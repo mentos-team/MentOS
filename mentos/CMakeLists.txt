@@ -31,12 +31,14 @@ set(KERNEL_SOURCES
     ${CMAKE_SOURCE_DIR}/mentos/src/devices/pci.c
     ${CMAKE_SOURCE_DIR}/mentos/src/devices/fpu.c
     ${CMAKE_SOURCE_DIR}/mentos/src/drivers/ata.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/drivers/mem.c
     ${CMAKE_SOURCE_DIR}/mentos/src/drivers/rtc.c
     ${CMAKE_SOURCE_DIR}/mentos/src/drivers/fdc.c
     ${CMAKE_SOURCE_DIR}/mentos/src/drivers/mouse.c
     ${CMAKE_SOURCE_DIR}/mentos/src/drivers/ps2.c
     ${CMAKE_SOURCE_DIR}/mentos/src/drivers/keyboard/keyboard.c
     ${CMAKE_SOURCE_DIR}/mentos/src/drivers/keyboard/keymap.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/fs/attr.c
     ${CMAKE_SOURCE_DIR}/mentos/src/fs/vfs.c
     ${CMAKE_SOURCE_DIR}/mentos/src/fs/read_write.c
     ${CMAKE_SOURCE_DIR}/mentos/src/fs/open.c
@@ -134,6 +136,11 @@ target_compile_definitions(
     ${KERNEL_NAME} PUBLIC
     __KERNEL__
 )
+# If the emulator is set to output on a log file, tell that to the C code.
+if(${EMULATOR_OUTPUT_TYPE} STREQUAL OUTPUT_LOG)
+    target_compile_definitions(${KERNEL_NAME} PUBLIC EMULATOR_OUTPUT_LOG)
+endif()
+
 
 # =============================================================================
 # Enables cache tracing.
@@ -191,7 +198,7 @@ endif()
 
 # =============================================================================
 # Set the list of valid keyboard mappings.
-set(KEYMAP_TYPES KEYMAP_US KEYMAP_IT)
+set(KEYMAP_TYPES KEYMAP_US KEYMAP_IT KEYMAP_DE)
 # Add the keyboard mapping.
 set(KEYMAP_TYPE "KEYMAP_US" CACHE STRING "Chose the type of keyboard mapping: ${KEYMAP_TYPES}")
 # List of keyboard mappings.

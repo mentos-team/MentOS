@@ -131,21 +131,32 @@ pid_t sys_getpgid(pid_t pid);
 /// @return returns zero. On error, -1 is returned, and errno is set appropriately.
 int sys_setpgid(pid_t pid, pid_t pgid);
 
-///@brief returns the group ID of the calling process.
+///@brief returns the real group ID of the calling process.
 ///@return GID of the current process
-pid_t sys_getgid(void);
+gid_t sys_getgid(void);
 
-///@brief sets the effective group ID of the calling process.
-///@param pid process identifier to
+///@brief sets the group ID of the calling process.
+///@param gid group id
 ///@return On success, zero is returned.
 ///        Otherwise returns -1 with errno set to :EINVAL or EPERM.
-int sys_setgid(pid_t pid);
+int sys_setgid(gid_t gid);
+
+///@brief returns the effective group ID of the calling process.
+///@return GID of the current process
+gid_t sys_getegid(void);
+
+///@brief sets the real and effective group ID of the calling process.
+///@param rgid real group id
+///@param egid effective group id
+///@return On success, zero is returned.
+///        Otherwise returns -1 with errno set to EPERM.
+int sys_setregid(gid_t rgid, gid_t egid);
 
 /// @brief Returns the parent process ID (PPID) of the calling process.
 /// @return The parent process ID.
 pid_t sys_getppid(void);
 
-/// @brief Returns the User ID (UID) of the calling process.
+/// @brief Returns the real User ID (UID) of the calling process.
 /// @return The User ID.
 uid_t sys_getuid(void);
 
@@ -154,6 +165,17 @@ uid_t sys_getuid(void);
 ///@return On success, zero is returned.
 ///        Otherwise returns -1 with errno set to :EINVAL or EPERM.
 int sys_setuid(uid_t uid);
+
+/// @brief Returns the effective User ID (UID) of the calling process.
+/// @return The User ID.
+uid_t sys_geteuid(void);
+
+/// @brief Set the real and effective User ID (UID) of the calling process.
+/// @param ruid the new real User ID.
+/// @param euid the new effective User ID.
+///@return On success, zero is returned.
+///        Otherwise returns -1 with errno set to EPERM.
+int sys_setreuid(uid_t ruid, uid_t euid);
 
 /// @brief Adds the increment to the priority value of the task.
 /// @param increment The modifier to apply to the nice value.
@@ -218,7 +240,7 @@ int sys_rmdir(const char *path);
 int sys_creat(const char *path, mode_t mode);
 
 /// @brief Read the symbolic link, if present.
-/// @param file the file for which we want to read the symbolic link information.
+/// @param path the file for which we want to read the symbolic link information.
 /// @param buffer the buffer where we will store the symbolic link path.
 /// @param bufsize the size of the buffer.
 /// @return The number of read characters on success, -1 otherwise and errno is set to indicate the error.

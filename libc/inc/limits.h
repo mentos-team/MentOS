@@ -58,3 +58,6 @@
 
 /// Maximum pid number.
 #define PID_MAX_LIMIT 32768
+
+/// Maximum number of links to follow during resolving a path
+#define SYMLOOP_MAX 8

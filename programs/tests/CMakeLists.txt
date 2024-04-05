@@ -1,5 +1,8 @@
 # List of programs.
 set(TEST_LIST
+    t_dup.c
+    t_creat.c
+    t_write_read.c
     t_gid.c
     t_alarm.c
     t_periodic3.c
@@ -14,7 +17,6 @@ set(TEST_LIST
     t_sigmask.c
     t_getenv.c
     t_sigusr.c
-    t_exec_callee.c
     t_shmget.c
     t_stopcont.c
     t_semop.c
@@ -30,6 +32,8 @@ set(TEST_LIST
     t_shm_write.c
     t_mem.c
     t_shm_read.c
+    t_spwd.c
+    t_big_write.c
 )
 
 # Set the directory where the compiled binaries will be placed.

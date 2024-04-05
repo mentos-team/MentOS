@@ -79,6 +79,15 @@ typedef struct wait_queue_entry_t {
     struct list_head task_list;
 } wait_queue_entry_t;
 
+
+/// @brief Allocates the memory for a wait_queue_entry.
+/// @return a pointer to the allocated wait_queue_entry.
+wait_queue_entry_t * wait_queue_entry_alloc();
+
+/// @brief Frees the memory of a wait_queue_entry.
+/// @param wait_queue_entry pointer to the wait_queue_entry.
+void wait_queue_entry_dealloc(wait_queue_entry_t * wait_queue_entry);
+
 /// @brief Initialize the waiting queue entry.
 /// @param wq   The entry we initialize.
 /// @param task The task associated with the entry.

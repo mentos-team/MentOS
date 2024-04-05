@@ -23,6 +23,8 @@ void sig_handler(int sig)
         printf("handler(%d) : Correct signal. ABRT (%d/3)\n", sig, counter);
         if (counter < 3)
             abort();
+        else
+            exit(0);
 
     } else {
         printf("handler(%d) : Wrong signal.\n", sig);

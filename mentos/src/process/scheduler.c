@@ -4,10 +4,10 @@
 /// See LICENSE.md for details.
 
 // Setup the logging for this file (do this before any other include).
-#include "sys/kernel_levels.h"          // Include kernel log levels.
-#define __DEBUG_HEADER__ "[SCHED ]"     ///< Change header.
-#define __DEBUG_LEVEL__  LOGLEVEL_DEBUG ///< Set log level.
-#include "io/debug.h"                   // Include debugging functions.
+#include "sys/kernel_levels.h"           // Include kernel log levels.
+#define __DEBUG_HEADER__ "[SCHED ]"      ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
+#include "io/debug.h"                    // Include debugging functions.
 
 #include "assert.h"
 #include "descriptor_tables/tss.h"
@@ -257,12 +257,12 @@ wait_queue_entry_t *sleep_on(wait_queue_head_t *wq)
     scheduler_restore_context(next, f);
 #endif
     // Allocate the wait_queue entry.
-    wait_queue_entry_t *wait_entry = kmalloc(sizeof(struct wait_queue_entry_t));
+    wait_queue_entry_t *wait_queue_entry = wait_queue_entry_alloc();
     // Initialize the entry.
-    init_waitqueue_entry(wait_entry, sleeping_task);
+    init_waitqueue_entry(wait_queue_entry, sleeping_task);
     // Add sleeping process to sleep wait queue.
-    add_wait_queue(wq, wait_entry);
-    return wait_entry;
+    add_wait_queue(wq, wait_queue_entry);
+    return wait_queue_entry;
 }
 
 int is_orphaned_pgrp(pid_t pgid)
@@ -376,38 +376,110 @@ int sys_setpgid(pid_t pid, pid_t pgid)
     return 0;
 }
 
+#define RETURN_PROCESS_ATTR_OR_EPERM(attr)             \
+    if (runqueue.curr) { return runqueue.curr->attr; } \
+    return -EPERM;
+
 uid_t sys_getuid(void)
 {
-    if (runqueue.curr) {
-        return runqueue.curr->uid;
-    }
-    return -EPERM;
+    RETURN_PROCESS_ATTR_OR_EPERM(ruid);
 }
+uid_t sys_geteuid(void)
+{
+    RETURN_PROCESS_ATTR_OR_EPERM(uid);
+}
+
+gid_t sys_getgid(void)
+{
+    RETURN_PROCESS_ATTR_OR_EPERM(rgid);
+}
+gid_t sys_getegid(void)
+{
+    RETURN_PROCESS_ATTR_OR_EPERM(gid);
+}
+
+#define FAIL_ON_INV_ID(id) \
+    if (id < 0) { return -EINVAL; }
+
+#define FAIL_ON_INV_ID_OR_PROC(id) \
+    FAIL_ON_INV_ID(id)             \
+    if (!runqueue.curr) { return -EPERM; }
+
+#define IF_PRIVILEGED_SET_ALL_AND_RETURN(attr)               \
+    if (runqueue.curr->uid == 0) {                           \
+        runqueue.curr->r##attr = runqueue.curr->attr = attr; \
+        return 0;                                            \
+    }
+
+#define IF_RESET_SET_AND_RETURN(attr)     \
+    if (runqueue.curr->r##attr == attr) { \
+        runqueue.curr->attr = attr;       \
+        return 0;                         \
+    }
+
+#define SET_IF_PRIVILEGED_OR_FAIL(attr) \
+    if (runqueue.curr->uid == 0) {      \
+        runqueue.curr->attr = attr;     \
+    } else {                            \
+        return -EPERM;                  \
+    }
 
 int sys_setuid(uid_t uid)
 {
-    if (runqueue.curr && (runqueue.curr->uid == 0)) {
-        runqueue.curr->uid = uid;
-        return 0;
-    }
+    FAIL_ON_INV_ID_OR_PROC(uid);
+    IF_PRIVILEGED_SET_ALL_AND_RETURN(uid);
+    IF_RESET_SET_AND_RETURN(uid);
     return -EPERM;
 }
 
-pid_t sys_getgid(void)
+int sys_setgid(gid_t gid)
 {
-    if (runqueue.curr) {
-        return runqueue.curr->gid;
-    }
+    FAIL_ON_INV_ID_OR_PROC(gid);
+    IF_PRIVILEGED_SET_ALL_AND_RETURN(gid);
+    IF_RESET_SET_AND_RETURN(gid);
     return -EPERM;
 }
 
-int sys_setgid(pid_t gid)
+int sys_setreuid(uid_t ruid, uid_t euid)
 {
-    if (runqueue.curr && (runqueue.curr->uid == 0)) {
-        runqueue.curr->gid = gid;
-        return 0;
+    if (!runqueue.curr) { return -EPERM; }
+
+    if (euid != -1) {
+        FAIL_ON_INV_ID(euid);
+        // Privileged or reset?
+        if ((runqueue.curr->uid == 0) || (runqueue.curr->ruid == euid)) {
+            runqueue.curr->uid = euid;
+        } else {
+            return -EPERM;
+        }
     }
-    return -EPERM;
+
+    if (ruid != -1) {
+        FAIL_ON_INV_ID(ruid);
+        SET_IF_PRIVILEGED_OR_FAIL(ruid);
+    }
+    return 0;
+}
+
+int sys_setregid(gid_t rgid, gid_t egid)
+{
+    if (!runqueue.curr) { return -EPERM; }
+
+    if (egid != -1) {
+        FAIL_ON_INV_ID(rgid);
+        // Privileged or reset?
+        if ((runqueue.curr->uid == 0) || (runqueue.curr->rgid == egid)) {
+            runqueue.curr->gid = egid;
+        } else {
+            return -EPERM;
+        }
+    }
+
+    if (rgid != -1) {
+        FAIL_ON_INV_ID(rgid);
+        SET_IF_PRIVILEGED_OR_FAIL(rgid);
+    }
+    return 0;
 }
 
 pid_t sys_getppid(void)

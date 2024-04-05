@@ -8,3 +8,4 @@
 #include "system/syscall_types.h"
 
 _syscall0(pid_t, getgid)
+_syscall0(gid_t, getegid)

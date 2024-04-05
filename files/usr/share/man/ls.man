@@ -7,6 +7,8 @@ DESCRIPTION
     inside the current folder.
     
 OPTIONS
-    -h --help : shows command help.
-    -a --all  : list all entries.
-    -l --long : show the entries as a detailed long list.
+    -h, --help    shows command help.
+    -a, --all     list all entries.
+    -l, --long    show the entries as a detailed long list.
+    -i, --inode   print the index number of each file
+    -1            list one file per line

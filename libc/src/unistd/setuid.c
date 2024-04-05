@@ -8,3 +8,4 @@
 #include "system/syscall_types.h"
 
 _syscall1(int, setuid, uid_t, pid)
+_syscall2(int, setreuid, uid_t, ruid, uid_t, euid)
