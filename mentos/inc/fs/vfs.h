@@ -38,18 +38,18 @@ int vfs_register_filesystem(file_system_type *fs);
 int vfs_unregister_filesystem(file_system_type *fs);
 
 /// @brief Given an absolute path to a file, vfs_open_abspath() returns a file struct, used to access the file.
-/// @param abspath  An absolute path to a file.
-/// @param flags    Used to set the file status flags and file access modes of the open file description.
-/// @param mode     Specifies the file mode bits be applied when a new file is created.
+/// @param absolute_path An absolute path to a file.
+/// @param flags Used to set the file status flags and file access modes of the open file description.
+/// @param mode Specifies the file mode bits be applied when a new file is created.
 /// @return Returns a file struct, or NULL.
-vfs_file_t *vfs_open_abspath(const char *pathname, int flags, mode_t mode);
+vfs_file_t *vfs_open_abspath(const char *absolute_path, int flags, mode_t mode);
 
 /// @brief Given a pathname for a file, vfs_open() returns a file struct, used to access the file.
-/// @param pathname A pathname for a file.
-/// @param flags    Used to set the file status flags and file access modes of the open file description.
-/// @param mode     Specifies the file mode bits be applied when a new file is created.
+/// @param path A pathname for a file.
+/// @param flags Used to set the file status flags and file access modes of the open file description.
+/// @param mode Specifies the file mode bits be applied when a new file is created.
 /// @return Returns a file struct, or NULL.
-vfs_file_t *vfs_open(const char *pathname, int flags, mode_t mode);
+vfs_file_t *vfs_open(const char *path, int flags, mode_t mode);
 
 /// @brief Decreases the number of references to a given file, if the
 ///         references number reaches 0, close the file.
@@ -199,13 +199,15 @@ int vfs_destroy_task(struct task_struct *task);
 /// @return -errno on fail, fd on success.
 int get_unused_fd(void);
 
+
 /// @brief Return new smallest available file desriptor.
+/// @param fd the descriptor of the file we want to duplicate.
 /// @return -errno on fail, fd on success.
 int sys_dup(int fd);
 
-/// @brief Check if the requested open flags against the file mask
+/// @brief Check if the requested open flags against the file mask.
 /// @param flags The requested open flags.
-/// @param mode The permissions of the file.
+/// @param mask The permissions of the file.
 /// @param uid The owner of the task opening the file.
 /// @param gid The group of the task opening the file.
 /// @return 0 on fail, 1 on success.

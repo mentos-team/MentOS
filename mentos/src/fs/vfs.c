@@ -704,12 +704,6 @@ static inline int __valid_open_permissions(
     return 0;
 }
 
-/// @brief Checks if the requests in flags are valid.
-/// @param flags the flags to check.
-/// @param mask the mask to check against.
-/// @param uid the uid of the owner.
-/// @param gid the gid of the owner.
-/// @return 1 on success, 0 otherwise.
 int vfs_valid_open_permissions(int flags, mode_t mask, uid_t uid, gid_t gid)
 {
     // Check the permissions.
@@ -734,10 +728,6 @@ int vfs_valid_open_permissions(int flags, mode_t mask, uid_t uid, gid_t gid)
     return __valid_open_permissions(mask, flags, S_IROTH, S_IWOTH);
 }
 
-/// @brief Checks if the task is allowed to execute the file
-/// @param task the task to execute the file.
-/// @param file the file to execute.
-/// @return 1 on success, 0 otherwise.
 int vfs_valid_exec_permission(task_struct *task, vfs_file_t *file)
 {
     // Init, and all root processes may execute any file with an execute bit set

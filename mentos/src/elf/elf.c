@@ -48,7 +48,6 @@ static inline elf_program_header_t *elf_get_program_header_table(elf_header_t *h
 /// @brief Returns a pointer to the desired section header.
 /// @param header a pointer to the ELF header.
 /// @param idx  The index of the section header.
-/// @param shdr Where we store the content we read.
 /// @return a pointer to the desired section header.
 static inline elf_section_header_t *elf_get_section_header(elf_header_t *header, unsigned idx)
 {
@@ -79,9 +78,10 @@ static inline const char *elf_get_section_header_string_table(elf_header_t *head
     return (const char *)((uintptr_t)header + elf_get_section_header(header, header->shstrndx)->offset);
 }
 
-/// @brief Returns a pointer to the section header string table.
+/// @brief Returns a pointer to the section header symbol table.
 /// @param header a pointer to the ELF header.
-/// @return a pointer to the section header string table, or NULL on failure.
+/// @param section_header a pointer to the ELF section header.
+/// @return a pointer to the section header symbol table, or NULL on failure.
 static inline const char *elf_get_symbol_string_table(elf_header_t *header, elf_section_header_t *section_header)
 {
     if (section_header->link == SHT_NULL) {
@@ -94,9 +94,9 @@ static inline const char *elf_get_symbol_string_table(elf_header_t *header, elf_
 // GET ELF OBJECTS NAME
 // ============================================================================
 
-/// @brief Returns the name of the given entry in the section header string table.
+/// @brief Returns the name of the given section header.
 /// @param header a pointer to the ELF header.
-/// @param name_offset the offset where the desired name resides inside the table.
+/// @param section_header a pointer to the section header.
 /// @return a pointer to the name, or NULL on failure.
 static inline const char *elf_get_section_header_name(elf_header_t *header, elf_section_header_t *section_header)
 {
@@ -109,6 +109,8 @@ static inline const char *elf_get_section_header_name(elf_header_t *header, elf_
 
 /// @brief Returns a pointer to the section header string table.
 /// @param header a pointer to the ELF header.
+/// @param section_header a pointer to the section header.
+/// @param symbol a pointer to the symbol we want to get the name for.
 /// @return a pointer to the section header string table, or NULL on failure.
 static inline const char *elf_get_symbol_name(elf_header_t *header, elf_section_header_t *section_header, elf_symbol_t *symbol)
 {

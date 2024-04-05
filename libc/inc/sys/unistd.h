@@ -306,7 +306,7 @@ int fchmod(int fd, mode_t mode);
 /// @brief Change the owner and group of a file.
 /// @param pathname The pathname of the file to change.
 /// @param owner The new owner to set.
-/// @param owner The new group to set.
+/// @param group The new group to set.
 /// @return On success, 0 is returned.
 ///         On error, -1 is returned, and errno is set appropriately.
 int chown(const char *pathname, uid_t owner, gid_t group);
@@ -314,7 +314,7 @@ int chown(const char *pathname, uid_t owner, gid_t group);
 /// @brief Change the owner and group of a file.
 /// @param fd The fd pointing to the opened file.
 /// @param owner The new owner to set.
-/// @param owner The new group to set.
+/// @param group The new group to set.
 /// @return On success, 0 is returned.
 ///         On error, -1 is returned, and errno is set appropriately.
 int fchown(int fd, uid_t owner, gid_t group);
@@ -322,7 +322,7 @@ int fchown(int fd, uid_t owner, gid_t group);
 /// @brief Change the owner and group of a file.
 /// @param pathname The pathname of the file to change.
 /// @param owner The new owner to set.
-/// @param owner The new group to set.
+/// @param group The new group to set.
 /// @return On success, 0 is returned.
 ///         On error, -1 is returned, and errno is set appropriately.
 int lchown(const char *pathname, uid_t owner, gid_t group);
