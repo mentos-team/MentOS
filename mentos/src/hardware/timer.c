@@ -30,24 +30,14 @@
 /// @defgroup picregs Programmable Interval Timer Registers
 /// @brief The list of registers used to set the PIT.
 /// @{
-
-/// Channel 0 data port (read/write).
-#define PIT_DATAREG0 0x40u
-
-/// Channel 1 data port (read/write).
-#define PIT_DATAREG1 0x41u
-
-/// Channel 2 data port (read/write).
-#define PIT_DATAREG2 0x42u
-
-/// Mode/Command register (write only, a read is ignored).
-#define PIT_COMREG 0x43u
-
+#define PIT_DATAREG0 0x40u ///< Channel 0 data port (read/write).
+#define PIT_DATAREG1 0x41u ///< Channel 1 data port (read/write).
+#define PIT_DATAREG2 0x42u ///< Channel 2 data port (read/write).
+#define PIT_COMREG   0x43u ///< Mode/Command register (write only, a read is ignored).
 /// @}
 
 /// @brief Frequency divider value (1.193182 MHz).
 #define PIT_DIVISOR 1193182
-
 /// @brief   Command used to configure the PIT.
 /// @details
 /// Bits         Usage
@@ -78,12 +68,15 @@
 ///     0x36 = 00|11|011|0
 ///     0x34 = 00|11|010|0
 #define PIT_CONFIGURATION 0x34u
-
 /// Mask used to set the divisor.
 #define PIT_MASK 0xFFu
 
 /// The number of ticks since the system started its execution.
 static __volatile__ unsigned long timer_ticks = 0;
+/// Contains timer for each CPU (for now only one)
+static tvec_base_t cpu_base = { 0 };
+/// Contains all process waiting for a sleep.
+static wait_queue_head_t sleep_queue;
 
 void timer_phase(const uint32_t hz)
 {
@@ -138,22 +131,11 @@ unsigned long timer_get_ticks(void)
 }
 
 // ============================================================================
-// SUPPORT STRUCTURES
-// ============================================================================
-
-/// @brief Contains the entry of a wait queue and timespec which keeps trakc of
-///        the remaining time.
-typedef struct sleep_data_t {
-    /// POinter to the entry of a wait queue.
-    wait_queue_entry_t *wait_queue_entry;
-    /// Keeps track of the remaining time.
-    timespec *remaining;
-} sleep_data_t;
-
-// ============================================================================
 // SUPPORT FUNCTIONS (tvec_base_t)
 // ============================================================================
 
+/// @brief Prints the addresses of all the timers inside a vector.
+/// @param vector the vector for which we print the details.
 static inline void __print_vector(list_head *vector)
 {
 #if defined(ENABLE_REAL_TIMER_SYSTEM_DUMP) && (__DEBUG_LEVEL__ == LOGLEVEL_DEBUG)
@@ -168,6 +150,8 @@ static inline void __print_vector(list_head *vector)
 #endif
 }
 
+/// @brief Prints the addresses of all the timers inside a vector base.
+/// @param base the base for which we print the details.
 static inline void __print_vector_base(tvec_base_t *base)
 {
 #if defined(ENABLE_REAL_TIMER_SYSTEM_DUMP) && (__DEBUG_LEVEL__ == LOGLEVEL_DEBUG)
@@ -190,38 +174,6 @@ static inline void __print_vector_base(tvec_base_t *base)
 #endif
 }
 
-/// Prints used slots of timer vector
-static void __print_vector_slots(list_head *vector, size_t size)
-{
-#if defined(ENABLE_REAL_TIMER_SYSTEM_DUMP) && (__DEBUG_LEVEL__ == LOGLEVEL_DEBUG)
-    char str[TVR_SIZE + 1] = { 0 };
-    for (size_t i = 0; i < size; ++i) {
-        // New line in order to not clutter the screen
-        if ((i != 0) && !(i % TVN_SIZE)) {
-            pr_debug("%s", str);
-        }
-        if (list_head_empty(vector + i)) {
-            str[i] = '0';
-        } else {
-            str[i] = '1';
-        }
-    }
-    pr_debug("%s\n", str);
-#endif
-}
-
-/// Dump all timer vector in base
-static inline void __dump_all_tvec_slots(tvec_base_t *base)
-{
-#if defined(ENABLE_REAL_TIMER_SYSTEM_DUMP) && (__DEBUG_LEVEL__ == LOGLEVEL_DEBUG)
-    __print_vector_slots(base->tvr, TVR_SIZE);
-    __print_vector_slots(base->tvn[0], TVN_SIZE);
-    __print_vector_slots(base->tvn[1], TVN_SIZE);
-    __print_vector_slots(base->tvn[2], TVN_SIZE);
-    __print_vector_slots(base->tvn[3], TVN_SIZE);
-#endif
-}
-
 static inline void __tvec_base_init(tvec_base_t *base)
 {
     spinlock_init(&base->lock);
@@ -241,8 +193,84 @@ static inline void __tvec_base_init(tvec_base_t *base)
 #endif
 }
 
+/// @brief Select correct timer vector and position inside of it for the input
+/// timer index contains the position inside of the tv_index timer vector.
+/// @param base the vector base we use to search the vector.
+/// @param timer the timer we use to determine the target vector.
+/// @return a pointer to the target vector.
+static inline list_head *__timer_get_target_vector(tvec_base_t *base, struct timer_list *timer)
+{
+    time_t expires = timer->expires;
+    long ticks     = expires - base->timer_ticks;
+    // Can happen if you add a timer with expires == ticks, or in the past
+    if (ticks < 0) {
+        return base->tvr + (base->timer_ticks & TVR_MASK);
+    }
+    if (ticks < TIMER_TICKS(0)) {
+        return base->tvr + (expires & TVR_MASK);
+    }
+    if (ticks < TIMER_TICKS(1)) {
+        return base->tvn[0] + ((expires >> TIMER_TICKS_BITS(0)) & TVN_MASK);
+    }
+    if (ticks < TIMER_TICKS(2)) {
+        return base->tvn[1] + ((expires >> TIMER_TICKS_BITS(1)) & TVN_MASK);
+    }
+    if (ticks < TIMER_TICKS(3)) {
+        return base->tvn[2] + ((expires >> TIMER_TICKS_BITS(2)) & TVN_MASK);
+    }
+    return base->tvn[3] + ((expires >> TIMER_TICKS_BITS(3)) & TVN_MASK);
+}
+
+/// Move all timers from tv up one level
+static inline void __timer_cascate_vector(tvec_base_t *base, list_head *current_vector)
+{
+    list_head *target_vector;
+    struct timer_list *timer;
+    // Migrate only if the vector actually has a timer in it.
+    if (!list_head_empty(current_vector)) {
+        pr_debug("Migrate from vector 0x%p\n", current_vector);
+        // Reinsert all timers into base in the new correct list.
+        list_for_each_safe_decl(it, save, current_vector)
+        {
+            // Get the timer.
+            timer = list_entry(it, struct timer_list, entry);
+            // Get the new vector.
+            target_vector = __timer_get_target_vector(base, timer);
+            // If the new vector is different than the current one, move the timer.
+            if (target_vector != current_vector) {
+                // First, remove the timer from the current list.
+                list_head_remove(it);
+                // Then, re-initialize the timer.
+                init_timer(timer);
+                // Insert the timer inside the vector.
+                list_head_insert_before(it, target_vector);
+                // Since we are moving timers around, print the vector base.
+                pr_debug("Migrate timer (0x%p) 0x%p -> 0x%p\n", it, current_vector, target_vector);
+                __print_vector_base(base);
+            }
+        }
+    }
+}
+
+/// @brief Move all timers from tv up one level.
+/// @param base the base for which we move the timers.
+/// @details
+/// Cascading means moving all dynamic timers in the base->tvn list into the
+/// proper lists of base->tvr; then, it returns a positive value, unless all base->tvn
+/// lists are now empty. If so, cascade() is invoked once more to replenish
+/// base->tvn with the timers included in a list of base->tvn, and so on.
+static inline void __timer_cascate_base(tvec_base_t *base)
+{
+    for (int i = 3; i >= 0; i--) {
+        // Cascate the vector.
+        __timer_cascate_vector(
+            base,
+            base->tvn[i] + ((base->timer_ticks >> TIMER_TICKS_BITS((size_t)i)) & TVN_MASK));
+    }
+}
+
 // ============================================================================
-// SUPPORT FUNCTIONS (timer_list, sleep_data)
+// SUPPORT FUNCTIONS (timer_list)
 // ============================================================================
 
 /// @brief Allocates the memory for timer.
@@ -279,6 +307,56 @@ static inline void __timer_list_dealloc(struct timer_list *timer)
     kfree(timer);
 }
 
+void init_timer(struct timer_list *timer)
+{
+    // Initialize the spinlock and unlock it.
+    spinlock_unlock(&timer->lock);
+    list_head_init(&timer->entry);
+    // timer->expires  = 0;
+    // timer->function = NULL;
+    // timer->data     = 0;
+    timer->base = NULL;
+}
+
+void add_timer(struct timer_list *timer)
+{
+#ifdef ENABLE_REAL_TIMER_SYSTEM
+    // Get the vector.
+    list_head *vector = __timer_get_target_vector(&cpu_base, timer);
+    // Insert the timer inside the vector.
+    list_head_insert_before(&timer->entry, vector);
+    // Debug on the output.
+    pr_debug("Add timer     (0x%p) to (0x%p)\n", &timer->entry, vector);
+    __print_vector_base(&cpu_base);
+#else
+    list_head_insert_before(&timer->entry, &base->list);
+#endif
+}
+
+void remove_timer(struct timer_list *timer)
+{
+    // First, remove the timer from the current list.
+    list_head_remove(&timer->entry);
+    // Then, re-initialize the timer.
+    init_timer(timer);
+    // Debug on the output.
+    pr_debug("Remove timer  (0x%p)\n", &timer->entry);
+    __print_vector_base(&cpu_base);
+}
+
+// ============================================================================
+// SUPPORT FUNCTIONS (sleep_data)
+// ============================================================================
+
+/// @brief Contains the entry of a wait queue and timespec which keeps trakc of
+/// the remaining time.
+typedef struct sleep_data_t {
+    /// POinter to the entry of a wait queue.
+    wait_queue_entry_t *wait_queue_entry;
+    /// Keeps track of the remaining time.
+    timespec *remaining;
+} sleep_data_t;
+
 /// @brief Allocates the memory for sleep_data.
 /// @return a pointer to the allocated sleep_data.
 static inline struct sleep_data_t *__sleep_data_alloc()
@@ -307,129 +385,109 @@ static inline void __sleep_data_dealloc(sleep_data_t *sleep_data)
     kfree(sleep_data);
 }
 
+// ============================================================================
+// SUPPORT FUNCTIONS (itimerval)
+// ============================================================================
+
+/// @brief Transforms interval and value to the timer.
+/// @param interval the interval for periodic timer.
+/// @param value the time until next expiration.
+/// @param timer where the final values should be stored.
+static inline void __values_to_itimerval(time_t interval, time_t value, struct itimerval *timer)
+{
+    timer->it_interval.tv_sec  = interval / TICKS_PER_SECOND;
+    timer->it_interval.tv_usec = (interval * 1000) / TICKS_PER_SECOND;
+    timer->it_value.tv_sec     = value / TICKS_PER_SECOND;
+    timer->it_value.tv_usec    = (value * 1000) / TICKS_PER_SECOND;
+}
+
+/// @brief Transforms an interval timer to values.
+/// @param interval the output variable where to store the interval for periodic timer.
+/// @param value the output variable where to store the time until next expiration.
+/// @param timer the timer used to initialize the values.
+static inline void __itimerval_to_values(time_t *interval, time_t *value, const struct itimerval *timer)
+{
+    *interval = (timer->it_interval.tv_sec * TICKS_PER_SECOND) +
+                (timer->it_interval.tv_usec * TICKS_PER_SECOND) / 1000;
+    *value = (timer->it_value.tv_sec * TICKS_PER_SECOND) +
+             (timer->it_value.tv_usec * TICKS_PER_SECOND) / 1000;
+}
+
+/// @brief Updates the timer for the given task.
+/// @param which the type of operation to execute.
+/// @param timer the timer to update.
+static void __update_task_itimerval(int which, const struct itimerval *timer)
+{
+    time_t interval, value;
+    // Get the current task.
+    struct task_struct *task = scheduler_get_current_process();
+    // Transform the timer to separate interval and value.
+    __itimerval_to_values(&interval, &value, timer);
+    // Sets the values for the task.
+    switch (which) {
+    case ITIMER_REAL:
+        task->it_real_incr  = interval;
+        task->it_real_value = value;
+        break;
+    case ITIMER_VIRTUAL:
+        task->it_virt_incr  = interval;
+        task->it_virt_value = value;
+        break;
+    case ITIMER_PROF:
+        task->it_prof_incr  = interval;
+        task->it_prof_value = value;
+        break;
+    }
+}
+
 //======================================================================================
 // Dynamics timers
 
-/// Contains timer for each CPU (for now only one)
-static tvec_base_t cpu_base = { 0 };
-/// Contains all process waiting for a sleep.
-static wait_queue_head_t sleep_queue;
-
-/// @brief Initialize dynamic timer system
+/// @brief Initialize dynamic timer system.
 void dynamic_timers_install(void)
 {
     // Initialize the timer structure for each CPU.
     __tvec_base_init(&cpu_base);
     // Initialize sleeping process list
     list_head_init(&sleep_queue.task_list);
+    // Initialize the sleep queue lock.
     spinlock_init(&sleep_queue.lock);
-}
-
-/// Select correct timer vector and position inside of it for the input timer
-/// index contains the position inside of the tv_index timer vector
-static list_head *__timer_get_vector(tvec_base_t *base, struct timer_list *timer)
-{
-    time_t expires = timer->expires;
-    long ticks     = expires - base->timer_ticks;
-    // Can happen if you add a timer with expires == ticks, or in the past
-    if (ticks < 0) {
-        return base->tvr + (base->timer_ticks & TVR_MASK);
-    }
-    if (ticks < TIMER_TICKS(0)) {
-        return base->tvr + (expires & TVR_MASK);
-    }
-    if (ticks < TIMER_TICKS(1)) {
-        return base->tvn[0] + ((expires >> TIMER_TICKS_BITS(0)) & TVN_MASK);
-    }
-    if (ticks < TIMER_TICKS(2)) {
-        return base->tvn[1] + ((expires >> TIMER_TICKS_BITS(1)) & TVN_MASK);
-    }
-    if (ticks < TIMER_TICKS(3)) {
-        return base->tvn[2] + ((expires >> TIMER_TICKS_BITS(2)) & TVN_MASK);
-    }
-    return base->tvn[3] + ((expires >> TIMER_TICKS_BITS(3)) & TVN_MASK);
-}
-
-/// Move all timers from tv up one level
-static void __timer_cascate(tvec_base_t *base, size_t vector_list_index, size_t vector_index)
-{
-    list_head *current_vector, *vector;
-    struct timer_list *timer;
-    // Get the current vector.
-    current_vector = &base->tvn[vector_list_index][vector_index];
-    // Migrate only if the vector actually has a timer in it.
-    if (!list_head_empty(current_vector)) {
-        pr_debug("Migrate from vector 0x%p\n", current_vector);
-        // Reinsert all timers into base in the new correct list.
-        list_for_each_safe_decl(it, save, current_vector)
-        {
-            // Get the timer.
-            timer = list_entry(it, struct timer_list, entry);
-            // Get the new vector.
-            vector = __timer_get_vector(base, timer);
-            // If the new vector is different than the current one, move the timer.
-            if (vector != current_vector) {
-                assert(!list_head_empty(it));
-
-                // First, remove the timer from the current list.
-                list_head_remove(it);
-                // Then, re-initialize the timer.
-                init_timer(timer);
-                // Insert the timer inside the vector.
-                list_head_insert_before(it, vector);
-                // Since we are moving timers around, print the vector base.
-                pr_debug("Migrate timer (0x%p) 0x%p -> 0x%p\n", it, current_vector, vector);
-                __print_vector_base(base);
-            }
-        }
-    }
 }
 
 void run_timer_softirq(void)
 {
     struct timer_list *timer;
+    uint32_t timer_index;
+    // For now the base is just for the single core.
     tvec_base_t *base = &cpu_base;
+    // Lock the base.
     spinlock_lock(&base->lock);
-
 #ifdef ENABLE_REAL_TIMER_SYSTEM
-
     // While we are not up to date with current ticks
     while (base->timer_ticks <= timer_get_ticks()) {
         // Index of the current timer to execute.
-        uint32_t current_time_index = base->timer_ticks & TVR_MASK;
-
-        // If the index is zero then all lists in base->tvr have been checked, so they are empty
-        if (!current_time_index) {
-            // Consider the first invocation of the cascade() function: it receives as arguments
-            // the address in base, the address of base->tv2, and the index of the list
-            // in base->tv2 including the timers that will decay in the next 256 ticks. This
-            // index is determined by looking at the proper bits of the base->timer_ticks value.
-            // cascade() moves all dynamic timers in the base->tv2 list into the
-            // proper lists of base->tvr; then, it returns a positive value, unless all base->tv2
-            // lists are now empty. If so, cascade() is invoked once more to replenish
-            // base->tv2 with the timers included in a list of base->tv3, and so on.
-
-            __timer_cascate(base, 3, (base->timer_ticks >> TIMER_TICKS_BITS(3)) & TVN_MASK);
-            __timer_cascate(base, 2, (base->timer_ticks >> TIMER_TICKS_BITS(2)) & TVN_MASK);
-            __timer_cascate(base, 1, (base->timer_ticks >> TIMER_TICKS_BITS(1)) & TVN_MASK);
-            __timer_cascate(base, 0, (base->timer_ticks >> TIMER_TICKS_BITS(0)) & TVN_MASK);
+        timer_index = base->timer_ticks & TVR_MASK;
+        // If the index is zero then all lists in base->tvr have been checked,
+        // so they are empty.
+        if (!timer_index) {
+            __timer_cascate_base(base);
         }
-
-        // If there are timers to execute in this instant
-        if (!list_head_empty(&base->tvr[current_time_index])) {
-            // Trigger all timers
-            list_for_each_safe_decl(it, store, &base->tvr[current_time_index])
+        // If there are timers to execute in this instant.
+        if (!list_head_empty(&base->tvr[timer_index])) {
+            // Trigger all timers.
+            list_for_each_safe_decl(it, store, &base->tvr[timer_index])
             {
+                pr_debug("Execute timer (0x%p)\n", it);
                 // Get the timer.
                 timer = list_entry(it, struct timer_list, entry);
-                pr_debug("Execute timer (0x%p)\n", it);
+                // Check the timer and its function.
+                assert(timer && "Dynamic timer is NULL...\n");
+                assert(timer->function && "Dynamic timer function is NULL...\n");
+                // Unlock the base.
                 spinlock_unlock(&base->lock);
                 // Executes the timer function.
-                if (timer->function) {
-                    timer->function(timer->data);
-                } else {
-                    pr_alert("Dynamic timer function is NULL...\n");
-                }
+                timer->function(timer->data);
+                // Lock the baes again.
                 spinlock_lock(&base->lock);
                 // Removes the timer from the list.
                 remove_timer(timer);
@@ -440,11 +498,7 @@ void run_timer_softirq(void)
         // Advance timer check
         ++base->timer_ticks;
     }
-
-    base->running_timer = NULL;
-
 #else
-
     struct list_head *it, *tmp;
     list_for_each_safe (it, tmp, &base->list) {
         struct timer_list *timer = list_entry(it, struct timer_list, entry);
@@ -464,65 +518,26 @@ void run_timer_softirq(void)
             __timer_list_dealloc(timer);
         }
     }
-
 #endif
-
     base->running_timer = NULL;
     spinlock_unlock(&base->lock);
-}
-
-void init_timer(struct timer_list *timer)
-{
-    timer->base = NULL;
-    list_head_init(&timer->entry);
-    spinlock_unlock(&timer->lock);
-}
-
-void add_timer(struct timer_list *timer)
-{
-#ifdef ENABLE_REAL_TIMER_SYSTEM
-    // Get the vector.
-    list_head *vector = __timer_get_vector(&cpu_base, timer);
-    // Insert the timer inside the vector.
-    list_head_insert_before(&timer->entry, vector);
-    // Debug on the output.
-    pr_debug("Add timer     (0x%p) to (0x%p)\n", &timer->entry, vector);
-    __print_vector_base(&cpu_base);
-#else
-    list_head_insert_before(&timer->entry, &base->list);
-#endif
-}
-
-void remove_timer(struct timer_list *timer)
-{
-    // First, remove the timer from the current list.
-    list_head_remove(&timer->entry);
-    // Then, re-initialize the timer.
-    init_timer(timer);
-    // Debug on the output.
-    pr_debug("Remove timer  (0x%p)\n", &timer->entry);
-    __print_vector_base(&cpu_base);
 }
 
 // ============================================================================
 // STANDARD TIMEOUT FUNCTIONS
 // ============================================================================
 
-/// @brief Debugging function.
+/// @brief Standard debugging function callback.
 /// @param data The data.
 static inline void debug_timeout(unsigned long data)
 {
     pr_debug("The timer has been successfully deactivated: %d, ticks: %d, seconds: %d\n", data, timer_ticks, timer_get_seconds());
 }
 
-/// @brief Callback for when a sleep timer expires
-/// @param data Custom data stored in the timer
+/// @brief Callback for when a sleep timer expires.
+/// @param data Custom data stored in the timer.
 static inline void sleep_timeout(unsigned long data)
 {
-    // TODO: We could modify the sleep_on and make it return the
-    // wait_queue_entry_t and then store it in the dynamic timer data member
-    // instead of the task pid, this would remove the need to iterate the sleep
-    // queue list.
     // Get the sleep data.
     sleep_data_t *sleep_data = (sleep_data_t *)data;
     // Get the wait_queue_entry.
@@ -530,7 +545,7 @@ static inline void sleep_timeout(unsigned long data)
     // Executed entry's wakeup test function
     if (wait_queue_entry->func(wait_queue_entry, 0, 0) == 1) {
         pr_debug("Process (pid: %d) restored from sleep\n", wait_queue_entry->task->pid);
-        // Removes entry from list and memory
+        // Removes entry from list and memory.
         remove_wait_queue(&sleep_queue, wait_queue_entry);
         // Free the memory of the wait queue item.
         wait_queue_entry_dealloc(wait_queue_entry);
@@ -539,8 +554,9 @@ static inline void sleep_timeout(unsigned long data)
     }
 }
 
-/// @brief Function executed when the real_timer of a process expires, sends SIGALRM to process.
-/// @param pid PID of the process whos associated timer has expired
+/// @brief Function executed when the real_timer of a process expires, sends
+/// SIGALRM to process.
+/// @param pid PID of the process whos associated timer has expired.
 static inline void alarm_timeout(unsigned long task_ptr)
 {
     // Get the task fromt the argument.
@@ -568,10 +584,10 @@ static inline void real_timer_timeout(unsigned long task_ptr)
         task->real_timer->data     = (unsigned long)task;
         // Add the timer.
         add_timer(task->real_timer);
-        return;
+    } else {
+        // Remove the timer.
+        task->real_timer = NULL;
     }
-    // Remove the timer.
-    task->real_timer = NULL;
 }
 
 // ============================================================================
@@ -580,56 +596,52 @@ static inline void real_timer_timeout(unsigned long task_ptr)
 
 int sys_nanosleep(const timespec *req, timespec *rem)
 {
-    // You probably have to save rem somewhere, because it contains how much
-    // time left until the timer expires, when the timer is stopped early by a
-    // signal.
+    // We need to store rem somewhere, because it contains how much time left
+    // until the timer expires, when the timer is stopped early by a signal.
     pr_debug("sys_nanosleep([s:%d; ns:%d],...)\n", req->tv_sec, req->tv_nsec);
-
     // Create a dinamic timer to wake up the process after some time
     struct timer_list *sleep_timer = __timer_list_alloc();
-
-    // Saves pid and rem timespec
-    sleep_data_t *data = __sleep_data_alloc();
-    data->remaining    = rem;
-
+    // First, we save the remaining time. Then, we remove the current process
+    // from runqueue and stores it in the waiting queue, this must be done at
+    // the end, because it changes the current active page and invalidates the
+    // req and rem pointers (?)
+    sleep_data_t *sleep_data     = __sleep_data_alloc();
+    sleep_data->remaining        = rem;
+    sleep_data->wait_queue_entry = sleep_on(&sleep_queue);
     // Setup the timer.
     sleep_timer->expires  = timer_get_ticks() + TICKS_PER_SECOND * req->tv_sec;
     sleep_timer->function = &sleep_timeout;
-    sleep_timer->data     = (unsigned long)data;
+    sleep_timer->data     = (unsigned long)sleep_data;
     // Add the timer.
     add_timer(sleep_timer);
-
-    // Removes current process from runqueue and stores it in the waiting queue,
-    // this must be done at the end, because it changes the current active page
-    // and invalidates the req and rem pointers (?)
-    data->wait_queue_entry = sleep_on(&sleep_queue);
-
     return -1;
 }
 
 unsigned sys_alarm(int seconds)
 {
     struct task_struct *task = scheduler_get_current_process();
-
-    // If there is already a timer running
-    unsigned result = 0;
+    // If there is already a timer running.
+    unsigned remaining_time = 0;
     if (task->real_timer) {
+        // First, we remove the timer.
         remove_timer(task->real_timer);
-        result = (task->real_timer->expires - timer_get_ticks()) / TICKS_PER_SECOND;
-        // Returns only the amount of seconds remaining
+        // We compute the remaining time.
+        remaining_time = (task->real_timer->expires - timer_get_ticks()) / TICKS_PER_SECOND;
+        // Returns only the amount of seconds remaining.
         if (seconds == 0) {
+            // Free the memory.
             __timer_list_dealloc(task->real_timer);
+            // Remove the reference.
             task->real_timer = NULL;
-            return result;
+            return remaining_time;
         }
     } else {
         if (seconds == 0) {
             return 0;
         }
-        // Allocate new timer
+        // Allocate new timer.
         task->real_timer = __timer_list_alloc();
     }
-
     // Initialize the timer.
     init_timer(task->real_timer);
     // Setup the timer.
@@ -638,64 +650,23 @@ unsigned sys_alarm(int seconds)
     task->real_timer->data     = (unsigned long)task;
     // Add the timer.
     add_timer(task->real_timer);
-
-    return result;
-}
-
-static void __calc_itimerval(unsigned long interval, unsigned long value, struct itimerval *result)
-{
-    result->it_interval.tv_sec  = interval / TICKS_PER_SECOND;
-    result->it_interval.tv_usec = (interval * 1000) / TICKS_PER_SECOND;
-    result->it_value.tv_sec     = value / TICKS_PER_SECOND;
-    result->it_value.tv_usec    = (value * 1000) / TICKS_PER_SECOND;
-}
-
-static void __update_task_itimerval(int which, const struct itimerval *timer)
-{
-    time_t interval = (timer->it_interval.tv_sec * TICKS_PER_SECOND) +
-                      (timer->it_interval.tv_usec * TICKS_PER_SECOND) / 1000;
-    time_t value = (timer->it_value.tv_sec * TICKS_PER_SECOND) +
-                   (timer->it_value.tv_usec * TICKS_PER_SECOND) / 1000;
-
-    struct task_struct *task = scheduler_get_current_process();
-    switch (which) {
-    case ITIMER_REAL:
-        task->it_real_incr  = interval;
-        task->it_real_value = value;
-        break;
-    case ITIMER_VIRTUAL:
-        task->it_virt_incr  = interval;
-        task->it_virt_value = value;
-        break;
-    case ITIMER_PROF:
-        task->it_prof_incr  = interval;
-        task->it_prof_value = value;
-        break;
-    }
+    return remaining_time;
 }
 
 int sys_getitimer(int which, struct itimerval *curr_value)
 {
-    // Invalid time domain
-    if (which < 0 || which > 3) {
-        return EINVAL;
-    }
     struct task_struct *task = scheduler_get_current_process();
-    switch (which) {
-    case ITIMER_REAL: {
+    // Transform the apropriate interval and store it in the given variable.
+    if (which == ITIMER_REAL) {
         // Extract remaining time in dynamic timer.
         task->it_real_value = task->real_timer->expires - timer_get_ticks();
-        // Compute the interval.
-        __calc_itimerval(task->it_real_incr, task->it_real_value, curr_value);
-    } break;
-    case ITIMER_VIRTUAL:
-        // Compute the interval.
-        __calc_itimerval(task->it_virt_incr, task->it_virt_value, curr_value);
-        break;
-    case ITIMER_PROF:
-        // Compute the interval.
-        __calc_itimerval(task->it_prof_incr, task->it_prof_value, curr_value);
-        break;
+        __values_to_itimerval(task->it_real_incr, task->it_real_value, curr_value);
+    } else if (which == ITIMER_VIRTUAL) {
+        __values_to_itimerval(task->it_virt_incr, task->it_virt_value, curr_value);
+    } else if (which == ITIMER_PROF) {
+        __values_to_itimerval(task->it_prof_incr, task->it_prof_value, curr_value);
+    } else {
+        return EINVAL;
     }
     return 0;
 }
