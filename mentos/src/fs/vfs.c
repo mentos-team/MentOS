@@ -147,24 +147,21 @@ vfs_file_t *vfs_open(const char *path, int flags, mode_t mode)
 {
     pr_debug("vfs_open(path: %s, flags: %d, mode: %d)\n", path, flags, mode);
     assert(path && "Provided null path.");
-    if (path[0] != '/') {
-        // Allocate a variable for the path.
-        char absolute_path[PATH_MAX];
-        // Resolve all symbolic links in the path before opening the file.
-        int resolve_flags = FOLLOW_LINKS;
-        // Allow the last component to be non existing when attempting to create it.
-        if (bitmask_check(flags, O_CREAT)) {
-            resolve_flags |= CREAT_LAST_COMPONENT;
-        }
-        int ret = resolve_path(path, absolute_path, sizeof(absolute_path), resolve_flags);
-        if (ret < 0) {
-            pr_err("vfs_open(%s): Cannot resolve path!\n", path);
-            errno = -ret;
-            return NULL;
-        }
-        return vfs_open_abspath(absolute_path, flags, mode);
+    // Allocate a variable for the path.
+    char absolute_path[PATH_MAX];
+    // Resolve all symbolic links in the path before opening the file.
+    int resolve_flags = FOLLOW_LINKS;
+    // Allow the last component to be non existing when attempting to create it.
+    if (bitmask_check(flags, O_CREAT)) {
+        resolve_flags |= CREAT_LAST_COMPONENT;
     }
-    return vfs_open_abspath(path, flags, mode);
+    int ret = resolve_path(path, absolute_path, sizeof(absolute_path), resolve_flags);
+    if (ret < 0) {
+        pr_err("vfs_open(%s): Cannot resolve path!\n", path);
+        errno = -ret;
+        return NULL;
+    }
+    return vfs_open_abspath(absolute_path, flags, mode);
 }
 
 int vfs_close(vfs_file_t *file)
