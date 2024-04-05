@@ -145,21 +145,26 @@ vfs_file_t *vfs_open_abspath(const char *absolute_path, int flags, mode_t mode)
 
 vfs_file_t *vfs_open(const char *path, int flags, mode_t mode)
 {
-    // Allocate a variable for the path.
-    char absolute_path[PATH_MAX];
-    // Resolve all symbolic links in the path before opening the file.
-    int resolve_flags = FOLLOW_LINKS;
-    // Allow the last component to be non existing when attempting to create it.
-    if (bitmask_check(flags, O_CREAT)) {
-        resolve_flags |= CREAT_LAST_COMPONENT;
+    pr_debug("vfs_open(path: %s, flags: %d, mode: %d)\n", path, flags, mode);
+    assert(path && "Provided null path.");
+    if (path[0] != '/') {
+        // Allocate a variable for the path.
+        char absolute_path[PATH_MAX];
+        // Resolve all symbolic links in the path before opening the file.
+        int resolve_flags = FOLLOW_LINKS;
+        // Allow the last component to be non existing when attempting to create it.
+        if (bitmask_check(flags, O_CREAT)) {
+            resolve_flags |= CREAT_LAST_COMPONENT;
+        }
+        int ret = resolve_path(path, absolute_path, sizeof(absolute_path), resolve_flags);
+        if (ret < 0) {
+            pr_err("vfs_open(%s): Cannot resolve path!\n", path);
+            errno = -ret;
+            return NULL;
+        }
+        return vfs_open_abspath(absolute_path, flags, mode);
     }
-    int ret = resolve_path(path, absolute_path, sizeof(absolute_path), resolve_flags);
-    if (ret < 0) {
-        pr_err("vfs_open(%s): Cannot resolve path!\n", path);
-        errno = -ret;
-        return NULL;
-    }
-    return vfs_open_abspath(absolute_path, flags, mode);
+    return vfs_open_abspath(path, flags, mode);
 }
 
 int vfs_close(vfs_file_t *file)
@@ -660,7 +665,7 @@ int sys_dup(int fd)
 
     // Get the file descriptor.
     vfs_file_descriptor_t *vfd = &task->fd_list[fd];
-    vfs_file_t *file = vfd->file_struct;
+    vfs_file_t *file           = vfd->file_struct;
 
     // Check the file.
     if (file == NULL) {
@@ -676,7 +681,7 @@ int sys_dup(int fd)
 
     // Install the new fd
     task->fd_list[fd].file_struct = file;
-    task->fd_list[fd].flags_mask = vfd->flags_mask;
+    task->fd_list[fd].flags_mask  = vfd->flags_mask;
 
     return fd;
 }
@@ -720,7 +725,7 @@ int vfs_valid_open_permissions(int flags, mode_t mask, uid_t uid, gid_t gid)
     // Check the owners permission
     if (task->uid == uid) {
         return __valid_open_permissions(mask, flags, S_IRUSR, S_IWUSR);
-    // Check the groups permission
+        // Check the groups permission
     } else if (task->gid == gid) {
         return __valid_open_permissions(mask, flags, S_IRGRP, S_IWGRP);
     }
@@ -733,7 +738,8 @@ int vfs_valid_open_permissions(int flags, mode_t mask, uid_t uid, gid_t gid)
 /// @param task the task to execute the file.
 /// @param file the file to execute.
 /// @return 1 on success, 0 otherwise.
-int vfs_valid_exec_permission(task_struct *task, vfs_file_t *file) {
+int vfs_valid_exec_permission(task_struct *task, vfs_file_t *file)
+{
     // Init, and all root processes may execute any file with an execute bit set
     if ((task->pid == 0) || (task->uid == 0)) {
         return file->mask & (S_IXUSR | S_IXGRP | S_IXOTH);
@@ -742,7 +748,7 @@ int vfs_valid_exec_permission(task_struct *task, vfs_file_t *file) {
     // Check the owners permission
     if (task->uid == file->uid) {
         return file->mask & S_IXUSR;
-    // Check the groups permission
+        // Check the groups permission
     } else if (task->gid == file->gid) {
         return file->mask & S_IXGRP;
     }
