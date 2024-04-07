@@ -51,7 +51,7 @@ off_t lseek(int fd, off_t offset, int whence);
 
 /// @brief Delete a name and possibly the file it refers to.
 /// @param path The path to the file.
-/// @return
+/// @return 0 on success, -errno on failure.
 int unlink(const char *path);
 
 /// @brief Creates a symbolic link.

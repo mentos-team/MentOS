@@ -125,6 +125,10 @@ static inline const char *elf_get_symbol_name(elf_header_t *header, elf_section_
 // SEARCH FUNCTIONS
 // ============================================================================
 
+/// @brief Finds the section header with the given name.
+/// @param header a pointer to the ELF header.
+/// @param name the name of the section we are looking for.
+/// @return a pointer to the section header.
 static inline elf_section_header_t *elf_find_section_header(elf_header_t *header, const char *name)
 {
     for (unsigned i = 0; i < header->shnum; ++i) {
@@ -142,6 +146,10 @@ static inline elf_section_header_t *elf_find_section_header(elf_header_t *header
     return NULL;
 }
 
+/// @brief Finds the symbol with the given name.
+/// @param header a pointer to the ELF header.
+/// @param name the name of the symbol we are looking for.
+/// @return a pointer to the symbol.
 static inline elf_symbol_t *elf_find_symbol(elf_header_t *header, const char *name)
 {
     for (unsigned i = 0; i < header->shnum; ++i) {
@@ -175,6 +183,8 @@ static inline elf_symbol_t *elf_find_symbol(elf_header_t *header, const char *na
 // DUMP FUNCTIONS
 // ============================================================================
 
+/// @brief Dumps the information about the sections.
+/// @param header a pointer to the ELF header.
 static inline void elf_dump_section_headers(elf_header_t *header)
 {
     pr_debug("[Nr] Name                 Type            Addr     Off    Size   ES Flg Lk Inf Al\n");
@@ -192,6 +202,8 @@ static inline void elf_dump_section_headers(elf_header_t *header)
     }
 }
 
+/// @brief Dumps the information about the symbols.
+/// @param header a pointer to the ELF header.
 static inline void elf_dump_symbol_table(elf_header_t *header)
 {
     for (unsigned i = 0; i < header->shnum; ++i) {
@@ -228,9 +240,8 @@ static inline void elf_dump_symbol_table(elf_header_t *header)
 // ============================================================================
 
 /// @brief Loads an ELF executable.
-/// @param task The task for which we load the ELF.
-/// @param file The ELF file.
 /// @param header  The header of the ELF file.
+/// @param task The task for which we load the ELF.
 /// @return The ELF entry.
 static inline int elf_load_exec(elf_header_t *header, task_struct *task)
 {
