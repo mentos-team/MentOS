@@ -182,7 +182,10 @@ resolve_abspath:
                 if (symlinks > SYMLOOP_MAX) { return -ELOOP; }
 
                 char link[PATH_MAX];
-                ssize_t nbytes = sys_readlink(abspath, link, sizeof(link));
+                vfs_file_t* link_file = vfs_open_abspath(abspath, O_RDONLY, 0);
+                if (link_file == NULL) { return -errno; }
+                ssize_t nbytes = vfs_readlink(link_file, link, sizeof(link));
+                vfs_close(link_file);
                 if (nbytes == -1) { return -errno; }
 
                 // Null-terminate link
