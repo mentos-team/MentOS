@@ -686,6 +686,12 @@ int sys_dup(int fd)
     return fd;
 }
 
+/// @brief Checks the valid open permission.
+/// @param mask the mask we need to check against.
+/// @param flags the flags we want to check.
+/// @param read the read permissions we want to check.
+/// @param write the write permissions we want to check.
+/// @return 0 on falure, success otherwise.
 static inline int __valid_open_permissions(
     const mode_t mask,
     const int flags,

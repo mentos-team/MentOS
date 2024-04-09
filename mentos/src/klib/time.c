@@ -11,12 +11,15 @@
 #include "stdio.h"
 #include "time.h"
 
-static const char *str_weekdays[] = { "Sunday", "Monday", "Tuesday", "Wednesday",
-                                      "Thursday", "Friday", "Saturday" };
+/// @brief List of week days.
+static const char *str_weekdays[] = {
+    "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"
+};
 
-static const char *str_months[] = { "January", "February", "March", "April",
-                                    "May", "June", "July", "August",
-                                    "September", "October", "November", "December" };
+/// @brief List of months.
+static const char *str_months[] = {
+    "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"
+};
 
 time_t sys_time(time_t *time)
 {

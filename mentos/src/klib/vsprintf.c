@@ -31,6 +31,8 @@ static char *_digits = "0123456789abcdefghijklmnopqrstuvwxyz";
 static char *_upper_digits = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
 /// @brief Returns the index of the first non-integer character.
+/// @param s the string.
+/// @return the index of the first non-integer character.
 static inline int skip_atoi(const char **s)
 {
     int i = 0;
@@ -40,6 +42,14 @@ static inline int skip_atoi(const char **s)
     return i;
 }
 
+/// @brief Places the number inside the string.
+/// @param str the string where the number will end up in.
+/// @param num the number.
+/// @param base the base used to transform the number.
+/// @param size the size available for storing the number.
+/// @param precision the precision.
+/// @param flags support flags.
+/// @return the string itself, or NULL.
 static char *number(char *str, long num, int base, int size, int32_t precision, unsigned flags)
 {
     char c, tmp[66] = { 0 };
@@ -52,7 +62,7 @@ static char *number(char *str, long num, int base, int size, int32_t precision, 
         flags &= ~FLAGS_ZEROPAD;
     }
     if (base < 2 || base > 36) {
-        return 0;
+        return NULL;
     }
 
     c = (flags & FLAGS_ZEROPAD) ? '0' : ' ';
@@ -130,6 +140,13 @@ static char *number(char *str, long num, int base, int size, int32_t precision, 
     return str;
 }
 
+/// @brief Prints a MAC address.
+/// @param str the string where we store the address.
+/// @param addr the address we need to store.
+/// @param size the size available in str.
+/// @param precision the precision to use.
+/// @param flags support flags.
+/// @return a pointer to str itself, or NULL.
 static char *eaddr(char *str, unsigned char *addr, int size, int precision, unsigned flags)
 {
     (void)precision;
@@ -167,6 +184,13 @@ static char *eaddr(char *str, unsigned char *addr, int size, int precision, unsi
     return str;
 }
 
+/// @brief Prints an internet address.
+/// @param str the string where we store the address.
+/// @param addr the address we need to store.
+/// @param size the size available in str.
+/// @param precision the precision to use.
+/// @param flags support flags.
+/// @return a pointer to str itself, or NULL.
 static char *iaddr(char *str, unsigned char *addr, int size, int precision, unsigned flags)
 {
     (void)precision;
@@ -214,6 +238,11 @@ static char *iaddr(char *str, unsigned char *addr, int size, int precision, unsi
     return str;
 }
 
+/// @brief Prints a floating point value.
+/// @param value the value to print.
+/// @param buffer the buffer where the value is stored.
+/// @param fmt the format.
+/// @param precision the precision.
 static void cfltcvt(double value, char *buffer, char fmt, int precision)
 {
     int decpt, sign, exp, pos;
@@ -314,6 +343,8 @@ static void cfltcvt(double value, char *buffer, char fmt, int precision)
     *buffer = '\0';
 }
 
+/// @brief Should we force the decimal point.
+/// @param buffer the buffer where we force the decimal point.
 static void forcdecpt(char *buffer)
 {
     while (*buffer) {
@@ -340,6 +371,8 @@ static void forcdecpt(char *buffer)
     }
 }
 
+/// @brief Crop zero unless '#' given.
+/// @param buffer the buffer to work on.
 static void cropzeros(char *buffer)
 {
     char *stop;
@@ -363,6 +396,14 @@ static void cropzeros(char *buffer)
     }
 }
 
+/// @brief Transforms a floating point value to string.
+/// @param str the string where the floating point value should be stored.
+/// @param num the number to store.
+/// @param size the size available for storing the floating point value.
+/// @param precision the precision.
+/// @param fmt the format.
+/// @param flags the support flags.
+/// @return a pointer to str itself.
 static char *flt(char *str, double num, int size, int precision, char fmt, unsigned flags)
 {
     char tmp[80];

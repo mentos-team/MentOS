@@ -46,6 +46,12 @@ struct ndtree_iter_t {
 
 // ============================================================================
 // Default Comparison functions.
+
+/// @brief Default comparison function.
+/// @param self the ndtree.
+/// @param a the first element.
+/// @param b the second element.
+/// @return comparison between the elements.
 static inline int __ndtree_tree_node_cmp_ptr_cb(ndtree_t *self, void *a, void *b)
 {
     return (a > b) - (a < b);
@@ -165,6 +171,10 @@ ndtree_t *ndtree_tree_init(ndtree_t *tree, ndtree_tree_cmp_f node_cmp_cb)
     return tree;
 }
 
+/// @brief Recursive deallocation of the memory of the tree.
+/// @param tree the tree.
+/// @param node the node to deallocate.
+/// @param node_cb the callback to call before freeing the memory of the node.
 static void __ndtree_tree_dealloc_rec(ndtree_t *tree, ndtree_node_t *node, ndtree_tree_node_f node_cb)
 {
     if (node && node_cb) {
@@ -192,6 +202,12 @@ void ndtree_tree_dealloc(ndtree_t *tree, ndtree_tree_node_f node_cb)
     kfree(tree);
 }
 
+/// @brief Recursive search in the tree.
+/// @param tree the tree.
+/// @param cmp the comparison function.
+/// @param value the value to compare against.
+/// @param node the current node.
+/// @return the node we found, NULL otherwise.
 static ndtree_node_t *__ndtree_tree_find_rec(ndtree_t *tree, ndtree_tree_cmp_f cmp, void *value, ndtree_node_t *node)
 {
     ndtree_node_t *result = NULL;
@@ -363,6 +379,12 @@ ndtree_node_t *ndtree_iter_prev(ndtree_iter_t *iter)
 
 // ============================================================================
 // Tree debugging functions.
+
+/// @brief A visitor function.
+/// @param tree the tree.
+/// @param node the current node.
+/// @param enter_fun the enter function.
+/// @param exit_fun the exit function.
 static void __ndtree_tree_visitor_iter(ndtree_t *tree,
                                        ndtree_node_t *node,
                                        ndtree_tree_node_f enter_fun,

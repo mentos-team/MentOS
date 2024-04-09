@@ -161,6 +161,8 @@ static inline sem_info_t *__list_find_sem_info_by_key(key_t key)
     return NULL;
 }
 
+/// @brief Adds the structure to the global list.
+/// @param sem_info the structure to add.
 static inline void __list_add_sem_info(sem_info_t *sem_info)
 {
     assert(sem_info && "Received a NULL pointer.");
@@ -168,6 +170,8 @@ static inline void __list_add_sem_info(sem_info_t *sem_info)
     list_head_insert_before(&sem_info->list, &semaphores_list);
 }
 
+/// @brief Removes the structure from the global list.
+/// @param sem_info the structure to remove.
 static inline void __list_remove_sem_info(sem_info_t *sem_info)
 {
     assert(sem_info && "Received a NULL pointer.");
@@ -179,6 +183,8 @@ static inline void __list_remove_sem_info(sem_info_t *sem_info)
 // SYSTEM FUNCTIONS
 // ============================================================================
 
+/// @brief Iinitializes the semaphore system.
+/// @return 0 on success, 1 on failure.
 int sem_init(void)
 {
     list_head_init(&semaphores_list);
@@ -495,6 +501,12 @@ long sys_semctl(int semid, int semnum, int cmd, union semun *arg)
 // PROCFS FUNCTIONS
 // ============================================================================
 
+/// @brief Read function for the proc system.
+/// @param file The file.
+/// @param buf Buffer where the read content must be placed.
+/// @param offset Offset from which we start reading from the file.
+/// @param nbyte The number of bytes to read.
+/// @return The number of red bytes.
 ssize_t procipc_sem_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyte)
 {
     if (!file) {

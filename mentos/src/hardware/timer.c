@@ -174,6 +174,8 @@ static inline void __print_vector_base(tvec_base_t *base)
 #endif
 }
 
+/// @brief Initializes the tvec_base.
+/// @param base the base to initialize.
 static inline void __tvec_base_init(tvec_base_t *base)
 {
     spinlock_init(&base->lock);
@@ -221,7 +223,9 @@ static inline list_head *__timer_get_target_vector(tvec_base_t *base, struct tim
     return base->tvn[3] + ((expires >> TIMER_TICKS_BITS(3)) & TVN_MASK);
 }
 
-/// Move all timers from tv up one level
+/// @brief Move all timers from tv up one level.
+/// @param base the base that contains the vector we want to cascate.
+/// @param current_vector the vector we want to cascate.
 static inline void __timer_cascate_vector(tvec_base_t *base, list_head *current_vector)
 {
     list_head *target_vector;
@@ -556,7 +560,7 @@ static inline void sleep_timeout(unsigned long data)
 
 /// @brief Function executed when the real_timer of a process expires, sends
 /// SIGALRM to process.
-/// @param pid PID of the process whos associated timer has expired.
+/// @param task_ptr pointer to the process whos associated timer has expired.
 static inline void alarm_timeout(unsigned long task_ptr)
 {
     // Get the task fromt the argument.
@@ -567,7 +571,9 @@ static inline void alarm_timeout(unsigned long task_ptr)
     task->real_timer = NULL;
 }
 
-// Real timer interval timemout
+/// @brief Function executed when the real_timer of a process expires, sends
+/// SIGALRM to process.
+/// @param task_ptr pointer to the process whos associated timer has expired.
 static inline void real_timer_timeout(unsigned long task_ptr)
 {
     // Get the task fromt the argument.

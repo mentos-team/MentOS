@@ -2868,7 +2868,7 @@ static ssize_t ext2_getdents(vfs_file_t *file, dirent_t *dirp, off_t doff, size_
 }
 
 /// @brief Read the symbolic link, if present.
-/// @param path the file for which we want to read the symbolic link information.
+/// @param file the file for which we want to read the symbolic link information.
 /// @param buffer the buffer where we will store the symbolic link path.
 /// @param bufsize the size of the buffer.
 /// @return The number of read characters on success, -1 otherwise and errno is
@@ -2897,7 +2897,7 @@ static ssize_t ext2_readlink(vfs_file_t *file, char *buffer, size_t bufsize)
 
 /// @brief Creates a new directory at the given path.
 /// @param path The path of the new directory.
-/// @param mode The permission of the new directory.
+/// @param permission The permission of the new directory.
 /// @return Returns a negative value on failure.
 static int ext2_mkdir(const char *path, mode_t permission)
 {

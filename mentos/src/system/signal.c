@@ -19,6 +19,7 @@
 #include "sys/errno.h"
 #include "system/signal.h"
 
+/// @brief Extracts the exit status.
 #define GET_EXIT_STATUS(status) (((status) & 0x00FF) << 8)
 
 /// SLAB caches for signal bits.
@@ -27,6 +28,7 @@ static kmem_cache_t *sigqueue_cachep;
 /// Contains all stopped process waiting for a continue signal
 static struct wait_queue_head_t stopped_queue;
 
+/// @brief The list of signal names.
 static const char *sys_siglist[] = {
     "HUP",
     "INT",
@@ -62,44 +64,67 @@ static const char *sys_siglist[] = {
     NULL,
 };
 
+/// @brief Copies the sigaction.
+/// @param to the target.
+/// @param from the source.
 static inline void __copy_sigaction(sigaction_t *to, const sigaction_t *from)
 {
     memcpy(to, from, sizeof(sigaction_t));
 }
 
+/// @brief Copies a signal set.
+/// @param to the target.
+/// @param from the source.
 static inline void __copy_sigset(sigset_t *to, const sigset_t *from)
 {
     memcpy(to, from, sizeof(sigset_t));
 }
 
+/// @brief Copies a signal information structure.
+/// @param to the target.
+/// @param from the source.
 static inline void __copy_siginfo(siginfo_t *to, const siginfo_t *from)
 {
     memcpy(to, from, sizeof(siginfo_t));
 }
 
+/// @brief Clears the memory of a signal information structure.
+/// @param info the signal information structure.
 static inline void __clear_siginfo(siginfo_t *info)
 {
     memset(info, 0, sizeof(siginfo_t));
 }
 
+/// @brief Locks the signal handling of a given task.
+/// @param t the task.
 static inline void __lock_task_sighand(struct task_struct *t)
 {
     assert(t && "Null task struct.");
     spinlock_lock(&t->sighand.siglock);
 }
 
+/// @brief Unlocks the signal handling of a given task.
+/// @param t the task.
 static inline void __unlock_task_sighand(struct task_struct *t)
 {
     assert(t && "Null task struct.");
     spinlock_unlock(&t->sighand.siglock);
 }
 
+/// @brief Returns the handler for a given signal, for a given task.
+/// @param t the task.
+/// @param sig the signal index.
+/// @return a pointer to the handler.
 static sighandler_t __get_handler(struct task_struct *t, int sig)
 {
     assert(t && "Null task struct.");
     return t->sighand.action[sig - 1].sa_handler;
 }
 
+/// @brief Checks if the given signal is ignored.
+/// @param t the task.
+/// @param sig the signal to check.
+/// @return 0 if not ignored, 1 if ignored.
 static int __sig_is_ignored(struct task_struct *t, int sig)
 {
     // Blocked signals are never ignored, since the
@@ -121,6 +146,7 @@ static int __sig_is_ignored(struct task_struct *t, int sig)
 /// @param t     The task to which the signal belongs.
 /// @param sig   The signal to set.
 /// @param flags Flags identifying from where we are going to take the memory.
+/// @return a pointer to the newly allocated signal queue.
 static inline sigqueue_t *__sigqueue_alloc(struct task_struct *t, int sig, gfp_t flags)
 {
     sigqueue_t *sigqueue = kmem_cache_alloc(sigqueue_cachep, flags);
@@ -132,18 +158,20 @@ static inline sigqueue_t *__sigqueue_alloc(struct task_struct *t, int sig, gfp_t
     return sigqueue;
 }
 
-static inline void __sigqueue_free(sigqueue_t *sigqueue)
+/// @brief Freest the memory of a signal queue.
+/// @param sigqueue the signal queue to free.
+static inline void __sigqueue_dealloc(sigqueue_t *sigqueue)
 {
     if (sigqueue) {
         kmem_cache_free(sigqueue);
     }
 }
 
-/// @brief
+/// @brief Sends a signal.
 /// @param sig  Signal to be sent.
 /// @param info The signal info
 /// @param t    The process to which we send the signal.
-/// @return
+/// @return 0 on success, a negative value on failure.
 static int __send_signal(int sig, siginfo_t *info, struct task_struct *t)
 {
     // Lock the signal handling for the given task.
@@ -181,6 +209,10 @@ static int __send_signal(int sig, siginfo_t *info, struct task_struct *t)
     return 0;
 }
 
+/// @brief Gets the next signal that abides by the given mask.
+/// @param pending the list of pending signals.
+/// @param mask the mask we are checking against.
+/// @return index of the next signal to handle.
 static inline int __next_signal(sigpending_t *pending, sigset_t *mask)
 {
     pr_debug("__next_signal(%p, %p)\n", pending, mask);
@@ -198,6 +230,10 @@ static inline int __next_signal(sigpending_t *pending, sigset_t *mask)
     return 0;
 }
 
+/// @brief Collects the signals from the list.
+/// @param sig the signal.
+/// @param list the list of pending signals.
+/// @param info the where we store the signal information.
 static inline void __collect_signal(int sig, sigpending_t *list, siginfo_t *info)
 {
     pr_debug("__collect_signal(%2d:%s, %p, %p)\n", sig, strsignal(sig), list, info);
@@ -240,7 +276,7 @@ static inline void __collect_signal(int sig, sigpending_t *list, siginfo_t *info
         // Copy the details about the entry inside the info structure.
         __copy_siginfo(info, &queue_entry->info);
         // Free the memory for the queue entry.
-        __sigqueue_free(queue_entry);
+        __sigqueue_dealloc(queue_entry);
     } else {
         pr_debug("__collect_signal(%2d:%s, %p, %p) : Cannot find the signal in the queue.\n", sig, strsignal(sig), list, info);
         // Ok, it wasn't in the queue, zero out the info.
@@ -262,6 +298,11 @@ static inline void __collect_signal(int sig, sigpending_t *list, siginfo_t *info
     }
 }
 
+/// @brief Dequeues a signal that abides by the mask.
+/// @param pending the list of pending signals.
+/// @param mask the mask used to select the signals.
+/// @param info the signal information, where we store the information of the dequeued signal.
+/// @return the signal index on success, a negative value on failure.
 static inline int __dequeue_signal(sigpending_t *pending, sigset_t *mask, siginfo_t *info)
 {
     pr_debug("__dequeue_signal(%p, %p, %p)\n", pending, mask, info);
@@ -275,6 +316,12 @@ static inline int __dequeue_signal(sigpending_t *pending, sigset_t *mask, siginf
     return sig;
 }
 
+/// @brief Handels the signals for the current process.
+/// @param signr the signal number.
+/// @param info the signal information.
+/// @param ka the action associated with the signal.
+/// @param regs the current registers.
+/// @return 1 on success, 0 on failure.
 static inline int __handle_signal(int signr, siginfo_t *info, sigaction_t *ka, struct pt_regs *regs)
 {
     pr_debug("__handle_signal(%d, %p, %p, %p)\n", signr, info, ka, regs);
@@ -340,7 +387,10 @@ long sys_sigreturn(struct pt_regs *f)
     return 0;
 }
 
-// Send signal to parent
+/// @brief Send signal to parent.
+/// @param current the current task.
+/// @param signr the signal number.
+/// @return the result of the operation.
 static int __notify_parent(struct task_struct *current, int signr)
 {
     siginfo_t info;

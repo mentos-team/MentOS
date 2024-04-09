@@ -81,6 +81,9 @@ static inline char **__push_args_on_stack(uintptr_t *stack, char *args[])
     return (char **)(*stack);
 }
 
+/// @brief Resets the process.
+/// @param task the process to reset.
+/// @return 0 on failure, 1 otherwise.
 static int __reset_process(task_struct *task)
 {
     pr_debug("__reset_process(%p `%s`)\n", task, task->name);
@@ -111,6 +114,9 @@ static int __reset_process(task_struct *task)
     return 1;
 }
 
+/// @brief Checks if the file starts with a shebang.
+/// @param file the file to check.
+/// @return 1 if it contains a shebang, 0 otherwise.
 static int __has_shebang(vfs_file_t *file) {
     char buf[2];
     vfs_read(file, buf, 0, sizeof(buf));
@@ -213,6 +219,11 @@ close_and_return:
     return ret;
 }
 
+/// @brief Allocates the memory for a task.
+/// @param source the source task we use for the copy.
+/// @param parent the parent process.
+/// @param name the name of the new process.
+/// @return pointer to the newly allocated task.
 static inline task_struct *__alloc_task(task_struct *source, task_struct *parent, const char *name)
 {
     // Create a new task_struct.

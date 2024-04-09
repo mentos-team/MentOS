@@ -276,11 +276,15 @@ inline int find_free_vm_area(mm_struct_t *mm, size_t length, uintptr_t *vm_start
     return 1;
 }
 
+/// @brief Initializes the page directory.
+/// @param pdir the page directory to initialize.
 static void __init_pagedir(page_directory_t *pdir)
 {
     *pdir = (page_directory_t){ { 0 } };
 }
 
+/// @brief Initializes the page table.
+/// @param ptable the page table to initialize.
 static void __init_pagetable(page_table_t *ptable)
 {
     *ptable = (page_table_t){ { 0 } };
@@ -319,6 +323,9 @@ void paging_init(boot_info_t *info)
 #define ERR_RESERVED 0x08 ///< Overwrote reserved bit.
 #define ERR_INST     0x10 ///< Instruction fetch.
 
+/// @brief Sets the given page table flags.
+/// @param table the page table.
+/// @param flags the flags to set.
 static inline void __set_pg_table_flags(page_table_entry_t *table, uint32_t flags)
 {
     table->rw         = (flags & MM_RW) != 0;
@@ -371,6 +378,9 @@ static void __page_fault_panic(pt_regs *f, uint32_t addr)
     __asm__ __volatile__("cli");
 }
 
+/// @brief Handles the copy-on-write.
+/// @param entry the entry to manage.
+/// @return 0 on success, 1 on error.
 static int __page_handle_cow(page_table_entry_t *entry)
 {
     // Check if the page is Copy On Write (COW).
@@ -397,6 +407,10 @@ static int __page_handle_cow(page_table_entry_t *entry)
     return 1;
 }
 
+/// @brief Allocates memory for a page table entry.
+/// @param entry the entry for which we allocate memory.
+/// @param flags the flags to control the allocation.
+/// @return a pointer to the page table entry.
 static page_table_t *__mem_pg_entry_alloc(page_dir_entry_t *entry, uint32_t flags)
 {
     if (!entry->present) {
@@ -424,6 +438,9 @@ static page_table_t *__mem_pg_entry_alloc(page_dir_entry_t *entry, uint32_t flag
         get_page_from_physical_address(((uint32_t)entry->frame) << 12U));
 }
 
+/// @brief Sets the frame attribute of a page table entry.
+/// @param entry the entry.
+/// @param table the page table.
 static inline void __set_pg_entry_frame(page_dir_entry_t *entry, page_table_t *table)
 {
     page_t *table_page = get_lowmem_page_from_address((uint32_t)table);

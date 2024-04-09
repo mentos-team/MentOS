@@ -9,6 +9,12 @@
 #include "stdio.h"
 #include "string.h"
 
+/// @brief Read formatted data from string.
+/// @param buf String processed as source to retrieve the data.
+/// @param s  Format string, following the same specifications as printf.
+/// @param ap The list of arguments where the values are stored.
+/// @return On success, the function returns the number of items of the
+///         argument list successfully filled. EOF otherwise.
 static int vsscanf(const char *buf, const char *s, va_list ap)
 {
     int count = 0, noassign = 0, width = 0, base = 0;
