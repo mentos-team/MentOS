@@ -382,6 +382,9 @@ unsigned long buddy_system_get_cached_space(bb_instance_t *instance)
     return size;
 }
 
+/// @brief Extenmds the cache of the given amount.
+/// @param instance the cache instance.
+/// @param count the amount to extend to.
 static void __cache_extend(bb_instance_t *instance, int count)
 {
     for (int i = 0; i < count; i++) {
@@ -391,6 +394,9 @@ static void __cache_extend(bb_instance_t *instance, int count)
     }
 }
 
+/// @brief Shrinks the cache.
+/// @param instance the cache instance.
+/// @param count the amount to shrink.
 static void __cache_shrink(bb_instance_t *instance, int count)
 {
     for (int i = 0; i < count; i++) {
@@ -401,6 +407,9 @@ static void __cache_shrink(bb_instance_t *instance, int count)
     }
 }
 
+/// @brief Allocate memory using the given cache.
+/// @param instance the cache instance.
+/// @return a pointer to the allocated page.
 static bb_page_t *__cached_alloc(bb_instance_t *instance)
 {
     if (instance->free_pages_cache_size < LOW_WATERMARK_LEVEL) {
@@ -413,6 +422,9 @@ static bb_page_t *__cached_alloc(bb_instance_t *instance)
     return page;
 }
 
+/// @brief Frees the memory of the allocated page.
+/// @param instance the cache instance.
+/// @param page a pointer to the allocated page.
 static void __cached_free(bb_instance_t *instance, bb_page_t *page)
 {
     list_head_insert_after(&page->location.cache, &instance->free_pages_cache_list);

@@ -200,6 +200,8 @@ static inline int procfs_find_inode(const char *path)
     return -1;
 }
 
+/// @brief Finds a free inode.
+/// @return the free inode index, or -1 on failure.
 static inline int procfs_get_free_inode(void)
 {
     for (int inode = 1; inode < PROCFS_MAX_FILES; ++inode) {
@@ -534,6 +536,7 @@ static vfs_file_t *procfs_open(const char *path, int flags, mode_t mode)
 
 /// @brief Closes the given file.
 /// @param file The file structure.
+/// @return 0 on success, -errno on failure.
 static int procfs_close(vfs_file_t *file)
 {
     assert(file && "Received null file.");
@@ -583,13 +586,13 @@ static inline int procfs_unlink(const char *path)
 /// @param offset Offset from which we start reading from the file.
 /// @param nbyte The number of bytes to read.
 /// @return The number of red bytes.
-static ssize_t procfs_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyte)
+static ssize_t procfs_read(vfs_file_t *file, char *buffer, off_t offset, size_t nbyte)
 {
     if (file) {
         procfs_file_t *procfs_file = procfs_find_entry_inode(file->ino);
         if (procfs_file && procfs_file->dir_entry.fs_operations) {
             if (procfs_file->dir_entry.fs_operations->read_f) {
-                return procfs_file->dir_entry.fs_operations->read_f(file, buf, offset, nbyte);
+                return procfs_file->dir_entry.fs_operations->read_f(file, buffer, offset, nbyte);
             }
         }
     }
@@ -602,13 +605,13 @@ static ssize_t procfs_read(vfs_file_t *file, char *buf, off_t offset, size_t nby
 /// @param offset Offset from which we start writing in the file.
 /// @param nbyte The number of bytes to write.
 /// @return The number of written bytes.
-static ssize_t procfs_write(vfs_file_t *file, const void *buf, off_t offset, size_t nbyte)
+static ssize_t procfs_write(vfs_file_t *file, const void *buffer, off_t offset, size_t nbyte)
 {
     if (file) {
         procfs_file_t *procfs_file = procfs_find_entry_inode(file->ino);
         if (procfs_file && procfs_file->dir_entry.fs_operations) {
             if (procfs_file->dir_entry.fs_operations->write_f) {
-                return procfs_file->dir_entry.fs_operations->write_f(file, buf, offset, nbyte);
+                return procfs_file->dir_entry.fs_operations->write_f(file, buffer, offset, nbyte);
             }
         }
     }
@@ -643,7 +646,7 @@ off_t procfs_lseek(vfs_file_t *file, off_t offset, int whence)
 }
 
 /// @brief Saves the information concerning the file.
-/// @param inode The inode containing the data.
+/// @param file The file containing the data.
 /// @param stat The structure where the information are stored.
 /// @return 0 if success.
 static int __procfs_stat(procfs_file_t *file, stat_t *stat)
@@ -712,6 +715,12 @@ static int procfs_stat(const char *path, stat_t *stat)
     return -1;
 }
 
+/// @brief Perform the I/O control operation specified by REQUEST on FD. One
+/// argument may follow; its presence and type depend on REQUEST.
+/// @param file the file on which we perform the operations.
+/// @param request the device-dependent request code
+/// @param data an untyped pointer to memory.
+/// @return Return value depends on REQUEST. Usually -1 indicates error.
 static int procfs_ioctl(vfs_file_t *file, int request, void *data)
 {
     if (file) {
@@ -811,10 +820,11 @@ static inline ssize_t procfs_getdents(vfs_file_t *file, dirent_t *dirp, off_t do
     return written_size;
 }
 
-/// @brief Mounts the block device as an EXT2 filesystem.
-/// @param block_device the block device formatted as EXT2.
-/// @return the VFS root node of the EXT2 filesystem.
-static vfs_file_t *ext2_mount(vfs_file_t *block_device, const char *path)
+/// @brief Mounts the block device as a procfs filesystem.
+/// @param block_device the block device formatted as procfs.
+/// @param path location where we mount the filesystem.
+/// @return the VFS root node of the procfs filesystem.
+static vfs_file_t *procfs_mount(vfs_file_t *block_device, const char *path)
 {
     return NULL;
 }

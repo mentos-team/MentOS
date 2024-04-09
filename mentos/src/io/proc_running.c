@@ -14,6 +14,8 @@
 #include "sys/errno.h"
 
 /// @brief Returns the character identifying the process state.
+/// @param state the process state.
+/// @return a character describing the state.
 /// @details
 ///     R  Running
 ///     S  Sleeping in an interruptible wait

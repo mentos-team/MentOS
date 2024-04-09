@@ -29,6 +29,12 @@ void dbg_puts(const char *s)
     }
 }
 
+/// @brief Prints the correct header for the given debug level.
+/// @param file the file origin of the debug message.
+/// @param fun the function where the debug message was called.
+/// @param line the line in the file where debug message was called.
+/// @param log_level the log level.
+/// @param header the header we want to show.
 static inline void __debug_print_header(const char *file, const char *fun, int line, short log_level, char *header)
 {
     // "EMERG  ", "ALERT  ", "CRIT   ", "ERR    ", "WARNING", "NOTICE ", "INFO   ", "DEBUG  ", "DEFAULT",
@@ -160,6 +166,8 @@ const char *dec_to_binary(unsigned long value, unsigned length)
     return buffer;
 }
 
+/// @brief Prints the registers.
+/// @param frame the registers to print.
 void dbg_print_regs(pt_regs *frame)
 {
     pr_debug("Interrupt stack frame:\n");

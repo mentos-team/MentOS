@@ -449,6 +449,9 @@ static const char *ext2_file_type_to_string(ext2_file_type_t ext2_type)
     return "UNK";
 }
 
+/// @brief Turns the EXT2 file type to OS standard file types.
+/// @param ext2_type the EXT2 file type.
+/// @return the OS standard file types.
 static int ext2_file_type_to_vfs_file_type(int ext2_type)
 {
     if (ext2_type == ext2_file_type_regular_file) { return DT_REG; }
@@ -536,6 +539,7 @@ static void ext2_dump_group_descriptor(ext2_group_descriptor_t *gd)
 }
 
 /// @brief Dumps on debugging output the inode.
+/// @param fs a pointer to the filesystem.
 /// @param inode the object to dump.
 static void ext2_dump_inode(ext2_filesystem_t *fs, ext2_inode_t *inode)
 {
@@ -766,6 +770,7 @@ static int __valid_x_permission(task_struct *task, ext2_inode_t *inode)
 /// @param fs the ext2 filesystem structure.
 /// @param cache the cache from which we read the bgdt data.
 /// @param group_offset the output variable where we store the linear indes to the free inode.
+/// @param skip_reserved should we skip reserved inodes.
 /// @return 1 if we found a free inode, 0 otherwise.
 static inline int ext2_find_free_inode_in_group(
     ext2_filesystem_t *fs,
@@ -792,6 +797,7 @@ static inline int ext2_find_free_inode_in_group(
 /// @param cache the cache from which we read the bgdt data.
 /// @param group_index the output variable where we store the group index.
 /// @param group_offset the output variable where we store the linear indes to the free inode.
+/// @param preferred_group we accept a preferred group, but only if available.
 /// @return 1 if we found a free inode, 0 otherwise.
 static inline int ext2_find_free_inode(
     ext2_filesystem_t *fs,
@@ -832,7 +838,6 @@ static inline int ext2_find_free_inode(
 /// @brief Searches for a free block inside the group data loaded inside the cache.
 /// @param fs the ext2 filesystem structure.
 /// @param cache the cache from which we read the bgdt data.
-/// @param group_index the output variable where we store the group index.
 /// @param block_offset the output variable where we store the linear indes to the free block.
 /// @return 1 if we found a free block, 0 otherwise.
 static inline int ext2_find_free_block_in_group(ext2_filesystem_t *fs, uint8_t *cache, uint32_t *block_offset)
@@ -849,6 +854,7 @@ static inline int ext2_find_free_block_in_group(ext2_filesystem_t *fs, uint8_t *
 /// @brief Searches for a free block.
 /// @param fs the ext2 filesystem structure.
 /// @param cache the cache from which we read the bgdt data.
+/// @param group_index the output variable where we store the group index.
 /// @param block_offset the output variable where we store the linear indes to the free block.
 /// @return 1 if we found a free block, 0 otherwise.
 static inline int ext2_find_free_block(
@@ -1166,7 +1172,6 @@ static uint32_t ext2_allocate_block(ext2_filesystem_t *fs)
 /// @brief Frees a block.
 /// @param fs the filesystem.
 /// @param block_index the index of the block we are freeing.
-/// @return 0 on failure, or the index of the new block on success.
 static void ext2_free_block(ext2_filesystem_t *fs, uint32_t block_index)
 {
     uint32_t group_index  = ext2_block_index_to_group_index(fs, block_index);
@@ -1205,6 +1210,11 @@ static void ext2_free_block(ext2_filesystem_t *fs, uint32_t block_index)
     }
 }
 
+/// @brief Frees the given inode.
+/// @param fs a pointer to the filesystem.
+/// @param inode the inode we free.
+/// @param inode_index its index.
+/// @return 0 on success, otherwise it is a failure.
 static int ext2_free_inode(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t inode_index)
 {
     // Retrieve the group index.
@@ -1315,6 +1325,7 @@ static int __ext2_read_and_allocate_indexing_block(
 /// @brief Sets the real block index based on the block index inside an inode.
 /// @param fs the filesystem.
 /// @param inode the inode which we are working with.
+/// @param inode_index thwe inode index.
 /// @param block_index the block index inside the inode.
 /// @param real_index the real block number.
 /// @return 0 on success, a negative value on failure.
@@ -1785,6 +1796,11 @@ void ext2_direntry_iterator_next(ext2_direntry_iterator_t *iterator)
     iterator->direntry = ext2_direntry_iterator_get(iterator);
 }
 
+/// @brief Checks if the directory is empty.
+/// @param fs a pointer to the filesystem.
+/// @param cache used for reading.
+/// @param inode the inode of the directory.
+/// @return 1 if empty, 0 if not empty.
 static inline int ext2_directory_is_empty(ext2_filesystem_t *fs, uint8_t *cache, ext2_inode_t *inode)
 {
     ext2_direntry_iterator_t it = ext2_direntry_iterator_begin(fs, cache, inode);
@@ -1796,6 +1812,11 @@ static inline int ext2_directory_is_empty(ext2_filesystem_t *fs, uint8_t *cache,
     return 1;
 }
 
+/// @brief Cleans the inode content.
+/// @param fs a pointer to the filesystem.
+/// @param inode the inode.
+/// @param inode_index the inode index.
+/// @return 0 on success, 1 on failure.
 static int ext2_clean_inode_content(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t inode_index)
 {
     // Check the type of operation.
@@ -1832,6 +1853,9 @@ static int ext2_clean_inode_content(ext2_filesystem_t *fs, ext2_inode_t *inode, 
 // Directory Entry Management Functions
 // ============================================================================
 
+/// @brief Returns the rec_len from the given name.
+/// @param name the name we use to compute the rec_len.
+/// @return the rec_len value.
 static inline uint32_t ext2_get_rec_len_from_name(const char *name)
 {
     unsigned int rec_len = sizeof(ext2_dirent_t) + strlen(name) - EXT2_NAME_LEN;
@@ -1839,6 +1863,9 @@ static inline uint32_t ext2_get_rec_len_from_name(const char *name)
     return rec_len;
 }
 
+/// @brief Returns the rec_len from the given direntry.
+/// @param direntry the direntry we use to compute the rec_len.
+/// @return the rec_len value.
 static inline uint32_t ext2_get_rec_len_from_direntry(const ext2_dirent_t *direntry)
 {
     unsigned int rec_len = sizeof(ext2_dirent_t) + direntry->name_len - EXT2_NAME_LEN;
@@ -1846,6 +1873,13 @@ static inline uint32_t ext2_get_rec_len_from_direntry(const ext2_dirent_t *diren
     return rec_len;
 }
 
+/// @brief Allocates a directory entry.
+/// @param fs a pointer to the filesystem.
+/// @param parent_inode_index the inode index of the parent.
+/// @param inode_index the inode index of the new entry.
+/// @param name the name of the new entry.
+/// @param file_type the type of file.
+/// @return 0 on success, a negative value on failure.
 static int ext2_allocate_direntry(
     ext2_filesystem_t *fs,
     uint32_t parent_inode_index,
@@ -1965,7 +1999,8 @@ free_cache_return_error:
 }
 
 /// @brief Finds the entry with the given `name` inside the `directory`.
-/// @param directory the directory in which we perform the search.
+/// @param fs a pointer to the filesystem.
+/// @param ino the inodex of the directory entry.
 /// @param name the name of the entry we are looking for.
 /// @param search the output variable where we save the info about the entry.
 /// @return 0 on success, -errno on failure.
@@ -2051,7 +2086,7 @@ free_cache_return_error:
 /// @param directory the directory from which we start performing the search.
 /// @param path the path of the entry we are looking for, it can be a relative path.
 /// @param search the output variable where we save the entry information.
-/// @return 0 on success, -1 on failure.
+/// @return 0 on success, -errno on failure.
 static int ext2_resolve_path(vfs_file_t *directory, char *path, ext2_direntry_search_t *search)
 {
     // Check the pointers.
@@ -2127,6 +2162,14 @@ static ext2_filesystem_t *get_ext2_filesystem(const char *absolute_path)
     return fs;
 }
 
+/// @brief Initializes the VFS file.
+/// @param fs a pointer to the filesystem.
+/// @param file the file we want to initialize.
+/// @param inode the inode we use to initialize the VFS file.
+/// @param inode_index the inode index.
+/// @param name the name of the file.
+/// @param name_len the length of the name.
+/// @return 0 on success, -errno on failure.
 static int ext2_init_vfs_file(
     ext2_filesystem_t *fs,
     vfs_file_t *file,
@@ -2191,6 +2234,10 @@ static int ext2_init_vfs_file(
     return 0;
 }
 
+/// @brief Finds the VFS file that is associated with the given inode index.
+/// @param fs a pointer to the fileystem.
+/// @param inode the inode index.
+/// @return a pointer to the VFS file.
 static vfs_file_t *ext2_find_vfs_file_with_inode(ext2_filesystem_t *fs, ino_t inode)
 {
     vfs_file_t *file = NULL;
@@ -2214,6 +2261,7 @@ static vfs_file_t *ext2_find_vfs_file_with_inode(ext2_filesystem_t *fs, ino_t in
 /// @brief Creates and initializes a new inode.
 /// @param fs the filesystem.
 /// @param inode the inode we use to initialize the root of the filesystem.
+/// @param mode the creat mode.
 /// @param preferred_group the preferred group where the inode should be allocated.
 /// @return the inode index on success, -1 on failure.
 static int ext2_create_inode(
@@ -2482,6 +2530,9 @@ static vfs_file_t *ext2_open(const char *path, int flags, mode_t mode)
     return file;
 }
 
+/// @brief Delete a name and possibly the file it refers to.
+/// @param path The path to the file.
+/// @return 0 on success, -errno on failure.
 static int ext2_unlink(const char *path)
 {
     pr_debug("ext2_unlink(%s)\n", path);
@@ -2570,6 +2621,7 @@ free_cache_return_error:
 
 /// @brief Closes the given file.
 /// @param file The file structure.
+/// @return 0 on success, -errno on failure.
 static int ext2_close(vfs_file_t *file)
 {
     // Get the filesystem.
@@ -2746,6 +2798,12 @@ static int ext2_fstat(vfs_file_t *file, stat_t *stat)
     return __ext2_stat(&inode, stat);
 }
 
+/// @brief Perform the I/O control operation specified by REQUEST on FD. One
+/// argument may follow; its presence and type depend on REQUEST.
+/// @param file the file on which we perform the operations.
+/// @param request the device-dependent request code
+/// @param data an untyped pointer to memory.
+/// @return Return value depends on REQUEST. Usually -1 indicates error.
 static int ext2_ioctl(vfs_file_t *file, int request, void *data)
 {
     return -1;
@@ -2809,6 +2867,12 @@ static ssize_t ext2_getdents(vfs_file_t *file, dirent_t *dirp, off_t doff, size_
     return written;
 }
 
+/// @brief Read the symbolic link, if present.
+/// @param file the file for which we want to read the symbolic link information.
+/// @param buffer the buffer where we will store the symbolic link path.
+/// @param bufsize the size of the buffer.
+/// @return The number of read characters on success, -1 otherwise and errno is
+/// set to indicate the error.
 static ssize_t ext2_readlink(vfs_file_t *file, char *buffer, size_t bufsize)
 {
     // Get the filesystem.
@@ -2831,6 +2895,10 @@ static ssize_t ext2_readlink(vfs_file_t *file, char *buffer, size_t bufsize)
     return nbytes;
 }
 
+/// @brief Creates a new directory at the given path.
+/// @param path The path of the new directory.
+/// @param permission The permission of the new directory.
+/// @return Returns a negative value on failure.
 static int ext2_mkdir(const char *path, mode_t permission)
 {
     pr_debug("\next2_mkdir(%s, %d)\n", path, permission);
@@ -2926,6 +2994,9 @@ static int ext2_mkdir(const char *path, mode_t permission)
     return 0;
 }
 
+/// @brief Removes the given directory.
+/// @param path The path to the directory to remove.
+/// @return Returns a negative value on failure.
 static int ext2_rmdir(const char *path)
 {
     pr_debug("ext2_unlink(%s)\n", path);
@@ -3061,7 +3132,7 @@ static int ext2_stat(const char *path, stat_t *stat)
 
 /// @brief Sets the attributes of an inode and saves it
 /// @param inode The inode to set the attributes
-/// @param stat The structure where the attributes are stored.
+/// @param attr The structure where the attributes are stored.
 /// @return 0 if success.
 static int __ext2_setattr(ext2_inode_t *inode, struct iattr *attr)
 {
@@ -3086,6 +3157,9 @@ static int __ext2_setattr(ext2_inode_t *inode, struct iattr *attr)
     return 0;
 }
 
+/// @brief Checks the attributes permission.
+/// @param file_owner the file owner we are checking against.
+/// @return 1 if it has permission, 0 otherwise.
 static int __ext2_check_setattr_permission(uid_t file_owner)
 {
     task_struct *task = scheduler_get_current_process();
@@ -3094,7 +3168,7 @@ static int __ext2_check_setattr_permission(uid_t file_owner)
 
 /// @brief Set attributes of the file at the given position.
 /// @param file The file struct.
-/// @param stat The structure where the attributes are stored.
+/// @param attr The structure where the attributes are stored.
 /// @return 0 if success.
 static int ext2_fsetattr(vfs_file_t *file, struct iattr *attr)
 {
@@ -3120,7 +3194,7 @@ static int ext2_fsetattr(vfs_file_t *file, struct iattr *attr)
 
 /// @brief Set attributes of a file
 /// @param path The path where the file resides.
-/// @param stat The structure where the information are stored.
+/// @param attr The structure where the information are stored.
 /// @return 0 if success.
 static int ext2_setattr(const char *path, struct iattr *attr)
 {
@@ -3163,6 +3237,7 @@ static int ext2_setattr(const char *path, struct iattr *attr)
 
 /// @brief Mounts the block device as an EXT2 filesystem.
 /// @param block_device the block device formatted as EXT2.
+/// @param path location where we mount the filesystem.
 /// @return the VFS root node of the EXT2 filesystem.
 static vfs_file_t *ext2_mount(vfs_file_t *block_device, const char *path)
 {
@@ -3308,6 +3383,11 @@ free_filesystem:
 // Initialization Functions
 // ============================================================================
 
+/// @brief The mount call-back, which prepares everything and calls the actual
+/// EXT2 mount function.
+/// @param path the path where the filesystem should be mounted.
+/// @param device the device we mount.
+/// @return the VFS file of the filesystem.
 static vfs_file_t *ext2_mount_callback(const char *path, const char *device)
 {
     // Allocate a variable for the path.

@@ -43,6 +43,9 @@ spinlock_t scancodes_lock;
 #define KBD_LEFT_ALT      (1 << 7) ///< Flag which identifies the left alt.
 #define KBD_RIGHT_ALT     (1 << 8) ///< Flag which identifies the right alt.
 
+/// @brief Returns the keypad number associated with the scancode.
+/// @param scancode the scan code we transform to number.
+/// @return the number it is associated with.
 static inline int get_keypad_number(unsigned int scancode)
 {
     if (scancode == KEY_KP0) { return 0; }
@@ -58,6 +61,8 @@ static inline int get_keypad_number(unsigned int scancode)
     return -1;
 }
 
+/// @brief Pushes the character in the scancode ring buffer.
+/// @param c the char we push inside the ring buffer.
 static inline void keyboard_push_front(unsigned int c)
 {
     spinlock_lock(&scancodes_lock);
@@ -65,6 +70,8 @@ static inline void keyboard_push_front(unsigned int c)
     spinlock_unlock(&scancodes_lock);
 }
 
+/// @brief Pops a value from the ring buffer.
+/// @return the value we removed from the ring buffer.
 int keyboard_pop_back(void)
 {
     int c;

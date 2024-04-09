@@ -73,60 +73,79 @@ unsigned char ps2_read(void)
     return inportb(PS2_DATA);
 }
 
+/// @brief Writes the given command to the PS2 port.
+/// @param command the command to write.
 static inline void __ps2_write_command(unsigned char command)
 {
     __ps2_wait_write();
     outportb(PS2_COMMAND, command);
 }
 
+/// @brief Reads the PS2 controller status.
+/// @return the PS2 controller status.
 static inline unsigned char __ps2_get_controller_status(void)
 {
     __ps2_write_command(0x20);
     return ps2_read();
 }
 
+/// @brief Sets the PS2 controller status.
+/// @param status the PS2 controller status.
 static inline void __ps2_set_controller_status(unsigned char status)
 {
     __ps2_write_command(0x60);
     ps2_write(status);
 }
 
+/// @brief Checks if the PS2 controller is dual channel.
+/// @return 1 if dual channel, 0 otherwise.
 static inline int __ps2_is_dual_channel(void)
 {
     return bit_check(__ps2_get_controller_status(), 6) != 0;
 }
 
+/// @brief Enables the first PS2 port.
 static inline void __ps2_enable_first_port(void)
 {
     __ps2_write_command(PS2_CTRL_P1_ENABLE);
 }
 
+/// @brief Enables the second PS2 port.
 static inline void __ps2_enable_second_port(void)
 {
     __ps2_write_command(PS2_CTRL_P2_ENABLE);
 }
 
+/// @brief Disables the first PS2 port.
 static inline void __ps2_disable_first_port(void)
 {
     __ps2_write_command(PS2_CTRL_P1_DISABLE);
 }
 
+/// @brief Disables the second PS2 port.
 static inline void __ps2_disable_second_port(void)
 {
     __ps2_write_command(PS2_CTRL_P2_DISABLE);
 }
 
+/// @brief Writes on the first PS2 port.
+/// @param byte the value to write.
 static inline void __ps2_write_first_port(unsigned char byte)
 {
     ps2_write(byte);
 }
 
+/// @brief Writes on the second PS2 port.
+/// @param byte the value to write.
 static inline void __ps2_write_second_port(unsigned char byte)
 {
     __ps2_write_command(0xD4);
     ps2_write(byte);
 }
 
+/// @brief Returns the string describing the received response.
+/// @param response the response received from the PS2 device.
+/// @return the string describing the received response.
 static const char *__ps2_get_response_error_message(unsigned response)
 {
     if (response == 0x01) {
