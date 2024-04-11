@@ -28,6 +28,10 @@ tm_t previous_global_time;
 /// Data type is BCD.
 int is_bcd;
 
+/// @brief Checks if the two time values are different.
+/// @param t0 the first time value.
+/// @param t1 the second time value.
+/// @return 1 if they are different, 0 otherwise.
 static inline unsigned int rtc_are_different(tm_t *t0, tm_t *t1)
 {
     if (t0->tm_sec != t1->tm_sec) { return 1; }
@@ -41,30 +45,41 @@ static inline unsigned int rtc_are_different(tm_t *t0, tm_t *t1)
 }
 
 /// @brief Check if rtc is updating time currently.
+/// @return 1 if RTC is updating, 0 otherwise.
 static inline unsigned int is_updating_rtc(void)
 {
     outportb(CMOS_ADDR, 0x0A);
     uint32_t status = inportb(CMOS_DATA);
-    return (status & 0x80U);
+    return (status & 0x80U) != 0;
 }
 
+/// @brief Reads the given register.
+/// @param reg the register to read.
+/// @return the value we read.
 static inline unsigned char read_register(unsigned char reg)
 {
     outportb(CMOS_ADDR, reg);
     return inportb(CMOS_DATA);
 }
 
+/// @brief Writes on the given register.
+/// @param reg the register on which we need to write.
+/// @param value the value we want to write.
 static inline void write_register(unsigned char reg, unsigned char value)
 {
     outportb(CMOS_ADDR, reg);
     outportb(CMOS_DATA, value);
 }
 
+/// @brief Transforms a Binary-Coded Decimal (BCD) to decimal.
+/// @param bcd the BCD value.
+/// @return the decimal value.
 static inline unsigned char bcd2bin(unsigned char bcd)
 {
     return ((bcd >> 4u) * 10) + (bcd & 0x0Fu);
 }
 
+/// @brief Reads the current datetime value from a real-time clock.
 static inline void rtc_read_datetime(void)
 {
     if (read_register(0x0Cu) & 0x10u) {
@@ -88,6 +103,7 @@ static inline void rtc_read_datetime(void)
     }
 }
 
+/// @brief Updates the internal datetime value.
 static inline void rtc_update_datetime(void)
 {
     static unsigned int first_update = 1;
@@ -108,6 +124,8 @@ static inline void rtc_update_datetime(void)
     }
 }
 
+/// @brief Callback for RTC.
+/// @param f the current registers.
 static inline void rtc_handler_isr(pt_regs *f)
 {
     rtc_update_datetime();

@@ -7,6 +7,7 @@
 #include "io/debug.h"
 #include "io/port_io.h"
 
+/// Shutdown port for qemu.
 #define SHUTDOWN_PORT 0x604
 extern int runtests;
 

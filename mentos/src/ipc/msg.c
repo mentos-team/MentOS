@@ -50,7 +50,7 @@ list_head msq_list;
 
 /// @brief Allocates the memory for message queue structure.
 /// @param key IPC_KEY associated with message queue.
-/// @param msgflg flags used to create message queue.
+/// @param msqflg flags used to create message queue.
 /// @return a pointer to the allocated message queue structure.
 static inline msq_info_t *__msq_info_alloc(key_t key, int msqflg)
 {
@@ -141,6 +141,8 @@ static inline msq_info_t *__list_find_msq_info_by_key(key_t key)
     return NULL;
 }
 
+/// @brief Adds the structure to the global list.
+/// @param msq_info the structure to add.
 static inline void __list_add_msq_info(msq_info_t *msq_info)
 {
     assert(msq_info && "Received a NULL pointer.");
@@ -148,6 +150,8 @@ static inline void __list_add_msq_info(msq_info_t *msq_info)
     list_head_insert_before(&msq_info->list, &msq_list);
 }
 
+/// @brief Removes the structure from the global list.
+/// @param msq_info the structure to remove.
 static inline void __list_remove_msq_info(msq_info_t *msq_info)
 {
     assert(msq_info && "Received a NULL pointer.");
@@ -155,6 +159,9 @@ static inline void __list_remove_msq_info(msq_info_t *msq_info)
     list_head_remove(&msq_info->list);
 }
 
+/// @brief Pushes a messages inside the message queue.
+/// @param msq_info the structure that will contain the message.
+/// @param message the message to push.
 static inline void __msq_info_push_message(msq_info_t *msq_info, struct msg *message)
 {
     assert(msq_info && "Received a NULL pointer.");
@@ -172,6 +179,9 @@ static inline void __msq_info_push_message(msq_info_t *msq_info, struct msg *mes
     }
 }
 
+/// @brief Removes the message from the message queue.
+/// @param msq_info the structure that contains the message.
+/// @param message the message to remove.
 static inline void __msq_info_remove_message(msq_info_t *msq_info, struct msg *message)
 {
     assert(msq_info && "Received a NULL pointer.");
@@ -201,6 +211,8 @@ static inline void __msq_info_remove_message(msq_info_t *msq_info, struct msg *m
 // SYSTEM FUNCTIONS
 // ============================================================================
 
+/// @brief Iinitializes the message queue system.
+/// @return 0 on success, 1 on failure.
 int msq_init(void)
 {
     list_head_init(&msq_list);
@@ -535,6 +547,12 @@ int sys_msgctl(int msqid, int cmd, struct msqid_ds *buf)
 // PROCFS FUNCTIONS
 // ============================================================================
 
+/// @brief Read function for the proc system.
+/// @param file The file.
+/// @param buf Buffer where the read content must be placed.
+/// @param offset Offset from which we start reading from the file.
+/// @param nbyte The number of bytes to read.
+/// @return The number of red bytes.
 ssize_t procipc_msg_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyte)
 {
     if (!file) {

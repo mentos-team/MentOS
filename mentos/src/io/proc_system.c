@@ -24,6 +24,12 @@ static ssize_t procs_do_meminfo(char *buffer, size_t bufsize);
 
 static ssize_t procs_do_stat(char *buffer, size_t bufsize);
 
+/// @brief Read function for the proc system.
+/// @param file The file.
+/// @param buf Buffer where the read content must be placed.
+/// @param offset Offset from which we start reading from the file.
+/// @param nbyte The number of bytes to read.
+/// @return The number of red bytes.
 static ssize_t __procs_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyte)
 {
     if (!file) {
@@ -157,33 +163,51 @@ int procs_module_init(void)
     return 0;
 }
 
+/// @brief Write the uptime inside the buffer.
+/// @param buffer the buffer.
+/// @param bufsize the buffer size.
+/// @return the amount we wrote.
 static ssize_t procs_do_uptime(char *buffer, size_t bufsize)
 {
-    sprintf(buffer, "%d", timer_get_seconds());
-    return 0;
+    return sprintf(buffer, "%d", timer_get_seconds());
 }
 
+/// @brief Write the version inside the buffer.
+/// @param buffer the buffer.
+/// @param bufsize the buffer size.
+/// @return the amount we wrote.
 static ssize_t procs_do_version(char *buffer, size_t bufsize)
 {
-    sprintf(buffer,
-            "%s version %s (site: %s) (email: %s)",
-            OS_NAME,
-            OS_VERSION,
-            OS_SITEURL,
-            OS_REF_EMAIL);
-    return 0;
+    return sprintf(buffer,
+                   "%s version %s (site: %s) (email: %s)",
+                   OS_NAME,
+                   OS_VERSION,
+                   OS_SITEURL,
+                   OS_REF_EMAIL);
 }
 
+/// @brief Write the list of mount points inside the buffer.
+/// @param buffer the buffer.
+/// @param bufsize the buffer size.
+/// @return the amount we wrote.
 static ssize_t procs_do_mounts(char *buffer, size_t bufsize)
 {
     return 0;
 }
 
+/// @brief Write the cpu information inside the buffer.
+/// @param buffer the buffer.
+/// @param bufsize the buffer size.
+/// @return the amount we wrote.
 static ssize_t procs_do_cpuinfo(char *buffer, size_t bufsize)
 {
     return 0;
 }
 
+/// @brief Write the memory information inside the buffer.
+/// @param buffer the buffer.
+/// @param bufsize the buffer size.
+/// @return the amount we wrote.
 static ssize_t procs_do_meminfo(char *buffer, size_t bufsize)
 {
     double total_space = get_zone_total_space(GFP_KERNEL) +
@@ -193,20 +217,22 @@ static ssize_t procs_do_meminfo(char *buffer, size_t bufsize)
            cached_space = get_zone_cached_space(GFP_KERNEL) +
                           get_zone_cached_space(GFP_USER),
            used_space = total_space - free_space;
-    total_space /= (double)K;
-    free_space /= (double)K;
-    cached_space /= (double)K;
-    used_space /= (double)K;
-    sprintf(
+    return sprintf(
         buffer,
         "MemTotal : %12.2f Kb\n"
         "MemFree  : %12.2f Kb\n"
         "MemUsed  : %12.2f Kb\n"
         "Cached   : %12.2f Kb\n",
-        total_space, free_space, used_space, cached_space);
-    return 0;
+        total_space / (double)K,
+        free_space / (double)K,
+        used_space / (double)K,
+        cached_space / (double)K);
 }
 
+/// @brief Write the process statistics inside the buffer.
+/// @param buffer the buffer.
+/// @param bufsize the buffer size.
+/// @return the amount we wrote.
 static ssize_t procs_do_stat(char *buffer, size_t bufsize)
 {
     return 0;

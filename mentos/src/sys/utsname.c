@@ -16,6 +16,10 @@
 #include "sys/utsname.h"
 #include "version.h"
 
+/// @brief Returns the hostname.
+/// @param name where the hostname is stored.
+/// @param len the length of the buffer.
+/// @return 0 on success, a negative value on failure.
 static inline int __gethostname(char *name, size_t len)
 {
     // Check if name is an invalid address.
@@ -54,7 +58,10 @@ int sys_uname(utsname_t *buf)
     strcpy(buf->sysname, OS_NAME);
     strcpy(buf->version, OS_VERSION);
     strcpy(buf->release, OS_VERSION);
-    __gethostname(buf->nodename, SYS_LEN);
     strcpy(buf->machine, "i686");
+    int ret = __gethostname(buf->nodename, SYS_LEN);
+    if (ret != 0) {
+        return ret;
+    }
     return 0;
 }

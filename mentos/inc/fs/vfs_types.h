@@ -176,27 +176,40 @@ typedef struct vfs_file_descriptor_t {
 
 /// @brief Data structure containing attributes of a file.
 struct iattr {
+    /// Validity check on iattr struct.
     unsigned int ia_valid;
+    /// Access mode.
     mode_t ia_mode;
+    /// Owner uid.
     uid_t ia_uid;
+    /// Owner gid.
     gid_t ia_gid;
+    /// Time of last access.
     uint32_t ia_atime;
+    /// Time of last data modification.
     uint32_t ia_mtime;
+    /// Time of last status change.
     uint32_t ia_ctime;
 };
 
-#define ATTR_MODE  (1 << 0)
-#define ATTR_UID   (1 << 1)
-#define ATTR_GID   (1 << 2)
-#define ATTR_ATIME (1 << 3)
-#define ATTR_MTIME (1 << 4)
-#define ATTR_CTIME (1 << 5)
+#define ATTR_MODE  (1 << 0) ///< Flag set to specify the validity of MODE.
+#define ATTR_UID   (1 << 1) ///< Flag set to specify the validity of UID.
+#define ATTR_GID   (1 << 2) ///< Flag set to specify the validity of GID.
+#define ATTR_ATIME (1 << 3) ///< Flag set to specify the validity of ATIME.
+#define ATTR_MTIME (1 << 4) ///< Flag set to specify the validity of MTIME.
+#define ATTR_CTIME (1 << 5) ///< Flag set to specify the validity of CTIME.
 
-#define IATTR_CHOWN(user, group)       \
-    { .ia_valid = ATTR_UID | ATTR_GID, \
-      .ia_uid = user,                  \
-      .ia_gid = group }
+/// Used to initialize an iattr inside the chown function.
+#define IATTR_CHOWN(user, group)         \
+    {                                    \
+        .ia_valid = ATTR_UID | ATTR_GID, \
+        .ia_uid   = (user),              \
+        .ia_gid   = (group)              \
+    }
 
-#define IATTR_CHMOD(mode)    \
-    { .ia_valid = ATTR_MODE, \
-      .ia_mode = mode }
+/// Used to initialize an iattr inside the chmod function.
+#define IATTR_CHMOD(mode)      \
+    {                          \
+        .ia_valid = ATTR_MODE, \
+        .ia_mode  = (mode)     \
+    }

@@ -102,6 +102,9 @@ static zone_t *get_zone_from_flags(gfp_t gfp_mask)
     }
 }
 
+/// @brief Checks if the memory is clean.
+/// @param gfp_mask the mask which specifies the zone we are interested in.
+/// @return 1 if clean, 0 on error.
 static int is_memory_clean(gfp_t gfp_mask)
 {
     // Get the corresponding zone.

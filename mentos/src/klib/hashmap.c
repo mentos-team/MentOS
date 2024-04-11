@@ -34,6 +34,8 @@ struct hashmap_t {
     hashmap_entry_t **entries;
 };
 
+/// @brief Allocates the memory for an hasmap.
+/// @return the newly allocated hashmap.
 static inline hashmap_t *__alloc_hashmap(void)
 {
     hashmap_t *hashmap = kmalloc(sizeof(hashmap_t));
@@ -41,6 +43,8 @@ static inline hashmap_t *__alloc_hashmap(void)
     return hashmap;
 }
 
+/// @brief Allocates the memory for an entry of the hasmap.
+/// @return the newly allocated entry of the hashmap.
 static inline hashmap_entry_t *__alloc_entry(void)
 {
     hashmap_entry_t *entry = kmalloc(sizeof(hashmap_entry_t));
@@ -48,12 +52,17 @@ static inline hashmap_entry_t *__alloc_entry(void)
     return entry;
 }
 
+/// @brief Frees the memory of an entry of the hasmap.
+/// @param entry the entry we destroy.
 static inline void __dealloc_entry(hashmap_entry_t *entry)
 {
     assert(entry && "Invalid pointer to an entry.");
     kfree(entry);
 }
 
+/// @brief Allocates the memory for a number of entries in the hasmap.
+/// @param size the number of entries.
+/// @return the newly allocated vector of entries in the hashmap.
 static inline hashmap_entry_t **__alloc_entries(unsigned int size)
 {
     hashmap_entry_t **entries = kmalloc(sizeof(hashmap_entry_t *) * size);
@@ -61,6 +70,8 @@ static inline hashmap_entry_t **__alloc_entries(unsigned int size)
     return entries;
 }
 
+/// @brief Frees the memory of a vector of entries.
+/// @param entries the vector of entries.
 static inline void __dealloc_entries(hashmap_entry_t **entries)
 {
     assert(entries && "Invalid pointer to entries.");

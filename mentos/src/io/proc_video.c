@@ -34,6 +34,12 @@ void print_rb(fs_rb_scancode_t *rb)
     }
 }
 
+/// @brief Read function for the proc video system.
+/// @param file The file.
+/// @param buf Buffer where the read content must be placed.
+/// @param offset Offset from which we start reading from the file.
+/// @param nbyte The number of bytes to read.
+/// @return The number of red bytes.
 static ssize_t procv_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyte)
 {
     // Stop if the buffer is invalid.

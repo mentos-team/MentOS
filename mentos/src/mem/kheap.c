@@ -92,6 +92,8 @@ static inline const char *__block_to_string(block_t *block)
     return buffer;
 }
 
+/// @brief Dumpts debug information about the heap.
+/// @param header the heap header.
 static inline void __blkmngr_dump(heap_header_t *header)
 {
 #if __DEBUG_LEVEL__ == LOGLEVEL_DEBUG
@@ -162,6 +164,9 @@ static inline block_t *__blkmngr_find_best_fitting(heap_header_t *header, uint32
 }
 
 /// @brief Given a block, finds its previous block.
+/// @param header the heap header.
+/// @param block the block.
+/// @return a pointer to the previous block.
 static inline block_t *__blkmngr_get_previous_block(heap_header_t *header, block_t *block)
 {
     assert(header && "Received a NULL heap header.");
@@ -174,6 +179,9 @@ static inline block_t *__blkmngr_get_previous_block(heap_header_t *header, block
 }
 
 /// @brief Given a block, finds its next block.
+/// @param header the heap header.
+/// @param block the block.
+/// @return a pointer to the next block.
 static inline block_t *__blkmngr_get_next_block(heap_header_t *header, block_t *block)
 {
     assert(header && "Received a NULL heap header.");
@@ -207,6 +215,10 @@ static inline int __blkmngr_is_next_block(block_t *block, block_t *next)
     return block->list.next == &next->list;
 }
 
+/// @brief Splits a block in two blocks, provided the size of the first one.
+/// @param header the heap header.
+/// @param block the block to split.
+/// @param size the size of the first of the two new blocks.
 static inline void __blkmngr_split_block(heap_header_t *header, block_t *block, uint32_t size)
 {
     assert(block && "Received NULL block.");
@@ -232,6 +244,10 @@ static inline void __blkmngr_split_block(heap_header_t *header, block_t *block, 
     pr_debug("And       %s\n", __block_to_string(split));
 }
 
+/// @brief Merges two blocks, into the first block.
+/// @param header the heap header.
+/// @param block the first block.
+/// @param other the second block, which is lost in the process.
 static inline void __blkmngr_merge_blocks(heap_header_t *header, block_t *block, block_t *other)
 {
     assert(block && "Received NULL first block.");
