@@ -1,0 +1,14 @@
+SYNOPSIS
+    login
+
+DESCRIPTION
+    login is used when signing onto a system. 
+
+    login prompts for the username and the password, where appropriate.
+    Echoing is disabled to prevent revealing the password.
+
+    The user and group ID will be set according to their values in the
+    /etc/passwd file.
+
+    The greeting message from the file /etc/motd is printed and the
+    user shell specified in /etc/passwd is started.

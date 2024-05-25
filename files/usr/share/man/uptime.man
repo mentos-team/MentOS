@@ -1,0 +1,5 @@
+SYNOPSIS
+    uptime
+
+DESCRIPTION
+    Tell how long the system has been running.
