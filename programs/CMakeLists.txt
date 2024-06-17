@@ -11,6 +11,7 @@ set(PROGRAM_LIST
     edit.c
     env.c
     false.c
+    head.c
     id.c
     init.c
     ipcrm.c
