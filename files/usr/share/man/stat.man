@@ -1,0 +1,12 @@
+SYNOPSIS
+    stat [OPTIONS]... FILE...
+
+DESCRIPTION
+    Display file status of one or more given files.
+    
+OPTIONS
+    -h, --help    shows command help.
+
+EXIT STATUS
+    stat will exit with status 1 if the stat system call fails.
+    Otherwise, stat will exit with status 0.

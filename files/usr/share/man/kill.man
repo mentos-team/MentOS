@@ -1,0 +1,14 @@
+SYNOPSIS
+    kill SIGNAL PID...
+    kill PID
+    kill -l
+
+DESCRIPTION
+    The kill utility shall send a signal to the process or processes specified
+    by each PID operand.
+
+    If no signal is given the TERM signal will be send to the process specified
+    by PID.
+
+OPTIONS
+    -l  Write a list of all suported signals.

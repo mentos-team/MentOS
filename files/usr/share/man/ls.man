@@ -1,5 +1,5 @@
 SYNOPSIS
-    ls [OPTIONS] [FILE/FOLDER]
+    ls [OPTIONS] [DIRECTORY]...
 
 DESCRIPTION
     List information about the given file, or the files contained in the given

@@ -1,0 +1,9 @@
+SYNOPSIS
+    init
+
+DESCRIPTION
+    init is used as PID 1 program, started by the operating system's kernel.
+
+    init forks and executes the login program in the new process.
+    It then awaits child processes. If the forked login process terminates
+    a new one will be started.

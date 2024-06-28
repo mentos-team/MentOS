@@ -1,0 +1,35 @@
+NAME
+    hier - description of the filesystem hierarchy
+
+DESCRIPTION
+    The filesystem is structured like a typical Linux system and more or less
+    resembles the Filesystem Hierarchy Standard by the Linux Foundation.
+
+    The filesystem has among others the following directories:
+
+    /      This is the root directory.  This is where the whole tree starts.
+
+    /bin   This directory contains basic and required executable programs.
+
+    /dev   Special or device files, which refer to physical devices.
+
+    /etc   Contains system-wide configuration files of the machine.
+
+    /home  Contains the home directories for individual users.
+
+    /proc  This is the mount point for the proc filesystem, which provides
+           information about running processes and the kernel.
+
+    /root  This directory is the home directory for the root user.
+
+    /usr/bin
+           This is the directory for additional executable programs.
+
+    /usr/srv
+           Contains the source code used to build the system.
+
+    /usr/share
+           Contains the source code used to build the system.
+
+    /usr/share/man
+           Manual pages go here.

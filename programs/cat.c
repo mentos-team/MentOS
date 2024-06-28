@@ -23,7 +23,7 @@ int main(int argc, char **argv)
     // Check if `--help` is provided.
     for (int i = 1; i < argc; ++i) {
         if ((strcmp(argv[i], "--help") == 0) || (strcmp(argv[i], "-h") == 0)) {
-            printf("Prints the content of the given file.\n");
+            printf("Print the content of each given file.\n");
             printf("Usage:\n");
             printf("    cat <file>\n");
             return 0;
