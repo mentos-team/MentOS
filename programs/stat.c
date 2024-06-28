@@ -5,6 +5,8 @@
 
 #include <fcntl.h>
 #include <io/debug.h>
+#include <grp.h>
+#include <pwd.h>
 #include <stdio.h>
 #include <strerror.h>
 #include <string.h>
@@ -24,7 +26,7 @@
 #define S_IFCHR  0x2000 ///< Character device
 #define S_IFIFO  0x1000 ///< Fifo
 
-void __print_time(const char* prefix, time_t *time) {
+static void __print_time(const char* prefix, time_t *time) {
     tm_t *timeinfo = localtime(time);
     printf("%s%d-%d-%d %d:%d:%d\n",
         prefix,
@@ -79,7 +81,14 @@ int main(int argc, char** argv)
     putchar(bitmask_check(statbuf.st_mode, S_IROTH) ? 'r' : '-');
     putchar(bitmask_check(statbuf.st_mode, S_IWOTH) ? 'w' : '-');
     putchar(bitmask_check(statbuf.st_mode, S_IXOTH) ? 'x' : '-');
-    printf(") Uid: (%d) Gid: (%d)\n", statbuf.st_uid, statbuf.st_gid);
+
+    passwd_t *user = getpwuid(statbuf.st_uid);
+    group_t *grp = getgrgid(statbuf.st_gid);
+
+    printf(") Uid: (%d/%s) Gid: (%d/%s)\n",
+        statbuf.st_uid, user->pw_name,
+        statbuf.st_gid, grp->gr_name);
+
     __print_time("Access: ", &statbuf.st_atime);
     __print_time("Modify: ", &statbuf.st_mtime);
     __print_time("Change: ", &statbuf.st_ctime);
