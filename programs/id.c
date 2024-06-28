@@ -3,14 +3,21 @@
 /// @copyright (c) 2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include <sys/unistd.h>
+#include <grp.h>
+#include <pwd.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/unistd.h>
 
 int main(int argc, char **argv)
 {
     if (argc == 1) {
-        printf("uid=%d gid=%d\n", geteuid(), getegid());
+        uid_t uid = geteuid();
+        passwd_t *user = getpwuid(uid);
+        gid_t gid = getegid();
+        group_t *grp = getgrgid(gid);
+
+        printf("uid=%d(%s) gid=%d(%s)\n", uid, user->pw_name, gid, grp->gr_name);
     } else if (strncmp(argv[1], "--help", 6) == 0) {
         printf("Usage: %s [OPTION]\n", argv[0]);
         printf("Print user and group information\n");
