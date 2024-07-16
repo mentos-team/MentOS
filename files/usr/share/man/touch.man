@@ -1,0 +1,18 @@
+SYNOPSIS
+    touch FILE
+
+DESCRIPTION
+    The touch utility shall change the last data modification timestamps,
+    the last data  access  timestamps, or both.
+
+    touch shall perform actions equivalent to the following functions:
+    1. If file does not exist:
+
+       a. The creat() function is called with the following arguments:
+          --  The file operand is used as the path argument.
+          --  The value of the bitwise-inclusive OR of S_IRUSR, S_IWUSR,
+              S_IRGRP, S_IROTH is used as the mode argument.
+       b. The file is opened for reading.
+    
+OPTIONS
+    -h, --help    shows command help.

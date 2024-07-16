@@ -1,8 +1,8 @@
 SYNOPSIS
-    cat [FILE]
+    cat [FILE]...
 
 DESCRIPTION
-    Prints the content of the given file.
+    Print the content of each given file.
 
 OPTIONS
     -h, --help  shows command help.

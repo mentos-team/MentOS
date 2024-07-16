@@ -52,7 +52,7 @@ int main(int argc, char *argv[])
             exit(1);
         }
         close(fd);
-        execlp(pager, pager, filepath);
+        execlp(pager, pager, filepath, NULL);
     }
     return 0;
 }
