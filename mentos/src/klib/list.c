@@ -27,7 +27,7 @@ static inline void __node_dealloc(listnode_t *node)
 
 /// @brief Allocates the memory for a list.
 /// @return a pointer to the newly allocated list.
-static inline list_t *__list_alloc()
+static inline list_t *__list_alloc(void)
 {
     // Allocate the list.
     list_t *list = kmalloc(sizeof(list_t));
