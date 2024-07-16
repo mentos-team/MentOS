@@ -103,4 +103,12 @@ jobs:
 
             - name: Check
               run: |
-                  cat build/test.log | scripts/tapview || cat build/test.log build/serial.log
+                  cat build/test.log | scripts/tapview
+
+            - name: Archive the logs
+              uses: actions/upload-artifact@v4
+              with:
+                name: logs
+                path: |
+                     build/test.log
+                     build/serial.log

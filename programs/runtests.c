@@ -44,6 +44,7 @@ static char *all_tests[] = {
     "t_itimer",
     "t_kill",
     /* "t_mem", */
+    "t_mkdir",
     "t_msgget",
     /* "t_periodic1", */
     /* "t_periodic2", */
