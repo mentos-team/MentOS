@@ -1902,6 +1902,40 @@ static inline void ext2_initialize_direntry(
     strncpy(direntry->name, name, direntry->name_len);
 }
 
+static inline int ext2_initialize_new_direntry_block(
+    ext2_filesystem_t *fs,
+    ext2_inode_t *inode,
+    uint32_t inode_index,
+    uint32_t block_index)
+{
+    // Allocate a new block.
+    if (ext2_allocate_inode_block(fs, inode, inode_index, block_index) == -1) {
+        pr_err("Failed to allocate a new block for an inode.\n");
+        return 0;
+    }
+    // Update the inode size.
+    inode->size = (block_index + 1) * fs->block_size;
+    // Update the inode.
+    if (ext2_write_inode(fs, inode, inode_index) == -1) {
+        pr_err("Failed to update the inode of directory.\n");
+        return 0;
+    }
+    // Create a cache.
+    uint8_t *cache = ext2_alloc_cache(fs);
+    // Get the first non-initizlied direntry.
+    ext2_dirent_t *direntry = (ext2_dirent_t *)cache;
+    // Initialize the new directory entry.
+    ext2_initialize_direntry(direntry, "", 0, fs->block_size, ext2_file_type_unknown);
+    // Update the inode block.
+    if (ext2_write_inode_block(fs, inode, inode_index, block_index, cache) == -1) {
+        pr_err("Failed to update the block of the father directory.\n");
+        ext2_dealloc_cache(cache);
+        return 0;
+    }
+    ext2_dealloc_cache(cache);
+    return 1;
+}
+
 /// @brief Dumps the directory entries inside the parent directory.
 /// @param fs a pointer to the filesystem.
 /// @param parent_inode the parent inode.
