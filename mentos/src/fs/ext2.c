@@ -1799,8 +1799,6 @@ ext2_direntry_iterator_t ext2_direntry_iterator_begin(ext2_filesystem_t *fs, uin
 /// @param iterator the iterator.
 void ext2_direntry_iterator_next(ext2_direntry_iterator_t *iterator)
 {
-    // Get the current rec_len.
-    uint32_t rec_len = ext2_direntry_iterator_get(iterator)->rec_len;
     // Advance the offsets.
     iterator->block_offset += iterator->direntry->rec_len;
     iterator->total_offset += iterator->direntry->rec_len;
