@@ -52,7 +52,8 @@ static char status_buf[4] = { 0 };
 
 static sigset_t oldmask;
 
-static void __block_sigchld(void) {
+static void __block_sigchld(void)
+{
     sigset_t mask;
     //sigmask functions only fail on invalid inputs -> no exception handling needed
     sigemptyset(&mask);
@@ -60,7 +61,8 @@ static void __block_sigchld(void) {
     sigprocmask(SIG_BLOCK, &mask, &oldmask);
 }
 
-static void __unblock_sigchld(void) {
+static void __unblock_sigchld(void)
+{
     sigprocmask(SIG_SETMASK, &oldmask, NULL);
 }
 
@@ -179,7 +181,8 @@ static inline void __prompt_print(void)
            USER, HOSTNAME, timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec, CWD);
 }
 
-static char* __getenv(const char* var) {
+static char *__getenv(const char *var)
+{
     if (strlen(var) > 1) {
         return getenv(var);
     }
@@ -192,7 +195,7 @@ static char* __getenv(const char* var) {
     // TODO: implement access to argv
     /* int arg = strtol(var, NULL, 10); */
     /* if (arg < argc) { */
-        /* return argv[arg]; */
+    /* return argv[arg]; */
     /* } */
 
     return NULL;
@@ -344,13 +347,20 @@ static int __cd(int argc, char *argv[])
             return 1;
         }
     }
-    int fd = open(path, O_RDONLY | O_DIRECTORY, S_IXUSR);
+    // Get the real path.
+    char real_path[PATH_MAX];
+    if (realpath(path, real_path, PATH_MAX) != real_path) {
+        printf("cd: Failed to resolve directory.\n");
+        return 1;
+    }
+    // Open the given directory.
+    int fd = open(real_path, O_RDONLY | O_DIRECTORY, S_IXUSR);
     if (fd == -1) {
-        printf("cd: %s: %s\n", path, strerror(errno));
+        printf("cd: %s: %s\n", real_path, strerror(errno));
         return 1;
     }
     // Set current working directory.
-    chdir(path);
+    chdir(real_path);
     close(fd);
     // Get the updated working directory.
     char cwd[PATH_MAX];
@@ -498,7 +508,8 @@ static inline void __cmd_sug(dirent_t *suggestion, size_t starting_position)
     }
 }
 
-static void __cmd_complete(void) {
+static void __cmd_complete(void)
+{
     // Get the lenght of the command.
     size_t cmd_len = strlen(cmd);
     // Count the number of words.
@@ -581,12 +592,14 @@ static void __cmd_complete(void) {
     }
 }
 
-static void __move_cursor_back(int n) {
+static void __move_cursor_back(int n)
+{
     printf("\033[%dD", n);
     cmd_cursor_index -= n;
 }
 
-static void __move_cursor_forward(int n) {
+static void __move_cursor_forward(int n)
+{
     printf("\033[%dC", n);
     cmd_cursor_index += n;
 }
@@ -704,16 +717,16 @@ static void __alloc_argv(char *command, int *argc, char ***argv)
     if ((*argc) == 0) {
         return;
     }
-    (*argv)         = (char **)malloc(sizeof(char *) * ((*argc) + 1));
-    bool_t inword   = false;
-    char *cit = command;
-    char *argStart  = command;
-    size_t argcIt   = 0;
+    (*argv)        = (char **)malloc(sizeof(char *) * ((*argc) + 1));
+    bool_t inword  = false;
+    char *cit      = command;
+    char *argStart = command;
+    size_t argcIt  = 0;
     do {
         if (!__is_separator(*cit)) {
             if (!inword) {
                 argStart = cit;
-                inword = true;
+                inword   = true;
             }
             continue;
         }
@@ -723,7 +736,7 @@ static void __alloc_argv(char *command, int *argc, char ***argv)
             // Expand possible environment variables in the current argument
             char expand_env_buf[BUFSIZ];
             ___expand_env(argStart, expand_env_buf, BUFSIZ, cit - argStart, true);
-            (*argv)[argcIt] = (char*)malloc(strlen(expand_env_buf) + 1);
+            (*argv)[argcIt] = (char *)malloc(strlen(expand_env_buf) + 1);
             strcpy((*argv)[argcIt++], expand_env_buf);
         }
     } while (*cit++);
@@ -738,12 +751,13 @@ static inline void __free_argv(int argc, char **argv)
     free(argv);
 }
 
-static void __setup_redirects(int *argcp, char ***argvp) {
+static void __setup_redirects(int *argcp, char ***argvp)
+{
     char **argv = *argvp;
-    int argc = *argcp;
+    int argc    = *argcp;
 
-    char* path;
-    int flags = O_CREAT | O_WRONLY;
+    char *path;
+    int flags   = O_CREAT | O_WRONLY;
     mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP;
 
     bool_t rd_stdout, rd_stderr;
@@ -757,7 +771,7 @@ static void __setup_redirects(int *argcp, char ***argvp) {
         path = argv[i + 1];
 
         // Determine stream to redirect
-        switch(*argv[i]) {
+        switch (*argv[i]) {
         case '&':
             rd_stdout = rd_stderr = true;
             break;
@@ -782,8 +796,8 @@ static void __setup_redirects(int *argcp, char ***argvp) {
         *argcp -= 2;
         free(argv[i]);
         (*argvp)[i] = 0;
-        free(argv[i+1]);
-        (*argvp)[i+1] = 0;
+        free(argv[i + 1]);
+        (*argvp)[i + 1] = 0;
 
         int fd = open(path, flags, mode);
         if (fd < 0) {
@@ -805,7 +819,7 @@ static void __setup_redirects(int *argcp, char ***argvp) {
     }
 }
 
-static int __execute_cmd(char* command, bool_t add_to_history)
+static int __execute_cmd(char *command, bool_t add_to_history)
 {
     int _status = 0;
     // Retrieve the options from the command.
@@ -919,7 +933,6 @@ static void __interactive_mode(void)
     }
 #pragma clang diagnostic pop
 }
-
 
 void wait_for_child(int signum)
 {
