@@ -696,9 +696,7 @@ static inline void ext2_dealloc_cache(uint8_t *cache)
 /// @return the rec_len value.
 static inline uint32_t ext2_get_rec_len_from_name(const char *name)
 {
-    uint32_t rec_len = sizeof(ext2_dirent_t) + strlen(name) + 1;
-    rec_len += (rec_len % 4) ? (4 - (rec_len % 4)) : 0;
-    return rec_len;
+    return round_up(sizeof(ext2_dirent_t) + strlen(name) + 1, 4);
 }
 
 /// @brief Returns the rec_len from the given direntry.
@@ -706,9 +704,16 @@ static inline uint32_t ext2_get_rec_len_from_name(const char *name)
 /// @return the rec_len value.
 static inline uint32_t ext2_get_rec_len_from_direntry(const ext2_dirent_t *direntry)
 {
-    uint32_t rec_len = sizeof(ext2_dirent_t) + direntry->name_len + 1;
-    rec_len += (rec_len % 4) ? (4 - (rec_len % 4)) : 0;
-    return rec_len;
+    return round_up(sizeof(ext2_dirent_t) + direntry->name_len + 1, 4);
+}
+
+/// @brief If the real rec_len is different from the on in attribute rec_len,
+/// this is the last directory entry.
+/// @param direntry the directory entry to check.
+/// @return 1 if it is the last, 0 otherwise.
+static inline uint32_t ext2_is_last_directory_entry(const ext2_dirent_t *direntry)
+{
+    return direntry->rec_len != ext2_get_rec_len_from_direntry(direntry);
 }
 
 /// @brief Cheks if the bit at the given linear index is free.
