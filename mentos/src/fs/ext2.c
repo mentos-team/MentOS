@@ -1802,8 +1802,8 @@ void ext2_direntry_iterator_next(ext2_direntry_iterator_t *iterator)
     // Get the current rec_len.
     uint32_t rec_len = ext2_direntry_iterator_get(iterator)->rec_len;
     // Advance the offsets.
-    iterator->block_offset += rec_len;
-    iterator->total_offset += rec_len;
+    iterator->block_offset += iterator->direntry->rec_len;
+    iterator->total_offset += iterator->direntry->rec_len;
     // If we reached the end of the inode, stop.
     if (iterator->total_offset >= iterator->inode->size) {
         // The iterator is not valid anymore.
