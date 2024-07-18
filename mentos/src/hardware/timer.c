@@ -279,7 +279,7 @@ static inline void __timer_cascate_base(tvec_base_t *base)
 
 /// @brief Allocates the memory for timer.
 /// @return a pointer to the allocated timer.
-static inline struct timer_list *__timer_list_alloc()
+static inline struct timer_list *__timer_list_alloc(void)
 {
     // Allocate the memory.
     struct timer_list *timer = (struct timer_list *)kmalloc(sizeof(struct timer_list));
@@ -363,7 +363,7 @@ typedef struct sleep_data_t {
 
 /// @brief Allocates the memory for sleep_data.
 /// @return a pointer to the allocated sleep_data.
-static inline struct sleep_data_t *__sleep_data_alloc()
+static inline struct sleep_data_t *__sleep_data_alloc(void)
 {
     // Allocate the memory.
     sleep_data_t *sleep_data = (sleep_data_t *)kmalloc(sizeof(sleep_data_t));

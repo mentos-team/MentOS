@@ -30,7 +30,7 @@ static inline void __remove_wait_queue(wait_queue_head_t *head, wait_queue_entry
     list_head_remove(&wq->task_list);
 }
 
-wait_queue_entry_t *wait_queue_entry_alloc()
+wait_queue_entry_t *wait_queue_entry_alloc(void)
 {
     // Allocate the memory.
     wait_queue_entry_t *wait_queue_entry = (wait_queue_entry_t *)kmalloc(sizeof(wait_queue_entry_t));
