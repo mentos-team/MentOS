@@ -1904,19 +1904,23 @@ static inline void ext2_initialize_direntry(
 
 static inline int ext2_initialize_new_direntry_block(
     ext2_filesystem_t *fs,
-    ext2_inode_t *inode,
     uint32_t inode_index,
     uint32_t block_index)
 {
+    ext2_inode_t inode;
+    if (ext2_read_inode(fs, &inode, inode_index) == -1) {
+        pr_err("Failed to read the inode of `%u`.\n", inode_index);
+        return 0;
+    }
     // Allocate a new block.
-    if (ext2_allocate_inode_block(fs, inode, inode_index, block_index) == -1) {
+    if (ext2_allocate_inode_block(fs, &inode, inode_index, block_index) == -1) {
         pr_err("Failed to allocate a new block for an inode.\n");
         return 0;
     }
     // Update the inode size.
-    inode->size = (block_index + 1) * fs->block_size;
+    inode.size = (block_index + 1) * fs->block_size;
     // Update the inode.
-    if (ext2_write_inode(fs, inode, inode_index) == -1) {
+    if (ext2_write_inode(fs, &inode, inode_index) == -1) {
         pr_err("Failed to update the inode of directory.\n");
         return 0;
     }
@@ -1927,7 +1931,7 @@ static inline int ext2_initialize_new_direntry_block(
     // Initialize the new directory entry.
     ext2_initialize_direntry(direntry, "", 0, fs->block_size, ext2_file_type_unknown);
     // Update the inode block.
-    if (ext2_write_inode_block(fs, inode, inode_index, block_index, cache) == -1) {
+    if (ext2_write_inode_block(fs, &inode, inode_index, block_index, cache) == -1) {
         pr_err("Failed to update the block of the father directory.\n");
         ext2_dealloc_cache(cache);
         return 0;
@@ -1938,9 +1942,12 @@ static inline int ext2_initialize_new_direntry_block(
 
 /// @brief Dumps the directory entries inside the parent directory.
 /// @param fs a pointer to the filesystem.
-/// @param parent_inode the parent inode.
 /// @param cache cache for memory EXT2 operations.
-static inline void ext2_dump_direntries(ext2_filesystem_t *fs, ext2_inode_t *parent_inode, uint8_t *cache)
+/// @param parent_inode the parent inode.
+static inline void ext2_dump_direntries(
+    ext2_filesystem_t *fs,
+    uint8_t *cache,
+    ext2_inode_t *parent_inode)
 {
     ext2_direntry_iterator_t it = ext2_direntry_iterator_begin(fs, cache, parent_inode);
     pr_debug("Directory entries:\n");
@@ -1956,26 +1963,30 @@ static inline void ext2_dump_direntries(ext2_filesystem_t *fs, ext2_inode_t *par
 
 /// @brief Searches for a free unused directory entry (inode == 0).
 /// @param fs a pointer to the filesystem.
-/// @param parent_inode the parent inode.
-/// @param parent_inode_index the parent inode index.
 /// @param cache cache for memory EXT2 operations.
+/// @param parent_inode_index the parent inode index.
 /// @param name the name of the new entry.
 /// @param inode_index its inode index.
 /// @param file_type its file type.
 /// @return 1 on success, 0 on failure.
 static inline int ext2_get_free_direntry(
     ext2_filesystem_t *fs,
-    ext2_inode_t *parent_inode,
-    uint32_t parent_inode_index,
     uint8_t *cache,
+    ino_t parent_inode_index,
     const char *name,
     ino_t inode_index,
     uint8_t file_type)
 {
+    // Read the parent inode.
+    ext2_inode_t parent_inode;
+    if (ext2_read_inode(fs, &parent_inode, parent_inode_index) == -1) {
+        pr_err("Failed to read the parent inode `%u`.\n", parent_inode_index);
+        return 0;
+    }
     // Get the rec_len;
     uint32_t rec_len = ext2_get_rec_len_from_name(name);
     // Prepare iterator.
-    ext2_direntry_iterator_t it = ext2_direntry_iterator_begin(fs, cache, parent_inode);
+    ext2_direntry_iterator_t it = ext2_direntry_iterator_begin(fs, cache, &parent_inode);
     // Iterate the directory entries.
     while (ext2_direntry_iterator_valid(&it)) {
         // If we hit a direntry with an empty inode, that is a free direntry.
@@ -1988,7 +1999,7 @@ static inline int ext2_get_free_direntry(
             }
             ext2_initialize_direntry(it.direntry, name, inode_index, rec_len, file_type);
             // Update the inode block.
-            if (ext2_write_inode_block(fs, parent_inode, parent_inode_index, it.block_index, cache) == -1) {
+            if (ext2_write_inode_block(fs, &parent_inode, parent_inode_index, it.block_index, cache) == -1) {
                 pr_err("Failed to update the block of the father directory.\n");
                 return 0;
             }
@@ -2005,26 +2016,30 @@ static inline int ext2_get_free_direntry(
 /// @brief Appends the new directory entry at the end of the last used block, if
 /// there is enough space.
 /// @param fs a pointer to the filesystem.
-/// @param parent_inode the parent inode.
-/// @param parent_inode_index the parent inode index.
 /// @param cache cache for memory EXT2 operations.
+/// @param parent_inode_index the parent inode index.
 /// @param name the name of the new entry.
 /// @param inode_index its inode index.
 /// @param file_type its file type.
 /// @return 1 on success, 0 on failure.
 static inline int ext2_append_new_direntry(
     ext2_filesystem_t *fs,
-    ext2_inode_t *parent_inode,
-    uint32_t parent_inode_index,
     uint8_t *cache,
+    ino_t parent_inode_index,
     const char *name,
     ino_t inode_index,
     uint8_t file_type)
 {
+    // Read the parent inode.
+    ext2_inode_t parent_inode;
+    if (ext2_read_inode(fs, &parent_inode, parent_inode_index) == -1) {
+        pr_err("Failed to read the parent inode `%u`.\n", parent_inode_index);
+        return 0;
+    }
     // Get the rec_len;
     uint32_t rec_len = ext2_get_rec_len_from_name(name), real_rec_len;
     // Prepare iterator.
-    ext2_direntry_iterator_t it = ext2_direntry_iterator_begin(fs, cache, parent_inode);
+    ext2_direntry_iterator_t it = ext2_direntry_iterator_begin(fs, cache, &parent_inode);
     // Iterate the directory entries.
     while (ext2_direntry_iterator_valid(&it)) {
         // Check if we reached the last directory entry, if that's the case, we
@@ -2046,7 +2061,7 @@ static inline int ext2_append_new_direntry(
             pr_debug("Appended new directory entry (offset: %u -> %u):\n", it.block_offset - real_rec_len, it.block_offset);
             ext2_dump_dirent(it.direntry);
             // Update the inode block.
-            if (ext2_write_inode_block(fs, parent_inode, parent_inode_index, it.block_index, cache) == -1) {
+            if (ext2_write_inode_block(fs, &parent_inode, parent_inode_index, it.block_index, cache) == -1) {
                 pr_err("Failed to update the block of the father directory.\n");
                 return 0;
             }
@@ -2061,49 +2076,51 @@ static inline int ext2_append_new_direntry(
 /// @brief Allocates a new block, and creates a new directory entry inside that
 /// new block.
 /// @param fs a pointer to the filesystem.
-/// @param parent_inode the parent inode.
-/// @param parent_inode_index the parent inode index.
 /// @param cache cache for memory EXT2 operations.
+/// @param parent_inode_index the parent inode index.
 /// @param name the name of the new entry.
 /// @param inode_index its inode index.
 /// @param file_type its file type.
 /// @return 1 on success, 0 on failure.
 static inline int ext2_create_new_direntry(
     ext2_filesystem_t *fs,
-    ext2_inode_t *parent_inode,
-    uint32_t parent_inode_index,
     uint8_t *cache,
+    ino_t parent_inode_index,
     const char *name,
     ino_t inode_index,
     uint8_t file_type)
 {
-    // Get the rec_len;
-    uint32_t rec_len = ext2_get_rec_len_from_name(name);
+    // Read the parent inode.
+    ext2_inode_t parent_inode;
+    if (ext2_read_inode(fs, &parent_inode, parent_inode_index) == -1) {
+        pr_err("Failed to read the parent inode `%u`.\n", parent_inode_index);
+        return 0;
+    }
     // Prepare iterator.
-    ext2_direntry_iterator_t it = ext2_direntry_iterator_begin(fs, cache, parent_inode);
+    ext2_direntry_iterator_t it = ext2_direntry_iterator_begin(fs, cache, &parent_inode);
     // Find the last entry.
     while (ext2_direntry_iterator_valid(&it)) { ext2_direntry_iterator_next(&it); }
     // Allocate a new block.
-    if (ext2_allocate_inode_block(fs, parent_inode, parent_inode_index, it.block_index) == -1) {
+    if (ext2_allocate_inode_block(fs, &parent_inode, parent_inode_index, it.block_index) == -1) {
         pr_err("Failed to allocate a new block for an inode.\n");
         return 0;
     }
     // Update the inode block.
-    if (ext2_write_inode_block(fs, parent_inode, parent_inode_index, it.block_index, cache) == -1) {
+    if (ext2_write_inode_block(fs, &parent_inode, parent_inode_index, it.block_index, cache) == -1) {
         pr_err("Failed to update the block of the father directory.\n");
         return 0;
     }
     // Move to new block inted.
     it.block_index += 1;
     // Update the inode size.
-    parent_inode->size = it.block_index * fs->block_size;
+    parent_inode.size = it.block_index * fs->block_size;
     // Update the inode.
-    if (ext2_write_inode(fs, parent_inode, parent_inode_index) == -1) {
+    if (ext2_write_inode(fs, &parent_inode, parent_inode_index) == -1) {
         pr_err("Failed to update the inode of the father directory.\n");
         return 0;
     }
     // Initialize the iterato once again, with the new block..
-    it = ext2_direntry_iterator_begin(fs, cache, parent_inode);
+    it = ext2_direntry_iterator_begin(fs, cache, &parent_inode);
     // Move back at the beginning of the block.
     it.block_offset = 0;
     // Set the iterator pointer to the new free location.
@@ -2111,7 +2128,7 @@ static inline int ext2_create_new_direntry(
     // Initialize the new directory entry.
     ext2_initialize_direntry(it.direntry, name, inode_index, fs->block_size - it.block_offset, file_type);
     // Update the inode block.
-    if (ext2_write_inode_block(fs, parent_inode, parent_inode_index, it.block_index, cache) == -1) {
+    if (ext2_write_inode_block(fs, &parent_inode, parent_inode_index, it.block_index, cache) == -1) {
         pr_err("Failed to update the block of the father directory.\n");
         return 0;
     }
@@ -2134,8 +2151,8 @@ static int ext2_allocate_direntry(
     const char *name,
     uint8_t file_type)
 {
-    ext2_inode_t parent_inode, direntry_inode;
     // Get the inode associated with the new directory entry.
+    ext2_inode_t direntry_inode;
     if (ext2_read_inode(fs, &direntry_inode, direntry_inode_index) == -1) {
         pr_err("Failed to read the inode of the directory entry (%d).\n", direntry_inode_index);
         return -1;
@@ -2148,6 +2165,7 @@ static int ext2_allocate_direntry(
         return -1;
     }
     // Get the inode associated with the parent directory.
+    ext2_inode_t parent_inode;
     if (ext2_read_inode(fs, &parent_inode, parent_inode_index) == -1) {
         pr_err("Failed to read the parent inode (%d).\n", parent_inode_index);
         return -1;
@@ -2160,13 +2178,10 @@ static int ext2_allocate_direntry(
     // Allocate the cache.
     uint8_t *cache = ext2_alloc_cache(fs);
 
-    pr_debug("[Before] ");
-    ext2_dump_direntries(fs, &parent_inode, cache);
-
     // Get free directory entry.
-    if (!ext2_get_free_direntry(fs, &parent_inode, parent_inode_index, cache, name, direntry_inode_index, file_type)) {
-        if (!ext2_append_new_direntry(fs, &parent_inode, parent_inode_index, cache, name, direntry_inode_index, file_type)) {
-            if (!ext2_create_new_direntry(fs, &parent_inode, parent_inode_index, cache, name, direntry_inode_index, file_type)) {
+    if (!ext2_get_free_direntry(fs, cache, parent_inode_index, name, direntry_inode_index, file_type)) {
+        if (!ext2_append_new_direntry(fs, cache, parent_inode_index, name, direntry_inode_index, file_type)) {
+            if (!ext2_create_new_direntry(fs, cache, parent_inode_index, name, direntry_inode_index, file_type)) {
                 pr_err("Failed to place directory entry.\n");
                 // Free the cache.
                 ext2_dealloc_cache(cache);
@@ -2174,9 +2189,6 @@ static int ext2_allocate_direntry(
             }
         }
     }
-
-    pr_debug("[After ] ");
-    ext2_dump_direntries(fs, &parent_inode, cache);
 
     // Free the cache.
     ext2_dealloc_cache(cache);
@@ -3160,7 +3172,7 @@ static int ext2_mkdir(const char *path, mode_t permission)
         return -ENOENT;
     }
     // Allocate a new block.
-    if (!ext2_initialize_new_direntry_block(fs, &inode, inode_index, 0)) {
+    if (!ext2_initialize_new_direntry_block(fs, inode_index, 0)) {
         pr_err("Failed to allocate a new block for an inode.\n");
         return 0;
     }
