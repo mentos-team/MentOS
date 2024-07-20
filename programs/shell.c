@@ -910,6 +910,7 @@ static int __execute_file(char *path)
         }
     }
 
+    close(fd);
     return status;
 }
 
