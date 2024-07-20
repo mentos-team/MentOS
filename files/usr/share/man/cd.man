@@ -1,0 +1,18 @@
+SYNOPSIS
+    cd [DIRECTORY]
+
+DESCRIPTION
+    cd is a command built into the shell, that changes the current working directory.
+
+    If DIRECTORY is given, it will become the new directory.
+    If no parameter is given, the HOME environment variable will be used.
+
+EXAMPLES
+    cd
+    # changes the working directory to your home directory.
+
+    cd ..
+    # changes the working directory to its parent directory.
+
+    cd /usr/src/mentos
+    # changes the working directory to /usr/src/mentos
