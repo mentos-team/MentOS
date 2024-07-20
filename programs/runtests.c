@@ -40,6 +40,7 @@ static char *all_tests[] = {
     "t_exec execvpe",
     "t_fork 10",
     "t_gid",
+    "t_grp",
     "t_groups",
     "t_itimer",
     "t_kill",
@@ -49,6 +50,7 @@ static char *all_tests[] = {
     /* "t_periodic1", */
     /* "t_periodic2", */
     /* "t_periodic3", */
+    "t_pwd",
     "t_schedfb",
     "t_semflg",
     "t_semget",
