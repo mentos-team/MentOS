@@ -117,12 +117,14 @@ static void print_ls(int fd, const char *path, unsigned int flags)
     memset(&dents, 0, DENTS_NUM * sizeof(dirent_t));
 
     size_t total_size = 0;
-    while (getdents(fd, dents, sizeof(dents))) {
-        for (size_t i = 0; i < DENTS_NUM; ++i) {
-            if (dents[i].d_ino != 0) {
-                print_dir_entry(&dents[i], path, flags, &total_size);
-            }
+    ssize_t bytes_read = 0;
+    while ((bytes_read = getdents(fd, dents, sizeof(dents))) > 0) {
+        for (size_t i = 0; i < bytes_read / sizeof(dirent_t); ++i) {
+            print_dir_entry(&dents[i], path, flags, &total_size);
         }
+    }
+    if (bytes_read < 0) {
+        perror("getdents failed");
     }
     printf("\n");
 
