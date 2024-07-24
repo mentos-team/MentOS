@@ -24,8 +24,11 @@ static void __test_getgrgid(void) {
     if (getgrgid(1337) != NULL)
         errx(EXIT_FAILURE, "Group entry for non-existent gid 1337 found");
 
-    if (getgrgid(0) == NULL)
-        errx(EXIT_FAILURE, "Group entry for gid 0 not found");
+    int gids[] = {0, 1000};
+    for (int i = 0; i < sizeof(gids) / sizeof(int); i++) {
+        if (getgrgid(gids[i]) == NULL)
+            errx(EXIT_FAILURE, "Group entry for gid %d not found", gids[i]);
+    }
 }
 
 int main(int argc, char *argv[])
