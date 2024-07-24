@@ -1,5 +1,7 @@
 # List of programs.
 set(TEST_LIST
+    t_grp.c
+    t_pwd.c
     t_mkdir.c
     t_dup.c
     t_creat.c
