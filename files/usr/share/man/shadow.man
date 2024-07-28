@@ -1,0 +1,22 @@
+NAME
+    shadow - shadowed password file
+
+DESCRIPTION
+    shadow is a file which contains the password information for the
+    system's accounts.
+
+    This file must not be readable by regular users if password security is to
+    be maintained.
+
+    Each line of this file contains 9 fields, separated by colons (“:”), in the
+    following order:
+
+        *   login name
+        *   encrypted password
+        *   date of last password change
+        *   minimum password age
+        *   maximum password age
+        *   password warning period
+        *   password inactivity period
+        *   account expiration date
+        *   reserved field
