@@ -61,7 +61,7 @@ static ssize_t __procs_read(vfs_file_t *file, char *buf, off_t offset, size_t nb
     }
     // Perform read.
     ssize_t it = 0;
-    if (ret == 0) {
+    if (ret >= 0) {
         size_t name_len = strlen(buffer);
         size_t read_pos = offset;
         if (read_pos < name_len) {
