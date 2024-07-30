@@ -57,6 +57,12 @@ proc_dir_entry_t *proc_create_entry(const char *name, proc_dir_entry_t *parent);
 /// @return 0 if succeed, or -errno in case of error.
 int proc_destroy_entry(const char *name, proc_dir_entry_t *parent);
 
+/// @brief Sets the mask of a given procfs entry.
+/// @param entry Pointer to the entry.
+/// @param mask The mask to set.
+/// @return 0 if succeed, or -errno in case of error.
+int proc_entry_set_mask(proc_dir_entry_t *entry, mode_t mask);
+
 /// @brief Create the entire procfs entry tree for the give process.
 /// @param entry Pointer to the task_struct of the process.
 /// @return 0 if succeed, or -errno in case of error.
