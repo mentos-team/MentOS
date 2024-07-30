@@ -194,18 +194,6 @@ static ssize_t procv_write(vfs_file_t *file, const void *buf, off_t offset, size
     }
     return nbyte;
 }
-
-static int procv_fstat(vfs_file_t *file, stat_t *stat)
-{
-    stat->st_dev = 0;
-    stat->st_mode = 0666;
-    stat->st_uid = 0;
-    stat->st_gid = 0;
-    stat->st_size = 0;
-    stat->st_mtime = sys_time(NULL);
-    return 0;
-}
-
 static int procv_ioctl(vfs_file_t *file, int request, void *data)
 {
     task_struct *process = scheduler_get_current_process();
@@ -239,7 +227,7 @@ static vfs_file_operations_t procv_fs_operations = {
     .read_f     = procv_read,
     .write_f    = procv_write,
     .lseek_f    = NULL,
-    .stat_f     = procv_fstat,
+    .stat_f     = NULL,
     .ioctl_f    = procv_ioctl,
     .getdents_f = NULL,
     .readlink_f = NULL,
@@ -256,5 +244,11 @@ int procv_module_init(void)
     // Set the specific operations.
     video->sys_operations = &procv_sys_operations;
     video->fs_operations  = &procv_fs_operations;
+
+    if (proc_entry_set_mask(video, 0666) < 0) {
+        pr_err("Cannot set mask for `/proc/video`.\n");
+        return 1;
+    }
+
     return 0;
 }

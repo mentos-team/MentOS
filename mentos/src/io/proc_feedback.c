@@ -56,5 +56,9 @@ int procfb_module_init(void)
     // Set the specific operations.
     file->sys_operations = &procfb_sys_operations;
     file->fs_operations  = &procfb_fs_operations;
+    if (proc_entry_set_mask(file, 0444) < 0) {
+        pr_err("Cannot set mask of `/proc/feedback`.\n");
+        return 1;
+    }
     return 0;
 }

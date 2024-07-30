@@ -101,65 +101,23 @@ static vfs_file_operations_t procs_fs_operations = {
 int procs_module_init(void)
 {
     proc_dir_entry_t *system_entry;
-    // == /proc/uptime ========================================================
-    if ((system_entry = proc_create_entry("uptime", NULL)) == NULL) {
-        pr_err("Cannot create `/proc/uptime`.\n");
-        return 1;
+    char* entry_names[] = {"uptime", "version", "mounts", "cpuinfo", "meminfo", "stat"};
+    for (int i = 0; i < count_of(entry_names); i++) {
+        char *entry_name = entry_names[i];
+        if ((system_entry = proc_create_entry(entry_name, NULL)) == NULL) {
+            pr_err("Cannot create `/proc/%s`.\n", entry_name);
+            return 1;
+        }
+        pr_debug("Created `/proc/%s` (%p)\n", entry_name, system_entry);
+        // Set the specific operations.
+        system_entry->sys_operations = &procs_sys_operations;
+        system_entry->fs_operations  = &procs_fs_operations;
+        if (proc_entry_set_mask(system_entry, 0444) < 0) {
+            pr_err("Cannot set mask of `/proc/%s`.\n", entry_name);
+            return 1;
+        }
     }
-    pr_debug("Created `/proc/uptime` (%p)\n", system_entry);
-    // Set the specific operations.
-    system_entry->sys_operations = &procs_sys_operations;
-    system_entry->fs_operations  = &procs_fs_operations;
 
-    // == /proc/version ========================================================
-    if ((system_entry = proc_create_entry("version", NULL)) == NULL) {
-        pr_err("Cannot create `/proc/version`.\n");
-        return 1;
-    }
-    pr_debug("Created `/proc/version` (%p)\n", system_entry);
-    // Set the specific operations.
-    system_entry->sys_operations = &procs_sys_operations;
-    system_entry->fs_operations  = &procs_fs_operations;
-
-    // == /proc/mounts ========================================================
-    if ((system_entry = proc_create_entry("mounts", NULL)) == NULL) {
-        pr_err("Cannot create `/proc/mounts`.\n");
-        return 1;
-    }
-    pr_debug("Created `/proc/mounts` (%p)\n", system_entry);
-    // Set the specific operations.
-    system_entry->sys_operations = &procs_sys_operations;
-    system_entry->fs_operations  = &procs_fs_operations;
-
-    // == /proc/cpuinfo ========================================================
-    if ((system_entry = proc_create_entry("cpuinfo", NULL)) == NULL) {
-        pr_err("Cannot create `/proc/cpuinfo`.\n");
-        return 1;
-    }
-    pr_debug("Created `/proc/cpuinfo` (%p)\n", system_entry);
-    // Set the specific operations.
-    system_entry->sys_operations = &procs_sys_operations;
-    system_entry->fs_operations  = &procs_fs_operations;
-
-    // == /proc/meminfo ========================================================
-    if ((system_entry = proc_create_entry("meminfo", NULL)) == NULL) {
-        pr_err("Cannot create `/proc/meminfo`.\n");
-        return 1;
-    }
-    pr_debug("Created `/proc/meminfo` (%p)\n", system_entry);
-    // Set the specific operations.
-    system_entry->sys_operations = &procs_sys_operations;
-    system_entry->fs_operations  = &procs_fs_operations;
-
-    // == /proc/stat ========================================================
-    if ((system_entry = proc_create_entry("stat", NULL)) == NULL) {
-        pr_err("Cannot create `/proc/stat`.\n");
-        return 1;
-    }
-    pr_debug("Created `/proc/stat` (%p)\n", system_entry);
-    // Set the specific operations.
-    system_entry->sys_operations = &procs_sys_operations;
-    system_entry->fs_operations  = &procs_fs_operations;
     return 0;
 }
 

@@ -668,6 +668,7 @@ static int __procfs_stat(procfs_file_t *file, stat_t *stat)
     } else {
         return -ENOENT;
     }
+    stat->st_mode  = stat->st_mode | file->mask;
     stat->st_uid   = file->uid;
     stat->st_gid   = file->gid;
     stat->st_dev   = 0;
@@ -1017,5 +1018,16 @@ int proc_destroy_entry(const char *name, proc_dir_entry_t *parent)
         pr_err("proc_destroy_entry(%s): Failed to remove file.\n", entry_path);
         return -ENOENT;
     }
+    return 0;
+}
+
+int proc_entry_set_mask(proc_dir_entry_t *entry, mode_t mask)
+{
+    procfs_file_t *procfs_file = container_of(entry, procfs_file_t, dir_entry);
+    if (procfs_file == NULL) {
+        pr_err("proc_destroy_entry(%s): Cannot find proc entry.\n", entry->name);
+        return -ENOENT;
+    }
+    procfs_file->mask = mask;
     return 0;
 }
