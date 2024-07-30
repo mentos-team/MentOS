@@ -29,7 +29,13 @@ DESCRIPTION
            Contains the source code used to build the system.
 
     /usr/share
-           Contains the source code used to build the system.
+           Contains subdirectories with specific application data, that can be shared
+           among different architectures of the same OS.
 
     /usr/share/man
            Manual pages go here.
+
+    /var   Contains files which may change in size.
+
+    /var/lib
+           Variable state information for programs.
