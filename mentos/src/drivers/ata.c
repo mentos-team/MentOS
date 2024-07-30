@@ -1138,12 +1138,12 @@ static int _ata_stat(const ata_device_t *dev, stat_t *stat)
         pr_debug("_ata_stat(%p, %p)\n", dev, stat);
         stat->st_dev   = 0;
         stat->st_ino   = 0;
-        stat->st_mode  = 0;
-        stat->st_uid   = 0;
-        stat->st_gid   = 0;
-        stat->st_atime = sys_time(NULL);
-        stat->st_mtime = sys_time(NULL);
-        stat->st_ctime = sys_time(NULL);
+        stat->st_mode  = dev->fs_root->mask;
+        stat->st_uid   = dev->fs_root->uid;
+        stat->st_gid   = dev->fs_root->gid;
+        stat->st_atime = dev->fs_root->atime;
+        stat->st_mtime = dev->fs_root->mtime;
+        stat->st_ctime = dev->fs_root->ctime;
         stat->st_size  = dev->fs_root->length;
     }
     return 0;
@@ -1208,6 +1208,12 @@ static vfs_file_t *ata_device_create(ata_device_t *dev)
     }
     // Set the device name.
     memcpy(file->name, dev->name, NAME_MAX);
+    file->uid = 0;
+    file->gid = 0;
+    file->mask = 0x2000 | 0600;
+    file->atime = sys_time(NULL);
+    file->mtime = sys_time(NULL);
+    file->ctime = sys_time(NULL);
     // Set the device.
     file->device = dev;
     // Re-set the flags.
