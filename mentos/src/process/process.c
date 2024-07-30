@@ -127,7 +127,7 @@ static int __has_shebang(vfs_file_t *file) {
 /// @param path the path to the executable to load.
 /// @param task the task to laod the exectuable.
 /// @param entry
-/// @return -errno or 0 on failure, 1 on success
+/// @return -errno or 0 on failure, 1 on success, 2 if a interpreter was loaded
 static int __load_executable(const char *path, task_struct *task, uint32_t *entry)
 {
     // Return code variable.
@@ -211,6 +211,7 @@ start:
     if (interpreter_loop) {
         // Free interpreter buffer
         kfree((void*)path);
+        ret = 2;
     }
 
 close_and_return:
@@ -530,6 +531,7 @@ int sys_execve(pt_regs *f)
     char **origin_argv, **saved_argv, **final_argv;
     char **origin_envp, **saved_envp, **final_envp;
     char name_buffer[NAME_MAX];
+    char saved_filename[PATH_MAX];
 
     // Get the filename.
     char *filename = (char *)f->ebx;
@@ -557,6 +559,8 @@ int sys_execve(pt_regs *f)
 
     // Save the name of the process.
     strcpy(name_buffer, origin_argv[0]);
+    // Save the filename.
+    strcpy(saved_filename, filename);
 
     // == COPY PROGRAM ARGUMENTS ==============================================
     // Copy argv and envp to kernel memory, because all the old process memory will be discarded.
@@ -590,6 +594,40 @@ int sys_execve(pt_regs *f)
         // Free the temporary args memory.
         kfree(args_mem);
         return ret;
+    } else if (ret == 2) { // An interpreter was loaded.
+        // We need to modify the argv array passed to the interpreter process.
+        // The original file name must be passed as second argument and the rest
+        // is shifted to the right.
+        // Prepare a new argv array.
+        char **int_argv = kmalloc((argc + 2) * sizeof(char*));
+        if (!int_argv) {
+            pr_err("Failed to allocate memory for interpreter argv array.\n");
+            return -1;
+        }
+        int_argv[0] = saved_argv[0]; // TODO: pass the path to the interpreter.
+        int_argv[1] = saved_filename;
+        for (int i = 1; i <= argc; i++) {
+            int_argv[i+1] = saved_argv[i];
+        }
+        argc++;
+
+        // Rebuild the saved argv and envp pointers.
+        int int_argv_bytes = __count_args_bytes(int_argv);
+        void *int_args_mem = kmalloc(int_argv_bytes);
+        if (!int_args_mem) {
+            pr_err("Failed to allocate memory for interpreter arguments and environment %d (%d + %d).\n",
+                   int_argv_bytes + envp_bytes, int_argv_bytes, envp_bytes);
+            return -1;
+        }
+        // Copy the arguments.
+        uint32_t int_args_mem_ptr = (uint32_t)int_args_mem + (int_argv_bytes + envp_bytes);
+        saved_argv            = __push_args_on_stack(&int_args_mem_ptr, int_argv);
+        saved_envp            = __push_args_on_stack(&int_args_mem_ptr, saved_envp);
+        // Check the memory pointer.
+        assert(int_args_mem_ptr == (uint32_t)int_args_mem);
+        // Free the old argument and environ memory block.
+        kfree(args_mem);
+        args_mem = int_args_mem;
     }
     // ------------------------------------------------------------------------
 
