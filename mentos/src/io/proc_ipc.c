@@ -71,6 +71,7 @@ static vfs_file_operations_t procipc_shm_fs_operations = {
 
 int procipc_module_init(void)
 {
+    int err = 0;
     proc_dir_entry_t *folder = NULL, *entry = NULL;
 
     // First, we need to create the `/proc/ipc` folder.
@@ -79,31 +80,27 @@ int procipc_module_init(void)
         return 1;
     }
 
-    // Create the `/proc/ipc/msg` entry.
-    if ((entry = proc_create_entry("msg", folder)) == NULL) {
-        pr_err("Cannot create the `/proc/ipc/msg` file.\n");
-        return 1;
+    if ((err = proc_entry_set_mask(folder, 0555))) {
+        pr_err("Cannot set mask of `/proc/ipc` directory.\n");
+        return err;
     }
-    // Set the specific operations.
-    entry->sys_operations = &procipc_sys_operations;
-    entry->fs_operations  = &procipc_msg_fs_operations;
 
-    // Create the `/proc/ipc/sem` entry.
-    if ((entry = proc_create_entry("sem", folder)) == NULL) {
-        pr_err("Cannot create the `/proc/ipc/sem` file.\n");
-        return 1;
-    }
-    // Set the specific operations.
-    entry->sys_operations = &procipc_sys_operations;
-    entry->fs_operations  = &procipc_sem_fs_operations;
+    char *entry_names[] = {"msg", "sem", "shm"};
+    for (int i = 0; i < count_of(entry_names); i++) {
+        char *entry_name = entry_names[i];
+        // Create the `/proc/ipc/` entry.
+        if ((entry = proc_create_entry(entry_name, folder)) == NULL) {
+            pr_err("Cannot create the `/proc/ipc/%s` file.\n", entry_name);
+            return 1;
+        }
+        // Set the specific operations.
+        entry->sys_operations = &procipc_sys_operations;
+        entry->fs_operations  = &procipc_msg_fs_operations;
 
-    // Create the `/proc/ipc/shm` entry.
-    if ((entry = proc_create_entry("shm", folder)) == NULL) {
-        pr_err("Cannot create the `/proc/ipc/shm` file.\n");
-        return 1;
+        if ((err = proc_entry_set_mask(entry, 0444))) {
+            pr_err("Cannot set mask of `/proc/ipc/%s` file.\n", entry_name);
+            return err;
+        }
     }
-    // Set the specific operations.
-    entry->sys_operations = &procipc_sys_operations;
-    entry->fs_operations  = &procipc_shm_fs_operations;
     return 0;
 }
