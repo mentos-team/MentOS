@@ -971,7 +971,7 @@ int main(int argc, char *argv[])
 
     // We have been executed as script interpreter
     if (!strstr(argv[0], "shell")) {
-        return __execute_file(argv[0]);
+        return __execute_file(argv[1]);
     }
 
     // Interactive
