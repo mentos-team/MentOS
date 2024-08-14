@@ -6,84 +6,99 @@
 #include <err.h>
 #include <fcntl.h>
 #include <stdio.h>
+#include <io/debug.h>
 #include <stdlib.h>
 #include <strerror.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/unistd.h>
 
-#define BASEDIR "/t_mkdir"
-
-int create_dir(const char *pathname, mode_t mode)
+int create_dir(const char *parent_directory, const char *directory_name, mode_t mode)
 {
-    int ret = mkdir(pathname, mode);
-    if (ret < 0) {
-        printf("Failed to create dir %s: %s\n", pathname, strerror(errno));
+    char path[PATH_MAX];
+    memset(path, 0, PATH_MAX);
+    strcat(path, parent_directory);
+    strcat(path, directory_name);
+    pr_notice("Creating directory `%s`...\n", path);
+    if (mkdir(path, mode) < 0) {
+        pr_err("Failed to create directory %s: %s\n", path, strerror(errno));
         return EXIT_FAILURE;
     }
     return EXIT_SUCCESS;
 }
 
-int test_consecutive_dirs(void)
+int remove_dir(const char *parent_directory, const char *directory_name)
 {
-    int ret = EXIT_SUCCESS;
-    if (create_dir(BASEDIR "/outer", 0777) == EXIT_FAILURE) {
+    char path[PATH_MAX];
+    memset(path, 0, PATH_MAX);
+    strcat(path, parent_directory);
+    strcat(path, directory_name);
+    pr_notice("Removing directory `%s`...\n", path);
+    if (rmdir(path) < 0) {
+        pr_err("Failed to remove directory %s: %s\n", path, strerror(errno));
         return EXIT_FAILURE;
     }
-    if (create_dir(BASEDIR "/outer/inner", 0777) == EXIT_FAILURE) {
-        ret = EXIT_FAILURE;
-        goto clean_outer;
-    }
+    return EXIT_SUCCESS;
+}
 
-    // Check if both directories are present
-    int fd = open(BASEDIR "/outer", O_RDONLY | O_DIRECTORY, 0);
-    if (fd == -1) {
-        ret = EXIT_FAILURE;
-        printf("failed to open dir %s: %s\n", BASEDIR "/outer", strerror(errno));
-        goto clean_inner;
+int check_dir(const char *parent_directory, const char *directory_name)
+{
+    char path[PATH_MAX];
+    memset(path, 0, PATH_MAX);
+    strcat(path, parent_directory);
+    strcat(path, directory_name);
+    pr_notice("Checking directory `%s`...\n", path);
+    stat_t buffer;
+    stat(path, &buffer);
+    if (!S_ISDIR(buffer.st_mode)) {
+        pr_err("Failed to check directory `%s` : %s.\n", path, strerror(errno));
+        return EXIT_FAILURE;
     }
+    return EXIT_SUCCESS;
+}
 
-    dirent_t dent;
-    ssize_t read_bytes = getdents(fd, &dent, sizeof(dirent_t));
-    // We reached the end of the folder.
-    if (read_bytes <= 0) {
-        ret = EXIT_FAILURE;
-        // We encountered an error.
-        if (read_bytes == -1) {
-            printf("failed to read outer dir: %s\n", strerror(errno));
-        } else { // There was nothing to read
-            printf("dir outer does not contain any entries\n");
+int test_consecutive_dirs(const char *parent_directory)
+{
+    int ret;
+    if (create_dir(parent_directory, "/t_mkdir", 0777) == EXIT_FAILURE) {
+        return EXIT_FAILURE;
+    }
+    if (create_dir(parent_directory, "/t_mkdir/outer", 0777) == EXIT_FAILURE) {
+        remove_dir(parent_directory, "/t_mkdir");
+        return EXIT_FAILURE;
+    }
+    if (create_dir(parent_directory, "/t_mkdir/outer/inner", 0777) == EXIT_FAILURE) {
+        remove_dir(parent_directory, "/t_mkdir/outer");
+        remove_dir(parent_directory, "/t_mkdir");
+        return EXIT_FAILURE;
+    }
+    // Check if both directories are present.
+    if ((ret = check_dir(parent_directory, "/t_mkdir")) == EXIT_SUCCESS) {
+        if ((ret = check_dir(parent_directory, "/t_mkdir/outer")) == EXIT_SUCCESS) {
+            ret = check_dir(parent_directory, "/t_mkdir/outer/inner");
         }
-        goto clean_inner;
     }
-
-    if (strcmp(dent.d_name, "outer") != 0) {
-        ret = EXIT_FAILURE;
-        printf("outer expected, %s found\n", dent.d_name);
+    // Remove the directories.
+    if (remove_dir(parent_directory, "/t_mkdir/outer/inner") == EXIT_FAILURE) {
+        return EXIT_FAILURE;
     }
-
-clean_inner:
-    rmdir(BASEDIR "/outer/inner");
-clean_outer:
-    rmdir(BASEDIR "/outer");
+    if (remove_dir(parent_directory, "/t_mkdir/outer") == EXIT_FAILURE) {
+        return EXIT_FAILURE;
+    }
+    if (remove_dir(parent_directory, "/t_mkdir") == EXIT_FAILURE) {
+        return EXIT_FAILURE;
+    }
     return ret;
 }
 
 int main(int argc, char *argv[])
 {
-    int ret = mkdir(BASEDIR, 0777);
-    if (ret == -1) {
-        err(EXIT_FAILURE, "Failed to create base dir %s", BASEDIR);
-    }
-    printf("Running `test_consecutive_dirs`...\n");
-    if (test_consecutive_dirs()) {
+    pr_notice("Running `test_consecutive_dirs`...\n");
+    if (test_consecutive_dirs("/home/user")) {
         return EXIT_FAILURE;
     }
-
-    ret = rmdir(BASEDIR);
-    if (ret == -1) {
-        err(EXIT_FAILURE, "Failed to remove base dir %s", BASEDIR);
+    if (test_consecutive_dirs("")) {
+        return EXIT_FAILURE;
     }
-
     return EXIT_SUCCESS;
 }
