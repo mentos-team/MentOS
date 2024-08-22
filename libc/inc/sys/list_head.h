@@ -6,6 +6,7 @@
 #pragma once
 
 #include "stddef.h"
+#include "assert.h"
 
 /// @brief Structure used to implement the list_head data structure.
 typedef struct list_head {
@@ -73,6 +74,7 @@ static inline void list_head_init(list_head *head)
 /// @return 1 if empty, 0 otherwise.
 static inline int list_head_empty(const list_head *head)
 {
+    assert(head && "Variable head is NULL.");
     return head->next == head;
 }
 
@@ -93,6 +95,8 @@ static inline unsigned list_head_size(const list_head *head)
 /// @param location the element after which we insert.
 static inline void list_head_insert_after(list_head *new_entry, list_head *location)
 {
+    assert(new_entry && "Variable new_entry is NULL.");
+    assert(location && "Variable location is NULL.");
     // We store the old `next` element.
     list_head *old_next = location->next;
     // We insert our element.
@@ -110,6 +114,8 @@ static inline void list_head_insert_after(list_head *new_entry, list_head *locat
 /// @param location the element after which we insert.
 static inline void list_head_insert_before(list_head *new_entry, list_head *location)
 {
+    assert(new_entry && "Variable new_entry is NULL.");
+    assert(location && "Variable location is NULL.");
     // We store the old `previous` element.
     list_head *old_prev = location->prev;
     // We link the old `previous` element to our new entry.
@@ -128,6 +134,8 @@ static inline void list_head_remove(list_head *entry)
 {
     // Check if the element is actually in a list.
     if (!list_head_empty(entry)) {
+        assert(entry->prev && "Attribute entry->prev is NULL.");
+        assert(entry->next && "Attribute entry->next is NULL.");
         // We link the `previous` element to the `next` one.
         entry->prev->next = entry->next;
         // We link the `next` element to the `previous` one.
@@ -162,16 +170,17 @@ static inline void list_head_append(list_head *main, list_head *secondary)
 {
     // Check that both lists are actually filled with entries.
     if (!list_head_empty(main) && !list_head_empty(secondary)) {
+        assert(main->prev && "Attribute main->prev is NULL.");
+        assert(secondary->next && "Attribute secondary->next is NULL.");
+        assert(secondary->prev && "Attribute secondary->prev is NULL.");
         // Connect the last element of the main list to the first one of the secondary list.
         main->prev->next = secondary->next;
         // Connect the first element of the secondary list to the last one of the main list.
         secondary->next->prev = main->prev;
-
         // Connect the last element of the secondary list to our main.
         secondary->prev->next = main;
         // Connect our main to the last element of the secondary list.
         main->prev = secondary->prev;
-
         // Re-initialize the secondary list.
         list_head_init(secondary);
     }
@@ -184,6 +193,8 @@ static inline void list_head_replace(list_head *entry1, list_head *entry2)
 {
     // First we need to remove the second entry.
     list_head_remove(entry2);
+    assert(entry2->next && "Attribute entry2->next is NULL.");
+    assert(entry2->prev && "Attribute entry2->prev is NULL.");
     // Then, we can place second entry where the first entry is.
     entry2->next       = entry1->next;
     entry2->next->prev = entry2;
