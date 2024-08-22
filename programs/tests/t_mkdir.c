@@ -59,7 +59,7 @@ int check_dir(const char *parent_directory, const char *directory_name)
 
 int test_consecutive_dirs(const char *parent_directory)
 {
-    int ret;
+    int ret = EXIT_SUCCESS;
     if (create_dir(parent_directory, "/t_mkdir", 0777) == EXIT_FAILURE) {
         return EXIT_FAILURE;
     }
@@ -94,10 +94,10 @@ int test_consecutive_dirs(const char *parent_directory)
 int main(int argc, char *argv[])
 {
     pr_notice("Running `test_consecutive_dirs`...\n");
-    if (test_consecutive_dirs("/home/user")) {
+    if (test_consecutive_dirs("")) {
         return EXIT_FAILURE;
     }
-    if (test_consecutive_dirs("")) {
+    if (test_consecutive_dirs("/home/user")) {
         return EXIT_FAILURE;
     }
     return EXIT_SUCCESS;
