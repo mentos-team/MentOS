@@ -174,6 +174,8 @@ static inline void __print_vector_base(tvec_base_t *base)
 #endif
 }
 
+/// @brief Initializes the tvec_base.
+/// @param base the base to initialize.
 static inline void __tvec_base_init(tvec_base_t *base)
 {
     spinlock_init(&base->lock);
@@ -221,7 +223,9 @@ static inline list_head *__timer_get_target_vector(tvec_base_t *base, struct tim
     return base->tvn[3] + ((expires >> TIMER_TICKS_BITS(3)) & TVN_MASK);
 }
 
-/// Move all timers from tv up one level
+/// @brief Move all timers from tv up one level.
+/// @param base the base that contains the vector we want to cascate.
+/// @param current_vector the vector we want to cascate.
 static inline void __timer_cascate_vector(tvec_base_t *base, list_head *current_vector)
 {
     list_head *target_vector;
@@ -275,7 +279,7 @@ static inline void __timer_cascate_base(tvec_base_t *base)
 
 /// @brief Allocates the memory for timer.
 /// @return a pointer to the allocated timer.
-static inline struct timer_list *__timer_list_alloc()
+static inline struct timer_list *__timer_list_alloc(void)
 {
     // Allocate the memory.
     struct timer_list *timer = (struct timer_list *)kmalloc(sizeof(struct timer_list));
@@ -359,7 +363,7 @@ typedef struct sleep_data_t {
 
 /// @brief Allocates the memory for sleep_data.
 /// @return a pointer to the allocated sleep_data.
-static inline struct sleep_data_t *__sleep_data_alloc()
+static inline struct sleep_data_t *__sleep_data_alloc(void)
 {
     // Allocate the memory.
     sleep_data_t *sleep_data = (sleep_data_t *)kmalloc(sizeof(sleep_data_t));
@@ -556,7 +560,7 @@ static inline void sleep_timeout(unsigned long data)
 
 /// @brief Function executed when the real_timer of a process expires, sends
 /// SIGALRM to process.
-/// @param pid PID of the process whos associated timer has expired.
+/// @param task_ptr pointer to the process whos associated timer has expired.
 static inline void alarm_timeout(unsigned long task_ptr)
 {
     // Get the task fromt the argument.
@@ -567,7 +571,9 @@ static inline void alarm_timeout(unsigned long task_ptr)
     task->real_timer = NULL;
 }
 
-// Real timer interval timemout
+/// @brief Function executed when the real_timer of a process expires, sends
+/// SIGALRM to process.
+/// @param task_ptr pointer to the process whos associated timer has expired.
 static inline void real_timer_timeout(unsigned long task_ptr)
 {
     // Get the task fromt the argument.

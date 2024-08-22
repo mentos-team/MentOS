@@ -14,17 +14,23 @@
 #include "assert.h"
 #include "string.h"
 
+/// @brief Adds the entry to the wait queue.
+/// @param head the wait queue.
+/// @param wq the entry.
 static inline void __add_wait_queue(wait_queue_head_t *head, wait_queue_entry_t *wq)
 {
     list_head_insert_before(&wq->task_list, &head->task_list);
 }
 
+/// @brief Removes the entry from the wait queue.
+/// @param head the wait queue.
+/// @param wq the entry.
 static inline void __remove_wait_queue(wait_queue_head_t *head, wait_queue_entry_t *wq)
 {
     list_head_remove(&wq->task_list);
 }
 
-wait_queue_entry_t *wait_queue_entry_alloc()
+wait_queue_entry_t *wait_queue_entry_alloc(void)
 {
     // Allocate the memory.
     wait_queue_entry_t *wait_queue_entry = (wait_queue_entry_t *)kmalloc(sizeof(wait_queue_entry_t));

@@ -74,7 +74,7 @@ static inline int __search_entry(int fd, char *buf, size_t buflen, const char *n
             buf[pos] = 0;
             // Check the entry.
             if (name) {
-                if (strncmp(buf, name, strlen(name)) == 0) {
+                if (strncmp(buf, name, strlen(name)) == 0 && buf[strlen(name)] == ':') {
                     return 1;
                 }
             } else {

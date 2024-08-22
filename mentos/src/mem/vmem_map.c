@@ -78,6 +78,9 @@ void virt_init(void)
     }
 }
 
+/// @brief Allocates a virtual page, given the page frame count.
+/// @param pfn_count the page frame count.
+/// @return pointer to the virtual page.
 static virt_map_page_t *_alloc_virt_pages(uint32_t pfn_count)
 {
     unsigned order         = find_nearest_order_greater(0, pfn_count << 12);

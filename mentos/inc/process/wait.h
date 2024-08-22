@@ -82,7 +82,7 @@ typedef struct wait_queue_entry_t {
 
 /// @brief Allocates the memory for a wait_queue_entry.
 /// @return a pointer to the allocated wait_queue_entry.
-wait_queue_entry_t * wait_queue_entry_alloc();
+wait_queue_entry_t * wait_queue_entry_alloc(void);
 
 /// @brief Frees the memory of a wait_queue_entry.
 /// @param wait_queue_entry pointer to the wait_queue_entry.

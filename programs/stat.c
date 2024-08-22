@@ -26,19 +26,20 @@
 #define S_IFCHR  0x2000 ///< Character device
 #define S_IFIFO  0x1000 ///< Fifo
 
-static void __print_time(const char* prefix, time_t *time) {
+static void __print_time(const char *prefix, time_t *time)
+{
     tm_t *timeinfo = localtime(time);
     printf("%s%d-%d-%d %d:%d:%d\n",
-        prefix,
-        timeinfo->tm_year,
-        timeinfo->tm_mon,
-        timeinfo->tm_mday,
-        timeinfo->tm_hour,
-        timeinfo->tm_min,
-        timeinfo->tm_sec);
+           prefix,
+           timeinfo->tm_year,
+           timeinfo->tm_mon,
+           timeinfo->tm_mday,
+           timeinfo->tm_hour,
+           timeinfo->tm_min,
+           timeinfo->tm_sec);
 }
 
-int main(int argc, char** argv)
+int main(int argc, char **argv)
 {
     if (argc != 2) {
         printf("%s: missing operand.\n", argv[0]);
@@ -47,28 +48,27 @@ int main(int argc, char** argv)
     }
     if (strcmp(argv[1], "--help") == 0) {
         printf("Usage: %s FILE\n", argv[0]);
-        printf( "Display file status.\n");
+        printf("Display file status.\n");
         exit(0);
     }
     stat_t statbuf;
-    if(stat(argv[1], &statbuf) == -1) {
+    if (stat(argv[1], &statbuf) == -1) {
         printf("%s: cannot stat '%s': %s\n", argv[0], argv[1], strerror(errno));
         exit(1);
     }
-
 
     printf("File: %s\n", argv[1]);
     printf("Size: %s\n", to_human_size(statbuf.st_size));
     printf("File type: ");
     switch (statbuf.st_mode & S_IFMT) {
-        case S_IFBLK:  printf("block device\n");            break;
-        case S_IFCHR:  printf("character device\n");        break;
-        case S_IFDIR:  printf("directory\n");               break;
-        case S_IFIFO:  printf("FIFO/pipe\n");               break;
-        case S_IFLNK:  printf("symlink\n");                 break;
-        case S_IFREG:  printf("regular file\n");            break;
-        case S_IFSOCK: printf("socket\n");                  break;
-        default:       printf("unknown?\n");                break;
+    case S_IFBLK : printf("block device\n"); break;
+    case S_IFCHR : printf("character device\n"); break;
+    case S_IFDIR : printf("directory\n"); break;
+    case S_IFIFO : printf("FIFO/pipe\n"); break;
+    case S_IFLNK : printf("symlink\n"); break;
+    case S_IFREG : printf("regular file\n"); break;
+    case S_IFSOCK: printf("socket\n"); break;
+    default      : printf("unknown?\n"); break;
     }
     printf("Access: (%.4o/", statbuf.st_mode & 0xFFF);
     // Print the access permissions.
@@ -83,11 +83,16 @@ int main(int argc, char** argv)
     putchar(bitmask_check(statbuf.st_mode, S_IXOTH) ? 'x' : '-');
 
     passwd_t *user = getpwuid(statbuf.st_uid);
-    group_t *grp = getgrgid(statbuf.st_gid);
-
-    printf(") Uid: (%d/%s) Gid: (%d/%s)\n",
-        statbuf.st_uid, user->pw_name,
-        statbuf.st_gid, grp->gr_name);
+    if (!user) {
+        printf("%s: failed to retrieve uid '%u'.\n", argv[0], statbuf.st_uid);
+        exit(1);
+    }
+    group_t *group = getgrgid(statbuf.st_gid);
+    if (!group) {
+        printf("%s: failed to retrieve gid '%u'.\n", argv[0], statbuf.st_gid);
+        exit(1);
+    }
+    printf(") Uid: (%d/%s) Gid: (%d/%s)\n", statbuf.st_uid, user->pw_name, statbuf.st_gid, group->gr_name);
 
     __print_time("Access: ", &statbuf.st_atime);
     __print_time("Modify: ", &statbuf.st_mtime);

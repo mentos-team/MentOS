@@ -8,6 +8,8 @@
 #include "mem/slab.h"
 #include "string.h"
 
+/// @brief Allocates the memory for a node.
+/// @return a pointer to the newly allocated node.
 static inline listnode_t *__node_alloc(void)
 {
     listnode_t *node = kmalloc(sizeof(listnode_t));
@@ -15,12 +17,28 @@ static inline listnode_t *__node_alloc(void)
     return node;
 }
 
+/// @brief Frees the memory of a node.
+/// @param node the new we want to free.
 static inline void __node_dealloc(listnode_t *node)
 {
     assert(node && "Invalid pointer to node.");
     kfree(node);
 }
 
+/// @brief Allocates the memory for a list.
+/// @return a pointer to the newly allocated list.
+static inline list_t *__list_alloc(void)
+{
+    // Allocate the list.
+    list_t *list = kmalloc(sizeof(list_t));
+    assert(list && "Failed to allocate memory for a list.");
+    // Clear the memory of the list.
+    memset(list, 0, sizeof(list_t));
+    return list;
+}
+
+/// @brief Frees the memory of a list.
+/// @param list the list we want to free.
 static inline void __list_dealloc(list_t *list)
 {
     assert(list && "Invalid pointer to list.");
@@ -29,9 +47,7 @@ static inline void __list_dealloc(list_t *list)
 
 list_t *list_create(void)
 {
-    list_t *list = kmalloc(sizeof(list_t));
-    memset(list, 0, sizeof(list_t));
-    return list;
+    return __list_alloc();
 }
 
 unsigned int list_size(list_t *list)

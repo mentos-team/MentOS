@@ -18,10 +18,10 @@
 #define OS_MAJOR_VERSION 0
 
 /// Minor version of the operating system.
-#define OS_MINOR_VERSION 6
+#define OS_MINOR_VERSION 7
 
 /// Micro version of the operating system.
-#define OS_MICRO_VERSION 0
+#define OS_MICRO_VERSION 2
 
 /// Helper to transform the given argument into a string.
 #define OS_STR_HELPER(x) #x

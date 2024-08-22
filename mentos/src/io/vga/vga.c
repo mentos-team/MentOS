@@ -225,6 +225,7 @@ static unsigned char __read_byte(unsigned int offset)
 
 /// @brief Writes onto the video memory.
 /// @param offset where we are going to write.
+/// @param value the value to write.
 static void __write_byte(unsigned int offset, unsigned char value)
 {
     *(char *)(driver->address + offset) = value;
@@ -456,7 +457,7 @@ static inline unsigned __read_pixel_2(unsigned x, unsigned y)
 /// @brief Writes a pixel.
 /// @param x x coordinates.
 /// @param y y coordinates.
-/// @param c color.
+/// @param color the color.
 static inline void __write_pixel_4(int x, int y, unsigned char color)
 {
     unsigned off, mask, plane, pmask;
@@ -489,7 +490,7 @@ static inline unsigned __read_pixel_4(int x, int y)
 /// @brief Writes a pixel.
 /// @param x x coordinates.
 /// @param y y coordinates.
-/// @param c color.
+/// @param color the color.
 static inline void __write_pixel_8(int x, int y, unsigned char color)
 {
     __set_plane(x);
@@ -664,6 +665,7 @@ void vga_run_test(void)
 
 // == MODEs and DRIVERs =======================================================
 
+/// @brief Operations for 720*480, and 16-bit color video.
 static vga_ops_t ops_720_480_16 = {
     .write_pixel = __write_pixel_4,
     .read_pixel  = __read_pixel_4,
@@ -671,6 +673,7 @@ static vga_ops_t ops_720_480_16 = {
     .fill_rect   = NULL,
 };
 
+/// @brief Operations for 640*480, and 16-bit color video.
 static vga_ops_t ops_640_480_16 = {
     .write_pixel = __write_pixel_4,
     .read_pixel  = __read_pixel_4,
@@ -678,6 +681,7 @@ static vga_ops_t ops_640_480_16 = {
     .fill_rect   = NULL,
 };
 
+/// @brief Operations for 320*200, and 256-bit color video.
 static vga_ops_t ops_320_200_256 = {
     .write_pixel = __write_pixel_8,
     .read_pixel  = __read_pixel_8,
@@ -685,36 +689,42 @@ static vga_ops_t ops_320_200_256 = {
     .fill_rect   = NULL,
 };
 
+/// @brief 4x6 font.
 static vga_font_t font_4x6 = {
     .font   = arr_4x6_font,
     .width  = 4,
     .height = 6,
 };
 
+/// @brief 5x6 font.
 static vga_font_t font_5x6 = {
     .font   = arr_5x6_font,
     .width  = 5,
     .height = 6,
 };
 
+/// @brief 8x8 font.
 static vga_font_t font_8x8 = {
     .font   = arr_8x8_font,
     .width  = 8,
     .height = 8,
 };
 
+/// @brief 8x14 font.
 static vga_font_t font_8x14 = {
     .font   = arr_8x14_font,
     .width  = 8,
     .height = 14,
 };
 
+/// @brief 8x16 font.
 static vga_font_t font_8x16 = {
     .font   = arr_8x16_font,
     .width  = 8,
     .height = 16,
 };
 
+/// @brief Drivers for 720*480, and 16-bit color video.
 static vga_driver_t driver_720_480_16 = {
     .width   = 720,
     .height  = 480,
@@ -723,6 +733,7 @@ static vga_driver_t driver_720_480_16 = {
     .ops     = &ops_720_480_16,
 };
 
+/// @brief Drivers for 640*480, and 16-bit color video.
 static vga_driver_t driver_640_480_16 = {
     .width   = 640,
     .height  = 480,
@@ -731,6 +742,7 @@ static vga_driver_t driver_640_480_16 = {
     .ops     = &ops_640_480_16,
 };
 
+/// @brief Drivers for 320*200, and 16-bit color video.
 static vga_driver_t driver_320_200_256 = {
     .width   = 320,
     .height  = 200,
@@ -796,11 +808,12 @@ void vga_finalize(void)
     vga_enable = false;
 }
 
-static int _x               = 0;
-static int _y               = 0;
-static unsigned char _color = 7;
-static int _cursor_state    = 0;
+static int _x               = 0; ///< Current x coordinate of the cursor.
+static int _y               = 0; ///< Current y coordinate of the cursor.
+static unsigned char _color = 7; ///< Current color.
+static int _cursor_state    = 0; ///< Current state of the cursor.
 
+/// @brief Clears the character at the cursor.
 inline static void __vga_clear_cursor(void)
 {
     for (unsigned cy = 0; cy < driver->font->height; ++cy) {
@@ -810,6 +823,7 @@ inline static void __vga_clear_cursor(void)
     }
 }
 
+/// @brief Draws the cursor.
 inline static void __vga_draw_cursor(void)
 {
     unsigned char color = (_cursor_state = (_cursor_state == 0)) * _color;

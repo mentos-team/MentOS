@@ -3,15 +3,33 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
+#include "fs/namei.h"
 #include "assert.h"
 #include "limits.h"
-#include "fs/namei.h"
 #include "fcntl.h"
 #include "fs/vfs.h"
 #include "io/debug.h"
 #include "process/scheduler.h"
 #include "sys/errno.h"
 #include "string.h"
+
+/// Appends the path with a "/" as separator.
+#define APPEND_PATH_SEP_OR_FAIL(b, remaining) \
+{                                             \
+    strncat(b, "/", remaining);               \
+    remaining--;                              \
+    if (remaining < 0)                        \
+        return -ENAMETOOLONG;                 \
+}
+
+/// Appends the path with a "/" as separator.
+#define APPEND_PATH_OR_FAIL(b, path, remaining) \
+{                                               \
+    strncat(b, path, remaining);                \
+    remaining -= strlen(path);                  \
+    if (remaining < 0)                          \
+        return -ENAMETOOLONG;                   \
+}
 
 int sys_unlink(const char *path)
 {
@@ -79,22 +97,6 @@ char *realpath(const char *path, char *buffer, size_t buflen) {
         return NULL;
     }
     return buffer;
-}
-
-#define APPEND_PATH_SEP_OR_FAIL(b, remaining) \
-{                                             \
-    strncat(b, "/", remaining);               \
-    remaining--;                              \
-    if (remaining < 0)                        \
-        return -ENAMETOOLONG;                 \
-}
-
-#define APPEND_PATH_OR_FAIL(b, path, remaining) \
-{                                               \
-    strncat(b, path, remaining);                \
-    remaining -= strlen(path);                  \
-    if (remaining < 0)                          \
-        return -ENAMETOOLONG;                   \
 }
 
 int resolve_path(const char *path, char *buffer, size_t buflen, int flags)

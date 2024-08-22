@@ -48,7 +48,6 @@ static inline elf_program_header_t *elf_get_program_header_table(elf_header_t *h
 /// @brief Returns a pointer to the desired section header.
 /// @param header a pointer to the ELF header.
 /// @param idx  The index of the section header.
-/// @param shdr Where we store the content we read.
 /// @return a pointer to the desired section header.
 static inline elf_section_header_t *elf_get_section_header(elf_header_t *header, unsigned idx)
 {
@@ -79,9 +78,10 @@ static inline const char *elf_get_section_header_string_table(elf_header_t *head
     return (const char *)((uintptr_t)header + elf_get_section_header(header, header->shstrndx)->offset);
 }
 
-/// @brief Returns a pointer to the section header string table.
+/// @brief Returns a pointer to the section header symbol table.
 /// @param header a pointer to the ELF header.
-/// @return a pointer to the section header string table, or NULL on failure.
+/// @param section_header a pointer to the ELF section header.
+/// @return a pointer to the section header symbol table, or NULL on failure.
 static inline const char *elf_get_symbol_string_table(elf_header_t *header, elf_section_header_t *section_header)
 {
     if (section_header->link == SHT_NULL) {
@@ -94,9 +94,9 @@ static inline const char *elf_get_symbol_string_table(elf_header_t *header, elf_
 // GET ELF OBJECTS NAME
 // ============================================================================
 
-/// @brief Returns the name of the given entry in the section header string table.
+/// @brief Returns the name of the given section header.
 /// @param header a pointer to the ELF header.
-/// @param name_offset the offset where the desired name resides inside the table.
+/// @param section_header a pointer to the section header.
 /// @return a pointer to the name, or NULL on failure.
 static inline const char *elf_get_section_header_name(elf_header_t *header, elf_section_header_t *section_header)
 {
@@ -109,6 +109,8 @@ static inline const char *elf_get_section_header_name(elf_header_t *header, elf_
 
 /// @brief Returns a pointer to the section header string table.
 /// @param header a pointer to the ELF header.
+/// @param section_header a pointer to the section header.
+/// @param symbol a pointer to the symbol we want to get the name for.
 /// @return a pointer to the section header string table, or NULL on failure.
 static inline const char *elf_get_symbol_name(elf_header_t *header, elf_section_header_t *section_header, elf_symbol_t *symbol)
 {
@@ -123,6 +125,10 @@ static inline const char *elf_get_symbol_name(elf_header_t *header, elf_section_
 // SEARCH FUNCTIONS
 // ============================================================================
 
+/// @brief Finds the section header with the given name.
+/// @param header a pointer to the ELF header.
+/// @param name the name of the section we are looking for.
+/// @return a pointer to the section header.
 static inline elf_section_header_t *elf_find_section_header(elf_header_t *header, const char *name)
 {
     for (unsigned i = 0; i < header->shnum; ++i) {
@@ -140,6 +146,10 @@ static inline elf_section_header_t *elf_find_section_header(elf_header_t *header
     return NULL;
 }
 
+/// @brief Finds the symbol with the given name.
+/// @param header a pointer to the ELF header.
+/// @param name the name of the symbol we are looking for.
+/// @return a pointer to the symbol.
 static inline elf_symbol_t *elf_find_symbol(elf_header_t *header, const char *name)
 {
     for (unsigned i = 0; i < header->shnum; ++i) {
@@ -173,6 +183,8 @@ static inline elf_symbol_t *elf_find_symbol(elf_header_t *header, const char *na
 // DUMP FUNCTIONS
 // ============================================================================
 
+/// @brief Dumps the information about the sections.
+/// @param header a pointer to the ELF header.
 static inline void elf_dump_section_headers(elf_header_t *header)
 {
     pr_debug("[Nr] Name                 Type            Addr     Off    Size   ES Flg Lk Inf Al\n");
@@ -190,6 +202,8 @@ static inline void elf_dump_section_headers(elf_header_t *header)
     }
 }
 
+/// @brief Dumps the information about the symbols.
+/// @param header a pointer to the ELF header.
 static inline void elf_dump_symbol_table(elf_header_t *header)
 {
     for (unsigned i = 0; i < header->shnum; ++i) {
@@ -226,9 +240,8 @@ static inline void elf_dump_symbol_table(elf_header_t *header)
 // ============================================================================
 
 /// @brief Loads an ELF executable.
-/// @param task The task for which we load the ELF.
-/// @param file The ELF file.
 /// @param header  The header of the ELF file.
+/// @param task The task for which we load the ELF.
 /// @return The ELF entry.
 static inline int elf_load_exec(elf_header_t *header, task_struct *task)
 {

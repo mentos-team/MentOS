@@ -9,6 +9,7 @@
 #include "sys/errno.h"
 #include "sys/reboot.h"
 
+/// @brief Powers off the machine.
 static void machine_power_off(void)
 {
     while (1) {

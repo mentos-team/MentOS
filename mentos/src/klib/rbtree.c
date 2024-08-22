@@ -76,11 +76,18 @@ void rbtree_node_dealloc(rbtree_node_t *node)
     }
 }
 
+/// @brief Checks if the node is red.
+/// @param node the node to check.
+/// @return 1 if the node is red, 0 otherwise.
 static int rbtree_node_is_red(const rbtree_node_t *node)
 {
     return node ? node->red : 0;
 }
 
+/// @brief Performs a node rotation.
+/// @param node the node.
+/// @param dir the direction of the rotation (0: left, 1: right).
+/// @return the result of the rotate operation.
 static rbtree_node_t *rbtree_node_rotate(rbtree_node_t *node, int dir)
 {
     rbtree_node_t *result = NULL;
@@ -94,6 +101,12 @@ static rbtree_node_t *rbtree_node_rotate(rbtree_node_t *node, int dir)
     return result;
 }
 
+/// @brief Performs a double rotation.
+/// @param node the node.
+/// @param dir the direction of the rotation (0: left, 1: right).
+/// @return the result of the rotate operation.
+/// @details Suppose U has a parent V and a grandparent W. Then two successive
+/// rotations on U will ensure that V and W are descendents of U.
 static rbtree_node_t *rbtree_node_rotate2(rbtree_node_t *node, int dir)
 {
     rbtree_node_t *result = NULL;
@@ -106,6 +119,11 @@ static rbtree_node_t *rbtree_node_rotate2(rbtree_node_t *node, int dir)
 
 // rbtree_t - default callbacks
 
+/// @brief Peforms a comparison between the pointers of two elements.
+/// @param tree the tree.
+/// @param a the first element.
+/// @param b the second element.
+/// @return result of the comparison.
 static int rbtree_tree_node_cmp_ptr_cb(
     rbtree_t *tree,
     rbtree_node_t *a,
@@ -115,12 +133,13 @@ static int rbtree_tree_node_cmp_ptr_cb(
     return (a->value > b->value) - (a->value < b->value);
 }
 
+/// @brief Default deallocation callback.
+/// @param tree the tree.
+/// @param node the node.
 static void rbtree_tree_node_dealloc_cb(rbtree_t *tree, rbtree_node_t *node)
 {
-    if (tree) {
-        if (node) {
-            rbtree_node_dealloc(node);
-        }
+    if (tree && node) {
+        rbtree_node_dealloc(node);
     }
 }
 
@@ -435,8 +454,12 @@ void rbtree_iter_dealloc(rbtree_iter_t *iter)
     }
 }
 
-// Internal function, init traversal object, dir determines whether
-// to begin traversal at the smallest or largest valued node.
+/// @brief  Internal function, init traversal object, dir determines whether
+/// to begin traversal at the smallest or largest valued node.
+/// @param iter the iterator.
+/// @param tree the tree.
+/// @param dir the direction.
+/// @return result of the iteration.
 static void *rbtree_iter_start(rbtree_iter_t *iter, rbtree_t *tree, int dir)
 {
     void *result = NULL;
@@ -458,7 +481,10 @@ static void *rbtree_iter_start(rbtree_iter_t *iter, rbtree_t *tree, int dir)
     return result;
 }
 
-// Traverse a red black tree in the user-specified direction (0 asc, 1 desc)
+/// @brief Traverse a red black tree in the user-specified direction (0 asc, 1 desc)
+/// @param iter the iterator.
+/// @param dir the direction.
+/// @return result of the iteration. 
 static void *rbtree_iter_move(rbtree_iter_t *iter, int dir)
 {
     if (iter->node->link[dir] != NULL) {
@@ -544,6 +570,10 @@ int rbtree_tree_test(rbtree_t *tree, rbtree_node_t *root)
     return 0;
 }
 
+/// @brief Prints the tree using a user-defined function.
+/// @param tree the tree.
+/// @param node the current node.
+/// @param fun the print function.
 static void rbtree_tree_print_iter(rbtree_t *tree,
                                    rbtree_node_t *node,
                                    rbtree_tree_node_f fun)

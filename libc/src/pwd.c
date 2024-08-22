@@ -72,7 +72,8 @@ static inline char *__search_entry(int fd, char *buffer, int buflen, const char 
             char *name_end = strchr(buffer, ':');
             if (name_end) {
                 *name_end = '\0';
-                if (strncmp(buffer, name, strlen(name)) == 0) {
+                if (strlen(name) == strlen(buffer) &&
+                    strncmp(buffer, name, strlen(name)) == 0) {
                     *name_end = ':';
                     return buffer;
                 }
