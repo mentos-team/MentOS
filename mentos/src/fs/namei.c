@@ -7,6 +7,7 @@
 #include "assert.h"
 #include "limits.h"
 #include "fcntl.h"
+#include "sys/stat.h"
 #include "fs/vfs.h"
 #include "io/debug.h"
 #include "process/scheduler.h"
@@ -77,12 +78,14 @@ int sys_symlink(const char *linkname, const char *path)
 
 int sys_readlink(const char *path, char *buffer, size_t bufsize)
 {
+    pr_crit("Open...\n");
     // Try to open the file.
     vfs_file_t *file = vfs_open(path, O_RDONLY, 0);
     if (file == NULL) {
         return -errno;
     }
     // Read the link.
+    pr_crit("Readlink...\n");
     ssize_t nbytes = vfs_readlink(file, buffer, bufsize);
     // Close the file.
     vfs_close(file);

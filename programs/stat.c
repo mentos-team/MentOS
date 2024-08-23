@@ -15,17 +15,6 @@
 #include <sys/stat.h>
 #include <sys/unistd.h>
 
-// Copied from mentos/src/fs/ext2.c
-// File types.
-#define S_IFMT   0xF000 ///< Format mask
-#define S_IFSOCK 0xC000 ///< Socket
-#define S_IFLNK  0xA000 ///< Symbolic link
-#define S_IFREG  0x8000 ///< Regular file
-#define S_IFBLK  0x6000 ///< Block device
-#define S_IFDIR  0x4000 ///< Directory
-#define S_IFCHR  0x2000 ///< Character device
-#define S_IFIFO  0x1000 ///< Fifo
-
 static void __print_time(const char *prefix, time_t *time)
 {
     tm_t *timeinfo = localtime(time);
@@ -51,51 +40,59 @@ int main(int argc, char **argv)
         printf("Display file status.\n");
         exit(0);
     }
-    stat_t statbuf;
-    if (stat(argv[1], &statbuf) == -1) {
+    stat_t dstat;
+    if (stat(argv[1], &dstat) == -1) {
         printf("%s: cannot stat '%s': %s\n", argv[0], argv[1], strerror(errno));
         exit(1);
     }
 
     printf("File: %s\n", argv[1]);
-    printf("Size: %s\n", to_human_size(statbuf.st_size));
+    if (S_ISLNK(dstat.st_mode)) {
+        char link_buffer[PATH_MAX];
+        ssize_t len;
+        if ((len = readlink(argv[1], link_buffer, sizeof(link_buffer))) != -1) {
+            link_buffer[len] = '\0';
+            printf(" -> %s\n", link_buffer);
+        }
+    }
+    printf("Size: %s\n", to_human_size(dstat.st_size));
     printf("File type: ");
-    switch (statbuf.st_mode & S_IFMT) {
+    switch (dstat.st_mode & S_IFMT) {
     case S_IFBLK : printf("block device\n"); break;
     case S_IFCHR : printf("character device\n"); break;
     case S_IFDIR : printf("directory\n"); break;
-    case S_IFIFO : printf("FIFO/pipe\n"); break;
-    case S_IFLNK : printf("symlink\n"); break;
+    case S_IFIFO : printf("fifo/pipe\n"); break;
+    case S_IFLNK : printf("symbolic link\n"); break;
     case S_IFREG : printf("regular file\n"); break;
     case S_IFSOCK: printf("socket\n"); break;
     default      : printf("unknown?\n"); break;
     }
-    printf("Access: (%.4o/", statbuf.st_mode & 0xFFF);
+    printf("Access: (%.4o/", dstat.st_mode & 0xFFF);
     // Print the access permissions.
-    putchar(bitmask_check(statbuf.st_mode, S_IRUSR) ? 'r' : '-');
-    putchar(bitmask_check(statbuf.st_mode, S_IWUSR) ? 'w' : '-');
-    putchar(bitmask_check(statbuf.st_mode, S_IXUSR) ? 'x' : '-');
-    putchar(bitmask_check(statbuf.st_mode, S_IRGRP) ? 'r' : '-');
-    putchar(bitmask_check(statbuf.st_mode, S_IWGRP) ? 'w' : '-');
-    putchar(bitmask_check(statbuf.st_mode, S_IXGRP) ? 'x' : '-');
-    putchar(bitmask_check(statbuf.st_mode, S_IROTH) ? 'r' : '-');
-    putchar(bitmask_check(statbuf.st_mode, S_IWOTH) ? 'w' : '-');
-    putchar(bitmask_check(statbuf.st_mode, S_IXOTH) ? 'x' : '-');
+    putchar(bitmask_check(dstat.st_mode, S_IRUSR) ? 'r' : '-');
+    putchar(bitmask_check(dstat.st_mode, S_IWUSR) ? 'w' : '-');
+    putchar(bitmask_check(dstat.st_mode, S_IXUSR) ? 'x' : '-');
+    putchar(bitmask_check(dstat.st_mode, S_IRGRP) ? 'r' : '-');
+    putchar(bitmask_check(dstat.st_mode, S_IWGRP) ? 'w' : '-');
+    putchar(bitmask_check(dstat.st_mode, S_IXGRP) ? 'x' : '-');
+    putchar(bitmask_check(dstat.st_mode, S_IROTH) ? 'r' : '-');
+    putchar(bitmask_check(dstat.st_mode, S_IWOTH) ? 'w' : '-');
+    putchar(bitmask_check(dstat.st_mode, S_IXOTH) ? 'x' : '-');
 
-    passwd_t *user = getpwuid(statbuf.st_uid);
+    passwd_t *user = getpwuid(dstat.st_uid);
     if (!user) {
-        printf("%s: failed to retrieve uid '%u'.\n", argv[0], statbuf.st_uid);
+        printf("%s: failed to retrieve uid '%u'.\n", argv[0], dstat.st_uid);
         exit(1);
     }
-    group_t *group = getgrgid(statbuf.st_gid);
+    group_t *group = getgrgid(dstat.st_gid);
     if (!group) {
-        printf("%s: failed to retrieve gid '%u'.\n", argv[0], statbuf.st_gid);
+        printf("%s: failed to retrieve gid '%u'.\n", argv[0], dstat.st_gid);
         exit(1);
     }
-    printf(") Uid: (%d/%s) Gid: (%d/%s)\n", statbuf.st_uid, user->pw_name, statbuf.st_gid, group->gr_name);
+    printf(") Uid: (%d/%s) Gid: (%d/%s)\n", dstat.st_uid, user->pw_name, dstat.st_gid, group->gr_name);
 
-    __print_time("Access: ", &statbuf.st_atime);
-    __print_time("Modify: ", &statbuf.st_mtime);
-    __print_time("Change: ", &statbuf.st_ctime);
+    __print_time("Access: ", &dstat.st_atime);
+    __print_time("Modify: ", &dstat.st_mtime);
+    __print_time("Change: ", &dstat.st_ctime);
     return 0;
 }

@@ -5,9 +5,9 @@
 
 #include "string.h"
 #include "ctype.h"
-#include "fcntl.h"
 #include "stdio.h"
 #include "stdlib.h"
+#include "sys/stat.h"
 
 #ifdef __KERNEL__
 #include "mem/kheap.h"

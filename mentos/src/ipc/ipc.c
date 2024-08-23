@@ -6,6 +6,7 @@
 #include "ipc/ipc.h"
 
 #include "assert.h"
+#include "sys/stat.h"
 #include "fcntl.h"
 #include "io/debug.h"
 #include "process/scheduler.h"

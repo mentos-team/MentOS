@@ -83,7 +83,7 @@ static inline void print_dir_entry(dirent_t *dirent, const char *path, unsigned 
         // Add a space.
         putchar(' ');
         // Print the rest.
-        printf("%4d %4d %11s %02d/%02d %02d:%02d %s\n",
+        printf("%4d %4d %11s %02d/%02d %02d:%02d %s",
                dstat.st_uid,
                dstat.st_gid,
                to_human_size(dstat.st_size),
@@ -92,6 +92,16 @@ static inline void print_dir_entry(dirent_t *dirent, const char *path, unsigned 
                timeinfo->tm_hour,
                timeinfo->tm_min,
                dirent->d_name);
+        if (S_ISLNK(dstat.st_mode)) {
+            char link_buffer[PATH_MAX];
+            ssize_t len;
+            pr_emerg("Read link...\n");
+            if ((len = readlink(relative_path, link_buffer, sizeof(link_buffer))) != -1) {
+                link_buffer[len] = '\0';
+                printf(" -> %s\n", link_buffer);
+            }
+        }
+        putchar('\n');
         (*total_size) += dstat.st_size;
     } else {
         // Print the inode if required.
@@ -116,7 +126,7 @@ static void print_ls(int fd, const char *path, unsigned int flags)
     dirent_t dents[DENTS_NUM];
     memset(&dents, 0, DENTS_NUM * sizeof(dirent_t));
 
-    size_t total_size = 0;
+    size_t total_size  = 0;
     ssize_t bytes_read = 0;
     while ((bytes_read = getdents(fd, dents, sizeof(dents))) > 0) {
         for (size_t i = 0; i < bytes_read / sizeof(dirent_t); ++i) {

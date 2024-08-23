@@ -11,6 +11,7 @@
 
 #include "assert.h"
 #include "fcntl.h"
+#include "sys/stat.h"
 #include "fs/procfs.h"
 #include "fs/vfs.h"
 #include "libgen.h"

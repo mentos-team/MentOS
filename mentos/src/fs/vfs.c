@@ -10,6 +10,7 @@
 #include "io/debug.h"                    // Include debugging functions.
 
 #include "fcntl.h"
+#include "sys/stat.h"
 #include "assert.h"
 #include "fs/procfs.h"
 #include "fs/namei.h"
