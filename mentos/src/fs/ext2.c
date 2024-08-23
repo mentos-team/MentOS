@@ -6,7 +6,7 @@
 // Setup the logging for this file (do this before any other include).
 #include "sys/kernel_levels.h"           // Include kernel log levels.
 #define __DEBUG_HEADER__ "[EXT2  ]"      ///< Change header.
-#define __DEBUG_LEVEL__  LOGLEVEL_DEBUG ///< Set log level.
+#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
 #include "io/debug.h"                    // Include debugging functions.
 
 #include "assert.h"
@@ -3161,7 +3161,6 @@ static ssize_t ext2_readlink(vfs_file_t *file, char *buffer, size_t bufsize)
     ssize_t nbytes = min(strlen(inode.data.symlink), bufsize);
     // Copy the symlink information.
     strncpy(buffer, inode.data.symlink, nbytes);
-    pr_emerg("LINK: %d `%s`\n", file->ino, inode.data.symlink);
     // Return how much we read.
     return nbytes;
 }

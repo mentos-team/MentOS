@@ -46,15 +46,16 @@ int main(int argc, char **argv)
         exit(1);
     }
 
-    printf("File: %s\n", argv[1]);
+    printf("File: %s", argv[1]);
     if (S_ISLNK(dstat.st_mode)) {
         char link_buffer[PATH_MAX];
         ssize_t len;
         if ((len = readlink(argv[1], link_buffer, sizeof(link_buffer))) != -1) {
             link_buffer[len] = '\0';
-            printf(" -> %s\n", link_buffer);
+            printf(" -> %s", link_buffer);
         }
     }
+    putchar('\n');
     printf("Size: %s\n", to_human_size(dstat.st_size));
     printf("File type: ");
     switch (dstat.st_mode & S_IFMT) {
