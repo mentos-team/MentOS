@@ -177,7 +177,7 @@ static inline void __prompt_print(void)
     } else {
         HOSTNAME = buffer.nodename;
     }
-    printf(FG_GREEN "%s" FG_WHITE "@" FG_CYAN "%s " FG_BLUE_BRIGHT "[%02d:%02d:%02d]" FG_WHITE " [%s] " FG_WHITE_BRIGHT "\n-> %% ",
+    printf(FG_GREEN "%s" FG_WHITE "@" FG_CYAN "%s " FG_BLUE_BRIGHT "[%02d:%02d:%02d]" FG_WHITE " [%s] " FG_RESET "\n-> %% ",
            USER, HOSTNAME, timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec, CWD);
 }
 

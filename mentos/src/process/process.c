@@ -12,6 +12,7 @@
 #include "assert.h"
 #include "elf/elf.h"
 #include "fcntl.h"
+#include "sys/stat.h"
 #include "fs/vfs.h"
 #include "hardware/timer.h"
 #include "klib/stack_helper.h"

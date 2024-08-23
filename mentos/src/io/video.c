@@ -7,6 +7,7 @@
 #include "ctype.h"
 #include "io/vga/vga.h"
 #include "io/video.h"
+#include "io/debug.h"
 #include "stdbool.h"
 #include "stdio.h"
 #include "string.h"
@@ -27,6 +28,8 @@ struct ansi_color_map_t {
 }
 /// @brief The mapping.
 ansi_color_map[] = {
+    { 0, 7 },
+
     { 30, 0 },
     { 31, 4 },
     { 32, 2 },
@@ -61,9 +64,7 @@ ansi_color_map[] = {
     { 104, 9 },
     { 105, 13 },
     { 106, 11 },
-    { 107, 15 },
-
-    { 0, 0 }
+    { 107, 15 }
 };
 
 /// Pointer to a position of the screen writer.
@@ -111,17 +112,18 @@ static inline void __draw_char(char c)
 /// @param ansi_code The ansi code describing background and foreground color.
 static inline void __set_color(uint8_t ansi_code)
 {
-    struct ansi_color_map_t *it = ansi_color_map;
-    while (it->ansi_color != 0) {
-        if (ansi_code == it->ansi_color) {
-            if (((ansi_code >= 30) && (ansi_code <= 37)) || ((ansi_code >= 90) && (ansi_code <= 97))) {
-                color = (color & 0xF0U) | it->video_color;
+    for (size_t i = 0; i < count_of(ansi_color_map); ++i) {
+        if (ansi_code == ansi_color_map[i].ansi_color) {
+            if (
+                (ansi_code == 0) ||
+                ((ansi_code >= 30) && (ansi_code <= 37)) ||
+                ((ansi_code >= 90) && (ansi_code <= 97))) {
+                color = (color & 0xF0U) | ansi_color_map[i].video_color;
             } else {
-                color = (color & 0x0FU) | (it->video_color << 4U);
+                color = (color & 0x0FU) | (ansi_color_map[i].video_color << 4U);
             }
             break;
         }
-        ++it;
     }
 }
 

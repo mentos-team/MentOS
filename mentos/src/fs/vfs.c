@@ -10,6 +10,7 @@
 #include "io/debug.h"                    // Include debugging functions.
 
 #include "fcntl.h"
+#include "sys/stat.h"
 #include "assert.h"
 #include "fs/procfs.h"
 #include "fs/namei.h"
@@ -357,6 +358,7 @@ ssize_t vfs_readlink(vfs_file_t *file, char *buffer, size_t bufsize)
         pr_err("vfs_readlink(%s): Function not supported in current filesystem.", file->name);
         return -ENOSYS;
     }
+    pr_debug("vfs_readlink(file: %s, ino:%d)\n", file->name, file->ino);
     // Perform the read.
     return file->fs_operations->readlink_f(file, buffer, bufsize);
 }

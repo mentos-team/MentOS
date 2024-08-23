@@ -7,6 +7,7 @@
 #include "assert.h"
 #include "limits.h"
 #include "fcntl.h"
+#include "sys/stat.h"
 #include "fs/vfs.h"
 #include "io/debug.h"
 #include "process/scheduler.h"
@@ -15,21 +16,21 @@
 
 /// Appends the path with a "/" as separator.
 #define APPEND_PATH_SEP_OR_FAIL(b, remaining) \
-{                                             \
-    strncat(b, "/", remaining);               \
-    remaining--;                              \
-    if (remaining < 0)                        \
-        return -ENAMETOOLONG;                 \
-}
+    {                                         \
+        strncat(b, "/", remaining);           \
+        remaining--;                          \
+        if (remaining < 0)                    \
+            return -ENAMETOOLONG;             \
+    }
 
 /// Appends the path with a "/" as separator.
 #define APPEND_PATH_OR_FAIL(b, path, remaining) \
-{                                               \
-    strncat(b, path, remaining);                \
-    remaining -= strlen(path);                  \
-    if (remaining < 0)                          \
-        return -ENAMETOOLONG;                   \
-}
+    {                                           \
+        strncat(b, path, remaining);            \
+        remaining -= strlen(path);              \
+        if (remaining < 0)                      \
+            return -ENAMETOOLONG;               \
+    }
 
 int sys_unlink(const char *path)
 {
@@ -64,7 +65,7 @@ int sys_creat(const char *path, mode_t mode)
 
     // Set the file descriptor id.
     task->fd_list[fd].file_struct = file;
-    task->fd_list[fd].flags_mask = O_WRONLY|O_CREAT|O_TRUNC;
+    task->fd_list[fd].flags_mask  = O_WRONLY | O_CREAT | O_TRUNC;
 
     // Return the file descriptor and increment it.
     return fd;
@@ -77,9 +78,18 @@ int sys_symlink(const char *linkname, const char *path)
 
 int sys_readlink(const char *path, char *buffer, size_t bufsize)
 {
+    // Allocate a variable for the path.
+    char absolute_path[PATH_MAX];
+    // Resolve the path.
+    int ret = resolve_path(path, absolute_path, sizeof(absolute_path), 0);
+    if (ret < 0) {
+        pr_err("sys_readlink(%s): Cannot resolve path!\n", path);
+        return ret;
+    }
     // Try to open the file.
-    vfs_file_t *file = vfs_open(path, O_RDONLY, 0);
+    vfs_file_t *file = vfs_open_abspath(absolute_path, O_RDONLY, 0);
     if (file == NULL) {
+        pr_err("sys_readlink(%s): Cannot open file!\n", path);
         return -errno;
     }
     // Read the link.
@@ -90,7 +100,8 @@ int sys_readlink(const char *path, char *buffer, size_t bufsize)
     return nbytes;
 }
 
-char *realpath(const char *path, char *buffer, size_t buflen) {
+char *realpath(const char *path, char *buffer, size_t buflen)
+{
     int ret = resolve_path(path, buffer, buflen, REMOVE_TRAILING_SLASH);
     if (ret < 0) {
         errno = -ret;
@@ -107,7 +118,7 @@ int resolve_path(const char *path, char *buffer, size_t buflen, int flags)
     // Buffer used to build up the absolute path
     char abspath[buflen];
     // Null-terminate our work buffer
-    memset(abspath,0, buflen);
+    memset(abspath, 0, buflen);
     int remaining = buflen - 1;
 
     // Track the resolved symlinks to ensure we do not end up in a loop
@@ -155,7 +166,7 @@ resolve_abspath:
                 buffer[pathidx++] = abspath[absidx++];
 
                 // Find the next separator after the current path component
-                char* sep_after_cur = strchr(abspath + absidx, '/');
+                char *sep_after_cur = strchr(abspath + absidx, '/');
                 if (sep_after_cur) {
                     // Null-terminate work buffer to properly open the current component
                     *sep_after_cur = 0;
@@ -184,7 +195,7 @@ resolve_abspath:
                 if (symlinks > SYMLOOP_MAX) { return -ELOOP; }
 
                 char link[PATH_MAX];
-                vfs_file_t* link_file = vfs_open_abspath(abspath, O_RDONLY, 0);
+                vfs_file_t *link_file = vfs_open_abspath(abspath, O_RDONLY, 0);
                 if (link_file == NULL) { return -errno; }
                 ssize_t nbytes = vfs_readlink(link_file, link, sizeof(link));
                 vfs_close(link_file);
@@ -205,7 +216,7 @@ resolve_abspath:
                     strncpy(abspath, link, remaining);
 
                     remaining -= strlen(link);
-                    if (remaining  < 0) { return -ENAMETOOLONG; }
+                    if (remaining < 0) { return -ENAMETOOLONG; }
 
                     // This is not the last component, therefore it must be a directory
                     if (sep_after_cur) {
@@ -214,7 +225,7 @@ resolve_abspath:
                         APPEND_PATH_OR_FAIL(abspath, buffer, remaining);
                     }
                     goto resolve_abspath;
-                // Link is relative, add it and continue
+                    // Link is relative, add it and continue
                 } else {
                     // Recalculate the remaining space in the working buffer
                     remaining = buflen - absidx - 1;
@@ -236,11 +247,10 @@ resolve_abspath:
             }
             // Copy the path component
             else {
-copy_path_component:
+            copy_path_component:
                 do {
                     buffer[pathidx++] = abspath[absidx++];
-                }
-                while (abspath[absidx] && abspath[absidx] != '/');
+                } while (abspath[absidx] && abspath[absidx] != '/');
             }
         }
     }

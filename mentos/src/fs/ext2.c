@@ -21,22 +21,13 @@
 #include "stdio.h"
 #include "string.h"
 #include "sys/errno.h"
+#include "sys/stat.h"
 
 #define EXT2_SUPERBLOCK_MAGIC  0xEF53 ///< Magic value used to identify an ext2 filesystem.
 #define EXT2_DIRECT_BLOCKS     12     ///< Amount of indirect blocks in an inode.
 #define EXT2_PATH_MAX          4096   ///< Maximum length of a pathname.
 #define EXT2_MAX_SYMLINK_COUNT 8      ///< Maximum nesting of symlinks, used to prevent a loop.
 #define EXT2_NAME_LEN          255    ///< The lenght of names inside directory entries.
-
-// File types.
-#define EXT2_S_IFMT   0xF000 ///< Format mask
-#define EXT2_S_IFSOCK 0xC000 ///< Socket
-#define EXT2_S_IFLNK  0xA000 ///< Symbolic link
-#define EXT2_S_IFREG  0x8000 ///< Regular file
-#define EXT2_S_IFBLK  0x6000 ///< Block device
-#define EXT2_S_IFDIR  0x4000 ///< Directory
-#define EXT2_S_IFCHR  0x2000 ///< Character device
-#define EXT2_S_IFIFO  0x1000 ///< Fifo
 
 // Permissions bit.
 #define EXT2_S_ISUID 0x0800 ///< SUID
@@ -1851,7 +1842,7 @@ static inline int ext2_directory_is_empty(ext2_filesystem_t *fs, uint8_t *cache,
 static int ext2_clean_inode_content(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t inode_index)
 {
     // Check the type of operation.
-    if ((inode->mode & EXT2_S_IFREG) != EXT2_S_IFREG) {
+    if ((inode->mode & S_IFREG) != S_IFREG) {
         pr_alert("Trying to clean the content of a non-regular file.\n");
         return 1;
     }
@@ -2170,7 +2161,7 @@ static int ext2_allocate_direntry(
         return -1;
     }
     // Check that the parent is a directory.
-    if (!bitmask_check(parent_inode.mode, EXT2_S_IFDIR)) {
+    if (!bitmask_check(parent_inode.mode, S_IFDIR)) {
         pr_err("The parent inode is not a directory (ino: %d, mode: %d).\n", parent_inode_index, parent_inode.mode);
         return -1;
     }
@@ -2306,7 +2297,7 @@ static int ext2_find_direntry(ext2_filesystem_t *fs, ino_t ino, const char *name
         return -1;
     }
     // Check that the parent is a directory.
-    if (!bitmask_check(inode.mode, EXT2_S_IFDIR)) {
+    if (!bitmask_check(inode.mode, S_IFDIR)) {
         pr_err("The parent inode is not a directory (ino: %d, mode: %d).\n", ino, inode.mode);
         return -1;
     }
@@ -2473,22 +2464,22 @@ static int ext2_init_vfs_file(
     file->gid = inode->gid;
     // Set the VFS specific flags.
     file->flags = 0;
-    if ((inode->mode & EXT2_S_IFREG) == EXT2_S_IFREG) {
+    if ((inode->mode & S_IFREG) == S_IFREG) {
         file->flags |= DT_REG;
     }
-    if ((inode->mode & EXT2_S_IFDIR) == EXT2_S_IFDIR) {
+    if ((inode->mode & S_IFDIR) == S_IFDIR) {
         file->flags |= DT_DIR;
     }
-    if ((inode->mode & EXT2_S_IFBLK) == EXT2_S_IFBLK) {
+    if ((inode->mode & S_IFBLK) == S_IFBLK) {
         file->flags |= DT_BLK;
     }
-    if ((inode->mode & EXT2_S_IFCHR) == EXT2_S_IFCHR) {
+    if ((inode->mode & S_IFCHR) == S_IFCHR) {
         file->flags |= DT_CHR;
     }
-    if ((inode->mode & EXT2_S_IFIFO) == EXT2_S_IFIFO) {
+    if ((inode->mode & S_IFIFO) == S_IFIFO) {
         file->flags |= DT_FIFO;
     }
-    if ((inode->mode & EXT2_S_IFLNK) == EXT2_S_IFLNK) {
+    if ((inode->mode & S_IFLNK) == S_IFLNK) {
         file->flags |= DT_LNK;
     }
     // Set the inode.
@@ -2682,7 +2673,7 @@ static vfs_file_t *ext2_creat(const char *path, mode_t mode)
         return file;
     }
     // Set the inode mode.
-    mode = EXT2_S_IFREG | (0xFFF & mode);
+    mode = S_IFREG | (0xFFF & mode);
     // Get the group index of the parent.
     uint32_t group_index = ext2_inode_index_to_group_index(fs, parent->ino);
     // Create and initialize the new inode.
@@ -2768,9 +2759,6 @@ static vfs_file_t *ext2_open(const char *path, int flags, mode_t mode)
         errno = ENOENT;
         return NULL;
     }
-    if (search.direntry.file_type == ext2_file_type_symbolic_link) {
-        pr_alert("Beware, it is a symbolic link.\n");
-    }
     // Prepare the structure for the inode.
     ext2_inode_t inode;
     memset(&inode, 0, sizeof(ext2_inode_t));
@@ -2787,7 +2775,7 @@ static vfs_file_t *ext2_open(const char *path, int flags, mode_t mode)
     }
 
     // Check if the file is a regular file, and the user wants to write and truncate.
-    if (bitmask_exact(inode.mode, EXT2_S_IFREG) && (bitmask_exact(flags, O_RDWR | O_TRUNC) || bitmask_exact(flags, O_RDONLY | O_TRUNC))) {
+    if (bitmask_exact(inode.mode, S_IFREG) && (bitmask_exact(flags, O_RDWR | O_TRUNC) || bitmask_exact(flags, O_RDONLY | O_TRUNC))) {
         // Clean the content of the newly created file.
         if (ext2_clean_inode_content(fs, &inode, search.direntry.inode) < 0) {
             pr_err("Failed to clean the content of the newly created inode.\n");
@@ -2947,7 +2935,7 @@ static ssize_t ext2_read(vfs_file_t *file, char *buffer, off_t offset, size_t nb
         return -1;
     }
     // Disallow reading directories using read
-    if ((inode.mode & EXT2_S_IFDIR) == EXT2_S_IFDIR) {
+    if ((inode.mode & S_IFDIR) == S_IFDIR) {
         pr_err("Reading a directory `%s` is not allowed.\n", file->name);
         return -EISDIR;
     }
@@ -3215,7 +3203,7 @@ static int ext2_mkdir(const char *path, mode_t permission)
         return -EEXIST;
     }
     // Set the inode mode.
-    uint32_t mode = EXT2_S_IFDIR;
+    uint32_t mode = S_IFDIR;
     mode |= 0xFFF & permission;
     // Get the group index of the parent.
     uint32_t group_index = ext2_inode_index_to_group_index(fs, search.parent_inode);
@@ -3552,7 +3540,7 @@ static vfs_file_t *ext2_mount(vfs_file_t *block_device, const char *path)
         // Free the block_buffer, the block_groups and the filesystem.
         goto free_block_buffer;
     }
-    if ((root_inode.mode & EXT2_S_IFDIR) != EXT2_S_IFDIR) {
+    if ((root_inode.mode & S_IFDIR) != S_IFDIR) {
         pr_err("The root is not a directory.\n");
         // Free the block_buffer, the block_groups and the filesystem.
         goto free_block_buffer;
