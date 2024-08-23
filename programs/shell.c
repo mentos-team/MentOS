@@ -353,6 +353,28 @@ static int __cd(int argc, char *argv[])
         printf("cd: Failed to resolve directory.\n");
         return 1;
     }
+    // Stat the directory.
+    stat_t dstat;
+    if (stat(real_path, &dstat) == -1) {
+        printf("cd: cannot stat '%s': %s\n", real_path, strerror(errno));
+        return 1;
+    }
+    // Check if the directory is actually a symbolic link.
+    if (S_ISLNK(dstat.st_mode)) {
+        char link_buffer[PATH_MAX];
+        ssize_t len;
+        // First, read the link.
+        if ((len = readlink(real_path, link_buffer, sizeof(link_buffer))) < 0) {
+            printf("cd: Failed to read symlink.\n");
+            return 1;
+        }
+        link_buffer[len] = '\0';
+        // Resolve the link, it might still be a relative path.
+        if (realpath(link_buffer, real_path, PATH_MAX) != real_path) {
+            printf("cd: Failed to resolve symlink to directory.\n");
+            return 1;
+        }
+    }
     // Open the given directory.
     int fd = open(real_path, O_RDONLY | O_DIRECTORY, S_IXUSR);
     if (fd == -1) {
