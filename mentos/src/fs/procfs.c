@@ -879,7 +879,7 @@ int procfs_cleanup_module(void)
     // Destroy the cache.
     kmem_cache_destroy(fs.procfs_file_cache);
     // Unregister the filesystem.
-    vfs_register_filesystem(&procfs_file_system_type);
+    vfs_unregister_filesystem(&procfs_file_system_type);
     return 0;
 }
 
