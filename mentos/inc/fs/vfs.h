@@ -19,11 +19,6 @@ extern kmem_cache_t *vfs_file_cache;
 /// @brief Forward declaration of task_struct.
 struct task_struct;
 
-/// @brief Searches for the mountpoint of the given path.
-/// @param absolute_path Path for which we want to search the mountpoint.
-/// @return Pointer to the vfs_file of the mountpoint.
-super_block_t *vfs_get_superblock(const char *absolute_path);
-
 /// @brief Initialize the Virtual File System (VFS).
 void vfs_init(void);
 
@@ -36,6 +31,15 @@ int vfs_register_filesystem(file_system_type *fs);
 /// @param fs A pointer to the information concerning the filesystem.
 /// @return The outcome of the operation, 0 if fails.
 int vfs_unregister_filesystem(file_system_type *fs);
+
+int vfs_register_superblock(const char *name, const char *path, file_system_type *type, vfs_file_t *root);
+
+int vfs_unregister_superblock(super_block_t *sb);
+
+/// @brief Searches for the mountpoint of the given path.
+/// @param absolute_path Path for which we want to search the mountpoint.
+/// @return Pointer to the vfs_file of the mountpoint.
+super_block_t *vfs_get_superblock(const char *absolute_path);
 
 /// @brief Given an absolute path to a file, vfs_open_abspath() returns a file struct, used to access the file.
 /// @param absolute_path An absolute path to a file.
@@ -151,24 +155,12 @@ int vfs_stat(const char *path, stat_t *buf);
 /// @return 0 on success, -errno on failure.
 int vfs_fstat(vfs_file_t *file, stat_t *buf);
 
-/// @brief Mount a file system to the specified path.
-/// @param path    Path where we want to map the filesystem.
-/// @param fs_root Root node of the filesystem.
-/// @return 1 on success, 0 on fail.
-/// @details
-/// For example, if we have an EXT2 filesystem with a root node
-/// of ext2_root and we want to mount it to /, we would run
-/// vfs_mount("/", ext2_root); - or, if we have a procfs node,
-/// we could mount that to /dev/procfs. Individual files can also
-/// be mounted.
-int vfs_mount(const char *path, vfs_file_t *fs_root);
-
 /// @brief Mount the path as a filesystem of the given type.
 /// @param type The type of filesystem
 /// @param path The path to where it should be mounter.
 /// @param args The arguments passed to the filesystem mount callback.
 /// @return 0 on success, a negative number if fails and errno is set.
-int do_mount(const char *type, const char *path, const char *args);
+int vfs_mount(const char *type, const char *path, const char *args);
 
 /// @brief Locks the access to the given file.
 /// @param file The file to lock.
@@ -198,7 +190,6 @@ int vfs_destroy_task(struct task_struct *task);
 /// @brief Find the smallest available fd.
 /// @return -errno on fail, fd on success.
 int get_unused_fd(void);
-
 
 /// @brief Return new smallest available file desriptor.
 /// @param fd the descriptor of the file we want to duplicate.

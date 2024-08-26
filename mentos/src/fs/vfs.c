@@ -4,10 +4,10 @@
 /// See LICENSE.md for details.
 
 // Setup the logging for this file (do this before any other include).
-#include "sys/kernel_levels.h"           // Include kernel log levels.
-#define __DEBUG_HEADER__ "[VFS   ]"      ///< Change header.
-#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
-#include "io/debug.h"                    // Include debugging functions.
+#include "sys/kernel_levels.h"          // Include kernel log levels.
+#define __DEBUG_HEADER__ "[VFS   ]"     ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_DEBUG ///< Set log level.
+#include "io/debug.h"                   // Include debugging functions.
 
 #include "fcntl.h"
 #include "sys/stat.h"
@@ -62,11 +62,11 @@ void vfs_init(void)
 
 int vfs_register_filesystem(file_system_type *fs)
 {
-    if (hashmap_set(vfs_filesystems, (void *)fs->name, (void *)fs) != NULL) {
+    if (hashmap_set(vfs_filesystems, fs->name, fs) != NULL) {
         pr_err("Filesystem already registered.\n");
         return 0;
     }
-    pr_debug("vfs_register_filesystem(`%s`) : %p\n", fs->name, fs);
+    pr_debug("vfs_register_filesystem(name: %s)\n", fs->name);
     return 1;
 }
 
@@ -76,35 +76,65 @@ int vfs_unregister_filesystem(file_system_type *fs)
         pr_err("Filesystem not present to unregister.\n");
         return 0;
     }
+    pr_debug("vfs_unregister_filesystem(name: %s)\n", fs->name);
     return 1;
 }
 
-super_block_t *vfs_get_superblock(const char *absolute_path)
+int vfs_register_superblock(const char *name, const char *path, file_system_type *type, vfs_file_t *root)
 {
-    size_t last_sb_len     = 0;
-    super_block_t *last_sb = NULL, *superblock = NULL;
+    pr_debug("vfs_register_superblock(name: %s, path: %s, type: %s)\n", name, path, type->name);
+    // Lock the vfs spinlock.
+    spinlock_lock(&vfs_spinlock);
+    // Create the superblock.
+    super_block_t *sb = kmem_cache_alloc(vfs_superblock_cache, GFP_KERNEL);
+    // Check if the superblock was correctly allocated.
+    assert(sb && "Cannot allocate memory for the superblock.\n");
+    // Copy the name.
+    strcpy(sb->name, name);
+    // Copy the path.
+    strcpy(sb->path, path);
+    // Set the pointer.
+    sb->root = root;
+    // Set the type.
+    sb->type = type;
+    // Add the superblock to the list.
+    list_head_insert_after(&sb->mounts, &vfs_super_blocks);
+
+    pr_debug("Superblocks:\n");
+    list_for_each_decl(it, &vfs_super_blocks)
+    {
+        super_block_t *_sb = list_entry(it, super_block_t, mounts);
+        pr_debug("    Name: %-12s, Path: %-12s, Type: %-12s\n", _sb->name, _sb->path, _sb->type->name);
+    }
+    pr_debug("\n");
+
+    // Unlock the vfs spinlock.
+    spinlock_unlock(&vfs_spinlock);
+    return 1;
+}
+
+int vfs_unregister_superblock(super_block_t *sb)
+{
+    pr_debug("vfs_unregister_superblock(name: %s, path: %s, type: %s)\n", sb->name, sb->path, sb->type->name);
+    list_head_remove(&sb->mounts);
+    kmem_cache_free(sb);
+    return 1;
+}
+
+super_block_t *vfs_get_superblock(const char *path)
+{
+    size_t last_sb_len     = 0, len;
+    super_block_t *last_sb = NULL, *sb = NULL;
     list_head *it;
     list_for_each (it, &vfs_super_blocks) {
-        superblock = list_entry(it, super_block_t, mounts);
-#if 0
-        int len    = strlen(superblock->name);
-        pr_debug("`%s` vs `%s`\n", absolute_path, superblock->name);
-        if (!strncmp(absolute_path, superblock->name, len)) {
-            size_t sbl = strlen(superblock->name);
-            if (sbl > last_sb_len) {
-                last_sb_len = sbl;
-                last_sb     = superblock;
-            }
-        }
-#else
-        size_t len = strlen(superblock->path);
-        if (!strncmp(absolute_path, superblock->path, len)) {
+        sb  = list_entry(it, super_block_t, mounts);
+        len = strlen(sb->path);
+        if (!strncmp(path, sb->path, len)) {
             if (len > last_sb_len) {
                 last_sb_len = len;
-                last_sb     = superblock;
+                last_sb     = sb;
             }
         }
-#endif
     }
     return last_sb;
 }
@@ -448,39 +478,7 @@ int vfs_fstat(vfs_file_t *file, stat_t *buf)
     return file->fs_operations->stat_f(file, buf);
 }
 
-int vfs_mount(const char *path, vfs_file_t *new_fs_root)
-{
-    if (!path || path[0] != '/') {
-        pr_err("vfs_mount(%s): Path must be absolute for superblock.\n", path);
-        return 0;
-    }
-    if (new_fs_root == NULL) {
-        pr_err("vfs_mount(%s): You must provide a valid file!\n", path);
-        return 0;
-    }
-    // Lock the vfs spinlock.
-    spinlock_lock(&vfs_spinlock);
-    pr_debug("Mounting file with path `%s` as root '%s'...\n", new_fs_root->name, path);
-    // Create the superblock.
-    super_block_t *sb = kmem_cache_alloc(vfs_superblock_cache, GFP_KERNEL);
-    if (!sb) {
-        pr_debug("Cannot allocate memory for the superblock.\n");
-    } else {
-        // Copy the name.
-        strcpy(sb->name, new_fs_root->name);
-        // Copy the path.
-        strcpy(sb->path, path);
-        // Set the pointer.
-        sb->root = new_fs_root;
-        // Add to the list.
-        list_head_insert_after(&sb->mounts, &vfs_super_blocks);
-    }
-    spinlock_unlock(&vfs_spinlock);
-    pr_debug("Correctly mounted '%s' on '%s'...\n", new_fs_root->name, path);
-    return 1;
-}
-
-int do_mount(const char *type, const char *path, const char *args)
+int vfs_mount(const char *type, const char *path, const char *args)
 {
     file_system_type *fst = (file_system_type *)hashmap_get(vfs_filesystems, type);
     if (fst == NULL) {
@@ -491,23 +489,18 @@ int do_mount(const char *type, const char *path, const char *args)
         pr_err("No mount callback set: %s\n", type);
         return -ENODEV;
     }
+    pr_debug("vfs_mount(type: %s, path: %s, args: %s)\n", fst->name, path, args);
     vfs_file_t *file = fst->mount(path, args);
     if (file == NULL) {
         pr_err("Mount callback return a null pointer: %s\n", type);
         return -ENODEV;
     }
-    if (!vfs_mount(path, file)) {
-        pr_err("do_mount(`%s`, `%s`, `%s`) : failed to mount.\n", type, path, args);
+    // Register the proc superblock.
+    if (!vfs_register_superblock(file->name, path, fst, file)) {
+        pr_alert("Failed to register %s superblock!\n", file->name);
         return -ENODEV;
     }
-    super_block_t *sb = vfs_get_superblock(path);
-    if (sb == NULL) {
-        pr_err("do_mount(`%s`, `%s`, `%s`) : Cannot find the superblock.\n", type, path, args);
-        return -ENODEV;
-    }
-    // Set the filesystem type.
-    sb->type = fst;
-    pr_debug("Mounted %s[%s] to `%s`: file = %p\n", type, args, path, file);
+    pr_debug("vfs_mount(type: %s, path: %s, args: %s), file: %s\n", fst->name, path, args, file->name);
     return 0;
 }
 

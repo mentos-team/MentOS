@@ -1172,6 +1172,25 @@ static int ata_stat(const char *path, stat_t *stat)
 }
 
 // == VFS ENTRY GENERATION ====================================================
+
+/// @brief The mount call-back, which prepares everything and calls the actual
+/// ATA mount function.
+/// @param path the path where the filesystem should be mounted.
+/// @param device the device we mount.
+/// @return the VFS file of the filesystem.
+static vfs_file_t *ata_mount_callback(const char *path, const char *device)
+{
+    pr_err("mount_callback(%s, %s): ATA has no mount callback!\n", path, device);
+    return NULL;
+}
+
+/// Filesystem information.
+static file_system_type ata_file_system_type = {
+    .name     = "ata",
+    .fs_flags = 0,
+    .mount    = ata_mount_callback
+};
+
 /// Filesystem general operations.
 static vfs_sys_operations_t ata_sys_operations = {
     .mkdir_f   = NULL,
@@ -1208,9 +1227,9 @@ static vfs_file_t *ata_device_create(ata_device_t *dev)
     }
     // Set the device name.
     memcpy(file->name, dev->name, NAME_MAX);
-    file->uid = 0;
-    file->gid = 0;
-    file->mask = 0x2000 | 0600;
+    file->uid   = 0;
+    file->gid   = 0;
+    file->mask  = 0x2000 | 0600;
     file->atime = sys_time(NULL);
     file->mtime = sys_time(NULL);
     file->ctime = sys_time(NULL);
@@ -1259,7 +1278,7 @@ static ata_device_type_t ata_device_detect(ata_device_t *dev)
         // Update the filesystem entry with the length of the device.
         dev->fs_root->length = ata_max_offset(dev);
         // Try to mount the drive.
-        if (!vfs_mount(dev->path, dev->fs_root)) {
+        if (!vfs_register_superblock(dev->fs_root->name, dev->path, &ata_file_system_type, dev->fs_root)) {
             pr_alert("Failed to mount ata device!\n");
             // Free the memory.
             kmem_cache_free(dev->fs_root);
@@ -1273,12 +1292,6 @@ static ata_device_type_t ata_device_detect(ata_device_t *dev)
     } else if (type == ata_dev_type_no_device) {
         pr_debug("[%s] Found no device...\n", ata_get_device_settings_str(dev));
     }
-    // if (type == ata_dev_type_unknown) {
-    //     pr_debug("[%s] Found unsupported device...\n", ata_get_device_settings_str(dev));
-    // }
-    // if ((type != ata_dev_type_no_device) && (type != ata_dev_type_unknown)) {
-    //     pr_warning("    Found %s device connected to %s.\n", ata_get_device_type_str(type), ata_get_device_settings_str(dev));
-    // }
     return type;
 }
 
@@ -1320,10 +1333,14 @@ static void pci_find_ata(uint32_t device, uint16_t vendorid, uint16_t deviceid, 
 }
 
 // == INITIALIZE/FINALIZE ATA =================================================
+
 int ata_initialize(void)
 {
     // Search for ATA devices.
     pci_scan(&pci_find_ata, -1, &ata_pci);
+
+    // Register the filesystem.
+    vfs_register_filesystem(&ata_file_system_type);
 
     // Install the IRQ handlers.
     irq_install_handler(IRQ_FIRST_HD, ata_irq_handler_master, "IDE Master");
