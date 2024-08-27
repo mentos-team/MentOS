@@ -134,7 +134,7 @@ static inline void print_dir_entry(dirent_t *dirent, const char *path, unsigned 
 static void print_ls(const char *path, unsigned int flags)
 {
     // Read the link, if the path points to one.
-    char real_path[PATH_MAX], link_path[PATH_MAX];
+    char real_path[PATH_MAX] = { 0 }, link_path[PATH_MAX] = { 0 };
     ssize_t link_len = readlink(path, link_path, sizeof(link_path));
     if (link_len > 0) {
         link_path[link_len] = '\0';
