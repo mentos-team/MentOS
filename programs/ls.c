@@ -27,25 +27,25 @@
 static inline void print_dir_entry_name(const char *name, mode_t st_mode)
 {
     if (S_ISSOCK(st_mode)) {
-        printf(FG_YELLOW "%s" FG_RESET, name);
+        printf(FG_YELLOW_BRIGHT "%s" FG_RESET, name);
     }
     if (S_ISLNK(st_mode)) {
-        printf(FG_CYAN "%s" FG_RESET, name);
+        printf(FG_CYAN_BRIGHT "%s" FG_RESET, name);
     }
     if (S_ISREG(st_mode)) {
-        printf(FG_WHITE "%s" FG_RESET, name);
+        printf(FG_WHITE_BRIGHT "%s" FG_RESET, name);
     }
     if (S_ISBLK(st_mode)) {
-        printf(FG_GREEN "%s" FG_RESET, name);
+        printf(FG_GREEN_BRIGHT "%s" FG_RESET, name);
     }
     if (S_ISDIR(st_mode)) {
-        printf(FG_BLUE "%s" FG_RESET, name);
+        printf(FG_BLUE_BRIGHT "%s" FG_RESET, name);
     }
     if (S_ISCHR(st_mode)) {
-        printf(FG_YELLOW "%s" FG_RESET, name);
+        printf(FG_YELLOW_BRIGHT "%s" FG_RESET, name);
     }
     if (S_ISFIFO(st_mode)) {
-        printf(FG_YELLOW "%s" FG_RESET, name);
+        printf(FG_YELLOW_BRIGHT "%s" FG_RESET, name);
     }
 }
 
@@ -63,8 +63,9 @@ static inline void print_dir_entry(dirent_t *dirent, const char *path, unsigned 
 
     // Prepare the relative path.
     strcpy(relative_path, path);
-    if (strcmp(path, "/") != 0)
+    if (strcmp(path, "/") != 0) {
         strcat(relative_path, "/");
+    }
     strcat(relative_path, dirent->d_name);
 
     // Stat the file.
