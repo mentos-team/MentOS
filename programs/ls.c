@@ -63,13 +63,14 @@ static inline void print_dir_entry(dirent_t *dirent, const char *path, unsigned 
 
     // Prepare the relative path.
     strcpy(relative_path, path);
-    if (strcmp(path, "/") != 0) {
+    if (path[strnlen(path, PATH_MAX) - 1] != '/') {
         strcat(relative_path, "/");
     }
     strcat(relative_path, dirent->d_name);
 
     // Stat the file.
-    if (stat(relative_path, &dstat) == -1) {
+    if (stat(relative_path, &dstat) < 0) {
+        printf("ls: failed to stat `%s`\n", relative_path);
         return;
     }
 
@@ -109,8 +110,8 @@ static inline void print_dir_entry(dirent_t *dirent, const char *path, unsigned 
 
         if (S_ISLNK(dstat.st_mode)) {
             char link_buffer[PATH_MAX];
-            ssize_t len;
-            if ((len = readlink(relative_path, link_buffer, sizeof(link_buffer))) != -1) {
+            ssize_t len = readlink(relative_path, link_buffer, sizeof(link_buffer));
+            if (len > 0) {
                 link_buffer[len] = '\0';
                 printf(" -> %s", link_buffer);
             }

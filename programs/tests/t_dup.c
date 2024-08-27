@@ -13,7 +13,7 @@
 
 int main(int argc, char *argv[])
 {
-    char *file        = "t_dup_file";
+    const char *file        = "t_dup_file";
     int fd1, fd2;
     int flags = O_WRONLY | O_CREAT | O_TRUNC;
     mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP;

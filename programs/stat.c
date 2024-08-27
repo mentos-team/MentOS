@@ -49,8 +49,8 @@ int main(int argc, char **argv)
     printf("File: %s", argv[1]);
     if (S_ISLNK(dstat.st_mode)) {
         char link_buffer[PATH_MAX];
-        ssize_t len;
-        if ((len = readlink(argv[1], link_buffer, sizeof(link_buffer))) != -1) {
+        ssize_t len = readlink(argv[1], link_buffer, sizeof(link_buffer));
+        if (len < 0) {
             link_buffer[len] = '\0';
             printf(" -> %s", link_buffer);
         }

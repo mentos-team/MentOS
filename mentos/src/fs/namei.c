@@ -15,21 +15,15 @@
 #include "string.h"
 
 /// Appends the path with a "/" as separator.
-#define APPEND_PATH_SEP_OR_FAIL(b, remaining) \
-    {                                         \
-        strncat(b, "/", remaining);           \
-        remaining--;                          \
-        if (remaining < 0)                    \
-            return -ENAMETOOLONG;             \
+#define APPEND_PATH_SEPARATOR(buffer, buflen)                                             \
+    {                                                                                     \
+        if (buffer[strnlen(buffer, buflen) - 1] != '/') { strncat(buffer, "/", buflen); } \
     }
 
-/// Appends the path with a "/" as separator.
-#define APPEND_PATH_OR_FAIL(b, path, remaining) \
-    {                                           \
-        strncat(b, path, remaining);            \
-        remaining -= strlen(path);              \
-        if (remaining < 0)                      \
-            return -ENAMETOOLONG;               \
+/// Appends the path.
+#define APPEND_PATH(buffer, token)             \
+    {                                          \
+        strncat(buffer, token, strlen(token)); \
     }
 
 int sys_unlink(const char *path)
@@ -86,16 +80,8 @@ int sys_readlink(const char *path, char *buffer, size_t bufsize)
         pr_err("sys_readlink(%s): Cannot resolve path!\n", path);
         return ret;
     }
-    // Try to open the file.
-    vfs_file_t *file = vfs_open_abspath(absolute_path, O_RDONLY, 0);
-    if (file == NULL) {
-        pr_err("sys_readlink(%s): Cannot open file!\n", path);
-        return -errno;
-    }
     // Read the link.
-    ssize_t nbytes = vfs_readlink(file, buffer, bufsize);
-    // Close the file.
-    vfs_close(file);
+    ssize_t nbytes = vfs_readlink(path, buffer, bufsize);
     // Return the number of bytes we read.
     return nbytes;
 }
@@ -110,160 +96,102 @@ char *realpath(const char *path, char *buffer, size_t buflen)
     return buffer;
 }
 
-int resolve_path(const char *path, char *buffer, size_t buflen, int flags)
+static inline int __get_link_content(const char *path, char *link, size_t length)
 {
-    assert(path && "Provided null path.");
-    assert(buffer && "Provided null buffer.");
+    ssize_t link_length = vfs_readlink(path, link, length);
+    if (link_length < 0) {
+        return -errno;
+    }
+    // Null-terminate link.
+    link[link_length] = 0;
+    return link_length;
+}
 
-    // Buffer used to build up the absolute path
-    char abspath[buflen];
-    // Null-terminate our work buffer
-    memset(abspath, 0, buflen);
-    int remaining = buflen - 1;
-
-    // Track the resolved symlinks to ensure we do not end up in a loop
-    int symlinks = 0;
+int __resolve_path(const char *path, char *abspath, size_t buflen, int flags, int link_depth)
+{
+    char token[NAME_MAX]    = { 0 };
+    char buffer[PATH_MAX]   = { 0 };
+    char linkpath[PATH_MAX] = { 0 };
+    size_t offset = 0, linklen = 0, tokenlen = 0;
+    int contains_links = 0;
+    stat_t statbuf;
 
     if (path[0] != '/') {
         // Get the working directory of the current task.
-        sys_getcwd(abspath, remaining);
-        // Check the absolute path.
-        assert((strlen(abspath) > 0) && "Current working directory is not set.");
-        // Check that the current working directory is an absolute path.
-        assert((abspath[0] == '/') && "Current working directory is not an absolute path.");
-        // Count the remaining space in the absolute path.
-        remaining -= strlen(abspath);
-        APPEND_PATH_SEP_OR_FAIL(abspath, remaining);
+        sys_getcwd(buffer, buflen);
+        pr_notice("|%-32s|%-32s| (INIT)\n", path, buffer);
     }
 
-    // Copy the path into the working buffer;
-    APPEND_PATH_OR_FAIL(abspath, path, remaining);
-
-    int absidx, pathidx;
-resolve_abspath:
-    absidx = pathidx = 0;
-    while (abspath[absidx]) {
-        // Skip multiple consecutive / characters
-        if (!strncmp("//", abspath + absidx, 2)) {
-            absidx++;
-        }
-        // Go to previous directory if /../ is found
-        else if (!strncmp("/../", abspath + absidx, 4)) {
-            // Go to a valid path character (pathidx points to the next one)
-            if (pathidx) {
-                pathidx--;
-            }
-            while (pathidx && buffer[pathidx] != '/') {
-                pathidx--;
-            }
-            absidx += 3;
-        } else if (!strncmp("/./", abspath + absidx, 3)) {
-            absidx += 2;
-        } else {
-            // Resolve a possible symlink
-            if (flags & FOLLOW_LINKS) {
-                // Write the next path separator
-                buffer[pathidx++] = abspath[absidx++];
-
-                // Find the next separator after the current path component
-                char *sep_after_cur = strchr(abspath + absidx, '/');
-                if (sep_after_cur) {
-                    // Null-terminate work buffer to properly open the current component
-                    *sep_after_cur = 0;
-                }
-
-                stat_t statbuf;
-                int ret = vfs_stat(abspath, &statbuf);
-                if (ret < 0) {
-                    // This is the last path component and we want to create it anyway.
-                    if (ret == -ENOENT && !sep_after_cur && (flags & CREAT_LAST_COMPONENT)) {
-                        // Just copy the component into the buffer
-                        goto copy_path_component;
-                    }
-                    return ret;
-                }
-
-                // The path component is no symbolic link
-                if (!S_ISLNK(statbuf.st_mode)) {
-                    // Restore replaced path separator
-                    *sep_after_cur = '/';
-                    // Just copy the component into the buffer
-                    goto copy_path_component;
-                }
-
-                symlinks++;
-                if (symlinks > SYMLOOP_MAX) { return -ELOOP; }
-
-                char link[PATH_MAX];
-                vfs_file_t *link_file = vfs_open_abspath(abspath, O_RDONLY, 0);
-                if (link_file == NULL) { return -errno; }
-                ssize_t nbytes = vfs_readlink(link_file, link, sizeof(link));
-                vfs_close(link_file);
-                if (nbytes == -1) { return -errno; }
-
-                // Null-terminate link
-                link[nbytes] = 0;
-
-                // Link is an absolute path, replace everything and continue
-                if (link[0] == '/') {
-                    // Save the rest of the current abspath into the buffer
-                    if (sep_after_cur) {
-                        strncpy(buffer, sep_after_cur + 1, buflen);
-                    }
-
-                    // Reset abspath with link
-                    remaining = buflen - 1;
-                    strncpy(abspath, link, remaining);
-
-                    remaining -= strlen(link);
-                    if (remaining < 0) { return -ENAMETOOLONG; }
-
-                    // This is not the last component, therefore it must be a directory
-                    if (sep_after_cur) {
-                        APPEND_PATH_SEP_OR_FAIL(abspath, remaining);
-                        // Copy the saved content from buffer back to the abspath
-                        APPEND_PATH_OR_FAIL(abspath, buffer, remaining);
-                    }
-                    goto resolve_abspath;
-                    // Link is relative, add it and continue
+    while (tokenize(path, "/", &offset, token, NAME_MAX)) {
+        tokenlen = strlen(token);
+        if ((strcmp(token, "..") == 0) && (tokenlen == 2)) {
+            // Handle parent directory token "..".
+            if (strlen(buffer) > 0) {
+                // Find the last occurrence of '/'.
+                char *last_slash = strrchr(buffer, '/');
+                if (!last_slash || (last_slash == buffer)) {
+                    // This case handles if buffer is already empty (e.g., ".."
+                    // from the root).
+                    buffer[0] = '/';
+                    buffer[1] = 0;
                 } else {
-                    // Recalculate the remaining space in the working buffer
-                    remaining = buflen - absidx - 1;
-                    strncpy(abspath + absidx, link, remaining);
-
-                    remaining -= strlen(link);
-                    if (remaining < 0) { return -ENAMETOOLONG; }
-
-                    if (sep_after_cur) {
-                        // Restore replaced path separator
-                        *sep_after_cur = '/';
-                    }
-
-                    // Continue with to previous path separator
-                    absidx--;
-                    pathidx--;
+                    // Truncate at the last slash.
+                    *last_slash = '\0';
                 }
-
             }
-            // Copy the path component
-            else {
-            copy_path_component:
-                do {
-                    buffer[pathidx++] = abspath[absidx++];
-                } while (abspath[absidx] && abspath[absidx] != '/');
+        } else if ((strcmp(token, ".") == 0) && (tokenlen == 1)) {
+            // Nothing to do.
+        } else {
+            if (strlen(buffer) + strlen(token) + 1 < buflen) {
+                APPEND_PATH_SEPARATOR(buffer, buflen);
+                APPEND_PATH(buffer, token);
+            } else {
+                pr_err("Buffer overflow while resolving path.\n");
+                return -ENAMETOOLONG;
+            }
+            if (flags & FOLLOW_LINKS) {
+                ssize_t link_length = __get_link_content(buffer, linkpath, PATH_MAX);
+                if (link_length > 0) {
+                    if (link_depth >= SYMLOOP_MAX) {
+                        pr_err("Reached symbolic link maximum depth `%d`.\n", link_depth);
+                        return -ELOOP;
+                    }
+                    linklen = strlen(linkpath);
+
+                    if (linkpath[0] == '/') {
+                        memcpy(buffer, linkpath, linklen);
+                    } else {
+                        // Find the last occurrence of '/'.
+                        char *last_slash = strrchr(buffer, '/');
+                        if (last_slash) {
+                            memcpy(++last_slash, linkpath, linklen);
+                            pr_notice("|%-32s|%-32s|%-32s| (LINK)\n", path, buffer, linkpath);
+                        }
+                    }
+                    contains_links = 1;
+                } else if (link_length < 0) {
+                    // This is the last path component and we want to create it anyway.
+                    if ((link_length == -ENOENT) && !strchr(path + offset, '/') && (flags & CREAT_LAST_COMPONENT)) {
+                    } else {
+                        pr_err("Cannot find entry `%s`.\n", buffer);
+                        return link_length;
+                    }
+                }
             }
         }
+        pr_notice("|%-32s|%-32s|\n", path, buffer);
     }
-
-    // Null-terminate buffer
-    buffer[pathidx] = 0;
-
-    if (flags & REMOVE_TRAILING_SLASH) {
-        // Ensure the path is not just "/"
-        if (pathidx > 1 && buffer[pathidx] == '/') {
-            buffer[pathidx - 1] = '\0';
-        }
+    if (contains_links) {
+        pr_notice("|%-32s|%-32s| (RECU)\n", path, buffer);
+        return __resolve_path(buffer, abspath, buflen, flags, ++link_depth);
+    } else {
+        strncpy(abspath, buffer, buflen);
+        pr_notice("|%-32s|%-32s| (END)\n", path, buffer);
     }
-
     return 0;
+}
+
+int resolve_path(const char *path, char *abspath, size_t buflen, int flags)
+{
+    return __resolve_path(path, abspath, buflen, flags, 0);
 }
