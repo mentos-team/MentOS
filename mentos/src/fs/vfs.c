@@ -187,7 +187,7 @@ vfs_file_t *vfs_open(const char *path, int flags, mode_t mode)
     // Allocate a variable for the path.
     char absolute_path[PATH_MAX];
     // If the first character is not the '/' then get the absolute path.
-    int ret = resolve_path(path, absolute_path, sizeof(absolute_path), resolve_flags);
+    int ret = resolve_path(path, absolute_path, PATH_MAX, resolve_flags);
     if (ret < 0) {
         pr_err("vfs_open(%s): Cannot resolve path!\n", path);
         errno = -ret;
@@ -262,9 +262,11 @@ int vfs_unlink(const char *path)
     // Allocate a variable for the path.
     char absolute_path[PATH_MAX];
     // If the first character is not the '/' then get the absolute path.
-    if (resolve_path(path, absolute_path, sizeof(absolute_path), REMOVE_TRAILING_SLASH | FOLLOW_LINKS) < 0) {
+    int resolve_flags = REMOVE_TRAILING_SLASH | FOLLOW_LINKS;
+    int ret           = resolve_path(path, absolute_path, PATH_MAX, resolve_flags);
+    if (ret < 0) {
         pr_err("vfs_unlink(%s): Cannot get the absolute path.\n", path);
-        return -ENODEV;
+        return ret;
     }
     super_block_t *sb = vfs_get_superblock(absolute_path);
     if (sb == NULL) {
@@ -290,10 +292,11 @@ int vfs_mkdir(const char *path, mode_t mode)
     // Allocate a variable for the path.
     char absolute_path[PATH_MAX];
     // If the first character is not the '/' then get the absolute path.
-    if (resolve_path(path, absolute_path, sizeof(absolute_path),
-                     REMOVE_TRAILING_SLASH | FOLLOW_LINKS | CREAT_LAST_COMPONENT) < 0) {
+    int resolve_flags = REMOVE_TRAILING_SLASH | FOLLOW_LINKS | CREAT_LAST_COMPONENT;
+    int ret           = resolve_path(path, absolute_path, PATH_MAX, resolve_flags);
+    if (ret < 0) {
         pr_err("vfs_mkdir(%s): Cannot get the absolute path.\n", path);
-        return -ENODEV;
+        return ret;
     }
     pr_debug("vfs_mkdir(path: %s, mode: %d) -> absolute_path: %s\n", path, mode, absolute_path);
     super_block_t *sb = vfs_get_superblock(absolute_path);
@@ -319,9 +322,11 @@ int vfs_rmdir(const char *path)
     // Allocate a variable for the path.
     char absolute_path[PATH_MAX];
     // If the first character is not the '/' then get the absolute path.
-    if (resolve_path(path, absolute_path, sizeof(absolute_path), REMOVE_TRAILING_SLASH | FOLLOW_LINKS) < 0) {
+    int resolve_flags = REMOVE_TRAILING_SLASH | FOLLOW_LINKS;
+    int ret           = resolve_path(path, absolute_path, PATH_MAX, resolve_flags);
+    if (ret < 0) {
         pr_err("vfs_rmdir(%s): Cannot get the absolute path.\n", path);
-        return -ENODEV;
+        return ret;
     }
     super_block_t *sb = vfs_get_superblock(absolute_path);
     if (sb == NULL) {
@@ -347,9 +352,11 @@ vfs_file_t *vfs_creat(const char *path, mode_t mode)
     // Allocate a variable for the path.
     char absolute_path[PATH_MAX];
     // If the first character is not the '/' then get the absolute path.
-    if (resolve_path(path, absolute_path, sizeof(absolute_path), REMOVE_TRAILING_SLASH | FOLLOW_LINKS) < 0) {
+    int resolve_flags = REMOVE_TRAILING_SLASH | FOLLOW_LINKS;
+    int ret           = resolve_path(path, absolute_path, PATH_MAX, resolve_flags);
+    if (ret < 0) {
         pr_err("vfs_creat(%s): Cannot get the absolute path.\n", path);
-        errno = ENODEV;
+        errno = ret;
         return NULL;
     }
     super_block_t *sb = vfs_get_superblock(absolute_path);
@@ -407,9 +414,11 @@ int vfs_symlink(const char *linkname, const char *path)
     // Allocate a variable for the path.
     char absolute_path[PATH_MAX];
     // If the first character is not the '/' then get the absolute path.
-    if (resolve_path(path, absolute_path, sizeof(absolute_path), REMOVE_TRAILING_SLASH | FOLLOW_LINKS) < 0) {
+    int resolve_flags = REMOVE_TRAILING_SLASH | FOLLOW_LINKS;
+    int ret           = resolve_path(path, absolute_path, PATH_MAX, resolve_flags);
+    if (ret < 0) {
         pr_err("vfs_symlink(%s, %s): Cannot get the absolute path.", linkname, path);
-        return -ENODEV;
+        return ret;
     }
     super_block_t *sb = vfs_get_superblock(absolute_path);
     if (sb == NULL) {
@@ -436,10 +445,11 @@ int vfs_stat(const char *path, stat_t *buf)
     // Allocate a variable for the path.
     char absolute_path[PATH_MAX];
     // If the first character is not the '/' then get the absolute path.
-    int ret = resolve_path(path, absolute_path, PATH_MAX, REMOVE_TRAILING_SLASH | FOLLOW_LINKS);
+    int resolve_flags = REMOVE_TRAILING_SLASH | FOLLOW_LINKS;
+    int ret           = resolve_path(path, absolute_path, PATH_MAX, resolve_flags);
     if (ret < 0) {
         pr_err("vfs_stat(%s): Cannot get the absolute path.", path);
-        return -ret;
+        return ret;
     }
     super_block_t *sb = vfs_get_superblock(absolute_path);
     if (sb == NULL) {
@@ -503,10 +513,12 @@ int vfs_mount(const char *type, const char *path, const char *args)
     // Allocate a variable for the path.
     char absolute_path[PATH_MAX];
     // If the first character is not the '/' then get the absolute path.
-    if (resolve_path(args, absolute_path, sizeof(absolute_path), REMOVE_TRAILING_SLASH) < 0) {
+    int resolve_flags = 0;
+    int ret           = resolve_path(args, absolute_path, PATH_MAX, resolve_flags);
+    if (ret < 0) {
         pr_err("vfs_mount(type: %s, path: %s, args: %s): Cannot get the absolute path\n",
                fst->name, path, args);
-        return -ENODEV;
+        return ret;
     }
     pr_debug("vfs_mount(type: %s, path: %s, args: %s (%s))\n", fst->name, path, args, absolute_path);
     vfs_file_t *file = fst->mount(path, absolute_path);

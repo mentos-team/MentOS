@@ -1589,7 +1589,7 @@ static ssize_t ext2_read_inode_block(ext2_filesystem_t *fs, ext2_inode_t *inode,
         return -1;
     }
     // Log the address to the inode block.
-    pr_debug("Read inode block  (block_index:%4u, real_index:%4u)\n", block_index, real_index);
+    // pr_debug("Read inode block  (block_index:%4u, real_index:%4u)\n", block_index, real_index);
     // Read the block.
     return ext2_read_block(fs, real_index, buffer);
 }
@@ -2730,31 +2730,27 @@ close_parent_return_null:
 /// @return The file descriptor of the opened file, otherwise returns -1.
 static vfs_file_t *ext2_open(const char *path, int flags, mode_t mode)
 {
-    pr_debug("open(path: \"%s\", flags: %d, mode: %d)\n", path, flags, mode);
-    // Get the absolute path.
-    char absolute_path[PATH_MAX];
-    // If the first character is not the '/' then get the absolute path.
-    if (!realpath(path, absolute_path, sizeof(absolute_path))) {
-        pr_err("Cannot get the absolute path for path `%s`.\n", path);
-        return NULL;
-    }
+    pr_debug("ext2_open(path: '%s', flags: %d, mode: %d)\n", path, flags, mode);
     // Get the EXT2 filesystem.
-    ext2_filesystem_t *fs = get_ext2_filesystem(absolute_path);
+    ext2_filesystem_t *fs = get_ext2_filesystem(path);
     if (fs == NULL) {
-        pr_err("Failed to get the EXT2 filesystem for absolute path `%s`.\n", absolute_path);
+        pr_err("ext2_open(path: '%s', flags: %d, mode: %d): Failed to get the EXT2 filesystem.\n",
+               path, flags, mode);
         return NULL;
     }
     // Prepare the structure for the search.
     ext2_direntry_search_t search;
     memset(&search, 0, sizeof(ext2_direntry_search_t));
     // First check, if a file with the given name already exists.
-    if (!ext2_resolve_path(fs->root, absolute_path, &search)) {
+    if (!ext2_resolve_path(fs->root, path, &search)) {
         if (bitmask_check(flags, O_CREAT) && bitmask_check(flags, O_EXCL)) {
-            pr_err("A file or directory already exists at `%s` (O_CREAT | O_EXCL).\n", absolute_path);
+            pr_err("ext2_open(path: '%s', flags: %d, mode: %d): A file or directory already exists (O_CREAT | O_EXCL).\n",
+                   path, flags, mode);
             return NULL;
         }
         if (bitmask_check(flags, O_DIRECTORY) && (search.direntry.file_type != ext2_file_type_directory)) {
-            pr_err("Directory entry `%s` is not a directory.\n", search.direntry.name);
+            pr_err("ext2_open(path: '%s', flags: %d, mode: %d): Directory entry `%s` is not a directory.\n",
+                   path, flags, mode, search.direntry.name);
             errno = ENOTDIR;
             return NULL;
         }
@@ -2763,7 +2759,8 @@ static vfs_file_t *ext2_open(const char *path, int flags, mode_t mode)
         if (bitmask_check(flags, O_CREAT)) {
             return ext2_creat(path, mode);
         }
-        pr_err("The file does not exist `%s`.\n", absolute_path);
+        pr_err("ext2_open(path: '%s', flags: %d, mode: %d): The file does not exist.\n",
+               path, flags, mode);
         errno = ENOENT;
         return NULL;
     }
@@ -2772,21 +2769,25 @@ static vfs_file_t *ext2_open(const char *path, int flags, mode_t mode)
     memset(&inode, 0, sizeof(ext2_inode_t));
     // Get the inode associated with the directory entry.
     if (ext2_read_inode(fs, &inode, search.direntry.inode) == -1) {
-        pr_err("Failed to read the inode of `%s`.\n", search.direntry.name);
+        pr_err("ext2_open(path: '%s', flags: %d, mode: %d): Failed to read the inode.\n",
+               path, flags, mode);
         return NULL;
     }
 
     if (!vfs_valid_open_permissions(flags, inode.mode, inode.uid, inode.gid)) {
-        pr_err("Task does not have access permission.\n");
+        pr_err("ext2_open(path: '%s', flags: %d, mode: %d): Task does not have access permission.\n",
+               path, flags, mode);
         errno = EACCES;
         return NULL;
     }
 
     // Check if the file is a regular file, and the user wants to write and truncate.
-    if (bitmask_exact(inode.mode, S_IFREG) && (bitmask_exact(flags, O_RDWR | O_TRUNC) || bitmask_exact(flags, O_RDONLY | O_TRUNC))) {
+    if (bitmask_exact(inode.mode, S_IFREG) &&
+        (bitmask_exact(flags, O_RDWR | O_TRUNC) || bitmask_exact(flags, O_RDONLY | O_TRUNC))) {
         // Clean the content of the newly created file.
         if (ext2_clean_inode_content(fs, &inode, search.direntry.inode) < 0) {
-            pr_err("Failed to clean the content of the newly created inode.\n");
+            pr_err("ext2_open(path: '%s', flags: %d, mode: %d): Failed to clean the content of the newly created inode.\n",
+                   path, flags, mode);
             return NULL;
         }
     }
@@ -2796,11 +2797,13 @@ static vfs_file_t *ext2_open(const char *path, int flags, mode_t mode)
         // Allocate the memory for the file.
         file = kmem_cache_alloc(vfs_file_cache, GFP_KERNEL);
         if (file == NULL) {
-            pr_err("Failed to allocate memory for the EXT2 file.\n");
+            pr_err("ext2_open(path: '%s', flags: %d, mode: %d): Failed to allocate memory for the EXT2 file.\n",
+                   path, flags, mode);
             return NULL;
         }
         if (ext2_init_vfs_file(fs, file, &inode, search.direntry.inode, search.direntry.name, search.direntry.name_len) == -1) {
-            pr_err("Failed to properly set the VFS file.\n");
+            pr_err("ext2_open(path: '%s', flags: %d, mode: %d): Failed to properly set the VFS file.\n",
+                   path, flags, mode);
             return NULL;
         }
         // Add the vfs_file to the list of associated files.
@@ -2815,37 +2818,30 @@ static vfs_file_t *ext2_open(const char *path, int flags, mode_t mode)
 static int ext2_unlink(const char *path)
 {
     pr_debug("unlink(%s)\n", path);
-    // Get the absolute path.
-    char absolute_path[PATH_MAX];
-    // If the first character is not the '/' then get the absolute path.
-    if (!realpath(path, absolute_path, sizeof(absolute_path))) {
-        pr_err("Cannot get the absolute path for path `%s`.\n", path);
-        return -ENOENT;
-    }
     // Get the name of the entry we want to unlink.
-    const char *name = basename(absolute_path);
+    const char *name = basename(path);
     if (name == NULL) {
-        pr_err("Cannot get the basename from the absolute path `%s`.\n", absolute_path);
+        pr_err("unlink(%s): Cannot get the basename.\n", path);
         return -ENOENT;
     }
     // Get the EXT2 filesystem.
-    ext2_filesystem_t *fs = get_ext2_filesystem(absolute_path);
+    ext2_filesystem_t *fs = get_ext2_filesystem(path);
     if (fs == NULL) {
-        pr_err("Failed to get the EXT2 filesystem for absolute path `%s`.\n", absolute_path);
+        pr_err("unlink(%s): Failed to get the EXT2 filesystem.\n", path);
         return -ENOENT;
     }
     // Prepare the structure for the search.
     ext2_direntry_search_t search;
     memset(&search, 0, sizeof(ext2_direntry_search_t));
     // Resolve the path to the directory entry.
-    if (ext2_resolve_path(fs->root, absolute_path, &search)) {
-        pr_err("Failed to resolve path `%s`.\n", absolute_path);
+    if (ext2_resolve_path(fs->root, path, &search)) {
+        pr_err("unlink(%s): Failed to resolve path.\n", path);
         return -ENOENT;
     }
     // Get the inode associated with the parent directory entry.
     ext2_inode_t parent_inode;
     if (ext2_read_inode(fs, &parent_inode, search.parent_inode) == -1) {
-        pr_err("stat(%s): Failed to read the inode of parent of `%s`.\n", path, search.direntry.name);
+        pr_err("unlink(%s): Failed to read the inode of parent (%d).\n", path, search.parent_inode);
         return -ENOENT;
     }
     // Allocate the cache.
@@ -2853,13 +2849,13 @@ static int ext2_unlink(const char *path)
 
     // Read the block where the direntry resides.
     if (ext2_read_inode_block(fs, &parent_inode, search.block_index, cache) == -1) {
-        pr_err("Failed to read the parent inode block `%d`\n", search.block_index);
+        pr_err("unlink(%s): Failed to read the parent inode block (%d).\n", path, search.block_index);
         goto free_cache_return_error;
     }
     // Get a pointer to the direntry.
     ext2_dirent_t *actual_dirent = (ext2_dirent_t *)((uintptr_t)cache + search.block_offset);
     if (actual_dirent == NULL) {
-        pr_err("We found a NULL ext2_dirent_t\n");
+        pr_err("unlink(%s): We found a NULL ext2_dirent_t.\n", path);
         goto free_cache_return_error;
     }
     // Clear the directory entry.
@@ -2869,13 +2865,14 @@ static int ext2_unlink(const char *path)
     actual_dirent->file_type = ext2_file_type_unknown;
     // Write back the parent directory block.
     if (!ext2_write_inode_block(fs, &parent_inode, search.parent_inode, search.block_index, cache)) {
-        pr_err("Failed to write the inode block `%d`\n", search.block_index);
+        pr_err("unlink(%s): Failed to write the inode block (%d).\n", path, search.block_index);
         goto free_cache_return_error;
     }
     // Read the inode of the direntry we want to unlink.
     ext2_inode_t inode;
     if (ext2_read_inode(fs, &inode, search.direntry.inode) == -1) {
-        pr_err("Failed to read the inode of `%s`.\n", search.direntry.name);
+        pr_err("unlink(%s): Failed to read the inode (%d: %s).\n",
+               path, search.direntry.inode, search.direntry.name);
         goto free_cache_return_error;
     }
     if (--inode.links_count == 0) {
@@ -2884,7 +2881,8 @@ static int ext2_unlink(const char *path)
     } else {
         // Update the inode.
         if (ext2_write_inode(fs, &inode, search.direntry.inode) == -1) {
-            pr_err("Failed to update the inode of `%s`.\n", search.direntry.name);
+            pr_err("unlink(%s): Failed to update the inode (%d: %s).\n",
+                   path, search.direntry.inode, search.direntry.name);
             goto free_cache_return_error;
         }
     }
@@ -3203,35 +3201,27 @@ static ssize_t ext2_readlink(const char *path, char *buffer, size_t bufsize)
 static int ext2_mkdir(const char *path, mode_t permission)
 {
     pr_debug("mkdir(%s, %d)\n", path, permission);
-    // Get the absolute path.
-    char absolute_path[PATH_MAX];
-    // If the first character is not the '/' then get the absolute path.
-    if (!realpath(path, absolute_path, sizeof(absolute_path))) {
-        pr_err("mkdir(%s): Cannot get the absolute path.\n", path);
-        return -ENOENT;
-    }
-    pr_debug("mkdir(%s, %d): %s -> %s\n", path, permission, path, absolute_path);
     // Get the parent directory.
     char parent_path[PATH_MAX];
-    if (!dirname(absolute_path, parent_path, sizeof(parent_path))) {
+    if (!dirname(path, parent_path, sizeof(parent_path))) {
         return -ENOENT;
     }
     // Check the parent path.
-    if (strcmp(parent_path, absolute_path) == 0) {
-        pr_err("mkdir(%s): Failed to properly get the parent directory (%s == %s).\n", path, parent_path, absolute_path);
+    if (strcmp(parent_path, path) == 0) {
+        pr_err("mkdir(%s): Failed to properly get the parent directory (%s).\n", path, parent_path);
         return -ENOENT;
     }
     // Get the EXT2 filesystem.
-    ext2_filesystem_t *fs = get_ext2_filesystem(absolute_path);
+    ext2_filesystem_t *fs = get_ext2_filesystem(path);
     if (fs == NULL) {
-        pr_err("mkdir(%s): Failed to get the EXT2 filesystem for absolute path `%s`.\n", path, absolute_path);
+        pr_err("mkdir(%s): Failed to get the EXT2 filesystem.\n", path);
         return -ENOENT;
     }
     // Prepare the structure for the search.
     ext2_direntry_search_t search;
     // Search if the entry already exists.
-    if (!ext2_resolve_path(fs->root, absolute_path, &search)) {
-        pr_err("mkdir(%s): Directory already exists.\n", absolute_path);
+    if (!ext2_resolve_path(fs->root, path, &search)) {
+        pr_err("mkdir(%s): Directory already exists.\n", path);
         return -EEXIST;
     }
     // Set the inode mode.
@@ -3285,31 +3275,24 @@ static int ext2_mkdir(const char *path, mode_t permission)
 static int ext2_rmdir(const char *path)
 {
     pr_debug("rmdir(%s)\n", path);
-    // Get the absolute path.
-    char absolute_path[PATH_MAX];
-    // If the first character is not the '/' then get the absolute path.
-    if (!realpath(path, absolute_path, sizeof(absolute_path))) {
-        pr_err("rmdir(%s): Cannot get the absolute path.\n", path);
-        return -ENOENT;
-    }
     // Get the name of the entry we want to unlink.
-    const char *name = basename(absolute_path);
+    const char *name = basename(path);
     if (name == NULL) {
-        pr_err("rmdir(%s): Cannot get the basename from the absolute path `%s`.\n", path, absolute_path);
+        pr_err("rmdir(%s): Cannot get the basename`.\n", path);
         return -ENOENT;
     }
     // Get the EXT2 filesystem.
-    ext2_filesystem_t *fs = get_ext2_filesystem(absolute_path);
+    ext2_filesystem_t *fs = get_ext2_filesystem(path);
     if (fs == NULL) {
-        pr_err("rmdir(%s): Failed to get the EXT2 filesystem for absolute path `%s`.\n", path, absolute_path);
+        pr_err("rmdir(%s): Failed to get the EXT2 filesystem.\n", path);
         return -ENOENT;
     }
     // Prepare the structure for the search.
     ext2_direntry_search_t search;
     memset(&search, 0, sizeof(ext2_direntry_search_t));
     // Resolve the path to the directory entry.
-    if (ext2_resolve_path(fs->root, absolute_path, &search)) {
-        pr_err("rmdir(%s): Failed to resolve path `%s`.\n", path, absolute_path);
+    if (ext2_resolve_path(fs->root, path, &search)) {
+        pr_err("rmdir(%s): Failed to resolve path.\n", path);
         return -ENOENT;
     }
 
@@ -3335,25 +3318,18 @@ static int ext2_rmdir(const char *path)
 static int ext2_stat(const char *path, stat_t *stat)
 {
     pr_debug("stat(%s, %p)\n", path, stat);
-    // Get the absolute path.
-    char absolute_path[PATH_MAX];
-    // If the first character is not the '/' then get the absolute path.
-    if (!realpath(path, absolute_path, sizeof(absolute_path))) {
-        pr_err("stat(%s): Cannot get the absolute path.\n", path);
-        return -ENOENT;
-    }
     // Get the EXT2 filesystem.
-    ext2_filesystem_t *fs = get_ext2_filesystem(absolute_path);
+    ext2_filesystem_t *fs = get_ext2_filesystem(path);
     if (fs == NULL) {
-        pr_err("stat(%s): Failed to get the EXT2 filesystem for absolute path `%s`.\n", path, absolute_path);
+        pr_err("stat(%s): Failed to get the EXT2 filesystem.\n", path);
         return -ENOENT;
     }
     // Prepare the structure for the search.
     ext2_direntry_search_t search;
     memset(&search, 0, sizeof(ext2_direntry_search_t));
     // Resolve the path.
-    if (ext2_resolve_path(fs->root, absolute_path, &search)) {
-        pr_err("stat(%s): Failed to resolve path `%s`.\n", path, absolute_path);
+    if (ext2_resolve_path(fs->root, path, &search)) {
+        pr_err("stat(%s): Failed to resolve path.\n", path);
         return -ENOENT;
     }
     // Get the inode associated with the directory entry.
@@ -3438,25 +3414,18 @@ static int ext2_fsetattr(vfs_file_t *file, struct iattr *attr)
 static int ext2_setattr(const char *path, struct iattr *attr)
 {
     pr_debug("setattr(%s, %p)\n", path, attr);
-    // Get the absolute path.
-    char absolute_path[PATH_MAX];
-    // If the first character is not the '/' then get the absolute path.
-    if (!realpath(path, absolute_path, sizeof(absolute_path))) {
-        pr_err("setattr(%s): Cannot get the absolute path.\n", path);
-        return -ENOENT;
-    }
     // Get the EXT2 filesystem.
-    ext2_filesystem_t *fs = get_ext2_filesystem(absolute_path);
+    ext2_filesystem_t *fs = get_ext2_filesystem(path);
     if (fs == NULL) {
-        pr_err("setattr(%s): Failed to get the EXT2 filesystem for absolute path `%s`.\n", path, absolute_path);
+        pr_err("setattr(%s): Failed to get the EXT2 filesystem for absolute path `%s`.\n", path);
         return -ENOENT;
     }
     // Prepare the structure for the search.
     ext2_direntry_search_t search;
     memset(&search, 0, sizeof(ext2_direntry_search_t));
     // Resolve the path.
-    if (ext2_resolve_path(fs->root, absolute_path, &search)) {
-        pr_err("setattr(%s): Failed to resolve path `%s`.\n", path, absolute_path);
+    if (ext2_resolve_path(fs->root, path, &search)) {
+        pr_err("setattr(%s): Failed to resolve path.\n", path);
         return -ENOENT;
     }
     // Get the inode associated with the directory entry.

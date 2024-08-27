@@ -119,7 +119,7 @@ int __resolve_path(const char *path, char *abspath, size_t buflen, int flags, in
     if (path[0] != '/') {
         // Get the working directory of the current task.
         sys_getcwd(buffer, buflen);
-        pr_notice("|%-32s|%-32s| (INIT)\n", path, buffer);
+        pr_debug("|%-32s|%-32s| (INIT)\n", path, buffer);
     }
 
     while (tokenize(path, "/", &offset, token, NAME_MAX)) {
@@ -165,7 +165,7 @@ int __resolve_path(const char *path, char *abspath, size_t buflen, int flags, in
                         char *last_slash = strrchr(buffer, '/');
                         if (last_slash) {
                             memcpy(++last_slash, linkpath, linklen);
-                            pr_notice("|%-32s|%-32s|%-32s| (LINK)\n", path, buffer, linkpath);
+                            pr_debug("|%-32s|%-32s|%-32s| (LINK)\n", path, buffer, linkpath);
                         }
                     }
                     contains_links = 1;
@@ -179,14 +179,19 @@ int __resolve_path(const char *path, char *abspath, size_t buflen, int flags, in
                 }
             }
         }
-        pr_notice("|%-32s|%-32s|\n", path, buffer);
+        pr_debug("|%-32s|%-32s|\n", path, buffer);
     }
     if (contains_links) {
-        pr_notice("|%-32s|%-32s| (RECU)\n", path, buffer);
+        pr_debug("|%-32s|%-32s| (RECU)\n", path, buffer);
         return __resolve_path(buffer, abspath, buflen, flags, ++link_depth);
     } else {
+        // Remove trailing slash if requested.
+        if (flags & REMOVE_TRAILING_SLASH) {
+            size_t buffer_end = strnlen(buffer, buflen) - 1;
+            if (buffer[buffer_end] == '/') { buffer[buffer_end] = 0; }
+        }
         strncpy(abspath, buffer, buflen);
-        pr_notice("|%-32s|%-32s| (END)\n", path, buffer);
+        pr_debug("|%-32s|%-32s| (END)\n", path, buffer);
     }
     return 0;
 }
