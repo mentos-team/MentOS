@@ -56,7 +56,8 @@ int main(int argc, char **argv)
         }
     }
     putchar('\n');
-    printf("Size: %s\n", to_human_size(dstat.st_size));
+    printf("Size: %12s ", to_human_size(dstat.st_size));
+    printf("Inode: %d\n", dstat.st_ino);
     printf("File type: ");
     switch (dstat.st_mode & S_IFMT) {
     case S_IFBLK : printf("block device\n"); break;
