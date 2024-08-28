@@ -9,9 +9,29 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <ctype.h>
 
 #define FORMAT_S "%5s %5s %6s %s\n"
 #define FORMAT   "%5d %5d %6c %s\n"
+
+static inline int __is_number(const char *str)
+{
+    // Check for NULL pointer.
+    if (str == NULL) { return 0; }
+    // Skip leading whitespace.
+    while (isspace((unsigned char)*str)) { str++; }
+    // Check if there is a sign at the beginning.
+    if (*str == '-' || *str == '+') { str++; }
+    // Check if the string is empty or only contains a sign.
+    if (*str == '\0') { return 0; }
+    // Check each character to ensure it's a digit
+    while (*str) {
+        if (!isdigit((unsigned char)*str)) { return 0; }
+        str++;
+    }
+    // If we reach here, all characters were digits.
+    return 1;
+}
 
 static inline void __iterate_proc_dirs(int proc_fd)
 {
@@ -47,6 +67,10 @@ static inline void __iterate_proc_dirs(int proc_fd)
         }
         // Skip non-directories.
         if (dent.d_type != DT_DIR) {
+            continue;
+        }
+        // Skip directories that are not PIDs.
+        if (!__is_number(dent.d_name)) {
             continue;
         }
         // Build the path to the stat file (i.e., `/proc/<pid>/stat`).
