@@ -178,7 +178,7 @@ char *strtok_r(char *str, const char *delim, char **saveptr);
 /// @param buffer the buffer where we save the parsed token.
 /// @param buflen the length of the buffer.
 /// @return 1 if we still have things to parse, 0 if we finished parsing.
-int tokenize(const char *string, char *separators, size_t *offset, char *buffer, ssize_t buflen);
+int tokenize(const char *string, const char *separators, size_t *offset, char *buffer, ssize_t buflen);
 
 /// @brief Copies the values of num bytes from the location pointed by source
 /// to the memory block pointed by destination.

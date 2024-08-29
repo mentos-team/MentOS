@@ -50,7 +50,7 @@ typedef int (*vfs_ioctl_callback)(vfs_file_t *, int, void *);
 /// Function for creating symbolic links.
 typedef int (*vfs_symlink_callback)(const char *, const char *);
 /// Function that reads the symbolic link data associated with a file.
-typedef ssize_t (*vfs_readlink_callback)(vfs_file_t *, char *, size_t);
+typedef ssize_t (*vfs_readlink_callback)(const char *, char *, size_t);
 /// Function used to modify the attributes of an fs entry.
 typedef int (*vfs_setattr_callback)(const char *, struct iattr *);
 /// Function used to modify the attributes of a file.

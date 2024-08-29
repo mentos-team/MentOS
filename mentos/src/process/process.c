@@ -13,7 +13,6 @@
 #include "elf/elf.h"
 #include "fcntl.h"
 #include "sys/stat.h"
-#include "fs/vfs.h"
 #include "hardware/timer.h"
 #include "klib/stack_helper.h"
 #include "libgen.h"
@@ -24,6 +23,8 @@
 #include "string.h"
 #include "sys/errno.h"
 #include "system/panic.h"
+#include "fs/vfs.h"
+#include "fs/namei.h"
 
 /// Cache for creating the task structs.
 static kmem_cache_t *task_struct_cache;
@@ -118,7 +119,8 @@ static int __reset_process(task_struct *task)
 /// @brief Checks if the file starts with a shebang.
 /// @param file the file to check.
 /// @return 1 if it contains a shebang, 0 otherwise.
-static int __has_shebang(vfs_file_t *file) {
+static int __has_shebang(vfs_file_t *file)
+{
     char buf[2];
     vfs_read(file, buf, 0, sizeof(buf));
     return buf[0] == '#' && buf[1] == '!';
@@ -132,7 +134,7 @@ static int __has_shebang(vfs_file_t *file) {
 static int __load_executable(const char *path, task_struct *task, uint32_t *entry)
 {
     // Return code variable.
-    int ret = 0;
+    int ret              = 0;
     int interpreter_loop = 0;
 start:
     pr_debug("__load_executable(`%s`, %p `%s`, %p)\n", path, task, task->name, entry);
@@ -180,14 +182,14 @@ start:
         if (interpreter_loop) {
             ret = -ELOOP;
             // Free interpreter buffer
-            kfree((void*)path);
+            kfree((void *)path);
             goto close_and_return;
         }
 
         // Read shebang line
         char buf[PATH_MAX];
         ssize_t bytes_read = vfs_read(file, buf, 2, sizeof(buf));
-        buf[bytes_read] = 0;
+        buf[bytes_read]    = 0;
         vfs_close(file);
 
         // Find end of the line
@@ -211,7 +213,7 @@ start:
     // Free potential interpreter path
     if (interpreter_loop) {
         // Free interpreter buffer
-        kfree((void*)path);
+        kfree((void *)path);
         ret = 2;
     }
 
@@ -441,9 +443,9 @@ int sys_chdir(char const *path)
         return -EFAULT;
     }
     char absolute_path[PATH_MAX];
-    if (!realpath(path, absolute_path, sizeof(absolute_path))) {
+    if (resolve_path(path, absolute_path, sizeof(absolute_path), REMOVE_TRAILING_SLASH | FOLLOW_LINKS) < 0) {
         pr_err("Cannot get the absolute path for path `%s`.\n", path);
-        return -ENOENT;
+        return -errno;
     }
     // Check that the directory exists.
     vfs_file_t *dir = vfs_open(absolute_path, O_RDONLY | O_DIRECTORY, S_IXUSR);
@@ -475,7 +477,7 @@ int sys_fchdir(int fd)
         return -ENOTDIR;
     }
     char absolute_path[PATH_MAX];
-    if (!realpath(vfd->file_struct->name, absolute_path, sizeof(absolute_path))) {
+    if (resolve_path(vfd->file_struct->name, absolute_path, sizeof(absolute_path), REMOVE_TRAILING_SLASH | FOLLOW_LINKS) < 0) {
         pr_err("Cannot get the absolute path for path `%s`.\n", vfd->file_struct->name);
         return -ENOENT;
     }
@@ -508,9 +510,9 @@ pid_t sys_fork(pt_regs *f)
     proc->sid  = current->sid;
     proc->pgid = current->pgid;
     proc->uid  = current->uid;
-    proc->ruid  = current->ruid;
+    proc->ruid = current->ruid;
     proc->gid  = current->gid;
-    proc->rgid  = current->rgid;
+    proc->rgid = current->rgid;
 
     // Active the new process.
     scheduler_enqueue_task(proc);
@@ -600,7 +602,7 @@ int sys_execve(pt_regs *f)
         // The original file name must be passed as second argument and the rest
         // is shifted to the right.
         // Prepare a new argv array.
-        char **int_argv = kmalloc((argc + 2) * sizeof(char*));
+        char **int_argv = kmalloc((argc + 2) * sizeof(char *));
         if (!int_argv) {
             pr_err("Failed to allocate memory for interpreter argv array.\n");
             return -1;
@@ -608,7 +610,7 @@ int sys_execve(pt_regs *f)
         int_argv[0] = saved_argv[0]; // TODO: pass the path to the interpreter.
         int_argv[1] = saved_filename;
         for (int i = 1; i <= argc; i++) {
-            int_argv[i+1] = saved_argv[i];
+            int_argv[i + 1] = saved_argv[i];
         }
         argc++;
 
@@ -622,8 +624,8 @@ int sys_execve(pt_regs *f)
         }
         // Copy the arguments.
         uint32_t int_args_mem_ptr = (uint32_t)int_args_mem + (int_argv_bytes + envp_bytes);
-        saved_argv            = __push_args_on_stack(&int_args_mem_ptr, int_argv);
-        saved_envp            = __push_args_on_stack(&int_args_mem_ptr, saved_envp);
+        saved_argv                = __push_args_on_stack(&int_args_mem_ptr, int_argv);
+        saved_envp                = __push_args_on_stack(&int_args_mem_ptr, saved_envp);
         // Check the memory pointer.
         assert(int_args_mem_ptr == (uint32_t)int_args_mem);
         // Free the old argument and environ memory block.

@@ -27,9 +27,10 @@ struct memdev {
 
 static struct memdev *devices;
 
-static void add_device(struct memdev *device) {
+static void add_device(struct memdev *device)
+{
     struct memdev *dit = devices;
-    for (;dit != NULL; dit = dit->next);
+    for (; dit != NULL; dit = dit->next);
     if (dit == NULL) {
         devices = device;
     } else {
@@ -37,8 +38,9 @@ static void add_device(struct memdev *device) {
     }
 }
 
-static vfs_file_t* find_device_file(const char *path) {
-    for(struct memdev *dev = devices; dev != NULL; dev = dev->next) {
+static vfs_file_t *find_device_file(const char *path)
+{
+    for (struct memdev *dev = devices; dev != NULL; dev = dev->next) {
         if (strcmp(dev->file->name, path) == 0) {
             return dev->file;
         }
@@ -46,7 +48,7 @@ static vfs_file_t* find_device_file(const char *path) {
     return NULL;
 }
 
-static int mem_stat(const char* path, stat_t *stat);
+static int mem_stat(const char *path, stat_t *stat);
 
 static vfs_sys_operations_t mem_sys_operations = {
     .mkdir_f = NULL,
@@ -55,10 +57,28 @@ static vfs_sys_operations_t mem_sys_operations = {
 };
 
 static vfs_file_t *null_open(const char *path, int flags, mode_t mode);
-static int null_close(vfs_file_t * file);
-static ssize_t null_write(vfs_file_t * file, const void *buffer, off_t offset, size_t size);
-static ssize_t null_read(vfs_file_t * file, char *buffer, off_t offset, size_t size);
-static int null_fstat(vfs_file_t * file, stat_t *stat);
+static int null_close(vfs_file_t *file);
+static ssize_t null_write(vfs_file_t *file, const void *buffer, off_t offset, size_t size);
+static ssize_t null_read(vfs_file_t *file, char *buffer, off_t offset, size_t size);
+static int null_fstat(vfs_file_t *file, stat_t *stat);
+
+/// @brief The mount call-back, which prepares everything and calls the actual
+/// NULL mount function.
+/// @param path the path where the filesystem should be mounted.
+/// @param device the device we mount.
+/// @return the VFS file of the filesystem.
+static vfs_file_t *null_mount_callback(const char *path, const char *device)
+{
+    pr_err("mount_callback(%s, %s): NULL has no mount callback!\n", path, device);
+    return NULL;
+}
+
+/// Filesystem information.
+static file_system_type null_file_system_type = {
+    .name     = "null",
+    .fs_flags = 0,
+    .mount    = null_mount_callback
+};
 
 static vfs_file_operations_t null_fs_operations = {
     .open_f     = null_open,
@@ -72,10 +92,11 @@ static vfs_file_operations_t null_fs_operations = {
     .getdents_f = NULL
 };
 
-static struct memdev *null_device_create(const char* name) {
+static struct memdev *null_device_create(const char *name)
+{
     // Create the device.
     struct memdev *dev = kmalloc(sizeof(struct memdev));
-    dev->next = NULL;
+    dev->next          = NULL;
 
     // Create the file.
     vfs_file_t *file = kmem_cache_alloc(vfs_file_cache, GFP_KERNEL);
@@ -87,13 +108,13 @@ static struct memdev *null_device_create(const char* name) {
 
     // Set the device name.
     strncpy(file->name, name, NAME_MAX);
-    file->count = 0;
-    file->uid = 0;
-    file->gid = 0;
-    file->mask = 0x2000 | 0666;
-    file->atime = sys_time(NULL);
-    file->mtime = sys_time(NULL);
-    file->ctime = sys_time(NULL);
+    file->count  = 0;
+    file->uid    = 0;
+    file->gid    = 0;
+    file->mask   = 0x2000 | 0666;
+    file->atime  = sys_time(NULL);
+    file->mtime  = sys_time(NULL);
+    file->ctime  = sys_time(NULL);
     file->length = 0;
     // Set the operations.
     file->sys_operations = &mem_sys_operations;
@@ -101,8 +122,9 @@ static struct memdev *null_device_create(const char* name) {
     return dev;
 }
 
-static vfs_file_t* null_open(const char *path, int flags, mode_t mode) {
-    vfs_file_t* file = find_device_file(path);
+static vfs_file_t *null_open(const char *path, int flags, mode_t mode)
+{
+    vfs_file_t *file = find_device_file(path);
     if (file) {
         file->count++;
     }
@@ -110,21 +132,24 @@ static vfs_file_t* null_open(const char *path, int flags, mode_t mode) {
     return file;
 }
 
-static int null_close(vfs_file_t * file) {
+static int null_close(vfs_file_t *file)
+{
     assert(file && "Received null file.");
     file->count--;
     return 0;
 }
 
-static ssize_t null_write(vfs_file_t * file, const void *buffer, off_t offset, size_t size) {
+static ssize_t null_write(vfs_file_t *file, const void *buffer, off_t offset, size_t size)
+{
     return size;
 }
 
-static ssize_t null_read(vfs_file_t * file, char *buffer, off_t offset, size_t size) {
+static ssize_t null_read(vfs_file_t *file, char *buffer, off_t offset, size_t size)
+{
     return 0;
 }
 
-static int null_fstat(vfs_file_t * file, stat_t *stat)
+static int null_fstat(vfs_file_t *file, stat_t *stat)
 {
     pr_debug("null_fstat(%s, %p)\n", file->name, stat);
     stat->st_dev   = 0;
@@ -139,8 +164,9 @@ static int null_fstat(vfs_file_t * file, stat_t *stat)
     return 0;
 }
 
-static int mem_stat(const char *path, stat_t *stat) {
-    vfs_file_t* file = find_device_file(path);
+static int mem_stat(const char *path, stat_t *stat)
+{
+    vfs_file_t *file = find_device_file(path);
 
     if (file) {
         return file->fs_operations->stat_f(file, stat);
@@ -155,13 +181,14 @@ int mem_devs_initialize(void)
         pr_err("Failed to create devnull");
         return -ENODEV;
     }
-    
-    if (!vfs_mount("/dev/null", devnull->file)) {
-        pr_err("Failed to mount /dev/null");
+    if (!vfs_register_filesystem(&null_file_system_type)) {
+        pr_err("Failed to register NULL filesystem.");
         return 1;
     }
-
+    if (!vfs_register_superblock("null", "/dev/null", &null_file_system_type, devnull->file)) {
+        pr_err("Failed to mount /dev/null.");
+        return 1;
+    }
     add_device(devnull);
-
     return 0;
 }

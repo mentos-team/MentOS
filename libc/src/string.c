@@ -218,23 +218,30 @@ char *strpbrk(const char *string, const char *control)
     return NULL;
 }
 
-int tokenize(const char *string, char *separators, size_t *offset, char *buffer, ssize_t buflen)
+int tokenize(const char *string, const char *separators, size_t *offset, char *buffer, ssize_t buflen)
 {
     // If we reached the end of the parsed string, stop.
     if ((*offset >= buflen) || (string[*offset] == 0)) {
         return 0;
     }
+    // Skip any leading (multiple) separators.
+    while (string[*offset] != 0 && strchr(separators, string[*offset])) {
+        ++(*offset);
+    }
+    // If we reach the end after skipping, return 0.
+    if (string[*offset] == 0) {
+        return 0;
+    }
     // Keep copying character until we either reach 1) the end of the buffer, 2) a
     // separator, or 3) the end of the string we are parsing.
     do {
-        for (char *separator = separators; *separator != 0; ++separator) {
-            if (string[*offset] == *separator) {
-                // Skip the character.
-                ++(*offset);
-                // Close the buffer.
-                *buffer = '\0';
-                return 1;
-            }
+        // Check if the character is a separator.
+        if (strchr(separators, string[*offset])) {
+            // Skip the character.
+            ++(*offset);
+            // Close the buffer.
+            *buffer = '\0';
+            return 1;
         }
         // Save the character.
         *buffer = string[*offset];
@@ -496,7 +503,7 @@ size_t strlen(const char *s)
 size_t strnlen(const char *s, size_t count)
 {
     const char *p = memchr(s, 0, count);
-    return p ? (size_t)(p-s) : count;
+    return p ? (size_t)(p - s) : count;
 }
 
 int strcmp(const char *s1, const char *s2)
