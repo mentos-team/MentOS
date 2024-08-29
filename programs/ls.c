@@ -135,23 +135,10 @@ static inline void print_dir_entry(dirent_t *dirent, const char *path, unsigned 
 
 static void print_ls(const char *path, unsigned int flags)
 {
-    // Read the link, if the path points to one.
-    char real_path[PATH_MAX] = { 0 }, link_path[PATH_MAX] = { 0 };
-    ssize_t link_len = readlink(path, link_path, sizeof(link_path));
-    if (link_len > 0) {
-        link_path[link_len] = '\0';
-        if (realpath(link_path, real_path, sizeof(real_path)) != real_path) {
-            printf("ls: cannot resolve path '%s': %s\n", real_path, strerror(errno));
-            return;
-        }
-    } else {
-        strncpy(real_path, path, strlen(path));
-    }
-
     // Open the directory.
-    int fd = open(real_path, O_RDONLY | O_DIRECTORY, 0);
+    int fd = open(path, O_RDONLY | O_DIRECTORY, 0);
     if (fd == -1) {
-        printf("ls: cannot access '%s': %s\n", real_path, strerror(errno));
+        printf("ls: cannot access '%s': %s\n", path, strerror(errno));
         return;
     }
 
@@ -162,7 +149,7 @@ static void print_ls(const char *path, unsigned int flags)
     ssize_t bytes_read = 0;
     while ((bytes_read = getdents(fd, dents, sizeof(dents))) > 0) {
         for (size_t i = 0; i < bytes_read / sizeof(dirent_t); ++i) {
-            print_dir_entry(&dents[i], real_path, flags, &total_size);
+            print_dir_entry(&dents[i], path, flags, &total_size);
         }
     }
     if (bytes_read < 0) {
@@ -218,6 +205,7 @@ int main(int argc, char *argv[])
         char cwd[PATH_MAX];
         getcwd(cwd, PATH_MAX);
         print_ls(cwd, flags);
+        printf("\n");
     }
     return 0;
 }

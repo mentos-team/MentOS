@@ -178,17 +178,16 @@ int main(int argc, char **argv)
     __print_message_file("/etc/issue");
 
     passwd_t *pwd;
-    char username[CREDENTIALS_LENGTH] = "user", password[CREDENTIALS_LENGTH] = "user";
+    char username[CREDENTIALS_LENGTH], password[CREDENTIALS_LENGTH];
     do {
         // Get the username.
-        // do {
-        //     printf("Username: ");
-        // } while (!__get_input(username, sizeof(username), false));
-
-        // // Get the password.
-        // do {
-        //     printf("Password: ");
-        // } while (!__get_input(password, sizeof(password), true));
+        do {
+            printf("Username: ");
+        } while (!__get_input(username, sizeof(username), false));
+        // Get the password.
+        do {
+            printf("Password: ");
+        } while (!__get_input(password, sizeof(password), true));
 
         // Check if we can find the user.
         if ((pwd = getpwnam(username)) == NULL) {

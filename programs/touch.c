@@ -27,7 +27,9 @@ int main(int argc, char **argv)
     int fd = open(argv[1], O_CREAT, S_IWUSR | S_IRUSR | S_IRGRP | S_IROTH);
     if (fd < 0) {
         err(EXIT_FAILURE, "cannot touch %s", argv[1]);
+        printf("\n");
     }
     close(fd);
+    printf("\n");
     return 0;
 }

@@ -224,8 +224,14 @@ int tokenize(const char *string, const char *separators, size_t *offset, char *b
     if ((*offset >= buflen) || (string[*offset] == 0)) {
         return 0;
     }
-    // If the first character is a separator, skip it.
-    *offset += (*offset == 0) && strchr(separators, string[*offset]);
+    // Skip any leading (multiple) separators.
+    while (string[*offset] != 0 && strchr(separators, string[*offset])) {
+        ++(*offset);
+    }
+    // If we reach the end after skipping, return 0.
+    if (string[*offset] == 0) {
+        return 0;
+    }
     // Keep copying character until we either reach 1) the end of the buffer, 2) a
     // separator, or 3) the end of the string we are parsing.
     do {

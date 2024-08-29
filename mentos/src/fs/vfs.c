@@ -4,10 +4,10 @@
 /// See LICENSE.md for details.
 
 // Setup the logging for this file (do this before any other include).
-#include "sys/kernel_levels.h"          // Include kernel log levels.
-#define __DEBUG_HEADER__ "[VFS   ]"     ///< Change header.
-#define __DEBUG_LEVEL__  LOGLEVEL_DEBUG ///< Set log level.
-#include "io/debug.h"                   // Include debugging functions.
+#include "sys/kernel_levels.h"           // Include kernel log levels.
+#define __DEBUG_HEADER__ "[VFS   ]"      ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
+#include "io/debug.h"                    // Include debugging functions.
 
 #include "fcntl.h"
 #include "sys/stat.h"
@@ -123,6 +123,7 @@ int vfs_unregister_superblock(super_block_t *sb)
 
 super_block_t *vfs_get_superblock(const char *path)
 {
+    pr_debug("vfs_get_superblock(path: %s)\n", path);
     size_t last_sb_len     = 0, len;
     super_block_t *last_sb = NULL, *sb = NULL;
     list_head *it;
@@ -396,14 +397,14 @@ ssize_t vfs_readlink(const char *path, char *buffer, size_t bufsize)
     super_block_t *sb = vfs_get_superblock(path);
     if (sb == NULL) {
         pr_err("vfs_readlink(%s, %s, %d): Cannot find the superblock!.\n", path, buffer, bufsize);
-        return -ENODEV;
+        return -ENOENT;
     }
     if (sb->root == NULL) {
         pr_err("vfs_readlink(%s, %s, %d): Cannot find the superblock root.\n", path, buffer, bufsize);
         return -ENOENT;
     }
     if (sb->root->fs_operations->readlink_f == NULL) {
-        return -ENOSYS;
+        return -ENOENT;
     }
     // Perform the read.
     return sb->root->fs_operations->readlink_f(path, buffer, bufsize);

@@ -4,10 +4,12 @@
 /// See LICENSE.md for details.
 
 // Setup the logging for this file (do this before any other include).
-#include "sys/kernel_levels.h"          // Include kernel log levels.
-#define __DEBUG_HEADER__ "[EXT2  ]"     ///< Change header.
-#define __DEBUG_LEVEL__  LOGLEVEL_DEBUG ///< Set log level.
-#include "io/debug.h"                   // Include debugging functions.
+#include "sys/kernel_levels.h"           // Include kernel log levels.
+#define __DEBUG_HEADER__ "[EXT2  ]"      ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
+#include "io/debug.h"                    // Include debugging functions.
+// If defined, ETX2 will debug everything.
+// #define EXT2_FULL_DEBUG
 
 #include "assert.h"
 #include "fcntl.h"
@@ -1586,9 +1588,10 @@ static ssize_t ext2_read_inode_block(ext2_filesystem_t *fs, ext2_inode_t *inode,
     if (real_index == 0) {
         return -1;
     }
-    pr_debug("ext2_read_inode_block(block: %4u, real: %4u)\n", block_index, real_index);
     // Log the address to the inode block.
-    // pr_debug("Read inode block  (block_index: %4u, real_index: %4u)\n", block_index, real_index);
+#ifdef EXT2_FULL_DEBUG
+    pr_debug("ext2_read_inode_block(block: %4u, real: %4u)\n", block_index, real_index);
+#endif
     // Read the block.
     return ext2_read_block(fs, real_index, buffer);
 }
@@ -1613,7 +1616,9 @@ static ssize_t ext2_write_inode_block(ext2_filesystem_t *fs, ext2_inode_t *inode
         return -1;
     }
     // Log the address to the inode block.
+#ifdef EXT2_FULL_DEBUG
     pr_debug("ext2_write_inode_block(block: %4u, inode: %4u, real: %4u)\n", block_index, inode_index, real_index);
+#endif
     // Write the block.
     return ext2_write_block(fs, real_index, buffer);
 }
@@ -1638,7 +1643,9 @@ static ssize_t ext2_read_inode_data(ext2_filesystem_t *fs, ext2_inode_t *inode, 
     // How much bytes to read for the end block.
     uint32_t end_size = end_offset - end_block * fs->block_size;
 
+#ifdef EXT2_FULL_DEBUG
     pr_debug("ext2_read_inode_data(inode: %4u, offset: %4u, nbyte: %4u)\n", inode_index, offset, nbyte);
+#endif
 
     // Allocate the cache.
     uint8_t *cache = ext2_alloc_cache(fs);
@@ -1696,7 +1703,9 @@ static ssize_t ext2_write_inode_data(ext2_filesystem_t *fs, ext2_inode_t *inode,
     // How much bytes to read for the end block.
     uint32_t end_size = end_offset - end_block * fs->block_size;
 
+#ifdef EXT2_FULL_DEBUG
     pr_debug("ext2_write_inode_data(inode: %4u, offset: %4u, nbyte: %4u)\n", inode_index, offset, nbyte);
+#endif
 
     // Allocate the cache.
     uint8_t *cache = ext2_alloc_cache(fs);
@@ -2927,7 +2936,9 @@ static int ext2_close(vfs_file_t *file)
 /// @return The number of red bytes.
 static ssize_t ext2_read(vfs_file_t *file, char *buffer, off_t offset, size_t nbyte)
 {
+#ifdef EXT2_FULL_DEBUG
     pr_debug("ext2_read(file: %s, offset: %4u, nbyte: %4u)\n", file->name, offset, nbyte);
+#endif
     // Get the filesystem.
     ext2_filesystem_t *fs = (ext2_filesystem_t *)file->device;
     if (fs == NULL) {
@@ -2956,7 +2967,9 @@ static ssize_t ext2_read(vfs_file_t *file, char *buffer, off_t offset, size_t nb
 /// @return The number of written bytes.
 static ssize_t ext2_write(vfs_file_t *file, const void *buffer, off_t offset, size_t nbyte)
 {
+#ifdef EXT2_FULL_DEBUG
     pr_debug("ext2_write(file: %s, offset: %4u, nbyte: %4u)\n", file->name, offset, nbyte);
+#endif
     // Get the filesystem.
     ext2_filesystem_t *fs = (ext2_filesystem_t *)file->device;
     if (fs == NULL) {
@@ -3190,26 +3203,17 @@ static ssize_t ext2_getdents(vfs_file_t *file, dirent_t *dirp, off_t doff, size_
 static ssize_t ext2_readlink(const char *path, char *buffer, size_t bufsize)
 {
     pr_debug("ext2_readlink(path: %s)\n", path);
-    super_block_t *sb = vfs_get_superblock(path);
-    if (sb == NULL) {
-        pr_err("ext2_readlink(path: %s): Cannot find the superblock!.\n", path);
-        return -ENODEV;
-    }
-    if (sb->root == NULL) {
-        pr_err("ext2_readlink(path: %s): Cannot find the superblock root.\n", path);
-        return -ENOENT;
-    }
-    // Get the filesystem.
-    ext2_filesystem_t *fs = (ext2_filesystem_t *)sb->root->device;
+    // Get the EXT2 filesystem.
+    ext2_filesystem_t *fs = get_ext2_filesystem(path);
     if (fs == NULL) {
-        pr_err("ext2_readlink(path: %s): The file does not belong to an EXT2 filesystem.\n", path);
+        pr_err("ext2_readlink(path: %s): Failed to get the EXT2 filesystem.\n", path);
         return -ENOENT;
     }
     // Prepare the structure for the search.
     ext2_direntry_search_t search;
     memset(&search, 0, sizeof(ext2_direntry_search_t));
-    // Resolve the path to the directory entry.
-    if (ext2_resolve_path(sb->root, path, &search)) {
+    // Resolve the path.
+    if (ext2_resolve_path(fs->root, path, &search)) {
         pr_err("ext2_readlink(path: %s): Failed to resolve path.\n", path);
         return -ENOENT;
     }
@@ -3219,17 +3223,15 @@ static ssize_t ext2_readlink(const char *path, char *buffer, size_t bufsize)
         pr_err("ext2_readlink(path: %s): Failed to read the inode (%d).\n", path, search.direntry.inode);
         return -ENOENT;
     }
+    ssize_t ret = -ENOENT;
     if ((inode.mode & S_IFLNK) == S_IFLNK) {
         // Get the length of the symlink.
-        ssize_t nbytes = min(strlen(inode.data.symlink), bufsize);
+        ret = min(strlen(inode.data.symlink), bufsize);
         // Copy the symlink information.
-        strncpy(buffer, inode.data.symlink, nbytes);
-        // Return how much we read.
-        return nbytes;
-    } else {
-        return -ENOLINK;
+        strncpy(buffer, inode.data.symlink, ret);
     }
-    return 0;
+    // Return how much we read.
+    return ret;
 }
 
 /// @brief Creates a new directory at the given path.
