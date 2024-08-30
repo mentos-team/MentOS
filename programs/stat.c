@@ -50,7 +50,7 @@ int main(int argc, char **argv)
     if (S_ISLNK(dstat.st_mode)) {
         char link_buffer[PATH_MAX];
         ssize_t len = readlink(argv[1], link_buffer, sizeof(link_buffer));
-        if (len < 0) {
+        if (len > 0) {
             link_buffer[len] = '\0';
             printf(" -> %s", link_buffer);
         }

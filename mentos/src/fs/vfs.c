@@ -394,7 +394,15 @@ vfs_file_t *vfs_creat(const char *path, mode_t mode)
 ssize_t vfs_readlink(const char *path, char *buffer, size_t bufsize)
 {
     pr_debug("vfs_readlink(%s, %s, %d)\n", path, buffer, bufsize);
-    super_block_t *sb = vfs_get_superblock(path);
+    // Allocate a variable for the path.
+    char absolute_path[PATH_MAX] = { 0 };
+    // If the first character is not the '/' then get the absolute path.
+    int ret = resolve_path(path, absolute_path, PATH_MAX, REMOVE_TRAILING_SLASH);
+    if (ret < 0) {
+        pr_err("vfs_readlink(%s, %s, %d): Cannot get the absolute path.", path, buffer, bufsize);
+        return ret;
+    }
+    super_block_t *sb = vfs_get_superblock(absolute_path);
     if (sb == NULL) {
         pr_err("vfs_readlink(%s, %s, %d): Cannot find the superblock!.\n", path, buffer, bufsize);
         return -ENOENT;
@@ -407,7 +415,7 @@ ssize_t vfs_readlink(const char *path, char *buffer, size_t bufsize)
         return -ENOENT;
     }
     // Perform the read.
-    return sb->root->fs_operations->readlink_f(path, buffer, bufsize);
+    return sb->root->fs_operations->readlink_f(absolute_path, buffer, bufsize);
 }
 
 int vfs_symlink(const char *linkname, const char *path)
@@ -444,10 +452,9 @@ int vfs_stat(const char *path, stat_t *buf)
 {
     pr_debug("vfs_stat(path: %s, buf: %p)\n", path, buf);
     // Allocate a variable for the path.
-    char absolute_path[PATH_MAX];
+    char absolute_path[PATH_MAX] = { 0 };
     // If the first character is not the '/' then get the absolute path.
-    int resolve_flags = REMOVE_TRAILING_SLASH | FOLLOW_LINKS;
-    int ret           = resolve_path(path, absolute_path, PATH_MAX, resolve_flags);
+    int ret = resolve_path(path, absolute_path, PATH_MAX, REMOVE_TRAILING_SLASH);
     if (ret < 0) {
         pr_err("vfs_stat(%s): Cannot get the absolute path.", path);
         return ret;
@@ -468,15 +475,7 @@ int vfs_stat(const char *path, stat_t *buf)
         return -ENOSYS;
     }
     // Reset the structure.
-    buf->st_dev   = 0;
-    buf->st_ino   = 0;
-    buf->st_mode  = 0;
-    buf->st_uid   = 0;
-    buf->st_gid   = 0;
-    buf->st_size  = 0;
-    buf->st_atime = 0;
-    buf->st_mtime = 0;
-    buf->st_ctime = 0;
+    memset(buf, 0, sizeof(stat_t));
     // Retrieve the file.
     return sb_root->sys_operations->stat_f(absolute_path, buf);
 }
