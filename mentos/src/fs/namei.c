@@ -102,17 +102,41 @@ char *realpath(const char *path, char *buffer, size_t buflen)
     return buffer;
 }
 
-static inline int __get_link_content(const char *path, char *link, size_t length)
+/// @brief Determines if the path points to a link.
+/// @param path the path to the file.
+/// @return 1 if it is a link, 0 otherwise.
+static inline int __is_a_link(const char *path)
 {
-    ssize_t link_length = vfs_readlink(path, link, length);
+    stat_t statbuf;
+    if (vfs_stat(path, &statbuf) > 0) {
+        return S_ISLNK(statbuf.st_mode);
+    }
+    return 0;
+}
+
+/// @brief Returns the content of the link.
+/// @param path the path to the file.
+/// @param buffer the buffer where we store the link content.
+/// @param buflen length of the buffer.
+/// @return the length of the link, or a negative value on error.
+static inline int __get_link_content(const char *path, char *buffer, size_t buflen)
+{
+    ssize_t link_length = vfs_readlink(path, buffer, buflen);
     if (link_length < 0) {
         return link_length;
     }
     // Null-terminate link.
-    link[link_length] = 0;
+    buffer[link_length] = 0;
     return link_length;
 }
 
+/// @brief Resolve the path by following all symbolic links.
+/// @param path the path to resolve.
+/// @param buffer the buffer where the resolved path is stored.
+/// @param buflen the size of the provided resolved_path buffer.
+/// @param flags the flags controlling how the path is resolved.
+/// @param link_depth the current link depth.
+/// @return -errno on fail, 1 on success.
 int __resolve_path(const char *path, char *abspath, size_t buflen, int flags, int link_depth)
 {
     char token[NAME_MAX]    = { 0 };
@@ -160,7 +184,7 @@ int __resolve_path(const char *path, char *abspath, size_t buflen, int flags, in
                 pr_err("Buffer overflow while resolving path.\n");
                 return -ENAMETOOLONG;
             }
-            if (flags & FOLLOW_LINKS) {
+            if ((flags & FOLLOW_LINKS) && __is_a_link(buffer)) {
                 ssize_t link_length = __get_link_content(buffer, linkpath, PATH_MAX);
                 if (link_length > 0) {
                     if (link_depth >= SYMLOOP_MAX) {

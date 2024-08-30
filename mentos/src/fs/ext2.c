@@ -3097,11 +3097,11 @@ static int ext2_fstat(vfs_file_t *file, stat_t *stat)
 /// @return 0 if success.
 static int ext2_stat(const char *path, stat_t *stat)
 {
-    pr_debug("ext2_fstat(path: %s)\n", path);
+    pr_debug("ext2_stat(path: %s)\n", path);
     // Get the EXT2 filesystem.
     ext2_filesystem_t *fs = get_ext2_filesystem(path);
     if (fs == NULL) {
-        pr_err("stat(%s): Failed to get the EXT2 filesystem.\n", path);
+        pr_err("ext2_stat(path: %s): Failed to get the EXT2 filesystem.\n", path);
         return -ENOENT;
     }
     // Prepare the structure for the search.
@@ -3109,13 +3109,13 @@ static int ext2_stat(const char *path, stat_t *stat)
     memset(&search, 0, sizeof(ext2_direntry_search_t));
     // Resolve the path.
     if (ext2_resolve_path(fs->root, path, &search)) {
-        pr_err("stat(%s): Failed to resolve path.\n", path);
+        pr_err("ext2_stat(path: %s): Failed to resolve path.\n", path);
         return -ENOENT;
     }
     // Get the inode associated with the directory entry.
     ext2_inode_t inode;
     if (ext2_read_inode(fs, &inode, search.direntry.inode) == -1) {
-        pr_err("stat(%s): Failed to read the inode of `%s`.\n", path, search.direntry.name);
+        pr_err("ext2_stat(path: %s): Failed to read the inode of `%s`.\n", path, search.direntry.name);
         return -ENOENT;
     }
     /// ID of device containing file.
@@ -3224,7 +3224,7 @@ static ssize_t ext2_readlink(const char *path, char *buffer, size_t bufsize)
         return -ENOENT;
     }
     ssize_t ret = -ENOENT;
-    if ((inode.mode & S_IFLNK) == S_IFLNK) {
+    if (S_ISLNK(inode.mode)) {
         // Get the length of the symlink.
         ret = min(strlen(inode.data.symlink), bufsize);
         // Copy the symlink information.

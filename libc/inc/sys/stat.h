@@ -26,13 +26,14 @@
 /// @defgroup FileTypeTest File Type Test Macros
 /// @brief These macros allows to easily identify file types.
 /// @{
-#define S_ISSOCK(m) (((m) & S_IFMT) == S_IFSOCK) ///< Check if the input values identifies a socket.
-#define S_ISLNK(m)  (((m) & S_IFMT) == S_IFLNK)  ///< Check if the input values identifies a symbolic link.
-#define S_ISREG(m)  (((m) & S_IFMT) == S_IFREG)  ///< Check if the input values identifies a regular file.
-#define S_ISBLK(m)  (((m) & S_IFMT) == S_IFBLK)  ///< Check if the input values identifies a block special.
-#define S_ISDIR(m)  (((m) & S_IFMT) == S_IFDIR)  ///< Check if the input values identifies a directory.
-#define S_ISCHR(m)  (((m) & S_IFMT) == S_IFCHR)  ///< Check if the input values identifies a char special.
-#define S_ISFIFO(m) (((m) & S_IFMT) == S_IFIFO)  ///< Check if the input values identifies a fifo.
+#define S_ISTYPE(mode, mask) (((mode) & S_IFMT) == (mask))
+#define S_ISSOCK(mode)       (S_ISTYPE(mode, S_IFSOCK)) ///< Check if a socket.
+#define S_ISLNK(mode)        (S_ISTYPE(mode, S_IFLNK))  ///< Check if a symbolic link.
+#define S_ISREG(mode)        (S_ISTYPE(mode, S_IFREG))  ///< Check if a regular file.
+#define S_ISBLK(mode)        (S_ISTYPE(mode, S_IFBLK))  ///< Check if a block special.
+#define S_ISDIR(mode)        (S_ISTYPE(mode, S_IFDIR))  ///< Check if a directory.
+#define S_ISCHR(mode)        (S_ISTYPE(mode, S_IFCHR))  ///< Check if a char special.
+#define S_ISFIFO(mode)       (S_ISTYPE(mode, S_IFIFO))  ///< Check if a fifo.
 /// @}
 
 /// @defgroup ModeBitsAccessPermission Mode Bits for Access Permission
