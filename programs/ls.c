@@ -15,18 +15,39 @@
 #include <libgen.h>
 #include <sys/bitops.h>
 #include <io/debug.h>
+#include <io/ansi_colors.h>
 
 #define FLAG_L (1U << 0U)
 #define FLAG_A (1U << 1U)
 #define FLAG_I (1U << 2U)
 #define FLAG_1 (1U << 3U)
 
-#define FG_BRIGHT_GREEN  "\033[92m"
-#define FG_BRIGHT_CYAN   "\033[96m"
-#define FG_BRIGHT_WHITE  "\033[97m"
-#define FG_BRIGHT_YELLOW "\033[93m"
-
 #define DENTS_NUM 12
+
+static inline void print_dir_entry_name(const char *name, mode_t st_mode)
+{
+    if (S_ISSOCK(st_mode)) {
+        printf(FG_YELLOW_BRIGHT "%s" FG_RESET, name);
+    }
+    if (S_ISLNK(st_mode)) {
+        printf(FG_CYAN_BRIGHT "%s" FG_RESET, name);
+    }
+    if (S_ISREG(st_mode)) {
+        printf(FG_WHITE_BRIGHT "%s" FG_RESET, name);
+    }
+    if (S_ISBLK(st_mode)) {
+        printf(FG_GREEN_BRIGHT "%s" FG_RESET, name);
+    }
+    if (S_ISDIR(st_mode)) {
+        printf(FG_BLUE_BRIGHT "%s" FG_RESET, name);
+    }
+    if (S_ISCHR(st_mode)) {
+        printf(FG_YELLOW_BRIGHT "%s" FG_RESET, name);
+    }
+    if (S_ISFIFO(st_mode)) {
+        printf(FG_YELLOW_BRIGHT "%s" FG_RESET, name);
+    }
+}
 
 static inline void print_dir_entry(dirent_t *dirent, const char *path, unsigned int flags, size_t *total_size)
 {
@@ -42,22 +63,15 @@ static inline void print_dir_entry(dirent_t *dirent, const char *path, unsigned 
 
     // Prepare the relative path.
     strcpy(relative_path, path);
-    if (strcmp(path, "/") != 0)
+    if (path[strnlen(path, PATH_MAX) - 1] != '/') {
         strcat(relative_path, "/");
+    }
     strcat(relative_path, dirent->d_name);
 
     // Stat the file.
-    if (stat(relative_path, &dstat) == -1) {
+    if (stat(relative_path, &dstat) < 0) {
+        printf("ls: failed to stat `%s`\n", relative_path);
         return;
-    }
-
-    // Deal with the coloring.
-    if ((dirent->d_type == DT_REG) && bitmask_check(dstat.st_mode, S_IXUSR)) {
-        puts(FG_BRIGHT_YELLOW);
-    } else if (dirent->d_type == DT_DIR) {
-        puts(FG_BRIGHT_CYAN);
-    } else if (dirent->d_type == DT_BLK) {
-        puts(FG_BRIGHT_GREEN);
     }
 
     // Deal with the -l.
@@ -83,22 +97,33 @@ static inline void print_dir_entry(dirent_t *dirent, const char *path, unsigned 
         // Add a space.
         putchar(' ');
         // Print the rest.
-        printf("%4d %4d %11s %02d/%02d %02d:%02d %s\n",
+        printf("%4d %4d %11s %02d/%02d %02d:%02d ",
                dstat.st_uid,
                dstat.st_gid,
                to_human_size(dstat.st_size),
                timeinfo->tm_mon,
                timeinfo->tm_mday,
                timeinfo->tm_hour,
-               timeinfo->tm_min,
-               dirent->d_name);
+               timeinfo->tm_min);
+
+        print_dir_entry_name(dirent->d_name, dstat.st_mode);
+
+        if (S_ISLNK(dstat.st_mode)) {
+            char link_buffer[PATH_MAX];
+            ssize_t len = readlink(relative_path, link_buffer, sizeof(link_buffer));
+            if (len > 0) {
+                link_buffer[len] = '\0';
+                printf(" -> %s", link_buffer);
+            }
+        }
+        putchar('\n');
         (*total_size) += dstat.st_size;
     } else {
         // Print the inode if required.
         if (bitmask_check(flags, FLAG_I)) {
             printf("%d ", dirent->d_ino);
         }
-        puts(dirent->d_name);
+        print_dir_entry_name(dirent->d_name, dstat.st_mode);
         // Print in 1 column if requested.
         if (bitmask_check(flags, FLAG_1)) {
             putchar('\n');
@@ -106,17 +131,21 @@ static inline void print_dir_entry(dirent_t *dirent, const char *path, unsigned 
             putchar(' ');
         }
     }
-
-    // Reset the color.
-    puts(FG_BRIGHT_WHITE);
 }
 
-static void print_ls(int fd, const char *path, unsigned int flags)
+static void print_ls(const char *path, unsigned int flags)
 {
+    // Open the directory.
+    int fd = open(path, O_RDONLY | O_DIRECTORY, 0);
+    if (fd == -1) {
+        printf("ls: cannot access '%s': %s\n", path, strerror(errno));
+        return;
+    }
+
+    // Clear the directory entry buffer.
     dirent_t dents[DENTS_NUM];
     memset(&dents, 0, DENTS_NUM * sizeof(dirent_t));
-
-    size_t total_size = 0;
+    size_t total_size  = 0;
     ssize_t bytes_read = 0;
     while ((bytes_read = getdents(fd, dents, sizeof(dents))) > 0) {
         for (size_t i = 0; i < bytes_read / sizeof(dirent_t); ++i) {
@@ -126,11 +155,10 @@ static void print_ls(int fd, const char *path, unsigned int flags)
     if (bytes_read < 0) {
         perror("getdents failed");
     }
-    printf("\n");
-
     if (bitmask_check(flags, FLAG_L)) {
         printf("Total: %s\n", to_human_size(total_size));
     }
+    close(fd);
 }
 
 int main(int argc, char *argv[])
@@ -164,31 +192,20 @@ int main(int argc, char *argv[])
             bitmask_set_assign(flags, FLAG_I);
         }
     }
-
     bool_t no_directory = true;
     for (int i = 1; i < argc; ++i) {
-        if (argv[i][0] == '-')
-            continue;
-        no_directory = false;
-        int fd       = open(argv[i], O_RDONLY | O_DIRECTORY, 0);
-        if (fd == -1) {
-            printf("ls: cannot access '%s': %s\n", argv[i], strerror(errno));
-        } else {
+        if (argv[i][0] != '-') {
+            no_directory = false;
             printf("%s:\n", argv[i]);
-            print_ls(fd, argv[i], flags);
-            close(fd);
+            print_ls(argv[i], flags);
+            printf("\n");
         }
     }
     if (no_directory) {
         char cwd[PATH_MAX];
         getcwd(cwd, PATH_MAX);
-        int fd = open(cwd, O_RDONLY | O_DIRECTORY, 0);
-        if (fd == -1) {
-            printf("ls: cannot access '%s': %s\n", cwd, strerror(errno));
-        } else {
-            print_ls(fd, cwd, flags);
-            close(fd);
-        }
+        print_ls(cwd, flags);
+        printf("\n");
     }
     return 0;
 }

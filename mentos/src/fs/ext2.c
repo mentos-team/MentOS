@@ -8,6 +8,8 @@
 #define __DEBUG_HEADER__ "[EXT2  ]"      ///< Change header.
 #define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
 #include "io/debug.h"                    // Include debugging functions.
+// If defined, ETX2 will debug everything.
+// #define EXT2_FULL_DEBUG
 
 #include "assert.h"
 #include "fcntl.h"
@@ -21,22 +23,13 @@
 #include "stdio.h"
 #include "string.h"
 #include "sys/errno.h"
+#include "sys/stat.h"
 
 #define EXT2_SUPERBLOCK_MAGIC  0xEF53 ///< Magic value used to identify an ext2 filesystem.
 #define EXT2_DIRECT_BLOCKS     12     ///< Amount of indirect blocks in an inode.
 #define EXT2_PATH_MAX          4096   ///< Maximum length of a pathname.
 #define EXT2_MAX_SYMLINK_COUNT 8      ///< Maximum nesting of symlinks, used to prevent a loop.
 #define EXT2_NAME_LEN          255    ///< The lenght of names inside directory entries.
-
-// File types.
-#define EXT2_S_IFMT   0xF000 ///< Format mask
-#define EXT2_S_IFSOCK 0xC000 ///< Socket
-#define EXT2_S_IFLNK  0xA000 ///< Symbolic link
-#define EXT2_S_IFREG  0x8000 ///< Regular file
-#define EXT2_S_IFBLK  0x6000 ///< Block device
-#define EXT2_S_IFDIR  0x4000 ///< Directory
-#define EXT2_S_IFCHR  0x2000 ///< Character device
-#define EXT2_S_IFIFO  0x1000 ///< Fifo
 
 // Permissions bit.
 #define EXT2_S_ISUID 0x0800 ///< SUID
@@ -377,7 +370,7 @@ static off_t ext2_lseek(vfs_file_t *file, off_t offset, int whence);
 static int ext2_fstat(vfs_file_t *file, stat_t *stat);
 static int ext2_ioctl(vfs_file_t *file, int request, void *data);
 static ssize_t ext2_getdents(vfs_file_t *file, dirent_t *dirp, off_t doff, size_t count);
-static ssize_t ext2_readlink(vfs_file_t *file, char *buffer, size_t bufsize);
+static ssize_t ext2_readlink(const char *path, char *buffer, size_t bufsize);
 static int ext2_fsetattr(vfs_file_t *file, struct iattr *attr);
 
 static int ext2_mkdir(const char *path, mode_t mode);
@@ -594,7 +587,7 @@ static void ext2_dump_inode(ext2_filesystem_t *fs, ext2_inode_t *inode)
 /// @param dirent the object to dump.
 static void ext2_dump_dirent(ext2_dirent_t *dirent)
 {
-    pr_debug("Inode: %4u Rec. Len.: %4u Name Len.: %4u Type:%4s Name: %s\n", dirent->inode, dirent->rec_len, dirent->name_len, ext2_file_type_to_string(dirent->file_type), dirent->name);
+    pr_debug("Inode: %4u Rec. Len.: %4u Name Len.: %4u Type: %4s Name: %s\n", dirent->inode, dirent->rec_len, dirent->name_len, ext2_file_type_to_string(dirent->file_type), dirent->name);
 }
 
 /// @brief Dumps on debugging output the BGDT.
@@ -991,15 +984,15 @@ static int ext2_write_block(ext2_filesystem_t *fs, uint32_t block_index, uint8_t
 /// @return 0 on success, -1 on failure.
 static int ext2_read_bgdt(ext2_filesystem_t *fs)
 {
-    pr_debug("Read BGDT for EXT2 filesystem (0x%x)\n", fs);
-    if (fs->block_groups) {
-        for (uint32_t i = 0; i < fs->bgdt_length; ++i) {
-            ext2_read_block(fs, fs->bgdt_start_block + i, (uint8_t *)((uintptr_t)fs->block_groups + (fs->block_size * i)));
-        }
-        return 0;
+    pr_debug("ext2_read_bgdt(%p)\n", fs);
+    if (!fs->block_groups) {
+        pr_err("The `block_groups` list is not initialized.\n");
+        return -1;
     }
-    pr_err("The `block_groups` list is not initialized.\n");
-    return -1;
+    for (uint32_t i = 0; i < fs->bgdt_length; ++i) {
+        ext2_read_block(fs, fs->bgdt_start_block + i, (uint8_t *)((uintptr_t)fs->block_groups + (fs->block_size * i)));
+    }
+    return 0;
 }
 
 /// @brief Writes the Block Group Descriptor Table (BGDT) to the block device associated with this filesystem.
@@ -1007,15 +1000,15 @@ static int ext2_read_bgdt(ext2_filesystem_t *fs)
 /// @return 0 on success, -1 on failure.
 static int ext2_write_bgdt(ext2_filesystem_t *fs)
 {
-    pr_debug("Write BGDT for EXT2 filesystem (0x%x)\n", fs);
-    if (fs->block_groups) {
-        for (uint32_t i = 0; i < fs->bgdt_length; ++i) {
-            ext2_write_block(fs, fs->bgdt_start_block + i, (uint8_t *)((uintptr_t)fs->block_groups + (fs->block_size * i)));
-        }
-        return 0;
+    pr_debug("ext2_write_bgdt(%p)\n", fs);
+    if (!fs->block_groups) {
+        pr_err("The `block_groups` list is not initialized.\n");
+        return -1;
     }
-    pr_err("The `block_groups` list is not initialized.\n");
-    return -1;
+    for (uint32_t i = 0; i < fs->bgdt_length; ++i) {
+        ext2_write_block(fs, fs->bgdt_start_block + i, (uint8_t *)((uintptr_t)fs->block_groups + (fs->block_size * i)));
+    }
+    return 0;
 }
 
 /// @brief Reads an inode.
@@ -1038,7 +1031,7 @@ static int ext2_read_inode(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t 
     block_index = ext2_inode_index_to_block_index(fs, inode_index);
 
     // Log the address to the inode.
-    // pr_debug("Read inode   (inode_index:%4u, group_index:%4u, group_offset:%4u, block_index:%4u)\n",
+    // pr_debug("Read inode   (inode_index: %4u, group_index: %4u, group_offset: %4u, block_index: %4u)\n",
     //          inode_index, group_index, group_offset, block_index);
 
     // Check for error.
@@ -1079,7 +1072,7 @@ static int ext2_write_inode(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t
     // Get the block offest.
     block_index = ext2_inode_index_to_block_index(fs, inode_index);
 
-    // pr_debug("Write inode  (inode_index:%4u, group_index:%4u, group_offset:%4u, block_index:%4u)\n",
+    // pr_debug("Write inode  (inode_index: %4u, group_index: %4u, group_offset: %4u, block_index: %4u)\n",
     //          inode_index, group_index, group_offset, block_index);
 
     // Check for error.
@@ -1131,7 +1124,7 @@ static int ext2_allocate_inode(ext2_filesystem_t *fs, unsigned preferred_group)
     // Compute the inode index.
     inode_index = (group_index * fs->superblock.inodes_per_group) + group_offset + 1U;
     // Log the allocation of the inode.
-    pr_debug("Allocate inode, inode_index:%u, group_index:%4u, group_offset:%4u\n", inode_index, group_index, group_offset);
+    pr_debug("ext2_allocate_inode(inode: %4u, group_index: %4u, group_offset: %4u\n", inode_index, group_index, group_offset);
     // Set the inode as occupied.
     ext2_bitmap_set(cache, group_offset);
     // Write back the inode bitmap.
@@ -1180,7 +1173,7 @@ static uint32_t ext2_allocate_block(ext2_filesystem_t *fs)
     // Compute the block index.
     block_index = (group_index * fs->superblock.blocks_per_group) + group_offset;
     // Log the allocation of the inode.
-    pr_debug("Allocate block (block_index:%u, group_index:%4u, group_offset:%4u)\n", block_index, group_index, group_offset);
+    pr_debug("ext2_allocate_block(block: %4u, group_index: %4u, group_offset: %4u)\n", block_index, group_index, group_offset);
     // Set the block as occupied.
     ext2_bitmap_set(cache, group_offset);
     // Update the bitmap.
@@ -1222,7 +1215,7 @@ static void ext2_free_block(ext2_filesystem_t *fs, uint32_t block_index)
     uint32_t block_bitmap = fs->block_groups[group_index].block_bitmap;
 
     // Log the allocation of the inode.
-    pr_debug("Free block     (block_index:%u, group_index:%4u, group_offset:%4u)\n", block_index, group_index, group_offset);
+    pr_debug("ext2_free_block(block: %4u, group_index: %4u, group_offset: %4u)\n", block_index, group_index, group_offset);
 
     // Allocate the cache.
     uint8_t *cache = ext2_alloc_cache(fs);
@@ -1268,7 +1261,7 @@ static int ext2_free_inode(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t 
     uint32_t block_number = (inode->size / fs->block_size) + ((inode->size % fs->block_size) != 0);
 
     // Log the allocation of the inode.
-    pr_debug("Free inode     (group_index:%u, inode_index:%4u, group_offset:%4u)\n", group_index, inode_index, group_offset);
+    pr_debug("ext2_free_inode(group: %4u, inode_index: %4u, group_offset: %4u)\n", group_index, inode_index, group_offset);
 
     // Free its blocks.
     for (uint32_t block_index = 0; block_index < block_number; ++block_index) {
@@ -1384,14 +1377,13 @@ static int ext2_set_real_block_index(
     // Result of the operation.
     int ret = 0;
 
-    // Allocate the cache.
-    uint8_t *cache = ext2_alloc_cache(fs);
-
     // Are we setting a DIRECT block pointer.
     a = ((int)block_index) - EXT2_DIRECT_BLOCKS;
     if (a <= 0) {
         inode->data.blocks.dir_blocks[block_index] = real_index;
     } else {
+        // Allocate the cache.
+        uint8_t *cache = ext2_alloc_cache(fs);
         // Are we setting an INDIRECT block pointer.
         b = a - p;
         if (b <= 0) {
@@ -1471,10 +1463,10 @@ static int ext2_set_real_block_index(
                 }
             }
         }
+    early_exit:
+        // Free the cache.
+        ext2_dealloc_cache(cache);
     }
-early_exit:
-    // Free the cache.
-    ext2_dealloc_cache(cache);
     return ret;
 }
 
@@ -1492,14 +1484,13 @@ static uint32_t ext2_get_real_block_index(ext2_filesystem_t *fs, ext2_inode_t *i
     // The real index.
     uint32_t real_index = 0;
 
-    // Allocate the cache.
-    uint8_t *cache = ext2_alloc_cache(fs);
-
     // Check if the index is among the DIRECT blocks.
     a = block_index - EXT2_DIRECT_BLOCKS;
     if (a < 0) {
         real_index = inode->data.blocks.dir_blocks[block_index];
     } else {
+        // Allocate the cache.
+        uint8_t *cache = ext2_alloc_cache(fs);
         // Check if the index is among the INDIRECT blocks.
         b = a - p;
         if (b < 0) {
@@ -1543,9 +1534,9 @@ static uint32_t ext2_get_real_block_index(ext2_filesystem_t *fs, ext2_inode_t *i
                 }
             }
         }
+        // Free the cache.
+        ext2_dealloc_cache(cache);
     }
-    // Free the cache.
-    ext2_dealloc_cache(cache);
     return real_index;
 }
 
@@ -1557,7 +1548,6 @@ static uint32_t ext2_get_real_block_index(ext2_filesystem_t *fs, ext2_inode_t *i
 /// @return 0 on success, -1 on failure.
 static int ext2_allocate_inode_block(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t inode_index, uint32_t block_index)
 {
-    pr_debug("Allocating block `%d` for inode `%d`.\n", block_index, inode_index);
     // Allocate the block.
     int real_index = ext2_allocate_block(fs);
     if (real_index == -1) {
@@ -1567,6 +1557,7 @@ static int ext2_allocate_inode_block(ext2_filesystem_t *fs, ext2_inode_t *inode,
     if (ext2_set_real_block_index(fs, inode, inode_index, block_index, real_index) == -1) {
         return -1;
     }
+    pr_debug("ext2_allocate_inode_block(inode: %4u, block: %4u, real: %4u)\n", inode_index, block_index, real_index);
     // Compute the new blocks count.
     uint32_t blocks_count = (block_index + 1) * fs->blocks_per_block_count;
     if (inode->blocks_count < blocks_count) {
@@ -1578,7 +1569,6 @@ static int ext2_allocate_inode_block(ext2_filesystem_t *fs, ext2_inode_t *inode,
     if (ext2_write_inode(fs, inode, inode_index) == -1) {
         return -1;
     }
-    pr_debug("Succesfully allocated block `%d` for inode `%d`.\n", block_index, inode_index);
     return 0;
 }
 
@@ -1599,7 +1589,9 @@ static ssize_t ext2_read_inode_block(ext2_filesystem_t *fs, ext2_inode_t *inode,
         return -1;
     }
     // Log the address to the inode block.
-    // pr_debug("Read inode block  (block_index:%4u, real_index:%4u)\n", block_index, real_index);
+#ifdef EXT2_FULL_DEBUG
+    pr_debug("ext2_read_inode_block(block: %4u, real: %4u)\n", block_index, real_index);
+#endif
     // Read the block.
     return ext2_read_block(fs, real_index, buffer);
 }
@@ -1614,9 +1606,6 @@ static ssize_t ext2_read_inode_block(ext2_filesystem_t *fs, ext2_inode_t *inode,
 static ssize_t ext2_write_inode_block(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t inode_index, uint32_t block_index, uint8_t *buffer)
 {
     while (block_index >= (inode->blocks_count / fs->blocks_per_block_count)) {
-        pr_debug("Write inode block: %u >= %u (%u / %u)\n",
-                 block_index, inode->blocks_count / fs->blocks_per_block_count,
-                 inode->blocks_count, fs->blocks_per_block_count);
         if (ext2_allocate_inode_block(fs, inode, inode_index, (inode->blocks_count / fs->blocks_per_block_count)) < 0) {
             pr_crit("Failed to write allocate inode block\n");
         }
@@ -1627,7 +1616,9 @@ static ssize_t ext2_write_inode_block(ext2_filesystem_t *fs, ext2_inode_t *inode
         return -1;
     }
     // Log the address to the inode block.
-    // pr_debug("Write inode block (block_index:%4u, real_index:%4u, inode_index:%4u)\n", block_index, real_index, inode_index);
+#ifdef EXT2_FULL_DEBUG
+    pr_debug("ext2_write_inode_block(block: %4u, inode: %4u, real: %4u)\n", block_index, inode_index, real_index);
+#endif
     // Write the block.
     return ext2_write_block(fs, real_index, buffer);
 }
@@ -1652,6 +1643,10 @@ static ssize_t ext2_read_inode_data(ext2_filesystem_t *fs, ext2_inode_t *inode, 
     // How much bytes to read for the end block.
     uint32_t end_size = end_offset - end_block * fs->block_size;
 
+#ifdef EXT2_FULL_DEBUG
+    pr_debug("ext2_read_inode_data(inode: %4u, offset: %4u, nbyte: %4u)\n", inode_index, offset, nbyte);
+#endif
+
     // Allocate the cache.
     uint8_t *cache = ext2_alloc_cache(fs);
 
@@ -1661,7 +1656,7 @@ static ssize_t ext2_read_inode_data(ext2_filesystem_t *fs, ext2_inode_t *inode, 
         // Read the real block.
         if (ext2_read_inode_block(fs, inode, block_index, cache) == -1) {
             // TODO: Understand why sometimes it fails.
-            pr_warning("Failed to read the inode block %u of inode %u\n", block_index, inode_index);
+            pr_warning("Failed to read the inode block %4u of inode %4u\n", block_index, inode_index);
             // ret = -1;
             // break;
         }
@@ -1708,6 +1703,10 @@ static ssize_t ext2_write_inode_data(ext2_filesystem_t *fs, ext2_inode_t *inode,
     // How much bytes to read for the end block.
     uint32_t end_size = end_offset - end_block * fs->block_size;
 
+#ifdef EXT2_FULL_DEBUG
+    pr_debug("ext2_write_inode_data(inode: %4u, offset: %4u, nbyte: %4u)\n", inode_index, offset, nbyte);
+#endif
+
     // Allocate the cache.
     uint8_t *cache = ext2_alloc_cache(fs);
 
@@ -1715,7 +1714,9 @@ static ssize_t ext2_write_inode_data(ext2_filesystem_t *fs, ext2_inode_t *inode,
     for (uint32_t block_index = start_block; block_index <= end_block; ++block_index) {
         left = 0, right = fs->block_size;
         // Read the real block. Do not check for
-        ext2_read_inode_block(fs, inode, block_index, cache);
+        if (ext2_read_inode_block(fs, inode, block_index, cache) < 0) {
+            pr_warning("Failed to read the inode block %4u of inode %4u\n", block_index, inode_index);
+        }
         if (block_index == start_block) {
             left = start_off;
         }
@@ -1850,8 +1851,9 @@ static inline int ext2_directory_is_empty(ext2_filesystem_t *fs, uint8_t *cache,
 /// @return 0 on success, 1 on failure.
 static int ext2_clean_inode_content(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t inode_index)
 {
+    pr_debug("ext2_clean_inode_content(%p, %p, %u)\n", fs, inode, inode_index);
     // Check the type of operation.
-    if ((inode->mode & EXT2_S_IFREG) != EXT2_S_IFREG) {
+    if ((inode->mode & S_IFREG) != S_IFREG) {
         pr_alert("Trying to clean the content of a non-regular file.\n");
         return 1;
     }
@@ -1862,10 +1864,13 @@ static int ext2_clean_inode_content(ext2_filesystem_t *fs, ext2_inode_t *inode, 
     //
     int ret = 0;
     for (ssize_t offset = 0, to_write; offset < inode->size;) {
+        pr_debug("ext2_clean_inode_content(%p, %p, %u): offset = %6u of size = %u\n", fs, inode, inode_index, offset, inode->size);
         // We do not want to extend the size of the inode.
         to_write = max(min(offset + cache_size, inode->size), 0);
+        pr_debug("ext2_clean_inode_content(%p, %p, %u): to_write = %6u\n", fs, inode, inode_index, to_write);
         // Override the content.
         ssize_t written = ext2_write_inode_data(fs, inode, inode_index, offset, to_write, (char *)cache);
+        pr_debug("ext2_clean_inode_content(%p, %p, %u): written = %6u\n", fs, inode, inode_index, written);
         if (written < 0) {
             pr_err("Failed to clean content of inode %d\n", inode_index);
             ret = -1;
@@ -2170,7 +2175,7 @@ static int ext2_allocate_direntry(
         return -1;
     }
     // Check that the parent is a directory.
-    if (!bitmask_check(parent_inode.mode, EXT2_S_IFDIR)) {
+    if (!bitmask_check(parent_inode.mode, S_IFDIR)) {
         pr_err("The parent inode is not a directory (ino: %d, mode: %d).\n", parent_inode_index, parent_inode.mode);
         return -1;
     }
@@ -2306,14 +2311,14 @@ static int ext2_find_direntry(ext2_filesystem_t *fs, ino_t ino, const char *name
         return -1;
     }
     // Check that the parent is a directory.
-    if (!bitmask_check(inode.mode, EXT2_S_IFDIR)) {
-        pr_err("The parent inode is not a directory (ino: %d, mode: %d).\n", ino, inode.mode);
+    if (!bitmask_check(inode.mode, S_IFDIR)) {
+        pr_err("The parent inode is not a directory (ino: %d, mode: %d, name: %s).\n", ino, inode.mode, name);
         return -1;
     }
 
     // Check that we are allowed to reach through the directory
     if (!__valid_x_permission(scheduler_get_current_process(), &inode)) {
-        pr_err("The parent inode has no x permission (ino: %d, mode: %d).\n", ino, inode.mode);
+        pr_err("The parent inode has no x permission (ino: %d, mode: %d, name: %s).\n", ino, inode.mode, name);
         return -EPERM;
     }
 
@@ -2341,8 +2346,9 @@ static int ext2_find_direntry(ext2_filesystem_t *fs, ino_t ino, const char *name
     // Copy the inode of the parent, even if we did not find the entry.
     search->parent_inode = ino;
     // Check if we have found the entry.
-    if (it.direntry == NULL)
+    if (it.direntry == NULL) {
         goto free_cache_return_error;
+    }
     // Copy the direntry.
     search->direntry.inode     = it.direntry->inode;
     search->direntry.rec_len   = it.direntry->rec_len;
@@ -2368,7 +2374,7 @@ free_cache_return_error:
 /// @param path the path of the entry we are looking for, it can be a relative path.
 /// @param search the output variable where we save the entry information.
 /// @return 0 on success, -errno on failure.
-static int ext2_resolve_path(vfs_file_t *directory, char *path, ext2_direntry_search_t *search)
+static int ext2_resolve_path(vfs_file_t *directory, const char *path, ext2_direntry_search_t *search)
 {
     // Check the pointers.
     if (directory == NULL) {
@@ -2393,17 +2399,16 @@ static int ext2_resolve_path(vfs_file_t *directory, char *path, ext2_direntry_se
     if (strcmp(path, "/") == 0) {
         return ext2_find_direntry(fs, directory->ino, path, search);
     }
-    ino_t ino = directory->ino;
-    char *saveptr, *token = strtok_r(path, "/", &saveptr);
-    while (token) {
-        if (!ext2_find_direntry(fs, ino, token, search)) {
-            ino = search->direntry.inode;
-        } else {
+    ino_t ino            = directory->ino;
+    char token[NAME_MAX] = { 0 };
+    size_t offset        = 0;
+    while (tokenize(path, "/", &offset, token, NAME_MAX)) {
+        if (ext2_find_direntry(fs, ino, token, search)) {
             return -1;
         }
-        token = strtok_r(NULL, "/", &saveptr);
+        ino = search->direntry.inode;
     }
-    pr_debug("resolve_path(directory: %s, path: %s) -> (%s, %d)\n",
+    pr_debug("ext2_resolve_path(directory: %s, path: %s) -> (%s, %d)\n",
              directory->name, path, search->direntry.name, search->direntry.inode);
     return 0;
 }
@@ -2473,22 +2478,22 @@ static int ext2_init_vfs_file(
     file->gid = inode->gid;
     // Set the VFS specific flags.
     file->flags = 0;
-    if ((inode->mode & EXT2_S_IFREG) == EXT2_S_IFREG) {
+    if ((inode->mode & S_IFREG) == S_IFREG) {
         file->flags |= DT_REG;
     }
-    if ((inode->mode & EXT2_S_IFDIR) == EXT2_S_IFDIR) {
+    if ((inode->mode & S_IFDIR) == S_IFDIR) {
         file->flags |= DT_DIR;
     }
-    if ((inode->mode & EXT2_S_IFBLK) == EXT2_S_IFBLK) {
+    if ((inode->mode & S_IFBLK) == S_IFBLK) {
         file->flags |= DT_BLK;
     }
-    if ((inode->mode & EXT2_S_IFCHR) == EXT2_S_IFCHR) {
+    if ((inode->mode & S_IFCHR) == S_IFCHR) {
         file->flags |= DT_CHR;
     }
-    if ((inode->mode & EXT2_S_IFIFO) == EXT2_S_IFIFO) {
+    if ((inode->mode & S_IFIFO) == S_IFIFO) {
         file->flags |= DT_FIFO;
     }
-    if ((inode->mode & EXT2_S_IFLNK) == EXT2_S_IFLNK) {
+    if ((inode->mode & S_IFLNK) == S_IFLNK) {
         file->flags |= DT_LNK;
     }
     // Set the inode.
@@ -2630,7 +2635,7 @@ static int ext2_create_inode(
 /// It is equivalent to: open(path, O_WRONLY|O_CREAT|O_TRUNC, mode)
 static vfs_file_t *ext2_creat(const char *path, mode_t mode)
 {
-    pr_debug("creat(path: \"%s\", mode: %d)\n", path, mode);
+    pr_debug("ext2_creat(path: `%s`, mode: %d)\n", path, mode);
     // Get the name of the directory.
     char parent_path[PATH_MAX];
     if (!dirname(path, parent_path, sizeof(parent_path))) {
@@ -2682,7 +2687,7 @@ static vfs_file_t *ext2_creat(const char *path, mode_t mode)
         return file;
     }
     // Set the inode mode.
-    mode = EXT2_S_IFREG | (0xFFF & mode);
+    mode = S_IFREG | (0xFFF & mode);
     // Get the group index of the parent.
     uint32_t group_index = ext2_inode_index_to_group_index(fs, parent->ino);
     // Create and initialize the new inode.
@@ -2731,31 +2736,27 @@ close_parent_return_null:
 /// @return The file descriptor of the opened file, otherwise returns -1.
 static vfs_file_t *ext2_open(const char *path, int flags, mode_t mode)
 {
-    pr_debug("open(path: \"%s\", flags: %d, mode: %d)\n", path, flags, mode);
-    // Get the absolute path.
-    char absolute_path[PATH_MAX];
-    // If the first character is not the '/' then get the absolute path.
-    if (!realpath(path, absolute_path, sizeof(absolute_path))) {
-        pr_err("Cannot get the absolute path for path `%s`.\n", path);
-        return NULL;
-    }
+    pr_debug("ext2_open(path: '%s', flags: %d, mode: %d)\n", path, flags, mode);
     // Get the EXT2 filesystem.
-    ext2_filesystem_t *fs = get_ext2_filesystem(absolute_path);
+    ext2_filesystem_t *fs = get_ext2_filesystem(path);
     if (fs == NULL) {
-        pr_err("Failed to get the EXT2 filesystem for absolute path `%s`.\n", absolute_path);
+        pr_err("ext2_open(path: '%s', flags: %d, mode: %d): Failed to get the EXT2 filesystem.\n",
+               path, flags, mode);
         return NULL;
     }
     // Prepare the structure for the search.
     ext2_direntry_search_t search;
     memset(&search, 0, sizeof(ext2_direntry_search_t));
     // First check, if a file with the given name already exists.
-    if (!ext2_resolve_path(fs->root, absolute_path, &search)) {
+    if (!ext2_resolve_path(fs->root, path, &search)) {
         if (bitmask_check(flags, O_CREAT) && bitmask_check(flags, O_EXCL)) {
-            pr_err("A file or directory already exists at `%s` (O_CREAT | O_EXCL).\n", absolute_path);
+            pr_err("ext2_open(path: '%s', flags: %d, mode: %d): A file or directory already exists (O_CREAT | O_EXCL).\n",
+                   path, flags, mode);
             return NULL;
         }
         if (bitmask_check(flags, O_DIRECTORY) && (search.direntry.file_type != ext2_file_type_directory)) {
-            pr_err("Directory entry `%s` is not a directory.\n", search.direntry.name);
+            pr_err("ext2_open(path: '%s', flags: %d, mode: %d): Directory entry `%s` is not a directory.\n",
+                   path, flags, mode, search.direntry.name);
             errno = ENOTDIR;
             return NULL;
         }
@@ -2764,33 +2765,35 @@ static vfs_file_t *ext2_open(const char *path, int flags, mode_t mode)
         if (bitmask_check(flags, O_CREAT)) {
             return ext2_creat(path, mode);
         }
-        pr_err("The file does not exist `%s`.\n", absolute_path);
+        pr_err("ext2_open(path: '%s', flags: %d, mode: %d): The file does not exist.\n",
+               path, flags, mode);
         errno = ENOENT;
         return NULL;
-    }
-    if (search.direntry.file_type == ext2_file_type_symbolic_link) {
-        pr_alert("Beware, it is a symbolic link.\n");
     }
     // Prepare the structure for the inode.
     ext2_inode_t inode;
     memset(&inode, 0, sizeof(ext2_inode_t));
     // Get the inode associated with the directory entry.
     if (ext2_read_inode(fs, &inode, search.direntry.inode) == -1) {
-        pr_err("Failed to read the inode of `%s`.\n", search.direntry.name);
+        pr_err("ext2_open(path: '%s', flags: %d, mode: %d): Failed to read the inode.\n",
+               path, flags, mode);
         return NULL;
     }
 
     if (!vfs_valid_open_permissions(flags, inode.mode, inode.uid, inode.gid)) {
-        pr_err("Task does not have access permission.\n");
+        pr_err("ext2_open(path: '%s', flags: %d, mode: %d): Task does not have access permission.\n",
+               path, flags, mode);
         errno = EACCES;
         return NULL;
     }
 
     // Check if the file is a regular file, and the user wants to write and truncate.
-    if (bitmask_exact(inode.mode, EXT2_S_IFREG) && (bitmask_exact(flags, O_RDWR | O_TRUNC) || bitmask_exact(flags, O_RDONLY | O_TRUNC))) {
+    if (bitmask_exact(inode.mode, S_IFREG) &&
+        (bitmask_exact(flags, O_RDWR | O_TRUNC) || bitmask_exact(flags, O_RDONLY | O_TRUNC))) {
         // Clean the content of the newly created file.
         if (ext2_clean_inode_content(fs, &inode, search.direntry.inode) < 0) {
-            pr_err("Failed to clean the content of the newly created inode.\n");
+            pr_err("ext2_open(path: '%s', flags: %d, mode: %d): Failed to clean the content of the newly created inode.\n",
+                   path, flags, mode);
             return NULL;
         }
     }
@@ -2800,11 +2803,13 @@ static vfs_file_t *ext2_open(const char *path, int flags, mode_t mode)
         // Allocate the memory for the file.
         file = kmem_cache_alloc(vfs_file_cache, GFP_KERNEL);
         if (file == NULL) {
-            pr_err("Failed to allocate memory for the EXT2 file.\n");
+            pr_err("ext2_open(path: '%s', flags: %d, mode: %d): Failed to allocate memory for the EXT2 file.\n",
+                   path, flags, mode);
             return NULL;
         }
         if (ext2_init_vfs_file(fs, file, &inode, search.direntry.inode, search.direntry.name, search.direntry.name_len) == -1) {
-            pr_err("Failed to properly set the VFS file.\n");
+            pr_err("ext2_open(path: '%s', flags: %d, mode: %d): Failed to properly set the VFS file.\n",
+                   path, flags, mode);
             return NULL;
         }
         // Add the vfs_file to the list of associated files.
@@ -2818,38 +2823,32 @@ static vfs_file_t *ext2_open(const char *path, int flags, mode_t mode)
 /// @return 0 on success, -errno on failure.
 static int ext2_unlink(const char *path)
 {
-    pr_debug("unlink(%s)\n", path);
-    // Get the absolute path.
-    char absolute_path[PATH_MAX];
-    // If the first character is not the '/' then get the absolute path.
-    if (!realpath(path, absolute_path, sizeof(absolute_path))) {
-        pr_err("Cannot get the absolute path for path `%s`.\n", path);
-        return -ENOENT;
-    }
+    pr_debug("ext2_unlink(%s)\n", path);
+    int ret = 0;
     // Get the name of the entry we want to unlink.
-    const char *name = basename(absolute_path);
+    const char *name = basename(path);
     if (name == NULL) {
-        pr_err("Cannot get the basename from the absolute path `%s`.\n", absolute_path);
+        pr_err("ext2_unlink(%s): Cannot get the basename.\n", path);
         return -ENOENT;
     }
     // Get the EXT2 filesystem.
-    ext2_filesystem_t *fs = get_ext2_filesystem(absolute_path);
+    ext2_filesystem_t *fs = get_ext2_filesystem(path);
     if (fs == NULL) {
-        pr_err("Failed to get the EXT2 filesystem for absolute path `%s`.\n", absolute_path);
+        pr_err("ext2_unlink(%s): Failed to get the EXT2 filesystem.\n", path);
         return -ENOENT;
     }
     // Prepare the structure for the search.
     ext2_direntry_search_t search;
     memset(&search, 0, sizeof(ext2_direntry_search_t));
     // Resolve the path to the directory entry.
-    if (ext2_resolve_path(fs->root, absolute_path, &search)) {
-        pr_err("Failed to resolve path `%s`.\n", absolute_path);
+    if (ext2_resolve_path(fs->root, path, &search)) {
+        pr_err("ext2_unlink(%s): Failed to resolve path.\n", path);
         return -ENOENT;
     }
     // Get the inode associated with the parent directory entry.
     ext2_inode_t parent_inode;
     if (ext2_read_inode(fs, &parent_inode, search.parent_inode) == -1) {
-        pr_err("stat(%s): Failed to read the inode of parent of `%s`.\n", path, search.direntry.name);
+        pr_err("ext2_unlink(%s): Failed to read the inode of parent (%d).\n", path, search.parent_inode);
         return -ENOENT;
     }
     // Allocate the cache.
@@ -2857,14 +2856,17 @@ static int ext2_unlink(const char *path)
 
     // Read the block where the direntry resides.
     if (ext2_read_inode_block(fs, &parent_inode, search.block_index, cache) == -1) {
-        pr_err("Failed to read the parent inode block `%d`\n", search.block_index);
-        goto free_cache_return_error;
+        pr_err("ext2_unlink(%s): Failed to read the parent inode block (%d).\n", path, search.block_index);
+        ret = -1;
+        goto early_exit;
     }
     // Get a pointer to the direntry.
     ext2_dirent_t *actual_dirent = (ext2_dirent_t *)((uintptr_t)cache + search.block_offset);
     if (actual_dirent == NULL) {
-        pr_err("We found a NULL ext2_dirent_t\n");
-        goto free_cache_return_error;
+        pr_err("ext2_unlink(%s): We found a NULL ext2_dirent_t.\n", path);
+
+        ret = -1;
+        goto early_exit;
     }
     // Clear the directory entry.
     actual_dirent->inode = 0;
@@ -2873,14 +2875,17 @@ static int ext2_unlink(const char *path)
     actual_dirent->file_type = ext2_file_type_unknown;
     // Write back the parent directory block.
     if (!ext2_write_inode_block(fs, &parent_inode, search.parent_inode, search.block_index, cache)) {
-        pr_err("Failed to write the inode block `%d`\n", search.block_index);
-        goto free_cache_return_error;
+        pr_err("ext2_unlink(%s): Failed to write the inode block (%d).\n", path, search.block_index);
+        ret = -1;
+        goto early_exit;
     }
     // Read the inode of the direntry we want to unlink.
     ext2_inode_t inode;
     if (ext2_read_inode(fs, &inode, search.direntry.inode) == -1) {
-        pr_err("Failed to read the inode of `%s`.\n", search.direntry.name);
-        goto free_cache_return_error;
+        pr_err("ext2_unlink(%s): Failed to read the inode (%d: %s).\n",
+               path, search.direntry.inode, search.direntry.name);
+        ret = -1;
+        goto early_exit;
     }
     if (--inode.links_count == 0) {
         // Free the inode.
@@ -2888,18 +2893,16 @@ static int ext2_unlink(const char *path)
     } else {
         // Update the inode.
         if (ext2_write_inode(fs, &inode, search.direntry.inode) == -1) {
-            pr_err("Failed to update the inode of `%s`.\n", search.direntry.name);
-            goto free_cache_return_error;
+            pr_err("ext2_unlink(%s): Failed to update the inode (%d: %s).\n",
+                   path, search.direntry.inode, search.direntry.name);
+            ret = -1;
+            goto early_exit;
         }
     }
-
+early_exit:
     // Free the cache.
     ext2_dealloc_cache(cache);
-    return 0;
-free_cache_return_error:
-    // Free the cache.
-    ext2_dealloc_cache(cache);
-    return -1;
+    return ret;
 }
 
 /// @brief Closes the given file.
@@ -2917,7 +2920,7 @@ static int ext2_close(vfs_file_t *file)
     if (file == fs->root) {
         return -1;
     }
-    pr_debug("close(ino: %d, file: \"%s\")\n", file->ino, file->name);
+    pr_debug("ext2_close(ino: %d, file: \"%s\")\n", file->ino, file->name);
     // Remove the file from the list of opened files.
     list_head_remove(&file->siblings);
     // Free the cache.
@@ -2933,7 +2936,9 @@ static int ext2_close(vfs_file_t *file)
 /// @return The number of red bytes.
 static ssize_t ext2_read(vfs_file_t *file, char *buffer, off_t offset, size_t nbyte)
 {
-    //pr_debug("read(%s, %p, %d, %d)\n", file->name, buffer, offset, nbyte);
+#ifdef EXT2_FULL_DEBUG
+    pr_debug("ext2_read(file: %s, offset: %4u, nbyte: %4u)\n", file->name, offset, nbyte);
+#endif
     // Get the filesystem.
     ext2_filesystem_t *fs = (ext2_filesystem_t *)file->device;
     if (fs == NULL) {
@@ -2947,7 +2952,7 @@ static ssize_t ext2_read(vfs_file_t *file, char *buffer, off_t offset, size_t nb
         return -1;
     }
     // Disallow reading directories using read
-    if ((inode.mode & EXT2_S_IFDIR) == EXT2_S_IFDIR) {
+    if ((inode.mode & S_IFDIR) == S_IFDIR) {
         pr_err("Reading a directory `%s` is not allowed.\n", file->name);
         return -EISDIR;
     }
@@ -2962,6 +2967,9 @@ static ssize_t ext2_read(vfs_file_t *file, char *buffer, off_t offset, size_t nb
 /// @return The number of written bytes.
 static ssize_t ext2_write(vfs_file_t *file, const void *buffer, off_t offset, size_t nbyte)
 {
+#ifdef EXT2_FULL_DEBUG
+    pr_debug("ext2_write(file: %s, offset: %4u, nbyte: %4u)\n", file->name, offset, nbyte);
+#endif
     // Get the filesystem.
     ext2_filesystem_t *fs = (ext2_filesystem_t *)file->device;
     if (fs == NULL) {
@@ -2994,6 +3002,7 @@ static ssize_t ext2_write(vfs_file_t *file, const void *buffer, off_t offset, si
 /// indicate the error.
 static off_t ext2_lseek(vfs_file_t *file, off_t offset, int whence)
 {
+    pr_debug("ext2_lseek(file: %s, offset: %4u, whence: %4u)\n", file->name, offset, whence);
     // Get the filesystem.
     ext2_filesystem_t *fs = (ext2_filesystem_t *)file->device;
     if (fs == NULL) {
@@ -3061,6 +3070,7 @@ static int ext2_fstat(vfs_file_t *file, stat_t *stat)
         pr_err("We received a NULL stat pointer.\n");
         return -EFAULT;
     }
+    pr_debug("ext2_fstat(file: %s)\n", file->name);
     // Get the filesystem.
     ext2_filesystem_t *fs = (ext2_filesystem_t *)file->device;
     if (fs == NULL) {
@@ -3077,6 +3087,41 @@ static int ext2_fstat(vfs_file_t *file, stat_t *stat)
     stat->st_dev = fs->block_device->ino;
     // Set the inode.
     stat->st_ino = file->ino;
+    // Set the rest of the structure.
+    return __ext2_stat(&inode, stat);
+}
+
+/// @brief Retrieves information concerning the file at the given position.
+/// @param path The path where the file resides.
+/// @param stat The structure where the information are stored.
+/// @return 0 if success.
+static int ext2_stat(const char *path, stat_t *stat)
+{
+    pr_debug("ext2_stat(path: %s)\n", path);
+    // Get the EXT2 filesystem.
+    ext2_filesystem_t *fs = get_ext2_filesystem(path);
+    if (fs == NULL) {
+        pr_err("ext2_stat(path: %s): Failed to get the EXT2 filesystem.\n", path);
+        return -ENOENT;
+    }
+    // Prepare the structure for the search.
+    ext2_direntry_search_t search;
+    memset(&search, 0, sizeof(ext2_direntry_search_t));
+    // Resolve the path.
+    if (ext2_resolve_path(fs->root, path, &search)) {
+        pr_err("ext2_stat(path: %s): Failed to resolve path.\n", path);
+        return -ENOENT;
+    }
+    // Get the inode associated with the directory entry.
+    ext2_inode_t inode;
+    if (ext2_read_inode(fs, &inode, search.direntry.inode) == -1) {
+        pr_err("ext2_stat(path: %s): Failed to read the inode of `%s`.\n", path, search.direntry.name);
+        return -ENOENT;
+    }
+    /// ID of device containing file.
+    stat->st_dev = fs->block_device->ino;
+    // Set the inode.
+    stat->st_ino = search.direntry.inode;
     // Set the rest of the structure.
     return __ext2_stat(&inode, stat);
 }
@@ -3102,7 +3147,7 @@ static int ext2_ioctl(vfs_file_t *file, int request, void *data)
 /// @return The number of written bytes in the buffer.
 static ssize_t ext2_getdents(vfs_file_t *file, dirent_t *dirp, off_t doff, size_t count)
 {
-    pr_debug("getdents(%s, %p, %d, %d)\n", file->name, dirp, doff, count);
+    pr_debug("ext2_getdents(file: %s, doff: %4u, count: %4u)\n", file->name, doff, count);
     // Get the filesystem.
     ext2_filesystem_t *fs = (ext2_filesystem_t *)file->device;
     if (fs == NULL) {
@@ -3155,26 +3200,38 @@ static ssize_t ext2_getdents(vfs_file_t *file, dirent_t *dirp, off_t doff, size_
 /// @param bufsize the size of the buffer.
 /// @return The number of read characters on success, -1 otherwise and errno is
 /// set to indicate the error.
-static ssize_t ext2_readlink(vfs_file_t *file, char *buffer, size_t bufsize)
+static ssize_t ext2_readlink(const char *path, char *buffer, size_t bufsize)
 {
-    // Get the filesystem.
-    ext2_filesystem_t *fs = (ext2_filesystem_t *)file->device;
+    pr_debug("ext2_readlink(path: %s)\n", path);
+    // Get the EXT2 filesystem.
+    ext2_filesystem_t *fs = get_ext2_filesystem(path);
     if (fs == NULL) {
-        pr_err("The file does not belong to an EXT2 filesystem `%s`.\n", file->name);
+        pr_err("ext2_readlink(path: %s): Failed to get the EXT2 filesystem.\n", path);
+        return -ENOENT;
+    }
+    // Prepare the structure for the search.
+    ext2_direntry_search_t search;
+    memset(&search, 0, sizeof(ext2_direntry_search_t));
+    // Resolve the path.
+    if (ext2_resolve_path(fs->root, path, &search)) {
+        pr_err("ext2_readlink(path: %s): Failed to resolve path.\n", path);
         return -ENOENT;
     }
     // Get the inode associated with the file.
     ext2_inode_t inode;
-    if (ext2_read_inode(fs, &inode, file->ino) == -1) {
-        pr_err("Failed to read the inode (%d).\n", file->ino);
+    if (ext2_read_inode(fs, &inode, search.direntry.inode) == -1) {
+        pr_err("ext2_readlink(path: %s): Failed to read the inode (%d).\n", path, search.direntry.inode);
         return -ENOENT;
     }
-    // Get the length of the symlink.
-    ssize_t nbytes = min(strlen(inode.data.symlink), bufsize);
-    // Copy the symlink information.
-    strncpy(buffer, inode.data.symlink, nbytes);
+    ssize_t ret = -ENOENT;
+    if (S_ISLNK(inode.mode)) {
+        // Get the length of the symlink.
+        ret = min(strlen(inode.data.symlink), bufsize);
+        // Copy the symlink information.
+        strncpy(buffer, inode.data.symlink, ret);
+    }
     // Return how much we read.
-    return nbytes;
+    return ret;
 }
 
 /// @brief Creates a new directory at the given path.
@@ -3183,39 +3240,32 @@ static ssize_t ext2_readlink(vfs_file_t *file, char *buffer, size_t bufsize)
 /// @return Returns a negative value on failure.
 static int ext2_mkdir(const char *path, mode_t permission)
 {
-    pr_debug("mkdir(%s, %d)\n", path, permission);
-    // Get the absolute path.
-    char absolute_path[PATH_MAX];
-    // If the first character is not the '/' then get the absolute path.
-    if (!realpath(path, absolute_path, sizeof(absolute_path))) {
-        pr_err("mkdir(%s): Cannot get the absolute path.\n", path);
-        return -ENOENT;
-    }
+    pr_debug("ext2_mkdir(path: %s, permission: %u)\n", path, permission);
     // Get the parent directory.
     char parent_path[PATH_MAX];
-    if (!dirname(absolute_path, parent_path, sizeof(parent_path))) {
+    if (!dirname(path, parent_path, sizeof(parent_path))) {
         return -ENOENT;
     }
     // Check the parent path.
-    if (strcmp(parent_path, absolute_path) == 0) {
-        pr_err("mkdir(%s): Failed to properly get the parent directory (%s == %s).\n", path, parent_path, absolute_path);
+    if (strcmp(parent_path, path) == 0) {
+        pr_err("ext2_mkdir(path: %s): Failed to properly get the parent directory (%s).\n", path, parent_path);
         return -ENOENT;
     }
     // Get the EXT2 filesystem.
-    ext2_filesystem_t *fs = get_ext2_filesystem(absolute_path);
+    ext2_filesystem_t *fs = get_ext2_filesystem(path);
     if (fs == NULL) {
-        pr_err("mkdir(%s): Failed to get the EXT2 filesystem for absolute path `%s`.\n", path, absolute_path);
+        pr_err("ext2_mkdir(path: %s): Failed to get the EXT2 filesystem.\n", path);
         return -ENOENT;
     }
     // Prepare the structure for the search.
     ext2_direntry_search_t search;
     // Search if the entry already exists.
-    if (!ext2_resolve_path(fs->root, absolute_path, &search)) {
-        pr_err("mkdir(%s): Directory already exists.\n", absolute_path);
+    if (!ext2_resolve_path(fs->root, path, &search)) {
+        pr_err("ext2_mkdir(path: %s): Directory already exists.\n", path);
         return -EEXIST;
     }
     // Set the inode mode.
-    uint32_t mode = EXT2_S_IFDIR;
+    uint32_t mode = S_IFDIR;
     mode |= 0xFFF & permission;
     // Get the group index of the parent.
     uint32_t group_index = ext2_inode_index_to_group_index(fs, search.parent_inode);
@@ -3224,7 +3274,7 @@ static int ext2_mkdir(const char *path, mode_t permission)
     // Create and initialize the new inode.
     int inode_index = ext2_create_inode(fs, &inode, mode, group_index);
     if (inode_index == -1) {
-        pr_err("mkdir(%s): Failed to create a new inode (group index: %d).\n", path, group_index);
+        pr_err("ext2_mkdir(path: %s): Failed to create a new inode (group index: %d).\n", path, group_index);
         return -ENOENT;
     }
     // Increase the number of directories inside the group.
@@ -3238,22 +3288,22 @@ static int ext2_mkdir(const char *path, mode_t permission)
     const char *directory_name = basename(path);
     // Create a directory entry for the directory.
     if (ext2_allocate_direntry(fs, search.parent_inode, inode_index, directory_name, ext2_file_type_directory) == -1) {
-        pr_err("mkdir(%s): Failed to allocate the new direntry `%s` for the inode.\n", path, directory_name);
+        pr_err("ext2_mkdir(path: %s): Failed to allocate the new direntry `%s` for the inode.\n", path, directory_name);
         return -ENOENT;
     }
     // Allocate a new block.
     if (!ext2_initialize_new_direntry_block(fs, inode_index, 0)) {
-        pr_err("mkdir(%s): Failed to allocate a new block for an inode.\n", path);
+        pr_err("ext2_mkdir(path: %s): Failed to allocate a new block for an inode.\n", path);
         return 0;
     }
     // Create a directory entry, inside the new directory, pointing to itself.
     if (ext2_allocate_direntry(fs, inode_index, inode_index, ".", ext2_file_type_directory) == -1) {
-        pr_err("mkdir(%s): Failed to allocate a new direntry for the inode.\n", path);
+        pr_err("ext2_mkdir(path: %s): Failed to allocate a new direntry for the inode.\n", path);
         return -ENOENT;
     }
     // Create a directory entry, inside the new directory, pointing to its parent.
     if (ext2_allocate_direntry(fs, inode_index, search.parent_inode, "..", ext2_file_type_directory) == -1) {
-        pr_err("mkdir(%s): Failed to allocate a new direntry for the inode.\n", path);
+        pr_err("ext2_mkdir(path: %s): Failed to allocate a new direntry for the inode.\n", path);
         return -ENOENT;
     }
     return 0;
@@ -3264,90 +3314,41 @@ static int ext2_mkdir(const char *path, mode_t permission)
 /// @return Returns a negative value on failure.
 static int ext2_rmdir(const char *path)
 {
-    pr_debug("rmdir(%s)\n", path);
-    // Get the absolute path.
-    char absolute_path[PATH_MAX];
-    // If the first character is not the '/' then get the absolute path.
-    if (!realpath(path, absolute_path, sizeof(absolute_path))) {
-        pr_err("rmdir(%s): Cannot get the absolute path.\n", path);
-        return -ENOENT;
-    }
+    pr_debug("ext2_rmdir(path: %s)\n", path);
     // Get the name of the entry we want to unlink.
-    const char *name = basename(absolute_path);
+    const char *name = basename(path);
     if (name == NULL) {
-        pr_err("rmdir(%s): Cannot get the basename from the absolute path `%s`.\n", path, absolute_path);
+        pr_err("ext2_rmdir(path: %s): Cannot get the basename`.\n", path);
         return -ENOENT;
     }
     // Get the EXT2 filesystem.
-    ext2_filesystem_t *fs = get_ext2_filesystem(absolute_path);
+    ext2_filesystem_t *fs = get_ext2_filesystem(path);
     if (fs == NULL) {
-        pr_err("rmdir(%s): Failed to get the EXT2 filesystem for absolute path `%s`.\n", path, absolute_path);
+        pr_err("ext2_rmdir(path: %s): Failed to get the EXT2 filesystem.\n", path);
         return -ENOENT;
     }
     // Prepare the structure for the search.
     ext2_direntry_search_t search;
     memset(&search, 0, sizeof(ext2_direntry_search_t));
     // Resolve the path to the directory entry.
-    if (ext2_resolve_path(fs->root, absolute_path, &search)) {
-        pr_err("rmdir(%s): Failed to resolve path `%s`.\n", path, absolute_path);
+    if (ext2_resolve_path(fs->root, path, &search)) {
+        pr_err("ext2_rmdir(path: %s): Failed to resolve path.\n", path);
         return -ENOENT;
     }
 
     // Get the inode associated with the parent directory entry.
     ext2_inode_t parent;
     if (ext2_read_inode(fs, &parent, search.parent_inode) == -1) {
-        pr_err("rmdir(%s): Failed to read the inode of parent of `%s`.\n", path, search.direntry.name);
+        pr_err("ext2_rmdir(path: %s): Failed to read the inode of parent of `%s`.\n", path, search.direntry.name);
         return -ENOENT;
     }
     // Read the inode of the direntry we want to unlink.
     ext2_inode_t inode;
     if (ext2_read_inode(fs, &inode, search.direntry.inode) == -1) {
-        pr_err("rmdir(%s): Failed to read the inode of `%s`.\n", path, search.direntry.name);
+        pr_err("ext2_rmdir(path: %s): Failed to read the inode of `%s`.\n", path, search.direntry.name);
         return -ENOENT;
     }
     return ext2_destroy_direntry(fs, parent, inode, search.parent_inode, search.direntry.inode, search.block_index, search.block_offset);
-}
-
-/// @brief Retrieves information concerning the file at the given position.
-/// @param path The path where the file resides.
-/// @param stat The structure where the information are stored.
-/// @return 0 if success.
-static int ext2_stat(const char *path, stat_t *stat)
-{
-    pr_debug("stat(%s, %p)\n", path, stat);
-    // Get the absolute path.
-    char absolute_path[PATH_MAX];
-    // If the first character is not the '/' then get the absolute path.
-    if (!realpath(path, absolute_path, sizeof(absolute_path))) {
-        pr_err("stat(%s): Cannot get the absolute path.\n", path);
-        return -ENOENT;
-    }
-    // Get the EXT2 filesystem.
-    ext2_filesystem_t *fs = get_ext2_filesystem(absolute_path);
-    if (fs == NULL) {
-        pr_err("stat(%s): Failed to get the EXT2 filesystem for absolute path `%s`.\n", path, absolute_path);
-        return -ENOENT;
-    }
-    // Prepare the structure for the search.
-    ext2_direntry_search_t search;
-    memset(&search, 0, sizeof(ext2_direntry_search_t));
-    // Resolve the path.
-    if (ext2_resolve_path(fs->root, absolute_path, &search)) {
-        pr_err("stat(%s): Failed to resolve path `%s`.\n", path, absolute_path);
-        return -ENOENT;
-    }
-    // Get the inode associated with the directory entry.
-    ext2_inode_t inode;
-    if (ext2_read_inode(fs, &inode, search.direntry.inode) == -1) {
-        pr_err("stat(%s): Failed to read the inode of `%s`.\n", path, search.direntry.name);
-        return -ENOENT;
-    }
-    /// ID of device containing file.
-    stat->st_dev = fs->block_device->ino;
-    // Set the inode.
-    stat->st_ino = search.direntry.inode;
-    // Set the rest of the structure.
-    return __ext2_stat(&inode, stat);
 }
 
 /// @brief Sets the attributes of an inode and saves it
@@ -3392,6 +3393,7 @@ static int __ext2_check_setattr_permission(uid_t file_owner)
 /// @return 0 if success.
 static int ext2_fsetattr(vfs_file_t *file, struct iattr *attr)
 {
+    pr_debug("ext2_fsetattr(file: %s)\n", file->name);
     if (!__ext2_check_setattr_permission(file->uid)) {
         return -EPERM;
     }
@@ -3417,26 +3419,19 @@ static int ext2_fsetattr(vfs_file_t *file, struct iattr *attr)
 /// @return 0 if success.
 static int ext2_setattr(const char *path, struct iattr *attr)
 {
-    pr_debug("setattr(%s, %p)\n", path, attr);
-    // Get the absolute path.
-    char absolute_path[PATH_MAX];
-    // If the first character is not the '/' then get the absolute path.
-    if (!realpath(path, absolute_path, sizeof(absolute_path))) {
-        pr_err("setattr(%s): Cannot get the absolute path.\n", path);
-        return -ENOENT;
-    }
+    pr_debug("ext2_setattr(file: %s)\n", path);
     // Get the EXT2 filesystem.
-    ext2_filesystem_t *fs = get_ext2_filesystem(absolute_path);
+    ext2_filesystem_t *fs = get_ext2_filesystem(path);
     if (fs == NULL) {
-        pr_err("setattr(%s): Failed to get the EXT2 filesystem for absolute path `%s`.\n", path, absolute_path);
+        pr_err("setattr(%s): Failed to get the EXT2 filesystem for absolute path `%s`.\n", path);
         return -ENOENT;
     }
     // Prepare the structure for the search.
     ext2_direntry_search_t search;
     memset(&search, 0, sizeof(ext2_direntry_search_t));
     // Resolve the path.
-    if (ext2_resolve_path(fs->root, absolute_path, &search)) {
-        pr_err("setattr(%s): Failed to resolve path `%s`.\n", path, absolute_path);
+    if (ext2_resolve_path(fs->root, path, &search)) {
+        pr_err("setattr(%s): Failed to resolve path.\n", path);
         return -ENOENT;
     }
     // Get the inode associated with the directory entry.
@@ -3458,6 +3453,7 @@ static int ext2_setattr(const char *path, struct iattr *attr)
 /// @return the VFS root node of the EXT2 filesystem.
 static vfs_file_t *ext2_mount(vfs_file_t *block_device, const char *path)
 {
+    pr_debug("ext2_mount(device: %s, path: %s)\n", block_device->name, path);
     // Create the ext2 filesystem.
     ext2_filesystem_t *fs = kmalloc(sizeof(ext2_filesystem_t));
     // Clean the memory.
@@ -3552,7 +3548,7 @@ static vfs_file_t *ext2_mount(vfs_file_t *block_device, const char *path)
         // Free the block_buffer, the block_groups and the filesystem.
         goto free_block_buffer;
     }
-    if ((root_inode.mode & EXT2_S_IFDIR) != EXT2_S_IFDIR) {
+    if ((root_inode.mode & S_IFDIR) != S_IFDIR) {
         pr_err("The root is not a directory.\n");
         // Free the block_buffer, the block_groups and the filesystem.
         goto free_block_buffer;
@@ -3607,16 +3603,9 @@ free_filesystem:
 /// @return the VFS file of the filesystem.
 static vfs_file_t *ext2_mount_callback(const char *path, const char *device)
 {
-    // Allocate a variable for the path.
-    char absolute_path[PATH_MAX];
-    // If the first character is not the '/' then get the absolute path.
-    if (!realpath(device, absolute_path, sizeof(absolute_path))) {
-        pr_err("mount_callback(%s, %s): Cannot get the absolute path.", path, device);
-        return NULL;
-    }
-    super_block_t *sb = vfs_get_superblock(absolute_path);
+    super_block_t *sb = vfs_get_superblock(device);
     if (sb == NULL) {
-        pr_err("mount_callback(%s, %s): Cannot find the superblock at absolute path `%s`!\n", path, device, absolute_path);
+        pr_err("mount_callback(%s, %s): Cannot find the superblock!\n", path, device);
         return NULL;
     }
     vfs_file_t *block_device = sb->root;

@@ -184,7 +184,6 @@ int main(int argc, char **argv)
         do {
             printf("Username: ");
         } while (!__get_input(username, sizeof(username), false));
-
         // Get the password.
         do {
             printf("Password: ");

@@ -237,7 +237,7 @@ int kmain(boot_info_t *boot_informations)
     //==========================================================================
     pr_notice("Mount EXT2 filesystem...\n");
     printf("Mount EXT2 filesystem...");
-    if (do_mount("ext2", "/", "/dev/hda")) {
+    if (vfs_mount("ext2", "/", "/dev/hda")) {
         pr_emerg("Failed to mount EXT2 filesystem...\n");
         return 1;
     }
@@ -266,7 +266,7 @@ int kmain(boot_info_t *boot_informations)
     //==========================================================================
     pr_notice("    Mounting 'procfs'...\n");
     printf("    Mounting 'procfs'...");
-    if (do_mount("procfs", "/proc", NULL)) {
+    if (vfs_mount("procfs", "/proc", NULL)) {
         pr_emerg("Failed to mount procfs at `/proc`!\n");
         return 1;
     }

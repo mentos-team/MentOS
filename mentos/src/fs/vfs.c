@@ -10,6 +10,7 @@
 #include "io/debug.h"                    // Include debugging functions.
 
 #include "fcntl.h"
+#include "sys/stat.h"
 #include "assert.h"
 #include "fs/procfs.h"
 #include "fs/namei.h"
@@ -61,11 +62,11 @@ void vfs_init(void)
 
 int vfs_register_filesystem(file_system_type *fs)
 {
-    if (hashmap_set(vfs_filesystems, (void *)fs->name, (void *)fs) != NULL) {
+    if (hashmap_set(vfs_filesystems, fs->name, fs) != NULL) {
         pr_err("Filesystem already registered.\n");
         return 0;
     }
-    pr_debug("vfs_register_filesystem(`%s`) : %p\n", fs->name, fs);
+    pr_debug("vfs_register_filesystem(name: %s)\n", fs->name);
     return 1;
 }
 
@@ -75,35 +76,66 @@ int vfs_unregister_filesystem(file_system_type *fs)
         pr_err("Filesystem not present to unregister.\n");
         return 0;
     }
+    pr_debug("vfs_unregister_filesystem(name: %s)\n", fs->name);
     return 1;
 }
 
-super_block_t *vfs_get_superblock(const char *absolute_path)
+int vfs_register_superblock(const char *name, const char *path, file_system_type *type, vfs_file_t *root)
 {
-    size_t last_sb_len     = 0;
-    super_block_t *last_sb = NULL, *superblock = NULL;
+    pr_debug("vfs_register_superblock(name: %s, path: %s, type: %s)\n", name, path, type->name);
+    // Lock the vfs spinlock.
+    spinlock_lock(&vfs_spinlock);
+    // Create the superblock.
+    super_block_t *sb = kmem_cache_alloc(vfs_superblock_cache, GFP_KERNEL);
+    // Check if the superblock was correctly allocated.
+    assert(sb && "Cannot allocate memory for the superblock.\n");
+    // Copy the name.
+    strcpy(sb->name, name);
+    // Copy the path.
+    strcpy(sb->path, path);
+    // Set the pointer.
+    sb->root = root;
+    // Set the type.
+    sb->type = type;
+    // Add the superblock to the list.
+    list_head_insert_after(&sb->mounts, &vfs_super_blocks);
+
+    pr_debug("Superblocks:\n");
+    list_for_each_decl(it, &vfs_super_blocks)
+    {
+        super_block_t *_sb = list_entry(it, super_block_t, mounts);
+        pr_debug("    Name: %-12s, Path: %-12s, Type: %-12s\n", _sb->name, _sb->path, _sb->type->name);
+    }
+    pr_debug("\n");
+
+    // Unlock the vfs spinlock.
+    spinlock_unlock(&vfs_spinlock);
+    return 1;
+}
+
+int vfs_unregister_superblock(super_block_t *sb)
+{
+    pr_debug("vfs_unregister_superblock(name: %s, path: %s, type: %s)\n", sb->name, sb->path, sb->type->name);
+    list_head_remove(&sb->mounts);
+    kmem_cache_free(sb);
+    return 1;
+}
+
+super_block_t *vfs_get_superblock(const char *path)
+{
+    pr_debug("vfs_get_superblock(path: %s)\n", path);
+    size_t last_sb_len     = 0, len;
+    super_block_t *last_sb = NULL, *sb = NULL;
     list_head *it;
     list_for_each (it, &vfs_super_blocks) {
-        superblock = list_entry(it, super_block_t, mounts);
-#if 0
-        int len    = strlen(superblock->name);
-        pr_debug("`%s` vs `%s`\n", absolute_path, superblock->name);
-        if (!strncmp(absolute_path, superblock->name, len)) {
-            size_t sbl = strlen(superblock->name);
-            if (sbl > last_sb_len) {
-                last_sb_len = sbl;
-                last_sb     = superblock;
-            }
-        }
-#else
-        size_t len = strlen(superblock->path);
-        if (!strncmp(absolute_path, superblock->path, len)) {
+        sb  = list_entry(it, super_block_t, mounts);
+        len = strlen(sb->path);
+        if (!strncmp(path, sb->path, len)) {
             if (len > last_sb_len) {
                 last_sb_len = len;
-                last_sb     = superblock;
+                last_sb     = sb;
             }
         }
-#endif
     }
     return last_sb;
 }
@@ -112,13 +144,13 @@ vfs_file_t *vfs_open_abspath(const char *absolute_path, int flags, mode_t mode)
 {
     super_block_t *sb = vfs_get_superblock(absolute_path);
     if (sb == NULL) {
-        pr_err("vfs_open(%s): Cannot find the superblock!\n", absolute_path);
+        pr_err("vfs_open_abspath(%s): Cannot find the superblock!\n", absolute_path);
         errno = ENOENT;
         return NULL;
     }
     vfs_file_t *sb_root = sb->root;
     if (sb_root == NULL) {
-        pr_err("vfs_open(%s): Cannot find the superblock root!\n", absolute_path);
+        pr_err("vfs_open_abspath(%s): Cannot find the superblock root!\n", absolute_path);
         errno = ENOENT;
         return NULL;
     }
@@ -126,14 +158,14 @@ vfs_file_t *vfs_open_abspath(const char *absolute_path, int flags, mode_t mode)
     //size_t name_offset = (strcmp(mp->name, "/") == 0) ? 0 : strlen(mp->name);
     // Check if the function is implemented.
     if (sb_root->fs_operations->open_f == NULL) {
-        pr_err("vfs_open(%s): Function not supported in current filesystem.", absolute_path);
+        pr_err("vfs_open_abspath(%s): Function not supported in current filesystem.\n", absolute_path);
         errno = ENOSYS;
         return NULL;
     }
     // Retrieve the file.
     vfs_file_t *file = sb_root->fs_operations->open_f(absolute_path, flags, mode);
     if (file == NULL) {
-        pr_debug("vfs_open(%s): Filesystem open returned NULL file (errno: %d, %s)!\n",
+        pr_debug("vfs_open_abspath(%s): Filesystem open returned NULL file (errno: %d, %s)!\n",
                  absolute_path, errno, strerror(errno));
         return NULL;
     }
@@ -147,20 +179,22 @@ vfs_file_t *vfs_open(const char *path, int flags, mode_t mode)
 {
     pr_debug("vfs_open(path: %s, flags: %d, mode: %d)\n", path, flags, mode);
     assert(path && "Provided null path.");
-    // Allocate a variable for the path.
-    char absolute_path[PATH_MAX];
     // Resolve all symbolic links in the path before opening the file.
-    int resolve_flags = FOLLOW_LINKS;
+    int resolve_flags = FOLLOW_LINKS | REMOVE_TRAILING_SLASH;
     // Allow the last component to be non existing when attempting to create it.
     if (bitmask_check(flags, O_CREAT)) {
         resolve_flags |= CREAT_LAST_COMPONENT;
     }
-    int ret = resolve_path(path, absolute_path, sizeof(absolute_path), resolve_flags);
+    // Allocate a variable for the path.
+    char absolute_path[PATH_MAX];
+    // If the first character is not the '/' then get the absolute path.
+    int ret = resolve_path(path, absolute_path, PATH_MAX, resolve_flags);
     if (ret < 0) {
         pr_err("vfs_open(%s): Cannot resolve path!\n", path);
         errno = -ret;
         return NULL;
     }
+    pr_debug("vfs_open(path: %s, flags: %d, mode: %d) -> %s\n", path, flags, mode, absolute_path);
     return vfs_open_abspath(absolute_path, flags, mode);
 }
 
@@ -229,9 +263,11 @@ int vfs_unlink(const char *path)
     // Allocate a variable for the path.
     char absolute_path[PATH_MAX];
     // If the first character is not the '/' then get the absolute path.
-    if (!realpath(path, absolute_path, sizeof(absolute_path))) {
-        pr_err("vfs_unlink(%s): Cannot get the absolute path.", path);
-        return -ENODEV;
+    int resolve_flags = REMOVE_TRAILING_SLASH | FOLLOW_LINKS;
+    int ret           = resolve_path(path, absolute_path, PATH_MAX, resolve_flags);
+    if (ret < 0) {
+        pr_err("vfs_unlink(%s): Cannot get the absolute path.\n", path);
+        return ret;
     }
     super_block_t *sb = vfs_get_superblock(absolute_path);
     if (sb == NULL) {
@@ -240,12 +276,12 @@ int vfs_unlink(const char *path)
     }
     vfs_file_t *sb_root = sb->root;
     if (sb_root == NULL) {
-        pr_err("vfs_unlink(%s): Cannot find the superblock root.", path);
+        pr_err("vfs_unlink(%s): Cannot find the superblock root.\n", path);
         return -ENOENT;
     }
     // Check if the function is implemented.
     if (sb_root->fs_operations->unlink_f == NULL) {
-        pr_err("vfs_unlink(%s): Function not supported in current filesystem.", path);
+        pr_err("vfs_unlink(%s): Function not supported in current filesystem.\n", path);
         return -ENOSYS;
     }
     return sb_root->fs_operations->unlink_f(absolute_path);
@@ -253,13 +289,17 @@ int vfs_unlink(const char *path)
 
 int vfs_mkdir(const char *path, mode_t mode)
 {
+    pr_debug("vfs_mkdir(path: %s, mode: %d)\n", path, mode);
     // Allocate a variable for the path.
     char absolute_path[PATH_MAX];
     // If the first character is not the '/' then get the absolute path.
-    if (!realpath(path, absolute_path, sizeof(absolute_path))) {
-        pr_err("vfs_mkdir(%s): Cannot get the absolute path.", path);
-        return -ENODEV;
+    int resolve_flags = REMOVE_TRAILING_SLASH | FOLLOW_LINKS | CREAT_LAST_COMPONENT;
+    int ret           = resolve_path(path, absolute_path, PATH_MAX, resolve_flags);
+    if (ret < 0) {
+        pr_err("vfs_mkdir(%s): Cannot get the absolute path.\n", path);
+        return ret;
     }
+    pr_debug("vfs_mkdir(path: %s, mode: %d) -> absolute_path: %s\n", path, mode, absolute_path);
     super_block_t *sb = vfs_get_superblock(absolute_path);
     if (sb == NULL) {
         pr_err("vfs_mkdir(%s): Cannot find the superblock!\n");
@@ -267,12 +307,12 @@ int vfs_mkdir(const char *path, mode_t mode)
     }
     vfs_file_t *sb_root = sb->root;
     if (sb_root == NULL) {
-        pr_err("vfs_mkdir(%s): Cannot find the superblock root.", path);
+        pr_err("vfs_mkdir(%s): Cannot find the superblock root.\n", path);
         return -ENOENT;
     }
     // Check if the function is implemented.
     if (sb_root->sys_operations->mkdir_f == NULL) {
-        pr_err("vfs_mkdir(%s): Function not supported in current filesystem.", path);
+        pr_err("vfs_mkdir(%s): Function not supported in current filesystem.\n", path);
         return -ENOSYS;
     }
     return sb_root->sys_operations->mkdir_f(absolute_path, mode);
@@ -283,9 +323,11 @@ int vfs_rmdir(const char *path)
     // Allocate a variable for the path.
     char absolute_path[PATH_MAX];
     // If the first character is not the '/' then get the absolute path.
-    if (!realpath(path, absolute_path, sizeof(absolute_path))) {
-        pr_err("vfs_rmdir(%s): Cannot get the absolute path.", path);
-        return -ENODEV;
+    int resolve_flags = REMOVE_TRAILING_SLASH | FOLLOW_LINKS;
+    int ret           = resolve_path(path, absolute_path, PATH_MAX, resolve_flags);
+    if (ret < 0) {
+        pr_err("vfs_rmdir(%s): Cannot get the absolute path.\n", path);
+        return ret;
     }
     super_block_t *sb = vfs_get_superblock(absolute_path);
     if (sb == NULL) {
@@ -294,12 +336,12 @@ int vfs_rmdir(const char *path)
     }
     vfs_file_t *sb_root = sb->root;
     if (sb_root == NULL) {
-        pr_err("vfs_rmdir(%s): Cannot find the superblock root.", path);
+        pr_err("vfs_rmdir(%s): Cannot find the superblock root.\n", path);
         return -ENOENT;
     }
     // Check if the function is implemented.
     if (sb_root->sys_operations->rmdir_f == NULL) {
-        pr_err("vfs_rmdir(%s): Function not supported in current filesystem.", path);
+        pr_err("vfs_rmdir(%s): Function not supported in current filesystem.\n", path);
         return -ENOSYS;
     }
     // Remove the file.
@@ -311,9 +353,11 @@ vfs_file_t *vfs_creat(const char *path, mode_t mode)
     // Allocate a variable for the path.
     char absolute_path[PATH_MAX];
     // If the first character is not the '/' then get the absolute path.
-    if (!realpath(path, absolute_path, sizeof(absolute_path))) {
-        pr_err("vfs_creat(%s): Cannot get the absolute path.", path);
-        errno = ENODEV;
+    int resolve_flags = REMOVE_TRAILING_SLASH | FOLLOW_LINKS;
+    int ret           = resolve_path(path, absolute_path, PATH_MAX, resolve_flags);
+    if (ret < 0) {
+        pr_err("vfs_creat(%s): Cannot get the absolute path.\n", path);
+        errno = ret;
         return NULL;
     }
     super_block_t *sb = vfs_get_superblock(absolute_path);
@@ -324,13 +368,13 @@ vfs_file_t *vfs_creat(const char *path, mode_t mode)
     }
     vfs_file_t *sb_root = sb->root;
     if (sb_root == NULL) {
-        pr_err("vfs_creat(%s): Cannot find the superblock root.", path);
+        pr_err("vfs_creat(%s): Cannot find the superblock root.\n", path);
         errno = ENOENT;
         return NULL;
     }
     // Check if the function is implemented.
     if (sb_root->sys_operations->creat_f == NULL) {
-        pr_err("vfs_creat(%s): Function not supported in current filesystem.", path);
+        pr_err("vfs_creat(%s): Function not supported in current filesystem.\n", path);
         errno = ENOSYS;
         return NULL;
     }
@@ -347,18 +391,31 @@ vfs_file_t *vfs_creat(const char *path, mode_t mode)
     return file;
 }
 
-ssize_t vfs_readlink(vfs_file_t *file, char *buffer, size_t bufsize)
+ssize_t vfs_readlink(const char *path, char *buffer, size_t bufsize)
 {
-    if (file == NULL) {
-        pr_err("vfs_readlink: received a null pointer for file.\n");
+    pr_debug("vfs_readlink(%s, %s, %d)\n", path, buffer, bufsize);
+    // Allocate a variable for the path.
+    char absolute_path[PATH_MAX] = { 0 };
+    // If the first character is not the '/' then get the absolute path.
+    int ret = resolve_path(path, absolute_path, PATH_MAX, REMOVE_TRAILING_SLASH);
+    if (ret < 0) {
+        pr_err("vfs_readlink(%s, %s, %d): Cannot get the absolute path.", path, buffer, bufsize);
+        return ret;
+    }
+    super_block_t *sb = vfs_get_superblock(absolute_path);
+    if (sb == NULL) {
+        pr_err("vfs_readlink(%s, %s, %d): Cannot find the superblock!.\n", path, buffer, bufsize);
         return -ENOENT;
     }
-    if (file->fs_operations->readlink_f == NULL) {
-        pr_err("vfs_readlink(%s): Function not supported in current filesystem.", file->name);
-        return -ENOSYS;
+    if (sb->root == NULL) {
+        pr_err("vfs_readlink(%s, %s, %d): Cannot find the superblock root.\n", path, buffer, bufsize);
+        return -ENOENT;
+    }
+    if (sb->root->fs_operations->readlink_f == NULL) {
+        return -ENOENT;
     }
     // Perform the read.
-    return file->fs_operations->readlink_f(file, buffer, bufsize);
+    return sb->root->fs_operations->readlink_f(absolute_path, buffer, bufsize);
 }
 
 int vfs_symlink(const char *linkname, const char *path)
@@ -366,9 +423,11 @@ int vfs_symlink(const char *linkname, const char *path)
     // Allocate a variable for the path.
     char absolute_path[PATH_MAX];
     // If the first character is not the '/' then get the absolute path.
-    if (!realpath(linkname, absolute_path, sizeof(absolute_path))) {
+    int resolve_flags = REMOVE_TRAILING_SLASH | FOLLOW_LINKS;
+    int ret           = resolve_path(path, absolute_path, PATH_MAX, resolve_flags);
+    if (ret < 0) {
         pr_err("vfs_symlink(%s, %s): Cannot get the absolute path.", linkname, path);
-        return -ENODEV;
+        return ret;
     }
     super_block_t *sb = vfs_get_superblock(absolute_path);
     if (sb == NULL) {
@@ -391,12 +450,14 @@ int vfs_symlink(const char *linkname, const char *path)
 
 int vfs_stat(const char *path, stat_t *buf)
 {
+    pr_debug("vfs_stat(path: %s, buf: %p)\n", path, buf);
     // Allocate a variable for the path.
-    char absolute_path[PATH_MAX];
+    char absolute_path[PATH_MAX] = { 0 };
     // If the first character is not the '/' then get the absolute path.
-    if (!realpath(path, absolute_path, sizeof(absolute_path))) {
+    int ret = resolve_path(path, absolute_path, PATH_MAX, REMOVE_TRAILING_SLASH);
+    if (ret < 0) {
         pr_err("vfs_stat(%s): Cannot get the absolute path.", path);
-        return -ENODEV;
+        return ret;
     }
     super_block_t *sb = vfs_get_superblock(absolute_path);
     if (sb == NULL) {
@@ -414,15 +475,7 @@ int vfs_stat(const char *path, stat_t *buf)
         return -ENOSYS;
     }
     // Reset the structure.
-    buf->st_dev   = 0;
-    buf->st_ino   = 0;
-    buf->st_mode  = 0;
-    buf->st_uid   = 0;
-    buf->st_gid   = 0;
-    buf->st_size  = 0;
-    buf->st_atime = 0;
-    buf->st_mtime = 0;
-    buf->st_ctime = 0;
+    memset(buf, 0, sizeof(stat_t));
     // Retrieve the file.
     return sb_root->sys_operations->stat_f(absolute_path, buf);
 }
@@ -446,39 +499,7 @@ int vfs_fstat(vfs_file_t *file, stat_t *buf)
     return file->fs_operations->stat_f(file, buf);
 }
 
-int vfs_mount(const char *path, vfs_file_t *new_fs_root)
-{
-    if (!path || path[0] != '/') {
-        pr_err("vfs_mount(%s): Path must be absolute for superblock.\n", path);
-        return 0;
-    }
-    if (new_fs_root == NULL) {
-        pr_err("vfs_mount(%s): You must provide a valid file!\n", path);
-        return 0;
-    }
-    // Lock the vfs spinlock.
-    spinlock_lock(&vfs_spinlock);
-    pr_debug("Mounting file with path `%s` as root '%s'...\n", new_fs_root->name, path);
-    // Create the superblock.
-    super_block_t *sb = kmem_cache_alloc(vfs_superblock_cache, GFP_KERNEL);
-    if (!sb) {
-        pr_debug("Cannot allocate memory for the superblock.\n");
-    } else {
-        // Copy the name.
-        strcpy(sb->name, new_fs_root->name);
-        // Copy the path.
-        strcpy(sb->path, path);
-        // Set the pointer.
-        sb->root = new_fs_root;
-        // Add to the list.
-        list_head_insert_after(&sb->mounts, &vfs_super_blocks);
-    }
-    spinlock_unlock(&vfs_spinlock);
-    pr_debug("Correctly mounted '%s' on '%s'...\n", new_fs_root->name, path);
-    return 1;
-}
-
-int do_mount(const char *type, const char *path, const char *args)
+int vfs_mount(const char *type, const char *path, const char *args)
 {
     file_system_type *fst = (file_system_type *)hashmap_get(vfs_filesystems, type);
     if (fst == NULL) {
@@ -489,23 +510,28 @@ int do_mount(const char *type, const char *path, const char *args)
         pr_err("No mount callback set: %s\n", type);
         return -ENODEV;
     }
-    vfs_file_t *file = fst->mount(path, args);
+    // Allocate a variable for the path.
+    char absolute_path[PATH_MAX];
+    // If the first character is not the '/' then get the absolute path.
+    int resolve_flags = 0;
+    int ret           = resolve_path(args, absolute_path, PATH_MAX, resolve_flags);
+    if (ret < 0) {
+        pr_err("vfs_mount(type: %s, path: %s, args: %s): Cannot get the absolute path\n",
+               fst->name, path, args);
+        return ret;
+    }
+    pr_debug("vfs_mount(type: %s, path: %s, args: %s (%s))\n", fst->name, path, args, absolute_path);
+    vfs_file_t *file = fst->mount(path, absolute_path);
     if (file == NULL) {
         pr_err("Mount callback return a null pointer: %s\n", type);
         return -ENODEV;
     }
-    if (!vfs_mount(path, file)) {
-        pr_err("do_mount(`%s`, `%s`, `%s`) : failed to mount.\n", type, path, args);
+    // Register the proc superblock.
+    if (!vfs_register_superblock(file->name, path, fst, file)) {
+        pr_alert("Failed to register %s superblock!\n", file->name);
         return -ENODEV;
     }
-    super_block_t *sb = vfs_get_superblock(path);
-    if (sb == NULL) {
-        pr_err("do_mount(`%s`, `%s`, `%s`) : Cannot find the superblock.\n", type, path, args);
-        return -ENODEV;
-    }
-    // Set the filesystem type.
-    sb->type = fst;
-    pr_debug("Mounted %s[%s] to `%s`: file = %p\n", type, args, path, file);
+    pr_debug("vfs_mount(type: %s, path: %s, args: %s), file: %s\n", fst->name, path, args, file->name);
     return 0;
 }
 

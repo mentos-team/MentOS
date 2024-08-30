@@ -44,6 +44,7 @@ int check_content(const char *filename, const char *content, int length)
         close(fd);
         return EXIT_FAILURE;
     }
+    close(fd);
     return EXIT_SUCCESS;
 }
 

@@ -8,9 +8,10 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <sys/stat.h>
 #include <sys/unistd.h>
 
-int main(int argc, char** argv)
+int main(int argc, char **argv)
 {
     if (argc != 2) {
         printf("%s: missing operand.\n", argv[0]);
@@ -23,13 +24,12 @@ int main(int argc, char** argv)
         printf("    touch <filename>\n");
         return 0;
     }
-    int fd = open(argv[1], O_RDONLY, 0);
+    int fd = open(argv[1], O_CREAT, S_IWUSR | S_IRUSR | S_IRGRP | S_IROTH);
     if (fd < 0) {
-        fd = open(argv[1], O_CREAT, S_IWUSR | S_IRUSR | S_IRGRP | S_IROTH);
-        if (fd < 0) {
-            err(EXIT_FAILURE, "cannot touch %s", argv[1]);
-        }
-        close(fd);
+        err(EXIT_FAILURE, "cannot touch %s", argv[1]);
+        printf("\n");
     }
+    close(fd);
+    printf("\n");
     return 0;
 }
