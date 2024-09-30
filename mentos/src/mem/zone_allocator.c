@@ -165,7 +165,6 @@ static zone_t *get_zone_from_flags(gfp_t gfp_mask)
 {
     // Ensure that contig_page_data and node_zones are valid.
     assert(contig_page_data && "contig_page_data is NULL.");
-    assert(contig_page_data->node_zones && "node_zones is NULL.");
 
     switch (gfp_mask) {
     case GFP_KERNEL:
