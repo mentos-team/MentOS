@@ -55,17 +55,26 @@ typedef struct kmem_cache_t {
     list_head slabs_free;
 } kmem_cache_t;
 
-/// Initialize the slab system
-void kmem_cache_init(void);
+/// @brief Initializes the kernel memory cache system.
+/// @details This function initializes the global cache list and creates the
+/// main cache for managing kmem_cache_t structures. It also creates caches for
+/// different order sizes for kmalloc allocations.
+/// @note This function should be called during system initialization.
+/// @return Returns 0 on success, or -1 if an error occurs.
+int kmem_cache_init(void);
 
-/// @brief Creates a new slab cache.
-/// @param name  Name of the cache.
-/// @param size  Size of the objects contained inside the cache.
-/// @param align Memory alignment for the objects inside the cache.
-/// @param flags Flags used to define the properties of the cache.
-/// @param ctor  Constructor for initializing the cache elements.
-/// @param dtor  Destructor for finalizing the cache elements.
-/// @return Pointer to the object used to manage the cache.
+/// @brief Creates a new kmem_cache structure.
+/// @details This function allocates memory for a new cache and initializes it
+/// with the provided parameters. The cache is ready for use after this function
+/// returns.
+/// @param name Name of the cache.
+/// @param size Size of each object in the cache.
+/// @param align Alignment requirement for objects in the cache.
+/// @param flags Flags for slab allocation.
+/// @param ctor Constructor function for initializing objects (can be NULL).
+/// @param dtor Destructor function for cleaning up objects (can be NULL).
+/// @return Pointer to the newly created kmem_cache_t, or NULL if allocation
+/// fails.
 kmem_cache_t *kmem_cache_create(
     const char *name,
     unsigned int size,
@@ -74,9 +83,13 @@ kmem_cache_t *kmem_cache_create(
     kmem_fun_t ctor,
     kmem_fun_t dtor);
 
-/// @brief Deletes the given cache.
-/// @param cachep Pointer to the cache.
-void kmem_cache_destroy(kmem_cache_t *cachep);
+/// @brief Destroys a specified kmem_cache structure.
+/// @details This function cleans up and frees all memory associated with the
+/// specified cache, including all associated slab pages. After calling this
+/// function, the cache should no longer be used.
+/// @param cachep Pointer to the kmem_cache_t structure to destroy.
+/// @return Returns 0 on success, or -1 if an error occurs.
+int kmem_cache_destroy(kmem_cache_t *cachep);
 
 #ifdef ENABLE_CACHE_TRACE
 
@@ -103,14 +116,15 @@ void pr_kmem_cache_free(const char *file, const char *fun, int line, void *addr)
 #define kmem_cache_free(...) pr_kmem_cache_free(__FILE__, __func__, __LINE__, __VA_ARGS__)
 
 #else
-/// @brief Allocs a new object using the provided cache.
-/// @param cachep The cache used to allocate the object.
-/// @param flags  Flags used to define where we are going to Get Free Pages (GFP).
-/// @return Pointer to the allocated space.
+
+/// @brief Allocates an object from the specified kmem_cache_t.
+/// @param cachep Pointer to the cache from which to allocate the object.
+/// @param flags Flags for the allocation (e.g., GFP_KERNEL).
+/// @return Pointer to the allocated object, or NULL if allocation fails.
 void *kmem_cache_alloc(kmem_cache_t *cachep, gfp_t flags);
 
-/// @brief Frees an cache allocated object.
-/// @param addr Address of the object.
+/// @brief Frees an object previously allocated from a kmem_cache_t.
+/// @param ptr Pointer to the object to free.
 void kmem_cache_free(void *addr);
 
 #endif
@@ -140,13 +154,13 @@ void pr_kfree(const char *file, const char *fun, int line, void *addr);
 
 #else
 
-/// @brief Provides dynamically allocated memory in kernel space.
-/// @param size The amount of memory to allocate.
-/// @return A pointer to the allocated memory.
+/// @brief Allocates memory of the specified size using kmalloc.
+/// @param size Size of the memory to allocate.
+/// @return Pointer to the allocated memory, or NULL if allocation fails.
 void *kmalloc(unsigned int size);
 
-/// @brief Frees dynamically allocated memory in kernel space.
-/// @param ptr The pointer to the allocated memory.
+/// @brief Frees memory allocated by kmalloc or kmem_cache_alloc.
+/// @param ptr Pointer to the memory to free.
 void kfree(void *ptr);
 
 #endif
