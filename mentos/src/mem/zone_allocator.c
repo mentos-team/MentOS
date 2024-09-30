@@ -414,6 +414,8 @@ static int zone_init(char *name, int zone_index, uint32_t adr_from, uint32_t adr
 
     // Dump the current state of the buddy system for debugging purposes.
     buddy_system_dump(&zone->buddy_system);
+
+    return 0;
 }
 
 /*
