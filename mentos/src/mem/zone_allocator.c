@@ -138,13 +138,19 @@ static zone_t *get_zone_from_page(page_t *page)
         zone = contig_page_data->node_zones + zone_index;
 
         // Check if the zone was retrieved successfully.
-        assert(zone && "Failed to retrieve the zone.");
+        if (!zone) {
+            pr_crit("Failed to get zone from GFP mask.\n");
+            return NULL; // Return NULL to indicate failure.
+        }
 
         // Get the last page of the zone by adding the size to the memory map.
         last_page = zone->zone_mem_map + zone->size;
 
         // Check if the last page of the zone was retrieved successfully.
-        assert(last_page && "Failed to retrieve the last page of the zone.");
+        if (!last_page) {
+            pr_crit("Failed to retrieve the last page of the zone.\n");
+            return NULL; // Return NULL to indicate failure.
+        }
 
         // Check if the given page is within the current zone.
         if (page < last_page) {
@@ -152,10 +158,11 @@ static zone_t *get_zone_from_page(page_t *page)
         }
     }
 
-    // If no zone contains the page, return NULL.
-    // This could represent an error where the page doesn't belong to any zone.
-    assert(0 && "Error: page is over memory size or not part of any zone.");
-    return (zone_t *)NULL;
+    pr_crit("page is over memory size or not part of any zone.");
+
+    // If no zone contains the page, return NULL. This could represent an error
+    // where the page doesn't belong to any zone.
+    return NULL;
 }
 
 /// @brief Get a zone from gfp_mask.
