@@ -159,22 +159,29 @@ uint32_t __alloc_pages_lowmem(gfp_t gfp_mask, uint32_t order);
 /// and return the memory address of the first page frame allocated.
 /// @param gfp_mask GFP_FLAGS to decide the zone allocation.
 /// @param order    The logarithm of the size of the page frame.
-/// @return Memory address of the first free page frame allocated, or NULL if allocation fails.
+/// @return Memory address of the first free page frame allocated, or NULL if
+/// allocation fails.
 page_t *_alloc_pages(gfp_t gfp_mask, uint32_t order);
 
-/// @brief Get the start address of the corresponding page.
-/// @param page A page structure.
-/// @return The address that corresponds to the page.
+/// @brief Converts a page structure to its corresponding low memory virtual
+/// address.
+/// @param page Pointer to the page structure.
+/// @return The low memory virtual address corresponding to the specified page,
+/// or 0 if the input page pointer is invalid.
 uint32_t get_lowmem_address_from_page(page_t *page);
 
-/// @brief Get the start physical address of the corresponding page.
-/// @param page A page structure
-/// @return The physical address that corresponds to the page.
+/// @brief Converts a page structure to its corresponding physical address.
+/// @param page Pointer to the page structure.
+/// @return The physical address corresponding to the specified page, or 0 if
+/// the input page pointer is invalid.
 uint32_t get_physical_address_from_page(page_t *page);
 
-/// @brief Get the page from it's physical address.
-/// @param phy_addr The physical address
-/// @return The page that corresponds to the physical address.
+/// @brief Retrieves the page structure corresponding to a given physical
+/// address.
+/// @param phy_addr The physical address for which the page structure is
+/// requested.
+/// @return A pointer to the corresponding page structure, or NULL if the
+/// address is invalid.
 page_t *get_page_from_physical_address(uint32_t phy_addr);
 
 /// @brief Retrieves the low memory page corresponding to the given virtual

@@ -77,11 +77,21 @@ page_t *get_lowmem_page_from_address(uint32_t addr)
 
 uint32_t get_lowmem_address_from_page(page_t *page)
 {
-    // Check for NULL page pointer.
-    assert(page && "Invalid page pointer.");
+    // Check for NULL page pointer. If it is NULL, print an error and return 0.
+    if (!page) {
+        pr_err("Invalid page pointer: NULL value provided.\n");
+        return 0; // Return 0 to indicate an error in retrieving the address.
+    }
 
     // Calculate the index of the page in the memory map.
     unsigned int page_index = page - mem_map;
+
+    // Ensure the calculated page index is within valid bounds.
+    if (page_index < lowmem_page_base) {
+        pr_err("Invalid page index: %u is less than low memory base: %u.\n",
+               page_index, lowmem_page_base);
+        return 0; // Return 0 to indicate an error in retrieving the address.
+    }
 
     // Calculate the offset from the low memory base address.
     unsigned int offset = page_index - lowmem_page_base;
@@ -92,8 +102,11 @@ uint32_t get_lowmem_address_from_page(page_t *page)
 
 uint32_t get_physical_address_from_page(page_t *page)
 {
-    // Ensure the page pointer is not NULL.
-    assert(page && "Invalid page pointer.");
+    // Ensure the page pointer is not NULL. If it is NULL, print an error and return 0.
+    if (!page) {
+        pr_err("Invalid page pointer: NULL value provided.\n");
+        return 0; // Return 0 to indicate an error in retrieving the address.
+    }
 
     // Calculate the index of the page in the memory map.
     unsigned int page_index = page - mem_map;
@@ -105,8 +118,11 @@ uint32_t get_physical_address_from_page(page_t *page)
 
 page_t *get_page_from_physical_address(uint32_t phy_addr)
 {
-    // Ensure the physical address is valid.
-    assert(phy_addr % PAGE_SIZE == 0 && "Address must be page-aligned.");
+    // Ensure the physical address is valid and aligned to page boundaries.
+    if (phy_addr % PAGE_SIZE != 0) {
+        pr_crit("Address must be page-aligned. Received address: 0x%08x\n", phy_addr);
+        return NULL; // Return NULL to indicate failure due to misalignment.
+    }
 
     // Calculate the index of the page in the memory map.
     unsigned int page_index = phy_addr / PAGE_SIZE;
@@ -114,25 +130,31 @@ page_t *get_page_from_physical_address(uint32_t phy_addr)
     // Check for overflow: ensure the index does not exceed the maximum memory
     // map size.
     if (page_index >= MAX_MEM_MAP_SIZE) {
-        pr_crit("Physical address is out of bounds.\n");
-        return NULL; // Return NULL to indicate failure.
+        pr_crit("Physical address is out of bounds. Page index: %u, MAX: %u\n",
+                page_index, MAX_MEM_MAP_SIZE);
+        return NULL; // Return NULL to indicate failure due to out-of-bounds access.
     }
 
     // Return the pointer to the corresponding page structure in the memory map.
     return mem_map + page_index;
 }
+
 /// @brief Get the zone that contains a page frame.
-/// @param page A page descriptor.
-/// @return The zone requested or NULL if the page is not within any zone.
+/// @param page A pointer to the page descriptor.
+/// @return A pointer to the zone containing the page, or NULL if the page is
+/// not within any zone.
 static zone_t *get_zone_from_page(page_t *page)
 {
     // Validate the input parameter.
-    assert(page && "Invalid input: page is NULL.");
+    if (!page) {
+        pr_crit("Invalid input: page is NULL.\n");
+        return NULL; // Return NULL to indicate failure due to NULL input.
+    }
 
     zone_t *zone;
-    page_t *last_page;
+    page_t *first_page, *last_page;
 
-    // Iterate over all the zones.
+    // Iterate over all the zones in the contiguous page data structure.
     for (int zone_index = 0; zone_index < contig_page_data->nr_zones; zone_index++) {
         // Get the zone at the given index.
         zone = contig_page_data->node_zones + zone_index;
@@ -140,20 +162,25 @@ static zone_t *get_zone_from_page(page_t *page)
         // Check if the zone was retrieved successfully.
         if (!zone) {
             pr_crit("Failed to get zone from GFP mask.\n");
-            return NULL; // Return NULL to indicate failure.
+            return NULL; // Return NULL to indicate failure if a zone is not found.
         }
 
-        // Get the last page of the zone by adding the size to the memory map.
-        last_page = zone->zone_mem_map + zone->size;
+        // Get the first and last page of the zone by adding the zone size to
+        // the base of the memory map.
+        first_page = zone->zone_mem_map, last_page = zone->zone_mem_map + zone->size;
 
-        // Check if the last page of the zone was retrieved successfully.
+        // Check if the first and last page of the zone was retrieved successfully.
+        if (!first_page) {
+            pr_crit("Failed to retrieve the first page of the zone.\n");
+            return NULL; // Return NULL to indicate failure.
+        }
         if (!last_page) {
             pr_crit("Failed to retrieve the last page of the zone.\n");
             return NULL; // Return NULL to indicate failure.
         }
 
         // Check if the given page is within the current zone.
-        if (page < last_page) {
+        if ((page >= first_page) && (page < last_page)) {
             return zone; // Return the zone if the page is within its range.
         }
     }
@@ -165,14 +192,19 @@ static zone_t *get_zone_from_page(page_t *page)
     return NULL;
 }
 
-/// @brief Get a zone from gfp_mask.
-/// @param gfp_mask GFP_FLAG see gfp.h.
-/// @return The zone requested or NULL if the gfp_mask is not recognized.
+/// @brief Get a zone from the specified GFP mask.
+/// @param gfp_mask GFP flags indicating the type of memory allocation request.
+/// @return A pointer to the requested zone, or NULL if the gfp_mask is not
+/// recognized.
 static zone_t *get_zone_from_flags(gfp_t gfp_mask)
 {
-    // Ensure that contig_page_data and node_zones are valid.
-    assert(contig_page_data && "contig_page_data is NULL.");
+    // Ensure that contig_page_data is initialized and valid.
+    if (!contig_page_data) {
+        pr_crit("contig_page_data is NULL.\n");
+        return NULL; // Return NULL to indicate failure due to uninitialized data.
+    }
 
+    // Determine the appropriate zone based on the given GFP mask.
     switch (gfp_mask) {
     case GFP_KERNEL:
     case GFP_ATOMIC:
@@ -187,28 +219,30 @@ static zone_t *get_zone_from_flags(gfp_t gfp_mask)
         return &contig_page_data->node_zones[ZONE_HIGHMEM];
 
     default:
-        // If the gfp_mask does not match any known flags, return NULL.
-        assert(0 && "Error: Unrecognized gfp_mask.");
-        return (zone_t *)NULL;
+        // If the gfp_mask does not match any recognized flags, log an error and return NULL.
+        pr_crit("Unrecognized gfp_mask: %u.\n", gfp_mask);
+        return NULL; // Return NULL to indicate that the input was not valid.
     }
 }
 
-/// @brief Checks if the memory is clean.
-/// @param gfp_mask The mask which specifies the zone we are interested in.
-/// @return 1 if clean, 0 on error.
+/// @brief Checks if the specified memory zone is clean (i.e., all pages are free).
+/// @param gfp_mask The mask that specifies the zone of interest for memory allocation.
+/// @return 1 if the memory is clean, 0 if there is an error or if the memory is not clean.
 static int is_memory_clean(gfp_t gfp_mask)
 {
     // Get the corresponding zone based on the gfp_mask.
     zone_t *zone = get_zone_from_flags(gfp_mask);
-
-    // Assert that the zone is valid.
-    assert(zone && "Failed to retrieve the zone given the gfp_mask!");
+    if (!zone) {
+        pr_crit("Failed to retrieve the zone for gfp_mask: %u.\n", gfp_mask);
+        return 0; // Return 0 to indicate an error due to invalid zone.
+    }
 
     // Get the last free area list of the buddy system.
     bb_free_area_t *area = zone->buddy_system.free_area + (MAX_BUDDYSYSTEM_GFP_ORDER - 1);
-
-    // Assert that the area is valid.
-    assert(area && "Failed to retrieve the last free_area for the given zone!");
+    if (!area) {
+        pr_crit("Failed to retrieve the last free_area for the zone.\n");
+        return 0; // Return 0 to indicate an error due to invalid area.
+    }
 
     // Compute the total size of the zone.
     unsigned int total_size = (zone->size / (1UL << (MAX_BUDDYSYSTEM_GFP_ORDER - 1)));
@@ -311,25 +345,46 @@ static int pmm_check(void)
 }
 
 /// @brief Initializes the memory attributes for a specified zone.
-/// @param name the zone's name.
-/// @param zone_index the zone's index.
-/// @param adr_from the lowest address of the zone.
-/// @param adr_to the highest address of the zone (not included!).
-static void zone_init(char *name, int zone_index, uint32_t adr_from, uint32_t adr_to)
+/// @param name The zone's name.
+/// @param zone_index The zone's index, which must be valid within the number of zones.
+/// @param adr_from The lowest address of the zone (inclusive).
+/// @param adr_to The highest address of the zone (exclusive).
+/// @return 0 on success, -1 on error.
+static int zone_init(char *name, int zone_index, uint32_t adr_from, uint32_t adr_to)
 {
-    // Ensure that the provided addresses are valid.
-    assert((adr_from < adr_to) && "Inserted bad block addresses: adr_from must be less than adr_to.");
-    assert(((adr_from & 0xfffff000) == adr_from) && "Inserted bad block addresses: adr_from must be aligned.");
-    assert(((adr_to & 0xfffff000) == adr_to) && "Inserted bad block addresses: adr_to must be aligned.");
+    // Ensure that the provided addresses are valid: adr_from must be less than adr_to.
+    if (adr_from >= adr_to) {
+        pr_crit("Invalid block addresses: adr_from (%u) must be less than adr_to (%u).\n", adr_from, adr_to);
+        return -1; // Return -1 to indicate an error.
+    }
+
+    // Ensure that adr_from is page-aligned.
+    if ((adr_from & 0xfffff000) != adr_from) {
+        pr_crit("adr_from (%u) must be page-aligned.\n", adr_from);
+        return -1; // Return -1 to indicate an error.
+    }
+
+    // Ensure that adr_to is page-aligned.
+    if ((adr_to & 0xfffff000) != adr_to) {
+        pr_crit("adr_to (%u) must be page-aligned.\n", adr_to);
+        return -1; // Return -1 to indicate an error.
+    }
 
     // Ensure that the zone_index is within the valid range.
-    assert((zone_index < contig_page_data->nr_zones) && "The index is above the number of zones.");
+    if ((zone_index < 0) || (zone_index >= contig_page_data->nr_zones)) {
+        pr_crit("The zone_index (%d) is out of bounds (max: %d).\n",
+                zone_index, contig_page_data->nr_zones - 1);
+        return -1; // Return -1 to indicate an error.
+    }
 
     // Take the zone_t structure that corresponds to the zone_index.
     zone_t *zone = contig_page_data->node_zones + zone_index;
 
-    // Assert that the zone was retrieved successfully.
-    assert(zone && "Failed to retrieve the zone.");
+    // Ensure that the zone was retrieved successfully.
+    if (!zone) {
+        pr_crit("Failed to retrieve the zone for zone_index: %d.\n", zone_index);
+        return -1; // Return -1 to indicate an error.
+    }
 
     // Calculate the number of page frames in the zone.
     size_t num_page_frames = (adr_to - adr_from) / PAGE_SIZE;
@@ -349,12 +404,13 @@ static void zone_init(char *name, int zone_index, uint32_t adr_from, uint32_t ad
 
     // Initialize the buddy system for the new zone.
     buddy_system_init(
-        &zone->buddy_system,
-        name,
-        zone->zone_mem_map,
-        BBSTRUCT_OFFSET(page_t, bbpage),
-        sizeof(page_t),
-        num_page_frames);
+        &zone->buddy_system,             // Buddy system structure for the zone.
+        name,                            // Name of the zone.
+        zone->zone_mem_map,              // Pointer to the memory map of the zone.
+        BBSTRUCT_OFFSET(page_t, bbpage), // Offset for the buddy system structure.
+        sizeof(page_t),                  // Size of each page.
+        num_page_frames                  // Total number of page frames in the zone.
+    );
 
     // Dump the current state of the buddy system for debugging purposes.
     buddy_system_dump(&zone->buddy_system);
