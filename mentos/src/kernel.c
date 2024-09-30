@@ -197,7 +197,10 @@ int kmain(boot_info_t *boot_informations)
     //==========================================================================
     pr_notice("Initialize virtual memory mapping.\n");
     printf("Initialize virtual memory mapping...");
-    virt_init();
+    if (virt_init() < 0) {
+        print_fail();
+        return 1;
+    }
     print_ok();
 
     //==========================================================================
