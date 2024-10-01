@@ -19,7 +19,7 @@ int create_dir(const char *parent_directory, const char *directory_name, mode_t 
     memset(path, 0, PATH_MAX);
     strcat(path, parent_directory);
     strcat(path, directory_name);
-    pr_notice("Creating directory `%s`...\n", path);
+    pr_debug("Creating directory `%s`...\n", path);
     if (mkdir(path, mode) < 0) {
         pr_err("Failed to create directory %s: %s\n", path, strerror(errno));
         return EXIT_FAILURE;
@@ -33,7 +33,7 @@ int remove_dir(const char *parent_directory, const char *directory_name)
     memset(path, 0, PATH_MAX);
     strcat(path, parent_directory);
     strcat(path, directory_name);
-    pr_notice("Removing directory `%s`...\n", path);
+    pr_debug("Removing directory `%s`...\n", path);
     if (rmdir(path) < 0) {
         pr_err("Failed to remove directory %s: %s\n", path, strerror(errno));
         return EXIT_FAILURE;
@@ -47,7 +47,7 @@ int check_dir(const char *parent_directory, const char *directory_name)
     memset(path, 0, PATH_MAX);
     strcat(path, parent_directory);
     strcat(path, directory_name);
-    pr_notice("Checking directory `%s`...\n", path);
+    pr_debug("Checking directory `%s`...\n", path);
     stat_t buffer;
     stat(path, &buffer);
     if (!S_ISDIR(buffer.st_mode)) {
@@ -93,7 +93,7 @@ int test_consecutive_dirs(const char *parent_directory)
 
 int main(int argc, char *argv[])
 {
-    pr_notice("Running `test_consecutive_dirs`...\n");
+    pr_debug("Running `test_consecutive_dirs`...\n");
     if (test_consecutive_dirs("")) {
         return EXIT_FAILURE;
     }

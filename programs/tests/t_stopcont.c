@@ -4,54 +4,77 @@
 /// See LICENSE.md for details.
 
 #include <sys/unistd.h>
-#include <signal.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
-#include <time.h>
-#include "stdlib.h"
 #include <sys/wait.h>
+#include <stdlib.h>
+#include <signal.h>
+#include <stdio.h>
+#include <time.h>
 
-int child_pid;
-
-void wait_for_child(int signr)
+/// @brief Signal handler for SIGCONT.
+/// @param sig The signal number.
+void handle_signal(int sig)
 {
-    printf("Signal received: %s\n", strsignal(signr));
-    sleep(8);
-
-    printf("Sending continue sig to child\n");
-    if (kill(child_pid, SIGCONT) == -1)
-        printf("Error sending signal\n");
+    if (sig == SIGCONT) {
+        printf("Received SIGCONT, continuing execution...\n");
+    }
 }
 
 int main(int argc, char *argv[])
 {
-    sigaction_t action;
-    memset(&action, 0, sizeof(action));
-    action.sa_handler = wait_for_child;
-    if (sigaction(SIGCHLD, &action, NULL) == -1) {
-        printf("Failed to set signal handler. %d\n", SIGCHLD);
-        return 1;
-    }
+    pid_t pid = fork();
 
-    child_pid = fork();
-    if (child_pid != 0) {
-        printf("Child PID: %d\n", child_pid);
+    if (pid < 0) {
+        // Error handling for fork failure.
+        perror("fork failed");
+        exit(EXIT_FAILURE);
 
-        sleep(2);
-        printf("Sending stop sig to child\n");
+    } else if (pid == 0) { // Child process.
 
-        if (kill(child_pid, SIGSTOP) == -1)
-            printf("Error sending signal\n");
+        // Error handling for signal setup failure.
+        if (signal(SIGCONT, handle_signal) == SIG_ERR) {
+            perror("signal setup failed");
+            exit(EXIT_FAILURE);
+        }
 
-        wait(NULL);
-    } else {
-        for (int c = 0; c < 5; c++) {
-            printf("c: %d\n", c);
+        printf("Child process (PID: %d) started.\n", getpid());
+
+        while (1) {
+            printf("Child process running...\n");
             sleep(1);
         }
-        exit(0);
+
+    } else { // Parent process.
+
+        // Let the child process run for a bit.
+        sleep(3);
+        if (kill(pid, SIGSTOP) == -1) {
+            perror("failed to send SIGSTOP");
+            exit(EXIT_FAILURE);
+        }
+        printf("Parent sending SIGSTOP to child (PID: %d).\n", pid);
+
+        // Wait for a bit before continuing the child process.
+        sleep(3);
+        if (kill(pid, SIGCONT) == -1) {
+            perror("failed to send SIGCONT");
+            exit(EXIT_FAILURE);
+        }
+        printf("Parent sending SIGCONT to child (PID: %d).\n", pid);
+
+        // Wait for a bit before terminating the child process.
+        sleep(3);
+        if (kill(pid, SIGTERM) == -1) {
+            perror("failed to send SIGTERM");
+            exit(EXIT_FAILURE);
+        }
+        printf("Parent sending SIGTERM to child (PID: %d).\n", pid);
+
+        // Wait for the child process to finish.
+        if (wait(NULL) == -1) {
+            perror("wait failed");
+            exit(EXIT_FAILURE);
+        }
     }
 
-    return 0;
+    return EXIT_SUCCESS;
 }
