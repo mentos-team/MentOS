@@ -354,16 +354,16 @@ void remove_timer(struct timer_list *timer)
 
 /// @brief Contains the entry of a wait queue and timespec which keeps trakc of
 /// the remaining time.
-typedef struct sleep_data_t {
+typedef struct sleep_data {
     /// POinter to the entry of a wait queue.
     wait_queue_entry_t *wait_queue_entry;
     /// Keeps track of the remaining time.
-    timespec *remaining;
+    struct timespec *remaining;
 } sleep_data_t;
 
 /// @brief Allocates the memory for sleep_data.
 /// @return a pointer to the allocated sleep_data.
-static inline struct sleep_data_t *__sleep_data_alloc(void)
+static inline sleep_data_t *__sleep_data_alloc(void)
 {
     // Allocate the memory.
     sleep_data_t *sleep_data = (sleep_data_t *)kmalloc(sizeof(sleep_data_t));
@@ -600,7 +600,7 @@ static inline void real_timer_timeout(unsigned long task_ptr)
 // TIMING FUNCTIONS
 // ============================================================================
 
-int sys_nanosleep(const timespec *req, timespec *rem)
+int sys_nanosleep(const struct timespec *req, struct timespec *rem)
 {
     // We need to store rem somewhere, because it contains how much time left
     // until the timer expires, when the timer is stopped early by a signal.
@@ -672,7 +672,7 @@ int sys_getitimer(int which, struct itimerval *curr_value)
     } else if (which == ITIMER_PROF) {
         __values_to_itimerval(task->it_prof_incr, task->it_prof_value, curr_value);
     } else {
-        return EINVAL;
+        return -EINVAL;
     }
     return 0;
 }
@@ -681,7 +681,7 @@ int sys_setitimer(int which, const struct itimerval *new_value, struct itimerval
 {
     // Invalid time domain
     if (which < 0 || which > 3) {
-        return EINVAL;
+        return -EINVAL;
     }
     // Returns old timer interval
     if (old_value != NULL) {
@@ -699,7 +699,7 @@ int sys_setitimer(int which, const struct itimerval *new_value, struct itimerval
             task->real_timer = NULL;
         }
         __update_task_itimerval(which, new_value);
-        return -1;
+        return 0;
     }
     switch (which) {
     // Uses Dynamic Timers
@@ -727,7 +727,7 @@ int sys_setitimer(int which, const struct itimerval *new_value, struct itimerval
     }
 
     __update_task_itimerval(which, new_value);
-    return -1;
+    return 0;
 }
 
 void update_process_profiling_timer(task_struct *proc)

@@ -6,6 +6,7 @@
 #pragma once
 
 #include "sys/types.h"
+#include "stddef.h"
 
 /// @brief List of signals.
 typedef enum {
