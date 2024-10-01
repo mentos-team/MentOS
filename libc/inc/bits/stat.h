@@ -13,7 +13,7 @@
 #include "time.h"
 
 /// @brief Data structure which contains information about a file.
-typedef struct stat_t {
+typedef struct stat {
     /// ID of device containing file.
     dev_t st_dev;
     /// File serial number.
