@@ -161,13 +161,13 @@ typedef void (*sighandler_t)(int);
 /// Signals are divided into two cathegories, identified by the two unsigned longs:
 ///     [ 1, 31] corresponds to normal signals;
 ///     [32, 64] corresponds to real-time signals.
-typedef struct sigset_t {
+typedef struct sigset {
     /// Signals divided into two cathegories.
     unsigned long sig[2];
 } sigset_t;
 
 /// @brief Holds the information on how to handle a specific signal.
-typedef struct sigaction_t {
+typedef struct sigaction {
     /// This field specifies the type of action to be performed; its value can be a pointer
     /// to the signal handler, SIG_DFL (that is, the value 0) to specify that the default
     /// action is performed, or SIG_IGN (that is, the value 1) to specify that the signal is
@@ -186,7 +186,7 @@ typedef union sigval {
 } sigval_t;
 
 /// @brief Stores information about an occurrence of a specific signal.
-typedef struct siginfo_t {
+typedef struct siginfo {
     /// The signal number.
     int si_signo;
     /// A code identifying who raised the signal (see signal_sender_code_t).
