@@ -1,17 +1,24 @@
 /// @file t_kill.c
-/// @brief
+/// @brief Test the kill and signal handling functionality.
+/// @details This program demonstrates the use of `fork`, `kill`, and signal
+/// handling. It creates a child process, sets up a signal handler for `SIGUSR1`
+/// in the child, and sends signals from the parent to the child. The child
+/// process handles the signals and prints messages accordingly. The parent
+/// process waits for the child to terminate before exiting.
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include <sys/unistd.h>
 #include <signal.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 #include <strerror.h>
 #include <sys/wait.h>
-#include <time.h>
+#include <sys/unistd.h>
 
+/// @brief Signal handler for SIGUSR1 in the child process.
+/// @param sig The signal number.
 void child_sigusr1_handler(int sig)
 {
     printf("handler(sig: %d) : Starting handler (pid: %d).\n", sig, getpid());
@@ -21,28 +28,54 @@ void child_sigusr1_handler(int sig)
 int main(int argc, char *argv[])
 {
     printf("main : Creating child!\n");
-    pid_t ppid;
-    if ((ppid = fork()) == 0) {
-        printf("I'm the child (%d)!\n", ppid);
-        sigaction_t action;
+    pid_t cpid;
+    if ((cpid = fork()) == 0) {
+        // Child process.
+        cpid = getpid();
+        printf("I'm the child (pid: %d)!\n", cpid);
+        struct sigaction action;
         memset(&action, 0, sizeof(action));
         action.sa_handler = child_sigusr1_handler;
+
+        // Set up the signal handler for SIGUSR1.
         if (sigaction(SIGUSR1, &action, NULL) == -1) {
-            printf("Failed to set signal handler (%s).\n", SIGUSR1, strerror(errno));
-            return 1;
+            fprintf(STDERR_FILENO, "Failed to set signal handler for SIGUSR1: %s\n", strerror(errno));
+            return EXIT_FAILURE;
         }
+
+        // Child process loop
         while (1) {
-            printf("I'm the child (%d): I'm playing around!\n", getpid());
+            printf("I'm the child (pid: %d): I'm waiting...\n", cpid);
             sleep(1);
         }
+    } else if (cpid > 0) {
+        // Parent process
+        printf("I'm the parent (pid: %d)!\n", cpid);
+        sleep(2);
+
+        // Send SIGUSR1 to the child process.
+        if (kill(cpid, SIGUSR1) == -1) {
+            fprintf(STDERR_FILENO, "Failed to send SIGUSR1 to child: %s\n", strerror(errno));
+            return EXIT_FAILURE;
+        }
+        sleep(2);
+
+        // Send SIGTERM to the child process to terminate it.
+        if (kill(cpid, SIGTERM) == -1) {
+            fprintf(STDERR_FILENO, "Failed to send SIGTERM to child: %s\n", strerror(errno));
+            return EXIT_FAILURE;
+        }
+
+        // Wait for the child process to terminate.
+        if (wait(NULL) == -1) {
+            fprintf(STDERR_FILENO, "Failed to wait for child process: %s\n", strerror(errno));
+            return EXIT_FAILURE;
+        }
+        printf("main : end\n");
     } else {
-        printf("I'm the parent (%d)!\n", ppid);
+        // Fork failed
+        fprintf(STDERR_FILENO, "Failed to fork: %s\n", strerror(errno));
+        return EXIT_FAILURE;
     }
-    sleep(2);
-    kill(ppid, SIGUSR1);
-    sleep(2);
-    kill(ppid, SIGTERM);
-    wait(NULL);
-    printf("main : end\n");
-    return 0;
+    return EXIT_SUCCESS;
 }

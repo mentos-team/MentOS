@@ -1,5 +1,5 @@
 /// @file t_alarm.c
-/// @brief
+/// @brief Demonstrates handling of the SIGALRM signal.
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
@@ -16,6 +16,7 @@
 /// @param sig The signal number.
 void alarm_handler(int sig)
 {
+    printf("handler(%d) : Starting handler.\n", sig);
     if (sig == SIGALRM) {
         // Set an alarm to go off after 5 seconds.
         alarm(5);
@@ -37,7 +38,10 @@ void alarm_handler(int sig)
         printf("handler(%d) : alarm(0) result: %d.\n", sig, rest);
 
         exit(EXIT_SUCCESS);
+    } else {
+        printf("handler(%d) : Wrong signal.\n", sig);
     }
+    printf("handler(%d) : Ending handler.\n", sig);
 }
 
 int main(int argc, char *argv[])
