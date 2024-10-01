@@ -2842,7 +2842,6 @@ static int ext2_unlink(const char *path)
     memset(&search, 0, sizeof(ext2_direntry_search_t));
     // Resolve the path to the directory entry.
     if (ext2_resolve_path(fs->root, path, &search)) {
-        pr_err("ext2_unlink(%s): Failed to resolve path.\n", path);
         return -ENOENT;
     }
     // Get the inode associated with the parent directory entry.
@@ -3109,7 +3108,6 @@ static int ext2_stat(const char *path, stat_t *stat)
     memset(&search, 0, sizeof(ext2_direntry_search_t));
     // Resolve the path.
     if (ext2_resolve_path(fs->root, path, &search)) {
-        pr_err("ext2_stat(path: %s): Failed to resolve path.\n", path);
         return -ENOENT;
     }
     // Get the inode associated with the directory entry.
@@ -3214,7 +3212,6 @@ static ssize_t ext2_readlink(const char *path, char *buffer, size_t bufsize)
     memset(&search, 0, sizeof(ext2_direntry_search_t));
     // Resolve the path.
     if (ext2_resolve_path(fs->root, path, &search)) {
-        pr_err("ext2_readlink(path: %s): Failed to resolve path.\n", path);
         return -ENOENT;
     }
     // Get the inode associated with the file.
@@ -3332,7 +3329,6 @@ static int ext2_rmdir(const char *path)
     memset(&search, 0, sizeof(ext2_direntry_search_t));
     // Resolve the path to the directory entry.
     if (ext2_resolve_path(fs->root, path, &search)) {
-        pr_err("ext2_rmdir(path: %s): Failed to resolve path.\n", path);
         return -ENOENT;
     }
 
@@ -3431,7 +3427,6 @@ static int ext2_setattr(const char *path, struct iattr *attr)
     memset(&search, 0, sizeof(ext2_direntry_search_t));
     // Resolve the path.
     if (ext2_resolve_path(fs->root, path, &search)) {
-        pr_err("setattr(%s): Failed to resolve path.\n", path);
         return -ENOENT;
     }
     // Get the inode associated with the directory entry.
