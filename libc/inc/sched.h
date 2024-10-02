@@ -8,7 +8,7 @@
 #include "stdbool.h"
 
 /// @brief Structure that describes scheduling parameters.
-typedef struct sched_param_t {
+typedef struct sched_param {
     /// Static execution priority.
     int sched_priority;
     /// Expected period of the task
