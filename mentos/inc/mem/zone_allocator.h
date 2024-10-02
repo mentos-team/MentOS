@@ -113,12 +113,13 @@ typedef struct pg_data_t {
 extern page_t *mem_map;
 extern pg_data_t *contig_page_data;
 
-/// @brief Find the nearest block's order of size greater than the amount of
-/// byte.
-/// @param base_addr The start address, used to handle extra page calculation in
-/// case of not page aligned addresses.
-/// @param amount    The amount of byte which we want to calculate order.
-/// @return The block's order greater and nearest than amount.
+/// @brief Finds the nearest order of memory allocation that can accommodate a
+/// given amount of memory.
+/// @param base_addr the base address from which to calculate the number of
+/// pages.
+/// @param amount the amount of memory (in bytes) to allocate.
+/// @return The nearest order (power of two) that is greater than or equal to
+/// the number of pages required.
 uint32_t find_nearest_order_greater(uint32_t base_addr, uint32_t amount);
 
 /// @brief Physical memory manager initialization.
@@ -126,24 +127,26 @@ uint32_t find_nearest_order_greater(uint32_t base_addr, uint32_t amount);
 /// @return Outcome of the operation.
 int pmmngr_init(boot_info_t *boot_info);
 
-/// @brief Alloc a single cached page.
-/// @param gfp_mask The GetFreePage mask.
-/// @return Pointer to the page.
+/// @brief Allocates a cached page based on the given GFP mask.
+/// @param gfp_mask The GFP mask specifying the allocation constraints.
+/// @return A pointer to the allocated page, or NULL if allocation fails.
 page_t *alloc_page_cached(gfp_t gfp_mask);
 
 /// @brief Free a page allocated with alloc_page_cached.
 /// @param page Pointer to the page to free.
-void free_page_cached(page_t *page);
+/// @return Returns 0 on success, or -1 if an error occurs.
+int free_page_cached(page_t *page);
 
 /// @brief Find the first free page frame, set it allocated and return the
 /// memory address of the page frame.
 /// @param gfp_mask GFP_FLAGS to decide the zone allocation.
-/// @return Memory address of the first free block.
+/// @return The low memory address of the allocated page, or 0 if allocation fails.
 uint32_t __alloc_page_lowmem(gfp_t gfp_mask);
 
 /// @brief Frees the given page frame address.
 /// @param addr The block address.
-void free_page_lowmem(uint32_t addr);
+/// @return Returns 0 on success, or -1 if an error occurs.
+int free_page_lowmem(uint32_t addr);
 
 /// @brief Find the first free 2^order amount of page frames, set it allocated
 /// and return the memory address of the first page frame allocated.
@@ -156,52 +159,63 @@ uint32_t __alloc_pages_lowmem(gfp_t gfp_mask, uint32_t order);
 /// and return the memory address of the first page frame allocated.
 /// @param gfp_mask GFP_FLAGS to decide the zone allocation.
 /// @param order    The logarithm of the size of the page frame.
-/// @return Memory address of the first free page frame allocated.
+/// @return Memory address of the first free page frame allocated, or NULL if
+/// allocation fails.
 page_t *_alloc_pages(gfp_t gfp_mask, uint32_t order);
 
-/// @brief Get the start address of the corresponding page.
-/// @param page A page structure.
-/// @return The address that corresponds to the page.
+/// @brief Converts a page structure to its corresponding low memory virtual
+/// address.
+/// @param page Pointer to the page structure.
+/// @return The low memory virtual address corresponding to the specified page,
+/// or 0 if the input page pointer is invalid.
 uint32_t get_lowmem_address_from_page(page_t *page);
 
-/// @brief Get the start physical address of the corresponding page.
-/// @param page A page structure
-/// @return The physical address that corresponds to the page.
+/// @brief Converts a page structure to its corresponding physical address.
+/// @param page Pointer to the page structure.
+/// @return The physical address corresponding to the specified page, or 0 if
+/// the input page pointer is invalid.
 uint32_t get_physical_address_from_page(page_t *page);
 
-/// @brief Get the page from it's physical address.
-/// @param phy_addr The physical address
-/// @return The page that corresponds to the physical address.
+/// @brief Retrieves the page structure corresponding to a given physical
+/// address.
+/// @param phy_addr The physical address for which the page structure is
+/// requested.
+/// @return A pointer to the corresponding page structure, or NULL if the
+/// address is invalid.
 page_t *get_page_from_physical_address(uint32_t phy_addr);
 
-/// @brief Get the page that contains the specified address.
-/// @param addr A phisical address.
-/// @return The page that corresponds to the address.
+/// @brief Retrieves the low memory page corresponding to the given virtual
+/// address.
+/// @param addr the virtual address to convert.
+/// @return A pointer to the corresponding page, or NULL if the address is out
+/// of range.
 page_t *get_lowmem_page_from_address(uint32_t addr);
 
 /// @brief Frees from the given page frame address up to 2^order amount of page
 /// frames.
 /// @param addr The page frame address.
-void free_pages_lowmem(uint32_t addr);
+/// @return Returns 0 on success, or -1 if an error occurs.
+int free_pages_lowmem(uint32_t addr);
 
 /// @brief Frees from the given page frame address up to 2^order amount of page
 /// frames.
 /// @param page The page.
-void __free_pages(page_t *page);
+/// @return Returns 0 on success, or -1 if an error occurs.
+int __free_pages(page_t *page);
 
-/// @brief Returns the total space for the given zone.
-/// @param gfp_mask GFP_FLAGS to decide the zone.
-/// @return Total space of the given zone.
+/// @brief Retrieves the total space of the zone corresponding to the given GFP mask.
+/// @param gfp_mask The GFP mask specifying the allocation constraints.
+/// @return The total space of the zone, or 0 if the zone cannot be retrieved.
 unsigned long get_zone_total_space(gfp_t gfp_mask);
 
-/// @brief Returns the total free space for the given zone.
-/// @param gfp_mask GFP_FLAGS to decide the zone.
-/// @return Total free space of the given zone.
+/// @brief Retrieves the free space of the zone corresponding to the given GFP mask.
+/// @param gfp_mask The GFP mask specifying the allocation constraints.
+/// @return The free space of the zone, or 0 if the zone cannot be retrieved.
 unsigned long get_zone_free_space(gfp_t gfp_mask);
 
-/// @brief Returns the total cached space for the given zone.
-/// @param gfp_mask GFP_FLAGS to decide the zone.
-/// @return Total cached space of the given zone.
+/// @brief Retrieves the cached space of the zone corresponding to the given GFP mask.
+/// @param gfp_mask The GFP mask specifying the allocation constraints.
+/// @return The cached space of the zone, or 0 if the zone cannot be retrieved.
 unsigned long get_zone_cached_space(gfp_t gfp_mask);
 
 /// @brief Checks if the specified address points to a page_t (or field) that

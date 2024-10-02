@@ -148,6 +148,26 @@ static inline void set_cr0(uintptr_t cr0)
                          : "r"(cr0));
 }
 
+
+/// @brief Reads the current cr2 value.
+/// @return the value we read.
+static inline uintptr_t get_cr2(void)
+{
+    uintptr_t cr2;
+    __asm__ __volatile__("mov %%cr2, %0"
+                         : "=r"(cr2));
+    return (cr2);
+}
+
+/// @brief Sets the cr2 value.
+/// @param cr2 the value we want to set.
+static inline void set_cr2(uintptr_t cr2)
+{
+    __asm__ __volatile__("mov %0, %%cr2"
+                         :
+                         : "r"(cr2));
+}
+
 /// @brief Reads the current cr3 value.
 /// @return the value we read.
 static inline uintptr_t get_cr3(void)
