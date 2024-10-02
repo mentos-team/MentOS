@@ -3,7 +3,14 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
+// Setup the logging for this file (do this before any other include).
+#include "sys/kernel_levels.h"          // Include kernel log levels.
+#define __DEBUG_HEADER__ "[LOGIN ]"     ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_DEBUG ///< Set log level.
+#include "io/debug.h"                   // Include debugging functions.
+
 #include <string.h>
+#include <ctype.h>
 #include <stdbool.h>
 #include <sys/unistd.h>
 #include <fcntl.h>
@@ -15,7 +22,6 @@
 #include <shadow.h>
 #include <strerror.h>
 #include <stdlib.h>
-#include <io/debug.h>
 #include <io/ansi_colors.h>
 
 #include <sys/mman.h>
@@ -46,14 +52,15 @@ static inline int __setup_env(passwd_t *pwd)
     return 1;
 }
 
-static inline void __set_io_flags(unsigned flag, bool_t active)
+static inline void __set_echo(bool_t active)
 {
     struct termios _termios;
     tcgetattr(STDIN_FILENO, &_termios);
-    if (active)
-        _termios.c_lflag |= flag;
-    else
-        _termios.c_lflag &= ~flag;
+    if (active) {
+        _termios.c_lflag |= (ICANON | ECHO);
+    } else {
+        _termios.c_lflag &= ~(ICANON | ECHO);
+    }
     tcsetattr(STDIN_FILENO, 0, &_termios);
 }
 
@@ -80,114 +87,135 @@ static inline void __print_message_file(const char *file)
         printf("\n");
 }
 
-/// @brief Gets the inserted command.
-static inline bool_t __get_input(char *input, size_t max_len, bool_t hide)
+// Function to read input in a blocking manner
+int read_input(char *buffer, size_t size, int show)
 {
-    size_t index = 0;
-    int c;
-    bool_t result = false;
+    int index = 0, c;
 
-    __set_io_flags(ICANON, false);
-    if (hide)
-        __set_io_flags(ECHO, false);
-
-    memset(input, 0, max_len);
     do {
         c = getchar();
-        // Return Key
+
+        pr_crit("[%2d](%lu)\n", index, c);
+
+        // Do nothing.
+        if ((c == EOF) || (c == 0)) {
+            continue;
+        }
+
+        // Newline.
         if (c == '\n') {
-            input[index] = 0;
-            result       = true;
-            break;
-        } else if (c == '\033') {
+            if (show) {
+                putchar('\n');
+            }
+            buffer[index] = 0;
+            return index;
+        }
+
+        // Delete.
+        if (c == '\b') {
+            if (index > 0) {
+                if (show) { putchar('\b'); }
+                buffer[--index] = 0;
+            }
+            continue;
+        }
+
+        if (c == '\033') {
             c = getchar();
             if (c == '[') {
-                getchar(); // Get the char, and ignore it.
-            } else if (c == '^') {
-                c = getchar(); // Get the char.
-                if (c == 'C') {
-                    // However, the ISR of the keyboard has already put the char.
-                    // Thus, delete it by using backspace.
-                    if (!hide) {
-                        putchar('\b');
-                        putchar('\b');
-                        putchar('\n');
+                // Get the char, and ignore it.
+                c = getchar();
+
+                if (c == 'D') { // LEFT
+                    if (index > 0) {
+                        if (show) { puts("\033[1D"); } // Move the cursor left.
+                        index--;                       // Decrease index if moving left.
                     }
-                    result = false;
-                    break;
-                } else if (c == 'U') {
-                    if (!hide) {
-                        // However, the ISR of the keyboard has already put the char.
-                        // Thus, delete it by using backspace.
-                        putchar('\b');
-                        putchar('\b');
+                } else if (c == 'C') { // RIGHT
+                    if ((index < size) && (buffer[index + 1] != 0)) {
+                        if (show) { puts("\033[1C"); } // Move the cursor right.
+                        index++;                       // Increase index if moving right.
+                    }
+                }
+
+            } else if (c == '^') {
+                // Get the char.
+                c = getchar();
+
+                if (c == 'C') {
+                    memset(buffer, 0, size);
+                    putchar('\n');
+                    return -1;
+                }
+
+                if (c == 'U') {
+                    memset(buffer, 0, size);
+                    if (show) {
                         // Clear the current command.
-                        for (size_t it = 0; it < index; ++it) {
+                        while (index) {
                             putchar('\b');
+                            index--;
                         }
                     }
                     index = 0;
                 }
             }
-        } else if (c == '\b') {
-            if (index > 0) {
-                if (!hide)
-                    putchar('\b');
-                --index;
+            continue;
+        }
+
+        if (isdigit(c) || isalpha(c)) {
+            // If we moved the cursor, we need to override the character.
+            if (buffer[index] && show) {
+                // Move the cursor right.
+                puts("\033[1C");
+                // Delete the character.
+                putchar('\b');
             }
-        } else if (c == 0) {
-            // Do nothing.
-        } else {
-            input[index++] = c;
-            if (index == (max_len - 1)) {
-                input[index] = 0;
-                result       = true;
+
+            buffer[index++] = c;
+            if (show) {
+                putchar(c);
+            }
+            if (index == (size - 1)) {
+                buffer[index] = 0;
                 break;
             }
         }
-    } while (index < max_len);
+    } while (index < size);
 
-    if (hide) {
-        __set_io_flags(ECHO, true);
-        putchar('\n');
-    }
-    __set_io_flags(ICANON, true);
-
-    return result;
+    return index;
 }
 
 int main(int argc, char **argv)
 {
-#if 0
-    int *shared = mmap(NULL, sizeof(int), PROT_READ | PROT_WRITE,
-                       MAP_SHARED, -1, 0);
-    pid_t child;
-    int childstate;
-    pr_warning("[F] (%p) %d\n", shared, *shared);
-    if ((child = fork()) == 0) {
-        *shared = 1;
-        pr_warning("[C] (%p) %d\n", shared, *shared);
-        return 0;
-    }
-    waitpid(child, &childstate, 0);
-    pr_warning("[F] (%p) %d\n", shared, *shared);
-    return 0;
-    while (1) {}
-#endif
     // Print /etc/issue if it exists.
     __print_message_file("/etc/issue");
+
+    struct termios _termios;
+    tcgetattr(STDIN_FILENO, &_termios);
+    _termios.c_lflag &= ~ISIG;
+    tcsetattr(STDIN_FILENO, 0, &_termios);
 
     passwd_t *pwd;
     char username[CREDENTIALS_LENGTH], password[CREDENTIALS_LENGTH];
     do {
-        // Get the username.
+        __set_echo(false);
+        // Get the username and password.
+
         do {
-            printf("Username: ");
-        } while (!__get_input(username, sizeof(username), false));
-        // Get the password.
-        do {
-            printf("Password: ");
-        } while (!__get_input(password, sizeof(password), true));
+            puts("Username: ");
+        } while (read_input(username, CREDENTIALS_LENGTH, 1) <= 0);
+        pr_crit("|%s|\n", username);
+
+        printf("Password: ");
+        if (read_input(password, CREDENTIALS_LENGTH, 0) < 0) {
+            fprintf(stderr, "Error reading password\n");
+            return EXIT_FAILURE;
+        }
+        putchar('\n');
+        pr_crit("|%s|\n", password);
+
+        __set_echo(true);
 
         // Check if we can find the user.
         if ((pwd = getpwnam(username)) == NULL) {
