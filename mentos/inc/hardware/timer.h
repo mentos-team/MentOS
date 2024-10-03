@@ -154,7 +154,7 @@ void remove_timer(struct timer_list *timer);
 /// in *req has elapsed, or the delivery of a signal that triggers the
 /// invocation of a handler in the calling thread or that terminates
 /// the process.
-int sys_nanosleep(const timespec *req, timespec *rem);
+int sys_nanosleep(const struct timespec *req, struct timespec *rem);
 
 /// @brief Send signal to calling thread after desired seconds.
 /// @param seconds The number of seconds in the interval
@@ -162,18 +162,6 @@ int sys_nanosleep(const timespec *req, timespec *rem);
 ///         alarm was due to be delivered, or zero if there was no previously
 ///         scheduled alarm.
 unsigned sys_alarm(int seconds);
-
-/// @brief Rappresents a time value.
-struct timeval {
-    time_t tv_sec;  ///< Seconds.
-    time_t tv_usec; ///< Microseconds.
-};
-
-/// @brief Rappresents a time interval.
-struct itimerval {
-    struct timeval it_interval; ///< Next value.
-    struct timeval it_value;    ///< Current value.
-};
 
 /// @brief Fills the structure pointed to by curr_value with the current setting for the timer specified by which.
 /// @param which      The time domain (i.e., ITIMER_REAL, ITIMER_VIRTUAL, ITIMER_PROF)

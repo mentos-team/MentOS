@@ -116,49 +116,49 @@ size_t strftime(char *str, size_t maxsize, const char *format, const tm_t *timep
                     break;
 #endif
             case 'b': // Abbreviated month name
-            {
-                strncat(s, months[timeptr->tm_mon], 3);
-                break;
-            }
+                {
+                    strncat(s, months[timeptr->tm_mon], 3);
+                    break;
+                }
             case 'B': // Full month name
-            {
-                unsigned int i = (unsigned int)timeptr->tm_mon;
-                strcat(s, months[i]);
-                break;
-            }
+                {
+                    unsigned int i = (unsigned int)timeptr->tm_mon;
+                    strcat(s, months[i]);
+                    break;
+                }
             case 'd': /* day of month as decimal number (01-31) */
-            {
-                value  = timeptr->tm_mday;
-                (*s++) = (char)('0' + ((value / 10) % 10));
-                (*s++) = (char)('0' + (value % 10));
-                break;
-            }
+                {
+                    value  = timeptr->tm_mday;
+                    (*s++) = (char)('0' + ((value / 10) % 10));
+                    (*s++) = (char)('0' + (value % 10));
+                    break;
+                }
             case 'H': /* hour (24-hour clock) as decimal (00-23) */
-            {
-                value  = timeptr->tm_hour;
-                (*s++) = (char)('0' + ((value / 10) % 10));
-                (*s++) = (char)('0' + (value % 10));
-                break;
-            }
+                {
+                    value  = timeptr->tm_hour;
+                    (*s++) = (char)('0' + ((value / 10) % 10));
+                    (*s++) = (char)('0' + (value % 10));
+                    break;
+                }
 #if 0
                 case 'I':    /* hour (12-hour clock) as decimal (01-12) */
                     SPRINTF("%02d", ((timeptr->tm_hour + 11) % 12) + 1);
                     break;
 #endif
             case 'j': // Day of year as decimal number (001-366)
-            {
-                value  = timeptr->tm_yday;
-                (*s++) = (char)('0' + ((value / 10) % 10));
-                (*s++) = (char)('0' + (value % 10));
-                break;
-            }
+                {
+                    value  = timeptr->tm_yday;
+                    (*s++) = (char)('0' + ((value / 10) % 10));
+                    (*s++) = (char)('0' + (value % 10));
+                    break;
+                }
             case 'm': // Month as decimal number (01-12)
-            {
-                value  = timeptr->tm_mon;
-                (*s++) = (char)('0' + ((value / 10) % 10));
-                (*s++) = (char)('0' + (value % 10));
-                break;
-            }
+                {
+                    value  = timeptr->tm_mon;
+                    (*s++) = (char)('0' + ((value / 10) % 10));
+                    (*s++) = (char)('0' + (value % 10));
+                    break;
+                }
 #if 0
                 case 'M':    /* month as decimal number (00-59) */
                     SPRINTF("%02d", timeptr->tm_min);
@@ -381,11 +381,11 @@ size_t strftime(char *str, size_t maxsize, const char *format, const tm_t *timep
 }
 
 /// @brief nanosleep function.
-_syscall2(int, nanosleep, const timespec *, req, timespec *, rem)
+_syscall2(int, nanosleep, const struct timespec *, req, struct timespec *, rem)
 
-    unsigned int sleep(unsigned int seconds)
+unsigned int sleep(unsigned int seconds)
 {
-    timespec req, rem;
+    struct timespec req, rem;
     req.tv_sec = seconds;
     // Call the nanosleep.
     int __ret = nanosleep(&req, &rem);
@@ -397,6 +397,6 @@ _syscall2(int, nanosleep, const timespec *, req, timespec *, rem)
     return 0;
 }
 
-_syscall2(int, getitimer, int, which, itimerval *, curr_value)
+_syscall2(int, getitimer, int, which, struct itimerval *, curr_value)
 
-    _syscall3(int, setitimer, int, which, const itimerval *, new_value, itimerval *, old_value)
+_syscall3(int, setitimer, int, which, const struct itimerval *, new_value, struct itimerval *, old_value)

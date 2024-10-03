@@ -13,7 +13,7 @@
 
 void putchar(int character)
 {
-    write(STDOUT_FILENO, &character, 1);
+    write(STDOUT_FILENO, &character, 1U);
 }
 
 void puts(const char *str)
@@ -188,35 +188,57 @@ long strtol(const char *str, char **endptr, int base)
 
 int fgetc(int fd)
 {
-    unsigned char c;
-    if (read(fd, &c, 1) <= 0) {
-        return EOF;
+    char c;
+    ssize_t bytes_read;
+
+    // Read a single character from the file descriptor.
+    bytes_read = read(fd, &c, 1);
+
+    // Check for errors or EOF.
+    if (bytes_read == -1) {
+        perror("Error reading from file descriptor");
+        return EOF; // Return EOF on error.
+    } else if (bytes_read == 0) {
+        return EOF; // Return EOF if no bytes were read (end of file).
     }
-    return c;
+
+    // Return the character as an unsigned char.
+    return (unsigned char)c;
 }
 
 char *fgets(char *buf, int n, int fd)
 {
     int c;
-    char *p;
+    char *p = buf;
+    int count = n - 1; // Leave space for null terminator
 
-    /* get max bytes or upto a newline */
-    for (p = buf, n--; n > 0; n--) {
-        // Get the character.
-        c = fgetc(fd);
-        if (c == EOF) {
+    // Read characters until reaching the limit or newline
+    while (count > 0) {
+        ssize_t bytes_read = read(fd, &c, 1); // Read one character
+
+        if (bytes_read < 0) {
+            perror("Error reading from file descriptor");
+            return NULL; // Return NULL on error
+        } else if (bytes_read == 0) {
+            // End of file
             break;
         }
-        *p++ = (char)c;
+
+        *p++ = (char)c; // Store the character in the buffer
+
         if (c == '\n') {
-            break;
+            break; // Stop if we reach a newline
         }
+        count--;
     }
-    *p = 0;
+
+    *p = '\0'; // Null-terminate the string
+
     if (p == buf || c == EOF) {
-        return NULL;
+        return NULL; // Return NULL if no characters were read or EOF was reached
     }
-    return (p);
+
+    return buf; // Return the buffer
 }
 
 void perror(const char *s)
