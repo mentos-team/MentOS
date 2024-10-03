@@ -114,12 +114,6 @@ static ssize_t procv_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyt
             video_puts("^[[3~");
         }
 
-        // Add the character to the buffer.
-        fs_rb_scancode_push_front(rb, '\033');
-        fs_rb_scancode_push_front(rb, '[');
-        fs_rb_scancode_push_front(rb, '3');
-        fs_rb_scancode_push_front(rb, '~');
-
         // Indicate no character was returned.
         return 0;
     }
