@@ -134,7 +134,7 @@ static ssize_t procv_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyt
             sys_kill(process->pid, SIGSTOP);
         }
 
-        if (isalpha('A' + (c - 1)) && (c != '\n') && (c != '\b')) {
+        if (isalpha('A' + (c - 1)) && (c != '\n') && (c != '\b') && (c != '\t')) {
             // If echo is activated, output the character to video.
             if (flg_echo) {
                 video_putc('^');
