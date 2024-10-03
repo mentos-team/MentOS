@@ -95,7 +95,7 @@ int read_input(char *buffer, size_t size, int show)
     do {
         c = getchar();
 
-        pr_crit("[%2d](%lu)\n", index, c);
+        // pr_crit("[%2d](%lu)\n", index, c);
 
         // Do nothing.
         if ((c == EOF) || (c == 0)) {
