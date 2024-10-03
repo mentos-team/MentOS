@@ -205,7 +205,6 @@ int main(int argc, char **argv)
         do {
             puts("Username: ");
         } while (read_input(username, CREDENTIALS_LENGTH, 1) <= 0);
-        pr_crit("|%s|\n", username);
 
         printf("Password: ");
         if (read_input(password, CREDENTIALS_LENGTH, 0) < 0) {
@@ -213,7 +212,6 @@ int main(int argc, char **argv)
             return EXIT_FAILURE;
         }
         putchar('\n');
-        pr_crit("|%s|\n", password);
 
         __set_echo(true);
 
