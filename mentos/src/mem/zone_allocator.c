@@ -39,43 +39,84 @@
     (((addr) & (~((PAGE_SIZE << (MAX_BUDDYSYSTEM_GFP_ORDER - 1)) - 1))) + \
      (PAGE_SIZE << (MAX_BUDDYSYSTEM_GFP_ORDER - 1)))
 
-// #define MAX_MEM_MAP_SIZE (PAGE_SIZE * MAX_ORDER * MAX_NUMNODES)
-#define MAX_MEM_MAP_SIZE (PAGE_SIZE * MAX_BUDDYSYSTEM_GFP_ORDER * 256)
-
-/// Array of all physical blocks.
+/// @brief Array of all physical memory blocks (pages).
+/// @details This variable points to an array of `page_t` structures
+/// representing all physical memory blocks (pages) in the system. It is used to
+/// track the state of each page in memory.
 page_t *mem_map = NULL;
-/// Memory node.
+
+/// @brief Memory node descriptor for contiguous memory.
+/// @details This variable points to the `pg_data_t` structure, which represents
+/// a memory node (usually for NUMA systems). It typically describes the memory
+/// properties and zones for a contiguous block of physical memory.
 pg_data_t *contig_page_data = NULL;
-/// Low memory virtual base address.
+
+/// @brief Virtual base address of the low memory (lowmem) zone.
+/// @details This variable stores the base virtual address of the low memory
+/// region. The kernel uses this address to access low memory (directly
+/// addressable memory).
 uint32_t lowmem_virt_base = 0;
-/// Low memory base address.
+
+/// @brief Physical base address of the low memory (lowmem) zone.
+/// @details This variable stores the base physical address of the low memory
+/// region. It represents the starting point of the lowmem pages in physical
+/// memory.
 uint32_t lowmem_page_base = 0;
 
-page_t *get_lowmem_page_from_address(uint32_t addr)
-{
-    // Ensure the address is within the valid range.
-    if (addr < lowmem_virt_base) {
-        pr_crit("Address is below low memory virtual base.\n");
-        return NULL; // Return NULL to indicate failure.
-    }
+/// @brief Physical start address of low memory (lowmem) zone.
+/// @details This variable stores the physical address where the low memory
+/// (which is directly addressable by the kernel) begins.
+uint32_t lowmem_phy_start;
 
-    // Calculate the offset from the low memory virtual base address.
-    unsigned int offset = addr - lowmem_virt_base;
+/// @brief Virtual start address of low memory (lowmem) zone.
+/// @details This variable stores the virtual address corresponding to the start
+/// of the low memory region in the kernel's virtual address space.
+uint32_t lowmem_virt_start;
 
-    // Determine the index of the corresponding page structure in the memory map.
-    unsigned int page_index = lowmem_page_base + (offset / PAGE_SIZE);
+/// @brief Total size of available physical memory in bytes.
+/// @details This variable holds the total amount of memory available on the
+/// system (both low and high memory).
+uint32_t mem_size;
 
-    // Check for overflow.
-    if (page_index >= MAX_MEM_MAP_SIZE) {
-        pr_crit("Address is out of bounds.\n");
-        return NULL; // Return NULL to indicate failure.
-    }
+/// @brief Total number of memory frames (pages) available.
+/// @details The number of physical memory frames available in the system,
+/// calculated as the total memory divided by the size of a memory page.
+uint32_t mem_map_num;
 
-    // Return the pointer to the page structure.
-    return mem_map + page_index;
-}
+/// @brief Start address of the normal (lowmem) zone.
+/// @details This variable holds the starting physical address of the normal
+/// memory zone, also known as low memory, which is directly addressable by the
+/// kernel.
+uint32_t normal_start_addr;
 
-uint32_t get_lowmem_address_from_page(page_t *page)
+/// @brief End address of the normal (lowmem) zone.
+/// @details This variable holds the ending physical address of the normal
+/// memory zone (low memory), marking the boundary between lowmem and highmem.
+uint32_t normal_end_addr;
+
+/// @brief Total size of the normal (lowmem) zone.
+/// @details The size of the normal memory zone in bytes, which is the portion
+/// of memory directly addressable by the kernel.
+uint32_t normal_size;
+
+/// @brief Start address of the high memory (highmem) zone.
+/// @details This variable stores the starting physical address of the high
+/// memory zone, which is memory not directly addressable by the kernel and
+/// requires special handling.
+uint32_t high_start_addr;
+
+/// @brief End address of the high memory (highmem) zone.
+/// @details This variable holds the ending physical address of the high memory
+/// zone, which marks the limit of available physical memory.
+uint32_t high_end_addr;
+
+/// @brief Total size of the high memory (highmem) zone.
+/// @details The size of the high memory zone in bytes. High memory requires
+/// special handling as it is not directly accessible by the kernel's virtual
+/// address space.
+uint32_t high_size;
+
+uint32_t get_virtual_address_from_page(page_t *page)
 {
     // Check for NULL page pointer. If it is NULL, print an error and return 0.
     if (!page) {
@@ -86,11 +127,11 @@ uint32_t get_lowmem_address_from_page(page_t *page)
     // Calculate the index of the page in the memory map.
     unsigned int page_index = page - mem_map;
 
-    // Ensure the calculated page index is within valid bounds.
-    if (page_index < lowmem_page_base) {
-        pr_err("Invalid page index: %u is less than low memory base: %u.\n",
-               page_index, lowmem_page_base);
-        return 0; // Return 0 to indicate an error in retrieving the address.
+    // Check if the calculated page index is within valid bounds.
+    if ((page_index < lowmem_page_base) || (page_index >= mem_map_num)) {
+        pr_err("Page index %u is out of bounds. Valid range: %u to %u.\n",
+               page_index, lowmem_page_base, mem_map_num - 1);
+        return 0;
     }
 
     // Calculate the offset from the low memory base address.
@@ -111,9 +152,41 @@ uint32_t get_physical_address_from_page(page_t *page)
     // Calculate the index of the page in the memory map.
     unsigned int page_index = page - mem_map;
 
+    // Check if the calculated page index is within valid bounds.
+    if ((page_index < lowmem_page_base) || (page_index >= mem_map_num)) {
+        pr_err("Page index %u is out of bounds. Valid range: %u to %u.\n",
+               page_index, lowmem_page_base, mem_map_num - 1);
+        return 0;
+    }
+
     // Return the corresponding physical address by multiplying the index by the
     // page size.
     return page_index * PAGE_SIZE;
+}
+
+page_t *get_page_from_virtual_address(uint32_t vaddr)
+{
+    // Ensure the address is within the valid range.
+    if (vaddr < lowmem_virt_base) {
+        pr_crit("Address is below low memory virtual base.\n");
+        return NULL; // Return NULL to indicate failure.
+    }
+
+    // Calculate the offset from the low memory virtual base address.
+    unsigned int offset = vaddr - lowmem_virt_base;
+
+    // Determine the index of the corresponding page structure in the memory map.
+    unsigned int page_index = lowmem_page_base + (offset / PAGE_SIZE);
+
+    // Check if the page index exceeds the memory map limit.
+    if (page_index >= mem_map_num) {
+        pr_crit("Page index %u is out of bounds. Maximum allowed index is %u.\n",
+                page_index, mem_map_num - 1);
+        return NULL; // Return NULL to indicate failure.
+    }
+
+    // Return the pointer to the page structure.
+    return mem_map + page_index;
 }
 
 page_t *get_page_from_physical_address(uint32_t phy_addr)
@@ -127,12 +200,11 @@ page_t *get_page_from_physical_address(uint32_t phy_addr)
     // Calculate the index of the page in the memory map.
     unsigned int page_index = phy_addr / PAGE_SIZE;
 
-    // Check for overflow: ensure the index does not exceed the maximum memory
-    // map size.
-    if (page_index >= MAX_MEM_MAP_SIZE) {
-        pr_crit("Physical address is out of bounds. Page index: %u, MAX: %u\n",
-                page_index, MAX_MEM_MAP_SIZE);
-        return NULL; // Return NULL to indicate failure due to out-of-bounds access.
+    // Check if the calculated page index is within valid bounds.
+    if ((page_index < lowmem_page_base) || (page_index >= mem_map_num)) {
+        pr_err("Page index %u is out of bounds. Valid range: %u to %u.\n",
+               page_index, lowmem_page_base, mem_map_num - 1);
+        return NULL; // Return NULL to indicate failure.
     }
 
     // Return the pointer to the corresponding page structure in the memory map.
@@ -151,33 +223,15 @@ static zone_t *get_zone_from_page(page_t *page)
         return NULL; // Return NULL to indicate failure due to NULL input.
     }
 
-    zone_t *zone;
-    page_t *first_page, *last_page;
-
     // Iterate over all the zones in the contiguous page data structure.
     for (int zone_index = 0; zone_index < contig_page_data->nr_zones; zone_index++) {
         // Get the zone at the given index.
-        zone = contig_page_data->node_zones + zone_index;
-
-        // Check if the zone was retrieved successfully.
-        if (!zone) {
-            pr_crit("Failed to get zone from GFP mask.\n");
-            return NULL; // Return NULL to indicate failure if a zone is not found.
-        }
+        zone_t *zone = contig_page_data->node_zones + zone_index;
 
         // Get the first and last page of the zone by adding the zone size to
         // the base of the memory map.
-        first_page = zone->zone_mem_map, last_page = zone->zone_mem_map + zone->size;
-
-        // Check if the first and last page of the zone was retrieved successfully.
-        if (!first_page) {
-            pr_crit("Failed to retrieve the first page of the zone.\n");
-            return NULL; // Return NULL to indicate failure.
-        }
-        if (!last_page) {
-            pr_crit("Failed to retrieve the last page of the zone.\n");
-            return NULL; // Return NULL to indicate failure.
-        }
+        page_t *first_page = zone->zone_mem_map;
+        page_t *last_page  = zone->zone_mem_map + zone->size;
 
         // Check if the given page is within the current zone.
         if ((page >= first_page) && (page < last_page)) {
@@ -187,8 +241,7 @@ static zone_t *get_zone_from_page(page_t *page)
 
     pr_crit("page is over memory size or not part of any zone.");
 
-    // If no zone contains the page, return NULL. This could represent an error
-    // where the page doesn't belong to any zone.
+    // If no zone contains the page, return NULL.
     return NULL;
 }
 
@@ -450,11 +503,6 @@ unsigned int find_nearest_order_greater(uint32_t base_addr, uint32_t amount)
 
 int pmmngr_init(boot_info_t *boot_info)
 {
-    uint32_t lowmem_phy_start, lowmem_virt_start;
-    uint32_t mem_size, mem_num_frames;
-    uint32_t normal_start_addr, normal_end_addr, normal_size;
-    uint32_t high_start_addr, high_end_addr, high_size;
-
     //=======================================================================
     lowmem_phy_start = boot_info->lowmem_phy_start;
     // Now we have skipped all modules in physical space, is time to consider
@@ -468,15 +516,15 @@ int pmmngr_init(boot_info_t *boot_info)
     // Compute the size of memory.
     mem_size = boot_info->highmem_phy_end;
     // Total number of blocks (all lowmem+highmem RAM).
-    mem_num_frames = mem_size / PAGE_SIZE;
+    mem_map_num = mem_size / PAGE_SIZE;
     // Initialize each page_t.
-    for (unsigned i = 0; i < mem_num_frames; ++i) {
+    for (unsigned i = 0; i < mem_map_num; ++i) {
         // Mark page as free.
         set_page_count(&mem_map[i], 0);
     }
     // Skip memory space used for page_t[]
-    lowmem_phy_start += sizeof(page_t) * mem_num_frames;
-    lowmem_virt_start += sizeof(page_t) * mem_num_frames;
+    lowmem_phy_start += sizeof(page_t) * mem_map_num;
+    lowmem_virt_start += sizeof(page_t) * mem_map_num;
     //=======================================================================
 
     //==== Initialize contig_page_data node =================================
@@ -491,7 +539,7 @@ int pmmngr_init(boot_info_t *boot_info)
     // In UMA we have only one node.
     contig_page_data->node_next = NULL;
     // All the memory.
-    contig_page_data->node_size = mem_num_frames;
+    contig_page_data->node_size = mem_map_num;
     // mem_map[0].
     contig_page_data->node_start_mapnr = 0;
     // The first physical page.
@@ -530,10 +578,10 @@ int pmmngr_init(boot_info_t *boot_info)
     pr_debug("    LowMem  (phy): 0x%p to 0x%p\n", boot_info->lowmem_phy_start, boot_info->lowmem_phy_end);
     pr_debug("    HighMem (phy): 0x%p to 0x%p\n", boot_info->highmem_phy_start, boot_info->highmem_phy_end);
     pr_debug("    LowMem  (vrt): 0x%p to 0x%p\n", boot_info->lowmem_start, boot_info->lowmem_end);
-    pr_debug("Memory map  size      : %s\n", to_human_size(sizeof(page_t) * mem_num_frames));
+    pr_debug("Memory map  size      : %s\n", to_human_size(sizeof(page_t) * mem_map_num));
     pr_debug("Memory size           : %s\n", to_human_size(mem_size));
     pr_debug("Page size             : %s\n", to_human_size(PAGE_SIZE));
-    pr_debug("Number of page frames : %u\n", mem_num_frames);
+    pr_debug("Number of page frames : %u\n", mem_map_num);
     for (unsigned i = 0; i < __MAX_NR_ZONES; ++i) {
         zone_t *zone = &contig_page_data->node_zones[i];
         pr_debug("Zone %9s, first page: 0x%p, last page: 0x%p, # pages: %6d\n",
@@ -604,13 +652,13 @@ uint32_t __alloc_page_lowmem(gfp_t gfp_mask)
     }
 
     // Get the low memory address from the allocated page.
-    return get_lowmem_address_from_page(page);
+    return get_virtual_address_from_page(page);
 }
 
 int free_page_lowmem(uint32_t addr)
 {
     // Get the page corresponding to the given low memory address.
-    page_t *page = get_lowmem_page_from_address(addr);
+    page_t *page = get_page_from_virtual_address(addr);
 
     // Ensure the page retrieval was successful.
     if (!page) {
@@ -648,7 +696,7 @@ uint32_t __alloc_pages_lowmem(gfp_t gfp_mask, uint32_t order)
     }
 
     // Get the low memory address of the first page in the allocated block.
-    uint32_t block_frame_adr = get_lowmem_address_from_page(page);
+    uint32_t block_frame_adr = get_virtual_address_from_page(page);
 
     // Ensure the address retrieval was successful.
     if (block_frame_adr == (uint32_t)-1) {
@@ -714,7 +762,7 @@ page_t *_alloc_pages(gfp_t gfp_mask, uint32_t order)
 int free_pages_lowmem(uint32_t addr)
 {
     // Get the page corresponding to the given low memory address.
-    page_t *page = get_lowmem_page_from_address(addr);
+    page_t *page = get_page_from_virtual_address(addr);
 
     // Ensure the page retrieval was successful.
     if (!page) {

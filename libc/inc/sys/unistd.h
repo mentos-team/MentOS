@@ -9,13 +9,13 @@
 #include "stddef.h"
 #include "sys/dirent.h"
 
-#define STDIN_FILENO  0 ///< Standard input.
-#define STDOUT_FILENO 1 ///< Standard output.
-#define STDERR_FILENO 2 ///< Standard error output.
+#define STDIN_FILENO  0 ///< Standard input file descriptor.
+#define STDOUT_FILENO 1 ///< Standard output file descriptor.
+#define STDERR_FILENO 2 ///< Standard error file descriptor.
 
-#define stdin  STDIN_FILENO  ///< Standard input.
-#define stdout STDOUT_FILENO ///< Standard output.
-#define stderr STDERR_FILENO ///< Standard error output.
+#define stdin  STDIN_FILENO  ///< Standard input file descriptor.
+#define stdout STDOUT_FILENO ///< Standard output file descriptor.
+#define stderr STDERR_FILENO ///< Standard error file descriptor.
 
 /// @brief        Read data from a file descriptor.
 /// @param fd     The file descriptor.

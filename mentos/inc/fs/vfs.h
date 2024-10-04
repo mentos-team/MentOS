@@ -8,18 +8,19 @@
 #include "fs/vfs_types.h"
 #include "mem/slab.h"
 
-#define MAX_OPEN_FD 16 ///< Maximum number of opened file.
+/// Maximum number of opened file.
+#define MAX_OPEN_FD 16
 
-#define STDIN_FILENO  0 ///< Standard input.
-#define STDOUT_FILENO 1 ///< Standard output.
-#define STDERR_FILENO 2 ///< Standard error output.
-
+/// Cache for file structures in the VFS.
 extern kmem_cache_t *vfs_file_cache;
 
 /// @brief Forward declaration of task_struct.
+/// Used for task management in the VFS.
 struct task_struct;
 
 /// @brief Initialize the Virtual File System (VFS).
+/// This function sets up necessary resources and structures for the VFS. It
+/// must be called before any other VFS functions.
 void vfs_init(void);
 
 /// @brief Register a new filesystem.
@@ -32,20 +33,29 @@ int vfs_register_filesystem(file_system_type *fs);
 /// @return The outcome of the operation, 0 if fails.
 int vfs_unregister_filesystem(file_system_type *fs);
 
+/// @brief Register a superblock for the filesystem.
+/// @param name The name of the superblock.
+/// @param path The path associated with the superblock.
+/// @param type A pointer to the filesystem type.
+/// @param root A pointer to the root file of the filesystem.
+/// @return 1 on success, 0 on failure.
 int vfs_register_superblock(const char *name, const char *path, file_system_type *type, vfs_file_t *root);
 
+/// @brief Unregister a superblock.
+/// @param sb A pointer to the superblock to unregister.
+/// @return 1 on success, 0 on failure.
 int vfs_unregister_superblock(super_block_t *sb);
 
 /// @brief Searches for the mountpoint of the given path.
 /// @param absolute_path Path for which we want to search the mountpoint.
-/// @return Pointer to the vfs_file of the mountpoint.
+/// @return Pointer to the super_block_t of the mountpoint, or NULL if not found.
 super_block_t *vfs_get_superblock(const char *absolute_path);
 
-/// @brief Given an absolute path to a file, vfs_open_abspath() returns a file struct, used to access the file.
-/// @param absolute_path An absolute path to a file.
-/// @param flags Used to set the file status flags and file access modes of the open file description.
-/// @param mode Specifies the file mode bits be applied when a new file is created.
-/// @return Returns a file struct, or NULL.
+/// @brief Open a file given its absolute path.
+/// @param absolute_path An absolute path to the file.
+/// @param flags Used to set the file status flags and access modes.
+/// @param mode Specifies the file mode bits to apply when creating a new file.
+/// @return Pointer to the opened vfs_file_t structure, or NULL on error.
 vfs_file_t *vfs_open_abspath(const char *absolute_path, int flags, mode_t mode);
 
 /// @brief Given a pathname for a file, vfs_open() returns a file struct, used to access the file.

@@ -94,7 +94,7 @@ int virt_init(void)
         }
 
         // Get the physical address of the allocated page table.
-        page_t *table_page = get_lowmem_page_from_address((uint32_t)table);
+        page_t *table_page = get_page_from_virtual_address((uint32_t)table);
         // Error handling: failed to get low memory page from address.
         if (!table_page) {
             pr_crit("Failed to get low memory page from address\n");

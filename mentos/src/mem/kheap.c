@@ -90,8 +90,7 @@ static inline uint32_t __blkmngr_get_rounded_size(uint32_t size)
 /// available size.
 /// @param block The given block to check. Must not be NULL.
 /// @param size  The size to check against the block's size.
-/// @return 1 if the size fits within the block, 0 otherwise.
-/// @error Returns -1 if the block is NULL.
+/// @return 1 if the size fits within the block, -1 if the block is NULL.
 static inline int __blkmngr_does_it_fit(block_t *block, uint32_t size)
 {
     // Check for a null block pointer to avoid dereferencing a null pointer
@@ -462,7 +461,7 @@ static void *__do_brk(vm_area_struct_t *heap, uint32_t increment)
     uint32_t new_heap_top = mm->brk + increment;
 
     // Debugging message to indicate the expansion of the heap.
-    pr_notice("Expanding heap from 0x%p to 0x%p.\n", mm->brk, new_heap_top);
+    pr_debug("Expanding heap from 0x%p to 0x%p.\n", mm->brk, new_heap_top);
 
     // Check if the new heap top exceeds the boundaries of the heap.
     if (new_heap_top > heap->vm_end) {
