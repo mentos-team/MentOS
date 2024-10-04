@@ -1,5 +1,4 @@
 /// @file mman.c
-/// @author Enrico Fraccaroli (enry.frak@gmail.com)
 /// @brief Functions for managing mappings in virtual address space.
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.

@@ -1,5 +1,4 @@
 /// @file list_head_algorithm.h
-/// @author Enrico Fraccaroli (enry.frak@gmail.com)
 /// @brief Some general algorithm that might come in handy while using list_head.
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
