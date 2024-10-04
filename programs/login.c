@@ -312,7 +312,7 @@ int main(int argc, char **argv)
 
     // Welcome the user
     puts(BG_WHITE FG_BLACK);
-    printf("Welcome " FG_RED "%s" FG_BLACK "...\n", pwd->pw_name);
+    printf("\nWelcome " FG_RED "%s" FG_BLACK "...\n", pwd->pw_name);
     puts(BG_BLACK FG_WHITE_BRIGHT);
 
     // Execute the user's shell

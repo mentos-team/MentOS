@@ -78,20 +78,24 @@ Follows the list of implemented features:
 **Filesystem**
  - [x] Virtual Filesystem (VFS);
  - [x] Initramfs;
- - [x] EXT2;
+ - [x] Second Extended File System (EXT2);
  - [x] Procfs;
 
 **Input/Output**
  - [x] Programmable Interrupt Controller (PIC) drivers;
+ - [x] PS/2 drivers;
+ - [x] Advanced Technology Attachment (ATA) drivers;
+ - [x] Real Time Clock (RTC) drivers;
  - [x] Keyboard drivers (IT/ENG layouts);
  - [x] Video drivers;
  - [ ] VGA drivers;
 
 **Inter-Process Communication (IPC)**
  - [X] Semaphore
- - [ ] Message queue
- - [ ] Shared memory
- - [ ] Named pipe
+ - [X] Message queue
+ - [X] Shared memory
+ - [ ] PIPE
+ - [ ] Named PIPE
 
 I will try to keep it updated...
 
