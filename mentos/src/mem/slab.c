@@ -108,7 +108,7 @@ static int __alloc_slab_page(kmem_cache_t *cachep, gfp_t flags)
     page->slab_objfree = page->slab_objcnt;        // Initially, all objects are free.
 
     // Get the starting physical address of the allocated slab page.
-    unsigned int pg_addr = get_lowmem_address_from_page(page);
+    unsigned int pg_addr = get_virtual_address_from_page(page);
 
     // Check if `get_lowmem_address_from_page` failed.
     if (!pg_addr) {
@@ -540,7 +540,7 @@ void kmem_cache_free(void *ptr)
 #endif
 {
     // Get the slab page corresponding to the given pointer.
-    page_t *slab_page = get_lowmem_page_from_address((uint32_t)ptr);
+    page_t *slab_page = get_page_from_virtual_address((uint32_t)ptr);
 
     // If the slab main page is a low memory page, update to the root page.
     if (is_lowmem_page_struct(slab_page->container.slab_main_page)) {
@@ -620,7 +620,7 @@ void kfree(void *ptr)
     pr_notice("KFREE   0x%p at %s:%d\n", ptr, file, line);
 #endif
     // Get the slab page from the pointer's address.
-    page_t *page = get_lowmem_page_from_address((uint32_t)ptr);
+    page_t *page = get_page_from_virtual_address((uint32_t)ptr);
 
     // If the address belongs to a cache, free it using kmem_cache_free.
     if (page->container.slab_main_page) {

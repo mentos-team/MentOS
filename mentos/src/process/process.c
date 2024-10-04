@@ -25,6 +25,7 @@
 #include "system/panic.h"
 #include "fs/vfs.h"
 #include "fs/namei.h"
+#include "sys/unistd.h"
 
 /// Cache for creating the task structs.
 static kmem_cache_t *task_struct_cache;
@@ -351,25 +352,25 @@ task_struct *process_create_init(const char *path)
     assert((init_proc->max_fd > 3) && "File descriptor list cannot contain the standard IOs.");
 
     // Create STDIN descriptor.
-    vfs_file_t *stdin = vfs_open("/proc/video", O_RDONLY, 0);
-    stdin->count++;
-    init_proc->fd_list[STDIN_FILENO].file_struct = stdin;
+    vfs_file_t *vfs_stdin = vfs_open("/proc/video", O_RDONLY, 0);
+    vfs_stdin->count++;
+    init_proc->fd_list[STDIN_FILENO].file_struct = vfs_stdin;
     init_proc->fd_list[STDIN_FILENO].flags_mask  = O_RDONLY;
-    pr_debug("`/proc/video` stdin  : %p\n", stdin);
+    pr_debug("`/proc/video` stdin  : %p\n", vfs_stdin);
 
     // Create STDOUT descriptor.
-    vfs_file_t *stdout = vfs_open("/proc/video", O_WRONLY, 0);
-    stdout->count++;
-    init_proc->fd_list[STDOUT_FILENO].file_struct = stdout;
+    vfs_file_t *vfs_stdout = vfs_open("/proc/video", O_WRONLY, 0);
+    vfs_stdout->count++;
+    init_proc->fd_list[STDOUT_FILENO].file_struct = vfs_stdout;
     init_proc->fd_list[STDOUT_FILENO].flags_mask  = O_WRONLY;
-    pr_debug("`/proc/video` stdout : %p\n", stdout);
+    pr_debug("`/proc/video` stdout : %p\n", vfs_stdout);
 
     // Create STDERR descriptor.
-    vfs_file_t *stderr = vfs_open("/proc/video", O_WRONLY, 0);
-    stderr->count++;
-    init_proc->fd_list[STDERR_FILENO].file_struct = stderr;
+    vfs_file_t *vfs_stderr = vfs_open("/proc/video", O_WRONLY, 0);
+    vfs_stderr->count++;
+    init_proc->fd_list[STDERR_FILENO].file_struct = vfs_stderr;
     init_proc->fd_list[STDERR_FILENO].flags_mask  = O_WRONLY;
-    pr_debug("`/proc/video` stderr : %p\n", stderr);
+    pr_debug("`/proc/video` stderr : %p\n", vfs_stderr);
     // ------------------------------------------------------------------------
 
     // == INITIALIZE TASK MEMORY ==============================================

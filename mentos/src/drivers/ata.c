@@ -670,7 +670,7 @@ static inline uintptr_t ata_dma_alloc(size_t size, uintptr_t *physical)
     // Retrieve the low-memory address (logical address) that the CPU can use to
     // access the allocated memory. The CPU will use this address to interact
     // with the DMA memory region.
-    uintptr_t lowmem_address = get_lowmem_address_from_page(page);
+    uintptr_t lowmem_address = get_virtual_address_from_page(page);
     if (lowmem_address == 0) {
         pr_crit("Failed to retrieve a valid low-memory address.\n");
         return 0;
@@ -697,7 +697,7 @@ static inline int ata_dma_free(uintptr_t logical_addr)
     }
 
     // Retrieve the page structure from the logical address.
-    page_t *page = get_lowmem_page_from_address(logical_addr);
+    page_t *page = get_page_from_virtual_address(logical_addr);
     if (!page) {
         pr_debug("Failed to retrieve the page structure from logical address 0x%lx.\n", logical_addr);
         return 1;

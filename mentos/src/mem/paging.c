@@ -89,7 +89,7 @@ int paging_switch_directory_va(page_directory_t *dir)
     }
 
     // Get the low memory page corresponding to the given directory address.
-    page_t *page = get_lowmem_page_from_address((uintptr_t)dir);
+    page_t *page = get_page_from_virtual_address((uintptr_t)dir);
     if (!page) {
         pr_crit("Failed to get low memory page from address\n");
         return -1; // Return -1 to indicate failure.
@@ -723,7 +723,7 @@ static page_table_t *__mem_pg_entry_alloc(page_dir_entry_t *entry, uint32_t flag
     }
 
     // Convert the physical address into a low memory address.
-    page_table_t *lowmem_addr = (page_table_t *)get_lowmem_address_from_page(page);
+    page_table_t *lowmem_addr = (page_table_t *)get_virtual_address_from_page(page);
     if (!lowmem_addr) {
         pr_crit("Failed to map page to low memory address.\n");
         return NULL; // Return NULL if the low memory mapping fails.
@@ -751,7 +751,7 @@ static inline int __set_pg_entry_frame(page_dir_entry_t *entry, page_table_t *ta
     }
 
     // Retrieve the low memory page structure from the virtual address of the table.
-    page_t *table_page = get_lowmem_page_from_address((uint32_t)table);
+    page_t *table_page = get_page_from_virtual_address((uint32_t)table);
     if (!table_page) {
         pr_crit("Failed to retrieve low memory page from table address: %p\n", table);
         return -1; // Return -1 if the low memory page retrieval fails (error).
@@ -816,7 +816,7 @@ void page_fault_handler(pt_regs *f)
     }
 
     // Get the low memory address from the page and cast it to a page directory structure.
-    page_directory_t *lowmem_dir = (page_directory_t *)get_lowmem_address_from_page(dir_page);
+    page_directory_t *lowmem_dir = (page_directory_t *)get_virtual_address_from_page(dir_page);
     if (!lowmem_dir) {
         pr_crit("Failed to get low memory address from page: %p\n", (void *)dir_page);
         __page_fault_panic(f, faulting_addr);
@@ -858,7 +858,7 @@ void page_fault_handler(pt_regs *f)
     }
 
     // Get the low memory address from the page and cast it to a page table structure.
-    page_table_t *lowmem_table = (page_table_t *)get_lowmem_address_from_page(table_page);
+    page_table_t *lowmem_table = (page_table_t *)get_virtual_address_from_page(table_page);
     if (!lowmem_table) {
         pr_crit("Failed to get low memory address from page: %p\n", (void *)table_page);
         __page_fault_panic(f, faulting_addr);
@@ -1050,7 +1050,7 @@ page_t *mem_virtual_to_page(page_directory_t *pgd, uint32_t virt_start, size_t *
     page_t *pgd_page = mem_map + pgd->entries[virt_pgt].frame;
 
     // Get the low memory address of the page table.
-    page_table_t *pgt_address = (page_table_t *)get_lowmem_address_from_page(pgd_page);
+    page_table_t *pgt_address = (page_table_t *)get_virtual_address_from_page(pgd_page);
     if (!pgt_address) {
         pr_crit("Failed to get low memory address from page directory entry.\n");
         return NULL; // Return NULL if unable to retrieve page table address.
@@ -1329,7 +1329,7 @@ int destroy_process_image(mm_struct_t *mm)
     }
 
     // Get the low memory page associated with the given mm_struct.
-    page_t *lowmem_page = get_lowmem_page_from_address((uint32_t)mm->pgd);
+    page_t *lowmem_page = get_page_from_virtual_address((uint32_t)mm->pgd);
     if (!lowmem_page) {
         pr_crit("Failed to get low memory page from mm->pgd address: %p\n", (void *)mm->pgd);
         return -1; // Return -1 to indicate error.
@@ -1385,7 +1385,7 @@ int destroy_process_image(mm_struct_t *mm)
             }
 
             // Get the low memory address for the page table.
-            uint32_t pgt_addr = get_lowmem_address_from_page(pgt_page);
+            uint32_t pgt_addr = get_virtual_address_from_page(pgt_page);
             if (pgt_addr == 0) {
                 pr_crit("Failed to get low memory address for physical page %p.\n", (void *)pgt_page);
                 continue; // Skip to the next entry on error.

@@ -280,19 +280,19 @@ void sha256_final(SHA256_ctx_t *ctx, uint8_t hash[])
         }
 
         // Process the full buffer.
-        __sha256_transform(ctx, ctx->data); 
+        __sha256_transform(ctx, ctx->data);
 
         // Reset the buffer for the next padding.
-        memset(ctx->data, 0, 56);           
+        memset(ctx->data, 0, 56);
     }
 
     // Step 2: Append the total message length in bits and process the final block.
-    
+
     // Convert the total length from bytes to bits.
-    ctx->bitlen += ctx->datalen * 8; 
+    ctx->bitlen += ctx->datalen * 8;
 
     // Append the lower 8 bits of the length.
-    ctx->data[63] = ctx->bitlen;     
+    ctx->data[63] = ctx->bitlen;
     ctx->data[62] = ctx->bitlen >> 8;
     ctx->data[61] = ctx->bitlen >> 16;
     ctx->data[60] = ctx->bitlen >> 24;

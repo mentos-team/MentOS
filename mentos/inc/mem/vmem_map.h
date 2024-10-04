@@ -45,7 +45,7 @@ virt_map_page_t *virt_map_alloc(uint32_t size);
 /// @param vaddr The virtual address to map.
 /// @param size The size of the memory area to map.
 /// @return The starting virtual address of the mapped area, or 0 on failure.
-uint32_t virt_map_vaddress(mm_struct_t *mm, virt_map_page_t *vpage, uint32_t addr, uint32_t size);
+uint32_t virt_map_vaddress(mm_struct_t *mm, virt_map_page_t *vpage, uint32_t vaddr, uint32_t size);
 
 /// @brief Checks if an address belongs to the virtual memory mapping.
 /// @param addr The address to check.

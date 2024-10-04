@@ -124,7 +124,7 @@ void pr_kmem_cache_free(const char *file, const char *fun, int line, void *addr)
 void *kmem_cache_alloc(kmem_cache_t *cachep, gfp_t flags);
 
 /// @brief Frees an object previously allocated from a kmem_cache_t.
-/// @param ptr Pointer to the object to free.
+/// @param addr Pointer to the object to free.
 void kmem_cache_free(void *addr);
 
 #endif

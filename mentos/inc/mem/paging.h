@@ -16,7 +16,7 @@
 #define PAGE_SHIFT 12
 /// Size of a page (4096 bytes).
 #define PAGE_SIZE (1 << PAGE_SHIFT)
-// Maximum number of physical page frame numbers (PFNs).
+/// Maximum number of physical page frame numbers (PFNs).
 #define MAX_PHY_PFN (1UL << (32 - PAGE_SHIFT))
 
 /// The start of the process area.
