@@ -541,8 +541,7 @@ static void cropzeros(char *buffer)
 /// @return Pointer to the next position in the output string after the formatted number.
 static char *flt(char *str, double num, int size, int precision, char fmt, unsigned flags)
 {
-    const unsigned BUFFER_SIZE = 80;
-    char workbuf[BUFFER_SIZE];
+    char workbuf[80];
     char c, sign;
     int n, i;
 
@@ -600,7 +599,7 @@ static char *flt(char *str, double num, int size, int precision, char fmt, unsig
     }
 
     /// Calculate the length of the resulting string `workbuf`.
-    n = strnlen(workbuf, BUFFER_SIZE);
+    n = strnlen(workbuf, 80);
 
     /// Adjust size to account for the length of the output string.
     size -= n;
