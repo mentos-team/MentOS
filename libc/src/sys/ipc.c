@@ -114,7 +114,7 @@ key_t ftok(char *path, int id)
 {
     // Create a struct containing the serial number and the device number of the
     // file we use to generate the key.
-    struct stat_t st;
+    struct stat st;
     if (stat(path, &st) < 0) {
         pr_err("Cannot stat the file `%s`...\n", path);
         errno = ENOENT;

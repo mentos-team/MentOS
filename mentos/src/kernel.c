@@ -152,7 +152,10 @@ int kmain(boot_info_t *boot_informations)
     //==========================================================================
     pr_notice("Initialize slab allocator.\n");
     printf("Initialize slab...");
-    kmem_cache_init();
+    if (kmem_cache_init() < 0) {
+        print_fail();
+        return 1;
+    }
     print_ok();
 
     //==========================================================================
@@ -194,7 +197,10 @@ int kmain(boot_info_t *boot_informations)
     //==========================================================================
     pr_notice("Initialize virtual memory mapping.\n");
     printf("Initialize virtual memory mapping...");
-    virt_init();
+    if (virt_init() < 0) {
+        print_fail();
+        return 1;
+    }
     print_ok();
 
     //==========================================================================
@@ -409,8 +415,8 @@ int kmain(boot_info_t *boot_informations)
     //==========================================================================
     // TODO: fix the hardcoded check for the flags set by GRUB
     runtests = boot_info.multiboot_header->flags == 0x1a67 &&
-        bitmask_check(boot_info.multiboot_header->flags, MULTIBOOT_FLAG_CMDLINE) &&
-        strcmp((char *)boot_info.multiboot_header->cmdline, "runtests") == 0;
+               bitmask_check(boot_info.multiboot_header->flags, MULTIBOOT_FLAG_CMDLINE) &&
+               strcmp((char *)boot_info.multiboot_header->cmdline, "runtests") == 0;
 
     task_struct *init_p;
     if (runtests) {

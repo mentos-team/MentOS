@@ -1797,7 +1797,7 @@ ext2_direntry_iterator_t ext2_direntry_iterator_begin(ext2_filesystem_t *fs, uin
 }
 
 /// @brief Moves to the next direntry, and moves to the next block if necessary.
-/// @param iterator the iterator.
+/// @param it the iterator.
 void ext2_direntry_iterator_next(ext2_direntry_iterator_t *it)
 {
     // Advance the offsets.
@@ -1909,58 +1909,87 @@ static inline void ext2_initialize_direntry(
     strncpy(direntry->name, name, direntry->name_len);
 }
 
+/// @brief Initializes a new directory entry block for the specified inode.
+/// @param fs Pointer to the ext2 filesystem structure.
+/// @param inode_index The index of the inode for which the directory entry block is to be initialized.
+/// @param block_index The index of the block to be allocated.
+/// @return 1 on success, 0 on failure.
 static inline int ext2_initialize_new_direntry_block(
     ext2_filesystem_t *fs,
     uint32_t inode_index,
     uint32_t block_index)
 {
     ext2_inode_t inode;
+
+    // Error check: Ensure the filesystem pointer is valid
+    if (!fs) {
+        pr_err("Invalid filesystem pointer.\n");
+        return 0;
+    }
+
+    // Read the inode for the specified inode index
     if (ext2_read_inode(fs, &inode, inode_index) == -1) {
         pr_err("Failed to read the inode of `%u`.\n", inode_index);
         return 0;
     }
-    // Allocate a new block.
+
+    // Allocate a new block for the inode
     if (ext2_allocate_inode_block(fs, &inode, inode_index, block_index) == -1) {
-        pr_err("Failed to allocate a new block for an inode.\n");
+        pr_err("Failed to allocate a new block for inode `%u`.\n", inode_index);
         return 0;
     }
-    // Update the inode size.
+
+    // Update the inode size based on the new block index
     inode.size = (block_index + 1) * fs->block_size;
-    // Update the inode.
+
+    // Write the updated inode back to the filesystem
     if (ext2_write_inode(fs, &inode, inode_index) == -1) {
-        pr_err("Failed to update the inode of directory.\n");
+        pr_err("Failed to update the inode of `%u`.\n", inode_index);
         return 0;
     }
-    // Create a cache.
+
+    // Allocate memory for the cache
     uint8_t *cache = ext2_alloc_cache(fs);
-    // Get the first non-initizlied direntry.
+
+    // Get the first uninitialized directory entry in the block
     ext2_dirent_t *direntry = (ext2_dirent_t *)cache;
-    // Initialize the new directory entry.
+
+    // Initialize the new directory entry with an empty name and unknown file type
     ext2_initialize_direntry(direntry, "", 0, fs->block_size, ext2_file_type_unknown);
-    // Update the inode block.
+
+    // Write the updated block (with new directory entry) back to the filesystem
     if (ext2_write_inode_block(fs, &inode, inode_index, block_index, cache) == -1) {
-        pr_err("Failed to update the block of the father directory.\n");
-        ext2_dealloc_cache(cache);
+        pr_err("Failed to write the block for inode `%u`.\n", inode_index);
+        ext2_dealloc_cache(cache); // Free allocated cache memory before returning
         return 0;
     }
+
+    // Free the allocated cache memory after usage
     ext2_dealloc_cache(cache);
+
+    // Return success
     return 1;
 }
 
 /// @brief Dumps the directory entries inside the parent directory.
-/// @param fs a pointer to the filesystem.
-/// @param cache cache for memory EXT2 operations.
-/// @param parent_inode the parent inode.
+/// @param fs A pointer to the filesystem structure.
+/// @param cache A pointer to a memory cache used for EXT2 operations.
+/// @param parent_inode A pointer to the parent inode whose directory entries
+/// are to be dumped.
 static inline void ext2_dump_direntries(
     ext2_filesystem_t *fs,
     uint8_t *cache,
     ext2_inode_t *parent_inode)
 {
+    /// Initialize the directory entry iterator for the parent directory
     ext2_direntry_iterator_t it = ext2_direntry_iterator_begin(fs, cache, parent_inode);
-    // Iterate the directory entries.
+
+    /// Iterate through all directory entries in the parent directory
     for (; ext2_direntry_iterator_valid(&it); ext2_direntry_iterator_next(&it)) {
-        // Dump the entry.
-        pr_debug("    [%2u, %4u] ", it.block_index, it.block_offset);
+        /// Dump debug information for the directory entry's block index and offset
+        pr_debug("    [Block: %2u, Offset: %4u] ", it.block_index, it.block_offset);
+
+        /// Dump detailed information about the current directory entry
         ext2_dump_dirent(it.direntry);
     }
 }
@@ -2207,12 +2236,14 @@ static int ext2_allocate_direntry(
     return 0;
 }
 
-/// @brief Destroys a directory entry.
-/// @param fs a pointer to the filesystem.
-/// @param parent_inode_index the inode index of the parent.
-/// @param direntry_inode_index the inode index of the new entry.
-/// @param name the name of the new entry.
-/// @param file_type the type of file.
+/// @brief Destroys a directory entry in the parent directory.
+/// @param fs A pointer to the filesystem structure.
+/// @param parent The inode of the parent directory.
+/// @param inode The inode of the directory entry to be destroyed.
+/// @param parent_index The index of the parent inode.
+/// @param inode_index The index of the directory entry's inode.
+/// @param block_index The block index where the directory entry resides.
+/// @param block_offset The offset within the block where the directory entry is located.
 /// @return 0 on success, a negative value on failure.
 static int ext2_destroy_direntry(
     ext2_filesystem_t *fs,
@@ -2224,18 +2255,40 @@ static int ext2_destroy_direntry(
     uint32_t block_offset)
 {
     pr_debug("destroy_direntry(parent: %u, entry: %u)\n", parent_index, inode_index);
-    // Allocate the cache and clean it.
+
+    // Validate filesystem pointer
+    if (!fs) {
+        pr_err("Invalid filesystem pointer.\n");
+        return -EINVAL;
+    }
+
+    // Validate inode indices
+    if (parent_index == 0 || inode_index == 0) {
+        pr_err("Invalid inode index (parent: %u, inode: %u).\n", parent_index, inode_index);
+        return -EINVAL;
+    }
+
+    // Allocate and clean the cache
     uint8_t *cache = ext2_alloc_cache(fs);
+
     // Check if the directory is empty, if it enters the loop then it means it is not empty.
     if (!ext2_directory_is_empty(fs, cache, &inode)) {
-        pr_err("The directory is not empty `%d`.\n", inode_index);
+        pr_err("Directory `%u` is not empty.\n", inode_index);
         ext2_dealloc_cache(cache);
         return -ENOTEMPTY;
     }
-    // Get the group index of the parent.
+
+    // Get the group index of the parent
     uint32_t group_index = ext2_inode_index_to_group_index(fs, parent_index);
-    // Increase the number of directories inside the group.
-    fs->block_groups[group_index].used_dirs_count -= 1;
+
+    // Decrease the number of directories in the group
+    if (fs->block_groups[group_index].used_dirs_count == 0) {
+        pr_err("Directory count underflow in block group `%u`.\n", group_index);
+        ext2_dealloc_cache(cache);
+        return -EINVAL;
+    }
+    fs->block_groups[group_index].used_dirs_count--;
+
     // Reduce the number of links to the parent directory.
     parent.links_count--;
     if (ext2_write_inode(fs, &parent, parent_index) < 0) {
@@ -2243,42 +2296,51 @@ static int ext2_destroy_direntry(
         ext2_dealloc_cache(cache);
         return -1;
     }
+
     // Reduce the number of links to the directory.
     inode.links_count = 0;
+
     // Update the delete time.
     inode.dtime = sys_time(NULL);
+
     if (ext2_write_inode(fs, &inode, inode_index) < 0) {
         pr_err("Failed to update the inode of `%d`.\n", inode_index);
         ext2_dealloc_cache(cache);
         return -1;
     }
+
     // Free the inode.
     if (ext2_free_inode(fs, &inode, inode_index) < 0) {
-        pr_err("Failed to free the inode of `%d`.\n", inode_index);
+        pr_err("Failed to update inode `%u`.\n", inode_index);
         ext2_dealloc_cache(cache);
         return -1;
     }
+
     // Read the block where the direntry resides.
     if (ext2_read_inode_block(fs, &parent, block_index, cache) == -1) {
-        pr_err("Failed to read the parent inode block `%d`\n", block_index);
+        pr_err("Failed to read block `%u` for parent inode `%u`.\n", block_index, parent_index);
         ext2_dealloc_cache(cache);
         return -1;
     }
+
     // Get a pointer to the direntry.
     ext2_dirent_t *dirent = (ext2_dirent_t *)((uintptr_t)cache + block_offset);
-    if (dirent == NULL) {
-        pr_err("We found a NULL ext2_dirent_t\n");
+    if (!dirent) {
+        pr_err("Found a NULL directory entry at offset `%u` in block `%u`.\n", block_offset, block_index);
         ext2_dealloc_cache(cache);
         return -1;
     }
+
     // Set the inode to zero.
     dirent->inode = 0;
+
     // Write back the parent directory block.
     if (!ext2_write_inode_block(fs, &parent, parent_index, block_index, cache)) {
-        pr_err("Failed to write the inode block `%d`\n", block_index);
+        pr_err("Failed to write block `%u` for parent inode `%u`.\n", block_index, parent_index);
         ext2_dealloc_cache(cache);
         return -1;
     }
+
     // Free the cache.
     ext2_dealloc_cache(cache);
     return 0;
@@ -2842,7 +2904,6 @@ static int ext2_unlink(const char *path)
     memset(&search, 0, sizeof(ext2_direntry_search_t));
     // Resolve the path to the directory entry.
     if (ext2_resolve_path(fs->root, path, &search)) {
-        pr_err("ext2_unlink(%s): Failed to resolve path.\n", path);
         return -ENOENT;
     }
     // Get the inode associated with the parent directory entry.
@@ -3109,7 +3170,6 @@ static int ext2_stat(const char *path, stat_t *stat)
     memset(&search, 0, sizeof(ext2_direntry_search_t));
     // Resolve the path.
     if (ext2_resolve_path(fs->root, path, &search)) {
-        pr_err("ext2_stat(path: %s): Failed to resolve path.\n", path);
         return -ENOENT;
     }
     // Get the inode associated with the directory entry.
@@ -3195,42 +3255,63 @@ static ssize_t ext2_getdents(vfs_file_t *file, dirent_t *dirp, off_t doff, size_
 }
 
 /// @brief Read the symbolic link, if present.
-/// @param file the file for which we want to read the symbolic link information.
-/// @param buffer the buffer where we will store the symbolic link path.
-/// @param bufsize the size of the buffer.
-/// @return The number of read characters on success, -1 otherwise and errno is
-/// set to indicate the error.
+/// @param path The path to the file for which we want to read the symbolic link information.
+/// @param buffer The buffer where we will store the symbolic link path.
+/// @param bufsize The size of the buffer.
+/// @return The number of read characters on success, -1 on failure, with errno set to indicate the error.
 static ssize_t ext2_readlink(const char *path, char *buffer, size_t bufsize)
 {
+    // Check if path and buffer are valid
+    if (!path || !buffer || bufsize == 0) {
+        pr_err("Invalid arguments: path or buffer is NULL or bufsize is zero.\n");
+        return -EINVAL;
+    }
+
     pr_debug("ext2_readlink(path: %s)\n", path);
-    // Get the EXT2 filesystem.
+
+    // Get the EXT2 filesystem associated with the given path
     ext2_filesystem_t *fs = get_ext2_filesystem(path);
-    if (fs == NULL) {
+    if (!fs) {
         pr_err("ext2_readlink(path: %s): Failed to get the EXT2 filesystem.\n", path);
         return -ENOENT;
     }
-    // Prepare the structure for the search.
+
+    // Initialize the structure used for searching the directory entry.
     ext2_direntry_search_t search;
     memset(&search, 0, sizeof(ext2_direntry_search_t));
-    // Resolve the path.
-    if (ext2_resolve_path(fs->root, path, &search)) {
+
+    // Resolve the given path to find the associated directory entry.
+    if (ext2_resolve_path(fs->root, path, &search) != 0) {
         pr_err("ext2_readlink(path: %s): Failed to resolve path.\n", path);
         return -ENOENT;
     }
-    // Get the inode associated with the file.
+
+    // Read the inode associated with the directory entry.
     ext2_inode_t inode;
     if (ext2_read_inode(fs, &inode, search.direntry.inode) == -1) {
         pr_err("ext2_readlink(path: %s): Failed to read the inode (%d).\n", path, search.direntry.inode);
         return -ENOENT;
     }
-    ssize_t ret = -ENOENT;
-    if (S_ISLNK(inode.mode)) {
-        // Get the length of the symlink.
-        ret = min(strlen(inode.data.symlink), bufsize);
-        // Copy the symlink information.
-        strncpy(buffer, inode.data.symlink, ret);
+
+    // Check if the inode represents a symbolic link.
+    if (!S_ISLNK(inode.mode)) {
+        pr_err("ext2_readlink(path: %s): The file is not a symbolic link.\n", path);
+        return -EINVAL;
     }
-    // Return how much we read.
+
+    // Determine the number of characters to read (symlink length or buffer
+    // size, whichever is smaller).
+    ssize_t ret = min(strlen(inode.data.symlink), bufsize);
+
+    // Copy the symbolic link content to the buffer.
+    strncpy(buffer, inode.data.symlink, ret);
+
+    // Null-terminate the buffer if there's space.
+    if (ret < bufsize) {
+        buffer[ret] = '\0';
+    }
+
+    // Return the number of characters read.
     return ret;
 }
 
@@ -3332,7 +3413,6 @@ static int ext2_rmdir(const char *path)
     memset(&search, 0, sizeof(ext2_direntry_search_t));
     // Resolve the path to the directory entry.
     if (ext2_resolve_path(fs->root, path, &search)) {
-        pr_err("ext2_rmdir(path: %s): Failed to resolve path.\n", path);
         return -ENOENT;
     }
 
@@ -3431,7 +3511,6 @@ static int ext2_setattr(const char *path, struct iattr *attr)
     memset(&search, 0, sizeof(ext2_direntry_search_t));
     // Resolve the path.
     if (ext2_resolve_path(fs->root, path, &search)) {
-        pr_err("setattr(%s): Failed to resolve path.\n", path);
         return -ENOENT;
     }
     // Get the inode associated with the directory entry.

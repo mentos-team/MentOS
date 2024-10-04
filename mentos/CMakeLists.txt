@@ -89,6 +89,7 @@ set(KERNEL_SOURCES
     ${CMAKE_SOURCE_DIR}/mentos/src/mem/vmem_map.c
     ${CMAKE_SOURCE_DIR}/mentos/src/mem/zone_allocator.c
     ${CMAKE_SOURCE_DIR}/mentos/src/elf/elf.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/crypt/sha256.c
     ${CMAKE_SOURCE_DIR}/mentos/src/descriptor_tables/gdt.c
     ${CMAKE_SOURCE_DIR}/mentos/src/descriptor_tables/gdt.S
     ${CMAKE_SOURCE_DIR}/mentos/src/descriptor_tables/interrupt.c

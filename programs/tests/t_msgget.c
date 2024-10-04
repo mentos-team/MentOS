@@ -1,5 +1,11 @@
 /// @file t_msgget.c
-/// @brief This program creates a message queue.
+/// @brief This program creates a message queue and demonstrates sending and
+/// receiving messages using System V message queues.
+/// @details This program creates a message queue, sends and receives messages,
+/// and then deletes the message queue. It demonstrates basic message queue
+/// operations in C, including error handling for message queue operations. The
+/// program also includes a child process that sends a message to the parent
+/// process.
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
@@ -15,12 +21,17 @@
 
 #define MESSAGE_LEN 100
 
-// structure for message queue
+/// @brief Structure for message queue.
 typedef struct {
-    long mesg_type;
-    char mesg_text[MESSAGE_LEN];
+    long mesg_type;              ///< Message type.
+    char mesg_text[MESSAGE_LEN]; ///< Message text.
 } message_t;
 
+/// @brief Send a message to the message queue.
+/// @param msqid The message queue identifier.
+/// @param mtype The message type.
+/// @param message The message structure.
+/// @param msg The message text.
 static inline void __send_message(int msqid, long mtype, message_t *message, const char *msg)
 {
     // Set the type.
@@ -35,6 +46,10 @@ static inline void __send_message(int msqid, long mtype, message_t *message, con
     }
 }
 
+/// @brief Receive a message from the message queue.
+/// @param msqid The message queue identifier.
+/// @param mtype The message type.
+/// @param message The message structure.
 static inline void __receive_message(int msqid, long mtype, message_t *message)
 {
     // Clear the user-defined message.
@@ -59,7 +74,7 @@ int main(int argc, char *argv[])
     key = ftok("/README", 5);
     if (key < 0) {
         perror("Failed to generate key using ftok");
-        return 1;
+        return EXIT_FAILURE;
     }
     printf("Generated key using ftok (key = %d)\n", key);
 
@@ -68,7 +83,7 @@ int main(int argc, char *argv[])
     msqid = msgget(key, IPC_CREAT | IPC_EXCL | S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
     if (msqid < 0) {
         perror("Failed to create message queue");
-        return 1;
+        return EXIT_FAILURE;
     }
     printf("Created message queue (id : %d)\n", msqid);
 
@@ -82,30 +97,32 @@ int main(int argc, char *argv[])
         sleep(3);
         // Send the message.
         __send_message(msqid, 1, &message, "General Kenobi...");
-        return 0;
+        return EXIT_SUCCESS;
     }
     // Receive the message.
     __receive_message(msqid, 1, &message);
     sleep(3);
 
     // ========================================================================
-    // Send the message.
+    // Send multiple messages.
     __send_message(msqid, 7, &message, "course, ");
     __send_message(msqid, 9, &message, "cheers!");
     __send_message(msqid, 1, &message, "From the operating");
     __send_message(msqid, 3, &message, "systems");
 
-    // Receive the message.
+    // Receive multiple messages.
     __receive_message(msqid, 1, &message);
     __receive_message(msqid, -8, &message);
     __receive_message(msqid, -8, &message);
     __receive_message(msqid, 0, &message);
 
+    // ========================================================================
     // Delete the message queue.
     ret = msgctl(msqid, IPC_RMID, NULL);
     if (ret < 0) {
         perror("Failed to remove message queue.");
+        return EXIT_FAILURE;
     }
     printf("Correctly removed message queue.\n");
-    return 0;
+    return EXIT_SUCCESS;
 }

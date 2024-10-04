@@ -9,9 +9,13 @@
 #include "stddef.h"
 #include "sys/dirent.h"
 
-#define STDIN_FILENO  0 ///< Standard input.
-#define STDOUT_FILENO 1 ///< Standard output.
-#define STDERR_FILENO 2 ///< Standard error output.
+#define STDIN_FILENO  0 ///< Standard input file descriptor.
+#define STDOUT_FILENO 1 ///< Standard output file descriptor.
+#define STDERR_FILENO 2 ///< Standard error file descriptor.
+
+#define stdin  STDIN_FILENO  ///< Standard input file descriptor.
+#define stdout STDOUT_FILENO ///< Standard output file descriptor.
+#define stderr STDERR_FILENO ///< Standard error file descriptor.
 
 /// @brief        Read data from a file descriptor.
 /// @param fd     The file descriptor.
@@ -80,7 +84,7 @@ extern pid_t getpid(void);
 ///        If pid != 0 return the SID corresponding to the process having identifier == pid
 ///@param pid process identifier from wich we want the SID
 ///@return On success return SID of the session
-///        Otherwise return -1 with errno set on: EPERM or ESRCH  
+///        Otherwise return -1 with errno set on: EPERM or ESRCH
 extern pid_t getsid(pid_t pid);
 
 ///@brief creates a new session if the calling process is not a
@@ -90,7 +94,7 @@ extern pid_t getsid(pid_t pid);
 ///       of a new process group in the session (i.e., its process group ID
 ///       is made the same as its process ID).
 ///@return On success return SID of the session just created
-///        Otherwise return -1 with errno : EPERM 
+///        Otherwise return -1 with errno : EPERM
 extern pid_t setsid(void);
 
 ///@brief returns the Process Group ID (PGID) of the process specified by pid.
@@ -117,7 +121,7 @@ extern gid_t getegid(void);
 ///@brief sets the group IDs of the calling process.
 ///@param gid the Group ID to set
 ///@return On success, zero is returned.
-///        Otherwise returns -1 with errno set to :EINVAL or EPERM  
+///        Otherwise returns -1 with errno set to :EINVAL or EPERM
 extern int setgid(gid_t gid);
 
 ///@brief sets the real and effective group IDs of the calling process.
@@ -138,7 +142,7 @@ extern uid_t geteuid(void);
 ///@brief Sets the User IDs of the calling process.
 ///@param uid the new User ID.
 ///@return On success, zero is returned.
-///        Otherwise returns -1 with errno set to :EINVAL or EPERM  
+///        Otherwise returns -1 with errno set to :EINVAL or EPERM
 extern int setuid(uid_t uid);
 
 ///@brief Sets the effective and real User IDs of the calling process.

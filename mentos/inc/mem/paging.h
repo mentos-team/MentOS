@@ -12,125 +12,134 @@
 #include "boot.h"
 #include "stdint.h"
 
-/// Size of a page.
-#define PAGE_SIZE 4096U
+/// 4KB pages (2^12 = 4096 bytes)
+#define PAGE_SHIFT 12
+/// Size of a page (4096 bytes).
+#define PAGE_SIZE (1 << PAGE_SHIFT)
+/// Maximum number of physical page frame numbers (PFNs).
+#define MAX_PHY_PFN (1UL << (32 - PAGE_SHIFT))
+
 /// The start of the process area.
 #define PROCAREA_START_ADDR 0x00000000
 /// The end of the process area (and start of the kernel area).
 #define PROCAREA_END_ADDR 0xC0000000
 
+/// For a single page table in a 32-bit system.
+#define MAX_PAGE_TABLE_ENTRIES 1024
+/// For a page directory with 1024 entries.
+#define MAX_PAGE_DIR_ENTRIES 1024
+
 /// @brief An entry of a page directory.
 typedef struct page_dir_entry_t {
-    unsigned int present : 1;   ///< TODO: Comment.
-    unsigned int rw : 1;        ///< TODO: Comment.
-    unsigned int user : 1;      ///< TODO: Comment.
-    unsigned int w_through : 1; ///< TODO: Comment.
-    unsigned int cache : 1;     ///< TODO: Comment.
-    unsigned int accessed : 1;  ///< TODO: Comment.
-    unsigned int reserved : 1;  ///< TODO: Comment.
-    unsigned int page_size : 1; ///< TODO: Comment.
-    unsigned int global : 1;    ///< TODO: Comment.
-    unsigned int available : 3; ///< TODO: Comment.
-    unsigned int frame : 20;    ///< TODO: Comment.
+    unsigned int present : 1;   ///< Page is present in memory.
+    unsigned int rw : 1;        ///< Read/write permission (0 = read-only, 1 = read/write).
+    unsigned int user : 1;      ///< User/supervisor (0 = supervisor, 1 = user).
+    unsigned int w_through : 1; ///< Write-through caching enabled.
+    unsigned int cache : 1;     ///< Cache disabled.
+    unsigned int accessed : 1;  ///< Page has been accessed.
+    unsigned int reserved : 1;  ///< Reserved.
+    unsigned int page_size : 1; ///< Page size (0 = 4 KB, 1 = 4 MB).
+    unsigned int global : 1;    ///< Global page (not flushed by TLB).
+    unsigned int available : 3; ///< Available for system use.
+    unsigned int frame : 20;    ///< Frame address (shifted right 12 bits).
 } page_dir_entry_t;
 
 /// @brief An entry of a page table.
 typedef struct page_table_entry_t {
-    unsigned int present : 1;    ///< TODO: Comment.
-    unsigned int rw : 1;         ///< TODO: Comment.
-    unsigned int user : 1;       ///< TODO: Comment.
-    unsigned int w_through : 1;  ///< TODO: Comment.
-    unsigned int cache : 1;      ///< TODO: Comment.
-    unsigned int accessed : 1;   ///< TODO: Comment.
-    unsigned int dirty : 1;      ///< TODO: Comment.
-    unsigned int zero : 1;       ///< TODO: Comment.
-    unsigned int global : 1;     ///< TODO: Comment.
-    unsigned int kernel_cow : 1; ///< TODO: Comment.
-    unsigned int available : 2;  ///< TODO: Comment.
-    unsigned int frame : 20;     ///< TODO: Comment.
+    unsigned int present : 1;    ///< Page is present in memory.
+    unsigned int rw : 1;         ///< Read/write permission (0 = read-only, 1 = read/write).
+    unsigned int user : 1;       ///< User/supervisor (0 = supervisor, 1 = user).
+    unsigned int w_through : 1;  ///< Write-through caching enabled.
+    unsigned int cache : 1;      ///< Cache disabled.
+    unsigned int accessed : 1;   ///< Page has been accessed.
+    unsigned int dirty : 1;      ///< Page has been written to.
+    unsigned int zero : 1;       ///< Reserved (set to 0).
+    unsigned int global : 1;     ///< Global page (not flushed by TLB).
+    unsigned int kernel_cow : 1; ///< Kernel copy-on-write.
+    unsigned int available : 2;  ///< Available for system use.
+    unsigned int frame : 20;     ///< Frame address (shifted right 12 bits).
 } page_table_entry_t;
 
 /// @brief Flags associated with virtual memory areas.
 enum MEMMAP_FLAGS {
-    MM_USER    = 0x1, ///< Area belongs to user.
-    MM_GLOBAL  = 0x2, ///< Area is global.
-    MM_RW      = 0x4, ///< Area has user read/write perm.
-    MM_PRESENT = 0x8, ///< Area is valid.
+    MM_USER    = 0x1, ///< Area belongs to user mode (accessible by user-level processes).
+    MM_GLOBAL  = 0x2, ///< Area is global (not flushed from TLB on context switch).
+    MM_RW      = 0x4, ///< Area has read/write permissions.
+    MM_PRESENT = 0x8, ///< Area is present in memory.
     // Kernel flags
-    MM_COW     = 0x10, ///< Area is copy on write.
-    MM_UPDADDR = 0x20, ///< Check?
+    MM_COW     = 0x10, ///< Area is copy-on-write (used for forked processes).
+    MM_UPDADDR = 0x20, ///< Update address (used for special memory mappings).
 };
 
 /// @brief A page table.
 /// @details
 /// It contains 1024 entries which can be addressed by 10 bits (log_2(1024)).
 typedef struct page_table_t {
-    page_table_entry_t pages[1024]; ///< Array of pages.
+    /// @brief Array of page table entries.
+    page_table_entry_t pages[MAX_PAGE_TABLE_ENTRIES];
 } __attribute__((aligned(PAGE_SIZE))) page_table_t;
 
 /// @brief A page directory.
 /// @details In the two-level paging, this is the first level.
 typedef struct page_directory_t {
-    /// We need a table that contains virtual address, so that we can
-    /// actually get to the tables (size: 1024 * 4 = 4096 byte).
-    page_dir_entry_t entries[1024];
+    /// @brief Array of page directory entries.
+    /// @details
+    /// We need a table that contains virtual addresses, so that we can actually
+    /// get to the tables (size: 1024 * 4 = 4096 bytes).
+    page_dir_entry_t entries[MAX_PAGE_DIR_ENTRIES];
 } __attribute__((aligned(PAGE_SIZE))) page_directory_t;
 
 /// @brief Virtual Memory Area, used to store details of a process segment.
 typedef struct vm_area_struct_t {
-    /// Memory descriptor associated.
+    /// Pointer to the memory descriptor associated with this area.
     struct mm_struct_t *vm_mm;
     /// Start address of the segment, inclusive.
     uint32_t vm_start;
     /// End address of the segment, exclusive.
     uint32_t vm_end;
-    /// List of memory areas.
+    /// Linked list of memory areas.
     list_head vm_list;
-    /// Permissions.
+    /// Page protection flags (permissions).
     pgprot_t vm_page_prot;
-    /// Flags.
+    /// Flags indicating attributes of the memory area.
     unsigned short vm_flags;
-    /// rbtree node.
-    // struct rb_node vm_rb;
 } vm_area_struct_t;
 
 /// @brief Memory Descriptor, used to store details about the memory of a user process.
 typedef struct mm_struct_t {
-    /// List of memory area (vm_area_struct reference).
+    /// List of memory areas (vm_area_struct references).
     list_head mmap_list;
-    // /// rbtree of memory area.
-    // struct rb_root mm_rb;
-    /// Last memory area used.
+    /// Pointer to the last used memory area.
     vm_area_struct_t *mmap_cache;
-    /// Process page directory.
+    /// Pointer to the process's page directory.
     page_directory_t *pgd;
-    /// Number of memory area.
+    /// Number of memory areas.
     int map_count;
-    /// List of mm_struct.
+    /// List of mm_structs.
     list_head mm_list;
-    /// CODE start.
+    /// Start address of the code segment.
     uint32_t start_code;
-    /// CODE end.
+    /// End address of the code segment.
     uint32_t end_code;
-    /// DATA start.
+    /// Start address of the data segment.
     uint32_t start_data;
-    /// DATA end.
+    /// End address of the data segment.
     uint32_t end_data;
-    /// HEAP start.
+    /// Start address of the heap.
     uint32_t start_brk;
-    /// HEAP end.
+    /// End address of the heap.
     uint32_t brk;
-    /// STACK start.
+    /// Start address of the stack.
     uint32_t start_stack;
-    /// ARGS start.
+    /// Start address of the arguments.
     uint32_t arg_start;
-    /// ARGS end.
+    /// End address of the arguments.
     uint32_t arg_end;
-    /// ENVIRONMENT start.
+    /// Start address of the environment variables.
     uint32_t env_start;
-    /// ENVIRONMENT end.
+    /// End address of the environment variables.
     uint32_t env_end;
-    /// Number of mapped pages.
+    /// Total number of mapped pages.
     unsigned int total_vm;
 } mm_struct_t;
 
@@ -138,22 +147,28 @@ typedef struct mm_struct_t {
 extern kmem_cache_t *pgtbl_cache;
 
 /// @brief Comparison function between virtual memory areas.
-/// @param vma0 the first vm_area.
-/// @param vma1 the second vm_area.
-/// @return true if vma0 is after vma1.
+/// @param vma0 Pointer to the first vm_area_struct's list_head.
+/// @param vma1 Pointer to the second vm_area_struct's list_head.
+/// @return 1 if vma0 starts after vma1 ends, 0 otherwise.
 static inline int vm_area_compare(const list_head *vma0, const list_head *vma1)
 {
+    // Retrieve the vm_area_struct from the list_head for vma0.
     vm_area_struct_t *_vma0 = list_entry(vma0, vm_area_struct_t, vm_list);
+    // Retrieve the vm_area_struct from the list_head for vma1.
     vm_area_struct_t *_vma1 = list_entry(vma1, vm_area_struct_t, vm_list);
+    // Compare the start address of vma0 with the end address of vma1.
     return _vma0->vm_start > _vma1->vm_end;
 }
 
-/// @brief Initializes paging
-/// @param info Information coming from bootloader.
-void paging_init(boot_info_t *info);
+/// @brief Initializes the paging system, sets up memory caches, page
+/// directories, and maps important memory regions.
+/// @param info   Pointer to the boot information structure, containing kernel
+/// addresses and other details.
+/// @return 0 on success, -1 on error.
+int paging_init(boot_info_t *info);
 
 /// @brief Provide access to the main page directory.
-/// @return A pointer to the main page directory.
+/// @return A pointer to the main page directory, or NULL if main_mm is not initialized.
 page_directory_t *paging_get_main_directory(void);
 
 /// @brief Provide access to the current paging directory.
@@ -170,9 +185,15 @@ static inline void paging_switch_directory(page_directory_t *dir)
     set_cr3((uintptr_t)dir);
 }
 
+/// @brief Checks if the given page directory is the current one.
+/// @param pgd A pointer to the page directory to check.
+/// @return 1 if the given page directory is the current one, 0 otherwise.
+int is_current_pgd(page_directory_t *pgd);
+
 /// @brief Switches paging directory, the pointer can be a lowmem address.
 /// @param dir A pointer to the new page directory.
-void paging_switch_directory_va(page_directory_t *dir);
+/// @return Returns 0 on success, or -1 if an error occurs.
+int paging_switch_directory_va(page_directory_t *dir);
 
 /// @brief Invalidate a single tlb page (the one that maps the specified virtual address)
 /// @param addr The address of the page table.
@@ -198,20 +219,21 @@ static inline int paging_is_enabled(void)
 /// @param f The interrupt stack frame.
 void page_fault_handler(pt_regs *f);
 
-/// @brief Gets a page from a virtual address
-/// @param pgdir      The target page directory.
-/// @param virt_start The virtual address to query
-/// @param size       A pointer to the requested size of the data, size is updated if physical memory is not contiguous
-/// @return Pointer to the page.
+/// @brief Maps a virtual address to a corresponding physical page.
+/// @param pgdir The page directory.
+/// @param virt_start The starting virtual address to map.
+/// @param size Pointer to a size_t variable to store the size of the mapped memory.
+/// @return A pointer to the physical page corresponding to the virtual address, or NULL on error.
 page_t *mem_virtual_to_page(page_directory_t *pgdir, uint32_t virt_start, size_t *size);
 
-/// @brief Creates a virtual to physical mapping, incrementing pages usage counters.
-/// @param pgd        The target page directory.
-/// @param virt_start The virtual address to map to.
-/// @param phy_start  The physical address to map.
-/// @param size       The size of the segment.
-/// @param flags      The flags for the memory range.
-void mem_upd_vm_area(page_directory_t *pgd, uint32_t virt_start, uint32_t phy_start, size_t size, uint32_t flags);
+/// @brief Updates the virtual memory area in a page directory.
+/// @param pgd The page directory to update.
+/// @param virt_start The starting virtual address to update.
+/// @param phy_start The starting physical address to map to the virtual addresses.
+/// @param size The size of the memory area to update.
+/// @param flags Flags to set for the page table entries.
+/// @return 0 on success, or -1 on failure.
+int mem_upd_vm_area(page_directory_t *pgd, uint32_t virt_start, uint32_t phy_start, size_t size, uint32_t flags);
 
 /// @brief Clones a range of pages between two distinct page tables
 /// @param src_pgd   The source page directory.
@@ -220,12 +242,13 @@ void mem_upd_vm_area(page_directory_t *pgd, uint32_t virt_start, uint32_t phy_st
 /// @param dst_start The destination virtual address for the clone.
 /// @param size      The size of the segment.
 /// @param flags     The flags for the new dst memory range.
-void mem_clone_vm_area(page_directory_t *src_pgd,
-                       page_directory_t *dst_pgd,
-                       uint32_t src_start,
-                       uint32_t dst_start,
-                       size_t size,
-                       uint32_t flags);
+/// @return 0 on success, -1 on failure.
+int mem_clone_vm_area(page_directory_t *src_pgd,
+                      page_directory_t *dst_pgd,
+                      uint32_t src_start,
+                      uint32_t dst_start,
+                      size_t size,
+                      uint32_t flags);
 
 /// @brief Create a virtual memory area.
 /// @param mm         The memory descriptor which will contain the new segment.
@@ -254,7 +277,7 @@ uint32_t clone_vm_area(mm_struct_t *mm,
 /// @brief Destroys a virtual memory area.
 /// @param mm the memory descriptor from which we will destroy the area.
 /// @param area the are we want to destroy.
-/// @return 0 if the area was destroyed, or 1 if the operation failed.
+/// @return 0 if the area was destroyed, or -1 if the operation failed.
 int destroy_vm_area(mm_struct_t *mm, vm_area_struct_t *area);
 
 /// @brief Searches for the virtual memory area at the given address.
@@ -274,7 +297,7 @@ int is_valid_vm_area(mm_struct_t *mm, uintptr_t vm_start, uintptr_t vm_end);
 /// @param mm the memory descriptor which should contain the new area.
 /// @param length the size of the empty spot.
 /// @param vm_start where we save the starting address for the new area.
-/// @return 0 on success, 1 on failure.
+/// @return 0 on success, -1 on error, or 1 if no free area is found.
 int find_free_vm_area(mm_struct_t *mm, size_t length, uintptr_t *vm_start);
 
 /// @brief Creates the main memory descriptor.
@@ -289,4 +312,5 @@ mm_struct_t *clone_process_image(mm_struct_t *mmp);
 
 /// @brief Free Memory Descriptor with all the memory segment contained.
 /// @param mm The Memory Descriptor to free.
-void destroy_process_image(mm_struct_t *mm);
+/// @return Returns -1 on error, otherwise 0.
+int destroy_process_image(mm_struct_t *mm);

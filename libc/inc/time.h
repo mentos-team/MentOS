@@ -22,7 +22,7 @@
 typedef unsigned int time_t;
 
 /// Used to get information about the current time.
-typedef struct tm_t {
+typedef struct tm {
     /// Seconds [0 to 59]
     int tm_sec;
     /// Minutes [0 to 59]
@@ -44,22 +44,22 @@ typedef struct tm_t {
 } tm_t;
 
 /// Rappresents time.
-typedef struct _timeval {
+typedef struct timeval {
     time_t tv_sec;  ///< Seconds.
     time_t tv_usec; ///< Microseconds.
-} timeval;
+} timeval_t;
 
 /// Rappresents a time interval.
-typedef struct _itimerval {
-    timeval it_interval; ///< Next value.
-    timeval it_value;    ///< Current value.
-} itimerval;
+typedef struct itimerval {
+    struct timeval it_interval; ///< Next value.
+    struct timeval it_value;    ///< Current value.
+} itimerval_t;
 
 /// @brief Specify intervals of time with nanosecond precision.
 typedef struct timespec {
     time_t tv_sec; ///< Seconds.
     long tv_nsec;  ///< Nanoseconds.
-} timespec;
+} timespec_t;
 
 /// @brief Returns the current time.
 /// @param t Where the time should be stored.
@@ -97,7 +97,7 @@ size_t strftime(char *s, size_t max, const char *format, const tm_t *tm);
 /// in *req has elapsed, or the delivery of a signal that triggers the
 /// invocation of a handler in the calling thread or that terminates
 /// the process.
-int nanosleep(const timespec *req, timespec *rem);
+int nanosleep(const struct timespec *req, struct timespec *rem);
 
 /// @brief Causes the calling thread to sleep either until the number of
 ///        real-time seconds specified in seconds have elapsed or
@@ -112,7 +112,7 @@ unsigned int sleep(unsigned int seconds);
 /// @param which which timer.
 /// @param curr_value where we place the timer value.
 /// @return 0 on success, -1 on failure and errno is set to indicate the error.
-int getitimer(int which, itimerval *curr_value);
+int getitimer(int which, struct itimerval *curr_value);
 
 /// @brief The system provides each process with three interval timers, each
 /// decrementing in a distinct time domain. When any timer expires, a signal is
@@ -121,4 +121,4 @@ int getitimer(int which, itimerval *curr_value);
 /// @param new_value the new value for the timer.
 /// @param old_value output variable where the function places the previous value.
 /// @return 0 on success, -1 on failure and errno is set to indicate the error.
-int setitimer(int which, const itimerval *new_value, itimerval *old_value);
+int setitimer(int which, const struct itimerval *new_value, struct itimerval *old_value);

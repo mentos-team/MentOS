@@ -24,43 +24,43 @@ typedef struct virt_map_page_t {
     bb_page_t bbpage;
 } virt_map_page_t;
 
-/// @brief Initialize the virtual memory mapper
-void virt_init(void);
+/// @brief Initialize the virtual memory mapper.
+/// @return Returns 0 on success, or -1 if an error occurs.
+int virt_init(void);
 
-/// @brief Map a page range to virtual memory
-/// @param page The start page of the mapping
-/// @param pfn_count The number of pages to map
-/// @return The virtual address of the mapping
+/// @brief Maps physical pages to virtual memory.
+/// @param page Pointer to the physical page.
+/// @param pfn_count The number of page frames to map.
+/// @return The virtual address of the mapped pages, or 0 on failure.
 uint32_t virt_map_physical_pages(page_t *page, int pfn_count);
 
-/// @brief Allocate a virtual page range of the specified size.
-/// @param size The required amount.
-/// @return Pointer to the allocated memory.
+/// @brief Allocates virtual pages for a given size.
+/// @param size The size in bytes to allocate.
+/// @return Pointer to the allocated virtual pages, or NULL on failure.
 virt_map_page_t *virt_map_alloc(uint32_t size);
 
-/// @brief Map a page to a memory area portion.
-/// @param mm    The memory descriptor.
-/// @param vpage Pointer to the virtual page.
-/// @param vaddr The starting address of the are.
-/// @param size  The size of the area.
-/// @return Address of the mapped area.
-uint32_t virt_map_vaddress(mm_struct_t *mm,
-                           virt_map_page_t *vpage,
-                           uint32_t vaddr,
-                           uint32_t size);
+/// @brief Maps a virtual address to a virtual memory area.
+/// @param mm Pointer to the memory management structure.
+/// @param vpage Pointer to the virtual map page.
+/// @param vaddr The virtual address to map.
+/// @param size The size of the memory area to map.
+/// @return The starting virtual address of the mapped area, or 0 on failure.
+uint32_t virt_map_vaddress(mm_struct_t *mm, virt_map_page_t *vpage, uint32_t vaddr, uint32_t size);
 
 /// @brief Checks if an address belongs to the virtual memory mapping.
 /// @param addr The address to check.
 /// @return 1 if it belongs to the virtual memory mapping, 0 otherwise.
 int virtual_check_address(uint32_t addr);
 
-/// @brief Unmap an address.
-/// @param addr The address to unmap.
-void virt_unmap(uint32_t addr);
+/// @brief Unmaps a virtual address from the virtual memory.
+/// @param addr The virtual address to unmap.
+/// @return Returns 0 on success, or -1 if an error occurs.
+int virt_unmap(uint32_t addr);
 
 /// @brief Unmap a page.
 /// @param page Pointer to the page to unmap.
-void virt_unmap_pg(virt_map_page_t *page);
+/// @return Returns 0 on success, or -1 if an error occurs.
+int virt_unmap_pg(virt_map_page_t *page);
 
 /// @brief Memcpy from different processes virtual addresses
 /// @param dst_mm The destination memory struct

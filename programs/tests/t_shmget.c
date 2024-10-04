@@ -1,3 +1,8 @@
+/// @file t_shmget.c
+/// @brief Demonstrates the creation and usage of shared memory between a parent
+/// and child process.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
+/// See LICENSE.md for details.
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -7,6 +12,7 @@
 #include <sys/unistd.h>
 #include <sys/wait.h>
 
+/// Define the size of shared memory to hold two integers.
 #define MEM_SIZE sizeof(int) * 2
 
 int main(void)
@@ -15,7 +21,7 @@ int main(void)
     pid_t cpid;
     int *array;
 
-    // Create shared memory.
+    // Create shared memory segment with IPC_PRIVATE key and specified memory size.
     shmid = shmget(IPC_PRIVATE, MEM_SIZE, IPC_CREAT | 0600);
     if (shmid == -1) {
         perror("shmget");
@@ -43,10 +49,10 @@ int main(void)
         perror("shmat");
         return EXIT_FAILURE;
     }
-    
+
     // Wait for the child to finish.
     while (wait(NULL) != -1) continue;
-    
+
     printf("F: %p\n", array);
     array[1] = 2;
 

@@ -70,7 +70,7 @@ static char *all_tests[] = {
 };
 
 static char **tests = &all_tests[0];
-static int testsc   = sizeof(all_tests) / sizeof(all_tests[0]);
+static int testsc   = count_of(all_tests);
 
 static char buf[4096];
 static char *bufpos = buf;
@@ -122,7 +122,7 @@ static int test_ok(int test, int success, const char *restrict format, ...)
     if (!success) {
         append("not ");
     }
-    append("ok %d - %s", test, tests[test - 1]);
+    append("ok %2d - %s", test, tests[test - 1]);
     if (format) {
         append(": ");
         va_list ap;
@@ -223,7 +223,7 @@ int runtests_main(int argc, char **argv)
 
     char *test_argv[32];
     for (int i = 0; i < testsc; i++) {
-        pr_info("Running test (%2d/%2d): %s\n", i, testsc, tests[i]);
+        pr_info("Running test (%2d/%2d): %s\n", i + 1, testsc, tests[i]);
         run_test(i + 1, tests[i]);
     }
 

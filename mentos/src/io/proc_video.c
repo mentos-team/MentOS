@@ -49,141 +49,114 @@ static ssize_t procv_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyt
 
     // Get the currently running process.
     task_struct *process = scheduler_get_current_process();
-    // Get a pointer to its ketboard ring-buffer.
+    // Get a pointer to its keyboard ring buffer.
     fs_rb_scancode_t *rb = &process->keyboard_rb;
-    // Pre-check the flags.
+
+    // Pre-check the terminal flags.
     bool_t flg_icanon = bitmask_check(process->termios.c_lflag, ICANON) == ICANON;
     bool_t flg_echoe  = bitmask_check(process->termios.c_lflag, ECHOE) == ECHOE;
     bool_t flg_echo   = bitmask_check(process->termios.c_lflag, ECHO) == ECHO;
     bool_t flg_isig   = bitmask_check(process->termios.c_lflag, ISIG) == ISIG;
 
-    // If we are in canonical mode, and the last inserted element is a newline,
-    // we pop the buffer until it's empty.
-    if (!fs_rb_scancode_empty(rb) && (!flg_icanon || (flg_icanon && (fs_rb_scancode_front(rb) == '\n')))) {
+    // If we are in canonical mode and the last inserted element is a newline,
+    // pop the buffer until it's empty.
+    if (!fs_rb_scancode_empty(rb) && (!flg_icanon || (fs_rb_scancode_front(rb) == '\n'))) {
+        // Return the newline character.
         *((char *)buf) = fs_rb_scancode_pop_back(rb) & 0x00FF;
+        // Indicate a character has been returned.
         return 1;
     }
 
-    // Once we have dealt with the canonical mode, get the character.
+    // Once we have dealt with canonical mode, get the character.
     int c = keyboard_pop_back();
 
-    // Check that it's a valid caracter.
+    // Check that it's a valid character.
     if (c < 0) {
-        return 0;
+        return 0; // No valid character received.
     }
 
-    // Keep only the character not the scancode.
+    // Keep only the character, not the scancode.
     c &= 0x00FF;
 
-    // We just received backspace.
+    // Handle backspace.
     if (c == '\b') {
-        // If !ECHOE and ECHO, We need to show the the `^?` string.
+        // If ECHOE is off and ECHO is on, show the `^?` string.
         if (!flg_echoe && flg_echo) {
             video_puts("^?");
         }
-        // If we are in canonical mode, we pop the previous character.
+
+        // If we are in canonical mode, pop the previous character.
         if (flg_icanon) {
-            // Pop the previous character in buffer.
+            // Remove the last character from the buffer.
             fs_rb_scancode_pop_front(rb);
-            // Delete the previous character on video.
-            if (flg_echoe) {
-                video_putc(c);
-            }
+
+            // Optionally display the backspace character.
+            if (flg_echoe) { video_putc(c); }
         } else {
-            // Add the character to the buffer.
+            // Add the backspace character to the buffer.
             fs_rb_scancode_push_front(rb, c);
-            // Return the character.
+
+            // Return the backspace character.
             *((char *)buf) = fs_rb_scancode_pop_back(rb) & 0x00FF;
+
+            // Indicate a character has been returned.
             return 1;
         }
+
+        // No character returned for backspace handling.
         return 0;
     }
-    if (c == 0x7f) {
+
+    // Handle delete key (0x7F).
+    if (c == 0x7F) {
         if (flg_echo) {
+            // Print escape sequence for delete.
             video_puts("^[[3~");
         }
-        // Add the character to the buffer.
-        fs_rb_scancode_push_front(rb, '\033');
-        fs_rb_scancode_push_front(rb, '[');
-        fs_rb_scancode_push_front(rb, '3');
-        fs_rb_scancode_push_front(rb, '~');
+
+        // Indicate no character was returned.
         return 0;
     }
+
     // Add the character to the buffer.
     fs_rb_scancode_push_front(rb, c);
 
-    // If echo is activated, output the character to video.
-    if (flg_echo) {
-        if (iscntrl(c) && (isalpha('A' + (c - 1)) && (c != '\n') && (c != '\b'))) {
-            video_putc('^');
-            video_putc('A' + (c - 1));
-        } else {
-            video_putc(c);
+    if (iscntrl(c)) {
+        if ((c == 0x03) && (flg_isig)) {
+            sys_kill(process->pid, SIGTERM);
+        } else if ((c == 0x1A) && (flg_isig)) {
+            sys_kill(process->pid, SIGSTOP);
         }
-    }
 
-    if (flg_isig) {
-        if (iscntrl(c)) {
-            if (c == 0x03) {
-                sys_kill(process->pid, SIGTERM);
-            } else if (c == 0x1A) {
-                sys_kill(process->pid, SIGSTOP);
+        if (isalpha('A' + (c - 1)) && (c != '\n') && (c != '\b') && (c != '\t')) {
+            // If echo is activated, output the character to video.
+            if (flg_echo) {
+                video_putc('^');
+                video_putc('A' + (c - 1));
             }
+
+            fs_rb_scancode_push_front(rb, '\033');
+            fs_rb_scancode_push_front(rb, '^');
+            fs_rb_scancode_push_front(rb, 'A' + (c - 1));
+
+            return 3;
         }
+        // Echo the character.
+        // if (flg_echo) {
+        //     video_putc(c);
+        // }
+        // return 1;
     }
 
-    // If we are NOT in canonical mode, we can send the character back to user
-    // right away.
+    // If we are NOT in canonical mode, send the character back to user immediately.
     if (!flg_icanon) {
+        // Return the character.
         *((char *)buf) = fs_rb_scancode_pop_back(rb) & 0x00FF;
+        // Indicate a character has been returned.
         return 1;
     }
 
-#if 0
-
-    // The last inserted character.
-    int back_c = keyboard_back();
-
-    if (back_c < 0)
-        return 0;
-
-    // The first inserted character.
-    int front_c = keyboard_front();
-
-    pr_debug("'%c' (%3d %04x) [F: '%c' (%04x)]\n", back_c, back_c, back_c, front_c, front_c);
-
-    // Echo the character to video.
-    if (flg_echo) {
-        video_putc(back_c & 0x00FF);
-    }
-
-    // If we have the canonical input active, we should not return characters,
-    // until we receive a newline.
-    if ((flg_icanon && (front_c == '\n')) ||
-        !flg_icanon) {
-        *((char *)buf) = keyboard_pop_back() & 0x00FF;
-        return 1;
-    }
-#endif
-
-#if 0
-    // Read the character from the keyboard.
-    int c = keyboard_getc(false) & 0x00FF;
-    if (c < 0)
-        return 0;
-    if (c == KEY_PAGE_UP) {
-        video_shift_one_page_down();
-        return 0;
-    } else if (c == KEY_PAGE_DOWN) {
-        video_shift_one_page_up();
-        return 0;
-    } else {
-        // Echo the character to video.
-        if (flg_echo) {
-            video_putc(c & 0x00FF);
-        }
-    }
-#endif
+    // Default return indicating no character was processed.
     return 0;
 }
 

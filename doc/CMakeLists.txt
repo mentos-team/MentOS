@@ -105,6 +105,7 @@ if (DOXYGEN_FOUND)
         ${CMAKE_SOURCE_DIR}/mentos/inc/version.h
 
         ${CMAKE_SOURCE_DIR}/mentos/src/boot.c
+        ${CMAKE_SOURCE_DIR}/mentos/src/crypt/sha256.c
         ${CMAKE_SOURCE_DIR}/mentos/src/descriptor_tables/exception.c
         ${CMAKE_SOURCE_DIR}/mentos/src/descriptor_tables/gdt.c
         ${CMAKE_SOURCE_DIR}/mentos/src/descriptor_tables/idt.c
@@ -193,6 +194,7 @@ if (DOXYGEN_FOUND)
         ${CMAKE_SOURCE_DIR}/libc/inc/bits/ioctls.h
         ${CMAKE_SOURCE_DIR}/libc/inc/bits/stat.h
         ${CMAKE_SOURCE_DIR}/libc/inc/bits/termios-struct.h
+        ${CMAKE_SOURCE_DIR}/libc/inc/crypt/sha256.h
         ${CMAKE_SOURCE_DIR}/libc/inc/ctype.h
         ${CMAKE_SOURCE_DIR}/libc/inc/fcntl.h
         ${CMAKE_SOURCE_DIR}/libc/inc/fcvt.h
@@ -259,6 +261,7 @@ if (DOXYGEN_FOUND)
         ${CMAKE_SOURCE_DIR}/libc/src/sys/utsname.c
         ${CMAKE_SOURCE_DIR}/libc/src/termios.c
         ${CMAKE_SOURCE_DIR}/libc/src/time.c
+        ${CMAKE_SOURCE_DIR}/libc/src/crypt/sha256.c
         ${CMAKE_SOURCE_DIR}/libc/src/unistd/chdir.c
         ${CMAKE_SOURCE_DIR}/libc/src/unistd/close.c
         ${CMAKE_SOURCE_DIR}/libc/src/unistd/creat.c
