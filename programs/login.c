@@ -78,6 +78,8 @@ static inline int __read_input(char *buffer, size_t size, int show)
     do {
         c = getchar(); // Read a character from input
 
+        pr_alert("%c\n", c);
+
         // Ignore EOF and null or tab characters
         if (c == EOF || c == 0 || c == '\t') {
             continue;

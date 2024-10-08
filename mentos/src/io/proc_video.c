@@ -24,14 +24,13 @@
 
 /// @brief Prints the ring-buffer.
 /// @param rb the ring-buffer to print.
-void print_rb(fs_rb_scancode_t *rb)
+void rb_keybuffer_print(rb_keybuffer_t *rb)
 {
-    if (!fs_rb_scancode_empty(rb)) {
-        for (unsigned i = rb->read; (i < rb->write) && (i < rb->size); ++i) {
-            pr_debug("%c", rb->buffer[i]);
-        }
-        pr_debug("\n");
+    pr_notice("(%u)[ ", rb->count);
+    for (unsigned i = 0; i < rb->count; ++i) {
+        pr_notice("%d ", rb_keybuffer_get(rb, i));
     }
+    pr_notice("]\n");
 }
 
 /// @brief Read function for the proc video system.
@@ -50,7 +49,7 @@ static ssize_t procv_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyt
     // Get the currently running process.
     task_struct *process = scheduler_get_current_process();
     // Get a pointer to its keyboard ring buffer.
-    fs_rb_scancode_t *rb = &process->keyboard_rb;
+    rb_keybuffer_t *rb = &process->keyboard_rb;
 
     // Pre-check the terminal flags.
     bool_t flg_icanon = bitmask_check(process->termios.c_lflag, ICANON) == ICANON;
@@ -60,9 +59,9 @@ static ssize_t procv_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyt
 
     // If we are in canonical mode and the last inserted element is a newline,
     // pop the buffer until it's empty.
-    if (!fs_rb_scancode_empty(rb) && (!flg_icanon || (fs_rb_scancode_front(rb) == '\n'))) {
+    if (!rb_keybuffer_is_empty(rb) && (!flg_icanon || (rb_keybuffer_peek_front(rb) == '\n'))) {
         // Return the newline character.
-        *((char *)buf) = fs_rb_scancode_pop_back(rb) & 0x00FF;
+        *((char *)buf) = rb_keybuffer_pop_back(rb) & 0x00FF;
         // Indicate a character has been returned.
         return 1;
     }
@@ -88,16 +87,16 @@ static ssize_t procv_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyt
         // If we are in canonical mode, pop the previous character.
         if (flg_icanon) {
             // Remove the last character from the buffer.
-            fs_rb_scancode_pop_front(rb);
+            rb_keybuffer_pop_front(rb);
 
             // Optionally display the backspace character.
             if (flg_echoe) { video_putc(c); }
         } else {
             // Add the backspace character to the buffer.
-            fs_rb_scancode_push_front(rb, c);
+            rb_keybuffer_push_front(rb, c);
 
             // Return the backspace character.
-            *((char *)buf) = fs_rb_scancode_pop_back(rb) & 0x00FF;
+            *((char *)buf) = rb_keybuffer_pop_back(rb) & 0x00FF;
 
             // Indicate a character has been returned.
             return 1;
@@ -119,7 +118,7 @@ static ssize_t procv_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyt
     }
 
     // Add the character to the buffer.
-    fs_rb_scancode_push_front(rb, c);
+    rb_keybuffer_push_front(rb, c);
 
     if (iscntrl(c)) {
         if ((c == 0x03) && (flg_isig)) {
@@ -135,9 +134,9 @@ static ssize_t procv_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyt
                 video_putc('A' + (c - 1));
             }
 
-            fs_rb_scancode_push_front(rb, '\033');
-            fs_rb_scancode_push_front(rb, '^');
-            fs_rb_scancode_push_front(rb, 'A' + (c - 1));
+            rb_keybuffer_push_front(rb, '\033');
+            rb_keybuffer_push_front(rb, '^');
+            rb_keybuffer_push_front(rb, 'A' + (c - 1));
 
             return 3;
         }
@@ -151,7 +150,7 @@ static ssize_t procv_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyt
     // If we are NOT in canonical mode, send the character back to user immediately.
     if (!flg_icanon) {
         // Return the character.
-        *((char *)buf) = fs_rb_scancode_pop_back(rb) & 0x00FF;
+        *((char *)buf) = rb_keybuffer_pop_back(rb) & 0x00FF;
         // Indicate a character has been returned.
         return 1;
     }
