@@ -73,6 +73,22 @@ static inline void keyboard_push_back_sequence(char *sequence)
     spinlock_unlock(&scancodes_lock);
 }
 
+/// @brief Pushes a sequence of characters (scancodes) into the keyboard buffer.
+/// @param sequence A null-terminated string representing the sequence to push.
+static inline void keyboard_push_front_sequence(char *sequence)
+{
+    // Lock the scancodes ring buffer to ensure thread safety.
+    spinlock_lock(&scancodes_lock);
+
+    // Iterate through each character in the sequence and push it to the buffer.
+    for (size_t i = 0; i < strlen(sequence); ++i) {
+        rb_keybuffer_push_front(&scancodes, (int)sequence[i]);
+    }
+
+    // Unlock the buffer after the operation is complete.
+    spinlock_unlock(&scancodes_lock);
+}
+
 /// @brief Pops a value from the ring buffer.
 /// @return the value we removed from the ring buffer.
 int keyboard_pop_back(void)
@@ -176,70 +192,70 @@ void keyboard_isr(pt_regs *f)
         pr_debug("Press(KEY_ENTER)\n");
     } else if ((scancode == KEY_UP_ARROW) || (keypad_code == KEY_KP8)) {
         pr_debug("Press(KEY_UP_ARROW)\n");
-        keyboard_push_back_sequence("\033[A");
+        keyboard_push_front_sequence("\033[A");
     } else if ((scancode == KEY_DOWN_ARROW) || (keypad_code == KEY_KP2)) {
         pr_debug("Press(KEY_DOWN_ARROW)\n");
-        keyboard_push_back_sequence("\033[B");
+        keyboard_push_front_sequence("\033[B");
     } else if ((scancode == KEY_RIGHT_ARROW) || (keypad_code == KEY_KP6)) {
         pr_debug("Press(KEY_RIGHT_ARROW)\n");
-        keyboard_push_back_sequence("\033[C");
+        keyboard_push_front_sequence("\033[C");
     } else if ((scancode == KEY_LEFT_ARROW) || (keypad_code == KEY_KP4)) {
         pr_debug("Press(KEY_LEFT_ARROW)\n");
-        keyboard_push_back_sequence("\033[D");
+        keyboard_push_front_sequence("\033[D");
     } else if (scancode == KEY_F1) {
         pr_debug("Press(KEY_F1)\n");
-        keyboard_push_back_sequence("\033[11~");
+        keyboard_push_front_sequence("\033[11~");
     } else if (scancode == KEY_F2) {
         pr_debug("Press(KEY_F2)\n");
-        keyboard_push_back_sequence("\033[12~");
+        keyboard_push_front_sequence("\033[12~");
     } else if (scancode == KEY_F3) {
         pr_debug("Press(KEY_F3)\n");
-        keyboard_push_back_sequence("\033[13~");
+        keyboard_push_front_sequence("\033[13~");
     } else if (scancode == KEY_F4) {
         pr_debug("Press(KEY_F4)\n");
-        keyboard_push_back_sequence("\033[14~");
+        keyboard_push_front_sequence("\033[14~");
     } else if (scancode == KEY_F5) {
         pr_debug("Press(KEY_F5)\n");
-        keyboard_push_back_sequence("\033[15~");
+        keyboard_push_front_sequence("\033[15~");
     } else if (scancode == KEY_F6) {
         pr_debug("Press(KEY_F6)\n");
-        keyboard_push_back_sequence("\033[17~");
+        keyboard_push_front_sequence("\033[17~");
     } else if (scancode == KEY_F7) {
         pr_debug("Press(KEY_F7)\n");
-        keyboard_push_back_sequence("\033[18~");
+        keyboard_push_front_sequence("\033[18~");
     } else if (scancode == KEY_F8) {
         pr_debug("Press(KEY_F8)\n");
-        keyboard_push_back_sequence("\033[19~");
+        keyboard_push_front_sequence("\033[19~");
     } else if (scancode == KEY_F9) {
         pr_debug("Press(KEY_F9)\n");
-        keyboard_push_back_sequence("\033[20~");
+        keyboard_push_front_sequence("\033[20~");
     } else if (scancode == KEY_F10) {
         pr_debug("Press(KEY_F10)\n");
-        keyboard_push_back_sequence("\033[21~");
+        keyboard_push_front_sequence("\033[21~");
     } else if (scancode == KEY_F11) {
         pr_debug("Press(KEY_F11)\n");
-        keyboard_push_back_sequence("\033[23~");
+        keyboard_push_front_sequence("\033[23~");
     } else if (scancode == KEY_F12) {
         pr_debug("Press(KEY_F12)\n");
-        keyboard_push_back_sequence("\033[24~");
+        keyboard_push_front_sequence("\033[24~");
     } else if ((scancode == KEY_INSERT) || (keypad_code == KEY_KP0)) {
         pr_debug("Press(KEY_INSERT)\n");
-        keyboard_push_back_sequence("\033[2~");
+        keyboard_push_front_sequence("\033[2~");
     } else if ((scancode == KEY_DELETE) || (keypad_code == KEY_KP_DEC)) {
         pr_debug("Press(KEY_DELETE)\n");
-        keyboard_push_back_sequence("\033[3~");
+        keyboard_push_front_sequence("\033[3~");
     } else if ((scancode == KEY_HOME) || (keypad_code == KEY_KP7)) {
         pr_debug("Press(KEY_HOME)\n");
-        keyboard_push_back_sequence("\033[1~");
+        keyboard_push_front_sequence("\033[1~");
     } else if ((scancode == KEY_END) || (keypad_code == KEY_KP1)) {
         pr_debug("Press(KEY_END)\n");
-        keyboard_push_back_sequence("\033[4~");
+        keyboard_push_front_sequence("\033[4~");
     } else if ((scancode == KEY_PAGE_UP) || (keypad_code == KEY_KP9)) {
         pr_debug("Press(KEY_PAGE_UP)\n");
-        keyboard_push_back_sequence("\033[5~");
+        keyboard_push_front_sequence("\033[5~");
     } else if ((scancode == KEY_PAGE_DOWN) || (keypad_code == KEY_KP3)) {
         pr_debug("Press(KEY_PAGE_DOWN)\n");
-        keyboard_push_back_sequence("\033[6~");
+        keyboard_push_front_sequence("\033[6~");
     } else if (scancode == KEY_ESCAPE) {
         // Nothing to do.
     } else if (keypad_code == KEY_5) {

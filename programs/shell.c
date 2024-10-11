@@ -3,6 +3,12 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
+// Setup the logging for this file (do this before any other include).
+#include "sys/kernel_levels.h"           // Include kernel log levels.
+#define __DEBUG_HEADER__ "[SHELL ]"      ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
+#include "io/debug.h"                    // Include debugging functions.
+
 #include <sys/unistd.h>
 #include <sys/wait.h>
 #include <fcntl.h>
@@ -22,11 +28,20 @@
 #include <limits.h>
 #include <sys/utsname.h>
 #include <ctype.h>
+#include <ring_buffer.h>
 
 /// Maximum length of commands.
 #define CMD_LEN 64
 /// Maximum lenght of the history.
 #define HISTORY_MAX 10
+
+static inline void rb_history_entry_copy(char *dest, const char *src, unsigned size)
+{
+    strncpy(dest, src, size);
+}
+
+/// Initialize the two-dimensional ring buffer for integers.
+DECLARE_FIXED_SIZE_2D_RING_BUFFER(char, history, HISTORY_MAX, CMD_LEN, 0, rb_history_entry_copy)
 
 // Required by `export`
 #define ENV_NORM 1
@@ -38,13 +53,9 @@ static char cmd[CMD_LEN] = { 0 };
 // The index of the cursor.
 static size_t cmd_cursor_index = 0;
 // History of commands.
-static char history[HISTORY_MAX][CMD_LEN] = { 0 };
-// The current write index inside the history.
-static int history_write_index = 0;
-// The current read index inside the history.
-static int history_read_index = 0;
-// Boolean used to check if the history is full.
-static bool_t history_full = false;
+static rb_history_t history;
+// History reading index.
+static unsigned history_index;
 // Store the last command status
 static int status = 0;
 // Store the last command status as string
@@ -399,58 +410,33 @@ static int __cd(int argc, char *argv[])
 /// @brief Push the command inside the history.
 static inline void __hst_push(char *_cmd)
 {
-    // Reset the read index.
-    history_read_index = history_write_index;
-    // Check if it is a duplicated entry.
-    if (history_write_index > 0) {
-        if (strcmp(history[history_write_index - 1], _cmd) == 0) {
-            return;
-        }
-    }
-    // Insert the node.
-    strcpy(history[history_write_index], _cmd);
-    if (++history_write_index >= HISTORY_MAX) {
-        history_write_index = 0;
-        history_full        = true;
-    }
-    // Reset the read index.
-    history_read_index = history_write_index;
+    static rb_history_entry_t entry = { { 0 }, CMD_LEN };
+    rb_history_entry_copy(entry.buffer, _cmd, entry.size);
+    rb_history_push_back(&history, &entry);
+    history_index = history.count;
 }
 
 /// @brief Give the key allows to navigate through the history.
-static char *__hst_fetch(bool_t up)
+static char *__hst_fetch(char direction)
 {
-    if ((history_write_index == 0) && (history_full == false)) {
-        return NULL;
-    }
-    // If the history is empty do nothing.
-    char *_cmd = NULL;
-    // Update the position inside the history.
-    int next_index = history_read_index + (up ? -1 : +1);
-    // Check the next index.
-    if (history_full) {
-        if (next_index < 0) {
-            next_index = HISTORY_MAX - 1;
-        } else if (next_index >= HISTORY_MAX) {
-            next_index = 0;
-        }
-        // Do no read where ne will have to write next.
-        if (next_index == history_write_index) {
-            next_index = history_read_index;
-            return NULL;
-        }
-    } else {
-        if (next_index < 0) {
-            next_index = 0;
-        } else if (next_index >= history_write_index) {
-            next_index = history_read_index;
-            return NULL;
+    static char empty[CMD_LEN] = { 0 };
+    // Fetch previous.
+    if (direction == 'A') {
+        // Move the index.
+        if (history_index > 0) {
+            history_index--;
         }
     }
-    history_read_index = next_index;
-    _cmd               = history[history_read_index];
-    // Return the command.
-    return _cmd;
+    // Fetch next.
+    else if (direction == 'B') {
+        // Move the index.
+        if (history_index < history.size) {
+            history_index++;
+        } else {
+            return empty;
+        }
+    }
+    return history.buffer[(history.tail + history_index) % history.size].buffer;
 }
 
 /// @brief Completely delete the current command.
@@ -649,7 +635,7 @@ static void __cmd_get(void)
             if (c == '[') {
                 c = getchar(); // Get the char.
                 if ((c == 'A') || (c == 'B')) {
-                    char *old_cmd = __hst_fetch(c == 'A');
+                    char *old_cmd = __hst_fetch(c);
                     if (old_cmd != NULL) {
                         // Clear the current command.
                         __cmd_clr();
@@ -965,6 +951,8 @@ void wait_for_child(int signum)
 int main(int argc, char *argv[])
 {
     setsid();
+    // Initialize the history.
+    rb_history_init(&history);
 
     struct termios _termios;
     tcgetattr(STDIN_FILENO, &_termios);

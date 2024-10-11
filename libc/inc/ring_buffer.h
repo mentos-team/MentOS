@@ -440,19 +440,19 @@
                                       rb_##name##_entry_t *item)            \
     {                                                                       \
         if (!rb_##name##_is_empty(rb) && (position < rb->count)) {          \
-            unsigned index = ((rb->tail + position) % size1);               \
+            unsigned index = (rb->tail + position) % size1;                 \
             rb->copy(item->buffer, rb->buffer[index].buffer, size2);        \
-            return 0;                                                       \
+            return 1;                                                       \
         }                                                                   \
-        return 1;                                                           \
+        return 0;                                                           \
     }                                                                       \
+                                                                            \
     static inline void rb_##name##_iterate(                                 \
         rb_##name##_t *rb, void (*callback)(rb_##name##_entry_t *))         \
     {                                                                       \
         rb_##name##_entry_t item;                                           \
         for (unsigned i = 0; i < rb->count; i++) {                          \
-            if (!rb_##name##_get(rb, i, &item)) {                           \
-                callback(&item);                                            \
-            }                                                               \
+            rb_##name##_get(rb, i, &item);                                  \
+            callback(&item);                                                \
         }                                                                   \
     }
