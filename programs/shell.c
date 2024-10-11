@@ -41,7 +41,7 @@ static inline void rb_history_entry_copy(char *dest, const char *src, unsigned s
 }
 
 /// Initialize the two-dimensional ring buffer for integers.
-DECLARE_FIXED_SIZE_2D_RING_BUFFER(char, history, HISTORY_MAX, CMD_LEN, 0, rb_history_entry_copy)
+DECLARE_FIXED_SIZE_2D_RING_BUFFER(char, history, HISTORY_MAX, CMD_LEN, 0)
 
 // Required by `export`
 #define ENV_NORM 1
@@ -952,7 +952,7 @@ int main(int argc, char *argv[])
 {
     setsid();
     // Initialize the history.
-    rb_history_init(&history);
+    rb_history_init(&history, rb_history_entry_copy);
 
     struct termios _termios;
     tcgetattr(STDIN_FILENO, &_termios);

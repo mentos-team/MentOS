@@ -309,8 +309,7 @@
         }                                                                     \
     }
 
-#define DECLARE_FIXED_SIZE_2D_RING_BUFFER(type, name, size1, size2, init,   \
-                                          copy_fun)                         \
+#define DECLARE_FIXED_SIZE_2D_RING_BUFFER(type, name, size1, size2, init)   \
     typedef struct {                                                        \
         type buffer[size2];                                                 \
         unsigned size;                                                      \
@@ -341,7 +340,9 @@
         }                                                                   \
     }                                                                       \
                                                                             \
-    static inline void rb_##name##_init(rb_##name##_t *rb)                  \
+    static inline void rb_##name##_init(                                    \
+        rb_##name##_t *rb,                                                  \
+        void (*copy_fun)(type * dest, const type *src, unsigned))           \
     {                                                                       \
         rb->head  = 0;                                                      \
         rb->tail  = 0;                                                      \
