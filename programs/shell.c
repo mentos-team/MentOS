@@ -78,18 +78,29 @@ static inline int __is_separator(char c)
     return ((c == '\0') || (c == ' ') || (c == '\t') || (c == '\n') || (c == '\r'));
 }
 
+/// @brief Count the number of words in a given sentence.
+/// @param sentence Pointer to the input sentence.
+/// @return The number of words in the sentence or -1 if input is invalid.
 static inline int __count_words(const char *sentence)
 {
+    // Check if the input sentence is valid.
+    if (sentence == NULL) {
+        return -1; // Return -1 to indicate an error.
+    }
     int result     = 0;
     bool_t inword  = false;
     const char *it = sentence;
+    // Iterate over each character in the sentence.
     do {
+        // Check if the current character is a word separator.
         if (__is_separator(*it)) {
+            // If we are currently inside a word, mark the end of the word.
             if (inword) {
                 inword = false;
-                result++;
+                result++; // Increment the word count.
             }
         } else {
+            // If the character is not a separator, mark that we are inside a word.
             inword = true;
         }
     } while (*it++);
@@ -436,232 +447,183 @@ static rb_history_entry_t *__history_fetch(char direction)
     return history.buffer + ((history.tail + history_index) % history.size);
 }
 
-static inline void __cmd_sug(dirent_t *suggestion, size_t starting_position)
+/// @brief Append a character to the history entry buffer.
+/// @param entry Pointer to the history entry structure.
+/// @param index Pointer to the current index in the buffer.
+/// @param length Pointer to the current length of the buffer.
+/// @param c Character to append to the buffer.
+/// @return Returns 1 if the buffer limit is reached, 0 otherwise.
+static inline int __command_append(
+    rb_history_entry_t *entry,
+    int *index,
+    int *length,
+    char c)
 {
-    // TODO!
-#if 0
-
-    if (suggestion) {
-        for (size_t i = starting_position; i < strlen(suggestion->d_name); ++i) {
-            if (__cmd_app(suggestion->d_name[i])) {
-                putchar(suggestion->d_name[i]);
-            }
-        }
-        // If we suggested a directory, append a slash.
-        if (suggestion->d_type == DT_DIR) {
-            if (__cmd_app('/')) {
-                putchar('/');
-            }
-        }
+    // Insert the new character at the current index in the buffer, then
+    // increment the index.
+    entry->buffer[(*index)++] = c;
+    // Increase the length of the buffer to reflect the added character.
+    (*length)++;
+    // Display the newly added character to the standard output.
+    putchar(c);
+    // Check if the buffer limit has been reached.
+    if ((*index) == (entry->size - 1)) {
+        // Null-terminate the buffer to ensure it is a valid string.
+        entry->buffer[(*index)] = 0;
+        // Indicate that the buffer is full.
+        return 1;
     }
-#endif
+    // The buffer limit has not been reached.
+    return 0;
 }
 
-static void __cmd_complete(rb_history_entry_t *entry)
+/// @brief Suggests a directory entry to be appended to the current command
+/// buffer.
+/// @param suggestion Pointer to the directory entry to suggest.
+/// @param entry Pointer to the history entry structure.
+/// @param index Pointer to the current index in the buffer.
+/// @param length Pointer to the current length of the buffer.
+static inline void __command_suggest(
+    dirent_t *suggestion,
+    rb_history_entry_t *entry,
+    int *index,
+    int *length)
 {
-    pr_crit("Complete: `%s`\n", entry->buffer);
-    // TODO!
-#if 0
-    // Get the lenght of the command.
-    size_t cmd_len = strlen(cmd);
-    // Count the number of words.
-    int words = __count_words(cmd);
-    // If there are no words, skip.
-    if (words == 0) {
-        return;
-    }
-    // Determines if we are at the beginning of a new argument, last character is space.
-    if (__is_separator(cmd[cmd_len - 1])) {
-        return;
-    }
-    // If the last two characters are two dots `..` append a slash `/`,
-    // and continue.
-    if ((cmd_len >= 2) && ((cmd[cmd_len - 2] == '.') && (cmd[cmd_len - 1] == '.'))) {
-        if (__cmd_app('/')) {
-            putchar('/');
-            return;
+    // Check if there is a valid suggestion to process.
+    if (suggestion) {
+        // Iterate through the characters of the suggested directory entry name.
+        for (int i = (*index); i < strlen(suggestion->d_name); ++i) {
+            // Append the current character to the buffer.
+            // If the buffer is full, break the loop.
+            if (__command_append(entry, index, length, suggestion->d_name[i])) {
+                break;
+            }
+        }
+        // If the suggestion is a directory, append a trailing slash.
+        if ((suggestion->d_type == DT_DIR) && (entry->buffer[(*index) - 1] != '/')) {
+            // Append the slash character to indicate a directory.
+            __command_append(entry, index, length, '/');
         }
     }
-    char cwd[PATH_MAX];
-    getcwd(cwd, PATH_MAX);
+}
+
+/// @brief Completes the current command based on the given entry, index, and length.
+/// @param entry The history entry containing the command buffer.
+/// @param index The current index in the command buffer.
+/// @param length The total length of the command buffer.
+/// @return Returns 0 on success, 1 on failure.
+static int __command_complete(
+    rb_history_entry_t *entry,
+    int *index,
+    int *length)
+{
+    pr_crit("__command_complete(%s, %2d, %2d)\n", entry->buffer, *index, *length);
+
+    char cwd[PATH_MAX]; // Buffer to store the current working directory.
+    int words;          // Variable to store the word count.
+    dirent_t dent;      // Prepare the dirent variable.
+
+    // Count the number of words in the command buffer.
+    words = __count_words(entry->buffer);
+
+    // If there are no words in the command buffer, log it and return.
+    if (words == 0) {
+        pr_crit("__command_complete(%s, %2d, %2d) : No words.\n", entry->buffer, *index, *length);
+        return 0;
+    }
+
+    // Determines if we are at the beginning of a new argument, last character is space.
+    if (__is_separator(entry->buffer[(*index) - 1])) {
+        pr_crit("__command_complete(%s, %2d, %2d) : Separator.\n", entry->buffer, *index, *length);
+        return 0;
+    }
+
+    // If the last two characters are two dots `..` append a slash `/`, and
+    // continue.
+    if (((*index) >= 2) && ((entry->buffer[(*index) - 1] == '.') && (entry->buffer[(*index) - 2] == '.'))) {
+        pr_crit("__command_complete(%s, %2d, %2d) : Append '/'.\n", entry->buffer, *index, *length);
+        if (__command_append(entry, index, length, '/')) {
+            pr_crit("Failed to append character.\n");
+            return 1;
+        }
+    }
+
+    // Attempt to retrieve the current working directory.
+    if (getcwd(cwd, PATH_MAX) == NULL) {
+        // Error handling: If getcwd fails, it returns NULL
+        pr_crit("Failed to get current working directory.\n");
+        return 1;
+    }
+
     // Determines if we are executing a command from current directory.
-    int is_run_cmd = (words == 1) && (cmd[0] == '.') && (cmd_len > 3) && (cmd[1] == '/');
+    int is_run_cmd = ((*index) >= 2) && (entry->buffer[0] == '.') && (entry->buffer[1] == '/');
     // Determines if we are entering an absolute path.
-    int is_abs_path = (words == 1) && (cmd[0] == '/');
-    // Prepare the dirent variable.
-    dirent_t dent;
+    int is_abs_path = ((*index) >= 1) && (entry->buffer[0] == '/');
+
     // If there is only one word, we are searching for a command.
     if (is_run_cmd) {
-        if (__folder_contains(cwd, cmd + 2, 0, &dent)) {
-            __cmd_sug(&dent, cmd_len - 2);
+        if (__folder_contains(cwd, entry->buffer + 2, 0, &dent)) {
+            pr_crit("__command_complete(%s, %2d, %2d) : Suggest '%s' -> '%s'.\n", entry->buffer, *index, *length,
+                    entry->buffer + 2, dent.d_name);
+            // __command_suggest(&dent, entry, index, length);
         }
     } else if (is_abs_path) {
         char _dirname[PATH_MAX];
-        if (!dirname(cmd, _dirname, sizeof(_dirname))) {
-            return;
+        if (!dirname(entry->buffer, _dirname, sizeof(_dirname))) {
+            return 0;
         }
-        const char *_basename = basename(cmd);
+        const char *_basename = basename(entry->buffer);
         if (!_basename) {
-            return;
+            return 0;
         }
         if ((*_dirname == 0) || (*_basename == 0)) {
-            return;
+            return 0;
         }
         if (__folder_contains(_dirname, _basename, 0, &dent)) {
-            __cmd_sug(&dent, strlen(_basename));
+            pr_crit("__command_complete(%s, %2d, %2d) : Suggest '%s' -> '%s'.\n", entry->buffer, *index, *length,
+                    entry->buffer, dent.d_name);
+            //__command_suggest(&dent, strlen(_basename));
         }
     } else if (words == 1) {
-        if (__search_in_path(cmd, &dent)) {
-            __cmd_sug(&dent, cmd_len);
+        if (__search_in_path(entry->buffer, &dent)) {
+            pr_crit("__command_complete(%s, %2d, %2d) : Suggest '%s' -> '%s'.\n", entry->buffer, *index, *length,
+                    entry->buffer, dent.d_name);
+            //__command_suggest(&dent, (*length));
         }
     } else {
         // Search the last occurrence of a space, from there on
         // we will have the last argument.
-        char *last_argument = strrchr(cmd, ' ');
+        char *last_argument = strrchr(entry->buffer, ' ');
         // We need to move ahead of one character if we found the space.
         last_argument = last_argument ? last_argument + 1 : NULL;
         // If there is no last argument.
         if (last_argument == NULL) {
-            return;
+            return 0;
         }
         char _dirname[PATH_MAX];
         if (!dirname(last_argument, _dirname, sizeof(_dirname))) {
-            return;
+            return 0;
         }
         const char *_basename = basename(last_argument);
         if (!_basename) {
-            return;
+            return 0;
         }
         if ((*_dirname != 0) && (*_basename != 0)) {
             if (__folder_contains(_dirname, _basename, 0, &dent)) {
-                __cmd_sug(&dent, strlen(_basename));
+                pr_crit("__command_complete(%s, %2d, %2d) : Suggest '%s' -> '%s'.\n", entry->buffer, *index, *length,
+                        last_argument, dent.d_name);
+                //__command_suggest(&dent, strlen(_basename));
             }
         } else if (*_basename != 0) {
             if (__folder_contains(cwd, _basename, 0, &dent)) {
-                __cmd_sug(&dent, strlen(_basename));
+                pr_crit("__command_complete(%s, %2d, %2d) : Suggest '%s' -> '%s'.\n", entry->buffer, *index, *length,
+                        last_argument, dent.d_name);
+                //__command_suggest(&dent, strlen(_basename));
             }
         }
     }
-#endif
+    return 0;
 }
-
-/// @brief Gets the inserted command.
-#if 0
-static void __cmd_get(rb_history_entry_t *entry)
-{
-    // Re-Initialize the cursor index.
-    cmd_cursor_index = 0;
-    // Initializing the current command line buffer.
-    memset(entry->buffer, 0, entry->size);
-
-    // Get terminal attributes for input handling.
-    struct termios _termios;
-    tcgetattr(STDIN_FILENO, &_termios);
-    _termios.c_lflag &= ~(ICANON | ECHO | ISIG);
-    tcsetattr(STDIN_FILENO, 0, &_termios);
-
-    do {
-        int c = getchar();
-        // Return Key
-        if (c == '\n') {
-            putchar('\n');
-            // Break the while loop.
-            __cmd_app(0);
-            break;
-        }
-        // It is a special character.
-        if (c == '\033') {
-            c = getchar();
-            if (c == '[') {
-                c = getchar(); // Get the char.
-                if ((c == 'A') || (c == 'B')) {
-                    rb_history_entry_t *history_entry = __history_fetch(c);
-                    if (history_entry != NULL) {
-                        // Clear the current command.
-                        __cmd_clr();
-                        // Sets the command.
-                        rb_history_entry_copy(entry->buffer, history_entry->buffer, entry->size);
-                        // Print the old command.
-                        printf(entry->buffer);
-                    }
-                } else if (c == 'D') {
-                    if (cmd_cursor_index > 0) {
-                        __move_cursor_back(1);
-                    }
-                } else if (c == 'C') {
-                    if ((cmd_cursor_index + 1) < CMD_LEN && (cmd_cursor_index + 1) <= strnlen(entry->buffer, entry->size)) {
-                        __move_cursor_forward(1);
-                    }
-                } else if (c == 'H') {
-                    __move_cursor_back(cmd_cursor_index);
-                } else if (c == 'F') {
-                    // Compute the offest to the end of the line, and move only if necessary.
-                    size_t offset = strnlen(entry->buffer, entry->size) - cmd_cursor_index;
-                    if (offset > 0) {
-                        __move_cursor_forward(offset);
-                    }
-                } else if (c == '3') {
-                    c = getchar(); // Get the char.
-                    if (c == '~') {
-                        __cmd_ers(0x7F);
-                    }
-                }
-            }
-        } else if (c == '\b') {
-            __cmd_ers('\b');
-        } else if (c == '\t') {
-            __cmd_complete();
-        } else if (c == 127) {
-            if ((cmd_cursor_index + 1) <= strnlen(entry->buffer, entry->size)) {
-                strcpy(entry->buffer + cmd_cursor_index, entry->buffer + cmd_cursor_index + 1);
-                putchar(127);
-            }
-        } else if (iscntrl(c)) {
-            if (c == CTRL('C')) {
-                // Re-set the index to the beginning.
-                cmd_cursor_index = 0;
-                // Go to the new line.
-                printf("\n");
-                // Sets the command.
-                __display_command("\0");
-                // Break the while loop.
-                break;
-            } else if (c == CTRL('U')) {
-                // Clear the current command.
-                __cmd_clr();
-                // Sets the command.
-                __display_command("\0");
-            } else if (c == CTRL('A')) {
-                __move_cursor_back(cmd_cursor_index);
-            } else if (c == CTRL('E')) {
-                // Compute the offest to the end of the line, and move only if necessary.
-                size_t offset = strnlen(entry->buffer, entry->size) - cmd_cursor_index;
-                if (offset > 0) {
-                    __move_cursor_forward(offset);
-                }
-            } else if (c == CTRL('D')) {
-                // Go to the new line.
-                printf("\n");
-                exit(0);
-            }
-        } else if ((c > 0) && (c != '\n')) {
-            if (__cmd_app(c)) {
-                putchar(c);
-            }
-        } else {
-            pr_debug("Unrecognized character %02x (%c)\n", c, c);
-        }
-    } while (cmd_cursor_index < CMD_LEN);
-
-    // Cleans all blanks at the beginning of the command.
-    trim(entry->buffer);
-
-    // Restore terminal attributes.
-    tcgetattr(STDIN_FILENO, &_termios);
-    _termios.c_lflag |= (ICANON | ECHO | ISIG);
-    tcsetattr(STDIN_FILENO, 0, &_termios);
-}
-#endif
 
 /// @brief Reads user input into a buffer, supporting basic editing features.
 /// @param buffer The buffer to store the input string.
@@ -681,7 +643,7 @@ static inline int __read_command(rb_history_entry_t *entry)
         //pr_debug("[%2d      ] %c (%u) (0)\n", index, c, c);
 
         // Ignore EOF and null or tab characters
-        if (c == EOF || c == 0 || c == '\t') {
+        if (c == EOF || c == 0) {
             continue;
         }
 
@@ -716,7 +678,7 @@ static inline int __read_command(rb_history_entry_t *entry)
         }
 
         if (c == '\t') {
-            __cmd_complete(entry);
+            __command_complete(entry, &index, &length);
             continue;
         }
 
@@ -833,15 +795,9 @@ static inline int __read_command(rb_history_entry_t *entry)
 
         //pr_debug("[%2d -> %2u] %c (%u) (0)\n", index, index + 1, c, c);
 
-        entry->buffer[index++] = c; // Insert new character
-        length++;                   // Increase length
-
-        putchar(c); // Show new character
-
-        // Check if we reached the buffer limit
-        if (index == (entry->size - 1)) {
-            entry->buffer[index] = 0; // Null-terminate the buffer
-            break;                    // Exit loop if buffer is full
+        // Append the character.
+        if (__command_append(entry, &index, &length, c)) {
+            break; // Exit loop if buffer is full.
         }
 
     } while (length < entry->size);
