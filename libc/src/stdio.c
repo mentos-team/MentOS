@@ -23,7 +23,7 @@ void puts(const char *str)
 
 int getchar(void)
 {
-    char c;
+    char c = 0;
     while (read(STDIN_FILENO, &c, 1) == 0) {
         continue;
     }
@@ -209,7 +209,7 @@ int fgetc(int fd)
 char *fgets(char *buf, int n, int fd)
 {
     int c;
-    char *p = buf;
+    char *p   = buf;
     int count = n - 1; // Leave space for null terminator
 
     // Read characters until reaching the limit or newline

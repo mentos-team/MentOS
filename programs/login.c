@@ -85,6 +85,16 @@ static inline int __read_input(char *buffer, size_t size, int show)
             continue;
         }
 
+        if (c == 127) { // DELETE
+            if (index < length) {
+                --length;                    // Decrease length
+                if (show) { putchar(0x7F); } // Show delete character
+                // Shift left to remove character at index
+                memmove(buffer + index, buffer + index + 1, length - index + 1);
+            }
+            continue;
+        }
+
         // Handle newline character to finish input
         if (c == '\n') {
             if (show) {
@@ -132,21 +142,18 @@ static inline int __read_input(char *buffer, size_t size, int show)
                         if (show) { puts("\033[1C"); } // Move the cursor right
                         index++;                       // Increase index
                     }
-                } else if (c == '1') {                                // HOME
+                } else if ((c == '1') && (getchar() == '~')) {        // HOME
                     if (show) { printf("\033[%dD", index); }          // Move cursor to the beginning
                     index = 0;                                        // Set index to the start
-                } else if (c == '4') {                                // END
+                } else if ((c == '4') && (getchar() == '~')) {        // END
                     if (show) { printf("\033[%dC", length - index); } // Move cursor to the end
                     index = length;                                   // Set index to the end
-                } else if (c == '2') {                                // INSERT
+                } else if ((c == '2') && (getchar() == '~')) {        // INSERT
                     insert_active = !insert_active;                   // Toggle insert mode
-                } else if (c == '3') {                                // DELETE
-                    if (index < length) {
-                        --length;                    // Decrease length
-                        if (show) { putchar(0x7F); } // Show delete character
-                        // Shift left to remove character at index
-                        memmove(buffer + index, buffer + index + 1, length - index + 1);
-                    }
+                } else if ((c == '5') && (getchar() == '~')) {        // PAGE_UP
+                    // Nothing to do.
+                } else if ((c == '6') && (getchar() == '~')) { // PAGE_DOWN
+                    // Nothing to do.
                 }
 
             } else if (c == '^') {
@@ -172,28 +179,26 @@ static inline int __read_input(char *buffer, size_t size, int show)
             continue;
         }
 
-        // Handle alphanumeric input
-        if (isdigit(c) || isalpha(c)) {
-            // Handle insertion based on insert mode
-            if (!insert_active) {
-                // Shift buffer to the right to insert new character
-                memmove(buffer + index + 1, buffer + index, length - index + 1);
-            } else if (show && (index < length - 1)) {
-                puts("\033[1C"); // Move cursor right
-                putchar('\b');   // Prepare to delete the character
-            }
-
-            buffer[index++] = c; // Insert new character
-            length++;            // Increase length
-
-            if (show) { putchar(c); } // Show new character
-
-            // Check if we reached the buffer limit
-            if (index == (size - 1)) {
-                buffer[index] = 0; // Null-terminate the buffer
-                break;             // Exit loop if buffer is full
-            }
+        // Handle insertion based on insert mode
+        if (!insert_active) {
+            // Shift buffer to the right to insert new character
+            memmove(buffer + index + 1, buffer + index, length - index + 1);
+        } else if (show && (index < length - 1)) {
+            puts("\033[1C"); // Move cursor right
+            putchar('\b');   // Prepare to delete the character
         }
+
+        buffer[index++] = c; // Insert new character
+        length++;            // Increase length
+
+        if (show) { putchar(c); } // Show new character
+
+        // Check if we reached the buffer limit
+        if (index == (size - 1)) {
+            buffer[index] = 0; // Null-terminate the buffer
+            break;             // Exit loop if buffer is full
+        }
+
     } while (length < size);
 
     return length; // Return total length of input

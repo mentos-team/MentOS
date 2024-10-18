@@ -4,10 +4,10 @@
 /// See LICENSE.md for details.
 
 // Setup the logging for this file (do this before any other include).
-#include "sys/kernel_levels.h"           // Include kernel log levels.
-#define __DEBUG_HEADER__ "[SHELL ]"      ///< Change header.
-#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
-#include "io/debug.h"                    // Include debugging functions.
+#include "sys/kernel_levels.h"          // Include kernel log levels.
+#define __DEBUG_HEADER__ "[SHELL ]"     ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_DEBUG ///< Set log level.
+#include "io/debug.h"                   // Include debugging functions.
 
 #include <sys/unistd.h>
 #include <sys/wait.h>
@@ -33,7 +33,7 @@
 /// Maximum length of commands.
 #define CMD_LEN 64
 /// Maximum lenght of the history.
-#define HISTORY_MAX 10
+#define HISTORY_MAX 3
 
 static inline void rb_history_entry_copy(char *dest, const char *src, unsigned size)
 {
@@ -48,10 +48,6 @@ DECLARE_FIXED_SIZE_2D_RING_BUFFER(char, history, HISTORY_MAX, CMD_LEN, 0)
 #define ENV_BRAK 2
 #define ENV_PROT 3
 
-// The input command.
-static char cmd[CMD_LEN] = { 0 };
-// The index of the cursor.
-static size_t cmd_cursor_index = 0;
 // History of commands.
 static rb_history_t history;
 // History reading index.
@@ -98,18 +94,6 @@ static inline int __count_words(const char *sentence)
         }
     } while (*it++);
     return result;
-}
-
-static inline void __set_echo(bool_t active)
-{
-    struct termios _termios;
-    tcgetattr(STDIN_FILENO, &_termios);
-    if (active) {
-        _termios.c_lflag |= (ICANON | ECHO);
-    } else {
-        _termios.c_lflag &= ~(ICANON | ECHO);
-    }
-    tcsetattr(STDIN_FILENO, 0, &_termios);
 }
 
 static inline int __folder_contains(
@@ -407,100 +391,56 @@ static int __cd(int argc, char *argv[])
     return 0;
 }
 
-/// @brief Push the command inside the history.
-static inline void __hst_push(char *_cmd)
+void __history_print(void)
 {
-    static rb_history_entry_t entry = { { 0 }, CMD_LEN };
-    rb_history_entry_copy(entry.buffer, _cmd, entry.size);
-    rb_history_push_back(&history, &entry);
+    rb_history_entry_t entry;
+    rb_history_init_entry(&entry);
+    pr_notice("H[S:%2u, C:%2u] :\n", history.size, history.count);
+    for (unsigned i = 0; i < history.count; i++) {
+        rb_history_get(&history, i, &entry);
+        pr_notice("[%2u] %s\n", i, entry.buffer);
+    }
+    pr_notice("\n");
+}
+
+/// @brief Push the command inside the history.
+/// @param entry The history entry to be added.
+static inline void __history_push(rb_history_entry_t *entry)
+{
+    // Push the new entry to the back of the history ring buffer.
+    rb_history_push_back(&history, entry);
+    // Set the history index to the current count, pointing to the end.
     history_index = history.count;
 }
 
 /// @brief Give the key allows to navigate through the history.
-static char *__hst_fetch(char direction)
+static rb_history_entry_t *__history_fetch(char direction)
 {
-    static char empty[CMD_LEN] = { 0 };
-    // Fetch previous.
-    if (direction == 'A') {
-        // Move the index.
-        if (history_index > 0) {
-            history_index--;
-        }
+    // If history is empty, return NULL.
+    if (history.count == 0) {
+        return NULL;
     }
-    // Fetch next.
-    else if (direction == 'B') {
-        // Move the index.
-        if (history_index < history.size) {
-            history_index++;
-        } else {
-            return empty;
-        }
+    // Move to the previous entry if direction is UP and index is greater than 0.
+    if ((direction == 'A') && (history_index > 0)) {
+        history_index--;
     }
-    return history.buffer[(history.tail + history_index) % history.size].buffer;
-}
-
-/// @brief Completely delete the current command.
-static inline void __cmd_clr(void)
-{
-    // First we need to get back to the end of the line.
-    while (cmd[cmd_cursor_index] != 0) {
-        ++cmd_cursor_index;
-        puts("\033[1C");
+    // Move to the next entry if direction is DOWN and index is less than the history count.
+    else if ((direction == 'B') && (history_index < history.count)) {
+        history_index++;
     }
-    memset(cmd, '\0', CMD_LEN);
-    // Then we delete all the character.
-    for (size_t it = 0; it < cmd_cursor_index; ++it) {
-        putchar('\b');
+    // Check if we reached the end of the history in DOWN direction.
+    if ((direction == 'B') && (history_index == history.count)) {
+        return NULL;
     }
-    // Reset the index.
-    cmd_cursor_index = 0;
-}
-
-/// @brief Sets the new command.
-static inline void __cmd_set(char *_cmd)
-{
-    // Outputs the command.
-    printf(_cmd);
-    // Moves the cursore.
-    cmd_cursor_index += strlen(_cmd);
-    // Copies the command.
-    strcpy(cmd, _cmd);
-}
-
-/// @brief Erases one character from the console.
-static inline void __cmd_ers(char c)
-{
-    if ((c == '\b') && (cmd_cursor_index > 0)) {
-        strcpy(cmd + cmd_cursor_index - 1, cmd + cmd_cursor_index);
-        putchar('\b');
-        --cmd_cursor_index;
-    } else if ((c == 0x7F) && (cmd[0] != 0) && ((cmd_cursor_index + 1) < CMD_LEN)) {
-        strcpy(cmd + cmd_cursor_index, cmd + cmd_cursor_index + 1);
-        putchar(0x7F);
-    }
-}
-
-/// @brief Appends the character `c` on the command.
-static inline int __cmd_app(char c)
-{
-    if ((cmd_cursor_index + 1) < CMD_LEN) {
-        // If at the current index there is a character, shift the entire
-        // command ahead.
-        if (cmd[cmd_cursor_index] != 0) {
-            // Move forward the entire string.
-            for (unsigned long i = strlen(cmd); i > cmd_cursor_index; --i) {
-                cmd[i] = cmd[i - 1];
-            }
-        }
-        // Place the new character.
-        cmd[cmd_cursor_index++] = c;
-        return 1;
-    }
-    return 0;
+    // Return the current history entry, adjusting for buffer wrap-around.
+    return history.buffer + ((history.tail + history_index) % history.size);
 }
 
 static inline void __cmd_sug(dirent_t *suggestion, size_t starting_position)
 {
+    // TODO!
+#if 0
+
     if (suggestion) {
         for (size_t i = starting_position; i < strlen(suggestion->d_name); ++i) {
             if (__cmd_app(suggestion->d_name[i])) {
@@ -514,10 +454,14 @@ static inline void __cmd_sug(dirent_t *suggestion, size_t starting_position)
             }
         }
     }
+#endif
 }
 
-static void __cmd_complete(void)
+static void __cmd_complete(rb_history_entry_t *entry)
 {
+    pr_crit("Complete: `%s`\n", entry->buffer);
+    // TODO!
+#if 0
     // Get the lenght of the command.
     size_t cmd_len = strlen(cmd);
     // Count the number of words.
@@ -598,28 +542,24 @@ static void __cmd_complete(void)
             }
         }
     }
-}
-
-static void __move_cursor_back(int n)
-{
-    printf("\033[%dD", n);
-    cmd_cursor_index -= n;
-}
-
-static void __move_cursor_forward(int n)
-{
-    printf("\033[%dC", n);
-    cmd_cursor_index += n;
+#endif
 }
 
 /// @brief Gets the inserted command.
-static void __cmd_get(void)
+#if 0
+static void __cmd_get(rb_history_entry_t *entry)
 {
     // Re-Initialize the cursor index.
     cmd_cursor_index = 0;
-    // Initializing the current command line buffer
-    memset(cmd, '\0', CMD_LEN);
-    __set_echo(false);
+    // Initializing the current command line buffer.
+    memset(entry->buffer, 0, entry->size);
+
+    // Get terminal attributes for input handling.
+    struct termios _termios;
+    tcgetattr(STDIN_FILENO, &_termios);
+    _termios.c_lflag &= ~(ICANON | ECHO | ISIG);
+    tcsetattr(STDIN_FILENO, 0, &_termios);
+
     do {
         int c = getchar();
         // Return Key
@@ -635,26 +575,28 @@ static void __cmd_get(void)
             if (c == '[') {
                 c = getchar(); // Get the char.
                 if ((c == 'A') || (c == 'B')) {
-                    char *old_cmd = __hst_fetch(c);
-                    if (old_cmd != NULL) {
+                    rb_history_entry_t *history_entry = __history_fetch(c);
+                    if (history_entry != NULL) {
                         // Clear the current command.
                         __cmd_clr();
                         // Sets the command.
-                        __cmd_set(old_cmd);
+                        rb_history_entry_copy(entry->buffer, history_entry->buffer, entry->size);
+                        // Print the old command.
+                        printf(entry->buffer);
                     }
                 } else if (c == 'D') {
                     if (cmd_cursor_index > 0) {
                         __move_cursor_back(1);
                     }
                 } else if (c == 'C') {
-                    if ((cmd_cursor_index + 1) < CMD_LEN && (cmd_cursor_index + 1) <= strlen(cmd)) {
+                    if ((cmd_cursor_index + 1) < CMD_LEN && (cmd_cursor_index + 1) <= strnlen(entry->buffer, entry->size)) {
                         __move_cursor_forward(1);
                     }
                 } else if (c == 'H') {
                     __move_cursor_back(cmd_cursor_index);
                 } else if (c == 'F') {
                     // Compute the offest to the end of the line, and move only if necessary.
-                    size_t offset = strlen(cmd) - cmd_cursor_index;
+                    size_t offset = strnlen(entry->buffer, entry->size) - cmd_cursor_index;
                     if (offset > 0) {
                         __move_cursor_forward(offset);
                     }
@@ -670,8 +612,8 @@ static void __cmd_get(void)
         } else if (c == '\t') {
             __cmd_complete();
         } else if (c == 127) {
-            if ((cmd_cursor_index + 1) <= strlen(cmd)) {
-                strcpy(cmd + cmd_cursor_index, cmd + cmd_cursor_index + 1);
+            if ((cmd_cursor_index + 1) <= strnlen(entry->buffer, entry->size)) {
+                strcpy(entry->buffer + cmd_cursor_index, entry->buffer + cmd_cursor_index + 1);
                 putchar(127);
             }
         } else if (iscntrl(c)) {
@@ -681,19 +623,19 @@ static void __cmd_get(void)
                 // Go to the new line.
                 printf("\n");
                 // Sets the command.
-                __cmd_set("\0");
+                __display_command("\0");
                 // Break the while loop.
                 break;
             } else if (c == CTRL('U')) {
                 // Clear the current command.
                 __cmd_clr();
                 // Sets the command.
-                __cmd_set("\0");
+                __display_command("\0");
             } else if (c == CTRL('A')) {
                 __move_cursor_back(cmd_cursor_index);
             } else if (c == CTRL('E')) {
                 // Compute the offest to the end of the line, and move only if necessary.
-                size_t offset = strlen(cmd) - cmd_cursor_index;
+                size_t offset = strnlen(entry->buffer, entry->size) - cmd_cursor_index;
                 if (offset > 0) {
                     __move_cursor_forward(offset);
                 }
@@ -712,8 +654,199 @@ static void __cmd_get(void)
     } while (cmd_cursor_index < CMD_LEN);
 
     // Cleans all blanks at the beginning of the command.
-    trim(cmd);
-    __set_echo(true);
+    trim(entry->buffer);
+
+    // Restore terminal attributes.
+    tcgetattr(STDIN_FILENO, &_termios);
+    _termios.c_lflag |= (ICANON | ECHO | ISIG);
+    tcsetattr(STDIN_FILENO, 0, &_termios);
+}
+#endif
+
+/// @brief Reads user input into a buffer, supporting basic editing features.
+/// @param buffer The buffer to store the input string.
+/// @param bufsize The maximum size of the buffer.
+/// @return The length of the input read, or -1 if a special command (Ctrl+C) is
+/// detected.
+static inline int __read_command(rb_history_entry_t *entry)
+{
+    int index = 0, c, length = 0, insert_active = 0;
+
+    // Clear the buffer at the start
+    memset(entry->buffer, 0, entry->size);
+
+    do {
+        c = getchar(); // Read a character from input
+
+        //pr_debug("[%2d      ] %c (%u) (0)\n", index, c, c);
+
+        // Ignore EOF and null or tab characters
+        if (c == EOF || c == 0 || c == '\t') {
+            continue;
+        }
+
+        // Handle newline character to finish input
+        if (c == '\n') {
+            putchar('\n'); // Display a newline
+            return length; // Return length of input
+        }
+
+        // Handle delete character.
+        if (c == 127) {
+            if (index < length) {
+                --length;     // Decrease length
+                putchar(127); // Show delete character.
+                // Shift left to remove character at index
+                memmove(entry->buffer + index, entry->buffer + index + 1, length - index + 1);
+            }
+            continue;
+        }
+
+        // Handle backspace for deletion
+        if (c == '\b') {
+            if (index > 0) {
+                --length; // Decrease length
+                --index;  // Move index back
+                // Shift the buffer left to remove the character
+                memmove(entry->buffer + index, entry->buffer + index + 1, length - index + 1);
+                // Show backspace action.
+                putchar('\b');
+            }
+            continue;
+        }
+
+        if (c == '\t') {
+            __cmd_complete(entry);
+            continue;
+        }
+
+        // Handle space character
+        if (c == ' ') {
+            // Shift buffer to the right to insert space
+            memmove(entry->buffer + index + 1, entry->buffer + index, length - index + 1);
+            entry->buffer[index++] = c; // Insert space
+            length++;
+            // Show space.
+            putchar(c);
+            continue;
+        }
+
+        // Handle escape sequences (for arrow keys, home, end, etc.)
+        if (c == '\033') {
+            c = getchar(); // Get the next character
+            //pr_debug("[%2d      ] %c (%u) (1)\n", index, c, c);
+            if (c == '[') {
+                // Get the direction key (Left, Right, Home, End, Insert, Delete)
+                c = getchar();
+                //pr_debug("[%2d      ] %c (%u) (2)\n", index, c, c);
+                if ((c == 'A') || (c == 'B')) {
+                    // Clear the current command.
+                    memset(entry->buffer, 0, entry->size);
+                    // Clear the current command from display
+                    while (index--) { putchar('\b'); }
+                    // Reset index.
+                    index = 0;
+                    // Fetch the history element.
+                    rb_history_entry_t *history_entry = __history_fetch(c);
+                    if (history_entry != NULL) {
+                        // Sets the command.
+                        rb_history_entry_copy(entry->buffer, history_entry->buffer, entry->size);
+                        // Print the old command.
+                        printf(entry->buffer);
+                        // Set index to the end.
+                        index = strnlen(entry->buffer, entry->size);
+                    }
+                }
+                // LEFT Arrow.
+                else if (c == 'D') {
+                    pr_debug("%d > 0\n", index);
+                    if (index > 0) {
+                        puts("\033[1D"); // Move the cursor left
+                        index--;         // Decrease index
+                    }
+                }
+                // RIGHT Arrow.
+                else if (c == 'C') {
+                    pr_debug("%d < %d\n", index, length);
+                    if (index < length) {
+                        puts("\033[1C"); // Move the cursor right
+                        index++;         // Increase index
+                    }
+                }
+                // HOME
+                else if (c == '1') {
+                    if (getchar() == '~') {
+                        printf("\033[%dD", index); // Move cursor to the beginning
+                        index = 0;                 // Set index to the start
+                    }
+                }
+                // END
+                else if (c == '4') {
+                    if (getchar() == '~') {
+                        printf("\033[%dC", length - index); // Move cursor to the end
+                        index = length;                     // Set index to the end
+                    }
+                }
+                // INSERT
+                else if (c == '2') {
+                    if (getchar() == '~') {
+                        insert_active = !insert_active; // Toggle insert mode
+                    }
+                } else if ((c == '5') && (getchar() == '~')) { // PAGE_UP
+                    // Nothing to do.
+                } else if ((c == '6') && (getchar() == '~')) { // PAGE_DOWN
+                    // Nothing to do.
+                }
+
+            } else if (c == '^') {
+                // Handle special commands (Ctrl+C, Ctrl+U)
+                c = getchar();
+                //pr_debug("[%2d      ] %c (%u) (2)\n", index, c, c);
+                if (c == 'C') {
+                    memset(entry->buffer, 0, entry->size); // Clear buffer
+                    putchar('\n');
+                    return -1; // Return -1 on Ctrl+C
+                }
+
+                if (c == 'U') {
+                    // Clear the current command.
+                    memset(entry->buffer, 0, entry->size);
+                    // Clear the current command from display
+                    while (index--) {
+                        putchar('\b'); // Move cursor back.
+                    }
+                    index  = 0; // Reset index.
+                    length = 0;
+                }
+            }
+            continue;
+        }
+
+        // Handle insertion based on insert mode
+        if (!insert_active) {
+            // Shift buffer to the right to insert new character
+            memmove(entry->buffer + index + 1, entry->buffer + index, length - index + 1);
+        } else if (index < length - 1) {
+            puts("\033[1C"); // Move cursor right
+            putchar('\b');   // Prepare to delete the character
+        }
+
+        //pr_debug("[%2d -> %2u] %c (%u) (0)\n", index, index + 1, c, c);
+
+        entry->buffer[index++] = c; // Insert new character
+        length++;                   // Increase length
+
+        putchar(c); // Show new character
+
+        // Check if we reached the buffer limit
+        if (index == (entry->size - 1)) {
+            entry->buffer[index] = 0; // Null-terminate the buffer
+            break;                    // Exit loop if buffer is full
+        }
+
+    } while (length < entry->size);
+
+    return length; // Return total length of input
 }
 
 /// @brief Gets the options from the command.
@@ -827,7 +960,7 @@ static void __setup_redirects(int *argcp, char ***argvp)
     }
 }
 
-static int __execute_cmd(char *command, bool_t add_to_history)
+static int __execute_command(rb_history_entry_t *entry)
 {
     int _status = 0;
     // Retrieve the options from the command.
@@ -835,15 +968,10 @@ static int __execute_cmd(char *command, bool_t add_to_history)
     int _argc = 1;
     // The vector of arguments.
     char **_argv;
-    __alloc_argv(command, &_argc, &_argv);
+    __alloc_argv(entry->buffer, &_argc, &_argv);
     // Check if the command is empty.
     if (_argc == 0) {
         return 0;
-    }
-
-    // Add the command to the history.
-    if (add_to_history) {
-        __hst_push(cmd);
     }
 
     if (!strcmp(_argv[0], "init")) {
@@ -903,18 +1031,20 @@ static int __execute_cmd(char *command, bool_t add_to_history)
 
 static int __execute_file(char *path)
 {
+    rb_history_entry_t entry;
+    rb_history_init_entry(&entry);
     int fd;
     if ((fd = open(path, O_RDONLY, 0)) == -1) {
         printf("%s: %s\n", path, strerror(errno));
         return -errno;
     }
-    while (fgets(cmd, sizeof(cmd), fd)) {
-        if (cmd[0] == '#') {
+    while (fgets(entry.buffer, entry.size, fd)) {
+        if (entry.buffer[0] == '#') {
             continue;
         }
 
-        if ((status = __execute_cmd(cmd, false)) != 0) {
-            printf("\n%s: exited with %d\n", cmd, status);
+        if ((status = __execute_command(&entry)) != 0) {
+            printf("\n%s: exited with %d\n", entry.buffer, status);
         }
     }
 
@@ -924,6 +1054,9 @@ static int __execute_file(char *path)
 
 static void __interactive_mode(void)
 {
+    rb_history_entry_t entry;
+    rb_history_init_entry(&entry);
+
     stat_t buf;
     if (stat(".shellrc", &buf) == 0) {
         int ret = __execute_file(".shellrc");
@@ -936,9 +1069,35 @@ static void __interactive_mode(void)
     while (true) {
         // First print the prompt.
         __prompt_print();
+
+        // Get terminal attributes for input handling
+        struct termios _termios;
+        tcgetattr(STDIN_FILENO, &_termios);
+        _termios.c_lflag &= ~(ICANON | ECHO | ISIG); // Disable canonical mode and echo
+        tcsetattr(STDIN_FILENO, 0, &_termios);       // Set modified attributes
+
         // Get the input command.
-        __cmd_get();
-        __execute_cmd(cmd, true);
+        if (__read_command(&entry) < 0) {
+            pr_crit("Error reading command...\n");
+            // Restore terminal attributes
+            tcgetattr(STDIN_FILENO, &_termios);
+            _termios.c_lflag |= (ICANON | ECHO | ISIG); // Re-enable canonical mode and echo
+            tcsetattr(STDIN_FILENO, 0, &_termios);
+            continue;
+        }
+
+        // Restore terminal attributes
+        tcgetattr(STDIN_FILENO, &_termios);
+        _termios.c_lflag |= (ICANON | ECHO | ISIG); // Re-enable canonical mode and echo
+        tcsetattr(STDIN_FILENO, 0, &_termios);
+
+        // Add the command to the history.
+        if (strnlen(entry.buffer, entry.size) > 0) {
+            __history_push(&entry);
+        }
+
+        // Execute the command.
+        __execute_command(&entry);
     }
 #pragma clang diagnostic pop
 }
@@ -953,11 +1112,6 @@ int main(int argc, char *argv[])
     setsid();
     // Initialize the history.
     rb_history_init(&history, rb_history_entry_copy);
-
-    struct termios _termios;
-    tcgetattr(STDIN_FILENO, &_termios);
-    _termios.c_lflag &= ~ISIG;
-    tcsetattr(STDIN_FILENO, 0, &_termios);
 
     char *USER = getenv("USER");
     if (USER == NULL) {

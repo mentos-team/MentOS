@@ -4,10 +4,10 @@
 /// See LICENSE.md for details.
 
 // Setup the logging for this file (do this before any other include).
-#include "sys/kernel_levels.h"           // Include kernel log levels.
-#define __DEBUG_HEADER__ "[PROCV ]"      ///< Change header.
-#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
-#include "io/debug.h"                    // Include debugging functions.
+#include "sys/kernel_levels.h"          // Include kernel log levels.
+#define __DEBUG_HEADER__ "[PROCV ]"     ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_DEBUG ///< Set log level.
+#include "io/debug.h"                   // Include debugging functions.
 
 #include "bits/ioctls.h"
 #include "bits/termios-struct.h"
@@ -26,11 +26,11 @@
 /// @param rb the ring-buffer to print.
 void rb_keybuffer_print(rb_keybuffer_t *rb)
 {
-    pr_notice("(%u)[ ", rb->count);
+    pr_debug("(%u)[ ", rb->count);
     for (unsigned i = 0; i < rb->count; ++i) {
-        pr_notice("%d ", rb_keybuffer_get(rb, i));
+        pr_debug("%d ", rb_keybuffer_get(rb, i));
     }
-    pr_notice("]\n");
+    pr_debug("]\n");
 }
 
 /// @brief Read function for the proc video system.
@@ -61,6 +61,7 @@ static ssize_t procv_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyt
     // pop the buffer until it's empty.
     if (!rb_keybuffer_is_empty(rb) && (!flg_icanon || (rb_keybuffer_peek_front(rb) == '\n'))) {
         // Return the newline character.
+        rb_keybuffer_print(rb);
         *((char *)buf) = rb_keybuffer_pop_back(rb) & 0x00FF;
         // Indicate a character has been returned.
         return 1;
@@ -77,83 +78,90 @@ static ssize_t procv_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyt
     // Keep only the character, not the scancode.
     c &= 0x00FF;
 
-    // Handle backspace.
-    if (c == '\b') {
-        // If ECHOE is off and ECHO is on, show the `^?` string.
+    // Handle special characters.
+    switch (c) {
+    case '\n':
+    case '\t':
+        // Optionally display the character if echo is enabled.
+        if (flg_echo) {
+            video_putc(c);
+        }
+        // Return the character.
+        *((char *)buf) = c;
+        return 1;
+
+    case '\b':
+        // Handle backspace.
         if (!flg_echoe && flg_echo) {
             video_puts("^?");
         }
-
-        // If we are in canonical mode, pop the previous character.
         if (flg_icanon) {
-            // Remove the last character from the buffer.
-            rb_keybuffer_pop_front(rb);
-
-            // Optionally display the backspace character.
-            if (flg_echoe) { video_putc(c); }
+            // Canonical mode: Remove the last character from the buffer.
+            if (!rb_keybuffer_is_empty(rb)) {
+                rb_keybuffer_pop_front(rb);
+                if (flg_echoe) {
+                    video_putc(c);
+                }
+            }
+            return 0; // No character returned for backspace.
         } else {
-            // Add the backspace character to the buffer.
+            // Non-canonical mode: Add backspace to the buffer and return it.
             rb_keybuffer_push_front(rb, c);
-
-            // Return the backspace character.
             *((char *)buf) = rb_keybuffer_pop_back(rb) & 0x00FF;
-
-            // Indicate a character has been returned.
             return 1;
         }
 
-        // No character returned for backspace handling.
-        return 0;
-    }
-
-    // Handle delete key (0x7F).
-    if (c == 0x7F) {
+    case 127: // Delete key.
+        // Optionally display the character if echo is enabled.
         if (flg_echo) {
-            // Print escape sequence for delete.
-            video_puts("^[[3~");
+            video_putc(c);
         }
+        // Return the character.
+        *((char *)buf) = c;
+        return 1;
 
-        // Indicate no character was returned.
-        return 0;
+    default:
+        if (iscntrl(c)) {
+            rb_keybuffer_push_front(rb, c);
+            // Handle control characters in both canonical and non-canonical modes.
+            if (flg_isig) {
+                if (c == 0x03) {
+                    // Send SIGTERM on Ctrl+C.
+                    sys_kill(process->pid, SIGTERM);
+                    return 0;
+                } else if (c == 0x1A) {
+                    // Send SIGSTOP on Ctrl+Z.
+                    sys_kill(process->pid, SIGSTOP);
+                    return 0;
+                }
+            }
+            if (isalpha('A' + (c - 1))) {
+                // Display control character representation (e.g., ^A).
+                if (flg_echo) {
+                    video_putc('^');
+                    video_putc('A' + (c - 1));
+                }
+                // Add control character escape sequence to the buffer.
+                rb_keybuffer_push_front(rb, '\033');
+                rb_keybuffer_push_front(rb, '^');
+                rb_keybuffer_push_front(rb, 'A' + (c - 1));
+                return 3;
+            }
+            return 0;
+        }
+        break;
     }
 
     // Add the character to the buffer.
     rb_keybuffer_push_front(rb, c);
 
-    if (iscntrl(c)) {
-        if ((c == 0x03) && (flg_isig)) {
-            sys_kill(process->pid, SIGTERM);
-        } else if ((c == 0x1A) && (flg_isig)) {
-            sys_kill(process->pid, SIGSTOP);
-        }
-
-        if (isalpha('A' + (c - 1)) && (c != '\n') && (c != '\b') && (c != '\t')) {
-            // If echo is activated, output the character to video.
-            if (flg_echo) {
-                video_putc('^');
-                video_putc('A' + (c - 1));
-            }
-
-            rb_keybuffer_push_front(rb, '\033');
-            rb_keybuffer_push_front(rb, '^');
-            rb_keybuffer_push_front(rb, 'A' + (c - 1));
-
-            return 3;
-        }
-        // Echo the character.
-        // if (flg_echo) {
-        //     video_putc(c);
-        // }
-        // return 1;
-    }
-
-    // If we are NOT in canonical mode, send the character back to user immediately.
+    // If not in canonical mode, return the character immediately.
     if (!flg_icanon) {
-        // Return the character.
         *((char *)buf) = rb_keybuffer_pop_back(rb) & 0x00FF;
-        // Indicate a character has been returned.
         return 1;
     }
+
+    // FIXHERE: Handle additional edge cases for different control sequences if needed.
 
     // Default return indicating no character was processed.
     return 0;

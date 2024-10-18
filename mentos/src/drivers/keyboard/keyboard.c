@@ -57,6 +57,20 @@ static inline void keyboard_push_back(unsigned int c)
     spinlock_unlock(&scancodes_lock);
 }
 
+/// @brief Pushes a character into the scancode ring buffer.
+/// @param c The character to push into the ring buffer.
+static inline void keyboard_push_front(unsigned int c)
+{
+    // Lock the scancode buffer to ensure thread safety during push operation.
+    spinlock_lock(&scancodes_lock);
+
+    // Push the character into the front of the scancode buffer.
+    rb_keybuffer_push_front(&scancodes, (int)c);
+
+    // Unlock the buffer after the push operation is complete.
+    spinlock_unlock(&scancodes_lock);
+}
+
 /// @brief Pushes a sequence of characters (scancodes) into the keyboard buffer.
 /// @param sequence A null-terminated string representing the sequence to push.
 static inline void keyboard_push_back_sequence(char *sequence)
@@ -148,11 +162,11 @@ void keyboard_isr(pt_regs *f)
         pr_debug("Press(KBD_RIGHT_CONTROL)\n");
     } else if (scancode == KEY_LEFT_ALT) {
         bitmask_set_assign(kflags, KBD_LEFT_ALT);
-        keyboard_push_back(scancode << 16u);
+        keyboard_push_front(scancode << 16u);
         pr_debug("Press(KBD_LEFT_ALT)\n");
     } else if (scancode == KEY_RIGHT_ALT) {
         bitmask_set_assign(kflags, KBD_RIGHT_ALT);
-        keyboard_push_back(scancode << 16u);
+        keyboard_push_front(scancode << 16u);
         pr_debug("Press(KBD_RIGHT_ALT)\n");
     } else if (scancode == (KEY_LEFT_SHIFT | CODE_BREAK)) {
         bitmask_clear_assign(kflags, KBD_LEFT_SHIFT);
@@ -185,10 +199,10 @@ void keyboard_isr(pt_regs *f)
         keyboard_update_leds();
         pr_debug("Toggle(KBD_SCROLL_LOCK)\n");
     } else if (scancode == KEY_BACKSPACE) {
-        keyboard_push_back('\b');
+        keyboard_push_front('\b');
         pr_debug("Press(KEY_BACKSPACE)\n");
     } else if ((scancode == KEY_ENTER) || (scancode == KEY_KP_RETURN)) {
-        keyboard_push_back('\n');
+        keyboard_push_front('\n');
         pr_debug("Press(KEY_ENTER)\n");
     } else if ((scancode == KEY_UP_ARROW) || (keypad_code == KEY_KP8)) {
         pr_debug("Press(KEY_UP_ARROW)\n");
@@ -243,7 +257,7 @@ void keyboard_isr(pt_regs *f)
         keyboard_push_front_sequence("\033[2~");
     } else if ((scancode == KEY_DELETE) || (keypad_code == KEY_KP_DEC)) {
         pr_debug("Press(KEY_DELETE)\n");
-        keyboard_push_front_sequence("\033[3~");
+        keyboard_push_front(127);
     } else if ((scancode == KEY_HOME) || (keypad_code == KEY_KP7)) {
         pr_debug("Press(KEY_HOME)\n");
         keyboard_push_front_sequence("\033[1~");
@@ -258,23 +272,21 @@ void keyboard_isr(pt_regs *f)
         keyboard_push_front_sequence("\033[6~");
     } else if (scancode == KEY_ESCAPE) {
         // Nothing to do.
-    } else if (keypad_code == KEY_5) {
-        // Nothing to do.
     } else if (!(scancode & CODE_BREAK)) {
-        pr_debug("scancode : %04x (%c)\n", scancode, scancode);
         // Get the current keymap.
         const keymap_t *keymap = get_keymap(scancode);
+        pr_debug("scancode : %04x (%c)\n", scancode, keymap->normal);
         // Get the specific keymap.
         if (!bitmask_check(kflags, KBD_LEFT_SHIFT | KBD_RIGHT_SHIFT) != !bitmask_check(kflags, KBD_CAPS_LOCK)) {
-            keyboard_push_back(keymap->shift);
+            keyboard_push_front(keymap->shift);
         } else if ((get_keymap_type() == KEYMAP_IT) && bitmask_check(kflags, KBD_RIGHT_ALT) && (bitmask_check(kflags, KBD_LEFT_SHIFT | KBD_RIGHT_SHIFT))) {
-            keyboard_push_back(keymap->alt);
+            keyboard_push_front(keymap->alt);
         } else if (bitmask_check(kflags, KBD_RIGHT_ALT)) {
-            keyboard_push_back(keymap->alt);
+            keyboard_push_front(keymap->alt);
         } else if (bitmask_check(kflags, KBD_LEFT_CONTROL | KBD_RIGHT_CONTROL)) {
-            keyboard_push_back(keymap->ctrl);
+            keyboard_push_front(keymap->ctrl);
         } else {
-            keyboard_push_back(keymap->normal);
+            keyboard_push_front(keymap->normal);
         }
     }
     pic8259_send_eoi(IRQ_KEYBOARD);
