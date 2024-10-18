@@ -577,7 +577,7 @@ static int __command_complete(
     // If there is only one word, we are searching for a command.
     if (is_run_cmd) {
         if (__folder_contains(cwd, entry->buffer + 2, 0, &dent)) {
-            pr_crit("__command_complete(%s, %2d, %2d) : Suggest '%s' -> '%s'.\n", entry->buffer, *index, *length,
+            pr_crit("__command_complete(%s, %2d, %2d) : Suggest run '%s' -> '%s'.\n", entry->buffer, *index, *length,
                     entry->buffer + 2, dent.d_name);
             __command_suggest(
                 dent.d_name,
@@ -642,15 +642,27 @@ static int __command_complete(
         }
         if ((*_dirname != 0) && (*_basename != 0)) {
             if (__folder_contains(_dirname, _basename, 0, &dent)) {
-                pr_crit("__command_complete(%s, %2d, %2d) : Suggest '%s' -> '%s'.\n", entry->buffer, *index, *length,
+                pr_crit("__command_complete(%s, %2d, %2d) : Suggest 1 '%s' -> '%s'.\n", entry->buffer, *index, *length,
                         last_argument, dent.d_name);
-                //__command_suggest(&dent, strlen(_basename));
+                __command_suggest(
+                    dent.d_name,
+                    dent.d_type,
+                    strlen(_basename),
+                    entry,
+                    index,
+                    length);
             }
         } else if (*_basename != 0) {
             if (__folder_contains(cwd, _basename, 0, &dent)) {
-                pr_crit("__command_complete(%s, %2d, %2d) : Suggest '%s' -> '%s'.\n", entry->buffer, *index, *length,
+                pr_crit("__command_complete(%s, %2d, %2d) : Suggest 2 '%s' -> '%s'.\n", entry->buffer, *index, *length,
                         last_argument, dent.d_name);
-                //__command_suggest(&dent, strlen(_basename));
+                __command_suggest(
+                    dent.d_name,
+                    dent.d_type,
+                    strlen(_basename),
+                    entry,
+                    index,
+                    length);
             }
         }
     }
