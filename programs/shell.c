@@ -614,7 +614,13 @@ static int __command_complete(
         if (__search_in_path(entry->buffer, &dent)) {
             pr_crit("__command_complete(%s, %2d, %2d) : Suggest in path '%s' -> '%s'.\n", entry->buffer, *index, *length,
                     entry->buffer, dent.d_name);
-            //__command_suggest(&dent, (*length));
+            __command_suggest(
+                dent.d_name,
+                dent.d_type,
+                *index,
+                entry,
+                index,
+                length);
         }
     } else {
         // Search the last occurrence of a space, from there on
