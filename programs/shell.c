@@ -600,13 +600,19 @@ static int __command_complete(
             return 0;
         }
         if (__folder_contains(_dirname, _basename, 0, &dent)) {
-            pr_crit("__command_complete(%s, %2d, %2d) : Suggest '%s' -> '%s'.\n", entry->buffer, *index, *length,
+            pr_crit("__command_complete(%s, %2d, %2d) : Suggest abs '%s' -> '%s'.\n", entry->buffer, *index, *length,
                     entry->buffer, dent.d_name);
-            //__command_suggest(&dent, strlen(_basename));
+            __command_suggest(
+                dent.d_name,
+                dent.d_type,
+                strlen(_basename),
+                entry,
+                index,
+                length);
         }
     } else if (words == 1) {
         if (__search_in_path(entry->buffer, &dent)) {
-            pr_crit("__command_complete(%s, %2d, %2d) : Suggest '%s' -> '%s'.\n", entry->buffer, *index, *length,
+            pr_crit("__command_complete(%s, %2d, %2d) : Suggest in path '%s' -> '%s'.\n", entry->buffer, *index, *length,
                     entry->buffer, dent.d_name);
             //__command_suggest(&dent, (*length));
         }
