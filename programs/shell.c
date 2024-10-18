@@ -119,8 +119,14 @@ static inline int __folder_contains(
     }
     // Prepare the variables for the search.
     dirent_t dent;
-    size_t entry_len = strlen(entry);
-    int found        = 0;
+    size_t entry_len;
+    int found = 0;
+
+    entry_len = strlen(entry);
+    if (entry_len == 0) {
+        return 0;
+    }
+
     while (getdents(fd, &dent, sizeof(dirent_t)) == sizeof(dirent_t)) {
         if (accepted_type && (accepted_type != dent.d_type)) {
             continue;
@@ -150,8 +156,9 @@ static inline int __search_in_path(const char *entry, dirent_t *result)
         return 0;
     }
     do {
-        if (__folder_contains(token, entry, DT_REG, result))
+        if (__folder_contains(token, entry, DT_REG, result)) {
             return 1;
+        }
     } while ((token = strtok(NULL, ":")));
     free(path);
     return 0;
@@ -479,28 +486,35 @@ static inline int __command_append(
 
 /// @brief Suggests a directory entry to be appended to the current command
 /// buffer.
-/// @param suggestion Pointer to the directory entry to suggest.
+/// @param filename Pointer to the file name.
+/// @param filetype The file type.
 /// @param entry Pointer to the history entry structure.
 /// @param index Pointer to the current index in the buffer.
 /// @param length Pointer to the current length of the buffer.
 static inline void __command_suggest(
-    dirent_t *suggestion,
+    const char *filename,
+    int filetype,
+    int offset,
     rb_history_entry_t *entry,
     int *index,
     int *length)
 {
     // Check if there is a valid suggestion to process.
-    if (suggestion) {
+    if (filename) {
         // Iterate through the characters of the suggested directory entry name.
-        for (int i = (*index); i < strlen(suggestion->d_name); ++i) {
+        for (int i = offset; i < strlen(filename); ++i) {
+            pr_crit("[%2d] '%c'\n",
+                    i,
+                    filename[i],
+                    entry->buffer);
             // Append the current character to the buffer.
             // If the buffer is full, break the loop.
-            if (__command_append(entry, index, length, suggestion->d_name[i])) {
+            if (__command_append(entry, index, length, filename[i])) {
                 break;
             }
         }
         // If the suggestion is a directory, append a trailing slash.
-        if ((suggestion->d_type == DT_DIR) && (entry->buffer[(*index) - 1] != '/')) {
+        if ((filetype == DT_DIR) && (entry->buffer[(*index) - 1] != '/')) {
             // Append the slash character to indicate a directory.
             __command_append(entry, index, length, '/');
         }
@@ -565,7 +579,13 @@ static int __command_complete(
         if (__folder_contains(cwd, entry->buffer + 2, 0, &dent)) {
             pr_crit("__command_complete(%s, %2d, %2d) : Suggest '%s' -> '%s'.\n", entry->buffer, *index, *length,
                     entry->buffer + 2, dent.d_name);
-            // __command_suggest(&dent, entry, index, length);
+            __command_suggest(
+                dent.d_name,
+                dent.d_type,
+                (*index) - 2,
+                entry,
+                index,
+                length);
         }
     } else if (is_abs_path) {
         char _dirname[PATH_MAX];
