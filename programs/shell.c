@@ -278,8 +278,13 @@ static char *__getenv(const char *var)
 /// @param buf_len The maximum length of the buffer.
 /// @param str_len The length of the input string (if provided, otherwise it will be calculated).
 /// @param null_terminate If true, the resulting buffer will be null-terminated.
-static void ___expand_env(char *str, char *buf, size_t buf_len, size_t str_len, bool_t null_terminate)
+static void ___expand_env(char *str, size_t str_len, char *buf, size_t buf_len, bool_t null_terminate)
 {
+    // Input validation: Ensure that str and buf are not NULL, and that buf_len is valid.
+    if ((str == NULL) || (buf == NULL) || (buf_len == 0)) {
+        pr_crit("Error: Invalid input parameters to ___expand_env.\n");
+        return;
+    }
     // Buffer where we store the name of the variable.
     char buffer[BUFSIZ] = { 0 };
     // Flags used to keep track of the special characters.
@@ -288,10 +293,6 @@ static void ___expand_env(char *str, char *buf, size_t buf_len, size_t str_len, 
     char *env_start = NULL;
     // Pointer to store the retrieved environmental variable value.
     char *ENV = NULL;
-    // If str_len is 0, calculate the length of the input string.
-    if (!str_len) {
-        str_len = strlen(str);
-    }
     // Position where we are writing on the buffer.
     int b_pos = 0;
     // Iterate through the input string.
@@ -392,7 +393,7 @@ static void ___expand_env(char *str, char *buf, size_t buf_len, size_t str_len, 
 /// @param buf_len The size of the buffer.
 static void __expand_env(char *str, char *buf, size_t buf_len)
 {
-    ___expand_env(str, buf, buf_len, 0, false);
+    ___expand_env(str, 0, buf, buf_len, false);
 }
 
 /// @brief Sets environment variables based on arguments.
@@ -597,6 +598,16 @@ static inline int __command_append(
     int *length,
     char c)
 {
+    // Input validation: Ensure entry, index, and length are valid.
+    if ((entry == NULL) || (index == NULL) || (length == NULL)) {
+        pr_crit("Error: Invalid input to __command_append.\n");
+        return 1;
+    }
+    // Ensure index does not exceed the buffer size limit.
+    if ((*index) >= entry->size) {
+        pr_crit("Error: Index exceeds buffer size.\n");
+        return 1;
+    }
     // Insert the new character at the current index in the buffer, then
     // increment the index.
     entry->buffer[(*index)++] = c;
@@ -661,7 +672,18 @@ static inline void __command_suggest(
     if (filename) {
         // Iterate through the characters of the suggested directory entry name.
         for (int i = offset; i < strlen(filename); ++i) {
-            pr_debug("[%2d] '%c'\n", i, filename[i], entry->buffer);
+            // If there is a character inside the buffer, we
+            if (entry->buffer[(*index)]) {
+                if (entry->buffer[(*index)] != filename[i]) {
+                    return;
+                } else if (entry->buffer[(*index)] != ' ') {
+                    // Move the cursor right by 1.
+                    puts("\033[1C");
+                    // Increment the index.
+                    (*index)++;
+                    continue;
+                }
+            }
             // Append the current character to the buffer.
             // If the buffer is full, break the loop.
             if (__command_append(entry, index, length, filename[i])) {
@@ -785,16 +807,21 @@ static int __command_complete(
         last_argument = last_argument ? last_argument + 1 : NULL;
         // If there is no last argument.
         if (last_argument == NULL) {
+            pr_crit("__command_complete: No last argument found in buffer '%s'.\n", entry->buffer);
             return 0;
         }
         char _dirname[PATH_MAX];
         if (!dirname(last_argument, _dirname, sizeof(_dirname))) {
+            pr_crit("__command_complete: Failed to extract directory name from '%s'.\n", last_argument);
             return 0;
         }
         const char *_basename = basename(last_argument);
         if (!_basename) {
+            pr_crit("__command_complete: Failed to extract basename from '%s'.\n", last_argument);
             return 0;
         }
+        pr_debug("__command_complete(%s, %2d, %2d) : dirname='%s', basename='%s', last_argument='%s'.\n", entry->buffer, *index, *length,
+                 _dirname, _basename, last_argument);
         if ((*_dirname != 0) && (*_basename != 0)) {
             if (__folder_contains(_dirname, _basename, 0, &dent)) {
                 pr_debug("__command_complete(%s, %2d, %2d) : Suggest 1 '%s' -> '%s'.\n", entry->buffer, *index, *length,
@@ -1037,7 +1064,7 @@ static void __alloc_argv(char *command, int *argc, char ***argv)
             inword = false;
             // Expand possible environment variables in the current argument.
             char expand_env_buf[BUFSIZ];
-            ___expand_env(argStart, expand_env_buf, BUFSIZ, cit - argStart, true);
+            ___expand_env(argStart, cit - argStart, expand_env_buf, BUFSIZ, true);
             // Allocate memory for the expanded argument.
             (*argv)[argcIt] = (char *)malloc(strlen(expand_env_buf) + 1);
             if ((*argv)[argcIt] == NULL) {
