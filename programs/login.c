@@ -149,8 +149,15 @@ static inline int __read_input(char *buffer, size_t size, int show)
                     if (show) { printf("\033[%dC", length - index); } // Move cursor to the end
                     index = length;                                   // Set index to the end
                 } else if ((c == '2') && (getchar() == '~')) {        // INSERT
-                    insert_active = !insert_active;                   // Toggle insert mode
-                } else if ((c == '5') && (getchar() == '~')) {        // PAGE_UP
+                    insert_active = !insert_active; // Toggle insert mode
+                    if (insert_active) {
+                        // Change back to a block cursor (default) before exiting
+                        printf("\033[1 q");
+                    } else {
+                        // Change to a bar cursor
+                        printf("\033[3 q");
+                    }
+                } else if ((c == '5') && (getchar() == '~')) { // PAGE_UP
                     // Nothing to do.
                 } else if ((c == '6') && (getchar() == '~')) { // PAGE_DOWN
                     // Nothing to do.

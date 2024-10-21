@@ -975,6 +975,13 @@ static inline int __read_command(rb_history_entry_t *entry)
                 else if (c == '2') {
                     if (getchar() == '~') {
                         insert_active = !insert_active; // Toggle insert mode
+                        if (insert_active) {
+                            // Change back to a block cursor (default) before exiting
+                            printf("\033[1 q");
+                        } else {
+                            // Change to a bar cursor
+                            printf("\033[3 q");
+                        }
                     }
                 } else if ((c == '5') && (getchar() == '~')) { // PAGE_UP
                     // Nothing to do.

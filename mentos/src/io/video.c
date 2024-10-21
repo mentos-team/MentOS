@@ -108,6 +108,17 @@ static inline void __draw_char(char c)
     *(pointer++) = color;
 }
 
+void __set_cursor_shape(unsigned char start, unsigned char end)
+{
+    // Set the cursor's start scan line
+    outportb(0x3D4, 0x0A);  // Select cursor start register
+    outportb(0x3D5, start); // Set start scan line
+
+    // Set the cursor's end scan line
+    outportb(0x3D4, 0x0B); // Select cursor end register
+    outportb(0x3D5, end);  // Set end scan line
+}
+
 /// @brief Sets the provided ansi code.
 /// @param ansi_code The ansi code describing background and foreground color.
 static inline void __set_color(uint8_t ansi_code)
@@ -172,6 +183,34 @@ static inline void __video_set_cursor(unsigned int x, unsigned int y)
     outportb(0x3D5, (uint8_t)((position >> 8U) & 0xFFU));
 }
 
+void __parse_cursor_escape_code(int shape)
+{
+    switch (shape) {
+    case 0: // Default blinking block cursor
+    case 2: // Blinking block cursor
+        __set_cursor_shape(0, 15);
+        break;
+    case 1: // Steady block cursor
+        __set_cursor_shape(0, 15);
+        break;
+    case 3: // Blinking underline cursor
+        __set_cursor_shape(13, 15);
+        break;
+    case 4: // Steady underline cursor
+        __set_cursor_shape(13, 15);
+        break;
+    case 5: // Blinking vertical bar cursor
+        __set_cursor_shape(0, 1);
+        break;
+    case 6: // Steady vertical bar cursor
+        __set_cursor_shape(0, 1);
+        break;
+    default:
+        // Handle any other cases if needed
+        break;
+    }
+}
+
 void video_init(void)
 {
     video_clear();
@@ -200,14 +239,26 @@ void video_putc(int c)
         escape_buffer[escape_index]   = 0;
         if (isalpha(c)) {
             escape_buffer[--escape_index] = 0;
+
+            // Move cursor forward (e.g., ESC [ <num> C)
             if (c == 'C') {
                 __move_cursor_forward(false, atoi(escape_buffer));
-            } else if (c == 'D') {
+            }
+            // Move cursor backward (e.g., ESC [ <num> D)
+            else if (c == 'D') {
                 __move_cursor_backward(false, atoi(escape_buffer));
-            } else if (c == 'm') {
+            }
+            // Set color (e.g., ESC [ <num> m)
+            else if (c == 'm') {
                 __set_color(atoi(escape_buffer));
-            } else if (c == 'J') {
+            }
+            // Clear screen (e.g., ESC [ <num> J)
+            else if (c == 'J') {
                 video_clear();
+            }
+            // Handle cursor shape (e.g., ESC [ <num> q)
+            else if (c == 'q') {
+                __parse_cursor_escape_code(atoi(escape_buffer));
             }
             escape_index = -1;
         }
