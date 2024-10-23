@@ -23,7 +23,7 @@ void video_putc(int c);
 void video_puts(const char *str);
 
 /// @brief When something is written in another position, update the cursor.
-void video_set_cursor_auto(void);
+void video_update_cursor_position(void);
 
 /// @brief Move the cursor at the position x, y on the screen.
 /// @param x The x coordinate.

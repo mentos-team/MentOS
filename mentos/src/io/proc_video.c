@@ -4,10 +4,10 @@
 /// See LICENSE.md for details.
 
 // Setup the logging for this file (do this before any other include).
-#include "sys/kernel_levels.h"           // Include kernel log levels.
-#define __DEBUG_HEADER__ "[PROCV ]"      ///< Change header.
-#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
-#include "io/debug.h"                    // Include debugging functions.
+#include "sys/kernel_levels.h"          // Include kernel log levels.
+#define __DEBUG_HEADER__ "[PROCV ]"     ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_DEBUG ///< Set log level.
+#include "io/debug.h"                   // Include debugging functions.
 
 #include "bits/ioctls.h"
 #include "bits/termios-struct.h"
@@ -78,6 +78,11 @@ static ssize_t procv_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyt
     // Keep only the character, not the scancode.
     c &= 0x00FF;
 
+    if (iscntrl(c))
+        pr_debug("[ ](%d)\n", c);
+    else
+        pr_debug("[%c](%d)\n", c, c);
+
     // Handle special characters.
     switch (c) {
     case '\n':
@@ -122,7 +127,6 @@ static ssize_t procv_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyt
 
     default:
         if (iscntrl(c)) {
-            rb_keybuffer_push_front(rb, c);
             // Handle control characters in both canonical and non-canonical modes.
             if (flg_isig) {
                 if (c == 0x03) {
@@ -141,15 +145,8 @@ static ssize_t procv_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyt
                     video_putc('^');
                     video_putc('A' + (c - 1));
                 }
-                // Add control character escape sequence to the buffer.
-                rb_keybuffer_push_front(rb, '\033');
-                rb_keybuffer_push_front(rb, '^');
-                rb_keybuffer_push_front(rb, 'A' + (c - 1));
-                return 3;
             }
-            return 0;
         }
-        break;
     }
 
     // Add the character to the buffer.
@@ -160,8 +157,6 @@ static ssize_t procv_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyt
         *((char *)buf) = rb_keybuffer_pop_back(rb) & 0x00FF;
         return 1;
     }
-
-    // FIXHERE: Handle additional edge cases for different control sequences if needed.
 
     // Default return indicating no character was processed.
     return 0;

@@ -919,6 +919,20 @@ static inline int __read_command(rb_history_entry_t *entry)
             continue;
         }
 
+        // Ctrl+C
+        if (c == 0x03) {
+            memset(entry->buffer, 0, entry->size); // Clear buffer
+            putchar('\n');
+            return -1; // Return -1 on Ctrl+C
+        }
+
+        // CTRL+U
+        if (c == 0x15) {
+            // Clear the current command.
+            __command_clear(entry, &index, &length);
+            continue;
+        }
+
         // Handle escape sequences (for arrow keys, home, end, etc.)
         if (c == '\033') {
             c = getchar(); // Get the next character
@@ -974,33 +988,20 @@ static inline int __read_command(rb_history_entry_t *entry)
                 // INSERT
                 else if (c == '2') {
                     if (getchar() == '~') {
-                        insert_active = !insert_active; // Toggle insert mode
+                        // Toggle insert mode.
+                        insert_active = !insert_active;
                         if (insert_active) {
-                            // Change back to a block cursor (default) before exiting
-                            printf("\033[1 q");
-                        } else {
-                            // Change to a bar cursor
+                            // Change cursor to an underline cursor.
                             printf("\033[3 q");
+                        } else {
+                            // Change cursor back to a block cursor (default).
+                            printf("\033[0 q");
                         }
                     }
                 } else if ((c == '5') && (getchar() == '~')) { // PAGE_UP
                     // Nothing to do.
                 } else if ((c == '6') && (getchar() == '~')) { // PAGE_DOWN
                     // Nothing to do.
-                }
-
-            } else if (c == '^') {
-                // Handle special commands (Ctrl+C, Ctrl+U)
-                c = getchar();
-                //pr_debug("[%2d      ] %c (%u) (2)\n", index, c, c);
-                if (c == 'C') {
-                    memset(entry->buffer, 0, entry->size); // Clear buffer
-                    putchar('\n');
-                    return -1; // Return -1 on Ctrl+C
-                }
-                if (c == 'U') {
-                    // Clear the current command.
-                    __command_clear(entry, &index, &length);
                 }
             }
             continue;

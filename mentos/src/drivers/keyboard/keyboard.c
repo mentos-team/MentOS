@@ -6,10 +6,10 @@
 /// @{
 
 // Setup the logging for this file (do this before any other include).
-#include "sys/kernel_levels.h"           // Include kernel log levels.
-#define __DEBUG_HEADER__ "[KEYBRD]"      ///< Change header.
-#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
-#include "io/debug.h"                    // Include debugging functions.
+#include "sys/kernel_levels.h"          // Include kernel log levels.
+#define __DEBUG_HEADER__ "[KEYBRD]"     ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_DEBUG ///< Set log level.
+#include "io/debug.h"                   // Include debugging functions.
 
 #include "ctype.h"
 #include "descriptor_tables/isr.h"
@@ -147,6 +147,11 @@ void keyboard_isr(pt_regs *f)
     // Get the keypad number, of num-lock is disabled.
     int keypad_code = !bitmask_check(kflags, KBD_NUM_LOCK) ? scancode : 0;
 
+    int ctrl_pressed      = (kflags & (KBD_LEFT_CONTROL | KBD_RIGHT_CONTROL)) != 0;
+    int shift_pressed     = (kflags & (KBD_LEFT_SHIFT | KBD_RIGHT_SHIFT)) != 0;
+    int right_alt_pressed = (kflags & KBD_RIGHT_ALT) != 0;
+    int caps_lock_pressed = (kflags & KBD_CAPS_LOCK) != 0;
+
     // If the key has just been released.
     if (scancode == KEY_LEFT_SHIFT) {
         bitmask_set_assign(kflags, KBD_LEFT_SHIFT);
@@ -204,6 +209,18 @@ void keyboard_isr(pt_regs *f)
     } else if ((scancode == KEY_ENTER) || (scancode == KEY_KP_RETURN)) {
         keyboard_push_front('\n');
         pr_debug("Press(KEY_ENTER)\n");
+    } else if (ctrl_pressed && ((scancode == KEY_UP_ARROW) || (keypad_code == KEY_KP8))) {
+        pr_debug("Press(Ctrl + KEY_UP_ARROW)\n");
+        keyboard_push_front_sequence("\033[1;5A");
+    } else if (ctrl_pressed && ((scancode == KEY_DOWN_ARROW) || (keypad_code == KEY_KP2))) {
+        pr_debug("Press(Ctrl + KEY_DOWN_ARROW)\n");
+        keyboard_push_front_sequence("\033[1;5B");
+    } else if (ctrl_pressed && ((scancode == KEY_RIGHT_ARROW) || (keypad_code == KEY_KP6))) {
+        pr_debug("Press(Ctrl + KEY_RIGHT_ARROW)\n");
+        keyboard_push_front_sequence("\033[1;5C");
+    } else if (ctrl_pressed && ((scancode == KEY_LEFT_ARROW) || (keypad_code == KEY_KP4))) {
+        pr_debug("Press(Ctrl + KEY_LEFT_ARROW)\n");
+        keyboard_push_front_sequence("\033[1;5D");
     } else if ((scancode == KEY_UP_ARROW) || (keypad_code == KEY_KP8)) {
         pr_debug("Press(KEY_UP_ARROW)\n");
         keyboard_push_front_sequence("\033[A");
@@ -277,13 +294,13 @@ void keyboard_isr(pt_regs *f)
         const keymap_t *keymap = get_keymap(scancode);
         pr_debug("scancode : %04x (%c)\n", scancode, keymap->normal);
         // Get the specific keymap.
-        if (!bitmask_check(kflags, KBD_LEFT_SHIFT | KBD_RIGHT_SHIFT) != !bitmask_check(kflags, KBD_CAPS_LOCK)) {
+        if (!shift_pressed != !caps_lock_pressed) {
             keyboard_push_front(keymap->shift);
-        } else if ((get_keymap_type() == KEYMAP_IT) && bitmask_check(kflags, KBD_RIGHT_ALT) && (bitmask_check(kflags, KBD_LEFT_SHIFT | KBD_RIGHT_SHIFT))) {
+        } else if ((get_keymap_type() == KEYMAP_IT) && right_alt_pressed && shift_pressed) {
             keyboard_push_front(keymap->alt);
-        } else if (bitmask_check(kflags, KBD_RIGHT_ALT)) {
+        } else if (right_alt_pressed) {
             keyboard_push_front(keymap->alt);
-        } else if (bitmask_check(kflags, KBD_LEFT_CONTROL | KBD_RIGHT_CONTROL)) {
+        } else if (ctrl_pressed) {
             keyboard_push_front(keymap->ctrl);
         } else {
             keyboard_push_front(keymap->normal);

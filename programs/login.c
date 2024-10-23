@@ -125,62 +125,75 @@ static inline int __read_input(char *buffer, size_t size, int show)
             continue;
         }
 
+        // Ctrl+C
+        if (c == 0x03) {
+            memset(buffer, 0, size); // Clear buffer
+            putchar('\n');
+            return -1; // Return -1 on Ctrl+C
+        }
+
+        // CTRL+U
+        if (c == 0x15) {
+            memset(buffer, 0, size); // Clear the current command
+            if (show) {
+                // Clear the current command from display
+                while (index--) {
+                    putchar('\b'); // Move cursor back
+                }
+            }
+            index = 0; // Reset index
+            continue;
+        }
+
         // Handle escape sequences (for arrow keys, home, end, etc.)
         if (c == '\033') {
             c = getchar(); // Get the next character
             if (c == '[') {
                 // Get the direction key (Left, Right, Home, End, Insert, Delete)
                 c = getchar();
-
-                if (c == 'D') { // LEFT Arrow
+                // LEFT Arrow
+                if (c == 'D') {
                     if (index > 0) {
                         if (show) { puts("\033[1D"); } // Move the cursor left
                         index--;                       // Decrease index
                     }
-                } else if (c == 'C') { // RIGHT Arrow
+                }
+                // RIGHT Arrow
+                else if (c == 'C') {
                     if (index < length) {
                         if (show) { puts("\033[1C"); } // Move the cursor right
                         index++;                       // Increase index
                     }
-                } else if ((c == '1') && (getchar() == '~')) {        // HOME
-                    if (show) { printf("\033[%dD", index); }          // Move cursor to the beginning
-                    index = 0;                                        // Set index to the start
-                } else if ((c == '4') && (getchar() == '~')) {        // END
+                }
+                // HOME
+                else if ((c == '1') && (getchar() == '~')) {
+                    if (show) { printf("\033[%dD", index); } // Move cursor to the beginning
+                    index = 0;                               // Set index to the start
+                }
+                // END
+                else if ((c == '4') && (getchar() == '~')) {
                     if (show) { printf("\033[%dC", length - index); } // Move cursor to the end
                     index = length;                                   // Set index to the end
-                } else if ((c == '2') && (getchar() == '~')) {        // INSERT
-                    insert_active = !insert_active; // Toggle insert mode
+                }
+                // INSERT
+                else if ((c == '2') && (getchar() == '~')) {
+                    // Toggle insert mode.
+                    insert_active = !insert_active;
                     if (insert_active) {
-                        // Change back to a block cursor (default) before exiting
-                        printf("\033[1 q");
-                    } else {
-                        // Change to a bar cursor
+                        // Change cursor to an underline cursor.
                         printf("\033[3 q");
+                    } else {
+                        // Change cursor back to a block cursor (default).
+                        printf("\033[0 q");
                     }
-                } else if ((c == '5') && (getchar() == '~')) { // PAGE_UP
-                    // Nothing to do.
-                } else if ((c == '6') && (getchar() == '~')) { // PAGE_DOWN
+                }
+                // PAGE_UP
+                else if ((c == '5') && (getchar() == '~')) {
                     // Nothing to do.
                 }
-
-            } else if (c == '^') {
-                // Handle special commands (Ctrl+C, Ctrl+U)
-                c = getchar();
-                if (c == 'C') {
-                    memset(buffer, 0, size); // Clear buffer
-                    putchar('\n');
-                    return -1; // Return -1 on Ctrl+C
-                }
-
-                if (c == 'U') {
-                    memset(buffer, 0, size); // Clear the current command
-                    if (show) {
-                        // Clear the current command from display
-                        while (index--) {
-                            putchar('\b'); // Move cursor back
-                        }
-                    }
-                    index = 0; // Reset index
+                // PAGE_DOWN
+                else if ((c == '6') && (getchar() == '~')) {
+                    // Nothing to do.
                 }
             }
             continue;
