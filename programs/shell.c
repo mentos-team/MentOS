@@ -226,7 +226,9 @@ static inline void __prompt_print(void)
     tm_t *timeinfo = localtime(&rawtime);
     if (timeinfo == NULL) {
         pr_crit("__prompt_print: Failed to convert time to local time.\n");
-        timeinfo = &(tm_t){ 0 }; // Initialize to 0 to avoid segmentation faults.
+        // Use a default value to avoid segmentation faults.
+        static tm_t default_time = { 0 };
+        timeinfo                 = &default_time;
     }
     // Get the hostname using uname.
     char *HOSTNAME;
