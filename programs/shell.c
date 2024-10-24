@@ -866,9 +866,8 @@ static inline int __read_command(rb_history_entry_t *entry)
     memset(entry->buffer, 0, entry->size);
 
     do {
-        c = getchar(); // Read a character from input
-
-        //pr_debug("[%2d      ] %c (%u) (0)\n", index, c, c);
+        // Read a character from input.
+        c = getchar();
 
         // Ignore EOF and null or tab characters
         if (c == EOF || c == 0) {
@@ -879,17 +878,6 @@ static inline int __read_command(rb_history_entry_t *entry)
         if (c == '\n') {
             putchar('\n'); // Display a newline
             return length; // Return length of input
-        }
-
-        // Handle delete character.
-        if (c == 127) {
-            if (index < length) {
-                --length;     // Decrease length
-                putchar(127); // Show delete character.
-                // Shift left to remove character at index
-                memmove(entry->buffer + index, entry->buffer + index + 1, length - index + 1);
-            }
-            continue;
         }
 
         // Handle backspace for deletion
@@ -912,20 +900,27 @@ static inline int __read_command(rb_history_entry_t *entry)
 
         // Handle space character
         if (c == ' ') {
-            // Shift buffer to the right to insert space
+            // Shift the content of the buffer to the right to create space for the new character.
             memmove(entry->buffer + index + 1, entry->buffer + index, length - index + 1);
-            entry->buffer[index++] = c; // Insert space
-            length++;
-            // Show space.
+            // Insert the character at the current index and increment the index.
+            entry->buffer[index++] = c;
+            // If insert mode is not active, increase the length of the buffer.
+            if (!insert_active) {
+                length++;
+            }
+            // Display the newly inserted character.
             putchar(c);
             continue;
         }
 
         // Ctrl+C
         if (c == 0x03) {
-            memset(entry->buffer, 0, entry->size); // Clear buffer
+            // Clear the entire buffer by setting all elements to zero.
+            memset(entry->buffer, 0, entry->size);
+            // Print a newline to indicate that Ctrl+C was pressed.
             putchar('\n');
-            return -1; // Return -1 on Ctrl+C
+            // Return -1 to indicate the Ctrl+C operation.
+            return -1;
         }
 
         // CTRL+U
@@ -935,14 +930,11 @@ static inline int __read_command(rb_history_entry_t *entry)
             continue;
         }
 
-        // Handle escape sequences (for arrow keys, home, end, etc.)
         if (c == '\033') {
-            c = getchar(); // Get the next character
-            //pr_debug("[%2d      ] %c (%u) (1)\n", index, c, c);
+            c = getchar();
             if (c == '[') {
-                // Get the direction key (Left, Right, Home, End, Insert, Delete)
                 c = getchar();
-                //pr_debug("[%2d      ] %c (%u) (2)\n", index, c, c);
+                // UP/DOWN ARROW
                 if ((c == 'A') || (c == 'B')) {
                     // Clear the current command.
                     __command_clear(entry, &index, &length);
@@ -957,7 +949,7 @@ static inline int __read_command(rb_history_entry_t *entry)
                         index = length = strnlen(entry->buffer, entry->size);
                     }
                 }
-                // LEFT Arrow.
+                // LEFT ARROW
                 else if (c == 'D') {
                     pr_debug("%d > 0\n", index);
                     if (index > 0) {
@@ -965,7 +957,7 @@ static inline int __read_command(rb_history_entry_t *entry)
                         index--;         // Decrease index
                     }
                 }
-                // RIGHT Arrow.
+                // RIGHT ARROW
                 else if (c == 'C') {
                     pr_debug("%d < %d\n", index, length);
                     if (index < length) {
@@ -974,18 +966,14 @@ static inline int __read_command(rb_history_entry_t *entry)
                     }
                 }
                 // HOME
-                else if (c == '1') {
-                    if (getchar() == '~') {
-                        printf("\033[%dD", index); // Move cursor to the beginning
-                        index = 0;                 // Set index to the start
-                    }
+                else if (c == 'H') {
+                    printf("\033[%dD", index); // Move cursor to the beginning
+                    index = 0;                 // Set index to the start
                 }
                 // END
-                else if (c == '4') {
-                    if (getchar() == '~') {
-                        printf("\033[%dC", length - index); // Move cursor to the end
-                        index = length;                     // Set index to the end
-                    }
+                else if (c == 'F') {
+                    printf("\033[%dC", length - index); // Move cursor to the end
+                    index = length;                     // Set index to the end
                 }
                 // INSERT
                 else if (c == '2') {
@@ -1000,29 +988,100 @@ static inline int __read_command(rb_history_entry_t *entry)
                             printf("\033[0 q");
                         }
                     }
-                } else if ((c == '5') && (getchar() == '~')) { // PAGE_UP
-                    // Nothing to do.
-                } else if ((c == '6') && (getchar() == '~')) { // PAGE_DOWN
-                    // Nothing to do.
+                }
+                // DELETE
+                else if (c == '3') {
+                    if (getchar() == '~') {
+                        if (index < length) {
+                            --length;     // Decrease length
+                            putchar(127); // Show delete character.
+                            // Shift left to remove character at index
+                            memmove(entry->buffer + index, entry->buffer + index + 1, length - index + 1);
+                        }
+                    }
+                }
+                // PAGE_UP
+                else if (c == '5') {
+                    if (getchar() == '~') {
+                        // Nothing to do.
+                    }
+                }
+                // PAGE_DOWN
+                else if (c == '6') {
+                    if (getchar() == '~') {
+                        // Nothing to do.
+                    }
+                }
+                // CTRL+ARROW
+                else if (c == '1') {
+                    c = getchar();
+                    if (c == ';') {
+                        c = getchar();
+                        if (c == '5') {
+                            c              = getchar();
+                            int move_count = 0;
+
+                            // CTRL+RIGHT ARROW
+                            if (c == 'C') {
+                                // Move to the beginning of the next word
+                                // Skip spaces first
+                                while (index < length && entry->buffer[index] == ' ') {
+                                    index++;
+                                    move_count++;
+                                }
+                                // Move to the end of the current word (non-space characters)
+                                while (index < length && entry->buffer[index] != ' ') {
+                                    index++;
+                                    move_count++;
+                                }
+                                // Apply all movements to the right in one go.
+                                if (move_count > 0) {
+                                    printf("\033[%dC", move_count);
+                                }
+                            }
+                            // CTRL+LEFTY ARROW
+                            else if (c == 'D') {
+                                // Move left past spaces first
+                                while (index > 0 && entry->buffer[index - 1] == ' ') {
+                                    index--;
+                                    move_count++;
+                                }
+                                // Move left to the beginning of the current word (non-space characters)
+                                while (index > 0 && entry->buffer[index - 1] != ' ') {
+                                    index--;
+                                    move_count++;
+                                }
+                                // Apply all movements to the left in one go.
+                                if (move_count > 0) {
+                                    printf("\033[%dD", move_count);
+                                }
+                            }
+                        }
+                    }
                 }
             }
             continue;
         }
 
-        // Handle insertion based on insert mode
-        if (!insert_active) {
-            // Shift buffer to the right to insert new character
-            memmove(entry->buffer + index + 1, entry->buffer + index, length - index + 1);
+        // Handle insertion based on insert mode.
+        if (insert_active) {
+            // Move cursor right.
+            puts("\033[1C");
+            // Prepare to delete the character.
+            putchar('\b');
         } else if (index < length - 1) {
-            puts("\033[1C"); // Move cursor right
-            putchar('\b');   // Prepare to delete the character
+            // Shift buffer to the right to insert new character.
+            memmove(entry->buffer + index + 1, entry->buffer + index, length - index + 1);
         }
-
-        //pr_debug("[%2d -> %2u] %c (%u) (0)\n", index, index + 1, c, c);
 
         // Append the character.
         if (__command_append(entry, &index, &length, c)) {
             break; // Exit loop if buffer is full.
+        }
+
+        // In insert mode, the length stays the same, unless we are at the end of the line.
+        if (insert_active && (index < length)) {
+            --length;
         }
 
     } while (length < entry->size);

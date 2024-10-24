@@ -6,10 +6,10 @@
 /// @{
 
 // Setup the logging for this file (do this before any other include).
-#include "sys/kernel_levels.h"          // Include kernel log levels.
-#define __DEBUG_HEADER__ "[KEYBRD]"     ///< Change header.
-#define __DEBUG_LEVEL__  LOGLEVEL_DEBUG ///< Set log level.
-#include "io/debug.h"                   // Include debugging functions.
+#include "sys/kernel_levels.h"           // Include kernel log levels.
+#define __DEBUG_HEADER__ "[KEYBRD]"      ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
+#include "io/debug.h"                    // Include debugging functions.
 
 #include "ctype.h"
 #include "descriptor_tables/isr.h"
@@ -42,6 +42,41 @@ spinlock_t scancodes_lock;
 #define KBD_RIGHT_CONTROL (1 << 6) ///< Flag which identifies the right control.
 #define KBD_LEFT_ALT      (1 << 7) ///< Flag which identifies the left alt.
 #define KBD_RIGHT_ALT     (1 << 8) ///< Flag which identifies the right alt.
+
+/// Define variable to switch between normal mode sequences and xterm sequences.
+#define USE_XTERM_SEQUENCES 0
+
+#define SEQ_UP_ARROW         "\033[A"
+#define SEQ_DOWN_ARROW       "\033[B"
+#define SEQ_RIGHT_ARROW      "\033[C"
+#define SEQ_LEFT_ARROW       "\033[D"
+#define SEQ_CTRL_UP_ARROW    "\033[1;5A"
+#define SEQ_CTRL_DOWN_ARROW  "\033[1;5B"
+#define SEQ_CTRL_RIGHT_ARROW "\033[1;5C"
+#define SEQ_CTRL_LEFT_ARROW  "\033[1;5D"
+#define SEQ_INSERT           "\033[2~"
+#define SEQ_DELETE           "\033[3~"
+#define SEQ_PAGE_UP          "\033[5~"
+#define SEQ_PAGE_DOWN        "\033[6~"
+#define SEQ_F1               "\033OP"
+#define SEQ_F2               "\033OQ"
+#define SEQ_F3               "\033OR"
+#define SEQ_F4               "\033OS"
+#define SEQ_F5               "\033[15~"
+#define SEQ_F6               "\033[17~"
+#define SEQ_F7               "\033[18~"
+#define SEQ_F8               "\033[19~"
+#define SEQ_F9               "\033[20~"
+#define SEQ_F10              "\033[21~"
+#define SEQ_F11              "\033[23~"
+#define SEQ_F12              "\033[24~"
+#if USE_XTERM_SEQUENCES
+#define SEQ_HOME "\033[1~"
+#define SEQ_END  "\033[4~"
+#else
+#define SEQ_HOME "\033[H"
+#define SEQ_END  "\033[F"
+#endif
 
 /// @brief Pushes a character into the scancode ring buffer.
 /// @param c The character to push into the ring buffer.
@@ -154,141 +189,185 @@ void keyboard_isr(pt_regs *f)
 
     // If the key has just been released.
     if (scancode == KEY_LEFT_SHIFT) {
-        bitmask_set_assign(kflags, KBD_LEFT_SHIFT);
         pr_debug("Press(KBD_LEFT_SHIFT)\n");
+        bitmask_set_assign(kflags, KBD_LEFT_SHIFT);
+
     } else if (scancode == KEY_RIGHT_SHIFT) {
-        bitmask_set_assign(kflags, KBD_RIGHT_SHIFT);
         pr_debug("Press(KBD_RIGHT_SHIFT)\n");
+        bitmask_set_assign(kflags, KBD_RIGHT_SHIFT);
+
     } else if (scancode == KEY_LEFT_CONTROL) {
-        bitmask_set_assign(kflags, KBD_LEFT_CONTROL);
         pr_debug("Press(KBD_LEFT_CONTROL)\n");
+        bitmask_set_assign(kflags, KBD_LEFT_CONTROL);
+
     } else if (scancode == KEY_RIGHT_CONTROL) {
-        bitmask_set_assign(kflags, KBD_RIGHT_CONTROL);
         pr_debug("Press(KBD_RIGHT_CONTROL)\n");
+        bitmask_set_assign(kflags, KBD_RIGHT_CONTROL);
+
     } else if (scancode == KEY_LEFT_ALT) {
+        pr_debug("Press(KBD_LEFT_ALT)\n");
         bitmask_set_assign(kflags, KBD_LEFT_ALT);
         keyboard_push_front(scancode << 16u);
-        pr_debug("Press(KBD_LEFT_ALT)\n");
+
     } else if (scancode == KEY_RIGHT_ALT) {
+        pr_debug("Press(KBD_RIGHT_ALT)\n");
         bitmask_set_assign(kflags, KBD_RIGHT_ALT);
         keyboard_push_front(scancode << 16u);
-        pr_debug("Press(KBD_RIGHT_ALT)\n");
+
     } else if (scancode == (KEY_LEFT_SHIFT | CODE_BREAK)) {
-        bitmask_clear_assign(kflags, KBD_LEFT_SHIFT);
         pr_debug("Release(KBD_LEFT_SHIFT)\n");
+        bitmask_clear_assign(kflags, KBD_LEFT_SHIFT);
+
     } else if (scancode == (KEY_RIGHT_SHIFT | CODE_BREAK)) {
-        bitmask_clear_assign(kflags, KBD_RIGHT_SHIFT);
         pr_debug("Release(KBD_RIGHT_SHIFT)\n");
+        bitmask_clear_assign(kflags, KBD_RIGHT_SHIFT);
+
     } else if (scancode == (KEY_LEFT_CONTROL | CODE_BREAK)) {
-        bitmask_clear_assign(kflags, KBD_LEFT_CONTROL);
         pr_debug("Release(KBD_LEFT_CONTROL)\n");
+        bitmask_clear_assign(kflags, KBD_LEFT_CONTROL);
+
     } else if (scancode == (KEY_RIGHT_CONTROL | CODE_BREAK)) {
-        bitmask_clear_assign(kflags, KBD_RIGHT_CONTROL);
         pr_debug("Release(KBD_RIGHT_CONTROL)\n");
+        bitmask_clear_assign(kflags, KBD_RIGHT_CONTROL);
+
     } else if (scancode == (KEY_LEFT_ALT | CODE_BREAK)) {
-        bitmask_clear_assign(kflags, KBD_LEFT_ALT);
         pr_debug("Release(KBD_LEFT_ALT)\n");
+        bitmask_clear_assign(kflags, KBD_LEFT_ALT);
+
     } else if (scancode == (KEY_RIGHT_ALT | CODE_BREAK)) {
-        bitmask_clear_assign(kflags, KBD_RIGHT_ALT);
         pr_debug("Release(KBD_RIGHT_ALT)\n");
+        bitmask_clear_assign(kflags, KBD_RIGHT_ALT);
+
     } else if (scancode == KEY_CAPS_LOCK) {
+        pr_debug("Toggle(KBD_CAPS_LOCK)\n");
         bitmask_flip_assign(kflags, KBD_CAPS_LOCK);
         keyboard_update_leds();
-        pr_debug("Toggle(KBD_CAPS_LOCK)\n");
+
     } else if (scancode == KEY_NUM_LOCK) {
+        pr_debug("Toggle(KBD_NUM_LOCK)\n");
         bitmask_flip_assign(kflags, KBD_NUM_LOCK);
         keyboard_update_leds();
-        pr_debug("Toggle(KBD_NUM_LOCK)\n");
+
     } else if (scancode == KEY_SCROLL_LOCK) {
+        pr_debug("Toggle(KBD_SCROLL_LOCK)\n");
         bitmask_flip_assign(kflags, KBD_SCROLL_LOCK);
         keyboard_update_leds();
-        pr_debug("Toggle(KBD_SCROLL_LOCK)\n");
+
     } else if (scancode == KEY_BACKSPACE) {
-        keyboard_push_front('\b');
         pr_debug("Press(KEY_BACKSPACE)\n");
+        keyboard_push_front('\b');
+
     } else if ((scancode == KEY_ENTER) || (scancode == KEY_KP_RETURN)) {
-        keyboard_push_front('\n');
         pr_debug("Press(KEY_ENTER)\n");
+        keyboard_push_front('\n');
+
     } else if (ctrl_pressed && ((scancode == KEY_UP_ARROW) || (keypad_code == KEY_KP8))) {
         pr_debug("Press(Ctrl + KEY_UP_ARROW)\n");
-        keyboard_push_front_sequence("\033[1;5A");
+        keyboard_push_front_sequence(SEQ_CTRL_UP_ARROW);
+
     } else if (ctrl_pressed && ((scancode == KEY_DOWN_ARROW) || (keypad_code == KEY_KP2))) {
         pr_debug("Press(Ctrl + KEY_DOWN_ARROW)\n");
-        keyboard_push_front_sequence("\033[1;5B");
+        keyboard_push_front_sequence(SEQ_CTRL_DOWN_ARROW);
+
     } else if (ctrl_pressed && ((scancode == KEY_RIGHT_ARROW) || (keypad_code == KEY_KP6))) {
         pr_debug("Press(Ctrl + KEY_RIGHT_ARROW)\n");
-        keyboard_push_front_sequence("\033[1;5C");
+        keyboard_push_front_sequence(SEQ_CTRL_RIGHT_ARROW);
+
     } else if (ctrl_pressed && ((scancode == KEY_LEFT_ARROW) || (keypad_code == KEY_KP4))) {
         pr_debug("Press(Ctrl + KEY_LEFT_ARROW)\n");
-        keyboard_push_front_sequence("\033[1;5D");
+        keyboard_push_front_sequence(SEQ_CTRL_LEFT_ARROW);
+
     } else if ((scancode == KEY_UP_ARROW) || (keypad_code == KEY_KP8)) {
         pr_debug("Press(KEY_UP_ARROW)\n");
-        keyboard_push_front_sequence("\033[A");
+        keyboard_push_front_sequence(SEQ_UP_ARROW);
+
     } else if ((scancode == KEY_DOWN_ARROW) || (keypad_code == KEY_KP2)) {
         pr_debug("Press(KEY_DOWN_ARROW)\n");
-        keyboard_push_front_sequence("\033[B");
+        keyboard_push_front_sequence(SEQ_DOWN_ARROW);
+
     } else if ((scancode == KEY_RIGHT_ARROW) || (keypad_code == KEY_KP6)) {
         pr_debug("Press(KEY_RIGHT_ARROW)\n");
-        keyboard_push_front_sequence("\033[C");
+        keyboard_push_front_sequence(SEQ_RIGHT_ARROW);
+
     } else if ((scancode == KEY_LEFT_ARROW) || (keypad_code == KEY_KP4)) {
         pr_debug("Press(KEY_LEFT_ARROW)\n");
-        keyboard_push_front_sequence("\033[D");
+        keyboard_push_front_sequence(SEQ_LEFT_ARROW);
+
     } else if (scancode == KEY_F1) {
         pr_debug("Press(KEY_F1)\n");
-        keyboard_push_front_sequence("\033[11~");
+        keyboard_push_front_sequence(SEQ_F1);
+
     } else if (scancode == KEY_F2) {
         pr_debug("Press(KEY_F2)\n");
-        keyboard_push_front_sequence("\033[12~");
+        keyboard_push_front_sequence(SEQ_F2);
+
     } else if (scancode == KEY_F3) {
         pr_debug("Press(KEY_F3)\n");
-        keyboard_push_front_sequence("\033[13~");
+        keyboard_push_front_sequence(SEQ_F3);
+
     } else if (scancode == KEY_F4) {
         pr_debug("Press(KEY_F4)\n");
-        keyboard_push_front_sequence("\033[14~");
+        keyboard_push_front_sequence(SEQ_F4);
+
     } else if (scancode == KEY_F5) {
         pr_debug("Press(KEY_F5)\n");
-        keyboard_push_front_sequence("\033[15~");
+        keyboard_push_front_sequence(SEQ_F5);
+
     } else if (scancode == KEY_F6) {
         pr_debug("Press(KEY_F6)\n");
-        keyboard_push_front_sequence("\033[17~");
+        keyboard_push_front_sequence(SEQ_F6);
+
     } else if (scancode == KEY_F7) {
         pr_debug("Press(KEY_F7)\n");
-        keyboard_push_front_sequence("\033[18~");
+        keyboard_push_front_sequence(SEQ_F7);
+
     } else if (scancode == KEY_F8) {
         pr_debug("Press(KEY_F8)\n");
-        keyboard_push_front_sequence("\033[19~");
+        keyboard_push_front_sequence(SEQ_F8);
+
     } else if (scancode == KEY_F9) {
         pr_debug("Press(KEY_F9)\n");
-        keyboard_push_front_sequence("\033[20~");
+        keyboard_push_front_sequence(SEQ_F9);
+
     } else if (scancode == KEY_F10) {
         pr_debug("Press(KEY_F10)\n");
-        keyboard_push_front_sequence("\033[21~");
+        keyboard_push_front_sequence(SEQ_F10);
+
     } else if (scancode == KEY_F11) {
         pr_debug("Press(KEY_F11)\n");
-        keyboard_push_front_sequence("\033[23~");
+        keyboard_push_front_sequence(SEQ_F11);
+
     } else if (scancode == KEY_F12) {
         pr_debug("Press(KEY_F12)\n");
-        keyboard_push_front_sequence("\033[24~");
+        keyboard_push_front_sequence(SEQ_F12);
+
     } else if ((scancode == KEY_INSERT) || (keypad_code == KEY_KP0)) {
         pr_debug("Press(KEY_INSERT)\n");
-        keyboard_push_front_sequence("\033[2~");
+        keyboard_push_front_sequence(SEQ_INSERT);
+
     } else if ((scancode == KEY_DELETE) || (keypad_code == KEY_KP_DEC)) {
         pr_debug("Press(KEY_DELETE)\n");
-        keyboard_push_front(127);
+        keyboard_push_front_sequence(SEQ_DELETE);
+
     } else if ((scancode == KEY_HOME) || (keypad_code == KEY_KP7)) {
         pr_debug("Press(KEY_HOME)\n");
-        keyboard_push_front_sequence("\033[1~");
+        keyboard_push_front_sequence(SEQ_HOME);
+
     } else if ((scancode == KEY_END) || (keypad_code == KEY_KP1)) {
         pr_debug("Press(KEY_END)\n");
-        keyboard_push_front_sequence("\033[4~");
+        keyboard_push_front_sequence(SEQ_END);
+
     } else if ((scancode == KEY_PAGE_UP) || (keypad_code == KEY_KP9)) {
         pr_debug("Press(KEY_PAGE_UP)\n");
-        keyboard_push_front_sequence("\033[5~");
+        keyboard_push_front_sequence(SEQ_PAGE_UP);
+
     } else if ((scancode == KEY_PAGE_DOWN) || (keypad_code == KEY_KP3)) {
         pr_debug("Press(KEY_PAGE_DOWN)\n");
-        keyboard_push_front_sequence("\033[6~");
+        keyboard_push_front_sequence(SEQ_PAGE_DOWN);
+
     } else if (scancode == KEY_ESCAPE) {
         // Nothing to do.
+
     } else if (!(scancode & CODE_BREAK)) {
         // Get the current keymap.
         const keymap_t *keymap = get_keymap(scancode);

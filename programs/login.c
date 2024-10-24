@@ -85,16 +85,6 @@ static inline int __read_input(char *buffer, size_t size, int show)
             continue;
         }
 
-        if (c == 127) { // DELETE
-            if (index < length) {
-                --length;                    // Decrease length
-                if (show) { putchar(0x7F); } // Show delete character
-                // Shift left to remove character at index
-                memmove(buffer + index, buffer + index + 1, length - index + 1);
-            }
-            continue;
-        }
-
         // Handle newline character to finish input
         if (c == '\n') {
             if (show) {
@@ -166,34 +156,51 @@ static inline int __read_input(char *buffer, size_t size, int show)
                     }
                 }
                 // HOME
-                else if ((c == '1') && (getchar() == '~')) {
+                else if (c == 'H') {
                     if (show) { printf("\033[%dD", index); } // Move cursor to the beginning
                     index = 0;                               // Set index to the start
                 }
                 // END
-                else if ((c == '4') && (getchar() == '~')) {
+                else if (c == 'F') {
                     if (show) { printf("\033[%dC", length - index); } // Move cursor to the end
                     index = length;                                   // Set index to the end
                 }
                 // INSERT
-                else if ((c == '2') && (getchar() == '~')) {
-                    // Toggle insert mode.
-                    insert_active = !insert_active;
-                    if (insert_active) {
-                        // Change cursor to an underline cursor.
-                        printf("\033[3 q");
-                    } else {
-                        // Change cursor back to a block cursor (default).
-                        printf("\033[0 q");
+                else if (c == '2') {
+                    if (getchar() == '~') {
+                        // Toggle insert mode.
+                        insert_active = !insert_active;
+                        if (insert_active) {
+                            // Change cursor to an underline cursor.
+                            printf("\033[3 q");
+                        } else {
+                            // Change cursor back to a block cursor (default).
+                            printf("\033[0 q");
+                        }
+                    }
+                }
+                // DELETE
+                else if (c == '3') {
+                    if (getchar() == '~') {
+                        if (index < length) {
+                            --length;                    // Decrease length
+                            if (show) { putchar(0x7F); } // Show delete character
+                            // Shift left to remove character at index
+                            memmove(buffer + index, buffer + index + 1, length - index + 1);
+                        }
                     }
                 }
                 // PAGE_UP
-                else if ((c == '5') && (getchar() == '~')) {
-                    // Nothing to do.
+                else if (c == '5') {
+                    if (getchar() == '~') {
+                        // Nothing to do.
+                    }
                 }
                 // PAGE_DOWN
-                else if ((c == '6') && (getchar() == '~')) {
-                    // Nothing to do.
+                else if (c == '6') {
+                    if (getchar() == '~') {
+                        // Nothing to do.
+                    }
                 }
             }
             continue;

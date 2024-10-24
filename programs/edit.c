@@ -404,11 +404,13 @@ void edit_file(char *lines, size_t bufsize, int num_lines, const char *filename,
                         printf(insert_active ? "\033[3 q" : "\033[0 q"); // Change cursor appearance.
                     }
                 }
+                // HOME
+                else if (c == 'H') {
+                    cx = 0;
+                }
                 // END
-                else if (c == '4') {
-                    if (getchar() == '~') {
-                        cx = line_len;
-                    }
+                else if (c == 'F') {
+                    cx = line_len;
                 }
                 // PAGE UP
                 else if (c == '5') {
@@ -435,12 +437,8 @@ void edit_file(char *lines, size_t bufsize, int num_lines, const char *filename,
                     c = getchar();
                     pr_debug("[%c](%d)\n", c, c);
 
-                    // HOME
-                    if (c == '~') {
-                        cx = 0;
-                    }
                     // CTRL + ARROW
-                    else if (c == ';') {
+                    if (c == ';') {
                         c = getchar();
                         pr_debug("[%c](%d)\n", c, c);
                         if (c == '5') {
