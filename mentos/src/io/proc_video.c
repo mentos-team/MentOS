@@ -162,6 +162,13 @@ static ssize_t procv_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyt
     return 0;
 }
 
+/// @brief Writes data to the video output by sending each character from the buffer to the video output.
+///
+/// @param file Pointer to the file structure (unused).
+/// @param buf Pointer to the buffer containing the data to write.
+/// @param offset Offset within the file (unused).
+/// @param nbyte Number of bytes to write from the buffer.
+/// @return ssize_t The number of bytes written.
 static ssize_t procv_write(vfs_file_t *file, const void *buf, off_t offset, size_t nbyte)
 {
     for (size_t i = 0; i < nbyte; ++i) {
@@ -169,6 +176,13 @@ static ssize_t procv_write(vfs_file_t *file, const void *buf, off_t offset, size
     }
     return nbyte;
 }
+
+/// @brief Handles ioctl requests for the process, including terminal settings (TCGETS and TCSETS).
+///
+/// @param file Pointer to the file structure (unused).
+/// @param request The ioctl request code (e.g., TCGETS, TCSETS).
+/// @param data Pointer to the data structure for the ioctl request (e.g., termios).
+/// @return int Returns 0 on success.
 static int procv_ioctl(vfs_file_t *file, int request, void *data)
 {
     task_struct *process = scheduler_get_current_process();

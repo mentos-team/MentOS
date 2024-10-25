@@ -46,36 +46,37 @@ spinlock_t scancodes_lock;
 /// Define variable to switch between normal mode sequences and xterm sequences.
 #define USE_XTERM_SEQUENCES 0
 
-#define SEQ_UP_ARROW         "\033[A"
-#define SEQ_DOWN_ARROW       "\033[B"
-#define SEQ_RIGHT_ARROW      "\033[C"
-#define SEQ_LEFT_ARROW       "\033[D"
-#define SEQ_CTRL_UP_ARROW    "\033[1;5A"
-#define SEQ_CTRL_DOWN_ARROW  "\033[1;5B"
-#define SEQ_CTRL_RIGHT_ARROW "\033[1;5C"
-#define SEQ_CTRL_LEFT_ARROW  "\033[1;5D"
-#define SEQ_INSERT           "\033[2~"
-#define SEQ_DELETE           "\033[3~"
-#define SEQ_PAGE_UP          "\033[5~"
-#define SEQ_PAGE_DOWN        "\033[6~"
-#define SEQ_F1               "\033OP"
-#define SEQ_F2               "\033OQ"
-#define SEQ_F3               "\033OR"
-#define SEQ_F4               "\033OS"
-#define SEQ_F5               "\033[15~"
-#define SEQ_F6               "\033[17~"
-#define SEQ_F7               "\033[18~"
-#define SEQ_F8               "\033[19~"
-#define SEQ_F9               "\033[20~"
-#define SEQ_F10              "\033[21~"
-#define SEQ_F11              "\033[23~"
-#define SEQ_F12              "\033[24~"
+#define SEQ_UP_ARROW         "\033[A"    ///< Escape sequence for the Up Arrow key.
+#define SEQ_DOWN_ARROW       "\033[B"    ///< Escape sequence for the Down Arrow key.
+#define SEQ_RIGHT_ARROW      "\033[C"    ///< Escape sequence for the Right Arrow key.
+#define SEQ_LEFT_ARROW       "\033[D"    ///< Escape sequence for the Left Arrow key.
+#define SEQ_CTRL_UP_ARROW    "\033[1;5A" ///< Escape sequence for Ctrl + Up Arrow.
+#define SEQ_CTRL_DOWN_ARROW  "\033[1;5B" ///< Escape sequence for Ctrl + Down Arrow.
+#define SEQ_CTRL_RIGHT_ARROW "\033[1;5C" ///< Escape sequence for Ctrl + Right Arrow.
+#define SEQ_CTRL_LEFT_ARROW  "\033[1;5D" ///< Escape sequence for Ctrl + Left Arrow.
+#define SEQ_INSERT           "\033[2~"   ///< Escape sequence for the Insert key.
+#define SEQ_DELETE           "\033[3~"   ///< Escape sequence for the Delete key.
+#define SEQ_PAGE_UP          "\033[5~"   ///< Escape sequence for the Page Up key.
+#define SEQ_PAGE_DOWN        "\033[6~"   ///< Escape sequence for the Page Down key.
+#define SEQ_F1               "\033OP"    ///< Escape sequence for the F1 key.
+#define SEQ_F2               "\033OQ"    ///< Escape sequence for the F2 key.
+#define SEQ_F3               "\033OR"    ///< Escape sequence for the F3 key.
+#define SEQ_F4               "\033OS"    ///< Escape sequence for the F4 key.
+#define SEQ_F5               "\033[15~"  ///< Escape sequence for the F5 key.
+#define SEQ_F6               "\033[17~"  ///< Escape sequence for the F6 key.
+#define SEQ_F7               "\033[18~"  ///< Escape sequence for the F7 key.
+#define SEQ_F8               "\033[19~"  ///< Escape sequence for the F8 key.
+#define SEQ_F9               "\033[20~"  ///< Escape sequence for the F9 key.
+#define SEQ_F10              "\033[21~"  ///< Escape sequence for the F10 key.
+#define SEQ_F11              "\033[23~"  ///< Escape sequence for the F11 key.
+#define SEQ_F12              "\033[24~"  ///< Escape sequence for the F12 key.
+
 #if USE_XTERM_SEQUENCES
-#define SEQ_HOME "\033[1~"
-#define SEQ_END  "\033[4~"
+#define SEQ_HOME "\033[1~" ///< Escape sequence for the Home key in xterm.
+#define SEQ_END  "\033[4~" ///< Escape sequence for the End key in xterm.
 #else
-#define SEQ_HOME "\033[H"
-#define SEQ_END  "\033[F"
+#define SEQ_HOME "\033[H" ///< Escape sequence for the Home key.
+#define SEQ_END  "\033[F" ///< Escape sequence for the End key.
 #endif
 
 /// @brief Pushes a character into the scancode ring buffer.

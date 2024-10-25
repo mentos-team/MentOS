@@ -86,47 +86,6 @@ struct shmid_ds {
 #define SHM_REMAP  040000  ///< Take-over region on attach.
 #define SHM_EXEC   0100000 ///< Execution access.
 
-#ifdef __KERNEL__
-
-/// @brief Initializes the shared memory.
-/// @return 0 on success, 1 on failure.
-int shm_init(void);
-
-/// @brief Get a System V shared memory identifier.
-/// @param key can be used either to obtain the identifier of a previously
-/// created shared memory, or to create a new one.
-/// @param size of the shared memory, rounded up to a multiple of PAGE_SIZE.
-/// @param shmflg controls the behaviour of the function.
-/// @return the shared memory identifier, -1 on failure, and errno is set to
-/// indicate the error.
-long sys_shmget(key_t key, size_t size, int shmflg);
-
-/// @brief Attaches the shared memory segment identified by shmid to the address
-/// space of the calling process.
-/// @param shmid the shared memory identifier.
-/// @param shmaddr the attaching address.
-/// @param shmflg controls the behaviour of the function.
-/// @return returns the address of the attached shared memory segment; on error
-/// (void *) -1 is returned, and errno is set to indicate the error.
-void *sys_shmat(int shmid, const void *shmaddr, int shmflg);
-
-/// @brief Detaches the shared memory segment located at the address specified
-/// by shmaddr from the address space of the calling process
-/// @param shmaddr the address of the shared memory segment.
-/// @return 0 on success, -1 on failure and errno is set to indicate the error.
-long sys_shmdt(const void *shmaddr);
-
-/// @brief Performs the control operation specified by cmd on the shared memory
-/// segment whose identifier is given in shmid.
-/// @param shmid the shared memory identifier.
-/// @param cmd the command to perform.
-/// @param buf is a pointer to a shmid_ds structure.
-/// @return a non-negative value basedon on the requested operation, -1 on
-/// failure and errno is set to indicate the error.
-long sys_shmctl(int shmid, int cmd, struct shmid_ds *buf);
-
-#else
-
 /// @brief Get a System V shared memory identifier.
 /// @param key can be used either to obtain the identifier of a previously
 /// created shared memory, or to create a new one.
@@ -159,5 +118,3 @@ long shmdt(const void *shmaddr);
 /// @return a non-negative value basedon on the requested operation, -1 on
 /// failure and errno is set to indicate the error.
 long shmctl(int shmid, int cmd, struct shmid_ds *buf);
-
-#endif

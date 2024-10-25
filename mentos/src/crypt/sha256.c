@@ -157,12 +157,6 @@ static inline void __sha256_transform(SHA256_ctx_t *ctx, const uint8_t data[])
     ctx->state[7] += h;
 }
 
-/// @brief Converts a byte array into its hexadecimal string representation.
-/// @param src Pointer to the source byte array.
-/// @param src_length Length of the source byte array.
-/// @param out Pointer to the output buffer for the hexadecimal string.
-/// @param out_length Length of the output buffer (must be at least 2 * src_length + 1).
-/// @details The output string will be null-terminated if the buffer is large enough.
 void sha256_bytes_to_hex(uint8_t *src, size_t src_length, char *out, size_t out_length)
 {
     // Check if the output buffer is large enough to hold the hex string

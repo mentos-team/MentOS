@@ -309,6 +309,7 @@
         }                                                                     \
     }
 
+/// @brief Declares a fixed-size 2d ring buffer.
 #define DECLARE_FIXED_SIZE_2D_RING_BUFFER(type, name, size1, size2, init)   \
     typedef struct {                                                        \
         type buffer[size2];                                                 \

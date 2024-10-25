@@ -14,3 +14,15 @@
 int ipc_valid_permissions(int flags, struct ipc_perm *perm);
 
 struct ipc_perm register_ipc(key_t key, mode_t mode);
+
+/// @brief Initializes the semaphore system.
+/// @return 0 on success, 1 on failure.
+int sem_init(void);
+
+/// @brief Initializes the shared memory.
+/// @return 0 on success, 1 on failure.
+int shm_init(void);
+
+/// @brief Initializes the message queue system.
+/// @return 0 on success, 1 on failure.
+int msq_init(void);
