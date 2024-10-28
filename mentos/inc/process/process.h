@@ -156,7 +156,7 @@ typedef struct task_struct {
     /// Process-wise terminal options.
     termios_t termios;
     /// Buffer for managing inputs from keyboard.
-    fs_rb_scancode_t keyboard_rb;
+    rb_keybuffer_t keyboard_rb;
 
     //==== Future work =========================================================
     // - task's attributes:

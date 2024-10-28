@@ -82,6 +82,15 @@ int printf(const char *fmt, ...);
 ///         On failure, a negative number is returned.
 int sprintf(char *str, const char *fmt, ...);
 
+/// @brief Writes formatted output to `str`.
+/// @param str The buffer where the formatted string will be placed.
+/// @param size The size of the buffer.
+/// @param fmt The format string, following the same specifications as printf.
+/// @param ... The list of arguments.
+/// @return On success, the total number of characters written (excluding the null terminator) is returned.
+///         On failure, a negative number is returned.
+int snprintf(char *str, size_t size, const char *fmt, ...);
+
 #ifndef __KERNEL__
 /// @brief Write formatted output to a file.
 /// @param fd  The file descriptor associated with the file.
@@ -99,6 +108,14 @@ int fprintf(int fd, const char *fmt, ...);
 ///         On failure, a negative number is returned.
 int vfprintf(int fd, const char *fmt, va_list args);
 #endif
+
+/// @brief Formats a string and ensures buffer boundaries are respected.
+/// @param str The output buffer where the formatted string will be stored.
+/// @param size The maximum size of the output buffer.
+/// @param fmt The format string.
+/// @param args The argument list for the format specifiers.
+/// @return int The number of characters written, excluding the null-terminator.
+int vsnprintf(char *str, size_t size, const char *fmt, va_list args);
 
 /// @brief Write formatted data from variable argument list to string.
 /// @param str  Pointer to a buffer where the resulting C-string is stored.

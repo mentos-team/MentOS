@@ -4,10 +4,10 @@
 /// See LICENSE.md for details.
 
 // Setup the logging for this file (do this before any other include).
-#include "sys/kernel_levels.h"          // Include kernel log levels.
-#define __DEBUG_HEADER__ "[LOGIN ]"     ///< Change header.
-#define __DEBUG_LEVEL__  LOGLEVEL_DEBUG ///< Set log level.
-#include "io/debug.h"                   // Include debugging functions.
+#include "sys/kernel_levels.h"           // Include kernel log levels.
+#define __DEBUG_HEADER__ "[LOGIN ]"      ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
+#include "io/debug.h"                    // Include debugging functions.
 
 #include <string.h>
 #include <ctype.h>
@@ -78,6 +78,8 @@ static inline int __read_input(char *buffer, size_t size, int show)
     do {
         c = getchar(); // Read a character from input
 
+        pr_debug("%c\n", c);
+
         // Ignore EOF and null or tab characters
         if (c == EOF || c == 0 || c == '\t') {
             continue;
@@ -113,85 +115,117 @@ static inline int __read_input(char *buffer, size_t size, int show)
             continue;
         }
 
+        // Ctrl+C
+        if (c == 0x03) {
+            memset(buffer, 0, size); // Clear buffer
+            putchar('\n');
+            return -1; // Return -1 on Ctrl+C
+        }
+
+        // CTRL+U
+        if (c == 0x15) {
+            memset(buffer, 0, size); // Clear the current command
+            if (show) {
+                // Clear the current command from display
+                while (index--) {
+                    putchar('\b'); // Move cursor back
+                }
+            }
+            index = 0; // Reset index
+            continue;
+        }
+
         // Handle escape sequences (for arrow keys, home, end, etc.)
         if (c == '\033') {
             c = getchar(); // Get the next character
             if (c == '[') {
                 // Get the direction key (Left, Right, Home, End, Insert, Delete)
                 c = getchar();
-
-                if (c == 'D') { // LEFT Arrow
+                // LEFT Arrow
+                if (c == 'D') {
                     if (index > 0) {
                         if (show) { puts("\033[1D"); } // Move the cursor left
                         index--;                       // Decrease index
                     }
-                } else if (c == 'C') { // RIGHT Arrow
+                }
+                // RIGHT Arrow
+                else if (c == 'C') {
                     if (index < length) {
                         if (show) { puts("\033[1C"); } // Move the cursor right
                         index++;                       // Increase index
                     }
-                } else if (c == '1') {                                // HOME
-                    if (show) { printf("\033[%dD", index); }          // Move cursor to the beginning
-                    index = 0;                                        // Set index to the start
-                } else if (c == '4') {                                // END
+                }
+                // HOME
+                else if (c == 'H') {
+                    if (show) { printf("\033[%dD", index); } // Move cursor to the beginning
+                    index = 0;                               // Set index to the start
+                }
+                // END
+                else if (c == 'F') {
                     if (show) { printf("\033[%dC", length - index); } // Move cursor to the end
                     index = length;                                   // Set index to the end
-                } else if (c == '2') {                                // INSERT
-                    insert_active = !insert_active;                   // Toggle insert mode
-                } else if (c == '3') {                                // DELETE
-                    if (index < length) {
-                        --length;                    // Decrease length
-                        if (show) { putchar(0x7F); } // Show delete character
-                        // Shift left to remove character at index
-                        memmove(buffer + index, buffer + index + 1, length - index + 1);
-                    }
                 }
-
-            } else if (c == '^') {
-                // Handle special commands (Ctrl+C, Ctrl+U)
-                c = getchar();
-                if (c == 'C') {
-                    memset(buffer, 0, size); // Clear buffer
-                    putchar('\n');
-                    return -1; // Return -1 on Ctrl+C
-                }
-
-                if (c == 'U') {
-                    memset(buffer, 0, size); // Clear the current command
-                    if (show) {
-                        // Clear the current command from display
-                        while (index--) {
-                            putchar('\b'); // Move cursor back
+                // INSERT
+                else if (c == '2') {
+                    if (getchar() == '~') {
+                        // Toggle insert mode.
+                        insert_active = !insert_active;
+                        if (insert_active) {
+                            // Change cursor to an underline cursor.
+                            printf("\033[3 q");
+                        } else {
+                            // Change cursor back to a block cursor (default).
+                            printf("\033[0 q");
                         }
                     }
-                    index = 0; // Reset index
+                }
+                // DELETE
+                else if (c == '3') {
+                    if (getchar() == '~') {
+                        if (index < length) {
+                            --length;                    // Decrease length
+                            if (show) { putchar(0x7F); } // Show delete character
+                            // Shift left to remove character at index
+                            memmove(buffer + index, buffer + index + 1, length - index + 1);
+                        }
+                    }
+                }
+                // PAGE_UP
+                else if (c == '5') {
+                    if (getchar() == '~') {
+                        // Nothing to do.
+                    }
+                }
+                // PAGE_DOWN
+                else if (c == '6') {
+                    if (getchar() == '~') {
+                        // Nothing to do.
+                    }
                 }
             }
             continue;
         }
 
-        // Handle alphanumeric input
-        if (isdigit(c) || isalpha(c)) {
-            // Handle insertion based on insert mode
-            if (!insert_active) {
-                // Shift buffer to the right to insert new character
-                memmove(buffer + index + 1, buffer + index, length - index + 1);
-            } else if (show && (index < length - 1)) {
-                puts("\033[1C"); // Move cursor right
-                putchar('\b');   // Prepare to delete the character
-            }
-
-            buffer[index++] = c; // Insert new character
-            length++;            // Increase length
-
-            if (show) { putchar(c); } // Show new character
-
-            // Check if we reached the buffer limit
-            if (index == (size - 1)) {
-                buffer[index] = 0; // Null-terminate the buffer
-                break;             // Exit loop if buffer is full
-            }
+        // Handle insertion based on insert mode
+        if (!insert_active) {
+            // Shift buffer to the right to insert new character
+            memmove(buffer + index + 1, buffer + index, length - index + 1);
+        } else if (show && (index < length - 1)) {
+            puts("\033[1C"); // Move cursor right
+            putchar('\b');   // Prepare to delete the character
         }
+
+        buffer[index++] = c; // Insert new character
+        length++;            // Increase length
+
+        if (show) { putchar(c); } // Show new character
+
+        // Check if we reached the buffer limit
+        if (index == (size - 1)) {
+            buffer[index] = 0; // Null-terminate the buffer
+            break;             // Exit loop if buffer is full
+        }
+
     } while (length < size);
 
     return length; // Return total length of input

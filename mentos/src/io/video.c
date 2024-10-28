@@ -108,6 +108,70 @@ static inline void __draw_char(char c)
     *(pointer++) = color;
 }
 
+/// @brief Hides the VGA cursor.
+void __video_hide_cursor(void)
+{
+    outportb(0x3D4, 0x0A);
+    unsigned char cursor_start = inportb(0x3D5);
+    outportb(0x3D5, cursor_start | 0x20); // Set the most significant bit to disable the cursor.
+}
+
+/// @brief Shows the VGA cursor.
+void __video_show_cursor(void)
+{
+    outportb(0x3D4, 0x0A);
+    unsigned char cursor_start = inportb(0x3D5);
+    outportb(0x3D5, cursor_start & 0xDF); // Clear the most significant bit to enable the cursor.
+}
+
+/// @brief Sets the VGA cursor shape by specifying the start and end scan lines.
+///
+/// @param start The starting scan line of the cursor (0-15).
+/// @param end The ending scan line of the cursor (0-15).
+void __video_set_cursor_shape(unsigned char start, unsigned char end)
+{
+    // Set the cursor's start scan line
+    outportb(0x3D4, 0x0A);
+    outportb(0x3D5, start);
+
+    // Set the cursor's end scan line
+    outportb(0x3D4, 0x0B);
+    outportb(0x3D5, end);
+}
+
+/// @brief Issue the vide to move the cursor to the given position.
+/// @param x The x coordinate.
+/// @param y The y coordinate.
+static inline void __video_set_cursor_position(unsigned int x, unsigned int y)
+{
+    uint32_t position = y * WIDTH + x;
+    // Cursor LOW port to VGA index register.
+    outportb(0x3D4, 0x0F);
+    outportb(0x3D5, (uint8_t)(position & 0xFFU));
+    // Cursor HIGH port to VGA index register.
+    outportb(0x3D4, 0x0E);
+    outportb(0x3D5, (uint8_t)((position >> 8U) & 0xFFU));
+}
+
+/// @brief Retrieves the current VGA cursor position in terms of x and y coordinates.
+///
+/// @param x Pointer to store the x-coordinate (column).
+/// @param y Pointer to store the y-coordinate (row).
+static inline void __video_get_cursor_position(unsigned int *x, unsigned int *y)
+{
+    uint16_t position;
+
+    // Get the low byte of the cursor position.
+    outportb(0x3D4, 0x0F);
+    position = inportb(0x3D5);
+    // Get the high byte of the cursor position.
+    outportb(0x3D4, 0x0E);
+    position |= ((uint16_t)inportb(0x3D5)) << 8;
+    // Calculate x and y.
+    if (x) *x = position % WIDTH;
+    if (y) *y = position / WIDTH;
+}
+
 /// @brief Sets the provided ansi code.
 /// @param ansi_code The ansi code describing background and foreground color.
 static inline void __set_color(uint8_t ansi_code)
@@ -139,7 +203,7 @@ static inline void __move_cursor_backward(int erase, int amount)
             strcpy(pointer, pointer + 2);
         }
     }
-    video_set_cursor_auto();
+    video_update_cursor_position();
 }
 
 /// @brief Moves the cursor forward.
@@ -155,26 +219,43 @@ static inline void __move_cursor_forward(int erase, int amount)
             pointer += 2;
         }
     }
-    video_set_cursor_auto();
+    video_update_cursor_position();
 }
 
-/// @brief Issue the vide to move the cursor to the given position.
-/// @param x The x coordinate.
-/// @param y The y coordinate.
-static inline void __video_set_cursor(unsigned int x, unsigned int y)
+/// @brief Parses the cursor shape escape code and sets the cursor shape accordingly.
+/// @param shape The integer representing the cursor shape code.
+static inline void __parse_cursor_escape_code(int shape)
 {
-    uint32_t position = x * WIDTH + y;
-    // Cursor LOW port to vga INDEX register.
-    outportb(0x3D4, 0x0F);
-    outportb(0x3D5, (uint8_t)(position & 0xFFU));
-    // Cursor HIGH port to vga INDEX register.
-    outportb(0x3D4, 0x0E);
-    outportb(0x3D5, (uint8_t)((position >> 8U) & 0xFFU));
+    switch (shape) {
+    case 0: // Default blinking block cursor
+    case 2: // Blinking block cursor
+        __video_set_cursor_shape(0, 15);
+        break;
+    case 1: // Steady block cursor
+        __video_set_cursor_shape(0, 15);
+        break;
+    case 3: // Blinking underline cursor
+        __video_set_cursor_shape(13, 15);
+        break;
+    case 4: // Steady underline cursor
+        __video_set_cursor_shape(13, 15);
+        break;
+    case 5: // Blinking vertical bar cursor
+        __video_set_cursor_shape(0, 1);
+        break;
+    case 6: // Steady vertical bar cursor
+        __video_set_cursor_shape(0, 1);
+        break;
+    default:
+        // Handle any other cases if needed
+        break;
+    }
 }
 
 void video_init(void)
 {
     video_clear();
+    __parse_cursor_escape_code(0);
 }
 
 void video_update(void)
@@ -200,14 +281,39 @@ void video_putc(int c)
         escape_buffer[escape_index]   = 0;
         if (isalpha(c)) {
             escape_buffer[--escape_index] = 0;
+
+            // Move cursor forward (e.g., ESC [ <num> C)
             if (c == 'C') {
                 __move_cursor_forward(false, atoi(escape_buffer));
-            } else if (c == 'D') {
+            }
+            // Move cursor backward (e.g., ESC [ <num> D)
+            else if (c == 'D') {
                 __move_cursor_backward(false, atoi(escape_buffer));
-            } else if (c == 'm') {
+            }
+            // Set color (e.g., ESC [ <num> m)
+            else if (c == 'm') {
                 __set_color(atoi(escape_buffer));
-            } else if (c == 'J') {
+            }
+            // Clear screen (e.g., ESC [ <num> J)
+            else if (c == 'J') {
                 video_clear();
+            }
+            // Clear screen (e.g., ESC [ <num> J)
+            else if (c == 'H') {
+                char *semicolon = strchr(escape_buffer, ';');
+                if (semicolon != NULL) {
+                    *semicolon     = '\0';
+                    unsigned int y = atoi(escape_buffer);
+                    unsigned int x = atoi(semicolon + 1);
+                    pointer        = ADDR + ((y - 1) * WIDTH * 2 + (x - 1) * 2);
+                } else {
+                    pointer = ADDR;
+                }
+                video_update_cursor_position();
+            }
+            // Handle cursor shape (e.g., ESC [ <num> q)
+            else if (c == 'q') {
+                __parse_cursor_escape_code(atoi(escape_buffer));
             }
             escape_index = -1;
         }
@@ -239,7 +345,7 @@ void video_putc(int c)
     }
 
     video_shift_one_line_up();
-    video_set_cursor_auto();
+    video_update_cursor_position();
 }
 
 void video_puts(const char *str)
@@ -255,13 +361,15 @@ void video_puts(const char *str)
     }
 }
 
-void video_set_cursor_auto(void)
+void video_update_cursor_position(void)
 {
 #ifndef VGA_TEXT_MODE
     if (vga_is_enabled())
         return;
 #endif
-    __video_set_cursor(((pointer - ADDR) / 2U) / WIDTH, ((pointer - ADDR) / 2U) % WIDTH);
+    __video_set_cursor_position(
+        ((pointer - ADDR) / 2U) % WIDTH,
+        ((pointer - ADDR) / 2U) / WIDTH);
 }
 
 void video_move_cursor(unsigned int x, unsigned int y)
@@ -273,7 +381,7 @@ void video_move_cursor(unsigned int x, unsigned int y)
     }
 #endif
     pointer = ADDR + ((y * WIDTH * 2) + (x * 2));
-    video_set_cursor_auto();
+    video_update_cursor_position();
 }
 
 void video_get_cursor_position(unsigned int *x, unsigned int *y)
@@ -330,7 +438,7 @@ void video_new_line(void)
 #endif
     pointer = ADDR + ((pointer - ADDR) / W2 + 1) * W2;
     video_shift_one_line_up();
-    video_set_cursor_auto();
+    video_update_cursor_position();
 }
 
 void video_cartridge_return(void)
@@ -344,7 +452,7 @@ void video_cartridge_return(void)
     pointer = ADDR + ((pointer - ADDR) / W2 - 1) * W2;
     video_new_line();
     video_shift_one_line_up();
-    video_set_cursor_auto();
+    video_update_cursor_position();
 }
 
 void video_shift_one_line_up(void)

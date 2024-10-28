@@ -10,6 +10,9 @@
 #include "kernel.h"
 #include "sys/dirent.h"
 #include "sys/types.h"
+#include "sys/msg.h"
+#include "sys/sem.h"
+#include "sys/shm.h"
 
 /// @brief Initialize the system calls.
 void syscall_init(void);
@@ -266,3 +269,113 @@ ssize_t sys_getdents(int fd, dirent_t *dirp, unsigned int count);
 /// @param time Where the time should be stored.
 /// @return The current time.
 time_t sys_time(time_t *time);
+
+/// @brief Get a System V semaphore set identifier.
+/// @param key can be used either to obtain the identifier of a previously
+/// created semaphore set, or to create a new set.
+/// @param nsems number of semaphores.
+/// @param semflg controls the behaviour of the function.
+/// @return the semaphore set identifier, -1 on failure, and errno is set to
+/// indicate the error.
+long sys_semget(key_t key, int nsems, int semflg);
+
+/// @brief Performs operations on selected semaphores in the set.
+/// @param semid the semaphore set identifier.
+/// @param sops specifies operations to be performed on single semaphores.
+/// @param nsops number of operations.
+/// @return 0 on success, -1 on failure and errno is set to indicate the error.
+long sys_semop(int semid, struct sembuf *sops, unsigned nsops);
+
+/// @brief Performs control operations on a semaphore set.
+/// @param semid the semaphore set identifier.
+/// @param semnum the n-th semaphore of the set on which we perform the operations.
+/// @param cmd the command to perform.
+/// @param arg
+/// @return 0 on success, -1 on failure and errno is set to indicate the error.
+long sys_semctl(int semid, int semnum, int cmd, union semun *arg);
+
+/// @brief Get a System V shared memory identifier.
+/// @param key can be used either to obtain the identifier of a previously
+/// created shared memory, or to create a new one.
+/// @param size of the shared memory, rounded up to a multiple of PAGE_SIZE.
+/// @param shmflg controls the behaviour of the function.
+/// @return the shared memory identifier, -1 on failure, and errno is set to
+/// indicate the error.
+long sys_shmget(key_t key, size_t size, int shmflg);
+
+/// @brief Attaches the shared memory segment identified by shmid to the address
+/// space of the calling process.
+/// @param shmid the shared memory identifier.
+/// @param shmaddr the attaching address.
+/// @param shmflg controls the behaviour of the function.
+/// @return returns the address of the attached shared memory segment; on error
+/// (void *) -1 is returned, and errno is set to indicate the error.
+void *sys_shmat(int shmid, const void *shmaddr, int shmflg);
+
+/// @brief Detaches the shared memory segment located at the address specified
+/// by shmaddr from the address space of the calling process
+/// @param shmaddr the address of the shared memory segment.
+/// @return 0 on success, -1 on failure and errno is set to indicate the error.
+long sys_shmdt(const void *shmaddr);
+
+/// @brief Performs the control operation specified by cmd on the shared memory
+/// segment whose identifier is given in shmid.
+/// @param shmid the shared memory identifier.
+/// @param cmd the command to perform.
+/// @param buf is a pointer to a shmid_ds structure.
+/// @return a non-negative value basedon on the requested operation, -1 on
+/// failure and errno is set to indicate the error.
+long sys_shmctl(int shmid, int cmd, struct shmid_ds *buf);
+
+/// @brief Get a System V message queue identifier.
+/// @param key can be used either to obtain the identifier of a previously
+/// created message queue, or to create a new set.
+/// @param msgflg controls the behaviour of the function.
+/// @return the message queue identifier, -1 on failure, and errno is set to
+/// indicate the error.
+int sys_msgget(key_t key, int msgflg);
+
+/// @brief Used to send messages.
+/// @param msqid the message queue identifier.
+/// @param msgp points to a used-defined msgbuf.
+/// @param msgsz specifies the size in bytes of mtext.
+/// @param msgflg specifies the action to be taken in case of specific events.
+/// @return 0 on success, -1 on failure and errno is set to indicate the error.
+int sys_msgsnd(int msqid, const void *msgp, size_t msgsz, int msgflg);
+
+/// @brief Used to receive messages.
+/// @param msqid the message queue identifier.
+/// @param msgp points to a used-defined msgbuf.
+/// @param msgsz specifies the size in bytes of mtext.
+/// @param msgtyp specifies the type of message requested, as follows:
+/// - msgtyp == 0: the first message on the queue is received.
+/// - msgtyp  > 0: the first message of type, msgtyp, is received.
+/// - msgtyp  < 0: the first message of the lowest type that is less than or
+///                equal to the absolute value of msgtyp is received.
+/// @param msgflg specifies the action to be taken in case of specific events.
+/// @return the number of bytes actually copied on success, -1 on failure and
+/// errno is set to indicate the error.
+ssize_t sys_msgrcv(int msqid, void *msgp, size_t msgsz, long msgtyp, int msgflg);
+
+/// @brief Message queue control operations.
+/// @param msqid the message queue identifier.
+/// @param cmd The command to perform.
+/// @param buf used with IPC_STAT and IPC_SET.
+/// @return 0 on success, -1 on failure and errno is set to indicate the error.
+int sys_msgctl(int msqid, int cmd, struct msqid_ds *buf);
+
+/// @brief creates a new mapping in the virtual address space of the calling process.
+/// @param addr the starting address for the new mapping.
+/// @param length specifies the length of the mapping (which must be greater than 0).
+/// @param prot describes the desired memory protection of the mapping (and must not conflict with the open mode of the file).
+/// @param flags determines whether updates to the mapping are visible to other processes mapping the same region.
+/// @param fd in case of file mapping, the file descriptor to use.
+/// @param offset offset in the file, which must be a multiple of the page size PAGE_SIZE.
+/// @return returns a pointer to the mapped area, -1 and errno is set.
+void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset);
+
+/// @brief deletes the mappings for the specified address range.
+/// @param addr the starting address.
+/// @param length the length of the mapped area.
+/// @return 0 on success, -1 on falure and errno is set.
+int sys_munmap(void *addr, size_t length);

@@ -63,51 +63,6 @@ struct msqid_ds {
     pid_t msg_lrpid;
 };
 
-#ifdef __KERNEL__
-
-/// @brief Initializes the message queue system.
-/// @return 0 on success, 1 on failure.
-int msq_init(void);
-
-/// @brief Get a System V message queue identifier.
-/// @param key can be used either to obtain the identifier of a previously
-/// created message queue, or to create a new set.
-/// @param msgflg controls the behaviour of the function.
-/// @return the message queue identifier, -1 on failure, and errno is set to
-/// indicate the error.
-int sys_msgget(key_t key, int msgflg);
-
-/// @brief Used to send messages.
-/// @param msqid the message queue identifier.
-/// @param msgp points to a used-defined msgbuf.
-/// @param msgsz specifies the size in bytes of mtext.
-/// @param msgflg specifies the action to be taken in case of specific events.
-/// @return 0 on success, -1 on failure and errno is set to indicate the error.
-int sys_msgsnd(int msqid, const void *msgp, size_t msgsz, int msgflg);
-
-/// @brief Used to receive messages.
-/// @param msqid the message queue identifier.
-/// @param msgp points to a used-defined msgbuf.
-/// @param msgsz specifies the size in bytes of mtext.
-/// @param msgtyp specifies the type of message requested, as follows:
-/// - msgtyp == 0: the first message on the queue is received.
-/// - msgtyp  > 0: the first message of type, msgtyp, is received.
-/// - msgtyp  < 0: the first message of the lowest type that is less than or
-///                equal to the absolute value of msgtyp is received.
-/// @param msgflg specifies the action to be taken in case of specific events.
-/// @return the number of bytes actually copied on success, -1 on failure and
-/// errno is set to indicate the error.
-ssize_t sys_msgrcv(int msqid, void *msgp, size_t msgsz, long msgtyp, int msgflg);
-
-/// @brief Message queue control operations.
-/// @param msqid the message queue identifier.
-/// @param cmd The command to perform.
-/// @param buf used with IPC_STAT and IPC_SET.
-/// @return 0 on success, -1 on failure and errno is set to indicate the error.
-int sys_msgctl(int msqid, int cmd, struct msqid_ds *buf);
-
-#else
-
 /// @brief Get a System V message queue identifier.
 /// @param key can be used either to obtain the identifier of a previously
 /// created message queue, or to create a new set.
@@ -144,5 +99,3 @@ ssize_t msgrcv(int msqid, void *msgp, size_t msgsz, long msgtyp, int msgflg);
 /// @param buf used with IPC_STAT and IPC_SET.
 /// @return 0 on success, -1 on failure and errno is set to indicate the error.
 int msgctl(int msqid, int cmd, struct msqid_ds *buf);
-
-#endif

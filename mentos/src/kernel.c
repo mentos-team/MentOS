@@ -37,6 +37,7 @@
 #include "sys/msg.h"
 #include "sys/sem.h"
 #include "sys/shm.h"
+#include "ipc/ipc.h"
 #include "system/syscall.h"
 #include "version.h"
 

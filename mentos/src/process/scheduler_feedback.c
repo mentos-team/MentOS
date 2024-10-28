@@ -58,11 +58,16 @@ unsigned long next_log;
 /// session.
 size_t total_occurrences;
 
-/// @brief A structure that keeps track of scheduling statistics.
+/// @brief Structure that keeps track of scheduling statistics.
 struct statistic {
+    /// @brief Pointer to the task structure.
     task_struct *task;
+    /// @brief Number of times the task has been scheduled.
     unsigned long occur;
-} arr_stats[PID_MAX_LIMIT];
+};
+
+/// @brief Keeps track of scheduling statistics.
+struct statistic arr_stats[PID_MAX_LIMIT];
 
 /// @brief Updates when the logging should happen.
 static inline void __scheduler_feedback_deadline_advance(void)
