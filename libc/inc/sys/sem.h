@@ -26,8 +26,9 @@
 #define SEM_STAT 18 ///< Return a semid_ds structure.
 #define SEM_INFO 19 ///< Return a seminfo structure.
 
-/// }@
+/// @}
 
+/// @brief Defines the maximum number of semaphores in a semaphore set.
 #define SEM_SET_MAX 256
 
 /// @brief Optional argument for semctl() function

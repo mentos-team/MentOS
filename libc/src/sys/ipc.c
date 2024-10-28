@@ -5,19 +5,12 @@
 
 #include "sys/ipc.h"
 
-#include "io/debug.h"
-#include "io/debug.h"
-#include "stddef.h"
-#include "stdio.h"
-#include "stdio.h"
-#include "stdlib.h"
-#include "string.h"
-#include "sys/errno.h"
-#include "sys/msg.h"
-#include "sys/sem.h"
 #include "sys/shm.h"
+#include "sys/sem.h"
+#include "sys/msg.h"
+#include "sys/errno.h"
 #include "sys/stat.h"
-#include "sys/unistd.h"
+#include "io/debug.h"
 #include "system/syscall_types.h"
 
 _syscall3(void *, shmat, int, shmid, const void *, shmaddr, int, shmflg)

@@ -222,7 +222,9 @@ static inline void __move_cursor_forward(int erase, int amount)
     video_update_cursor_position();
 }
 
-void __parse_cursor_escape_code(int shape)
+/// @brief Parses the cursor shape escape code and sets the cursor shape accordingly.
+/// @param shape The integer representing the cursor shape code.
+static inline void __parse_cursor_escape_code(int shape)
 {
     switch (shape) {
     case 0: // Default blinking block cursor
