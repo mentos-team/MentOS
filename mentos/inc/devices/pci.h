@@ -200,42 +200,46 @@ typedef enum {
 /// @}
 
 /// @name PCI Base Addresses
-/// @brief
-/// Base addresses specify locations in memory or I/O space.
-/// Decoded size can be determined by writing a value of 0xffffffff to the
-/// register, and reading it back. Only 1 bits are decoded.
+/// @brief Base addresses specify locations in memory or I/O space.
+/// @details Decoded size can be determined by writing a value of 0xffffffff
+/// to the register and reading it back. Only bits set to 1 are decoded.
 /// @{
-
-#define PCI_BASE_ADDRESS_0 0x10 ///< Location of base address 0.
-#define PCI_BASE_ADDRESS_1 0x14 ///< Location of base address 1.
-#define PCI_BASE_ADDRESS_2 0x18 ///< Location of base address 2.
-#define PCI_BASE_ADDRESS_3 0x1c ///< Location of base address 3.
-#define PCI_BASE_ADDRESS_4 0x20 ///< Location of base address 4.
-#define PCI_BASE_ADDRESS_5 0x24 ///< Location of base address 5.
-
+#define PCI_BASE_ADDRESS_0 0x10 ///< Memory location of base address 0.
+#define PCI_BASE_ADDRESS_1 0x14 ///< Memory location of base address 1.
+#define PCI_BASE_ADDRESS_2 0x18 ///< Memory location of base address 2.
+#define PCI_BASE_ADDRESS_3 0x1c ///< Memory location of base address 3.
+#define PCI_BASE_ADDRESS_4 0x20 ///< Memory location of base address 4.
+#define PCI_BASE_ADDRESS_5 0x24 ///< Memory location of base address 5.
 /// @}
 
-#define PCI_PRIMARY_BUS   0x18 ///< Primary bus number.
-#define PCI_SECONDARY_BUS 0x19 ///< Secondary bus number.
+/// @brief PCI bus numbers.
+#define PCI_PRIMARY_BUS   0x18 ///< Primary PCI bus number.
+#define PCI_SECONDARY_BUS 0x19 ///< Secondary PCI bus number.
 
-#define PCI_HEADER_TYPE_NORMAL  0 ///< TODO: Document.
-#define PCI_HEADER_TYPE_BRIDGE  1 ///< TODO: Document.
-#define PCI_HEADER_TYPE_CARDBUS 2 ///< TODO: Document.
+/// @brief PCI header types.
+#define PCI_HEADER_TYPE_NORMAL  0 ///< Standard PCI device header type.
+#define PCI_HEADER_TYPE_BRIDGE  1 ///< PCI-to-PCI bridge header type.
+#define PCI_HEADER_TYPE_CARDBUS 2 ///< CardBus bridge header type.
 
-/// @brief PCI class codes
-#define PCI_CLASS_BRIDGE 0x06 // Class code for bridges
-/// @brief PCI subclass codes for bridge devices
-#define PCI_SUBCLASS_PCI_BRIDGE 0x04 // Subclass code for PCI-to-PCI bridge
-/// @brief This constant can also be used to represent the combination of class
-/// and subclass. It is sometimes constructed from the class and subclass
-/// values.
+/// @brief PCI class code for bridges.
+#define PCI_CLASS_BRIDGE 0x06 ///< Class code for PCI bridge devices.
+
+/// @brief PCI subclass codes for bridge devices.
+#define PCI_SUBCLASS_PCI_BRIDGE 0x04 ///< Subclass code for PCI-to-PCI bridges.
+
+/// @brief Represents the combination of PCI class and subclass for bridges.
+/// @details This value is constructed using the class and subclass codes.
 #define PCI_TYPE_BRIDGE ((PCI_CLASS_BRIDGE << 16U) | (PCI_SUBCLASS_PCI_BRIDGE << 8U))
 
-#define PCI_TYPE_SATA                0x010600 ///< TODO: Document.
+/// @brief PCI device type for SATA controllers.
+#define PCI_TYPE_SATA 0x010600 ///< Device type code for SATA controllers.
 
-#define PCI_ADDRESS_PORT 0xCF8  ///< TODO: Document.
-#define PCI_VALUE_PORT   0xCFC  ///< TODO: Document.
-#define PCI_NONE         0xFFFF ///< TODO: Document.
+/// @brief PCI I/O port addresses for configuration space access.
+#define PCI_ADDRESS_PORT 0xCF8 ///< I/O port for addressing PCI configuration space.
+#define PCI_VALUE_PORT   0xCFC ///< I/O port for reading/writing PCI configuration data.
+
+/// @brief Constant used when no PCI device is found.
+#define PCI_NONE 0xFFFF ///< No PCI device present.
 
 /// @brief PIC scan function.
 typedef int (*pci_scan_func_t)(uint32_t device, uint16_t vendor_id, uint16_t device_id, void *extra);
