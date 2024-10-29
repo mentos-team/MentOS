@@ -724,14 +724,16 @@ static inline int ata_dma_free(uintptr_t logical_addr)
 /// @return 0 on success, 1 on failure.
 static inline int ata_dma_enable_bus_mastering(void)
 {
+    uint32_t pci_cmd;
+
     // Ensure that the ata_pci device handle is valid.
     if (!ata_pci) {
         pr_crit("Invalid PCI device handle.\n");
         return 1;
     }
 
-    // Read the PCI command register.
-    uint32_t pci_cmd = pci_read_32(ata_pci, PCI_COMMAND);
+    // Read the PCI command register
+    pci_cmd = pci_read_32(ata_pci, PCI_COMMAND);
 
     // Check if bus mastering is already enabled.
     if (bit_check(pci_cmd, pci_command_bus_master)) {
@@ -741,11 +743,14 @@ static inline int ata_dma_enable_bus_mastering(void)
 
     // Enable bus mastering by setting the corresponding bit.
     bit_set_assign(pci_cmd, pci_command_bus_master);
-    // Write the updated PCI command register back to the device.
+
+    // Write the updated PCI command register back to the device
     pci_write_32(ata_pci, PCI_COMMAND, pci_cmd);
 
-    // Verify that bus mastering is enabled.
+    // Read the current PCI command register
     pci_cmd = pci_read_32(ata_pci, PCI_COMMAND);
+
+    // Verify that bus mastering is enabled
     if (!bit_check(pci_cmd, pci_command_bus_master)) {
         pr_crit("Bus mastering is not correctly set.\n");
         return 1;
@@ -762,14 +767,16 @@ static inline int ata_dma_enable_bus_mastering(void)
 /// @return 0 on success, 1 on failure.
 static inline int ata_dma_disable_bus_mastering(void)
 {
+    uint32_t pci_cmd;
+
     // Ensure that the ata_pci device handle is valid.
     if (!ata_pci) {
         pr_crit("Invalid PCI device handle.\n");
         return 1;
     }
 
-    // Read the current PCI command register.
-    uint32_t pci_cmd = pci_read_32(ata_pci, PCI_COMMAND);
+    // Read the current PCI command register
+    pci_cmd = pci_read_32(ata_pci, PCI_COMMAND);
 
     // Check if bus mastering is currently enabled.
     if (!bit_check(pci_cmd, pci_command_bus_master)) {
@@ -779,11 +786,14 @@ static inline int ata_dma_disable_bus_mastering(void)
 
     // Clear the bus mastering bit to disable it.
     bit_clear_assign(pci_cmd, pci_command_bus_master);
+
     // Write the updated PCI command register back to the device.
     pci_write_32(ata_pci, PCI_COMMAND, pci_cmd);
 
-    // Verify that bus mastering is disabled.
+    // Read the current PCI command register
     pci_cmd = pci_read_32(ata_pci, PCI_COMMAND);
+
+    // Verify that bus mastering is disabled.
     if (bit_check(pci_cmd, pci_command_bus_master)) {
         pr_crit("Bus mastering is not correctly cleared.\n");
         return 1;
@@ -805,8 +815,22 @@ static inline int ata_dma_disable_bus_mastering(void)
 /// @return 0 on success, 1 on failure.
 static inline int ata_dma_initialize_bus_mastering_address(ata_device_t *dev)
 {
-    // Read the value of the PCI Base Address Register (BAR) for bus mastering.
-    uint32_t address = pci_read_32(ata_pci, PCI_BASE_ADDRESS_4);
+    uint32_t address;
+
+    // Check if the device pointer is valid.
+    if (dev == NULL) {
+        pr_warning("Device pointer 'dev' is NULL.\n");
+        return 1;
+    }
+
+    // Ensure that the ata_pci device handle is valid
+    if (!ata_pci) {
+        pr_warning("Invalid PCI device handle.\n");
+        return 1;
+    }
+
+    // Read the value of the PCI Base Address Register (BAR) for bus mastering
+    address = pci_read_32(ata_pci, PCI_BASE_ADDRESS_4);
 
     // Check if the lowest bit is set to distinguish between memory space and
     // I/O space BARs. Memory space BARs have the lowest bit as 0, while I/O
