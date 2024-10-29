@@ -579,7 +579,7 @@ int pci_scan_func(pci_scan_func_t f, int type, uint8_t bus, uint8_t slot, uint8_
     }
 
     uint32_t device, device_type;
-    uint8_t class_code, subclass_code, secondary_bus;
+    uint8_t secondary_bus;
 
     // Obtain the device identifier.
     if (pci_box_device(bus, slot, func, &device)) {
@@ -599,11 +599,8 @@ int pci_scan_func(pci_scan_func_t f, int type, uint8_t bus, uint8_t slot, uint8_
             return 1;
         }
     }
-    // Extract class and subclass codes from device_type.
-    class_code    = (device_type >> 16U) & 0xFF;
-    subclass_code = (device_type >> 8U) & 0xFF;
     // If the device is a PCI bridge, scan the secondary bus
-    if ((class_code == PCI_TYPE_BRIDGE) && (subclass_code == PCI_TYPE_SUBCLASS_PCI_BRIDGE)) {
+    if (device_type == PCI_TYPE_BRIDGE) {
         // Get the secondary bus.
         if (pci_read_8(device, PCI_SECONDARY_BUS, &secondary_bus)) {
             pr_err("Failed to read secondary bus number for device %u.\n", device);

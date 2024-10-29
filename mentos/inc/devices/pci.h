@@ -222,9 +222,16 @@ typedef enum {
 #define PCI_HEADER_TYPE_BRIDGE  1 ///< TODO: Document.
 #define PCI_HEADER_TYPE_CARDBUS 2 ///< TODO: Document.
 
-#define PCI_TYPE_BRIDGE              0x060400 ///< TODO: Document.
+/// @brief PCI class codes
+#define PCI_CLASS_BRIDGE 0x06 // Class code for bridges
+/// @brief PCI subclass codes for bridge devices
+#define PCI_SUBCLASS_PCI_BRIDGE 0x04 // Subclass code for PCI-to-PCI bridge
+/// @brief This constant can also be used to represent the combination of class
+/// and subclass. It is sometimes constructed from the class and subclass
+/// values.
+#define PCI_TYPE_BRIDGE ((PCI_CLASS_BRIDGE << 16U) | (PCI_SUBCLASS_PCI_BRIDGE << 8U))
+
 #define PCI_TYPE_SATA                0x010600 ///< TODO: Document.
-#define PCI_TYPE_SUBCLASS_PCI_BRIDGE 0x04
 
 #define PCI_ADDRESS_PORT 0xCF8  ///< TODO: Document.
 #define PCI_VALUE_PORT   0xCFC  ///< TODO: Document.
