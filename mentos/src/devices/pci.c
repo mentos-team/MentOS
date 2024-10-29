@@ -365,15 +365,23 @@ int pci_write_32(uint32_t device, uint32_t field, uint32_t value)
     return 0;
 }
 
-uint8_t pci_read_8(uint32_t device, int field)
+int pci_read_8(uint32_t device, uint32_t field, uint8_t *value)
 {
-    // Get the PCI configuration address
+    // Check if the output pointer is valid.
+    if (value == NULL) {
+        pr_err("Output parameter 'value' is NULL.\n");
+        return 1;
+    }
+    // Get the PCI configuration address.
     uint32_t addr;
     if (pci_get_addr(device, field, &addr)) {
-        return 0;
+        return 1;
     }
+    // Write the address to the PCI address port
     outportl(PCI_ADDRESS_PORT, addr);
-    return inportb(PCI_VALUE_PORT + (field & 0x03));
+    // Read the 8-bit value from the PCI data port with the adjusted field offset
+    *value = inports(PCI_VALUE_PORT + (field & 0x03));
+    return 0;
 }
 
 uint16_t pci_read_16(uint32_t device, int field)
@@ -487,15 +495,22 @@ static inline int pci_find_type(uint32_t device, uint32_t *device_type)
         pr_err("Output parameter 'device_type' is NULL.\n");
         return 1;
     }
-    uint8_t class_code;
-    uint8_t subclass_code;
-    uint8_t prog_if;
+    uint8_t class_code, subclass_code, prog_if;
     // Read the class code.
-    class_code = pci_read_8(device, PCI_CLASS);
+    if (pci_read_8(device, PCI_CLASS, &class_code)) {
+        pr_err("Failed to read class code from device %u.\n", device);
+        return 1;
+    }
     // Read the subclass code.
-    subclass_code = pci_read_8(device, PCI_SUBCLASS);
+    if (pci_read_8(device, PCI_SUBCLASS, &subclass_code)) {
+        pr_err("Failed to read subclass code from device %u.\n", device);
+        return 1;
+    }
     // Read the programming interface.
-    prog_if = pci_read_8(device, PCI_PROG_IF);
+    if (pci_read_8(device, PCI_PROG_IF, &prog_if)) {
+        pr_err("Failed to read programming interface from device %u.\n", device);
+        return 1;
+    }
     // Combine the class code, subclass code, and programming interface
     *device_type = (class_code << 16U) | (subclass_code << 8U) | prog_if;
     return 0;
@@ -514,13 +529,8 @@ static inline int pci_scan_hit(pci_scan_func_t f, uint32_t device, void *extra)
         return 1;
     }
 
-    uint16_t vendor_id;
-    uint16_t device_id;
-    // Check if the function pointer f is valid.
-    if (f == NULL) {
-        pr_err("Function pointer is NULL.\n");
-        return 1;
-    }
+    uint16_t vendor_id, device_id;
+
     // Read the vendor ID.
     vendor_id = pci_read_16(device, PCI_VENDOR_ID);
     // Read the device ID.
@@ -573,7 +583,10 @@ int pci_scan_func(pci_scan_func_t f, int type, uint8_t bus, uint8_t slot, uint8_
     // If the device is a PCI bridge, scan the secondary bus
     if ((class_code == PCI_TYPE_BRIDGE) && (subclass_code == PCI_TYPE_SUBCLASS_PCI_BRIDGE)) {
         // Get the secondary bus.
-        secondary_bus = pci_read_8(device, PCI_SECONDARY_BUS);
+        if (pci_read_8(device, PCI_SECONDARY_BUS, &secondary_bus)) {
+            pr_err("Failed to read secondary bus number for device %u.\n", device);
+            return 1;
+        }
 
         // Recursively scan the secondary bus.
         if (pci_scan_bus(f, type, secondary_bus, extra)) {
@@ -616,7 +629,10 @@ int pci_scan_slot(pci_scan_func_t f, int type, uint8_t bus, uint8_t slot, void *
     }
 
     // Read the header type to determine if the device is multi-function
-    header_type = pci_read_8(device, PCI_HEADER_TYPE);
+    if (pci_read_8(device, PCI_HEADER_TYPE, &header_type)) {
+        pr_err("Failed to read header type for device at bus %u, slot %u, function 0.\n", bus, slot);
+        return 1; // Cannot proceed further
+    }
 
     // Check if the device is multi-function (bit 7 of header_type is set)
     if ((header_type & 0x80) != 0) {
@@ -673,7 +689,10 @@ int pci_scan(pci_scan_func_t f, int type, void *extra)
     uint16_t vendor_id;
 
     // Read the header type of bus 0, device 0, function 0
-    header_type = pci_read_8(0, PCI_HEADER_TYPE);
+    if (pci_read_8(0, PCI_HEADER_TYPE, &header_type)) {
+        pr_err("Failed to read header type from bus 0, device 0, function 0.\n");
+        return 1;
+    }
 
     // Check if it is a single PCI host controller.
     if ((header_type & 0x80) == 0) {
@@ -741,14 +760,24 @@ static inline int pci_remap(void)
         return 1;
     }
 
+    uint8_t value;
+    uint32_t out = 0;
+
     pr_default("PCI-to-ISA interrupt mappings by line:\n");
 
     for (int i = 0; i < 4; ++i) {
-        pci_remaps[i] = pci_read_8(pci_isa, 0x60 + i);
+        // Read the interrupt mapping value for the current line.
+        if (pci_read_8(pci_isa, 0x60 + i, &value)) {
+            pr_err("Failed to read interrupt mapping for line %d.\n", i + 1);
+            return 1;
+        }
+
+        // Store the value in the pci_remaps array.
+        pci_remaps[i] = value;
+
         pr_default("\tLine %d: 0x%2x\n", i + 1, pci_remaps[i]);
     }
 
-    uint32_t out = 0;
     memcpy(&out, &pci_remaps, 4);
 
     // Write the updated interrupt mappings back to the device.
@@ -760,81 +789,201 @@ static inline int pci_remap(void)
     return 0;
 }
 
-int pci_get_interrupt(uint32_t device)
+/// @brief Gets the interrupt line for a PCI device.
+/// @param device The PCI device identifier.
+/// @param[out] interrupt_line Pointer to store the interrupt line.
+/// @return 0 on success, non-zero on failure.
+int pci_get_interrupt(uint32_t device, uint8_t *interrupt_line)
 {
-    if (pci_isa == 0) {
-        return pci_read_8(device, PCI_INTERRUPT_LINE);
+    // Check if the output pointer is valid
+    if (interrupt_line == NULL) {
+        pr_err("Output parameter 'interrupt_line' is NULL.\n");
+        return 1;
     }
 
-    uint32_t irq_pin = pci_read_8(device, PCI_INTERRUPT_PIN);
+    uint8_t irq_pin;
+    uint8_t int_line;
+    uint8_t slot;
+    int pirq;
+    uint32_t out;
+
+    // Check if pci_isa is 0
+    if (pci_isa == 0) {
+        // Read PCI_INTERRUPT_LINE
+        if (pci_read_8(device, PCI_INTERRUPT_LINE, interrupt_line) != 0) {
+            pr_err("Failed to read PCI_INTERRUPT_LINE from device %u.\n", device);
+            return 1;
+        }
+        return 0;
+    }
+
+    // Read PCI_INTERRUPT_PIN
+    if (pci_read_8(device, PCI_INTERRUPT_PIN, &irq_pin) != 0) {
+        pr_err("Failed to read PCI_INTERRUPT_PIN from device %u.\n", device);
+        return 1;
+    }
 
     if (irq_pin == 0) {
-        pr_default("PCI device does not specific interrupt line\n");
-        return pci_read_8(device, PCI_INTERRUPT_LINE);
+        pr_default("PCI device does not specify interrupt line.\n");
+        // Read PCI_INTERRUPT_LINE
+        if (pci_read_8(device, PCI_INTERRUPT_LINE, interrupt_line) != 0) {
+            pr_err("Failed to read PCI_INTERRUPT_LINE from device %u.\n", device);
+            return 1;
+        }
+        return 0;
     }
 
-    int pirq          = (irq_pin + PCI_GET_SLOT(device) - 2) % 4;
-    uint32_t int_line = pci_read_8(device, PCI_INTERRUPT_LINE);
-    pr_default("Slot is %d, irq pin is %d, so pirq is %d and that maps to %d?"
-               "int_line=%d\n",
-               PCI_GET_SLOT(device), irq_pin, pirq, pci_remaps[pirq],
-               int_line);
-    if (pci_remaps[pirq] == 0x80) {
-        pr_default("Not mapped, remapping?\n");
-        pci_remaps[pirq] = int_line;
-        uint32_t out     = 0;
-        memcpy(&out, &pci_remaps, 4);
-        pci_write_32(pci_isa, 0x60, out);
-        return pci_read_8(device, PCI_INTERRUPT_LINE);
+    // Get the slot number
+    slot = PCI_GET_SLOT(device);
+
+    // Calculate pirq
+    pirq = (irq_pin + slot - 2) % 4;
+
+    // Read PCI_INTERRUPT_LINE
+    if (pci_read_8(device, PCI_INTERRUPT_LINE, &int_line) != 0) {
+        pr_err("Failed to read PCI_INTERRUPT_LINE from device %u.\n", device);
+        return 1;
     }
-    return pci_remaps[pirq];
+
+    pr_default("Slot is %d, irq_pin is %d, so pirq is %d and that maps to %d, int_line=%d\n",
+               slot, irq_pin, pirq, pci_remaps[pirq], int_line);
+
+    if (pci_remaps[pirq] == 0x80) {
+        pr_default("Not mapped, remapping.\n");
+        pci_remaps[pirq] = int_line;
+
+        // Prepare data to write back by copying pci_remaps into a 32-bit variable
+        memcpy(&out, pci_remaps, sizeof(pci_remaps));
+
+        // Write the updated interrupt mappings back to the ISA bridge
+        if (pci_write_32(pci_isa, 0x60, out) != 0) {
+            pr_err("Failed to write updated interrupt mappings.\n");
+            return 1;
+        }
+
+        // Read PCI_INTERRUPT_LINE again
+        if (pci_read_8(device, PCI_INTERRUPT_LINE, interrupt_line) != 0) {
+            pr_err("Failed to read PCI_INTERRUPT_LINE from device %u.\n", device);
+            return 1;
+        }
+        return 0;
+    }
+
+    // Set the interrupt line from pci_remaps
+    *interrupt_line = pci_remaps[pirq];
+    return 0;
 }
 
-void pci_dump_device_data(uint32_t device, uint16_t vendorid, uint16_t deviceid)
+int pci_dump_device_data(uint32_t device, uint16_t vendor_id, uint16_t device_id)
 {
-    uint8_t bus = PCI_GET_BUS(device), slot = PCI_GET_SLOT(device), func = PCI_GET_FUNC(device);
-    pr_debug("%2x:%x.%d (%s, %s)\n",
-             bus, slot, func,
-             pci_vendor_lookup(vendorid),
-             pci_device_lookup(vendorid, deviceid));
-    pr_debug("    %-12s: %s\n",
-             "Type", pci_type_lookup(pci_find_type(device)),
-             "Command", pci_read_16(device, PCI_COMMAND));
-    pr_debug("    %-12s: %8x, %-12s: %8x\n",
-             "Status", pci_read_16(device, PCI_STATUS),
-             "Command", pci_read_16(device, PCI_COMMAND));
+    uint8_t bus  = PCI_GET_BUS(device);
+    uint8_t slot = PCI_GET_SLOT(device);
+    uint8_t func = PCI_GET_FUNC(device);
+    uint16_t status;
+    uint16_t command;
+    uint32_t bar0, bar1, bar2, bar3, bar4, bar5;
+    uint8_t interrupt_pin;
+    uint8_t interrupt_line;
+    uint8_t interrupt_number;
+    uint8_t revision;
+    uint8_t cache_line_size;
+    uint8_t latency_timer;
+    uint8_t header_type;
+    uint8_t bist;
+    uint8_t cardbus_cis;
+    uint32_t device_type;
+
+    (void)status;
+    (void)command;
+    (void)bar0, (void)bar1, (void)bar2, (void)bar3, (void)bar4, (void)bar5;
+
+    // Get vendor and device names
+    const char *vendor_name = pci_vendor_lookup(vendor_id);
+    const char *device_name = pci_device_lookup(vendor_id, device_id);
+
+    pr_debug("%02x:%02x.%d (%s, %s)\n", bus, slot, func, vendor_name, device_name);
+
+    // Get device type
+    if (pci_find_type(device, &device_type) != 0) {
+        pr_err("Failed to find device type for device %u.\n", device);
+        return -1;
+    }
+    const char *type_name = pci_type_lookup(device_type);
+
+    // Read command register
+    command = pci_read_16(device, PCI_COMMAND);
+
+    // Print Type and Command
+    pr_debug("    %-12s: %s, %-12s: %04x\n", "Type", type_name, "Command", command);
+
+    // Read status register
+    status = pci_read_16(device, PCI_STATUS);
+
+    // Print Status and Command
+    pr_debug("    %-12s: %04x, %-12s: %04x\n", "Status", status, "Command", command);
+
+    // Read BARs
+    bar0 = pci_read_32(device, PCI_BASE_ADDRESS_0);
+    bar1 = pci_read_32(device, PCI_BASE_ADDRESS_1);
+    bar2 = pci_read_32(device, PCI_BASE_ADDRESS_2);
+    bar3 = pci_read_32(device, PCI_BASE_ADDRESS_3);
+    bar4 = pci_read_32(device, PCI_BASE_ADDRESS_4);
+    bar5 = pci_read_32(device, PCI_BASE_ADDRESS_5);
+
     pr_debug("    %-12s: %08x, %-12s: %08x, %-12s: %08x\n",
-             "BAR0", pci_read_32(device, PCI_BASE_ADDRESS_0),
-             "BAR1", pci_read_32(device, PCI_BASE_ADDRESS_1),
-             "BAR2", pci_read_32(device, PCI_BASE_ADDRESS_2));
+             "BAR0", bar0, "BAR1", bar1, "BAR2", bar2);
     pr_debug("    %-12s: %08x, %-12s: %08x, %-12s: %08x\n",
-             "BAR3", pci_read_32(device, PCI_BASE_ADDRESS_3),
-             "BAR4", pci_read_32(device, PCI_BASE_ADDRESS_4),
-             "BAR5", pci_read_32(device, PCI_BASE_ADDRESS_5));
-    pr_debug("    %-12s: %8d, %-12s: %8d, %-12s: %8d\n",
-             "Int. Ping", pci_read_8(device, PCI_INTERRUPT_PIN),
-             "Line", pci_read_8(device, PCI_INTERRUPT_LINE),
-             "Number", pci_get_interrupt(device));
-    pr_debug("    %-12s: %8d, %-12s: %8d, %-12s: %8d\n",
-             "Revision", pci_read_8(device, PCI_REVISION_ID),
-             "Cache L. Sz.", pci_read_8(device, PCI_CACHE_LINE_SIZE),
-             "Latency Tmr.", pci_read_8(device, PCI_LATENCY_TIMER));
-    pr_debug("    %-12s: %8d, %-12s: %8d, %-12s: %8d\n",
-             "Header Type", pci_read_8(device, PCI_HEADER_TYPE),
-             "BIST", pci_read_8(device, PCI_BIST),
-             "Cardbus CIS", pci_read_8(device, PCI_CARDBUS_CIS));
-#if 0
-    // pr_default(" Subsystem V. ID : 0x%08x\n", pci_read_field(device, PCI_SUBSYSTEM_VENDOR_ID, 2));
-    // pr_default(" Subsystem ID    : 0x%08x\n", pci_read_field(device, PCI_SUBSYSTEM_ID, 2));
-    // pr_default(" ROM Base Address: 0x%08x\n", pci_read_field(device, PCI_ROM_ADDRESS, 4));
-    // pr_default(" PCI Cp. LinkList: 0x%08x\n", pci_read_field(device, PCI_CAPABILITY_LIST, 1));
-    // pr_default(" Max Latency     : 0x%08x\n", pci_read_field(device, PCI_MAX_LAT, 1));
-    // pr_default(" Min Grant       : 0x%08x\n", pci_read_field(device, PCI_MIN_GNT, 1));
-    // pr_default(" Interrupt Pin   : %2d\n", pci_read_field(device, PCI_INTERRUPT_PIN, 1));
-    // pr_default(" Interrupt Line  : %2d\n", pci_read_field(device, PCI_INTERRUPT_LINE, 1));
-    // pr_default(" Interrupt Number: %2d\n", pci_get_interrupt(device));
-    // pr_default("\n");
-#endif
+             "BAR3", bar3, "BAR4", bar4, "BAR5", bar5);
+
+    // Read interrupt information
+    if (pci_read_8(device, PCI_INTERRUPT_PIN, &interrupt_pin) != 0) {
+        pr_err("Failed to read PCI_INTERRUPT_PIN from device %u.\n", device);
+        return -1;
+    }
+    if (pci_read_8(device, PCI_INTERRUPT_LINE, &interrupt_line) != 0) {
+        pr_err("Failed to read PCI_INTERRUPT_LINE from device %u.\n", device);
+        return -1;
+    }
+    if (pci_get_interrupt(device, &interrupt_number) != 0) {
+        pr_err("Failed to get interrupt number for device %u.\n", device);
+        return -1;
+    }
+    pr_debug("    %-12s: %3u, %-12s: %3u, %-12s: %3u\n",
+             "Int. Pin", interrupt_pin, "Line", interrupt_line, "Number", interrupt_number);
+
+    // Read revision, cache line size, and latency timer
+    if (pci_read_8(device, PCI_REVISION_ID, &revision) != 0) {
+        pr_err("Failed to read PCI_REVISION_ID from device %u.\n", device);
+        return -1;
+    }
+    if (pci_read_8(device, PCI_CACHE_LINE_SIZE, &cache_line_size) != 0) {
+        pr_err("Failed to read PCI_CACHE_LINE_SIZE from device %u.\n", device);
+        return -1;
+    }
+    if (pci_read_8(device, PCI_LATENCY_TIMER, &latency_timer) != 0) {
+        pr_err("Failed to read PCI_LATENCY_TIMER from device %u.\n", device);
+        return -1;
+    }
+    pr_debug("    %-12s: %3u, %-12s: %3u, %-12s: %3u\n",
+             "Revision", revision, "Cache L. Sz.", cache_line_size, "Latency Tmr.", latency_timer);
+
+    // Read header type, BIST, and Cardbus CIS
+    if (pci_read_8(device, PCI_HEADER_TYPE, &header_type) != 0) {
+        pr_err("Failed to read PCI_HEADER_TYPE from device %u.\n", device);
+        return -1;
+    }
+    if (pci_read_8(device, PCI_BIST, &bist) != 0) {
+        pr_err("Failed to read PCI_BIST from device %u.\n", device);
+        return -1;
+    }
+    if (pci_read_8(device, PCI_CARDBUS_CIS, &cardbus_cis) != 0) {
+        pr_err("Failed to read PCI_CARDBUS_CIS from device %u.\n", device);
+        return -1;
+    }
+    pr_debug("    %-12s: %3u, %-12s: %3u, %-12s: %3u\n",
+             "Header Type", header_type, "BIST", bist, "Cardbus CIS", cardbus_cis);
+
+    return 0;
 }
 
 /// @brief Callback function to count PCI devices during scanning.

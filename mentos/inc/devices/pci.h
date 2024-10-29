@@ -254,11 +254,12 @@ int pci_write_16(uint32_t device, uint32_t field, uint16_t value);
 /// @return 0 on success, 1 on error.
 int pci_write_32(uint32_t device, uint32_t field, uint32_t value);
 
-/// @brief Reads a 8bit field from the given PCI device.
-/// @param device the device.
-/// @param field the field to read.
-/// @return the value we read.
-uint8_t pci_read_8(uint32_t device, int field);
+/// @brief Reads an 8-bit value from a PCI device register.
+/// @param device The PCI device identifier.
+/// @param field The register field offset.
+/// @param[out] value Pointer to store the read value.
+/// @return 0 on success, non-zero on error.
+int pci_read_8(uint32_t device, uint32_t field, uint8_t *value);
 
 /// @brief Reads a 16bit field from the given PCI device.
 /// @param device the device.
@@ -279,11 +280,12 @@ uint32_t pci_read_32(uint32_t device, int field);
 /// @return 0 on success, non-zero if any errors occurred.
 int pci_scan(pci_scan_func_t f, int type, void *extra);
 
-/// @brief Dumps on DEBUG, the information about the given device.
-/// @param device the device.
-/// @param vendorid the ID of the vendor.
-/// @param deviceid the ID of the device.
-void pci_dump_device_data(uint32_t device, uint16_t vendorid, uint16_t deviceid);
+/// @brief Dumps the data of a PCI device.
+/// @param device The PCI device identifier.
+/// @param vendor_id The vendor ID of the device.
+/// @param device_id The device ID of the device.
+/// @return 0 on success, non-zero on failure.
+int pci_dump_device_data(uint32_t device, uint16_t vendor_id, uint16_t device_id);
 
 /// @brief Prints all the devices connected to the PCI interfance.
 void pci_debug_scan(void);
