@@ -733,7 +733,10 @@ static inline int ata_dma_enable_bus_mastering(void)
     }
 
     // Read the PCI command register
-    pci_cmd = pci_read_32(ata_pci, PCI_COMMAND);
+    if (pci_read_32(ata_pci, PCI_COMMAND, &pci_cmd) != 0) {
+        pr_crit("Failed to read PCI_COMMAND from device.\n");
+        return 1;
+    }
 
     // Check if bus mastering is already enabled.
     if (bit_check(pci_cmd, pci_command_bus_master)) {
@@ -751,7 +754,10 @@ static inline int ata_dma_enable_bus_mastering(void)
     }
 
     // Read the current PCI command register
-    pci_cmd = pci_read_32(ata_pci, PCI_COMMAND);
+    if (pci_read_32(ata_pci, PCI_COMMAND, &pci_cmd) != 0) {
+        pr_crit("Failed to read PCI_COMMAND from device.\n");
+        return 1;
+    }
 
     // Verify that bus mastering is enabled
     if (!bit_check(pci_cmd, pci_command_bus_master)) {
@@ -779,7 +785,10 @@ static inline int ata_dma_disable_bus_mastering(void)
     }
 
     // Read the current PCI command register
-    pci_cmd = pci_read_32(ata_pci, PCI_COMMAND);
+    if (pci_read_32(ata_pci, PCI_COMMAND, &pci_cmd) != 0) {
+        pr_crit("Failed to read PCI_COMMAND from device.\n");
+        return 1;
+    }
 
     // Check if bus mastering is currently enabled.
     if (!bit_check(pci_cmd, pci_command_bus_master)) {
@@ -797,7 +806,10 @@ static inline int ata_dma_disable_bus_mastering(void)
     }
 
     // Read the current PCI command register
-    pci_cmd = pci_read_32(ata_pci, PCI_COMMAND);
+    if (pci_read_32(ata_pci, PCI_COMMAND, &pci_cmd) != 0) {
+        pr_crit("Failed to read PCI_COMMAND from device.\n");
+        return 1;
+    }
 
     // Verify that bus mastering is disabled.
     if (bit_check(pci_cmd, pci_command_bus_master)) {
@@ -836,7 +848,10 @@ static inline int ata_dma_initialize_bus_mastering_address(ata_device_t *dev)
     }
 
     // Read the value of the PCI Base Address Register (BAR) for bus mastering
-    address = pci_read_32(ata_pci, PCI_BASE_ADDRESS_4);
+    if (pci_read_32(ata_pci, PCI_BASE_ADDRESS_4, &address) != 0) {
+        pr_warning("Failed to read PCI_BASE_ADDRESS_4 from device.\n");
+        return 1;
+    }
 
     // Check if the lowest bit is set to distinguish between memory space and
     // I/O space BARs. Memory space BARs have the lowest bit as 0, while I/O

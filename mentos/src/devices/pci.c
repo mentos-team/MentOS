@@ -403,15 +403,23 @@ int pci_read_16(uint32_t device, uint32_t field, uint16_t *value)
     return 0;
 }
 
-uint32_t pci_read_32(uint32_t device, int field)
+int pci_read_32(uint32_t device, uint32_t field, uint32_t *value)
 {
-    // Get the PCI configuration address
+    // Check if the output pointer is valid.
+    if (value == NULL) {
+        pr_err("Output parameter 'value' is NULL.\n");
+        return 1;
+    }
+    // Get the PCI configuration address.
     uint32_t addr;
     if (pci_get_addr(device, field, &addr)) {
-        return 0;
+        return 1;
     }
+    // Write the address to the PCI address port
     outportl(PCI_ADDRESS_PORT, addr);
-    return inportl(PCI_VALUE_PORT);
+    // Read and return the 32-bit value from the PCI value port.
+    *value = inportl(PCI_VALUE_PORT);
+    return 0;
 }
 
 /// @brief Searches for the vendor name from the vendor ID.
@@ -949,12 +957,30 @@ int pci_dump_device_data(uint32_t device, uint16_t vendor_id, uint16_t device_id
     pr_debug("    %-12s: %04x, %-12s: %04x\n", "Status", status, "Command", command);
 
     // Read BARs
-    bar0 = pci_read_32(device, PCI_BASE_ADDRESS_0);
-    bar1 = pci_read_32(device, PCI_BASE_ADDRESS_1);
-    bar2 = pci_read_32(device, PCI_BASE_ADDRESS_2);
-    bar3 = pci_read_32(device, PCI_BASE_ADDRESS_3);
-    bar4 = pci_read_32(device, PCI_BASE_ADDRESS_4);
-    bar5 = pci_read_32(device, PCI_BASE_ADDRESS_5);
+    if (pci_read_32(device, PCI_BASE_ADDRESS_0, &bar0) != 0) {
+        pr_err("Failed to read BAR0 from device %u.\n", device);
+        return -1;
+    }
+    if (pci_read_32(device, PCI_BASE_ADDRESS_1, &bar1) != 0) {
+        pr_err("Failed to read BAR1 from device %u.\n", device);
+        return -1;
+    }
+    if (pci_read_32(device, PCI_BASE_ADDRESS_2, &bar2) != 0) {
+        pr_err("Failed to read BAR2 from device %u.\n", device);
+        return -1;
+    }
+    if (pci_read_32(device, PCI_BASE_ADDRESS_3, &bar3) != 0) {
+        pr_err("Failed to read BAR3 from device %u.\n", device);
+        return -1;
+    }
+    if (pci_read_32(device, PCI_BASE_ADDRESS_4, &bar4) != 0) {
+        pr_err("Failed to read BAR4 from device %u.\n", device);
+        return -1;
+    }
+    if (pci_read_32(device, PCI_BASE_ADDRESS_5, &bar5) != 0) {
+        pr_err("Failed to read BAR5 from device %u.\n", device);
+        return -1;
+    }
 
     pr_debug("    %-12s: %08x, %-12s: %08x, %-12s: %08x\n",
              "BAR0", bar0, "BAR1", bar1, "BAR2", bar2);
