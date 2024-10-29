@@ -323,11 +323,6 @@ static inline int pci_get_addr(uint32_t device, uint32_t field, uint32_t *addr)
     return 0;
 }
 
-static inline uint32_t pci_box_device(uint8_t bus, uint8_t slot, uint8_t func)
-{
-    return (uint32_t)((bus << 16U) | (slot << 8U) | func);
-}
-
 void pci_write_8(uint32_t device, uint32_t field, uint8_t value)
 {
     // Get the PCI configuration address
@@ -394,19 +389,9 @@ uint32_t pci_read_32(uint32_t device, int field)
     return inportl(PCI_VALUE_PORT);
 }
 
-/// @brief Finds the type of the given device.
-/// @param device the device number.
-/// @return the type of the device.
-static inline uint32_t pci_find_type(uint32_t device)
-{
-    return pci_read_8(device, PCI_CLASS) << 16U |
-           pci_read_8(device, PCI_SUBCLASS) << 8U |
-           pci_read_8(device, PCI_PROG_IF);
-}
-
-/// @brief Searches for the vendor name from the ID.
-/// @param vendor_id the vendor ID.
-/// @return the vendor name.
+/// @brief Searches for the vendor name from the vendor ID.
+/// @param vendor_id The vendor ID to search for.
+/// @return The vendor name if found; otherwise, "Unknown".
 static inline const char *pci_vendor_lookup(uint16_t vendor_id)
 {
     for (size_t i = 0; i < count_of(_pci_vendors); ++i) {
@@ -414,13 +399,14 @@ static inline const char *pci_vendor_lookup(uint16_t vendor_id)
             return _pci_vendors[i].name;
         }
     }
+    pr_err("Vendor ID %u not found.\n", vendor_id);
     return "Unknown";
 }
 
-/// @brief Searches for the device name from its ID and the vendor id.
-/// @param vendor_id the vendor ID.
-/// @param device_id the device ID.
-/// @return the device name.
+/// @brief Searches for the device name from its ID and the vendor ID.
+/// @param vendor_id The vendor ID to search for.
+/// @param device_id The device ID to search for.
+/// @return The device name if found; otherwise, "Unknown".
 static inline const char *pci_device_lookup(uint16_t vendor_id, uint16_t device_id)
 {
     for (size_t i = 0; i < count_of(_pci_devices); ++i) {
@@ -428,9 +414,13 @@ static inline const char *pci_device_lookup(uint16_t vendor_id, uint16_t device_
             return _pci_devices[i].name;
         }
     }
+    pr_err("Device with Vendor ID %u and Device ID %u not found.\n", vendor_id, device_id);
     return "Unknown";
 }
 
+/// @brief Retrieves the type name from a given type ID.
+/// @param type_id The type ID to search for.
+/// @return The corresponding type name if found; otherwise, "Unknown".
 static inline const char *pci_type_lookup(uint32_t type_id)
 {
     for (size_t i = 0; i < count_of(_pci_types); ++i) {
@@ -438,10 +428,69 @@ static inline const char *pci_type_lookup(uint32_t type_id)
             return _pci_types[i].name;
         }
     }
+    pr_err("Type ID %u not found.\n", type_id);
     return "Unknown";
 }
 
-void pci_scan_bus(pci_scan_func_t f, int type, uint8_t bus, void *extra);
+static inline int pci_box_device(uint8_t bus, uint8_t slot, uint8_t func, uint32_t *device);
+static inline int pci_find_type(uint32_t device, uint32_t *device_type);
+static inline void pci_scan_hit(pci_scan_func_t f, uint32_t device, void *extra);
+static inline void pci_scan_func(pci_scan_func_t f, int type, uint8_t bus, uint8_t slot, uint8_t func, void *extra);
+static inline void pci_scan_slot(pci_scan_func_t f, int type, uint8_t bus, uint8_t slot, void *extra);
+static inline void pci_scan_bus(pci_scan_func_t f, int type, uint8_t bus, void *extra);
+
+/// @brief Finds the type of the given PCI device.
+/// @param device The 32-bit PCI device identifier (bus, slot, and function).
+/// @param[out] device_type Pointer to store the device type (class, subclass, and programming interface).
+/// @return 0 on success, 1 on failure.
+static inline int pci_find_type(uint32_t device, uint32_t *device_type)
+{
+    // Check if the output pointer is valid
+    if (device_type == NULL) {
+        pr_err("Output parameter 'device_type' is NULL.\n");
+        return 1;
+    }
+    uint8_t class_code;
+    uint8_t subclass_code;
+    uint8_t prog_if;
+    // Read the class code.
+    class_code = pci_read_8(device, PCI_CLASS);
+    // Read the subclass code.
+    subclass_code = pci_read_8(device, PCI_SUBCLASS);
+    // Read the programming interface.
+    prog_if = pci_read_8(device, PCI_PROG_IF);
+    // Combine the class code, subclass code, and programming interface
+    *device_type = (class_code << 16U) | (subclass_code << 8U) | prog_if;
+    return 0;
+}
+
+/// @brief Combines bus, slot, and function numbers into a 32-bit PCI device identifier.
+/// @param bus The PCI bus number (8-bit value).
+/// @param slot The PCI slot (device) number (8-bit value).
+/// @param func The PCI function number (8-bit value).
+/// @param[out] device Pointer to store the combined 32-bit PCI device identifier.
+/// @return 0 on success, 1 on failure.
+static inline int pci_box_device(uint8_t bus, uint8_t slot, uint8_t func, uint32_t *device)
+{
+    // Check if the output pointer is valid.
+    if (device == NULL) {
+        pr_err("Output parameter 'device' is NULL.\n");
+        return 1;
+    }
+    // Validate slot number (0-31).
+    if (slot > 31) {
+        pr_err("Invalid slot number %u. Must be between 0 and 31.\n", slot);
+        return 1;
+    }
+    // Validate function number (0-7).
+    if (func > 7) {
+        pr_err("Invalid function number %u. Must be between 0 and 7.\n", func);
+        return 1;
+    }
+    // Pack the bus, slot, and function numbers into a single 32-bit value.
+    *device = (uint32_t)((bus << 16U) | (slot << 8U) | func);
+    return 0;
+}
 
 /// @brief Calls the function f on the device if found.
 /// @param f the function to call.
@@ -463,8 +512,18 @@ void pci_scan_hit(pci_scan_func_t f, uint32_t device, void *extra)
 /// @param extra the extra arguemnts.
 void pci_scan_func(pci_scan_func_t f, int type, uint8_t bus, uint8_t slot, uint8_t func, void *extra)
 {
-    uint32_t device      = pci_box_device(bus, slot, func);
-    uint32_t device_type = pci_find_type(device);
+    uint32_t device;
+    uint32_t device_type;
+    // Obtain the device identifier.
+    if (pci_box_device(bus, slot, func, &device)) {
+        pr_err("Failed to obtain the device identifier.\n");
+        return;
+    }
+    // Find the device type.
+    if (pci_find_type(device, &device_type)) {
+        pr_err("Failed to obtain the device type.\n");
+        return;
+    }
     if ((type == -1) || (type == device_type)) {
         pci_scan_hit(f, device, extra);
     }
@@ -481,11 +540,23 @@ void pci_scan_func(pci_scan_func_t f, int type, uint8_t bus, uint8_t slot, uint8
 /// @param extra the extra arguemnts.
 void pci_scan_slot(pci_scan_func_t f, int type, uint8_t bus, uint8_t slot, void *extra)
 {
-    uint32_t device = pci_box_device(bus, slot, 0);
+    uint32_t device;
+
+    // Obtain the device identifier.
+    if (pci_box_device(bus, slot, 0, &device)) {
+        pr_err("Failed to obtain the device identifier (slot: %u, func: %u).\n", slot, 0);
+        return;
+    }
+
     pci_scan_func(f, type, bus, slot, 0, extra);
     if (pci_read_8(device, PCI_HEADER_TYPE)) {
         for (uint32_t func = 1; func < 8; func++) {
-            device = pci_box_device(bus, slot, func);
+            // Obtain the device identifier for this function.
+            if (pci_box_device(bus, slot, func, &device)) {
+                pr_err("Failed to obtain the device identifier (slot: %u, func: %u).\n", slot, func);
+                continue; // Skip to next function.
+            }
+
             if (pci_read_16(device, PCI_VENDOR_ID) != PCI_NONE) {
                 pci_scan_func(f, type, bus, slot, func, extra);
             }
@@ -507,12 +578,19 @@ void pci_scan_bus(pci_scan_func_t f, int type, uint8_t bus, void *extra)
 
 void pci_scan(pci_scan_func_t f, int type, void *extra)
 {
+    uint32_t device;
+
     // Single PCI host controller.
     if ((pci_read_8(0, PCI_HEADER_TYPE) & 0x80) == 0) {
         pci_scan_bus(f, type, 0, extra);
     } else {
         for (uint8_t bus = 0; bus < 8; ++bus) {
-            uint32_t device = pci_box_device(bus, 0, 0);
+            // Obtain the device identifier for this function.
+            if (pci_box_device(bus, 0, 0, &device)) {
+                pr_err("Failed to obtain the device identifier (slot: %u, func: %u).\n", 0, 0);
+                continue; // Skip to next function.
+            }
+
             if (pci_read_16(device, PCI_VENDOR_ID) != PCI_NONE) {
                 pci_scan_bus(f, type, bus, extra);
             }
