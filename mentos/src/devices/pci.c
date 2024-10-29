@@ -434,10 +434,10 @@ static inline const char *pci_type_lookup(uint32_t type_id)
 
 static inline int pci_box_device(uint8_t bus, uint8_t slot, uint8_t func, uint32_t *device);
 static inline int pci_find_type(uint32_t device, uint32_t *device_type);
-static inline void pci_scan_hit(pci_scan_func_t f, uint32_t device, void *extra);
-static inline void pci_scan_func(pci_scan_func_t f, int type, uint8_t bus, uint8_t slot, uint8_t func, void *extra);
-static inline void pci_scan_slot(pci_scan_func_t f, int type, uint8_t bus, uint8_t slot, void *extra);
-static inline void pci_scan_bus(pci_scan_func_t f, int type, uint8_t bus, void *extra);
+static inline int pci_scan_hit(pci_scan_func_t f, uint32_t device, void *extra);
+static inline int pci_scan_func(pci_scan_func_t f, int type, uint8_t bus, uint8_t slot, uint8_t func, void *extra);
+static inline int pci_scan_slot(pci_scan_func_t f, int type, uint8_t bus, uint8_t slot, void *extra);
+static inline int pci_scan_bus(pci_scan_func_t f, int type, uint8_t bus, void *extra);
 
 /// @brief Finds the type of the given PCI device.
 /// @param device The 32-bit PCI device identifier (bus, slot, and function).
@@ -493,59 +493,104 @@ static inline int pci_box_device(uint8_t bus, uint8_t slot, uint8_t func, uint32
 }
 
 /// @brief Calls the function f on the device if found.
-/// @param f the function to call.
-/// @param device the device number.
-/// @param extra the extra arguemnts.
-void pci_scan_hit(pci_scan_func_t f, uint32_t device, void *extra)
+/// @param f The function to call.
+/// @param device The device number.
+/// @param extra Extra arguments to pass to the function.
+/// @return 0 on success, 1 on failure.
+static inline int pci_scan_hit(pci_scan_func_t f, uint32_t device, void *extra)
 {
-    uint16_t vendor_id = pci_read_16(device, PCI_VENDOR_ID);
-    uint16_t device_id = pci_read_16(device, PCI_DEVICE_ID);
+    // Check if the function pointer f is valid
+    if (f == NULL) {
+        pr_err("Function pointer is NULL.\n");
+        return 1;
+    }
+
+    uint16_t vendor_id;
+    uint16_t device_id;
+    // Check if the function pointer f is valid.
+    if (f == NULL) {
+        pr_err("Function pointer is NULL.\n");
+        return 1;
+    }
+    // Read the vendor ID.
+    vendor_id = pci_read_16(device, PCI_VENDOR_ID);
+    // Read the device ID.
+    device_id = pci_read_16(device, PCI_DEVICE_ID);
+    // Call the provided function with the device information.
     f(device, vendor_id, device_id, extra);
+    return 0;
 }
 
 /// @brief Scans for the given type of device.
-/// @param f the function to call once we have found the device.
-/// @param type the type of device we are searching for.
-/// @param bus bus number.
-/// @param slot slot number.
-/// @param func choose a specific function in a device.
-/// @param extra the extra arguemnts.
-void pci_scan_func(pci_scan_func_t f, int type, uint8_t bus, uint8_t slot, uint8_t func, void *extra)
+/// @param f The function to call once we have found the device.
+/// @param type The type of device we are searching for.
+/// @param bus Bus number.
+/// @param slot Slot number.
+/// @param func Function number.
+/// @param extra Extra arguments.
+/// @return 0 on success, 1 on failure.
+int pci_scan_func(pci_scan_func_t f, int type, uint8_t bus, uint8_t slot, uint8_t func, void *extra)
 {
+    // Check if the function pointer f is valid
+    if (f == NULL) {
+        pr_err("Function pointer is NULL.\n");
+        return 1;
+    }
+
     uint32_t device;
     uint32_t device_type;
     // Obtain the device identifier.
     if (pci_box_device(bus, slot, func, &device)) {
         pr_err("Failed to obtain the device identifier.\n");
-        return;
+        return 1;
     }
     // Find the device type.
     if (pci_find_type(device, &device_type)) {
         pr_err("Failed to obtain the device type.\n");
-        return;
+        return 1;
     }
-    if ((type == -1) || (type == device_type)) {
-        pci_scan_hit(f, device, extra);
+    // If the device type matches or if type == -1 (any type), call the
+    // function.
+    if ((type == -1) || (type == (int)device_type)) {
+        if (pci_scan_hit(f, device, extra)) {
+            pr_err("The function call failed.\n");
+            return 1;
+        }
     }
-    if (device_type == PCI_TYPE_BRIDGE) {
-        pci_scan_bus(f, type, pci_read_8(device, PCI_SECONDARY_BUS), extra);
+    // Extract class and subclass codes from device_type.
+    uint8_t class_code    = (device_type >> 16U) & 0xFF;
+    uint8_t subclass_code = (device_type >> 8U) & 0xFF;
+    // If the device is a PCI bridge, scan the secondary bus
+    if ((class_code == PCI_TYPE_BRIDGE) && (subclass_code == PCI_TYPE_SUBCLASS_PCI_BRIDGE)) {
+        uint8_t secondary_bus;
+        secondary_bus = pci_read_8(device, PCI_SECONDARY_BUS);
+        // Recursively scan the secondary bus.
+        pci_scan_bus(f, type, secondary_bus, extra);
     }
+    return 0;
 }
 
-/// @brief Scans for the given type of device.
-/// @param f the function to call once we have found the device.
-/// @param type the type of device we are searching for.
-/// @param bus bus number.
-/// @param slot slot number.
-/// @param extra the extra arguemnts.
-void pci_scan_slot(pci_scan_func_t f, int type, uint8_t bus, uint8_t slot, void *extra)
+/// @brief Scans all functions in a PCI slot for a given device type.
+/// @param f The function to call once a device is found.
+/// @param type The type of device we are searching for.
+/// @param bus The bus number.
+/// @param slot The slot number.
+/// @param extra Extra arguments to pass to the function.
+/// @return 0 on success, non-negative value if any errors occurred.
+int pci_scan_slot(pci_scan_func_t f, int type, uint8_t bus, uint8_t slot, void *extra)
 {
+    // Check if the function pointer f is valid
+    if (f == NULL) {
+        pr_err("Function pointer is NULL.\n");
+        return 1;
+    }
+
     uint32_t device;
 
     // Obtain the device identifier.
     if (pci_box_device(bus, slot, 0, &device)) {
         pr_err("Failed to obtain the device identifier (slot: %u, func: %u).\n", slot, 0);
-        return;
+        return 1;
     }
 
     pci_scan_func(f, type, bus, slot, 0, extra);
@@ -562,27 +607,50 @@ void pci_scan_slot(pci_scan_func_t f, int type, uint8_t bus, uint8_t slot, void 
             }
         }
     }
+    return 0;
 }
 
-/// @brief Scans for the given type of device.
-/// @param f the function to call once we have found the device.
-/// @param type the type of device we are searching for.
-/// @param bus bus number.
-/// @param extra the extra arguemnts.
-void pci_scan_bus(pci_scan_func_t f, int type, uint8_t bus, void *extra)
+/// @brief Scans a PCI bus for devices of a given type.
+/// @param f The function to call once we have found the device.
+/// @param type The type of device we are searching for.
+/// @param bus The bus number.
+/// @param extra Extra arguments.
+/// @return 0 on success, non-negative value indicating the number of errors.
+int pci_scan_bus(pci_scan_func_t f, int type, uint8_t bus, void *extra)
 {
+    // Check if the function pointer f is valid.
+    if (f == NULL) {
+        pr_err("Function pointer is NULL.\n");
+        return 1;
+    }
+
     for (uint8_t slot = 0; slot < 32; ++slot) {
         pci_scan_slot(f, type, bus, slot, extra);
     }
+    return 0;
 }
 
-void pci_scan(pci_scan_func_t f, int type, void *extra)
+int pci_scan(pci_scan_func_t f, int type, void *extra)
 {
-    uint32_t device;
+    // Check if the function pointer f is valid.
+    if (f == NULL) {
+        pr_err("Function pointer is NULL.\n");
+        return 1;
+    }
 
-    // Single PCI host controller.
-    if ((pci_read_8(0, PCI_HEADER_TYPE) & 0x80) == 0) {
-        pci_scan_bus(f, type, 0, extra);
+    uint8_t header_type;
+    uint32_t device;
+    uint16_t vendor_id;
+
+    // Read the header type of bus 0, device 0, function 0
+    header_type = pci_read_8(0, PCI_HEADER_TYPE);
+
+    // Check if it is a single PCI host controller.
+    if ((header_type & 0x80) == 0) {
+        // Single PCI host controller; scan bus 0
+        if (pci_scan_bus(f, type, 0, extra)) {
+            return 1;
+        }
     } else {
         for (uint8_t bus = 0; bus < 8; ++bus) {
             // Obtain the device identifier for this function.
@@ -591,39 +659,68 @@ void pci_scan(pci_scan_func_t f, int type, void *extra)
                 continue; // Skip to next function.
             }
 
-            if (pci_read_16(device, PCI_VENDOR_ID) != PCI_NONE) {
+            // Read the vendor ID.
+            vendor_id = pci_read_16(device, PCI_VENDOR_ID);
+
+            // Check if the device exists.
+            if (vendor_id != PCI_NONE) {
                 pci_scan_bus(f, type, bus, extra);
             }
         }
     }
+    return 0;
 }
 
-static void find_isa_bridge(uint32_t device, uint16_t vendorid, uint16_t deviceid, void *extra)
+/// @brief Callback function to find an ISA bridge device.
+/// @param device The PCI device identifier.
+/// @param vendor_id The vendor ID of the device.
+/// @param device_id The device ID of the device.
+/// @param extra Pointer to store the device identifier if a matching device is found.
+/// @return 1 if a matching device is found, 0 if not, -1 on error.
+static int find_isa_bridge(uint32_t device, uint16_t vendor_id, uint16_t device_id, void *extra)
 {
-    if (vendorid == 0x8086 && (deviceid == 0x7000 || deviceid == 0x7110)) {
-        *((uint32_t *)extra) = device;
+    // Check if the output pointer 'extra' is valid
+    if (extra == NULL) {
+        pr_err("Output parameter 'extra' is NULL.\n");
+        return 1;
     }
+    // Check if the device matches the specified vendor and device IDs
+    if (vendor_id == 0x8086 && (device_id == 0x7000 || device_id == 0x7110)) {
+        // Store the device identifier in the location pointed to by 'extra'
+        *((uint32_t *)extra) = device;
+        return 1; // Matching device found
+    }
+    return 0; // No matching device found
 }
 
 static uint32_t pci_isa       = 0;
 static uint32_t pci_remaps[4] = { 0 };
 
-void pci_remap(void)
+/// @brief Remaps PCI-to-ISA interrupts.
+/// @return 0 on success, non-zero on failure.
+static inline int pci_remap(void)
 {
-    pci_scan(&find_isa_bridge, -1, &pci_isa);
-
-    if (pci_isa) {
-        pr_default("PCI-to-ISA interrupt mappings by line:\n");
-
-        for (int i = 0; i < 4; ++i) {
-            pci_remaps[i] = pci_read_8(pci_isa, 0x60 + i);
-            pr_default("\tLine %d: 0x%2x\n", i + 1, pci_remaps[i]);
-        }
-
-        uint32_t out = 0;
-        memcpy(&out, &pci_remaps, 4);
-        pci_write_32(pci_isa, 0x60, out);
+    // Scan for the ISA bridge device.
+    if (pci_scan(&find_isa_bridge, -1, &pci_isa)) {
+        pr_err("Failed to scan for ISA bridge.\n");
+        return 1;
     }
+    // Check if the ISA bridge device was found.
+    if (!pci_isa) {
+        return 1;
+    }
+
+    pr_default("PCI-to-ISA interrupt mappings by line:\n");
+
+    for (int i = 0; i < 4; ++i) {
+        pci_remaps[i] = pci_read_8(pci_isa, 0x60 + i);
+        pr_default("\tLine %d: 0x%2x\n", i + 1, pci_remaps[i]);
+    }
+
+    uint32_t out = 0;
+    memcpy(&out, &pci_remaps, 4);
+    pci_write_32(pci_isa, 0x60, out);
+    return 0;
 }
 
 int pci_get_interrupt(uint32_t device)
@@ -703,20 +800,43 @@ void pci_dump_device_data(uint32_t device, uint16_t vendorid, uint16_t deviceid)
 #endif
 }
 
-static void __scan_count(uint32_t device, uint16_t vendorid, uint16_t deviceid, void *extra)
+/// @brief Callback function to count PCI devices during scanning.
+/// @param device The PCI device identifier.
+/// @param vendor_id The vendor ID of the device.
+/// @param device_id The device ID of the device.
+/// @param extra Pointer to a size_t variable to store the count.
+/// @return 0 on success, non-zero on failure.
+static int __scan_count(uint32_t device, uint16_t vendor_id, uint16_t device_id, void *extra)
 {
     (void)device;
-    (void)vendorid;
-    (void)deviceid;
-    size_t *count = extra;
-    ++(*count);
+    (void)vendor_id;
+    (void)device_id;
+    // Check if the output pointer 'extra' is valid
+    if (extra == NULL) {
+        pr_err("Output parameter 'extra' is NULL.\n");
+        return -1;
+    }
+    // Increment the count
+    ++(*(size_t *)extra);
+    return 0;
 }
 
-static void __scan_hit_list(uint32_t device, uint16_t vendorid, uint16_t deviceid, void *extra)
+/// @brief Callback function to process and display PCI device data during scanning.
+/// @param device The PCI device identifier.
+/// @param vendor_id The vendor ID of the device.
+/// @param device_id The device ID of the device.
+/// @param extra Unused parameter.
+/// @return 0 on success, non-zero on failure.
+static int __scan_hit_list(uint32_t device, uint16_t vendor_id, uint16_t device_id, void *extra)
 {
     (void)extra;
-    pci_dump_device_data(device, vendorid, deviceid);
+
+    // Process and display PCI device data
+    pci_dump_device_data(device, vendor_id, device_id);
+
     pr_debug("\n");
+
+    return 0;
 }
 
 void pci_debug_scan(void)

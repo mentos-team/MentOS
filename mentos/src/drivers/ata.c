@@ -1606,18 +1606,28 @@ static void ata_irq_handler_slave(pt_regs *f)
 
 // == PCI FUNCTIONS ===========================================================
 
-/// @brief Used while scanning the PCI interface.
-/// @param device the device we want to find.
-/// @param vendorid its vendor ID.
-/// @param deviceid its device ID.
-/// @param extra the devoce once we find it.
-static void pci_find_ata(uint32_t device, uint16_t vendorid, uint16_t deviceid, void *extra)
+/// @brief Callback function used while scanning the PCI interface to find ATA devices.
+/// @param device The PCI device identifier.
+/// @param vendor_id The vendor ID of the device.
+/// @param device_id The device ID of the device.
+/// @param extra Pointer to store the device identifier once found.
+/// @return 1 if a matching device is found, 0 if not, -1 on error.
+static int pci_find_ata(uint32_t device, uint16_t vendor_id, uint16_t device_id, void *extra)
 {
-    // Intel Corporation AND (IDE Interface OR PIIX4 IDE)
-    if ((vendorid == 0x8086) && (deviceid == 0x7010 || deviceid == 0x7111)) {
-        *((uint32_t *)extra) = device;
-        pci_dump_device_data(device, vendorid, deviceid);
+    // Check if the output pointer 'extra' is valid.
+    if (extra == NULL) {
+        pr_err("Output parameter 'extra' is NULL.\n");
+        return 1;
     }
+    // Intel Corporation AND (IDE Interface OR PIIX4 IDE).
+    if ((vendor_id == 0x8086) && (device_id == 0x7010 || device_id == 0x7111)) {
+        // Store the device identifier in the location pointed to by 'extra'.
+        *((uint32_t *)extra) = device;
+        // Call pci_dump_device_data to display device information
+        pci_dump_device_data(device, vendor_id, device_id);
+        return 0; // Matching device found.
+    }
+    return 1; // No matching device found.
 }
 
 // == INITIALIZE/FINALIZE ATA =================================================
@@ -1625,7 +1635,10 @@ static void pci_find_ata(uint32_t device, uint16_t vendorid, uint16_t deviceid, 
 int ata_initialize(void)
 {
     // Search for ATA devices.
-    pci_scan(&pci_find_ata, -1, &ata_pci);
+    if (pci_scan(pci_find_ata, -1, &ata_pci) != 0) {
+        pr_err("Failed to scan for ATA devices.\n");
+        return 1;
+    }
 
     // Register the filesystem.
     vfs_register_filesystem(&ata_file_system_type);

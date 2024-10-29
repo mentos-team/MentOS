@@ -222,15 +222,16 @@ typedef enum {
 #define PCI_HEADER_TYPE_BRIDGE  1 ///< TODO: Document.
 #define PCI_HEADER_TYPE_CARDBUS 2 ///< TODO: Document.
 
-#define PCI_TYPE_BRIDGE 0x060400 ///< TODO: Document.
-#define PCI_TYPE_SATA   0x010600 ///< TODO: Document.
+#define PCI_TYPE_BRIDGE              0x060400 ///< TODO: Document.
+#define PCI_TYPE_SATA                0x010600 ///< TODO: Document.
+#define PCI_TYPE_SUBCLASS_PCI_BRIDGE 0x04
 
 #define PCI_ADDRESS_PORT 0xCF8  ///< TODO: Document.
 #define PCI_VALUE_PORT   0xCFC  ///< TODO: Document.
 #define PCI_NONE         0xFFFF ///< TODO: Document.
 
 /// @brief PIC scan function.
-typedef void (*pci_scan_func_t)(uint32_t device, uint16_t vendor_id, uint16_t device_id, void *extra);
+typedef int (*pci_scan_func_t)(uint32_t device, uint16_t vendor_id, uint16_t device_id, void *extra);
 
 /// @brief Writes a 8bit field to the given PCI device.
 /// @param device the device.
@@ -272,15 +273,8 @@ uint32_t pci_read_32(uint32_t device, int field);
 /// @param f the function to call once we have found the device.
 /// @param type the type of device we are searching for.
 /// @param extra the extra arguemnts.
-void pci_scan(pci_scan_func_t f, int type, void *extra);
-
-/// @brief PCI-to-ISA remapping.
-void pci_remap(void);
-
-/// @brief Retrieves the interrupt number for the given device.
-/// @param device the device.
-/// @return interrupt number.
-int pci_get_interrupt(uint32_t device);
+/// @return 0 on success, non-zero if any errors occurred.
+int pci_scan(pci_scan_func_t f, int type, void *extra);
 
 /// @brief Dumps on DEBUG, the information about the given device.
 /// @param device the device.
