@@ -129,8 +129,8 @@ uint32_t get_virtual_address_from_page(page_t *page)
 
     // Check if the calculated page index is within valid bounds.
     if ((page_index < lowmem_page_base) || (page_index >= mem_map_num)) {
-        pr_err("Page index %u is out of bounds. Valid range: %u to %u.\n",
-               page_index, lowmem_page_base, mem_map_num - 1);
+        pr_err("Page %p at index %u is out of bounds. Valid range: %u to %u.\n",
+               (void *)page, page_index, lowmem_page_base, mem_map_num - 1);
         return 0;
     }
 
@@ -154,8 +154,8 @@ uint32_t get_physical_address_from_page(page_t *page)
 
     // Check if the calculated page index is within valid bounds.
     if ((page_index < lowmem_page_base) || (page_index >= mem_map_num)) {
-        pr_err("Page index %u is out of bounds. Valid range: %u to %u.\n",
-               page_index, lowmem_page_base, mem_map_num - 1);
+        pr_err("Page %p at index %u is out of bounds. Valid range: %u to %u.\n",
+               (void *)page, page_index, lowmem_page_base, mem_map_num - 1);
         return 0;
     }
 

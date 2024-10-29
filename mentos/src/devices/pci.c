@@ -14,88 +14,6 @@
 #include "io/port_io.h"
 #include "string.h"
 
-/// The configuration bit in I/O location CF8h[31] must be set to 1b.
-#define PCI_ADDR_ENABLE 0x80000000
-/// The device's bus number must be written into bits [23:16] of I/O location CF8h.
-#define PCI_ADDR_BUS(x) (((uint32_t)(x)&0xFF) << 16)
-/// The device's "PCI device number" must be written into bits [15:11] of I/O location CF8h.
-#define PCI_ADDR_DEV(x) (((uint32_t)(x)&0x1F) << 11)
-/// The device's function must be written into bits [10:8] of I/O location CF8h.
-#define PCI_ADDR_FUNC(x) (((uint32_t)(x)&0x03) << 8)
-///
-#define PCI_ADDR_FIELD(x) (((uint32_t)(x)&0xFC))
-
-/// @brief Extracts the bus id from the device.
-#define PCI_GET_BUS(x) ((uint8_t)((x) >> 16U))
-/// @brief Extracts the slot id from the device.
-#define PCI_GET_SLOT(x) ((uint8_t)((x) >> 8U))
-/// @brief Extracts the function id from the device.
-#define PCI_GET_FUNC(x) ((uint8_t)((x)))
-
-/// @brief TODO: Comment.
-/// @param device
-/// @param field
-/// @return
-static inline uint32_t pci_get_addr(uint32_t device, uint32_t field)
-{
-    return PCI_ADDR_ENABLE |
-           PCI_ADDR_BUS(PCI_GET_BUS(device)) |
-           PCI_ADDR_DEV(PCI_GET_SLOT(device)) |
-           PCI_ADDR_FUNC(PCI_GET_FUNC(device)) |
-           PCI_ADDR_FIELD(field);
-}
-
-static inline uint32_t pci_box_device(uint8_t bus, uint8_t slot, uint8_t func)
-{
-    return (uint32_t)((bus << 16U) | (slot << 8U) | func);
-}
-
-void pci_write_8(uint32_t device, uint32_t field, uint8_t value)
-{
-    outportl(PCI_ADDRESS_PORT, pci_get_addr(device, field));
-    outportb(PCI_VALUE_PORT + (field & 0x03), value);
-}
-
-void pci_write_16(uint32_t device, uint32_t field, uint16_t value)
-{
-    outportl(PCI_ADDRESS_PORT, pci_get_addr(device, field));
-    outports(PCI_VALUE_PORT + (field & 0x02), value);
-}
-
-void pci_write_32(uint32_t device, uint32_t field, uint32_t value)
-{
-    outportl(PCI_ADDRESS_PORT, pci_get_addr(device, field));
-    outportl(PCI_VALUE_PORT, value);
-}
-
-uint8_t pci_read_8(uint32_t device, int field)
-{
-    outportl(PCI_ADDRESS_PORT, pci_get_addr(device, field));
-    return inportb(PCI_VALUE_PORT + (field & 0x03));
-}
-
-uint16_t pci_read_16(uint32_t device, int field)
-{
-    outportl(PCI_ADDRESS_PORT, pci_get_addr(device, field));
-    return inports(PCI_VALUE_PORT + (field & 0x02));
-}
-
-uint32_t pci_read_32(uint32_t device, int field)
-{
-    outportl(PCI_ADDRESS_PORT, pci_get_addr(device, field));
-    return inportl(PCI_VALUE_PORT);
-}
-
-/// @brief Finds the type of the given device.
-/// @param device the device number.
-/// @return the type of the device.
-static inline uint32_t pci_find_type(uint32_t device)
-{
-    return pci_read_8(device, PCI_CLASS) << 16U |
-           pci_read_8(device, PCI_SUBCLASS) << 8U |
-           pci_read_8(device, PCI_PROG_IF);
-}
-
 struct {
     uint16_t id;
     const char *name;
@@ -317,6 +235,174 @@ struct {
     { 0x112000, "Management card" },
     { 0x118000, "Data acq./Signal proc." },
 };
+
+/// @brief Enables configuration space access for PCI devices.
+/// @details The configuration bit in I/O location CF8h[31] must be set to 1b to
+/// enable access to PCI configuration space.
+#define PCI_ADDR_ENABLE 0x80000000U
+
+/// @brief Writes the bus number into bits [23:16] of I/O location CF8h.
+/// @details This macro takes the PCI bus number and shifts it into the correct
+/// position (bits [23:16]) for the PCI configuration address.
+#define PCI_ADDR_BUS(bus) ((uint32_t)(bus) << 16U)
+
+/// @brief Writes the PCI device number into bits [15:11] of I/O location CF8h.
+/// @details This macro takes the PCI device number and shifts it into the
+/// correct position (bits [15:11]) for the PCI configuration address.
+#define PCI_ADDR_DEV(slot) ((uint32_t)(slot) << 11U)
+
+/// @brief Writes the function number into bits [10:8] of I/O location CF8h.
+/// @details This macro takes the PCI function number and shifts it into the
+/// correct position (bits [10:8]) for the PCI configuration address.
+#define PCI_ADDR_FUNC(func) ((uint32_t)(func) << 8U)
+
+/// @brief Writes the register field into bits [7:2] of I/O location CF8h.
+/// @details This macro takes the PCI register field and masks it to fit into
+/// bits [7:2] for the PCI configuration address. This field is used to specify
+/// the configuration register within the PCI device.
+#define PCI_ADDR_FIELD(field) ((uint32_t)(field) & 0xFCU)
+
+/// @brief Extracts the bus ID from the PCI address.
+/// @details This macro extracts the bus number from bits [23:16] of the PCI
+/// address.
+#define PCI_GET_BUS(dev) (((dev) >> 16U) & 0xFF)
+
+/// @brief Extracts the slot ID (device number) from the PCI address.
+/// @details This macro extracts the slot (device) number from bits [15:8] of
+/// the PCI address.
+#define PCI_GET_SLOT(dev) (((dev) >> 11U) & 0x1F)
+
+/// @brief Extracts the function ID from the PCI address.
+/// @details This macro extracts the function number from bits [7:0] of the PCI
+/// address.
+#define PCI_GET_FUNC(dev) (((dev) >> 8U) & 0x07)
+
+/// @brief Constructs the PCI configuration address for a given device and register field.
+///
+/// @param device The 32-bit value representing the PCI device (includes bus, slot, and function).
+/// @param field The 32-bit value representing the register field (which register to access).
+/// @param[out] addr Pointer to store the constructed PCI configuration address.
+/// @return 0 on success, 1 on error.
+static inline int pci_get_addr(uint32_t device, uint32_t field, uint32_t *addr)
+{
+    // Check if the output pointer is valid.
+    if (addr == NULL) {
+        pr_err("Output parameter 'addr' is NULL.\n");
+        return 1;
+    }
+    // Extract bus, slot, and function numbers from the device identifier.
+    uint8_t bus  = PCI_GET_BUS(device);
+    uint8_t slot = PCI_GET_SLOT(device);
+    uint8_t func = PCI_GET_FUNC(device);
+    // Validate bus number (0-255)
+    if (bus > 255) {
+        pr_err("Invalid bus number %u. Must be between 0 and 255.\n", bus);
+        return 1;
+    }
+    // Validate slot number (0-31).
+    if (slot > 31) {
+        pr_err("Invalid slot number %u. Must be between 0 and 31.\n", slot);
+        return 1;
+    }
+    // Validate function number (0-7).
+    if (func > 7) {
+        pr_err("Invalid function number %u. Must be between 0 and 7.\n", func);
+        return 1;
+    }
+    // Validate field (must be less than or equal to 0xFC and aligned to the access size).
+    if (field > 0xFC) {
+        pr_err("Invalid field 0x%X. Must be less than or equal to 0xFC.\n", field);
+        return 1;
+    }
+    // Construct the PCI configuration address.
+    *addr = PCI_ADDR_ENABLE |      // Enable access to PCI configuration space.
+            PCI_ADDR_BUS(bus) |    // Set the bus number.
+            PCI_ADDR_DEV(slot) |   // Set the slot (device) number.
+            PCI_ADDR_FUNC(func) |  // Set the function number.
+            PCI_ADDR_FIELD(field); // Set the register field.
+    return 0;
+}
+
+static inline uint32_t pci_box_device(uint8_t bus, uint8_t slot, uint8_t func)
+{
+    return (uint32_t)((bus << 16U) | (slot << 8U) | func);
+}
+
+void pci_write_8(uint32_t device, uint32_t field, uint8_t value)
+{
+    // Get the PCI configuration address
+    uint32_t addr;
+    if (pci_get_addr(device, field, &addr)) {
+        return;
+    }
+    outportl(PCI_ADDRESS_PORT, addr);
+    outportb(PCI_VALUE_PORT + (field & 0x03), value);
+}
+
+void pci_write_16(uint32_t device, uint32_t field, uint16_t value)
+{
+    // Get the PCI configuration address
+    uint32_t addr;
+    if (pci_get_addr(device, field, &addr)) {
+        return;
+    }
+    outportl(PCI_ADDRESS_PORT, addr);
+    outports(PCI_VALUE_PORT + (field & 0x02), value);
+}
+
+void pci_write_32(uint32_t device, uint32_t field, uint32_t value)
+{
+    // Get the PCI configuration address
+    uint32_t addr;
+    if (pci_get_addr(device, field, &addr)) {
+        return;
+    }
+    outportl(PCI_ADDRESS_PORT, addr);
+    outportl(PCI_VALUE_PORT, value);
+}
+
+uint8_t pci_read_8(uint32_t device, int field)
+{
+    // Get the PCI configuration address
+    uint32_t addr;
+    if (pci_get_addr(device, field, &addr)) {
+        return 0;
+    }
+    outportl(PCI_ADDRESS_PORT, addr);
+    return inportb(PCI_VALUE_PORT + (field & 0x03));
+}
+
+uint16_t pci_read_16(uint32_t device, int field)
+{
+    // Get the PCI configuration address
+    uint32_t addr;
+    if (pci_get_addr(device, field, &addr)) {
+        return 0;
+    }
+    outportl(PCI_ADDRESS_PORT, addr);
+    return inports(PCI_VALUE_PORT + (field & 0x02));
+}
+
+uint32_t pci_read_32(uint32_t device, int field)
+{
+    // Get the PCI configuration address
+    uint32_t addr;
+    if (pci_get_addr(device, field, &addr)) {
+        return 0;
+    }
+    outportl(PCI_ADDRESS_PORT, addr);
+    return inportl(PCI_VALUE_PORT);
+}
+
+/// @brief Finds the type of the given device.
+/// @param device the device number.
+/// @return the type of the device.
+static inline uint32_t pci_find_type(uint32_t device)
+{
+    return pci_read_8(device, PCI_CLASS) << 16U |
+           pci_read_8(device, PCI_SUBCLASS) << 8U |
+           pci_read_8(device, PCI_PROG_IF);
+}
 
 /// @brief Searches for the vendor name from the ID.
 /// @param vendor_id the vendor ID.
