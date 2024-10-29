@@ -261,11 +261,12 @@ int pci_write_32(uint32_t device, uint32_t field, uint32_t value);
 /// @return 0 on success, non-zero on error.
 int pci_read_8(uint32_t device, uint32_t field, uint8_t *value);
 
-/// @brief Reads a 16bit field from the given PCI device.
-/// @param device the device.
-/// @param field the field to read.
-/// @return the value we read.
-uint16_t pci_read_16(uint32_t device, int field);
+/// @brief Reads a 16-bit value from a PCI device register.
+/// @param device The PCI device identifier.
+/// @param field The register field offset.
+/// @param[out] value Pointer to store the read value.
+/// @return 0 on success, non-zero on error.
+int pci_read_16(uint32_t device, uint32_t field, uint16_t *value);
 
 /// @brief Reads a 32bit field from the given PCI device.
 /// @param device the device.

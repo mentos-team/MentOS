@@ -384,15 +384,23 @@ int pci_read_8(uint32_t device, uint32_t field, uint8_t *value)
     return 0;
 }
 
-uint16_t pci_read_16(uint32_t device, int field)
+int pci_read_16(uint32_t device, uint32_t field, uint16_t *value)
 {
-    // Get the PCI configuration address
+    // Check if the output pointer is valid.
+    if (value == NULL) {
+        pr_err("Output parameter 'value' is NULL.\n");
+        return 1;
+    }
+    // Get the PCI configuration address.
     uint32_t addr;
     if (pci_get_addr(device, field, &addr)) {
-        return 0;
+        return 1;
     }
+    // Write the address to the PCI address port
     outportl(PCI_ADDRESS_PORT, addr);
-    return inports(PCI_VALUE_PORT + (field & 0x02));
+    // Read and return the 16-bit value from the PCI value port with adjusted field offset.
+    *value = inports(PCI_VALUE_PORT + (field & 0x02));
+    return 0;
 }
 
 uint32_t pci_read_32(uint32_t device, int field)
@@ -532,9 +540,15 @@ static inline int pci_scan_hit(pci_scan_func_t f, uint32_t device, void *extra)
     uint16_t vendor_id, device_id;
 
     // Read the vendor ID.
-    vendor_id = pci_read_16(device, PCI_VENDOR_ID);
+    if (pci_read_16(device, PCI_VENDOR_ID, &vendor_id)) {
+        pr_err("Failed to read vendor ID from device %u.\n", device);
+        return 1;
+    }
     // Read the device ID.
-    device_id = pci_read_16(device, PCI_DEVICE_ID);
+    if (pci_read_16(device, PCI_DEVICE_ID, &device_id)) {
+        pr_err("Failed to read device ID from device %u.\n", device);
+        return 1;
+    }
     // Call the provided function with the device information.
     f(device, vendor_id, device_id, extra);
     return 0;
@@ -644,7 +658,10 @@ int pci_scan_slot(pci_scan_func_t f, int type, uint8_t bus, uint8_t slot, void *
             }
 
             // Read the vendor ID.
-            vendor_id = pci_read_16(device, PCI_VENDOR_ID);
+            if (pci_read_16(device, PCI_VENDOR_ID, &vendor_id)) {
+                pr_err("Failed to read vendor ID from device %u.\n", device);
+                return 1;
+            }
 
             // Check if the device exists.
             if (vendor_id != PCI_NONE) {
@@ -709,7 +726,10 @@ int pci_scan(pci_scan_func_t f, int type, void *extra)
             }
 
             // Read the vendor ID.
-            vendor_id = pci_read_16(device, PCI_VENDOR_ID);
+            if (pci_read_16(device, PCI_VENDOR_ID, &vendor_id)) {
+                pr_err("Failed to read vendor ID from device %u.\n", device);
+                return 1;
+            }
 
             // Check if the device exists.
             if (vendor_id != PCI_NONE) {
@@ -911,13 +931,19 @@ int pci_dump_device_data(uint32_t device, uint16_t vendor_id, uint16_t device_id
     const char *type_name = pci_type_lookup(device_type);
 
     // Read command register
-    command = pci_read_16(device, PCI_COMMAND);
+    if (pci_read_16(device, PCI_COMMAND, &command) != 0) {
+        pr_err("Failed to read PCI_COMMAND from device %u.\n", device);
+        return -1;
+    }
 
     // Print Type and Command
     pr_debug("    %-12s: %s, %-12s: %04x\n", "Type", type_name, "Command", command);
 
     // Read status register
-    status = pci_read_16(device, PCI_STATUS);
+    if (pci_read_16(device, PCI_STATUS, &status) != 0) {
+        pr_err("Failed to read PCI_STATUS from device %u.\n", device);
+        return -1;
+    }
 
     // Print Status and Command
     pr_debug("    %-12s: %04x, %-12s: %04x\n", "Status", status, "Command", command);
