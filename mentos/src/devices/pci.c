@@ -323,37 +323,46 @@ static inline int pci_get_addr(uint32_t device, uint32_t field, uint32_t *addr)
     return 0;
 }
 
-void pci_write_8(uint32_t device, uint32_t field, uint8_t value)
+int pci_write_8(uint32_t device, uint32_t field, uint8_t value)
 {
     // Get the PCI configuration address
     uint32_t addr;
     if (pci_get_addr(device, field, &addr)) {
-        return;
+        return 1;
     }
+    // Write the address to the PCI address port
     outportl(PCI_ADDRESS_PORT, addr);
+    // Write the 8-bit value to the PCI data port with the adjusted field offset
     outportb(PCI_VALUE_PORT + (field & 0x03), value);
+    return 0;
 }
 
-void pci_write_16(uint32_t device, uint32_t field, uint16_t value)
+int pci_write_16(uint32_t device, uint32_t field, uint16_t value)
 {
     // Get the PCI configuration address
     uint32_t addr;
     if (pci_get_addr(device, field, &addr)) {
-        return;
+        return 1;
     }
+    // Write the address to the PCI address port.
     outportl(PCI_ADDRESS_PORT, addr);
+    // Write the 16-bit value to the PCI value port with the adjusted field offset.
     outports(PCI_VALUE_PORT + (field & 0x02), value);
+    return 0;
 }
 
-void pci_write_32(uint32_t device, uint32_t field, uint32_t value)
+int pci_write_32(uint32_t device, uint32_t field, uint32_t value)
 {
     // Get the PCI configuration address
     uint32_t addr;
     if (pci_get_addr(device, field, &addr)) {
-        return;
+        return 1;
     }
+    // Write the address to the PCI address port.
     outportl(PCI_ADDRESS_PORT, addr);
+    // Write the 32-bit value to the PCI value port.
     outportl(PCI_VALUE_PORT, value);
+    return 0;
 }
 
 uint8_t pci_read_8(uint32_t device, int field)
@@ -612,13 +621,12 @@ int pci_scan_slot(pci_scan_func_t f, int type, uint8_t bus, uint8_t slot, void *
     // Check if the device is multi-function (bit 7 of header_type is set)
     if ((header_type & 0x80) != 0) {
         for (uint32_t func = 1; func < 8; func++) {
-            
             // Obtain the device identifier for this function.
             if (pci_box_device(bus, slot, func, &device)) {
                 pr_err("Failed to obtain the device identifier.\n");
                 continue; // Skip to next function.
             }
-            
+
             // Read the vendor ID.
             vendor_id = pci_read_16(device, PCI_VENDOR_ID);
 
@@ -675,7 +683,6 @@ int pci_scan(pci_scan_func_t f, int type, void *extra)
         }
     } else {
         for (uint8_t bus = 0; bus < 8; ++bus) {
-
             // Obtain the device identifier for this function.
             if (pci_box_device(bus, 0, 0, &device)) {
                 pr_err("Failed to obtain the device identifier (slot: %u, func: %u).\n", 0, 0);
@@ -743,7 +750,13 @@ static inline int pci_remap(void)
 
     uint32_t out = 0;
     memcpy(&out, &pci_remaps, 4);
-    pci_write_32(pci_isa, 0x60, out);
+
+    // Write the updated interrupt mappings back to the device.
+    if (pci_write_32(pci_isa, 0x60, out)) {
+        pr_err("Failed to write updated interrupt mappings.\n");
+        return 1;
+    }
+
     return 0;
 }
 

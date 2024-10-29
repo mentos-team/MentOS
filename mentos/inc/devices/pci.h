@@ -233,23 +233,26 @@ typedef enum {
 /// @brief PIC scan function.
 typedef int (*pci_scan_func_t)(uint32_t device, uint16_t vendor_id, uint16_t device_id, void *extra);
 
-/// @brief Writes a 8bit field to the given PCI device.
-/// @param device the device.
-/// @param field the field to write.
-/// @param value the value to write.
-void pci_write_8(uint32_t device, uint32_t field, uint8_t value);
+/// @brief Writes an 8-bit value to a PCI configuration register.
+/// @param device The 32-bit PCI device identifier (bus, slot, and function).
+/// @param field The PCI configuration register field to write to.
+/// @param value The 8-bit value to write to the specified register.
+/// @return 0 on success, 1 on error.
+int pci_write_8(uint32_t device, uint32_t field, uint8_t value);
 
-/// @brief Writes a 16bit field to the given PCI device.
-/// @param device the device.
-/// @param field the field to write.
-/// @param value the value to write.
-void pci_write_16(uint32_t device, uint32_t field, uint16_t value);
+/// @brief Writes a 16-bit value to a PCI configuration register.
+/// @param device The 32-bit PCI device identifier (bus, slot, and function).
+/// @param field The PCI configuration register field to write to.
+/// @param value The 16-bit value to write to the specified register.
+/// @return 0 on success, 1 on error.
+int pci_write_16(uint32_t device, uint32_t field, uint16_t value);
 
-/// @brief Writes a 32bit field to the given PCI device.
-/// @param device the device.
-/// @param field the field to write.
-/// @param value the value to write.
-void pci_write_32(uint32_t device, uint32_t field, uint32_t value);
+/// @brief Writes a 32-bit value to a PCI configuration register.
+/// @param device The 32-bit PCI device identifier (bus, slot, and function).
+/// @param field The PCI configuration register field to write to.
+/// @param value The 32-bit value to write to the specified register.
+/// @return 0 on success, 1 on error.
+int pci_write_32(uint32_t device, uint32_t field, uint32_t value);
 
 /// @brief Reads a 8bit field from the given PCI device.
 /// @param device the device.

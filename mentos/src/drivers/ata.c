@@ -745,7 +745,10 @@ static inline int ata_dma_enable_bus_mastering(void)
     bit_set_assign(pci_cmd, pci_command_bus_master);
 
     // Write the updated PCI command register back to the device
-    pci_write_32(ata_pci, PCI_COMMAND, pci_cmd);
+    if (pci_write_32(ata_pci, PCI_COMMAND, pci_cmd) != 0) {
+        pr_crit("Failed to write PCI_COMMAND to device.\n");
+        return 1;
+    }
 
     // Read the current PCI command register
     pci_cmd = pci_read_32(ata_pci, PCI_COMMAND);
@@ -788,7 +791,10 @@ static inline int ata_dma_disable_bus_mastering(void)
     bit_clear_assign(pci_cmd, pci_command_bus_master);
 
     // Write the updated PCI command register back to the device.
-    pci_write_32(ata_pci, PCI_COMMAND, pci_cmd);
+    if (pci_write_32(ata_pci, PCI_COMMAND, pci_cmd) != 0) {
+        pr_crit("Failed to write PCI_COMMAND to device.\n");
+        return 1;
+    }
 
     // Read the current PCI command register
     pci_cmd = pci_read_32(ata_pci, PCI_COMMAND);
