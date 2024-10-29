@@ -709,9 +709,9 @@ int pci_scan(pci_scan_func_t f, int type, void *extra)
         return 1;
     }
 
-    uint8_t header_type;
     uint32_t device;
     uint16_t vendor_id;
+    uint8_t header_type;
 
     // Read the header type of bus 0, device 0, function 0
     if (pci_read_8(0, PCI_HEADER_TYPE, &header_type)) {
