@@ -16,7 +16,7 @@
 #include "stdint.h"
 #include "stdio.h"
 #include "string.h"
-#include "sys/unistd.h"
+#include "unistd.h"
 
 /// Size of the buffer used to call cvt functions.
 #define CVTBUFSIZE 500

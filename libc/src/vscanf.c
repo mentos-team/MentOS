@@ -6,7 +6,7 @@
 #include <ctype.h>
 #include <stdio.h>
 #include <string.h>
-#include <sys/unistd.h>
+#include <unistd.h>
 
 /// @brief Read formatted data from string.
 /// @param buf String processed as source to retrieve the data.

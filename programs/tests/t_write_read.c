@@ -9,7 +9,7 @@
 #include <strerror.h>
 #include <string.h>
 #include <sys/stat.h>
-#include <sys/unistd.h>
+#include <unistd.h>
 #include <math.h>
 
 /// @brief Creates a file with the specified name and mode.

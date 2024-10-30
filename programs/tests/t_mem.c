@@ -8,7 +8,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/unistd.h>
+#include <unistd.h>
 #include <sys/wait.h>
 #include <io/debug.h>
 #include <time.h>

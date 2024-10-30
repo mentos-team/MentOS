@@ -11,7 +11,7 @@
 #include <strerror.h>
 #include <string.h>
 #include <sys/errno.h>
-#include <sys/unistd.h>
+#include <unistd.h>
 #include <sys/wait.h>
 
 // Setup the logging for this file (do this before any other include).
@@ -27,6 +27,7 @@
 static char *all_tests[] = {
     "t_abort",
     "t_alarm",
+    "t_chdir",
     /* "t_big_write", */
     "t_creat",
     "t_dup",

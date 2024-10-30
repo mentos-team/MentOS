@@ -11,7 +11,7 @@
 #include "stdio.h"
 #include "string.h"
 #include "sys/errno.h"
-#include "sys/unistd.h"
+#include "unistd.h"
 
 /// @brief Parses the input buffer and fills pwd with its details.
 /// @param pwd the structure we need to fill.

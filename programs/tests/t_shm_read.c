@@ -9,7 +9,7 @@
 #include <string.h>
 #include <sys/ipc.h>
 #include <sys/shm.h>
-#include <sys/unistd.h>
+#include <unistd.h>
 
 int main(int argc, char *argv[])
 {

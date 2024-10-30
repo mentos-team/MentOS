@@ -5,7 +5,7 @@
 
 #include <stdio.h>
 #include <string.h>
-#include <sys/unistd.h>
+#include <unistd.h>
 #include <fcntl.h>
 #include <strerror.h>
 #include <stdbool.h>

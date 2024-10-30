@@ -11,7 +11,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strerror.h>
-#include <sys/unistd.h>
+#include <unistd.h>
 
 /// @brief List all groups and their members.
 static void list_groups(void)

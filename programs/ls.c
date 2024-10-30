@@ -8,7 +8,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdbool.h>
-#include <sys/unistd.h>
+#include <unistd.h>
 #include <fcntl.h>
 #include <strerror.h>
 #include <sys/stat.h>
