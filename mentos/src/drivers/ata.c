@@ -724,14 +724,19 @@ static inline int ata_dma_free(uintptr_t logical_addr)
 /// @return 0 on success, 1 on failure.
 static inline int ata_dma_enable_bus_mastering(void)
 {
+    uint32_t pci_cmd;
+
     // Ensure that the ata_pci device handle is valid.
     if (!ata_pci) {
         pr_crit("Invalid PCI device handle.\n");
         return 1;
     }
 
-    // Read the PCI command register.
-    uint32_t pci_cmd = pci_read_32(ata_pci, PCI_COMMAND);
+    // Read the PCI command register
+    if (pci_read_32(ata_pci, PCI_COMMAND, &pci_cmd) != 0) {
+        pr_crit("Failed to read PCI_COMMAND from device.\n");
+        return 1;
+    }
 
     // Check if bus mastering is already enabled.
     if (bit_check(pci_cmd, pci_command_bus_master)) {
@@ -741,11 +746,20 @@ static inline int ata_dma_enable_bus_mastering(void)
 
     // Enable bus mastering by setting the corresponding bit.
     bit_set_assign(pci_cmd, pci_command_bus_master);
-    // Write the updated PCI command register back to the device.
-    pci_write_32(ata_pci, PCI_COMMAND, pci_cmd);
 
-    // Verify that bus mastering is enabled.
-    pci_cmd = pci_read_32(ata_pci, PCI_COMMAND);
+    // Write the updated PCI command register back to the device
+    if (pci_write_32(ata_pci, PCI_COMMAND, pci_cmd) != 0) {
+        pr_crit("Failed to write PCI_COMMAND to device.\n");
+        return 1;
+    }
+
+    // Read the current PCI command register
+    if (pci_read_32(ata_pci, PCI_COMMAND, &pci_cmd) != 0) {
+        pr_crit("Failed to read PCI_COMMAND from device.\n");
+        return 1;
+    }
+
+    // Verify that bus mastering is enabled
     if (!bit_check(pci_cmd, pci_command_bus_master)) {
         pr_crit("Bus mastering is not correctly set.\n");
         return 1;
@@ -762,14 +776,19 @@ static inline int ata_dma_enable_bus_mastering(void)
 /// @return 0 on success, 1 on failure.
 static inline int ata_dma_disable_bus_mastering(void)
 {
+    uint32_t pci_cmd;
+
     // Ensure that the ata_pci device handle is valid.
     if (!ata_pci) {
         pr_crit("Invalid PCI device handle.\n");
         return 1;
     }
 
-    // Read the current PCI command register.
-    uint32_t pci_cmd = pci_read_32(ata_pci, PCI_COMMAND);
+    // Read the current PCI command register
+    if (pci_read_32(ata_pci, PCI_COMMAND, &pci_cmd) != 0) {
+        pr_crit("Failed to read PCI_COMMAND from device.\n");
+        return 1;
+    }
 
     // Check if bus mastering is currently enabled.
     if (!bit_check(pci_cmd, pci_command_bus_master)) {
@@ -779,11 +798,20 @@ static inline int ata_dma_disable_bus_mastering(void)
 
     // Clear the bus mastering bit to disable it.
     bit_clear_assign(pci_cmd, pci_command_bus_master);
+
     // Write the updated PCI command register back to the device.
-    pci_write_32(ata_pci, PCI_COMMAND, pci_cmd);
+    if (pci_write_32(ata_pci, PCI_COMMAND, pci_cmd) != 0) {
+        pr_crit("Failed to write PCI_COMMAND to device.\n");
+        return 1;
+    }
+
+    // Read the current PCI command register
+    if (pci_read_32(ata_pci, PCI_COMMAND, &pci_cmd) != 0) {
+        pr_crit("Failed to read PCI_COMMAND from device.\n");
+        return 1;
+    }
 
     // Verify that bus mastering is disabled.
-    pci_cmd = pci_read_32(ata_pci, PCI_COMMAND);
     if (bit_check(pci_cmd, pci_command_bus_master)) {
         pr_crit("Bus mastering is not correctly cleared.\n");
         return 1;
@@ -805,8 +833,25 @@ static inline int ata_dma_disable_bus_mastering(void)
 /// @return 0 on success, 1 on failure.
 static inline int ata_dma_initialize_bus_mastering_address(ata_device_t *dev)
 {
-    // Read the value of the PCI Base Address Register (BAR) for bus mastering.
-    uint32_t address = pci_read_32(ata_pci, PCI_BASE_ADDRESS_4);
+    uint32_t address;
+
+    // Check if the device pointer is valid.
+    if (dev == NULL) {
+        pr_warning("Device pointer 'dev' is NULL.\n");
+        return 1;
+    }
+
+    // Ensure that the ata_pci device handle is valid
+    if (!ata_pci) {
+        pr_warning("Invalid PCI device handle.\n");
+        return 1;
+    }
+
+    // Read the value of the PCI Base Address Register (BAR) for bus mastering
+    if (pci_read_32(ata_pci, PCI_BASE_ADDRESS_4, &address) != 0) {
+        pr_warning("Failed to read PCI_BASE_ADDRESS_4 from device.\n");
+        return 1;
+    }
 
     // Check if the lowest bit is set to distinguish between memory space and
     // I/O space BARs. Memory space BARs have the lowest bit as 0, while I/O
@@ -1606,18 +1651,28 @@ static void ata_irq_handler_slave(pt_regs *f)
 
 // == PCI FUNCTIONS ===========================================================
 
-/// @brief Used while scanning the PCI interface.
-/// @param device the device we want to find.
-/// @param vendorid its vendor ID.
-/// @param deviceid its device ID.
-/// @param extra the devoce once we find it.
-static void pci_find_ata(uint32_t device, uint16_t vendorid, uint16_t deviceid, void *extra)
+/// @brief Callback function used while scanning the PCI interface to find ATA devices.
+/// @param device The PCI device identifier.
+/// @param vendor_id The vendor ID of the device.
+/// @param device_id The device ID of the device.
+/// @param extra Pointer to store the device identifier once found.
+/// @return 1 if a matching device is found, 0 if not, -1 on error.
+static int pci_find_ata(uint32_t device, uint16_t vendor_id, uint16_t device_id, void *extra)
 {
-    // Intel Corporation AND (IDE Interface OR PIIX4 IDE)
-    if ((vendorid == 0x8086) && (deviceid == 0x7010 || deviceid == 0x7111)) {
-        *((uint32_t *)extra) = device;
-        pci_dump_device_data(device, vendorid, deviceid);
+    // Check if the output pointer 'extra' is valid.
+    if (extra == NULL) {
+        pr_err("Output parameter 'extra' is NULL.\n");
+        return 1;
     }
+    // Intel Corporation AND (IDE Interface OR PIIX4 IDE).
+    if ((vendor_id == 0x8086) && (device_id == 0x7010 || device_id == 0x7111)) {
+        // Store the device identifier in the location pointed to by 'extra'.
+        *((uint32_t *)extra) = device;
+        // Call pci_dump_device_data to display device information
+        pci_dump_device_data(device, vendor_id, device_id);
+        return 0; // Matching device found.
+    }
+    return 1; // No matching device found.
 }
 
 // == INITIALIZE/FINALIZE ATA =================================================
@@ -1625,7 +1680,10 @@ static void pci_find_ata(uint32_t device, uint16_t vendorid, uint16_t deviceid, 
 int ata_initialize(void)
 {
     // Search for ATA devices.
-    pci_scan(&pci_find_ata, -1, &ata_pci);
+    if (pci_scan(pci_find_ata, -1, &ata_pci) != 0) {
+        pr_err("Failed to scan for ATA devices.\n");
+        return 1;
+    }
 
     // Register the filesystem.
     vfs_register_filesystem(&ata_file_system_type);

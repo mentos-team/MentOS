@@ -4,7 +4,7 @@
 /// See LICENSE.md for details.
 
 #include <sys/reboot.h>
-#include <sys/unistd.h>
+#include <unistd.h>
 #include <stdio.h>
 
 int main(int argc, char** argv)

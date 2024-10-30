@@ -7,12 +7,13 @@
 
 #include "system/syscall_types.h"
 #include "fs/vfs_types.h"
-#include "kernel.h"
-#include "sys/dirent.h"
+#include "sys/utsname.h"
 #include "sys/types.h"
 #include "sys/msg.h"
 #include "sys/sem.h"
 #include "sys/shm.h"
+#include "kernel.h"
+#include "dirent.h"
 
 /// @brief Initialize the system calls.
 void syscall_init(void);
@@ -379,3 +380,8 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
 /// @param length the length of the mapped area.
 /// @return 0 on success, -1 on falure and errno is set.
 int sys_munmap(void *addr, size_t length);
+
+/// @brief Returns system information in the structure pointed to by buf.
+/// @param buf Buffer where the info will be placed.
+/// @return 0 on success, a negative value on failure.
+int sys_uname(utsname_t *buf);

@@ -8,7 +8,7 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include <sys/unistd.h>
+#include <unistd.h>
 #include <sys/wait.h>
 #include <stdlib.h>
 #include <stdio.h>

@@ -14,7 +14,7 @@
 #include <time.h>
 #include <strerror.h>
 #include <sys/wait.h>
-#include <sys/unistd.h>
+#include <unistd.h>
 
 /// @brief Signal handler for SIGALRM.
 /// @param sig The signal number.

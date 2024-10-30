@@ -3,7 +3,7 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "sys/dirent.h"
+#include "dirent.h"
 #include "assert.h"
 #include "fs/vfs.h"
 #include "process/scheduler.h"

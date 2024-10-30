@@ -13,7 +13,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strerror.h>
-#include <sys/unistd.h>
+#include <unistd.h>
 
 /// @brief Test the getgrnam function.
 /// @details This function tests that `getgrnam` correctly handles both existing

@@ -9,7 +9,7 @@
 #define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
 #include "io/debug.h"                    // Include debugging functions.
 
-#include <sys/unistd.h>
+#include <unistd.h>
 #include <sys/wait.h>
 #include <fcntl.h>
 #include <libgen.h>

@@ -13,7 +13,9 @@
 #include <sys/bitops.h>
 #include <sys/errno.h>
 #include <sys/stat.h>
-#include <sys/unistd.h>
+#include <unistd.h>
+#include <limits.h>
+#include <stdlib.h>
 
 static void __print_time(const char *prefix, time_t *time)
 {

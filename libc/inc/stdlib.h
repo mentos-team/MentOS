@@ -97,3 +97,7 @@ unsigned randuint(unsigned lb, unsigned ub);
 /// @param ub the upper-bound value.
 /// @return the random value.
 float randfloat(float lb, float ub);
+
+/// @brief Wrapper for exit system call.
+/// @param status The exit status.
+void exit(int status);

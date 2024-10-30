@@ -9,7 +9,7 @@
 #include "string.h"
 #include <assert.h>
 #include <stdlib.h>
-#include <sys/unistd.h>
+#include <unistd.h>
 
 int dirname(const char *path, char *buffer, size_t buflen)
 {

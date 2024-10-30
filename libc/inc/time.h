@@ -66,6 +66,16 @@ typedef struct timespec {
 /// @return The current time.
 time_t time(time_t *t);
 
+/// @brief Converts the given time to a string representing the local time.
+/// @details Converts the value pointed to by timer, representing the time in
+/// seconds since the Unix epoch (1970-01-01 00:00:00 UTC), to a string in the
+/// format: Www Mmm dd hh:mm:ss yyyy.
+/// @param timer A pointer to a time_t object representing the time to be
+/// converted.
+/// @return A pointer to a statically allocated string containing the formatted
+/// date and time. The string is overwritten with each call to ctime().
+char *ctime(const time_t *timer);
+
 /// @brief Return the difference between the two time values.
 /// @param time1 The first time value.
 /// @param time2 The second time value.

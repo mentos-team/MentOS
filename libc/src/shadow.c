@@ -3,15 +3,16 @@
 /// @copyright (c) 2005-2020 Rich Felker, et al.
 /// This file is based on the code from libmusl.
 
-#include <shadow.h>
-#include <fcntl.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/errno.h>
-#include <sys/unistd.h>
-#include <sys/stat.h>
-#include <ctype.h>
+#include "shadow.h"
+#include "fcntl.h"
+#include "stdio.h"
+#include "stdlib.h"
+#include "string.h"
+#include "sys/errno.h"
+#include "unistd.h"
+#include "sys/stat.h"
+#include "ctype.h"
+#include "limits.h"
 
 /// Defines the buffer size for reading lines from the shadow file.
 #define LINE_LIM 256

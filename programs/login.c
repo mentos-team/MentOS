@@ -12,7 +12,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <stdbool.h>
-#include <sys/unistd.h>
+#include <unistd.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <limits.h>

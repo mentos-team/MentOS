@@ -3,12 +3,12 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include <sys/dirent.h>
+#include <dirent.h>
 #include <stdint.h>
 #include <string.h>
 #include <stdio.h>
 #include <stdbool.h>
-#include <sys/unistd.h>
+#include <unistd.h>
 #include <fcntl.h>
 #include <strerror.h>
 #include <sys/stat.h>

@@ -141,14 +141,14 @@ if (DOXYGEN_FOUND)
         ${CMAKE_SOURCE_DIR}/libc/inc/sys/wait.h
         ${CMAKE_SOURCE_DIR}/libc/inc/sys/list_head.h
         ${CMAKE_SOURCE_DIR}/libc/inc/sys/kernel_levels.h
-        ${CMAKE_SOURCE_DIR}/libc/inc/sys/dirent.h
         ${CMAKE_SOURCE_DIR}/libc/inc/sys/ioctl.h
         ${CMAKE_SOURCE_DIR}/libc/inc/sys/mman.h
         ${CMAKE_SOURCE_DIR}/libc/inc/sys/utsname.h
-        ${CMAKE_SOURCE_DIR}/libc/inc/sys/unistd.h
         ${CMAKE_SOURCE_DIR}/libc/inc/sys/stat.h
         ${CMAKE_SOURCE_DIR}/libc/inc/sys/list_head_algorithm.h
         ${CMAKE_SOURCE_DIR}/libc/inc/grp.h
+        ${CMAKE_SOURCE_DIR}/libc/inc/unistd.h
+        ${CMAKE_SOURCE_DIR}/libc/inc/dirent.h
         ${CMAKE_SOURCE_DIR}/libc/inc/io/ansi_colors.h
         ${CMAKE_SOURCE_DIR}/libc/inc/io/mm_io.h
         ${CMAKE_SOURCE_DIR}/libc/inc/io/debug.h

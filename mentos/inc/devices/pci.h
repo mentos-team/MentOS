@@ -200,93 +200,105 @@ typedef enum {
 /// @}
 
 /// @name PCI Base Addresses
-/// @brief
-/// Base addresses specify locations in memory or I/O space.
-/// Decoded size can be determined by writing a value of 0xffffffff to the
-/// register, and reading it back. Only 1 bits are decoded.
+/// @brief Base addresses specify locations in memory or I/O space.
+/// @details Decoded size can be determined by writing a value of 0xffffffff
+/// to the register and reading it back. Only bits set to 1 are decoded.
 /// @{
-
-#define PCI_BASE_ADDRESS_0 0x10 ///< Location of base address 0.
-#define PCI_BASE_ADDRESS_1 0x14 ///< Location of base address 1.
-#define PCI_BASE_ADDRESS_2 0x18 ///< Location of base address 2.
-#define PCI_BASE_ADDRESS_3 0x1c ///< Location of base address 3.
-#define PCI_BASE_ADDRESS_4 0x20 ///< Location of base address 4.
-#define PCI_BASE_ADDRESS_5 0x24 ///< Location of base address 5.
-
+#define PCI_BASE_ADDRESS_0 0x10 ///< Memory location of base address 0.
+#define PCI_BASE_ADDRESS_1 0x14 ///< Memory location of base address 1.
+#define PCI_BASE_ADDRESS_2 0x18 ///< Memory location of base address 2.
+#define PCI_BASE_ADDRESS_3 0x1c ///< Memory location of base address 3.
+#define PCI_BASE_ADDRESS_4 0x20 ///< Memory location of base address 4.
+#define PCI_BASE_ADDRESS_5 0x24 ///< Memory location of base address 5.
 /// @}
 
-#define PCI_PRIMARY_BUS   0x18 ///< Primary bus number.
-#define PCI_SECONDARY_BUS 0x19 ///< Secondary bus number.
+/// @brief PCI bus numbers.
+#define PCI_PRIMARY_BUS   0x18 ///< Primary PCI bus number.
+#define PCI_SECONDARY_BUS 0x19 ///< Secondary PCI bus number.
 
-#define PCI_HEADER_TYPE_NORMAL  0 ///< TODO: Document.
-#define PCI_HEADER_TYPE_BRIDGE  1 ///< TODO: Document.
-#define PCI_HEADER_TYPE_CARDBUS 2 ///< TODO: Document.
+/// @brief PCI header types.
+#define PCI_HEADER_TYPE_NORMAL  0 ///< Standard PCI device header type.
+#define PCI_HEADER_TYPE_BRIDGE  1 ///< PCI-to-PCI bridge header type.
+#define PCI_HEADER_TYPE_CARDBUS 2 ///< CardBus bridge header type.
 
-#define PCI_TYPE_BRIDGE 0x060400 ///< TODO: Document.
-#define PCI_TYPE_SATA   0x010600 ///< TODO: Document.
+/// @brief PCI class code for bridges.
+#define PCI_CLASS_BRIDGE 0x06 ///< Class code for PCI bridge devices.
 
-#define PCI_ADDRESS_PORT 0xCF8  ///< TODO: Document.
-#define PCI_VALUE_PORT   0xCFC  ///< TODO: Document.
-#define PCI_NONE         0xFFFF ///< TODO: Document.
+/// @brief PCI subclass codes for bridge devices.
+#define PCI_SUBCLASS_PCI_BRIDGE 0x04 ///< Subclass code for PCI-to-PCI bridges.
+
+/// @brief Represents the combination of PCI class and subclass for bridges.
+/// @details This value is constructed using the class and subclass codes.
+#define PCI_TYPE_BRIDGE ((PCI_CLASS_BRIDGE << 16U) | (PCI_SUBCLASS_PCI_BRIDGE << 8U))
+
+/// @brief PCI device type for SATA controllers.
+#define PCI_TYPE_SATA 0x010600 ///< Device type code for SATA controllers.
+
+/// @brief PCI I/O port addresses for configuration space access.
+#define PCI_ADDRESS_PORT 0xCF8 ///< I/O port for addressing PCI configuration space.
+#define PCI_VALUE_PORT   0xCFC ///< I/O port for reading/writing PCI configuration data.
+
+/// @brief Constant used when no PCI device is found.
+#define PCI_NONE 0xFFFF ///< No PCI device present.
 
 /// @brief PIC scan function.
-typedef void (*pci_scan_func_t)(uint32_t device, uint16_t vendor_id, uint16_t device_id, void *extra);
+typedef int (*pci_scan_func_t)(uint32_t device, uint16_t vendor_id, uint16_t device_id, void *extra);
 
-/// @brief Writes a 8bit field to the given PCI device.
-/// @param device the device.
-/// @param field the field to write.
-/// @param value the value to write.
-void pci_write_8(uint32_t device, uint32_t field, uint8_t value);
+/// @brief Writes an 8-bit value to a PCI configuration register.
+/// @param device The 32-bit PCI device identifier (bus, slot, and function).
+/// @param field The PCI configuration register field to write to.
+/// @param value The 8-bit value to write to the specified register.
+/// @return 0 on success, 1 on error.
+int pci_write_8(uint32_t device, uint32_t field, uint8_t value);
 
-/// @brief Writes a 16bit field to the given PCI device.
-/// @param device the device.
-/// @param field the field to write.
-/// @param value the value to write.
-void pci_write_16(uint32_t device, uint32_t field, uint16_t value);
+/// @brief Writes a 16-bit value to a PCI configuration register.
+/// @param device The 32-bit PCI device identifier (bus, slot, and function).
+/// @param field The PCI configuration register field to write to.
+/// @param value The 16-bit value to write to the specified register.
+/// @return 0 on success, 1 on error.
+int pci_write_16(uint32_t device, uint32_t field, uint16_t value);
 
-/// @brief Writes a 32bit field to the given PCI device.
-/// @param device the device.
-/// @param field the field to write.
-/// @param value the value to write.
-void pci_write_32(uint32_t device, uint32_t field, uint32_t value);
+/// @brief Writes a 32-bit value to a PCI configuration register.
+/// @param device The 32-bit PCI device identifier (bus, slot, and function).
+/// @param field The PCI configuration register field to write to.
+/// @param value The 32-bit value to write to the specified register.
+/// @return 0 on success, 1 on error.
+int pci_write_32(uint32_t device, uint32_t field, uint32_t value);
 
-/// @brief Reads a 8bit field from the given PCI device.
-/// @param device the device.
-/// @param field the field to read.
-/// @return the value we read.
-uint8_t pci_read_8(uint32_t device, int field);
+/// @brief Reads an 8-bit value from a PCI device register.
+/// @param device The PCI device identifier.
+/// @param field The register field offset.
+/// @param[out] value Pointer to store the read value.
+/// @return 0 on success, non-zero on error.
+int pci_read_8(uint32_t device, uint32_t field, uint8_t *value);
 
-/// @brief Reads a 16bit field from the given PCI device.
-/// @param device the device.
-/// @param field the field to read.
-/// @return the value we read.
-uint16_t pci_read_16(uint32_t device, int field);
+/// @brief Reads a 16-bit value from a PCI device register.
+/// @param device The PCI device identifier.
+/// @param field The register field offset.
+/// @param[out] value Pointer to store the read value.
+/// @return 0 on success, non-zero on error.
+int pci_read_16(uint32_t device, uint32_t field, uint16_t *value);
 
-/// @brief Reads a 32bit field from the given PCI device.
-/// @param device the device.
-/// @param field the field to read.
-/// @return the value we read.
-uint32_t pci_read_32(uint32_t device, int field);
+/// @brief Reads a 32-bit value from a PCI device register.
+/// @param device The PCI device identifier.
+/// @param field The register field offset.
+/// @param[out] value Pointer to store the read value.
+/// @return 0 on success, non-zero on error.
+int pci_read_32(uint32_t device, uint32_t field, uint32_t *value);
 
 /// @brief Scans for the given type of device.
 /// @param f the function to call once we have found the device.
 /// @param type the type of device we are searching for.
 /// @param extra the extra arguemnts.
-void pci_scan(pci_scan_func_t f, int type, void *extra);
+/// @return 0 on success, non-zero if any errors occurred.
+int pci_scan(pci_scan_func_t f, int type, void *extra);
 
-/// @brief PCI-to-ISA remapping.
-void pci_remap(void);
-
-/// @brief Retrieves the interrupt number for the given device.
-/// @param device the device.
-/// @return interrupt number.
-int pci_get_interrupt(uint32_t device);
-
-/// @brief Dumps on DEBUG, the information about the given device.
-/// @param device the device.
-/// @param vendorid the ID of the vendor.
-/// @param deviceid the ID of the device.
-void pci_dump_device_data(uint32_t device, uint16_t vendorid, uint16_t deviceid);
+/// @brief Dumps the data of a PCI device.
+/// @param device The PCI device identifier.
+/// @param vendor_id The vendor ID of the device.
+/// @param device_id The device ID of the device.
+/// @return 0 on success, non-zero on failure.
+int pci_dump_device_data(uint32_t device, uint16_t vendor_id, uint16_t device_id);
 
 /// @brief Prints all the devices connected to the PCI interfance.
 void pci_debug_scan(void);

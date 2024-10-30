@@ -3,10 +3,12 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "sys/unistd.h"
+#include "unistd.h"
 #include "signal.h"
 #include "stdio.h"
 #include "string.h"
+#include "grp.h"
+#include "stdlib.h"
 
 /// @brief Since there could be signal handlers listening for the abort, we need
 /// to keep track at which stage of the abort we are.

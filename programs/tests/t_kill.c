@@ -15,7 +15,7 @@
 #include <time.h>
 #include <strerror.h>
 #include <sys/wait.h>
-#include <sys/unistd.h>
+#include <unistd.h>
 
 /// @brief Signal handler for SIGUSR1 in the child process.
 /// @param sig The signal number.

@@ -11,7 +11,7 @@
 
 #include <stdio.h>
 #include <sched.h>
-#include <sys/unistd.h>
+#include <unistd.h>
 #include <string.h>
 #include <strerror.h>
 #include <stdlib.h>

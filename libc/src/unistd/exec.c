@@ -3,7 +3,7 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "sys/unistd.h"
+#include "unistd.h"
 #include "fcntl.h"
 #include "io/debug.h"
 #include "stdarg.h"
@@ -12,6 +12,7 @@
 #include "sys/errno.h"
 #include "sys/stat.h"
 #include "system/syscall_types.h"
+#include "limits.h"
 
 extern char **environ;
 
