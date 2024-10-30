@@ -33,3 +33,14 @@
 #define LINUX_REBOOT_CMD_SW_SUSPEND 0xD000FCE2
 /// Restart system using a previously loaded Linux kernel
 #define LINUX_REBOOT_CMD_KEXEC 0x45584543
+
+/// @brief Reboots the system, or enables/disables the reboot keystroke.
+/// @param magic1 fails (with the error EINVAL) unless equals LINUX_REBOOT_MAGIC1.
+/// @param magic2 fails (with the error EINVAL) unless equals LINUX_REBOOT_MAGIC2.
+/// @param cmd The command to send to the reboot.
+/// @param arg Argument passed with some specific commands.
+/// @return For the values of cmd that stop or restart the system, a
+///         successful call to reboot() does not return. For the other cmd
+///         values, zero is returned on success. In all cases, -1 is
+///         returned on failure, and errno is set appropriately.
+int reboot(int magic1, int magic2, unsigned int cmd, void *arg);

@@ -7,7 +7,7 @@
 
 #include "sys/types.h"
 #include "stddef.h"
-#include "sys/dirent.h"
+#include "dirent.h"
 
 #define STDIN_FILENO  0 ///< Standard input file descriptor.
 #define STDOUT_FILENO 1 ///< Standard output file descriptor.
@@ -71,13 +71,9 @@ int symlink(const char *linkname, const char *path);
 /// @return The number of read characters on success, -1 otherwise and errno is set to indicate the error.
 int readlink(const char *path, char *buffer, size_t bufsize);
 
-/// @brief Wrapper for exit system call.
-/// @param status The exit status.
-extern void exit(int status);
-
 /// @brief Returns the process ID (PID) of the calling process.
 /// @return pid_t process identifier.
-extern pid_t getpid(void);
+pid_t getpid(void);
 
 ///@brief  Return session id of the given process.
 ///        If pid == 0 return the SID of the calling process
@@ -85,7 +81,7 @@ extern pid_t getpid(void);
 ///@param pid process identifier from wich we want the SID
 ///@return On success return SID of the session
 ///        Otherwise return -1 with errno set on: EPERM or ESRCH
-extern pid_t getsid(pid_t pid);
+pid_t getsid(pid_t pid);
 
 ///@brief creates a new session if the calling process is not a
 ///       process group leader.  The calling process is the leader of the
@@ -95,7 +91,7 @@ extern pid_t getsid(pid_t pid);
 ///       is made the same as its process ID).
 ///@return On success return SID of the session just created
 ///        Otherwise return -1 with errno : EPERM
-extern pid_t setsid(void);
+pid_t setsid(void);
 
 ///@brief returns the Process Group ID (PGID) of the process specified by pid.
 /// If pid is zero, the process ID of the calling process is used.
@@ -112,56 +108,56 @@ int setpgid(pid_t pid, pid_t pgid);
 
 ///@brief returns the real group ID of the calling process.
 ///@return GID of the current process
-extern gid_t getgid(void);
+gid_t getgid(void);
 
 ///@brief returns the effective group ID of the calling process.
 ///@return GID of the current process
-extern gid_t getegid(void);
+gid_t getegid(void);
 
 ///@brief sets the group IDs of the calling process.
 ///@param gid the Group ID to set
 ///@return On success, zero is returned.
 ///        Otherwise returns -1 with errno set to :EINVAL or EPERM
-extern int setgid(gid_t gid);
+int setgid(gid_t gid);
 
 ///@brief sets the real and effective group IDs of the calling process.
 ///@param rgid the new real Group ID.
 ///@param egid the effective real Group ID.
 ///@return On success, zero is returned.
 ///        Otherwise returns -1 with errno set EPERM
-extern int setregid(gid_t rgid, gid_t egid);
+int setregid(gid_t rgid, gid_t egid);
 
 ///@brief Returns the real User ID of the calling process.
 ///@return User ID of the current process.
-extern uid_t getuid(void);
+uid_t getuid(void);
 
 ///@brief Returns the effective User ID of the calling process.
 ///@return User ID of the current process.
-extern uid_t geteuid(void);
+uid_t geteuid(void);
 
 ///@brief Sets the User IDs of the calling process.
 ///@param uid the new User ID.
 ///@return On success, zero is returned.
 ///        Otherwise returns -1 with errno set to :EINVAL or EPERM
-extern int setuid(uid_t uid);
+int setuid(uid_t uid);
 
 ///@brief Sets the effective and real User IDs of the calling process.
 ///@param ruid the new real User ID.
 ///@param euid the effective real User ID.
 ///@return On success, zero is returned.
 ///        Otherwise returns -1 with errno set to EPERM
-extern int setreuid(uid_t ruid, uid_t euid);
+int setreuid(uid_t ruid, uid_t euid);
 
 /// @brief Returns the parent process ID (PPID) of the calling process.
 /// @return pid_t parent process identifier.
-extern pid_t getppid(void);
+pid_t getppid(void);
 
 /// @brief Clone the calling process, but without copying the whole address space.
 ///        The calling process is suspended until the new process exits or is
 ///        replaced by a call to `execve'.
 /// @return Return -1 for errors, 0 to the new process, and the process ID of
 ///         the new process to the old process.
-extern pid_t fork(void);
+pid_t fork(void);
 
 /// @brief Replaces the current process image with a new process image (argument list).
 /// @param path The absolute path to the binary file to execute.
@@ -241,17 +237,6 @@ int execvpe(const char *file, char *const argv[], char *const envp[]);
 ///         returned, and errno is set appropriately.
 int nice(int inc);
 
-/// @brief Reboots the system, or enables/disables the reboot keystroke.
-/// @param magic1 fails (with the error EINVAL) unless equals LINUX_REBOOT_MAGIC1.
-/// @param magic2 fails (with the error EINVAL) unless equals LINUX_REBOOT_MAGIC2.
-/// @param cmd The command to send to the reboot.
-/// @param arg Argument passed with some specific commands.
-/// @return For the values of cmd that stop or restart the system, a
-///         successful call to reboot() does not return. For the other cmd
-///         values, zero is returned on success. In all cases, -1 is
-///         returned on failure, and errno is set appropriately.
-int reboot(int magic1, int magic2, unsigned int cmd, void *arg);
-
 /// @brief Get current working directory.
 /// @param buf  The array where the CWD will be copied.
 /// @param size The size of the array.
@@ -269,15 +254,6 @@ int chdir(char const *path);
 /// @param fd The file descriptor of the open directory.
 /// @return 0 on success, -1 on failure and errno is set to indicate the error.
 int fchdir(int fd);
-
-/// Provide access to the directory entries.
-/// @param fd The fd pointing to the opened directory.
-/// @param dirp The buffer where de data should be placed.
-/// @param count The size of the buffer.
-/// @return On success, the number of bytes read is returned.  On end of
-///         directory, 0 is returned.  On error, -1 is returned, and errno is set
-///         appropriately.
-ssize_t getdents(int fd, dirent_t *dirp, unsigned int count);
 
 /// @brief Return a new file descriptor
 /// @param fd The fd pointing to the opened file.

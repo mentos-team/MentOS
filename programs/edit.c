@@ -18,6 +18,7 @@
 #include <stdio.h>
 #include <ctype.h>
 #include <fcntl.h>
+#include <stdlib.h>
 
 #define MAX_LINE_LENGTH 160
 #define MAX_LINES       512

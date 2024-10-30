@@ -7,8 +7,9 @@
 #include <stdio.h>
 #include <strerror.h>
 #include <string.h>
-#include <sys/dirent.h>
+#include <dirent.h>
 #include <unistd.h>
+#include <stdlib.h>
 
 int main(int argc, char *argv[])
 {

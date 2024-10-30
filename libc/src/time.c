@@ -14,10 +14,19 @@ static const char *weekdays[] = {
     "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"
 };
 
+/// @brief List of week days shortened name.
+static const char *weekdays_short[] = {
+    "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"
+};
+
 /// @brief List of months name.
 static const char *months[] = {
-    "January", "February", "March", "April", "May", "June",
-    "July", "August", "September", "October", "November", "December"
+    "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"
+};
+
+/// @brief List of months shortened name.
+static const char *months_short[] = {
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
 };
 
 /// @brief Time function.
@@ -26,6 +35,44 @@ _syscall1(time_t, time, time_t *, t)
     time_t difftime(time_t time1, time_t time2)
 {
     return time1 - time2;
+}
+
+char *ctime(const time_t *timer)
+{
+    // Buffer to hold the time string (ctime returns a 26-character string).
+    static char buffer[26] = { 0 };
+
+    // Check if the timer is NULL..
+    if (timer == NULL) {
+        perror("Error: NULL timer passed to ctime.\n");
+        return NULL;
+    }
+
+    // Convert time_t to a broken-down time structure (local time).
+    struct tm *local_time = localtime(timer);
+    if (local_time == NULL) {
+        perror("Error: localtime() failed");
+        return NULL;
+    }
+
+    // Format the broken-down time into the expected ctime format:
+    // Www Mmm dd hh:mm:ss yyyy\n
+    int written = snprintf(buffer, sizeof(buffer), "%3s %3s %02d %02d:%02d:%02d %4d",
+                           weekdays_short[local_time->tm_wday], // Day of the week
+                           months_short[local_time->tm_mon],    // Month
+                           local_time->tm_mday,                 // Day of the month
+                           local_time->tm_hour,                 // Hour
+                           local_time->tm_min,                  // Minutes
+                           local_time->tm_sec,                  // Seconds
+                           local_time->tm_year + 1900);         // Year
+
+    // Check if snprintf succeeded.
+    if (written < 0 || written >= (int)sizeof(buffer)) {
+        perror("Error: snprintf failed or output was truncated.\n");
+        return NULL;
+    }
+
+    return buffer;
 }
 
 /// @brief Computes day of week
@@ -383,7 +430,7 @@ size_t strftime(char *str, size_t maxsize, const char *format, const tm_t *timep
 /// @brief nanosleep function.
 _syscall2(int, nanosleep, const struct timespec *, req, struct timespec *, rem)
 
-unsigned int sleep(unsigned int seconds)
+    unsigned int sleep(unsigned int seconds)
 {
     struct timespec req, rem;
     req.tv_sec = seconds;
@@ -399,4 +446,4 @@ unsigned int sleep(unsigned int seconds)
 
 _syscall2(int, getitimer, int, which, struct itimerval *, curr_value)
 
-_syscall3(int, setitimer, int, which, const struct itimerval *, new_value, struct itimerval *, old_value)
+    _syscall3(int, setitimer, int, which, const struct itimerval *, new_value, struct itimerval *, old_value)

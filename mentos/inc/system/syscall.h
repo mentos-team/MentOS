@@ -7,12 +7,12 @@
 
 #include "system/syscall_types.h"
 #include "fs/vfs_types.h"
-#include "kernel.h"
-#include "sys/dirent.h"
 #include "sys/types.h"
 #include "sys/msg.h"
 #include "sys/sem.h"
 #include "sys/shm.h"
+#include "kernel.h"
+#include "dirent.h"
 
 /// @brief Initialize the system calls.
 void syscall_init(void);

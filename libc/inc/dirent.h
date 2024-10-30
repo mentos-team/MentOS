@@ -48,3 +48,12 @@ typedef struct dirent_t {
     unsigned short d_type;   ///< type of the directory entry.
     char d_name[NAME_MAX];   ///< Filename (null-terminated)
 } dirent_t;
+
+/// Provide access to the directory entries.
+/// @param fd The fd pointing to the opened directory.
+/// @param dirp The buffer where de data should be placed.
+/// @param count The size of the buffer.
+/// @return On success, the number of bytes read is returned.  On end of
+///         directory, 0 is returned.  On error, -1 is returned, and errno is set
+///         appropriately.
+ssize_t getdents(int fd, dirent_t *dirp, unsigned int count);

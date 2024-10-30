@@ -6,6 +6,7 @@
 #include "unistd.h"
 #include "sys/errno.h"
 #include "system/syscall_types.h"
+#include "dirent.h"
 
 
 _syscall3(ssize_t, getdents, int, fd, dirent_t *, dirp, unsigned int, count)

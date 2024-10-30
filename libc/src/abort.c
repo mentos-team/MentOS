@@ -7,6 +7,8 @@
 #include "signal.h"
 #include "stdio.h"
 #include "string.h"
+#include "grp.h"
+#include "stdlib.h"
 
 /// @brief Since there could be signal handlers listening for the abort, we need
 /// to keep track at which stage of the abort we are.

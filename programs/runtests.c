@@ -13,6 +13,7 @@
 #include <sys/errno.h>
 #include <unistd.h>
 #include <sys/wait.h>
+#include <limits.h>
 
 // Setup the logging for this file (do this before any other include).
 #include "sys/kernel_levels.h"         // Include kernel log levels.
@@ -25,9 +26,11 @@
 #define SERIAL_COM2 0x02F8
 
 static char *all_tests[] = {
+    "t_exit",
     "t_abort",
     "t_alarm",
     "t_chdir",
+    "t_time",
     /* "t_big_write", */
     "t_creat",
     "t_dup",

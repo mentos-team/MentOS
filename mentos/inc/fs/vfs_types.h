@@ -6,9 +6,9 @@
 #pragma once
 
 #include "sys/list_head.h"
-#include "sys/dirent.h"
 #include "bits/stat.h"
 #include "stdint.h"
+#include "dirent.h"
 
 #define PATH_SEPARATOR        '/'  ///< The character used as path separator.
 #define PATH_SEPARATOR_STRING "/"  ///< The string used as path separator.
