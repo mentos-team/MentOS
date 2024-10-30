@@ -1,40 +1,40 @@
 # List of programs.
 set(PROGRAM_LIST
-    runtests.c
-    more.c
+    cat.c
     chmod.c
     chown.c
-    id.c
-    stat.c
-    false.c
-    nice.c
-    ls.c
-    mkdir.c
-    ipcrm.c
-    login.c
-    man.c
-    logo.c
-    shell.c
-    cpuid.c
     clear.c
-    rmdir.c
-    poweroff.c
-    rm.c
-    cat.c
-    init.c
-    ps.c
-    kill.c
-    edit.c
-    sleep.c
+    cpuid.c
     date.c
     echo.c
-    showpid.c
-    uname.c
-    ipcs.c
-    touch.c
-    uptime.c
-    pwd.c
+    edit.c
     env.c
+    false.c
+    id.c
+    init.c
+    ipcrm.c
+    ipcs.c
+    kill.c
+    login.c
+    logo.c
+    ls.c
+    man.c
+    mkdir.c
+    more.c
+    nice.c
+    poweroff.c
+    ps.c
+    pwd.c
+    rm.c
+    rmdir.c
+    runtests.c
+    shell.c
+    showpid.c
+    sleep.c
+    stat.c
+    touch.c
+    uname.c
+    uptime.c
 )
 
 # Set the directory where the compiled binaries will be placed.
