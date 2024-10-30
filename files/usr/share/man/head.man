@@ -1,0 +1,14 @@
+SYNOPSIS
+    head [-NUM] [FILE]...
+
+DESCRIPTION
+    Output the first part of each FILE.
+
+    Print the first 10 lines of each FILE to standard output.
+    With more than one FILE, precede each with a header giving the file name.
+
+    With no FILE read standard input.
+
+OPTIONS
+    -h, --help  shows command help.
+    -NUM        print only the first NUM lines.
