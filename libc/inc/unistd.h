@@ -306,3 +306,16 @@ int fchown(int fd, uid_t owner, gid_t group);
 /// @return On success, 0 is returned.
 ///         On error, -1 is returned, and errno is set appropriately.
 int lchown(const char *pathname, uid_t owner, gid_t group);
+
+/// @brief Causes the calling thread to sleep either until the number of
+///        real-time seconds specified in seconds have elapsed or
+///        until a signal arrives which is not ignored.
+/// @param seconds The number of seconds we want to sleep.
+/// @return Zero if the requested time has elapsed, or the number of seconds
+///         left to sleep, if the call was interrupted by a signal handler.
+unsigned int sleep(unsigned int seconds);
+
+/// @brief System call to create a new pipe.
+/// @param fds Array to store read and write file descriptors.
+/// @return 0 on success, or -1 on error.
+int pipe(int fds[2]);

@@ -9,10 +9,12 @@
 
 void __assert_fail(const char *assertion, const char *file, const char *function, unsigned int line)
 {
-    printf("FILE: %s\n"
-           "FUNC: %s\n"
-           "LINE: %d\n\n"
-           "Assertion `%s` failed.\n",
-           file, (function ? function : "NO_FUN"), line, assertion);
+    printf("\n=== ASSERTION FAILED ===\n"
+           "Assertion: %s\n"
+           "Location : %s:%d\n"
+           "Function : %s\n\n",
+           assertion,
+           file, line,
+           (function ? function : "Unknown function"));
     abort();
 }

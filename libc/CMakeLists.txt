@@ -56,6 +56,7 @@ add_library(
     ${CMAKE_SOURCE_DIR}/libc/src/unistd/exec.c
     ${CMAKE_SOURCE_DIR}/libc/src/unistd/nice.c
     ${CMAKE_SOURCE_DIR}/libc/src/unistd/open.c
+    ${CMAKE_SOURCE_DIR}/libc/src/unistd/pipe.c
     ${CMAKE_SOURCE_DIR}/libc/src/unistd/reboot.c
     ${CMAKE_SOURCE_DIR}/libc/src/unistd/waitpid.c
     ${CMAKE_SOURCE_DIR}/libc/src/unistd/chdir.c

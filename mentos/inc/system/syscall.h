@@ -22,10 +22,6 @@ void syscall_init(void);
 /// @param f The interrupt stack frame.
 void syscall_handler(pt_regs *f);
 
-/// @brief Returns the current interrupt stack frame.
-/// @return Pointer to the stack frame.
-pt_regs *get_current_interrupt_stack_frame(void);
-
 /// The exit() function causes normal process termination.
 /// @param exit_code The exit code.
 void sys_exit(int exit_code);
@@ -385,3 +381,8 @@ int sys_munmap(void *addr, size_t length);
 /// @param buf Buffer where the info will be placed.
 /// @return 0 on success, a negative value on failure.
 int sys_uname(utsname_t *buf);
+
+/// @brief System call to create a new pipe.
+/// @param fds Array to store read and write file descriptors.
+/// @return 0 on success, or -1 on error.
+int sys_pipe(int fds[2]);

@@ -61,3 +61,11 @@ typedef struct pt_regs {
     /// Stack Segment.
     uint32_t ss;
 } pt_regs;
+
+/// @brief Sets the current pt_regs for the current context.
+/// @param f Pointer to the pt_regs structure to set as current.
+void set_current_pt_regs(struct pt_regs *f);
+
+/// @brief Retrieves the current pt_regs for the current context.
+/// @return Pointer to the current pt_regs structure.
+struct pt_regs *get_current_pt_regs();

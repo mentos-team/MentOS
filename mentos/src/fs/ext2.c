@@ -2971,21 +2971,40 @@ early_exit:
 /// @return 0 on success, -errno on failure.
 static int ext2_close(vfs_file_t *file)
 {
-    // Get the filesystem.
+    // Validate the file pointer.
+    if (file == NULL) {
+        pr_err("ext2_close: Invalid file pointer (NULL).\n");
+        return -EINVAL; // Invalid argument error
+    }
+
+    // Get the filesystem from the device.
     ext2_filesystem_t *fs = (ext2_filesystem_t *)file->device;
     if (fs == NULL) {
-        pr_err("The file does not belong to an EXT2 filesystem `%s`.\n", file->name);
-        return -1;
+        pr_err("ext2_close: File `%s` does not belong to a valid EXT2 filesystem.\n", file->name);
+        return -EINVAL;
     }
-    // We cannot close the root.
+
+    // Ensure we are not trying to close the root.
     if (file == fs->root) {
-        return -1;
+        pr_warning("ext2_close: Attempted to close the root file `%s`.\n", file->name);
+        return -EPERM;
     }
-    pr_debug("ext2_close(ino: %d, file: \"%s\")\n", file->ino, file->name);
-    // Remove the file from the list of opened files.
-    list_head_remove(&file->siblings);
-    // Free the cache.
-    kmem_cache_free(file);
+
+    pr_debug("ext2_close(ino: %d, file: \"%s\", count: %d)\n", file->ino, file->name, file->count - 1);
+
+    // Decrement the reference count for the file and close if last reference.
+    if (--file->count == 0) {
+        pr_debug("ext2_close: Closing file `%s` (ino: %d).\n", file->name, file->ino);
+
+        // Remove the file from the list of opened files.
+        list_head_remove(&file->siblings);
+        pr_debug("ext2_close: Removed file `%s` from the opened file list.\n", file->name);
+
+        // Free the file from cache.
+        kmem_cache_free(file);
+        pr_debug("ext2_close: Freed memory for file `%s`.\n", file->name);
+    }
+
     return 0;
 }
 
@@ -3105,15 +3124,21 @@ static off_t ext2_lseek(vfs_file_t *file, off_t offset, int whence)
 /// @param inode The inode containing the data.
 /// @param stat The structure where the information are stored.
 /// @return 0 if success.
-static int __ext2_stat(ext2_inode_t *inode, stat_t *stat)
+static int __ext2_stat(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t inode_index, stat_t *stat)
 {
-    stat->st_mode  = inode->mode;
-    stat->st_uid   = inode->uid;
-    stat->st_gid   = inode->gid;
-    stat->st_size  = inode->size;
-    stat->st_atime = inode->atime;
-    stat->st_mtime = inode->mtime;
-    stat->st_ctime = inode->ctime;
+    stat->st_dev     = fs->block_device->ino;
+    stat->st_ino     = inode_index;
+    stat->st_mode    = inode->mode;
+    stat->st_nlink   = inode->links_count;
+    stat->st_uid     = inode->uid;
+    stat->st_gid     = inode->gid;
+    stat->st_rdev    = 0;
+    stat->st_size    = inode->size;
+    stat->st_blksize = fs->block_size;
+    stat->st_blocks  = inode->blocks_count;
+    stat->st_atime   = inode->atime;
+    stat->st_mtime   = inode->mtime;
+    stat->st_ctime   = inode->ctime;
     return 0;
 }
 
@@ -3144,12 +3169,8 @@ static int ext2_fstat(vfs_file_t *file, stat_t *stat)
         pr_err("Failed to read the inode `%s`.\n", file->name);
         return -ENOENT;
     }
-    /// ID of device containing file.
-    stat->st_dev = fs->block_device->ino;
-    // Set the inode.
-    stat->st_ino = file->ino;
     // Set the rest of the structure.
-    return __ext2_stat(&inode, stat);
+    return __ext2_stat(fs, &inode, file->ino, stat);
 }
 
 /// @brief Retrieves information concerning the file at the given position.
@@ -3178,12 +3199,8 @@ static int ext2_stat(const char *path, stat_t *stat)
         pr_err("ext2_stat(path: %s): Failed to read the inode of `%s`.\n", path, search.direntry.name);
         return -ENOENT;
     }
-    /// ID of device containing file.
-    stat->st_dev = fs->block_device->ino;
-    // Set the inode.
-    stat->st_ino = search.direntry.inode;
     // Set the rest of the structure.
-    return __ext2_stat(&inode, stat);
+    return __ext2_stat(fs, &inode, search.direntry.inode, stat);
 }
 
 /// @brief Perform the I/O control operation specified by REQUEST on FD. One
@@ -3700,7 +3717,7 @@ static vfs_file_t *ext2_mount_callback(const char *path, const char *device)
 }
 
 /// Filesystem information.
-static file_system_type ext2_file_system_type = {
+static file_system_type_t ext2_file_system_type = {
     .name     = "ext2",
     .fs_flags = 0,
     .mount    = ext2_mount_callback

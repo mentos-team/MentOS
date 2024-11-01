@@ -26,12 +26,12 @@ void vfs_init(void);
 /// @brief Register a new filesystem.
 /// @param fs A pointer to the information concerning the new filesystem.
 /// @return The outcome of the operation, 0 if fails.
-int vfs_register_filesystem(file_system_type *fs);
+int vfs_register_filesystem(file_system_type_t *fs);
 
 /// @brief Unregister a new filesystem.
 /// @param fs A pointer to the information concerning the filesystem.
 /// @return The outcome of the operation, 0 if fails.
-int vfs_unregister_filesystem(file_system_type *fs);
+int vfs_unregister_filesystem(file_system_type_t *fs);
 
 /// @brief Register a superblock for the filesystem.
 /// @param name The name of the superblock.
@@ -39,7 +39,7 @@ int vfs_unregister_filesystem(file_system_type *fs);
 /// @param type A pointer to the filesystem type.
 /// @param root A pointer to the root file of the filesystem.
 /// @return 1 on success, 0 on failure.
-int vfs_register_superblock(const char *name, const char *path, file_system_type *type, vfs_file_t *root);
+int vfs_register_superblock(const char *name, const char *path, file_system_type_t *type, vfs_file_t *root);
 
 /// @brief Unregister a superblock.
 /// @param sb A pointer to the superblock to unregister.

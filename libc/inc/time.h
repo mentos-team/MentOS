@@ -109,14 +109,6 @@ size_t strftime(char *s, size_t max, const char *format, const tm_t *tm);
 /// the process.
 int nanosleep(const struct timespec *req, struct timespec *rem);
 
-/// @brief Causes the calling thread to sleep either until the number of
-///        real-time seconds specified in seconds have elapsed or
-///        until a signal arrives which is not ignored.
-/// @param seconds The number of seconds we want to sleep.
-/// @return Zero if the requested time has elapsed, or the number of seconds
-///         left to sleep, if the call was interrupted by a signal handler.
-unsigned int sleep(unsigned int seconds);
-
 /// @brief Fills the structure pointed to by curr_value with the current setting
 /// for the timer specified by which.
 /// @param which which timer.

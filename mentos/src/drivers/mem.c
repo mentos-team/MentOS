@@ -99,7 +99,7 @@ static ssize_t null_read(vfs_file_t *file, char *buffer, off_t offset, size_t si
 static int null_fstat(vfs_file_t *file, stat_t *stat);
 
 /// @brief Filesystem type structure for the null device.
-static file_system_type null_file_system_type = {
+static file_system_type_t null_file_system_type = {
     .name     = "null",
     .fs_flags = 0,
     .mount    = null_mount_callback
@@ -271,26 +271,34 @@ static vfs_file_t *null_open(const char *path, int flags, mode_t mode)
 }
 
 /// @brief Closes a null device file.
-///
 /// @param file A pointer to the vfs_file_t structure representing the file to close.
-/// @return 0 on success, -EINVAL if the file is NULL.
+/// @return 0 on success, -errno on failure.
 static int null_close(vfs_file_t *file)
 {
-    // Check if the file is NULL.
+    // Check if the file pointer is NULL.
     if (file == NULL) {
-        pr_crit("null_close: Received NULL file\n");
-        return -EINVAL; // Return an error if the file is NULL.
+        pr_crit("null_close: Received NULL file pointer.\n");
+        return -EINVAL;
     }
 
-    // Decrease the reference count.
-    if (file->count > 0) {
-        file->count--;
-    } else {
-        pr_warning("null_close: Attempt to close a file with zero reference count\n");
+    pr_debug("null_close(ino: %d, file: \"%s\", count: %d)\n", file->ino, file->name, file->count);
+
+    // Decrement the reference count for the file.
+    if (--file->count == 0) {
+        pr_debug("null_close: Closing file `%s` (ino: %d).\n", file->name, file->ino);
+
+        // Remove the file from the list of opened files.
+        list_head_remove(&file->siblings);
+        pr_debug("null_close: Removed file `%s` from the opened file list.\n", file->name);
+
+        // Free the file from cache.
+        kmem_cache_free(file);
+        pr_debug("null_close: Freed memory for file `%s`.\n", file->name);
     }
 
     return 0;
 }
+
 /// @brief Writes data to a null device file.
 ///
 /// @param file A pointer to the vfs_file_t structure representing the file to write to.

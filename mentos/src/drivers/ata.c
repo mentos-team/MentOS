@@ -1269,37 +1269,39 @@ static vfs_file_t *ata_open(const char *path, int flags, mode_t mode)
 
 /// @brief Closes an ATA device.
 /// @param file the VFS file associated with the ATA device.
-/// @return 0 on success, it panics on failure.
+/// @return 0 on success, -errno on failure.
 static int ata_close(vfs_file_t *file)
 {
-    pr_debug("ata_close(%p)\n", file);
-
-    // Check if the file pointer is NULL.
+    // Validate the file pointer.
     if (file == NULL) {
-        pr_crit("Attempted to close a NULL file pointer.\n");
-        return 1;
+        pr_err("ata_close: Invalid file pointer (NULL).\n");
+        return -EINVAL;
     }
 
     // Get the device from the VFS file.
     ata_device_t *dev = (ata_device_t *)file->device;
-
-    // Check the device.
     if (dev == NULL) {
-        pr_crit("Device not set for file: %p\n", file);
-        return 1;
+        pr_crit("ata_close: Device not set for file `%s`.\n", file->name);
+        return -ENODEV;
     }
 
-    // Check if the device is one of the ATA devices.
-    if ((dev == &ata_primary_master) || (dev == &ata_primary_slave) ||
-        (dev == &ata_secondary_master) || (dev == &ata_secondary_slave)) {
-        // Decrement the reference count for the file.
-        if (--file->count == 0) {
-            // Optional: Free any resources if this is the last reference.
-            // Freeing resources can be added here if necessary.
-        }
-    } else {
-        pr_crit("Invalid device encountered: %p\n", dev);
-        return 1;
+    // Ensure the device is one of the known ATA devices.
+    if (!(dev == &ata_primary_master || dev == &ata_primary_slave || dev == &ata_secondary_master || dev == &ata_secondary_slave)) {
+        pr_crit("ata_close: Invalid device encountered for file `%s`.\n", file->name);
+        return -EINVAL;
+    }
+
+    // Decrement the reference count for the file.
+    if (--file->count == 0) {
+        pr_debug("ata_close: Closing file `%s` (ino: %d).\n", file->name, file->ino);
+
+        // Remove the file from the list of opened files.
+        list_head_remove(&file->siblings);
+        pr_debug("ata_close: Removed file `%s` from the opened file list.\n", file->name);
+
+        // Free the file from cache.
+        kmem_cache_free(file);
+        pr_debug("ata_close: Freed memory for file `%s`.\n", file->name);
     }
 
     return 0;
@@ -1515,7 +1517,7 @@ static vfs_file_t *ata_mount_callback(const char *path, const char *device)
 }
 
 /// Filesystem information.
-static file_system_type ata_file_system_type = {
+static file_system_type_t ata_file_system_type = {
     .name     = "ata",
     .fs_flags = 0,
     .mount    = ata_mount_callback

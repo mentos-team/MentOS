@@ -24,6 +24,7 @@
 #include "string.h"
 #include "system/panic.h"
 #include "system/syscall.h"
+#include "fs/pipe.h"
 
 /// The hashmap that associates a type of Filesystem `name` to its `mount` function;
 static hashmap_t *vfs_filesystems;
@@ -60,7 +61,7 @@ void vfs_init(void)
     spinlock_init(&vfs_spinlock_refcount);
 }
 
-int vfs_register_filesystem(file_system_type *fs)
+int vfs_register_filesystem(file_system_type_t *fs)
 {
     if (hashmap_set(vfs_filesystems, fs->name, fs) != NULL) {
         pr_err("Filesystem already registered.\n");
@@ -70,7 +71,7 @@ int vfs_register_filesystem(file_system_type *fs)
     return 1;
 }
 
-int vfs_unregister_filesystem(file_system_type *fs)
+int vfs_unregister_filesystem(file_system_type_t *fs)
 {
     if (hashmap_remove(vfs_filesystems, (void *)fs->name) != NULL) {
         pr_err("Filesystem not present to unregister.\n");
@@ -80,7 +81,7 @@ int vfs_unregister_filesystem(file_system_type *fs)
     return 1;
 }
 
-int vfs_register_superblock(const char *name, const char *path, file_system_type *type, vfs_file_t *root)
+int vfs_register_superblock(const char *name, const char *path, file_system_type_t *type, vfs_file_t *root)
 {
     pr_debug("vfs_register_superblock(name: %s, path: %s, type: %s)\n", name, path, type->name);
     // Lock the vfs spinlock.
@@ -200,16 +201,40 @@ vfs_file_t *vfs_open(const char *path, int flags, mode_t mode)
 
 int vfs_close(vfs_file_t *file)
 {
-    pr_debug("vfs_close(ino: %d, file: \"%s\", count: %d)\n", file->ino, file->name, file->count - 1);
-    assert(file->count > 0);
-    // Close file if it's the last reference.
-    if (--file->count == 0) {
-        // Check if the filesystem has the close function.
-        if (file->fs_operations->close_f == NULL) {
-            return -ENOSYS;
-        }
-        file->fs_operations->close_f(file);
+    // Check for null file pointer.
+    if (file == NULL) {
+        pr_err("vfs_close: Invalid file pointer (NULL).\n");
+        return -EINVAL;
     }
+
+    // Check for valid fs_operations pointer.
+    if (file->fs_operations == NULL) {
+        pr_err("vfs_close: No fs_operations provided for file \"%s\" (ino: %d).\n", file->name, file->ino);
+        return -EFAULT;
+    }
+
+    pr_debug("vfs_close(ino: %d, file: \"%s\", count: %d)\n", file->ino, file->name, file->count - 1);
+
+    // Ensure reference count is greater than zero.
+    if (file->count <= 0) {
+        pr_crit("vfs_close: Invalid reference count (%d) for file \"%s\" (ino: %d).\n", file->count, file->name, file->ino);
+        return -EINVAL;
+    }
+
+    // Check if the filesystem has a close function.
+    if (file->fs_operations->close_f == NULL) {
+        pr_warning("vfs_close: Filesystem does not support close operation for file \"%s\" (ino: %d).\n", file->name, file->ino);
+        return -ENOSYS;
+    }
+
+    int ret = file->fs_operations->close_f(file);
+    if (ret < 0) {
+        pr_err("vfs_close: Filesystem close function failed for file \"%s\" (ino: %d) with error %d.\n", file->name, file->ino, ret);
+        return ret; // Return the specific error from close_f
+    }
+
+    pr_debug("vfs_close: Successfully closed file \"%s\" (ino: %d).\n", file->name, file->ino);
+
     return 0;
 }
 
@@ -501,7 +526,7 @@ int vfs_fstat(vfs_file_t *file, stat_t *buf)
 
 int vfs_mount(const char *type, const char *path, const char *args)
 {
-    file_system_type *fst = (file_system_type *)hashmap_get(vfs_filesystems, type);
+    file_system_type_t *fst = (file_system_type_t *)hashmap_get(vfs_filesystems, type);
     if (fst == NULL) {
         pr_err("Unknown filesystem type: %s\n", type);
         return -ENODEV;
@@ -614,6 +639,10 @@ int vfs_dup_task(task_struct *task, task_struct *old_task)
     // Create the proc entry.
     if (procr_create_entry_pid(task)) {
         pr_err("Error while trying to create proc entry for '%d': %s\n", task->pid, strerror(errno));
+        return 0;
+    }
+    if (vfs_update_pipe_counts(task, old_task)) {
+        pr_err("Error while updating the pipe count for '%d': %s\n", task->pid, strerror(errno));
         return 0;
     }
     return 1;

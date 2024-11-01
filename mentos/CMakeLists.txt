@@ -42,6 +42,7 @@ set(KERNEL_SOURCES
     ${CMAKE_SOURCE_DIR}/mentos/src/fs/vfs.c
     ${CMAKE_SOURCE_DIR}/mentos/src/fs/read_write.c
     ${CMAKE_SOURCE_DIR}/mentos/src/fs/open.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/fs/pipe.c
     ${CMAKE_SOURCE_DIR}/mentos/src/fs/stat.c
     ${CMAKE_SOURCE_DIR}/mentos/src/fs/readdir.c
     ${CMAKE_SOURCE_DIR}/mentos/src/fs/procfs.c

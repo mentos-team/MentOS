@@ -16,7 +16,7 @@
 #define PATH_DOT              "."  ///< The path to the current directory.
 
 /// Forward declaration of the VFS file.
-typedef struct vfs_file_t vfs_file_t;
+typedef struct vfs_file vfs_file_t;
 
 /// Forward declaration of the inode attributes.
 struct iattr;
@@ -64,10 +64,10 @@ typedef struct file_system_type {
     int fs_flags;
     /// Mount function.
     vfs_file_t *(*mount)(const char *, const char *);
-} file_system_type;
+} file_system_type_t;
 
 /// @brief Set of functions used to perform operations on filesystem.
-typedef struct vfs_sys_operations_t {
+typedef struct vfs_sys_operations {
     /// Creates a directory.
     vfs_mkdir_callback mkdir_f;
     /// Removes a directory.
@@ -83,7 +83,7 @@ typedef struct vfs_sys_operations_t {
 } vfs_sys_operations_t;
 
 /// @brief Set of functions used to perform operations on files.
-typedef struct vfs_file_operations_t {
+typedef struct vfs_file_operations {
     /// Open a file.
     vfs_open_callback open_f;
     /// Remove a file.
@@ -109,7 +109,7 @@ typedef struct vfs_file_operations_t {
 } vfs_file_operations_t;
 
 /// @brief Data structure that contains information about the mounted filesystems.
-struct vfs_file_t {
+struct vfs_file {
     /// The filename.
     char name[NAME_MAX];
     /// Device object (optional).
@@ -148,7 +148,7 @@ struct vfs_file_t {
     uint32_t nlink;
     /// List to hold all active files associated with a specific entry in a filesystem.
     list_head siblings;
-    /// TODO: Comment.
+    /// Reference count for this file.
     int32_t refcount;
 };
 
@@ -161,7 +161,7 @@ typedef struct super_block_t {
     /// Pointer to the root file of the given filesystem.
     vfs_file_t *root;
     /// Pointer to the information regarding the filesystem.
-    file_system_type *type;
+    file_system_type_t *type;
     /// List to hold all active mounting points.
     list_head mounts;
 } super_block_t;

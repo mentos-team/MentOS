@@ -540,12 +540,27 @@ static vfs_file_t *procfs_open(const char *path, int flags, mode_t mode)
 /// @return 0 on success, -errno on failure.
 static int procfs_close(vfs_file_t *file)
 {
-    assert(file && "Received null file.");
-    //pr_debug("procfs_close(%p): VFS file : %p\n", file, file);
-    // Remove the file from the list of `files` inside its corresponding `procfs_file_t`.
-    list_head_remove(&file->siblings);
-    // Free the memory of the file.
-    kmem_cache_free(file);
+    // Check if the file pointer is NULL.
+    if (file == NULL) {
+        pr_crit("procfs_close: Received NULL file pointer.\n");
+        return -EINVAL;
+    }
+
+    pr_debug("procfs_close(ino: %d, file: \"%s\", count: %d)\n", file->ino, file->name, file->count);
+
+    // Decrement the reference count for the file.
+    if (--file->count == 0) {
+        pr_debug("procfs_close: Closing file `%s` (ino: %d).\n", file->name, file->ino);
+
+        // Remove the file from the list of opened files.
+        list_head_remove(&file->siblings);
+        pr_debug("procfs_close: Removed file `%s` from the opened file list.\n", file->name);
+
+        // Free the file from cache.
+        kmem_cache_free(file);
+        pr_debug("procfs_close: Freed memory for file `%s`.\n", file->name);
+    }
+
     return 0;
 }
 
@@ -855,7 +870,7 @@ static vfs_file_t *procfs_mount_callback(const char *path, const char *device)
 }
 
 /// Filesystem information.
-static file_system_type procfs_file_system_type = {
+static file_system_type_t procfs_file_system_type = {
     .name     = "procfs",
     .fs_flags = 0,
     .mount    = procfs_mount_callback

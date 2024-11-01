@@ -54,7 +54,7 @@ static inline void __debug_print_header(const char *file, const char *fun, int l
     // Print the file and line.
     sprintf(tmp_prefix, "%s:%d", file, line);
     // Print the message.
-    sprintf(final_prefix, " %-20s ", tmp_prefix);
+    sprintf(final_prefix, " %-32s ", tmp_prefix);
     // Print the actual message.
     dbg_puts(final_prefix);
 #if 0
