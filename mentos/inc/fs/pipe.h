@@ -40,11 +40,6 @@ typedef struct pipe_buffer {
     /// type.
     const struct pipe_buf_operations *ops;
 
-    /// @brief Reference count for the buffer, tracking the number of active
-    /// users. This value helps manage ownership and ensures the buffer isn't
-    /// freed or modified while in use elsewhere.
-    unsigned int ref_count;
-
 } pipe_buffer_t;
 
 /// @brief This structure represents a pipe in the kernel. It contains
@@ -71,10 +66,15 @@ typedef struct pipe_inode_info {
     /// @brief The number of processes currently writing to the pipe.
     unsigned int writers;
 
-    /// @brief Wait queue for processes that are blocked waiting to read from or
-    /// write to the pipe. This queue helps manage process scheduling and
+    /// @brief Wait queue for processes that are blocked waiting to read from
+    /// the pipe. This queue helps manage process scheduling and
     /// synchronization.
-    wait_queue_head_t wait;
+    wait_queue_head_t read_wait;
+
+    /// @brief Wait queue for processes that are blocked waiting to write from
+    /// the pipe. This queue helps manage process scheduling and
+    /// synchronization.
+    wait_queue_head_t write_wait;
 
     /// @brief Mutex for protecting access to the pipe structure and ensuring
     /// thread-safe operations. This prevents race conditions when multiple
@@ -100,16 +100,6 @@ typedef struct pipe_buf_operations {
     /// synchronizations are in place.
     int (*confirm)(pipe_inode_info_t *, size_t);
 
-    /// @brief Handles the cleanup and release of the buffer when it is no
-    /// longer in use. This function may decrease reference counts or perform
-    /// other necessary actions to free or repurpose the buffer.
-    int (*release)(pipe_inode_info_t *, size_t);
-
-    /// @brief Increments the reference count for the buffer, ensuring that it
-    /// is not freed or altered while being accessed. This is crucial for
-    /// maintaining data integrity when multiple readers or writers are
-    /// interacting with the buffer.
-    int (*get)(pipe_inode_info_t *, size_t);
 } pipe_buf_operations_t;
 
 /// @brief Updates readers and writers counts for pipes.

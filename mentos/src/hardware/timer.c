@@ -452,10 +452,8 @@ void dynamic_timers_install(void)
 {
     // Initialize the timer structure for each CPU.
     __tvec_base_init(&cpu_base);
-    // Initialize sleeping process list
-    list_head_init(&sleep_queue.task_list);
-    // Initialize the sleep queue lock.
-    spinlock_init(&sleep_queue.lock);
+    // Initialize wait queue.
+    wait_queue_head_init(&sleep_queue);
 }
 
 void run_timer_softirq(void)

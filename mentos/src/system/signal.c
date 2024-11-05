@@ -600,7 +600,8 @@ int signals_init(void)
         pr_emerg("Failed to allocate cache for signals.\n");
         return 0;
     }
-    list_head_init(&stopped_queue.task_list);
+    // Initialize wait queue.
+    wait_queue_head_init(&stopped_queue);
     return 1;
 }
 

@@ -27,14 +27,13 @@
 #include "fcntl.h"
 #include "time.h"
 #include "klib/hashmap.h"
+#include "system/syscall.h"
 
 // ============================================================================
 // Virtual FileSystem (VFS) Operaions
 // ============================================================================
 
 static int pipe_buffer_confirm(pipe_inode_info_t *, size_t);
-static int pipe_buffer_release(pipe_inode_info_t *, size_t);
-static int pipe_buffer_get(pipe_inode_info_t *, size_t);
 
 static int pipe_stat(const char *path, stat_t *stat);
 
@@ -49,8 +48,6 @@ static int pipe_fstat(vfs_file_t *file, stat_t *stat);
 /// @brief Operations for managing pipe buffers in the kernel.
 static struct pipe_buf_operations pipe_buf_ops = {
     .confirm = pipe_buffer_confirm,
-    .release = pipe_buffer_release,
-    .get     = pipe_buffer_get,
 };
 
 /// @brief Filesystem-level operations for managing pipes.
@@ -96,10 +93,9 @@ static inline int __pipe_buffer_init(pipe_buffer_t *pipe_buffer)
     memset(pipe_buffer, 0, sizeof(pipe_buffer_t));
 
     // Initialize additional fields in the pipe_buffer_t structure.
-    pipe_buffer->len       = 0;
-    pipe_buffer->offset    = 0;
-    pipe_buffer->ops       = &pipe_buf_ops;
-    pipe_buffer->ref_count = 0;
+    pipe_buffer->len    = 0;
+    pipe_buffer->offset = 0;
+    pipe_buffer->ops    = &pipe_buf_ops;
 
     return 0;
 }
@@ -115,10 +111,9 @@ static inline void __pipe_buffer_deinit(pipe_buffer_t *pipe_buffer)
     assert(pipe_buffer && "Received a null pipe buffer.");
 
     // Reset other fields for safety.
-    pipe_buffer->len       = 0;
-    pipe_buffer->offset    = 0;
-    pipe_buffer->ops       = NULL;
-    pipe_buffer->ref_count = 0;
+    pipe_buffer->len    = 0;
+    pipe_buffer->offset = 0;
+    pipe_buffer->ops    = NULL;
 }
 
 /// @brief Allocates and initializes a new `pipe_inode_info_t` structure.
@@ -140,9 +135,9 @@ static inline pipe_inode_info_t *__pipe_inode_info_alloc(void)
     // Zero initialize the allocated memory.
     memset(pipe_info, 0, sizeof(pipe_inode_info_t));
 
-    // Initialize the wait queue.
-    spinlock_init(&pipe_info->wait.lock);
-    list_head_init(&pipe_info->wait.task_list);
+    // Initialize the wait queues.
+    wait_queue_head_init(&pipe_info->read_wait);
+    wait_queue_head_init(&pipe_info->write_wait);
 
     // Initialize the mutex.
     mutex_unlock(&pipe_info->mutex);
@@ -228,13 +223,7 @@ static int pipe_buffer_confirm(pipe_inode_info_t *pipe_info, size_t index)
         return -EINVAL;
     }
 
-    pipe_buffer_t *buf = &pipe_info->bufs[index];
-
-    // Ensure the buffer is not in use.
-    if (buf->ref_count > 0) {
-        pr_err("pipe_buffer_confirm: Buffer at index %u has non-zero reference count.\n", index);
-        return -EBADSLT;
-    }
+    pipe_buffer_t *buf = pipe_info->bufs + index;
 
     // Ensure length and offset are within valid bounds.
     if ((buf->len + buf->offset) > PIPE_BUFFER_SIZE) {
@@ -248,62 +237,6 @@ static int pipe_buffer_confirm(pipe_inode_info_t *pipe_info, size_t index)
         pr_err("pipe_buffer_confirm: Buffer operations pointer (buf->ops) at index %u is NULL.\n", index);
         return -ENXIO;
     }
-
-    return 0;
-}
-
-/// @brief Handles cleanup and release operations for the buffer at the specified index.
-/// @param pipe_info Pointer to the pipe information structure.
-/// @param index The index of the buffer to be released.
-/// @return 0 if successful, or a negative error code if a problem occurs.
-static int pipe_buffer_release(pipe_inode_info_t *pipe_info, size_t index)
-{
-    // Ensure the pipe_info and index are valid.
-    if (!pipe_info) {
-        pr_err("pipe_buffer_release: pipe_info is NULL.\n");
-        return -EINVAL;
-    }
-    if (index >= PIPE_NUM_BUFFERS) {
-        pr_err("pipe_buffer_release: index %u out of bounds.\n", index);
-        return -EINVAL;
-    }
-
-    pipe_buffer_t *buf = &pipe_info->bufs[index];
-
-    // Decrement the reference count, releasing only if it reaches zero.
-    if (buf->ref_count > 0) {
-        buf->ref_count--;
-        pr_debug("pipe_buffer_release: Decremented buffer ref_count at index %u to %u.\n", index, buf->ref_count);
-    } else {
-        pr_warning("pipe_buffer_release: Attempt to release buffer at index %u with zero reference count.\n", index);
-        return -EBADSLT; // Indicate an invalid release attempt.
-    }
-
-    return 0;
-}
-
-/// @brief Increments the reference count for the buffer at the specified index to prevent it from
-/// being freed or altered while being accessed.
-/// @param pipe_info Pointer to the pipe information structure.
-/// @param index The index of the buffer to be accessed.
-/// @return 0 if the buffer was successfully acquired, or a non-zero error code if not.
-static int pipe_buffer_get(pipe_inode_info_t *pipe_info, size_t index)
-{
-    // Ensure the pipe_info and index are valid.
-    if (!pipe_info) {
-        pr_err("pipe_buffer_get: pipe_info is NULL.\n");
-        return -EINVAL;
-    }
-    if (index >= PIPE_NUM_BUFFERS) {
-        pr_err("pipe_buffer_get: index %u out of bounds.\n", index);
-        return -EINVAL;
-    }
-
-    pipe_buffer_t *buf = &pipe_info->bufs[index];
-
-    // Increment the reference count to mark the buffer as in use.
-    buf->ref_count++;
-    pr_debug("pipe_buffer_get: Incremented buffer ref_count at index %u to %u.\n", index, buf->ref_count);
 
     return 0;
 }
@@ -366,24 +299,49 @@ static inline size_t pipe_buffer_capacity(pipe_inode_info_t *pipe_info, unsigned
 /// @return Number of bytes read, or -1 on error.
 static ssize_t pipe_buffer_read(pipe_inode_info_t *pipe_info, unsigned int index, char *dest, size_t count)
 {
-    // Check if the index is within bounds
+    // Validate input parameters.
+    if (!pipe_info) {
+        pr_err("pipe_buffer_read: pipe_info is NULL.\n");
+        return -1;
+    }
+    if (!dest) {
+        pr_err("pipe_buffer_read: Destination buffer is NULL.\n");
+        return -1;
+    }
     if (index >= pipe_info->numbuf) {
-        pr_err("Buffer index out of range.\n");
+        pr_err("pipe_buffer_read: Buffer index %u out of range (max: %u).\n", index, pipe_info->numbuf);
         return -1;
     }
 
     // Get the specified buffer
-    pipe_buffer_t *buffer = &pipe_info->bufs[index];
+    pipe_buffer_t *buffer = pipe_info->bufs + index;
 
-    // Limit the read size to the available data or requested count, whichever is smaller
-    size_t to_read = (count < buffer->len) ? count : buffer->len;
+    // Ensure the buffer contains data to read.
+    if (buffer->len == 0) {
+        pr_debug("pipe_buffer_read: No data available in buffer %u.\n", index);
+        return 0;
+    }
 
-    // Copy data from the pipe buffer's page at the specified offset
-    memcpy(dest, ((char *)buffer->data) + buffer->offset, to_read);
+    // Check if the buffer's offset and length are within valid bounds
+    if (buffer->offset + buffer->len > PIPE_BUFFER_SIZE) {
+        pr_err("pipe_buffer_read: Buffer offset %u and length %u exceed buffer size.\n", buffer->offset, buffer->len);
+        return -1;
+    }
 
-    // Update the buffer's offset and length to reflect consumed data
+    // Limit the read size to the available data or requested count, whichever is smaller.
+    ssize_t to_read = (count < buffer->len) ? count : buffer->len;
+
+    pr_debug("pipe_buffer_read: Reading %u bytes from buffer %u with offset %u (length: %u).\n",
+             to_read, index, buffer->offset, buffer->len);
+
+    // Copy data from the pipe buffer's data at the specified offset
+    memcpy(dest, buffer->data + buffer->offset, to_read);
+
+    // Adjust buffer's offset and length to reflect the data consumption.
     buffer->offset += to_read;
     buffer->len -= to_read;
+
+    pr_debug("pipe_buffer_read: Updated buffer %u - new offset: %u, new length: %u.\n", index, buffer->offset, buffer->len);
 
     // Return the number of bytes read
     return to_read;
@@ -398,29 +356,48 @@ static ssize_t pipe_buffer_read(pipe_inode_info_t *pipe_info, unsigned int index
 static int pipe_buffer_write(pipe_inode_info_t *pipe_info, unsigned int index, const char *src, size_t count)
 {
     // Check if the index is within bounds
+    if (!pipe_info) {
+        pr_err("pipe_buffer_write: pipe_info is NULL.\n");
+        return -1;
+    }
+    if (!src) {
+        pr_err("pipe_buffer_write: Source buffer is NULL.\n");
+        return -1;
+    }
     if (index >= pipe_info->numbuf) {
-        pr_err("Buffer index out of range.\n");
+        pr_err("pipe_buffer_write: Buffer index %u out of range (max: %u).\n", index, pipe_info->numbuf);
         return -1;
     }
 
     // Get the specified buffer
-    pipe_buffer_t *buffer = &pipe_info->bufs[index];
+    pipe_buffer_t *buffer = pipe_info->bufs + index;
+
+    // Ensure the buffer offset and length are within valid bounds
+    if ((buffer->offset + buffer->len) > PIPE_BUFFER_SIZE) {
+        pr_err("pipe_buffer_write: Buffer overflow detected (offset: %u, length: %u).\n", buffer->offset, buffer->len);
+        return -1;
+    }
 
     // Calculate available space in the buffer
-    size_t available_space = PIPE_BUFFER_SIZE - buffer->len;
-    if (available_space == 0) {
-        pr_err("No space available in buffer.\n");
+    ssize_t available_space = PIPE_BUFFER_SIZE - buffer->len - buffer->offset;
+    if (available_space <= 0) {
+        pr_debug("pipe_buffer_write: Buffer %u is full, no space available to write.\n", index);
         return 0; // No space to write, return 0 for non-blocking behavior
     }
 
     // Determine the number of bytes to write
-    size_t to_write = (count < available_space) ? count : available_space;
+    ssize_t to_write = (count < available_space) ? count : available_space;
 
-    // Copy data to the pipe buffer's page at the specified offset
-    memcpy(((char *)buffer->data) + buffer->offset + buffer->len, src, to_write);
+    pr_debug("pipe_buffer_write: Writing %d bytes to buffer %u (offset: %u, length: %u, available space: %u).\n",
+             to_write, index, buffer->offset, buffer->len, available_space);
+
+    // Copy data to the pipe buffer's data array at the current offset + length
+    memcpy(buffer->data + buffer->offset + buffer->len, src, to_write);
 
     // Update the buffer's length to reflect the added data
     buffer->len += to_write;
+
+    pr_debug("pipe_buffer_write: Buffer %u updated - new length: %u.\n", index, buffer->len);
 
     // Return the number of bytes written
     return to_write;
@@ -429,6 +406,11 @@ static int pipe_buffer_write(pipe_inode_info_t *pipe_info, unsigned int index, c
 // ============================================================================
 // Virtual FileSystem (VFS) Functions
 // ============================================================================
+
+static inline int is_pipe_nonblocking(vfs_file_t *file)
+{
+    return (file->flags & O_NONBLOCK) != 0;
+}
 
 /// @brief Creates a VFS file structure for a pipe.
 /// @param path Path to the file (not used here but may be needed elsewhere).
@@ -577,9 +559,11 @@ static int pipe_unlink(const char *path)
 {
     // Validate the path parameter.
     if (!path) {
-        pr_err("Invalid path: path is NULL.\n");
+        pr_err("pipe_unlink: Invalid path - path is NULL.\n");
         return -1;
     }
+
+    pr_debug("pipe_unlink: Attempting to unlink pipe with path: %s\n", path);
 
     // Retrieve the current task structure.
     task_struct *task = scheduler_get_current_process();
@@ -592,27 +576,29 @@ static int pipe_unlink(const char *path)
 
         // Check if the file name matches the specified path.
         if (file && strcmp(file->name, path) == 0) {
-            // Pipe file found, unlink and free resources.
+            pr_debug("pipe_unlink: Pipe file found for path %s at FD %d.\n", path, fd);
 
             // Remove from the task's pipe list.
+            pr_debug("pipe_unlink: Removing file from task's pipe list.\n");
             list_head_remove(&file->siblings);
 
             // Free the associated pipe_inode_info and the vfs_file structure.
             if (file->device) {
+                pr_debug("pipe_unlink: Deallocating pipe_inode_info for file.\n");
                 __pipe_inode_info_dealloc((pipe_inode_info_t *)file->device);
             }
 
             // We can free the file now.
+            pr_debug("pipe_unlink: Freeing vfs_file structure.\n");
             kfree(file);
 
-            pr_info("Successfully unlinked pipe: %s\n", path);
-
+            pr_info("pipe_unlink: Successfully unlinked pipe: %s\n", path);
             return 0;
         }
     }
 
     // Pipe not found, return an error.
-    pr_err("Pipe unlink failed: no pipe found with path %s.\n", path);
+    pr_err("pipe_unlink: Pipe unlink failed - no pipe found with path %s.\n", path);
     return -1;
 }
 
@@ -673,6 +659,62 @@ static int pipe_close(vfs_file_t *file)
         kmem_cache_free(file);
     }
 
+    return 0;
+}
+
+int pipe_info_has_data(pipe_inode_info_t *pipe_info)
+{
+    // Check that data is available in at least one buffer.
+    for (unsigned int i = 0; i < pipe_info->numbuf; i++) {
+        if (pipe_info->bufs[i].len > 0) {
+            return 1;
+        }
+    }
+    // No data available in any buffer.
+    return 0;
+}
+
+int pipe_info_has_space(pipe_inode_info_t *pipe_info)
+{
+    // Check if At least one buffer has available space.
+    for (unsigned int i = 0; i < pipe_info->numbuf; i++) {
+        if (pipe_info->bufs[i].len < PIPE_BUFFER_SIZE) {
+            return 1;
+        }
+    }
+    // No buffer has space.
+    return 0;
+}
+
+int pipe_read_wake_function(wait_queue_entry_t *wait, unsigned mode, int sync)
+{
+    pipe_inode_info_t *pipe_info = wait->private;
+
+    // Check if any data is available in the entire pipe, not just a specific buffer.
+    if (pipe_info_has_data(pipe_info)) {
+        // Signal that we should wake up the waiting process.
+        pr_debug("pipe_read_wake_function: Data available, waking up reader.\n");
+        return 1;
+    }
+
+    // No data available, so the reader should remain waiting.
+    pr_debug("pipe_read_wake_function: No data available, reader should continue waiting.\n");
+    return 0;
+}
+
+int pipe_write_wake_function(wait_queue_entry_t *wait, unsigned mode, int sync)
+{
+    pipe_inode_info_t *pipe_info = wait->private;
+
+    // Check if there is available space in the entire pipe
+    if (pipe_info_has_space(pipe_info)) {
+        // Signal that the writer can proceed.
+        pr_debug("pipe_write_wake_function: Space available, waking up writer.\n");
+        return 1;
+    }
+
+    // No space available, so the writer should remain waiting.
+    pr_debug("pipe_write_wake_function: No space available, writer should continue waiting.\n");
     return 0;
 }
 
@@ -741,13 +783,6 @@ static ssize_t pipe_read(vfs_file_t *file, char *buffer, off_t offset, size_t nb
             break; // Exit the loop if data has been read.
         }
 
-        // Increment the reference count before reading.
-        err = pipe_buffer_get(pipe_info, buffer_index);
-        if (err < 0) {
-            pr_err("pipe_read: Failed to acquire buffer %u for reading, with error code %d: %s.\n", buffer_index, -err, strerror(-err));
-            return err; // Could not acquire the buffer
-        }
-
         // Calculate the number of bytes available in the current buffer.
         size_t available = pipe_buffer_available(pipe_info, buffer_index);
         size_t to_read   = (nbyte - bytes_read) < available ? (nbyte - bytes_read) : available;
@@ -755,16 +790,48 @@ static ssize_t pipe_read(vfs_file_t *file, char *buffer, off_t offset, size_t nb
         // Read data from the pipe buffer into the user-provided buffer.
         ssize_t ret = pipe_buffer_read(pipe_info, buffer_index, buffer + bytes_read, to_read);
         if (ret < 0) {
-            pr_err("pipe_read: Error reading from pipe buffer.\n");
+            pr_err("pipe_read: Error reading to pipe buffer.\n");
             bytes_read = -1;
+
+            break;
+        } else if (ret == 0) {
+            pr_warning("pipe_read: Pipe buffer is full, no data written. Retrying or handling as needed.\n");
+
+            // For a non-blocking pipe, return bytes_written so far.
+            if (!is_pipe_nonblocking(file)) {
+                wait_queue_entry_t *wait_queue_entry = sleep_on(&pipe_info->read_wait);
+                if (wait_queue_entry) {
+                    wait_queue_entry->func    = pipe_read_wake_function;
+                    wait_queue_entry->private = pipe_info;
+                }
+                scheduler_run(get_current_interrupt_stack_frame());
+            }
+
             break;
         }
 
         pr_debug("pipe_read: Read %d bytes from buffer %u.\n", ret, buffer_index);
+
+        // Increment bytes_read by the actual number of bytes read.
         bytes_read += ret;
 
         // Update the linear read index.
         pipe_info->read_index += ret;
+
+        list_for_each_safe_decl(it, store, &pipe_info->write_wait.task_list)
+        {
+            wait_queue_entry_t *wait_queue_entry = list_entry(it, wait_queue_entry_t, task_list);
+
+            // Run the wakeup test function for the waiting task.
+            if (wait_queue_entry->func(wait_queue_entry, TASK_RUNNING, 0)) {
+                // Task is ready, remove from the wait queue.
+                remove_wait_queue(&pipe_info->write_wait, wait_queue_entry);
+
+                // Log and free the memory associated with the wait entry.
+                pr_debug("pipe_read: Process %d woken up from waiting for read.\n", wait_queue_entry->task->pid);
+                wait_queue_entry_dealloc(wait_queue_entry);
+            }
+        }
 
         // Check if the current buffer is now empty.
         if (pipe_buffer_empty(pipe_info, buffer_index)) {
@@ -772,16 +839,9 @@ static ssize_t pipe_read(vfs_file_t *file, char *buffer, off_t offset, size_t nb
             // Advance the read index to the next buffer.
             pipe_info->read_index++;
         }
-
-        // Release the buffer after reading
-        err = pipe_buffer_release(pipe_info, buffer_index);
-        if (err < 0) {
-            pr_err("pipe_read: Failed to release buffer %u after reading, with error code %d: %s.\n", buffer_index, -err, strerror(-err));
-            return err; // Could not acquire the buffer
-        }
     }
 
-    // Release the mutex after reading.
+    // Release the mutex.
     mutex_unlock(&pipe_info->mutex);
     pr_debug("pipe_read: Mutex unlocked by process %d.\n", task->pid);
 
@@ -844,13 +904,6 @@ static ssize_t pipe_write(vfs_file_t *file, const void *buffer, off_t offset, si
             break;
         }
 
-        // Increment the reference count before writing.
-        err = pipe_buffer_get(pipe_info, buffer_index);
-        if (err < 0) {
-            pr_err("pipe_read: Failed to acquire buffer %u for writing, with error code %d: %s.\n", buffer_index, -err, strerror(-err));
-            return err; // Could not acquire the buffer
-        }
-
         // Calculate available space in the buffer.
         size_t available = pipe_buffer_capacity(pipe_info, buffer_index) - pipe_buffer->len;
         if (available == 0) {
@@ -868,26 +921,51 @@ static ssize_t pipe_write(vfs_file_t *file, const void *buffer, off_t offset, si
         if (ret < 0) {
             pr_err("pipe_write: Error writing to pipe buffer.\n");
             bytes_written = -1;
+
+            break;
+        } else if (ret == 0) {
+            pr_warning("pipe_write: Pipe buffer is full, no data written. Retrying or handling as needed.\n");
+
+            // For a non-blocking pipe, return bytes_written so far.
+            if (!is_pipe_nonblocking(file)) {
+                wait_queue_entry_t *wait_queue_entry = sleep_on(&pipe_info->write_wait);
+                if (wait_queue_entry) {
+                    wait_queue_entry->func    = pipe_write_wake_function;
+                    wait_queue_entry->private = pipe_info;
+                }
+                scheduler_run(get_current_interrupt_stack_frame());
+            }
+
             break;
         }
 
         pr_debug("pipe_write: Wrote %d bytes to buffer %u.\n", ret, buffer_index);
+
+        // Increment bytes_written by the actual number of bytes written.
         bytes_written += ret;
 
         // Update the linear write index.
         pipe_info->write_index += ret;
 
+        list_for_each_safe_decl(it, store, &pipe_info->read_wait.task_list)
+        {
+            wait_queue_entry_t *wait_queue_entry = list_entry(it, wait_queue_entry_t, task_list);
+
+            // Run the wakeup test function for the waiting task.
+            if (wait_queue_entry->func(wait_queue_entry, TASK_RUNNING, 0)) {
+                // Task is ready, remove from the wait queue.
+                remove_wait_queue(&pipe_info->read_wait, wait_queue_entry);
+
+                // Log and free the memory associated with the wait entry.
+                pr_debug("pipe_write: Process %d woken up from waiting for read.\n", wait_queue_entry->task->pid);
+                wait_queue_entry_dealloc(wait_queue_entry);
+            }
+        }
+
         // Advance the write index to the next buffer if necessary.
         if (pipe_buffer->len >= pipe_buffer_capacity(pipe_info, buffer_index)) {
             pr_debug("pipe_write: Buffer %u is now full. Advancing to next buffer.\n", buffer_index);
             pipe_info->write_index++;
-        }
-
-        // Release the buffer after reading
-        err = pipe_buffer_release(pipe_info, buffer_index);
-        if (err < 0) {
-            pr_err("pipe_write: Failed to release buffer %u after reading, with error code %d: %s.\n", buffer_index, -err, strerror(-err));
-            return err; // Could not acquire the buffer
         }
     }
 
