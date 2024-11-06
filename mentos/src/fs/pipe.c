@@ -438,12 +438,8 @@ static ssize_t pipe_buffer_read(pipe_buffer_t *pipe_buffer, char *dest, size_t c
         pr_debug("pipe_buffer_read: Buffer is now empty, resetting offset.\n");
     }
 
-    pr_debug("pipe_buffer_read: Read %u bytes from buffer (offset: %u -> %u, length: %u -> %u).\n",
-             bytes_to_read,
-             pipe_buffer->offset - bytes_to_read,
-             pipe_buffer->offset,
-             pipe_buffer->len + bytes_to_read,
-             pipe_buffer->len);
+    pr_debug("pipe_buffer_read: Read %ld bytes from buffer (offset: %u, length: %u).\n",
+             bytes_to_read, pipe_buffer->offset, pipe_buffer->len);
 
     return bytes_to_read;
 }
@@ -478,8 +474,8 @@ static ssize_t pipe_buffer_write(pipe_buffer_t *pipe_buffer, const char *src, si
     // Update the buffer's length to reflect the newly added data.
     pipe_buffer->len += bytes_to_write;
 
-    pr_debug("pipe_buffer_write: Wrote %u bytes to buffer (offset: %u, length: %u -> %u).\n",
-             bytes_to_write, pipe_buffer->offset, pipe_buffer->len - bytes_to_write, pipe_buffer->len);
+    pr_debug("pipe_buffer_write: Wrote %ld bytes to buffer (offset: %u, length: %u).\n",
+             bytes_to_write, pipe_buffer->offset, pipe_buffer->len);
 
     return bytes_to_write;
 }
