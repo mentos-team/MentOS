@@ -27,12 +27,12 @@ typedef struct pipe_buffer {
     /// @brief Offset within the memory page where the buffer's data begins.
     /// This allows for partial usage of the page if the buffer does not occupy
     /// the entire page.
-    unsigned int offset;
+    size_t offset;
 
     /// @brief Length of the data currently stored in the buffer. This indicates
     /// the amount of data that the buffer holds and can be used during read and
     /// write operations.
-    unsigned int len;
+    size_t len;
 
     /// @brief Pointer to a set of operations that can be performed on the
     /// buffer. These operations include functions for getting, releasing, and
@@ -52,7 +52,7 @@ typedef struct pipe_inode_info {
 
     /// @brief Number of buffers allocated for the pipe. This value determines
     /// the size of the `bufs` array and how many buffers are available for use.
-    unsigned int numbuf;
+    size_t numbuf;
 
     /// @brief Index for reading.
     size_t read_index;
@@ -61,10 +61,10 @@ typedef struct pipe_inode_info {
     size_t write_index;
 
     /// @brief The number of processes currently reading from the pipe.
-    unsigned int readers;
+    size_t readers;
 
     /// @brief The number of processes currently writing to the pipe.
-    unsigned int writers;
+    size_t writers;
 
     /// @brief Wait queue for processes that are blocked waiting to read from
     /// the pipe. This queue helps manage process scheduling and
@@ -87,18 +87,24 @@ typedef struct pipe_inode_info {
 } pipe_inode_info_t;
 
 /// @brief Structure defining operations for managing pipe buffers.
-/// @details
-/// This structure contains function pointers to operations that can be
-/// performed on pipe buffers. These operations handle various aspects of buffer
-/// management including validation, reference counting, buffer stealing, and
-/// releasing. Each buffer in a pipe is associated with a set of these
-/// operations, which allows the kernel to manage different types of buffers
-/// efficiently and safely.
 typedef struct pipe_buf_operations {
-    /// @brief Ensures that the buffer is valid and ready to be used. This might
-    /// involve checking if the buffer contains valid data or if any required
-    /// synchronizations are in place.
+    /// @brief Ensures that the buffer is valid and ready for use.
     int (*confirm)(pipe_inode_info_t *, size_t);
+
+    /// @brief Checks if the buffer is empty.
+    int (*empty)(pipe_inode_info_t *, size_t);
+
+    /// @brief Calculates the available data in the buffer.
+    size_t (*available)(pipe_inode_info_t *, size_t);
+
+    /// @brief Calculates the remaining capacity in the buffer.
+    size_t (*capacity)(pipe_inode_info_t *, size_t);
+
+    /// @brief Reads data from the buffer into a specified destination.
+    ssize_t (*read)(pipe_inode_info_t *, size_t, char *, size_t);
+
+    /// @brief Writes data to the buffer from a specified source.
+    int (*write)(pipe_inode_info_t *, size_t, const char *, size_t);
 
 } pipe_buf_operations_t;
 

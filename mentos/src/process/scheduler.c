@@ -240,28 +240,55 @@ int default_wake_function(wait_queue_entry_t *wait, unsigned mode, int sync)
 
 wait_queue_entry_t *sleep_on(wait_queue_head_t *wq)
 {
-    // Save the sleeping process registers state
+    // Validate input parameters.
+    if (!wq) {
+        pr_err("sleep_on: Wait queue head is NULL.\n");
+        return NULL;
+    }
+
+    // Retrieve the current process/task.
     task_struct *sleeping_task = scheduler_get_current_process();
-    // Stops task from runqueue making it unrunnable.
+    if (!sleeping_task) {
+        pr_err("sleep_on: Failed to retrieve the current process.\n");
+        return NULL;
+    }
+
+    // Set the task state to uninterruptible to indicate it is sleeping.
     sleeping_task->state = TASK_UNINTERRUPTIBLE;
+
 #if 0
-    // Get the interrupt registers.
+    // Store the context of the current interrupt frame.
     pt_regs *f = get_current_interrupt_stack_frame();
-    // Store its context.
+    if (!f) {
+        pr_err("sleep_on: Failed to retrieve interrupt stack frame.\n");
+        return NULL;
+    }
+
+    // Save the process context.
     scheduler_store_context(f, sleeping_task);
-    // Select next process in the runqueue as the current, restore it's context,
-    // we assume that the first process is init wich does not sleep (I hope).
-    // This is necessary to make the scheduler_run() in syscall_handler work.
+
+    // Select the next runnable task, which cannot be the sleeping task.
     task_struct *next = scheduler_pick_next_task(&runqueue);
     assert((next != sleeping_task) && "The next selected process in the runqueue is the sleeping process");
+
+    // Restore the context of the selected task.
     scheduler_restore_context(next, f);
 #endif
-    // Allocate the wait_queue entry.
+
+    // Allocate memory for a new wait queue entry.
     wait_queue_entry_t *wait_queue_entry = wait_queue_entry_alloc();
-    // Initialize the entry.
+    if (!wait_queue_entry) {
+        pr_err("sleep_on: Failed to allocate memory for wait queue entry.\n");
+        return NULL;
+    }
+
+    // Initialize the wait queue entry with the current task.
     wait_queue_entry_init(wait_queue_entry, sleeping_task);
-    // Add sleeping process to sleep wait queue.
+
+    // Add the wait queue entry to the specified wait queue.
     add_wait_queue(wq, wait_queue_entry);
+    pr_debug("sleep_on: Added process %d to the wait queue.\n", sleeping_task->pid);
+
     return wait_queue_entry;
 }
 

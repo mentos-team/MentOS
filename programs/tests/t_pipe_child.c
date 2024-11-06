@@ -90,15 +90,15 @@ int main(int argc, char *argv[])
 
             pr_info("\nParent writing into pipe...\n");
             if (write(fds[1], write_msg, strlen(write_msg)) == -1) {
-                pr_err("Parent write to pipe failed.\n");
+                pr_err("Parent write to pipe failed (%s).\n", strerror(errno));
                 close(fds[1]);
                 return 1;
             }
-            pr_info("Parent successfully wrote to pipe:"
+            pr_info("Parent successfully wrote to pipe (%u of %u):"
                     "\n----------------------------------------\n"
                     "%s"
                     "\n----------------------------------------\n\n",
-                    write_msg);
+                    i, total_messages, write_msg);
 
             // Signal the child that the parent has finished writing.
             semop(sem_id, &sem_signal_parent, 1);
@@ -139,20 +139,21 @@ int main(int argc, char *argv[])
             // Wait for the parent to finish writing before reading
             semop(sem_id, &sem_wait_parent, 1);
 
+            pr_info("\nChild reading from pipe...\n");
             bytes_read = read(fds[0], read_msg, sizeof(read_msg) - 1);
-            if (bytes_read == -1) {
-                pr_err("Child: Read from pipe failed.\n");
+            if (bytes_read < 0) {
+                pr_err("Child: Read from pipe failed (%s).\n", strerror(errno));
                 break;
             }
 
             // Null-terminate the read message and print it
             read_msg[bytes_read] = '\0';
 
-            pr_info("Child successfully read from pipe:"
+            pr_info("Child successfully read from pipe (%u of %u):"
                     "\n----------------------------------------\n"
                     "%s"
                     "\n----------------------------------------\n\n",
-                    read_msg);
+                    i, total_messages, read_msg);
 
             // Signal the parent that the child has finished reading
             semop(sem_id, &sem_signal_child, 1);

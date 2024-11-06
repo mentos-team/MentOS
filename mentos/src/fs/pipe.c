@@ -2,6 +2,11 @@
 /// @brief PIPE functions and structures implementation.
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
+/// @details
+/// This haiku is to celebrate the functioning pipes:
+///     Data flows like streams,
+///     Silent pipes breathe in and out,
+///     Code sings clear and true.
 
 // ============================================================================
 // Setup the logging for this file (do this before any other include).
@@ -33,7 +38,12 @@
 // Virtual FileSystem (VFS) Operaions
 // ============================================================================
 
-static int pipe_buffer_confirm(pipe_inode_info_t *, size_t);
+// static int pipe_buffer_confirm(pipe_inode_info_t *, size_t);
+// static int pipe_buffer_empty(pipe_inode_info_t *pipe_info, size_t index);
+// static size_t pipe_buffer_available(pipe_inode_info_t *pipe_info, size_t index);
+// static size_t pipe_buffer_capacity(pipe_inode_info_t *pipe_info, size_t index);
+// static ssize_t pipe_buffer_read(pipe_inode_info_t *pipe_info, size_t index, char *dest, size_t count);
+// static int pipe_buffer_write(pipe_inode_info_t *pipe_info, size_t index, const char *src, size_t count);
 
 static int pipe_stat(const char *path, stat_t *stat);
 
@@ -46,8 +56,23 @@ static off_t pipe_lseek(vfs_file_t *file, off_t offset, int whence);
 static int pipe_fstat(vfs_file_t *file, stat_t *stat);
 
 /// @brief Operations for managing pipe buffers in the kernel.
-static struct pipe_buf_operations pipe_buf_ops = {
-    .confirm = pipe_buffer_confirm,
+static struct pipe_buf_operations anonymous_pipe_ops = {
+    .confirm   = NULL, // pipe_buffer_confirm,
+    .empty     = NULL, // pipe_buffer_empty,
+    .available = NULL, // pipe_buffer_available,
+    .capacity  = NULL, // pipe_buffer_capacity,
+    .read      = NULL, // pipe_buffer_read,
+    .write     = NULL, // pipe_buffer_write,
+};
+
+/// @brief Operations for managing pipe buffers in the kernel.
+static struct pipe_buf_operations named_pipe_ops = {
+    .confirm   = NULL, //pipe_buffer_confirm,
+    .empty     = NULL, //pipe_buffer_empty,
+    .available = NULL, //pipe_buffer_available,
+    .capacity  = NULL, //pipe_buffer_capacity,
+    .read      = NULL, //pipe_buffer_read,
+    .write     = NULL, //pipe_buffer_write,
 };
 
 /// @brief Filesystem-level operations for managing pipes.
@@ -84,7 +109,7 @@ static vfs_file_operations_t pipe_fs_operations = {
 /// allocates a memory page to hold the buffer's data.
 /// @param pipe_buffer Pointer to the `pipe_buffer_t` structure to initialize.
 /// @return 0 on success, -ENOMEM if page allocation fails.
-static inline int __pipe_buffer_init(pipe_buffer_t *pipe_buffer)
+static inline int __pipe_buffer_init(pipe_buffer_t *pipe_buffer, struct pipe_buf_operations *ops)
 {
     // Check if we received a valid pipe buffer.
     assert(pipe_buffer && "Received a null pipe buffer.");
@@ -95,7 +120,7 @@ static inline int __pipe_buffer_init(pipe_buffer_t *pipe_buffer)
     // Initialize additional fields in the pipe_buffer_t structure.
     pipe_buffer->len    = 0;
     pipe_buffer->offset = 0;
-    pipe_buffer->ops    = &pipe_buf_ops;
+    pipe_buffer->ops    = ops;
 
     return 0;
 }
@@ -123,7 +148,7 @@ static inline void __pipe_buffer_deinit(pipe_buffer_t *pipe_buffer)
 /// based on the `INITIAL_NUM_BUFFERS` constant.
 /// @return Pointer to the allocated and initialized `pipe_inode_info_t`
 /// structure, or NULL if allocation fails.
-static inline pipe_inode_info_t *__pipe_inode_info_alloc(void)
+static inline pipe_inode_info_t *__pipe_inode_info_alloc(struct pipe_buf_operations *ops)
 {
     // Allocate memory for the pipe_inode_info_t structure.
     pipe_inode_info_t *pipe_info = (pipe_inode_info_t *)kmalloc(sizeof(pipe_inode_info_t));
@@ -147,7 +172,7 @@ static inline pipe_inode_info_t *__pipe_inode_info_alloc(void)
 
     // Initialize each buffer in the buffer array.
     for (unsigned int i = 0; i < pipe_info->numbuf; ++i) {
-        if (__pipe_buffer_init(&pipe_info->bufs[i])) {
+        if (__pipe_buffer_init(&pipe_info->bufs[i], ops)) {
             pr_err("Failed to initialize pipe buffer %u.\n", i);
 
             // Deinitialize and free previously initialized buffers
@@ -188,7 +213,7 @@ static inline void __pipe_inode_info_dealloc(pipe_inode_info_t *pipe_info)
 }
 
 // ============================================================================
-// BUFFER OPERATIONS (Private)
+// PIPE INFO AND BUFFER OPERATIONS (Private)
 // ============================================================================
 
 /// @brief Converts a linear index to the corresponding buffer index within the buffer limit.
@@ -207,209 +232,389 @@ static inline size_t pipe_linear_to_offset(size_t index)
     return index % PIPE_BUFFER_SIZE;
 }
 
+/// @brief Checks if the specified pipe has any data available in its buffers.
+/// @param pipe_info Pointer to the pipe information structure.
+/// @return 1 if data is available, 0 if all buffers are empty, -EINVAL on error.
+static inline int pipe_info_has_data(pipe_inode_info_t *pipe_info)
+{
+    // Validate input parameter.
+    if (!pipe_info) {
+        pr_err("pipe_info_has_data: pipe_info is NULL.\n");
+        return -EINVAL;
+    }
+
+    // Check if data is available in at least one buffer.
+    for (unsigned int i = 0; i < pipe_info->numbuf; i++) {
+        if (pipe_info->bufs[i].len > 0) {
+            pr_debug("pipe_info_has_data: Data available in buffer %u.\n", i);
+            return 1;
+        }
+    }
+
+    // No data available in any buffer.
+    pr_debug("pipe_info_has_data: No data available in any buffer.\n");
+    return 0;
+}
+
+/// @brief Checks if the specified pipe has available space in any of its buffers.
+/// @param pipe_info Pointer to the pipe information structure.
+/// @return 1 if space is available, 0 if all buffers are full, -EINVAL on error.
+static inline int pipe_info_has_space(pipe_inode_info_t *pipe_info)
+{
+    // Validate input parameter.
+    if (!pipe_info) {
+        pr_err("pipe_info_has_space: pipe_info is NULL.\n");
+        return -EINVAL;
+    }
+
+    // Check if at least one buffer has available space.
+    for (unsigned int i = 0; i < pipe_info->numbuf; i++) {
+        if (pipe_info->bufs[i].len < PIPE_BUFFER_SIZE) {
+            pr_debug("pipe_info_has_space: Space available in buffer %u.\n", i);
+            return 1;
+        }
+    }
+
+    // No space available in any buffer.
+    pr_debug("pipe_info_has_space: No space available in any buffer.\n");
+    return 0;
+}
+
+/// @brief Checks if the specified pipe buffer is empty.
+/// @param pipe_buffer Pointer to the pipe buffer structure to check.
+/// @return 1 if the buffer is empty (length is 0), or 0 if not or if pipe_buffer is NULL.
+static int pipe_buffer_empty(pipe_buffer_t *pipe_buffer)
+{
+    // Validate input parameter.
+    if (!pipe_buffer) {
+        pr_err("pipe_buffer_empty: pipe_buffer is NULL.\n");
+        return 0; // Return 0 as there's no buffer to check.
+    }
+
+    // Buffer is empty if len is 0.
+    return pipe_buffer->len == 0;
+}
+
+/// @brief Retrieves the number of bytes available (unread) in the specified pipe buffer.
+/// @param pipe_buffer Pointer to the pipe buffer structure to check.
+/// @return The number of bytes available in the buffer, or 0 if pipe_buffer is NULL.
+static size_t pipe_buffer_available(pipe_buffer_t *pipe_buffer)
+{
+    // Validate input parameter.
+    if (!pipe_buffer) {
+        pr_err("pipe_buffer_available: pipe_buffer is NULL.\n");
+        return 0; // Return 0 as there’s no buffer to check.
+    }
+
+    // Return the current length of the buffer, representing unread data.
+    return pipe_buffer->len;
+}
+
+/// @brief Determines the remaining capacity for writing in the specified pipe buffer.
+/// @param pipe_buffer Pointer to the pipe buffer structure to check.
+/// @return The remaining write capacity in bytes, or 0 if pipe_buffer is NULL.
+static inline size_t pipe_buffer_capacity(pipe_buffer_t *pipe_buffer)
+{
+    // Validate input parameter.
+    if (!pipe_buffer) {
+        pr_err("pipe_buffer_capacity: pipe_buffer is NULL.\n");
+        return 0; // Return 0 as there's no buffer to check.
+    }
+
+    // Calculate available capacity by subtracting the offset + length from the total buffer size.
+    return PIPE_BUFFER_SIZE - (pipe_buffer->offset + pipe_buffer->len);
+}
+
+/// @brief Determines the number of bytes that can be read from the pipe buffer.
+/// @param pipe_buffer Pointer to the pipe buffer structure.
+/// @param count The requested number of bytes to read.
+/// @return The number of bytes that can be read on success, or a negative errno-style error code on failure.
+static ssize_t pipe_calculate_bytes_to_read(pipe_buffer_t *pipe_buffer, size_t count)
+{
+    // Validate input parameters.
+    if (!pipe_buffer) {
+        pr_err("pipe_calculate_bytes_to_read: pipe_buffer is NULL.\n");
+        return -EINVAL;
+    }
+    if (count == 0) {
+        pr_err("pipe_calculate_bytes_to_read: Invalid read request of 0 bytes (must be positive).\n");
+        return -EINVAL;
+    }
+
+    // Check if there is data available in the buffer.
+    if (pipe_buffer_empty(pipe_buffer)) {
+        pr_debug("pipe_calculate_bytes_to_read: No data available in buffer.\n");
+        return -ENODATA;
+    }
+
+    // Return the number of bytes to read based on the requested count and available data.
+    return (count < pipe_buffer->len) ? count : pipe_buffer->len;
+}
+
+/// @brief Determines the number of bytes that can be safely written to the pipe buffer.
+/// @param pipe_buffer Pointer to the specific pipe buffer.
+/// @param count Number of bytes the caller wants to write.
+/// @return The number of bytes that can be written on success, or a negative error code on failure.
+static ssize_t pipe_calculate_bytes_to_write(pipe_buffer_t *pipe_buffer, size_t count)
+{
+    // Validate input parameters.
+    if (!pipe_buffer) {
+        pr_err("pipe_calculate_bytes_to_write: pipe_buffer is NULL.\n");
+        return -EINVAL;
+    }
+    if (count == 0) {
+        pr_err("pipe_calculate_bytes_to_write: Invalid write request of %u bytes (must be positive).\n", count);
+        return -EINVAL;
+    }
+
+    // Calculate available space in the buffer from the current write position.
+    size_t capacity = pipe_buffer_capacity(pipe_buffer);
+    if (capacity == 0) {
+        pr_debug("pipe_calculate_bytes_to_write: No space available in buffer for writing.\n");
+        return -ENOSPC;
+    }
+
+    // Return the smaller of the requested write bytes or available space.
+    return (count < capacity) ? count : capacity;
+}
+
 /// @brief Ensures that the buffer at the specified index is valid and ready to be used.
 /// @param pipe_info Pointer to the pipe information structure.
 /// @param index The index of the buffer to confirm.
 /// @return 0 if the buffer is valid, or a non-zero error code if it is not.
-static int pipe_buffer_confirm(pipe_inode_info_t *pipe_info, size_t index)
+static int pipe_buffer_confirm(pipe_buffer_t *pipe_buffer)
 {
-    // Ensure the pipe_info and index are valid.
-    if (!pipe_info) {
-        pr_err("pipe_buffer_confirm: pipe_info is NULL.\n");
+    // Validate input parameters.
+    if (!pipe_buffer) {
+        pr_err("pipe_buffer_confirm: pipe_buffer is NULL.\n");
         return -EINVAL;
     }
-    if (index >= PIPE_NUM_BUFFERS) {
-        pr_err("pipe_buffer_confirm: index %u out of bounds.\n", index);
-        return -EINVAL;
-    }
-
-    pipe_buffer_t *buf = pipe_info->bufs + index;
 
     // Ensure length and offset are within valid bounds.
-    if ((buf->len + buf->offset) > PIPE_BUFFER_SIZE) {
-        pr_err("pipe_buffer_confirm: Buffer at index %u length and offset exceed bounds: len = %u, offset = %u, PIPE_BUFFER_SIZE = %lu.\n",
-               index, buf->len, buf->offset, PIPE_BUFFER_SIZE);
+    if ((pipe_buffer->len + pipe_buffer->offset) > PIPE_BUFFER_SIZE) {
+        pr_err("pipe_buffer_confirm: Buffer length and offset exceed bounds: len = %u, offset = %u, PIPE_BUFFER_SIZE = %lu.\n",
+               pipe_buffer->len, pipe_buffer->offset, PIPE_BUFFER_SIZE);
         return -EOVERFLOW;
     }
 
     // Ensure operations pointer is valid.
-    if (!buf->ops) {
-        pr_err("pipe_buffer_confirm: Buffer operations pointer (buf->ops) at index %u is NULL.\n", index);
+    if (!pipe_buffer->ops) {
+        pr_err("pipe_buffer_confirm: Buffer operations pointer is NULL.\n");
         return -ENXIO;
     }
 
     return 0;
 }
 
-/// @brief Checks if the specified pipe buffer is empty.
-/// @param pipe_info Pointer to the pipe inode information structure.
-/// @param index Index of the pipe buffer to check.
-/// @return 1 if the buffer is empty, 0 otherwise.
-static int pipe_buffer_empty(pipe_inode_info_t *pipe_info, unsigned int index)
-{
-    // Check if the index is within bounds
-    if (index >= pipe_info->numbuf) {
-        pr_err("Buffer index out of range.\n");
-        // Treat out-of-bounds as empty to avoid access.
-        return 1;
-    }
-
-    // Buffer is empty if len is 0
-    return (pipe_info->bufs[index].len == 0);
-}
-
-/// @brief Calculates the number of bytes available in the specified pipe buffer.
-/// @param pipe_info Pointer to the pipe inode information structure.
-/// @param index Index of the pipe buffer.
-/// @return Number of bytes available for reading.
-static size_t pipe_buffer_available(pipe_inode_info_t *pipe_info, unsigned int index)
-{
-    // Check if the index is within bounds
-    if (index >= pipe_info->numbuf) {
-        pr_err("Buffer index out of range.\n");
-        // No bytes available for out-of-bounds index.
-        return 0;
-    }
-
-    // Return the number of bytes available in the specified buffer
-    return pipe_info->bufs[index].len;
-}
-
-/// @brief Gets the remaining write capacity of the specified pipe buffer.
-/// @param pipe_info Pointer to the pipe inode information structure.
-/// @param index Index of the pipe buffer to check.
-/// @return Remaining capacity in bytes.
-static inline size_t pipe_buffer_capacity(pipe_inode_info_t *pipe_info, unsigned int index)
-{
-    // Check if the index is within bounds
-    if (index >= pipe_info->numbuf) {
-        pr_err("Buffer index out of range.\n");
-        // No bytes available for out-of-bounds index.
-        return 0;
-    }
-
-    return PIPE_BUFFER_SIZE - pipe_info->bufs[index].len;
-}
-
 /// @brief Reads data from the specified pipe buffer into the provided buffer.
-/// @param pipe_info Pointer to the pipe inode information structure.
-/// @param index Index of the pipe buffer to read from.
-/// @param dest Destination buffer where the data will be copied.
-/// @param count Maximum number of bytes to read.
-/// @return Number of bytes read, or -1 on error.
-static ssize_t pipe_buffer_read(pipe_inode_info_t *pipe_info, unsigned int index, char *dest, size_t count)
+static ssize_t pipe_buffer_read(pipe_buffer_t *pipe_buffer, char *dest, size_t count)
 {
     // Validate input parameters.
-    if (!pipe_info) {
-        pr_err("pipe_buffer_read: pipe_info is NULL.\n");
-        return -1;
+    if (!pipe_buffer) {
+        pr_err("pipe_buffer_read: pipe_buffer is NULL.\n");
+        return -EINVAL;
     }
     if (!dest) {
         pr_err("pipe_buffer_read: Destination buffer is NULL.\n");
-        return -1;
-    }
-    if (index >= pipe_info->numbuf) {
-        pr_err("pipe_buffer_read: Buffer index %u out of range (max: %u).\n", index, pipe_info->numbuf);
-        return -1;
+        return -EINVAL;
     }
 
-    // Get the specified buffer
-    pipe_buffer_t *buffer = pipe_info->bufs + index;
-
-    // Ensure the buffer contains data to read.
-    if (buffer->len == 0) {
-        pr_debug("pipe_buffer_read: No data available in buffer %u.\n", index);
-        return 0;
+    ssize_t bytes_to_read = pipe_calculate_bytes_to_read(pipe_buffer, count);
+    if (bytes_to_read < 0) {
+        pr_debug("pipe_buffer_read: Failed to calculate bytes to read (error[%2d]: %s).\n", -bytes_to_read, strerror(-bytes_to_read));
+        return bytes_to_read;
     }
 
-    // Check if the buffer's offset and length are within valid bounds
-    if (buffer->offset + buffer->len > PIPE_BUFFER_SIZE) {
-        pr_err("pipe_buffer_read: Buffer offset %u and length %u exceed buffer size.\n", buffer->offset, buffer->len);
-        return -1;
-    }
-
-    // Limit the read size to the available data or requested count, whichever is smaller.
-    ssize_t to_read = (count < buffer->len) ? count : buffer->len;
-
-    pr_debug("pipe_buffer_read: Reading %u bytes from buffer %u with offset %u (length: %u).\n",
-             to_read, index, buffer->offset, buffer->len);
-
-    // Copy data from the pipe buffer's data at the specified offset
-    memcpy(dest, buffer->data + buffer->offset, to_read);
+    // Copy data from the pipe buffer's data at the specified offset.
+    memcpy(dest, pipe_buffer->data + pipe_buffer->offset, bytes_to_read);
 
     // Adjust buffer's offset and length to reflect the data consumption.
-    buffer->offset += to_read;
-    buffer->len -= to_read;
+    pipe_buffer->offset += bytes_to_read;
+    pipe_buffer->len -= bytes_to_read;
 
-    pr_debug("pipe_buffer_read: Updated buffer %u - new offset: %u, new length: %u.\n", index, buffer->offset, buffer->len);
+    // If all data has been read, reset offset to 0 for reusability.
+    if (pipe_buffer->len == 0) {
+        pipe_buffer->offset = 0;
+        pr_debug("pipe_buffer_read: Buffer is now empty, resetting offset.\n");
+    }
 
-    // Return the number of bytes read
-    return to_read;
+    pr_debug("pipe_buffer_read: Read %u bytes from buffer (offset: %u -> %u, length: %u -> %u).\n",
+             bytes_to_read,
+             pipe_buffer->offset - bytes_to_read,
+             pipe_buffer->offset,
+             pipe_buffer->len + bytes_to_read,
+             pipe_buffer->len);
+
+    return bytes_to_read;
 }
 
 /// @brief Writes data to the specified pipe buffer.
-/// @param pipe_info Pointer to the pipe inode information structure.
-/// @param index Index of the pipe buffer to write to.
-/// @param src Source buffer containing data to write.
-/// @param count Maximum number of bytes to write.
-/// @return Number of bytes written, or -1 on error.
-static int pipe_buffer_write(pipe_inode_info_t *pipe_info, unsigned int index, const char *src, size_t count)
+/// @param pipe_buffer Pointer to the pipe buffer structure where data will be written.
+/// @param src Pointer to the source buffer containing data to write.
+/// @param count The maximum number of bytes to write.
+/// @return the number of written bytes on success, or a negative errno-style error code on failure.
+static ssize_t pipe_buffer_write(pipe_buffer_t *pipe_buffer, const char *src, size_t count)
 {
-    // Check if the index is within bounds
-    if (!pipe_info) {
-        pr_err("pipe_buffer_write: pipe_info is NULL.\n");
-        return -1;
+    // Validate input parameters.
+    if (!pipe_buffer) {
+        pr_err("pipe_buffer_write: pipe_buffer is NULL.\n");
+        return -EINVAL;
     }
     if (!src) {
         pr_err("pipe_buffer_write: Source buffer is NULL.\n");
-        return -1;
-    }
-    if (index >= pipe_info->numbuf) {
-        pr_err("pipe_buffer_write: Buffer index %u out of range (max: %u).\n", index, pipe_info->numbuf);
-        return -1;
+        return -EINVAL;
     }
 
-    // Get the specified buffer
-    pipe_buffer_t *buffer = pipe_info->bufs + index;
-
-    // Ensure the buffer offset and length are within valid bounds
-    if ((buffer->offset + buffer->len) > PIPE_BUFFER_SIZE) {
-        pr_err("pipe_buffer_write: Buffer overflow detected (offset: %u, length: %u).\n", buffer->offset, buffer->len);
-        return -1;
+    // Determine the actual number of bytes we can write into the buffer.
+    ssize_t bytes_to_write = pipe_calculate_bytes_to_write(pipe_buffer, count);
+    if (bytes_to_write < 0) {
+        pr_debug("pipe_buffer_write: Failed to calculate bytes to write (error[%2d]: %s).\n", -bytes_to_write, strerror(-bytes_to_write));
+        return bytes_to_write;
     }
 
-    // Calculate available space in the buffer
-    ssize_t available_space = PIPE_BUFFER_SIZE - buffer->len - buffer->offset;
-    if (available_space <= 0) {
-        pr_debug("pipe_buffer_write: Buffer %u is full, no space available to write.\n", index);
-        return 0; // No space to write, return 0 for non-blocking behavior
+    // Write data to the buffer's current write position (offset + length).
+    memcpy(pipe_buffer->data + pipe_buffer->offset + pipe_buffer->len, src, bytes_to_write);
+
+    // Update the buffer's length to reflect the newly added data.
+    pipe_buffer->len += bytes_to_write;
+
+    pr_debug("pipe_buffer_write: Wrote %u bytes to buffer (offset: %u, length: %u -> %u).\n",
+             bytes_to_write, pipe_buffer->offset, pipe_buffer->len - bytes_to_write, pipe_buffer->len);
+
+    return bytes_to_write;
+}
+
+// ============================================================================
+// Wait Queue Functions
+// ============================================================================
+
+/// @brief Wake-up function for processes waiting to read from a pipe.
+/// @param wait Pointer to the wait queue entry representing the sleeping process.
+/// @param mode The mode to set the task to upon wake-up.
+/// @param sync Synchronization flag (not used in this implementation).
+/// @return 1 if the process is woken up, 0 if it remains in the wait queue.
+int pipe_read_wake_function(wait_queue_entry_t *wait, unsigned mode, int sync)
+{
+    // Validate that data is available in the pipe for reading.
+    if (pipe_info_has_data((pipe_inode_info_t *)wait->private) > 0) {
+        // Check if the task is in an appropriate sleep state to be woken up.
+        if ((wait->task->state == TASK_UNINTERRUPTIBLE) || (wait->task->state == TASK_STOPPED)) {
+            // Set the task's state to the specified wake-up mode.
+            wait->task->state = mode;
+
+            // Signal that the task has been woken up.
+            pr_debug("pipe_read_wake_function: Data available, waking up reader %d.\n", wait->task->pid);
+            return 1;
+        } else {
+            pr_debug("pipe_read_wake_function: Reader %d not in the correct state for wake-up.\n", wait->task->pid);
+        }
+    } else {
+        pr_debug("pipe_read_wake_function: No data available, reader %d should continue waiting.\n", wait->task->pid);
     }
 
-    // Determine the number of bytes to write
-    ssize_t to_write = (count < available_space) ? count : available_space;
+    // No wake-up action taken, continue waiting.
+    return 0;
+}
 
-    pr_debug("pipe_buffer_write: Writing %d bytes to buffer %u (offset: %u, length: %u, available space: %u).\n",
-             to_write, index, buffer->offset, buffer->len, available_space);
+/// @brief Wake-up function for processes waiting to write to a pipe.
+/// @param wait Pointer to the wait queue entry representing the sleeping process.
+/// @param mode The mode to set the task to upon wake-up.
+/// @param sync Synchronization flag (not used in this implementation).
+/// @return 1 if the process is woken up, 0 if it remains in the wait queue.
+int pipe_write_wake_function(wait_queue_entry_t *wait, unsigned mode, int sync)
+{
+    // Check if there is available space in the pipe for writing.
+    if (pipe_info_has_space((pipe_inode_info_t *)wait->private) > 0) {
+        // Only tasks in the state TASK_UNINTERRUPTIBLE or TASK_STOPPED can be woken up.
+        if ((wait->task->state == TASK_UNINTERRUPTIBLE) || (wait->task->state == TASK_STOPPED)) {
+            // Set the wake-up mode for the task.
+            wait->task->state = mode;
 
-    // Copy data to the pipe buffer's data array at the current offset + length
-    memcpy(buffer->data + buffer->offset + buffer->len, src, to_write);
+            // Signal that the task has been woken up.
+            pr_debug("pipe_write_wake_function: Space available, waking up writer %d.\n", wait->task->pid);
+            return 1;
+        } else {
+            pr_debug("pipe_write_wake_function: Writer %d not in the correct state for wake-up.\n", wait->task->pid);
+        }
+    } else {
+        pr_debug("pipe_write_wake_function: No space available, writer %d should continue waiting.\n", wait->task->pid);
+    }
 
-    // Update the buffer's length to reflect the added data
-    buffer->len += to_write;
+    // No wake-up action taken, continue waiting.
+    return 0;
+}
 
-    pr_debug("pipe_buffer_write: Buffer %u updated - new length: %u.\n", index, buffer->len);
+/// @brief Wakes up tasks in the specified wait queue if their wake-up condition is met.
+/// @param wait_queue Pointer to the wait queue from which tasks should be woken up.
+/// @param debug_msg Debug message describing the wake-up context.
+static void pipe_wake_up_tasks(wait_queue_head_t *wait_queue, const char *debug_msg)
+{
+    // Validate input parameters.
+    if (!wait_queue) {
+        pr_err("pipe_wake_up_tasks: wait_queue is NULL.\n");
+        return;
+    }
 
-    // Return the number of bytes written
-    return to_write;
+    list_for_each_safe_decl(it, store, &wait_queue->task_list)
+    {
+        wait_queue_entry_t *wait_queue_entry = list_entry(it, wait_queue_entry_t, task_list);
+
+        // Run the wakeup test function for the waiting task.
+        if (wait_queue_entry->func(wait_queue_entry, TASK_RUNNING, 0)) {
+            // Task is ready, remove from the wait queue.
+            remove_wait_queue(wait_queue, wait_queue_entry);
+
+            // Log and free the memory associated with the wait entry.
+            pr_debug("%s: Process %d woken up.\n", debug_msg, wait_queue_entry->task->pid);
+            wait_queue_entry_dealloc(wait_queue_entry);
+        }
+    }
+}
+
+/// @brief Puts the current process to sleep on the specified wait queue if blocking is needed.
+/// @param pipe_info Pointer to the pipe information structure.
+/// @param wait_queue Pointer to the wait queue on which to put the process to sleep.
+/// @param wake_function Wake-up function associated with the wait queue entry.
+/// @param debug_msg Debug message describing the block context.
+/// @return 0 after scheduling the blocking behavior.
+static int pipe_put_process_to_sleep(
+    pipe_inode_info_t *pipe_info,
+    wait_queue_head_t *wait_queue,
+    int (*wake_function)(wait_queue_entry_t *, unsigned, int),
+    const char *debug_msg)
+{
+    // Blocking behavior: Put the process to sleep until the condition is met.
+    wait_queue_entry_t *wait_queue_entry = sleep_on(wait_queue);
+    assert(wait_queue_entry && "Failed to allocate wait_queue_entry_t.");
+
+    // Set the wake-up function and private data for the wait entry.
+    wait_queue_entry->func    = wake_function;
+    wait_queue_entry->private = pipe_info;
+
+    // Schedule the task to sleep until the condition is met.
+    scheduler_run(get_current_interrupt_stack_frame());
+    return 0; // Indicate blocking behavior was scheduled
 }
 
 // ============================================================================
 // Virtual FileSystem (VFS) Functions
 // ============================================================================
 
-static inline int is_pipe_nonblocking(vfs_file_t *file)
+/// @brief Checks if the pipe is in blocking mode.
+/// @param file Pointer to the vfs_file_t structure representing the pipe file.
+/// @return 1 if the pipe is in blocking mode, 0 if it is in non-blocking mode.
+static inline int pipe_is_blocking(vfs_file_t *file)
 {
-    return (file->flags & O_NONBLOCK) != 0;
+    // Ensure the file pointer is valid before dereferencing.
+    if (!file) {
+        pr_err("pipe_check_blocking: file pointer is NULL.\n");
+        return 0; // Assume non-blocking mode if file is NULL.
+    }
+
+    // Check if the O_NONBLOCK flag is NOT set in the file's flags.
+    // If NOT set, the pipe operates in blocking mode and the function returns 1.
+    // If set, the pipe is in non-blocking mode, and the function returns 0.
+    return (file->flags & O_NONBLOCK) == 0;
 }
 
 /// @brief Creates a VFS file structure for a pipe.
@@ -525,7 +730,7 @@ static vfs_file_t *pipe_open(const char *path, int flags, mode_t mode)
     }
 
     // Allocate and initialize the pipe_inode_info structure.
-    pipe_inode_info_t *pipe_info = __pipe_inode_info_alloc();
+    pipe_inode_info_t *pipe_info = __pipe_inode_info_alloc(&named_pipe_ops);
     if (!pipe_info) {
         pr_err("Failed to allocate memory for pipe_inode_info structure.\n");
         // Free allocated new_file structure before returning.
@@ -537,10 +742,13 @@ static vfs_file_t *pipe_open(const char *path, int flags, mode_t mode)
     new_file->device = pipe_info;
 
     // Confirm each buffer in pipe_info is properly initialized.
-    for (size_t index = 0; index < pipe_info->numbuf; ++index) {
-        int ret = pipe_buffer_confirm(pipe_info, index);
+    pipe_buffer_t *pipe_buffer;
+    for (size_t buffer_index = 0; buffer_index < pipe_info->numbuf; ++buffer_index) {
+        pipe_buffer = &pipe_info->bufs[buffer_index];
+
+        int ret = pipe_buffer_confirm(pipe_buffer);
         if (ret < 0) {
-            pr_err("Buffer confirmation failed for buffer %u with error code %d: %s.\n", index, ret, strerror(-ret));
+            pr_err("Buffer confirmation failed for buffer %u (error[%2d]: %s).\n", buffer_index, -ret, strerror(-ret));
             // Free pipe info structure.
             __pipe_inode_info_dealloc(pipe_info);
             // Free allocated new_file structure before returning.
@@ -662,62 +870,6 @@ static int pipe_close(vfs_file_t *file)
     return 0;
 }
 
-int pipe_info_has_data(pipe_inode_info_t *pipe_info)
-{
-    // Check that data is available in at least one buffer.
-    for (unsigned int i = 0; i < pipe_info->numbuf; i++) {
-        if (pipe_info->bufs[i].len > 0) {
-            return 1;
-        }
-    }
-    // No data available in any buffer.
-    return 0;
-}
-
-int pipe_info_has_space(pipe_inode_info_t *pipe_info)
-{
-    // Check if At least one buffer has available space.
-    for (unsigned int i = 0; i < pipe_info->numbuf; i++) {
-        if (pipe_info->bufs[i].len < PIPE_BUFFER_SIZE) {
-            return 1;
-        }
-    }
-    // No buffer has space.
-    return 0;
-}
-
-int pipe_read_wake_function(wait_queue_entry_t *wait, unsigned mode, int sync)
-{
-    pipe_inode_info_t *pipe_info = wait->private;
-
-    // Check if any data is available in the entire pipe, not just a specific buffer.
-    if (pipe_info_has_data(pipe_info)) {
-        // Signal that we should wake up the waiting process.
-        pr_debug("pipe_read_wake_function: Data available, waking up reader.\n");
-        return 1;
-    }
-
-    // No data available, so the reader should remain waiting.
-    pr_debug("pipe_read_wake_function: No data available, reader should continue waiting.\n");
-    return 0;
-}
-
-int pipe_write_wake_function(wait_queue_entry_t *wait, unsigned mode, int sync)
-{
-    pipe_inode_info_t *pipe_info = wait->private;
-
-    // Check if there is available space in the entire pipe
-    if (pipe_info_has_space(pipe_info)) {
-        // Signal that the writer can proceed.
-        pr_debug("pipe_write_wake_function: Space available, waking up writer.\n");
-        return 1;
-    }
-
-    // No space available, so the writer should remain waiting.
-    pr_debug("pipe_write_wake_function: No space available, writer should continue waiting.\n");
-    return 0;
-}
-
 /// @brief Reads data from the specified pipe file into the provided buffer.
 /// @param file Pointer to the `vfs_file_t` structure representing the pipe file.
 /// @param buffer Buffer where the data will be stored.
@@ -752,96 +904,58 @@ static ssize_t pipe_read(vfs_file_t *file, char *buffer, off_t offset, size_t nb
     pr_debug("pipe_read: Mutex locked by process %d for reading.\n", task->pid);
 
     ssize_t bytes_read = 0;
-    int err;
 
-    // Loop to read data from the pipe until requested bytes are read.
+    // Loop to read data from the pipe until requested bytes are read or an error occurs.
     while (bytes_read < nbyte) {
-        // Calculate the linear index for reading.
-        size_t read_pos = pipe_info->read_index;
+        // Wrap read_index around when exceeding max buffer capacity.
+        pipe_info->read_index %= (pipe_info->numbuf * PIPE_BUFFER_SIZE);
 
-        // Get the buffer index and offset for the current read position.
-        size_t buffer_index = pipe_linear_to_buffer_index(read_pos);
-        size_t buf_offset   = pipe_linear_to_offset(read_pos);
+        // Calculate the buffer index for the current read position.
+        size_t buffer_index        = pipe_linear_to_buffer_index(pipe_info->read_index);
+        pipe_buffer_t *pipe_buffer = &pipe_info->bufs[buffer_index];
 
-        // Access the current buffer.
-        pipe_buffer_t *pipe_buffer = pipe_info->bufs + buffer_index;
-
-        // Confirm the buffer is ready to be written to.
-        if (pipe_buffer_confirm(pipe_info, buffer_index) < 0) {
-            pr_err("pipe_read: Failed to confirm buffer %u readiness for reading.\n", buffer_index);
-            break; // No data to read.
+        // Confirm that the buffer is ready to be read.
+        if (pipe_buffer_confirm(pipe_buffer) < 0) {
+            pr_err("pipe_read: Failed to confirm readiness of buffer %u for reading.\n", buffer_index);
+            break; // Stop if there’s no data to read.
         }
 
-        // Confirm that the current buffer has data.
-        if (pipe_buffer_empty(pipe_info, buffer_index)) {
-            // In non-blocking mode, return 0 immediately if no data was read.
-            if (bytes_read == 0) {
-                pr_debug("pipe_read: Buffer %u is empty, no data to read.\n", buffer_index);
-                break; // No data to read.
-            }
-            pr_debug("pipe_read: Buffer %u is exhausted, stopping read.\n", buffer_index);
-            break; // Exit the loop if data has been read.
-        }
-
-        // Calculate the number of bytes available in the current buffer.
-        size_t available = pipe_buffer_available(pipe_info, buffer_index);
-        size_t to_read   = (nbyte - bytes_read) < available ? (nbyte - bytes_read) : available;
-
-        // Read data from the pipe buffer into the user-provided buffer.
-        ssize_t ret = pipe_buffer_read(pipe_info, buffer_index, buffer + bytes_read, to_read);
-        if (ret < 0) {
-            pr_err("pipe_read: Error reading to pipe buffer.\n");
-            bytes_read = -1;
-
-            break;
-        } else if (ret == 0) {
-            pr_warning("pipe_read: Pipe buffer is full, no data written. Retrying or handling as needed.\n");
-
-            // For a non-blocking pipe, return bytes_written so far.
-            if (!is_pipe_nonblocking(file)) {
-                wait_queue_entry_t *wait_queue_entry = sleep_on(&pipe_info->read_wait);
-                if (wait_queue_entry) {
-                    wait_queue_entry->func    = pipe_read_wake_function;
-                    wait_queue_entry->private = pipe_info;
+        // Calculate bytes to read in this iteration, considering the remaining requested bytes.
+        ssize_t bytes_to_read = pipe_buffer_read(pipe_buffer, buffer + bytes_read, nbyte - bytes_read);
+        if (bytes_to_read < 0) {
+            if (bytes_to_read == -ENODATA) {
+                // If in blocking mode, put the process to sleep until data is available.
+                if (pipe_is_blocking(file)) {
+                    pr_warning("pipe_read: No data available in pipe buffer. Handling in blocking mode.\n");
+                    pipe_put_process_to_sleep(pipe_info, &pipe_info->read_wait, pipe_read_wake_function, "pipe_read");
+                } else {
+                    pr_warning("pipe_read: No data available in pipe buffer. Handling in non-blocking mode.\n");
                 }
-                scheduler_run(get_current_interrupt_stack_frame());
-            }
 
+            } else {
+                pr_err("pipe_read: Error reading from pipe buffer (error[%2d]: %s).\n", -bytes_to_read, strerror(-bytes_to_read));
+                bytes_read = -1;
+            }
             break;
         }
 
-        pr_debug("pipe_read: Read %d bytes from buffer %u.\n", ret, buffer_index);
+        // Update bytes_read with the actual number of bytes read in this iteration.
+        bytes_read += bytes_to_read;
 
-        // Increment bytes_read by the actual number of bytes read.
-        bytes_read += ret;
+        // Advance the linear read index by the number of bytes read.
+        pipe_info->read_index += bytes_to_read;
 
-        // Update the linear read index.
-        pipe_info->read_index += ret;
+        // Wake up tasks that might be waiting to write to the pipe.
+        pipe_wake_up_tasks(&pipe_info->write_wait, "pipe_read");
 
-        list_for_each_safe_decl(it, store, &pipe_info->write_wait.task_list)
-        {
-            wait_queue_entry_t *wait_queue_entry = list_entry(it, wait_queue_entry_t, task_list);
-
-            // Run the wakeup test function for the waiting task.
-            if (wait_queue_entry->func(wait_queue_entry, TASK_RUNNING, 0)) {
-                // Task is ready, remove from the wait queue.
-                remove_wait_queue(&pipe_info->write_wait, wait_queue_entry);
-
-                // Log and free the memory associated with the wait entry.
-                pr_debug("pipe_read: Process %d woken up from waiting for read.\n", wait_queue_entry->task->pid);
-                wait_queue_entry_dealloc(wait_queue_entry);
-            }
-        }
-
-        // Check if the current buffer is now empty.
-        if (pipe_buffer_empty(pipe_info, buffer_index)) {
-            pr_debug("pipe_read: Buffer %u is now empty. Advancing to next buffer.\n", buffer_index);
-            // Advance the read index to the next buffer.
+        // If the buffer is empty after reading, advance to the next buffer.
+        if (pipe_buffer_empty(pipe_buffer)) {
+            pr_debug("pipe_read: Buffer %u is empty, advancing to the next buffer.\n", buffer_index);
             pipe_info->read_index++;
         }
     }
 
-    // Release the mutex.
+    // Release the mutex after reading.
     mutex_unlock(&pipe_info->mutex);
     pr_debug("pipe_read: Mutex unlocked by process %d.\n", task->pid);
 
@@ -882,94 +996,60 @@ static ssize_t pipe_write(vfs_file_t *file, const void *buffer, off_t offset, si
     pr_debug("pipe_write: Mutex locked by process %d for writing.\n", task->pid);
 
     ssize_t bytes_written = 0;
-    int err;
 
-    // Loop to write data to the pipe buffer until all requested bytes are written.
+    // Loop to write data to the pipe buffer until the requested number of bytes is written.
     while (bytes_written < nbyte) {
-        // Calculate the linear index for writing.
-        size_t write_pos = pipe_info->write_index;
+        // Wrap around write_index when it exceeds the max buffer capacity.
+        pipe_info->write_index %= (pipe_info->numbuf * PIPE_BUFFER_SIZE);
 
-        // Get the buffer index and offset for the current write position.
-        size_t buffer_index = pipe_linear_to_buffer_index(write_pos);
-        size_t buf_offset   = pipe_linear_to_offset(write_pos);
-
-        // Access the current pipe buffer.
+        // Get the buffer index for the current write position.
+        size_t buffer_index        = pipe_linear_to_buffer_index(pipe_info->write_index);
         pipe_buffer_t *pipe_buffer = &pipe_info->bufs[buffer_index];
-        pr_debug("pipe_write: Accessing buffer %u for writing at offset %u.\n", buffer_index, buf_offset);
 
-        // Confirm the buffer is ready to be written to.
-        if (pipe_buffer_confirm(pipe_info, buffer_index) < 0) {
-            pr_err("pipe_write: Failed to confirm buffer readiness for writing.\n");
+        // Confirm the buffer is ready for writing.
+        if (pipe_buffer_confirm(pipe_buffer) < 0) {
+            pr_err("pipe_write: Failed to confirm readiness of buffer %u for writing.\n", buffer_index);
             bytes_written = -1;
             break;
         }
 
-        // Calculate available space in the buffer.
-        size_t available = pipe_buffer_capacity(pipe_info, buffer_index) - pipe_buffer->len;
-        if (available == 0) {
-            pr_debug("pipe_write: Current buffer %u is full. Moving to next buffer.\n", buffer_index);
-            // Advance the write index to the next buffer.
-            pipe_info->write_index++;
-            continue; // Move to the next buffer if current one is full.
-        }
-
-        // Determine the amount of data to write in this iteration.
-        size_t to_write = (nbyte - bytes_written) < available ? (nbyte - bytes_written) : available;
-
-        // Write data to the pipe buffer at the current offset.
-        int ret = pipe_buffer_write(pipe_info, buffer_index, (const char *)buffer + bytes_written, to_write);
-        if (ret < 0) {
-            pr_err("pipe_write: Error writing to pipe buffer.\n");
-            bytes_written = -1;
-
-            break;
-        } else if (ret == 0) {
-            pr_warning("pipe_write: Pipe buffer is full, no data written. Retrying or handling as needed.\n");
-
-            // For a non-blocking pipe, return bytes_written so far.
-            if (!is_pipe_nonblocking(file)) {
-                wait_queue_entry_t *wait_queue_entry = sleep_on(&pipe_info->write_wait);
-                if (wait_queue_entry) {
-                    wait_queue_entry->func    = pipe_write_wake_function;
-                    wait_queue_entry->private = pipe_info;
+        // Attempt to write data into the pipe buffer.
+        ssize_t bytes_to_write = pipe_buffer_write(pipe_buffer, (const char *)buffer + bytes_written, nbyte - bytes_written);
+        if (bytes_to_write < 0) {
+            // Handle buffer full condition.
+            if (bytes_to_write == -ENOSPC) {
+                // Blocking behavior: Put the process to sleep until space is available.
+                if (pipe_is_blocking(file)) {
+                    pr_warning("pipe_write: Pipe buffer is full, no data written. Handling in blocking mode.\n");
+                    pipe_put_process_to_sleep(pipe_info, &pipe_info->write_wait, pipe_write_wake_function, "pipe_write");
+                } else {
+                    pr_warning("pipe_write: Pipe buffer is full, no data written. Handling in non-blocking mode.\n");
                 }
-                scheduler_run(get_current_interrupt_stack_frame());
+            } else {
+                // Other errors: Log and return immediately.
+                pr_err("pipe_write: Error writing to pipe buffer (error[%2d]: %s).\n", -bytes_to_write, strerror(-bytes_to_write));
+                bytes_written = -1;
             }
-
             break;
         }
 
-        pr_debug("pipe_write: Wrote %d bytes to buffer %u.\n", ret, buffer_index);
+        pr_debug("pipe_write: Wrote %d bytes to buffer %u.\n", bytes_to_write, buffer_index);
 
-        // Increment bytes_written by the actual number of bytes written.
-        bytes_written += ret;
+        // Update the total bytes written and the write index.
+        bytes_written += bytes_to_write;
+        pipe_info->write_index += bytes_to_write;
 
-        // Update the linear write index.
-        pipe_info->write_index += ret;
+        // Wake up tasks waiting to read from the pipe.
+        pipe_wake_up_tasks(&pipe_info->read_wait, "pipe_write");
 
-        list_for_each_safe_decl(it, store, &pipe_info->read_wait.task_list)
-        {
-            wait_queue_entry_t *wait_queue_entry = list_entry(it, wait_queue_entry_t, task_list);
-
-            // Run the wakeup test function for the waiting task.
-            if (wait_queue_entry->func(wait_queue_entry, TASK_RUNNING, 0)) {
-                // Task is ready, remove from the wait queue.
-                remove_wait_queue(&pipe_info->read_wait, wait_queue_entry);
-
-                // Log and free the memory associated with the wait entry.
-                pr_debug("pipe_write: Process %d woken up from waiting for read.\n", wait_queue_entry->task->pid);
-                wait_queue_entry_dealloc(wait_queue_entry);
-            }
-        }
-
-        // Advance the write index to the next buffer if necessary.
-        if (pipe_buffer->len >= pipe_buffer_capacity(pipe_info, buffer_index)) {
-            pr_debug("pipe_write: Buffer %u is now full. Advancing to next buffer.\n", buffer_index);
+        // Advance to the next buffer if the current one is full.
+        if (pipe_buffer->len >= pipe_buffer_capacity(pipe_buffer)) {
+            pr_debug("pipe_write: Buffer %u is now full. Advancing to the next buffer.\n", buffer_index);
             pipe_info->write_index++;
         }
     }
 
-    // Release the mutex after writing.
+    // Release the mutex after the write operation is complete.
     mutex_unlock(&pipe_info->mutex);
     pr_debug("pipe_write: Mutex unlocked by process %d.\n", task->pid);
 
@@ -1075,17 +1155,20 @@ int sys_pipe(int fds[2])
     }
 
     // Allocate and initialize the pipe_inode_info structure.
-    pipe_inode_info_t *pipe_info = __pipe_inode_info_alloc();
+    pipe_inode_info_t *pipe_info = __pipe_inode_info_alloc(&anonymous_pipe_ops);
     if (!pipe_info) {
         pr_err("Failed to allocate memory for pipe_inode_info structure.\n");
         return -1;
     }
 
     // Confirm each buffer in pipe_info is properly initialized.
-    for (size_t index = 0; index < pipe_info->numbuf; ++index) {
-        int ret = pipe_buffer_confirm(pipe_info, index);
+    pipe_buffer_t *pipe_buffer;
+    for (size_t buffer_index = 0; buffer_index < pipe_info->numbuf; ++buffer_index) {
+        pipe_buffer = &pipe_info->bufs[buffer_index];
+
+        int ret = pipe_buffer_confirm(pipe_buffer);
         if (ret < 0) {
-            pr_err("Buffer confirmation failed for buffer %u with error code %d: %s.\n", index, -ret, strerror(-ret));
+            pr_err("Buffer confirmation failed for buffer %u (error[%2d]: %s).\n", buffer_index, -ret, strerror(-ret));
             // Free pipe info structure.
             __pipe_inode_info_dealloc(pipe_info);
             // Free allocated file structure before returning.
