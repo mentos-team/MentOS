@@ -22,7 +22,7 @@
 #include "process/scheduler.h"
 #include "stdio.h"
 #include "string.h"
-#include "sys/errno.h"
+#include "errno.h"
 #include "sys/stat.h"
 
 #define EXT2_SUPERBLOCK_MAGIC  0xEF53 ///< Magic value used to identify an ext2 filesystem.
@@ -368,7 +368,7 @@ static ssize_t ext2_read(vfs_file_t *file, char *buffer, off_t offset, size_t nb
 static ssize_t ext2_write(vfs_file_t *file, const void *buffer, off_t offset, size_t nbyte);
 static off_t ext2_lseek(vfs_file_t *file, off_t offset, int whence);
 static int ext2_fstat(vfs_file_t *file, stat_t *stat);
-static int ext2_ioctl(vfs_file_t *file, int request, void *data);
+static long ext2_ioctl(vfs_file_t *file, unsigned int request, unsigned long data);
 static ssize_t ext2_getdents(vfs_file_t *file, dirent_t *dirp, off_t doff, size_t count);
 static ssize_t ext2_readlink(const char *path, char *buffer, size_t bufsize);
 static int ext2_fsetattr(vfs_file_t *file, struct iattr *attr);
@@ -3209,7 +3209,7 @@ static int ext2_stat(const char *path, stat_t *stat)
 /// @param request the device-dependent request code
 /// @param data an untyped pointer to memory.
 /// @return Return value depends on REQUEST. Usually -1 indicates error.
-static int ext2_ioctl(vfs_file_t *file, int request, void *data)
+static long ext2_ioctl(vfs_file_t *file, unsigned int request, unsigned long data)
 {
     return -1;
 }

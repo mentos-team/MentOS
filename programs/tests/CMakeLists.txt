@@ -21,6 +21,7 @@ set(TEST_LIST
     t_periodic2.c
     t_pipe_child.c
     t_pipe_single.c
+    t_pipe_non_blocking.c
     t_sigfpe.c
     t_sigmask.c
     t_getenv.c

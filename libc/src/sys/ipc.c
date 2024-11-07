@@ -8,7 +8,7 @@
 #include "sys/shm.h"
 #include "sys/sem.h"
 #include "sys/msg.h"
-#include "sys/errno.h"
+#include "errno.h"
 #include "sys/stat.h"
 #include "io/debug.h"
 #include "system/syscall_types.h"

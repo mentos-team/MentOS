@@ -6,7 +6,7 @@
 #include "time.h"
 #include "stdio.h"
 #include "string.h"
-#include "sys/errno.h"
+#include "errno.h"
 #include "system/syscall_types.h"
 
 /// @brief List of week days name.

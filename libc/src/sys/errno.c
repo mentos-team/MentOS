@@ -3,7 +3,7 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "sys/errno.h"
+#include "errno.h"
 
 /// @brief Returns the error number for the current process.
 /// @return Pointer to the error number.

@@ -42,6 +42,7 @@ add_library(
     ${CMAKE_SOURCE_DIR}/libc/src/unistd/getppid.c
     ${CMAKE_SOURCE_DIR}/libc/src/unistd/getpid.c
     ${CMAKE_SOURCE_DIR}/libc/src/unistd/exit.c
+    ${CMAKE_SOURCE_DIR}/libc/src/unistd/fcntl.c
     ${CMAKE_SOURCE_DIR}/libc/src/unistd/setsid.c
     ${CMAKE_SOURCE_DIR}/libc/src/unistd/getsid.c
     ${CMAKE_SOURCE_DIR}/libc/src/unistd/setpgid.c

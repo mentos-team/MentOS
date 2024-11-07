@@ -4,7 +4,7 @@
 /// See LICENSE.md for details.
 
 #include "sys/mman.h"
-#include "sys/errno.h"
+#include "errno.h"
 #include "unistd.h"
 #include "system/syscall_types.h"
 

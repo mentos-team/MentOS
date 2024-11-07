@@ -15,13 +15,12 @@
 #include "devices/fpu.h"
 #include "fs/attr.h"
 #include "fs/vfs.h"
-#include "fs/ioctl.h"
 #include "hardware/timer.h"
 #include "kernel.h"
 #include "mem/kheap.h"
 #include "process/process.h"
 #include "process/scheduler.h"
-#include "sys/errno.h"
+#include "errno.h"
 #include "sys/mman.h"
 #include "sys/msg.h"
 #include "sys/sem.h"
@@ -91,6 +90,7 @@ void syscall_init(void)
     sys_call_table[__NR_geteuid]        = (SystemCall)sys_geteuid;
     sys_call_table[__NR_getegid]        = (SystemCall)sys_getegid;
     sys_call_table[__NR_ioctl]          = (SystemCall)sys_ioctl;
+    sys_call_table[__NR_fcntl]          = (SystemCall)sys_fcntl;
     sys_call_table[__NR_setpgid]        = (SystemCall)sys_setpgid;
     sys_call_table[__NR_getppid]        = (SystemCall)sys_getppid;
     sys_call_table[__NR_setsid]         = (SystemCall)sys_setsid;

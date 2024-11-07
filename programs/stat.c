@@ -11,7 +11,7 @@
 #include <strerror.h>
 #include <string.h>
 #include <sys/bitops.h>
-#include <sys/errno.h>
+#include <errno.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <limits.h>

@@ -107,13 +107,19 @@ off_t vfs_lseek(vfs_file_t *file, off_t offset, int whence);
 ///         appropriately.
 ssize_t vfs_getdents(vfs_file_t *file, dirent_t *dirp, off_t off, size_t count);
 
-/// @brief Perform the I/O control operation specified by REQUEST on FD.
-///   One argument may follow; its presence and type depend on REQUEST.
-/// @param file     The file for which we are executing the operations.
-/// @param request The device-dependent request code
-/// @param data    An untyped pointer to memory.
-/// @return Return value depends on REQUEST. Usually -1 indicates error.
-int vfs_ioctl(vfs_file_t *file, int request, void *data);
+/// @brief Perform the I/O control operation specified by `request` on `file`.
+/// @param file The file for which the operation is executed.
+/// @param request The device-dependent request code.
+/// @param data An untyped value or pointer, depending on the request.
+/// @return A request-specific return value, or a negative error code on failure.
+long vfs_ioctl(vfs_file_t *file, unsigned int request, unsigned long data);
+
+/// @brief Provides control operations on an open file descriptor.
+/// @param file The file for which the operation is executed.
+/// @param request The `fcntl` command, defining the operation (e.g., `F_GETFL`, `F_SETFL`).
+/// @param data Additional data required by certain `fcntl` commands (e.g., flags or pointer).
+/// @return Returns 0 on success; on error, returns a negative error code.
+long vfs_fcntl(vfs_file_t *file, unsigned int request, unsigned long data);
 
 /// @brief Delete a name and possibly the file it refers to.
 /// @param path The path to the file.

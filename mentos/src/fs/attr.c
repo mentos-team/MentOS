@@ -13,7 +13,7 @@
 #include "process/process.h"
 #include "stdio.h"
 #include "string.h"
-#include "sys/errno.h"
+#include "errno.h"
 #include "system/printk.h"
 #include "system/syscall.h"
 

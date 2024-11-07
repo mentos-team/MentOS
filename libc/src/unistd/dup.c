@@ -5,6 +5,6 @@
 
 #include "unistd.h"
 #include "system/syscall_types.h"
-#include "sys/errno.h"
+#include "errno.h"
 
 _syscall1(int, dup, int, fd)

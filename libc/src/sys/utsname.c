@@ -5,7 +5,7 @@
 
 #include "sys/utsname.h"
 #include "stddef.h"
-#include "sys/errno.h"
+#include "errno.h"
 #include "system/syscall_types.h"
 
 _syscall1(int, uname, utsname_t *, buf)

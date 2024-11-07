@@ -4,11 +4,11 @@
 /// See LICENSE.md for details.
 
 #include "unistd.h"
-#include "sys/errno.h"
+#include "errno.h"
 #include "sys/wait.h"
 #include "system/syscall_types.h"
 
-#include "sys/errno.h"
+#include "errno.h"
 #include "unistd.h"
 #include "system/syscall_types.h"
 

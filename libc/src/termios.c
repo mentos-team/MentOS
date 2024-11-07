@@ -5,7 +5,7 @@
 
 #include "termios.h"
 #include "bits/ioctls.h"
-#include "sys/errno.h"
+#include "errno.h"
 #include "system/syscall_types.h"
 
 int tcgetattr(int fd, termios_t *termios_p)

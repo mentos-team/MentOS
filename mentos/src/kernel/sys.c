@@ -6,7 +6,7 @@
 #include "stdio.h"
 #include "klib/mutex.h"
 #include "klib/stdatomic.h"
-#include "sys/errno.h"
+#include "errno.h"
 #include "sys/reboot.h"
 
 /// @brief Powers off the machine.

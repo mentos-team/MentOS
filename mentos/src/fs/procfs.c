@@ -17,7 +17,7 @@
 #include "libgen.h"
 #include "stdio.h"
 #include "string.h"
-#include "sys/errno.h"
+#include "errno.h"
 #include "time.h"
 
 /// Maximum length of name in PROCFS.
@@ -90,7 +90,7 @@ static ssize_t procfs_read(vfs_file_t *file, char *buffer, off_t offset, size_t 
 static ssize_t procfs_write(vfs_file_t *file, const void *buffer, off_t offset, size_t nbyte);
 static off_t procfs_lseek(vfs_file_t *file, off_t offset, int whence);
 static int procfs_fstat(vfs_file_t *file, stat_t *stat);
-static int procfs_ioctl(vfs_file_t *file, int request, void *data);
+static long procfs_ioctl(vfs_file_t *file, unsigned int request, unsigned long data);
 static ssize_t procfs_getdents(vfs_file_t *file, dirent_t *dirp, off_t doff, size_t count);
 
 // ============================================================================
@@ -738,7 +738,7 @@ static int procfs_stat(const char *path, stat_t *stat)
 /// @param request the device-dependent request code
 /// @param data an untyped pointer to memory.
 /// @return Return value depends on REQUEST. Usually -1 indicates error.
-static int procfs_ioctl(vfs_file_t *file, int request, void *data)
+static long procfs_ioctl(vfs_file_t *file, unsigned int request, unsigned long data)
 {
     if (file) {
         procfs_file_t *procfs_file = procfs_find_entry_inode(file->ino);

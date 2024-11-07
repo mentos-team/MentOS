@@ -20,7 +20,7 @@
 #include "io/video.h"
 #include "process/scheduler.h"
 #include "sys/bitops.h"
-#include "sys/errno.h"
+#include "errno.h"
 
 /// @brief Prints the ring-buffer.
 /// @param rb the ring-buffer to print.
@@ -183,7 +183,7 @@ static ssize_t procv_write(vfs_file_t *file, const void *buf, off_t offset, size
 /// @param request The ioctl request code (e.g., TCGETS, TCSETS).
 /// @param data Pointer to the data structure for the ioctl request (e.g., termios).
 /// @return int Returns 0 on success.
-static int procv_ioctl(vfs_file_t *file, int request, void *data)
+static long procv_ioctl(vfs_file_t *file, unsigned int request, unsigned long data)
 {
     task_struct *process = scheduler_get_current_process();
     switch (request) {

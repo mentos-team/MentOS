@@ -274,13 +274,22 @@ ssize_t vfs_getdents(vfs_file_t *file, dirent_t *dirp, off_t off, size_t count)
     return file->fs_operations->getdents_f(file, dirp, off, count);
 }
 
-int vfs_ioctl(vfs_file_t *file, int request, void *data)
+long vfs_ioctl(vfs_file_t *file, unsigned int request, unsigned long data)
 {
     if (file->fs_operations->ioctl_f == NULL) {
         pr_err("No IOCTL function found for the current filesystem.\n");
         return -ENOSYS;
     }
     return file->fs_operations->ioctl_f(file, request, data);
+}
+
+long vfs_fcntl(vfs_file_t *file, unsigned int request, unsigned long data)
+{
+    if (file->fs_operations->fcntl_f == NULL) {
+        pr_err("No FCNTL function found for the current filesystem.\n");
+        return -ENOSYS;
+    }
+    return file->fs_operations->fcntl_f(file, request, data);
 }
 
 int vfs_unlink(const char *path)

@@ -7,7 +7,7 @@
 #include "io/debug.h"
 #include "process/process.h"
 #include "string.h"
-#include "sys/errno.h"
+#include "errno.h"
 
 /// @brief Reads data from the /proc/feedback file.
 ///

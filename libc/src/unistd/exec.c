@@ -9,7 +9,7 @@
 #include "stdarg.h"
 #include "stdlib.h"
 #include "string.h"
-#include "sys/errno.h"
+#include "errno.h"
 #include "sys/stat.h"
 #include "system/syscall_types.h"
 #include "limits.h"

@@ -10,7 +10,7 @@
 #include "readline.h"
 #include "stdio.h"
 #include "string.h"
-#include "sys/errno.h"
+#include "errno.h"
 #include "unistd.h"
 
 /// @brief Parses the input buffer and fills pwd with its details.

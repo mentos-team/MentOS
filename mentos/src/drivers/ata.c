@@ -25,7 +25,7 @@
 #include "process/wait.h"
 #include "stdio.h"
 #include "string.h"
-#include "sys/errno.h"
+#include "errno.h"
 #include "system/panic.h"
 
 /// @brief IDENTIFY device data (response to 0xEC).

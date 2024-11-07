@@ -10,7 +10,7 @@
 #include <stdlib.h>
 #include <strerror.h>
 #include <string.h>
-#include <sys/errno.h>
+#include <errno.h>
 #include <unistd.h>
 #include <sys/wait.h>
 #include <limits.h>
@@ -71,6 +71,7 @@ static char *all_tests[] = {
     "t_sleep",
     "t_stopcont",
     "t_write_read",
+    "t_pipe_non_blocking"
 };
 
 static char **tests = &all_tests[0];

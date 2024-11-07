@@ -4,7 +4,7 @@
 /// See LICENSE.md for details.
 
 #include "unistd.h"
-#include "sys/errno.h"
+#include "errno.h"
 #include "system/syscall_types.h"
 
 _syscall4(int, reboot, int, magic1, int, magic2, unsigned int, cmd, void *, arg)

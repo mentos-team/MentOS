@@ -47,6 +47,7 @@ set(KERNEL_SOURCES
     ${CMAKE_SOURCE_DIR}/mentos/src/fs/readdir.c
     ${CMAKE_SOURCE_DIR}/mentos/src/fs/procfs.c
     ${CMAKE_SOURCE_DIR}/mentos/src/fs/ioctl.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/fs/fcntl.c
     ${CMAKE_SOURCE_DIR}/mentos/src/fs/namei.c
     ${CMAKE_SOURCE_DIR}/mentos/src/fs/ext2.c
     ${CMAKE_SOURCE_DIR}/mentos/src/hardware/timer.c

@@ -16,7 +16,7 @@
 #include "sys/stat.h"
 #include "fs/vfs.h"
 #include "process/scheduler.h"
-#include "sys/errno.h"
+#include "errno.h"
 #include "strerror.h"
 #include "string.h"
 

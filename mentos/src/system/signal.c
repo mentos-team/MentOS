@@ -16,7 +16,7 @@
 #include "process/scheduler.h"
 #include "process/wait.h"
 #include "string.h"
-#include "sys/errno.h"
+#include "errno.h"
 #include "system/signal.h"
 
 /// @brief Extracts the exit status.

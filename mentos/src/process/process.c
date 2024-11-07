@@ -21,7 +21,7 @@
 #include "process/scheduler.h"
 #include "process/wait.h"
 #include "string.h"
-#include "sys/errno.h"
+#include "errno.h"
 #include "system/panic.h"
 #include "fs/vfs.h"
 #include "fs/namei.h"

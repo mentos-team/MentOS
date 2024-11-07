@@ -14,7 +14,7 @@
 #include "io/debug.h"
 #include "fs/vfs.h"
 #include "string.h"
-#include "sys/errno.h"
+#include "errno.h"
 #include "system/syscall.h"
 #include "process/scheduler.h"
 #include "fcntl.h"

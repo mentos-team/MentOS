@@ -1,15 +1,14 @@
-/// @file ioctl.c
+/// @file fcntl.c
 /// @brief
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "fs/vfs.h"
 #include "process/scheduler.h"
-#include "stdio.h"
+#include "system/syscall.h"
 #include "errno.h"
-#include "system/printk.h"
+#include "fs/vfs.h"
 
-long sys_ioctl(int fd, unsigned int request, unsigned long data)
+long sys_fcntl(int fd, unsigned int request, unsigned long data)
 {
     // Get the current task.
     task_struct *task = scheduler_get_current_process();
@@ -29,5 +28,5 @@ long sys_ioctl(int fd, unsigned int request, unsigned long data)
     }
 
     // Perform the ioctl operation.
-    return vfs_ioctl(file, request, data);
+    return vfs_fcntl(file, request, data);
 }

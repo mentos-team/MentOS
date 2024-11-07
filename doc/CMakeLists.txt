@@ -130,7 +130,7 @@ if (DOXYGEN_FOUND)
         ${CMAKE_SOURCE_DIR}/libc/inc/assert.h
         ${CMAKE_SOURCE_DIR}/libc/inc/stddef.h
         ${CMAKE_SOURCE_DIR}/libc/inc/signal.h
-        ${CMAKE_SOURCE_DIR}/libc/inc/sys/errno.h
+        ${CMAKE_SOURCE_DIR}/libc/inc/errno.h
         ${CMAKE_SOURCE_DIR}/libc/inc/sys/shm.h
         ${CMAKE_SOURCE_DIR}/libc/inc/sys/bitops.h
         ${CMAKE_SOURCE_DIR}/libc/inc/sys/types.h

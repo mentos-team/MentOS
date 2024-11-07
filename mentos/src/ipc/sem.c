@@ -49,7 +49,7 @@
 #include "stdio.h"
 #include "stdlib.h"
 #include "string.h"
-#include "sys/errno.h"
+#include "errno.h"
 
 ///@brief A value to compute the semid value.
 int __sem_id = 0;

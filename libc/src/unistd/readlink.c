@@ -4,7 +4,7 @@
 /// See LICENSE.md for details.
 
 #include "unistd.h"
-#include "sys/errno.h"
+#include "errno.h"
 #include "system/syscall_types.h"
 
 _syscall3(int, readlink, const char *, path, char *, buffer, size_t, bufsize)

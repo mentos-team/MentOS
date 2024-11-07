@@ -5,7 +5,7 @@
 
 #include "system/syscall_types.h"
 #include "sched.h"
-#include "sys/errno.h"
+#include "errno.h"
 
 _syscall2(int, sched_setparam, pid_t, pid, const sched_param_t *, param)
 

@@ -19,12 +19,11 @@
 #include "fs/pipe.h"
 
 #include "assert.h"
-#include "fcntl.h"
 #include "mem/kheap.h"
 #include "stdio.h"
 #include "stdlib.h"
 #include "string.h"
-#include "sys/errno.h"
+#include "errno.h"
 #include "strerror.h"
 #include "sys/list_head.h"
 #include "fs/vfs.h"
@@ -54,6 +53,7 @@ static ssize_t pipe_read(vfs_file_t *file, char *buffer, off_t offset, size_t nb
 static ssize_t pipe_write(vfs_file_t *file, const void *buffer, off_t offset, size_t nbyte);
 static off_t pipe_lseek(vfs_file_t *file, off_t offset, int whence);
 static int pipe_fstat(vfs_file_t *file, stat_t *stat);
+static long pipe_fcntl(vfs_file_t *file, unsigned int request, unsigned long data);
 
 /// @brief Operations for managing pipe buffers in the kernel.
 static struct pipe_buf_operations anonymous_pipe_ops = {
@@ -94,6 +94,7 @@ static vfs_file_operations_t pipe_fs_operations = {
     .lseek_f    = pipe_lseek,
     .stat_f     = pipe_fstat,
     .ioctl_f    = NULL,
+    .fcntl_f    = pipe_fcntl,
     .getdents_f = NULL,
     .readlink_f = NULL,
 };
@@ -344,7 +345,7 @@ static ssize_t pipe_calculate_bytes_to_read(pipe_buffer_t *pipe_buffer, size_t c
     // Check if there is data available in the buffer.
     if (pipe_buffer_empty(pipe_buffer)) {
         pr_debug("pipe_calculate_bytes_to_read: No data available in buffer.\n");
-        return -ENODATA;
+        return -EAGAIN;
     }
 
     // Return the number of bytes to read based on the requested count and available data.
@@ -371,7 +372,7 @@ static ssize_t pipe_calculate_bytes_to_write(pipe_buffer_t *pipe_buffer, size_t 
     size_t capacity = pipe_buffer_capacity(pipe_buffer);
     if (capacity == 0) {
         pr_debug("pipe_calculate_bytes_to_write: No space available in buffer for writing.\n");
-        return -ENOSPC;
+        return -EAGAIN;
     }
 
     // Return the smaller of the requested write bytes or available space.
@@ -435,10 +436,9 @@ static ssize_t pipe_buffer_read(pipe_buffer_t *pipe_buffer, char *dest, size_t c
     // If all data has been read, reset offset to 0 for reusability.
     if (pipe_buffer->len == 0) {
         pipe_buffer->offset = 0;
-        pr_debug("pipe_buffer_read: Buffer is now empty, resetting offset.\n");
     }
 
-    pr_debug("pipe_buffer_read: Read %ld bytes from buffer (offset: %u, length: %u).\n",
+    pr_debug("pipe_buffer_read: Read %3ld bytes from buffer (offset: %3u, length: %3u).\n",
              bytes_to_read, pipe_buffer->offset, pipe_buffer->len);
 
     return bytes_to_read;
@@ -474,7 +474,7 @@ static ssize_t pipe_buffer_write(pipe_buffer_t *pipe_buffer, const char *src, si
     // Update the buffer's length to reflect the newly added data.
     pipe_buffer->len += bytes_to_write;
 
-    pr_debug("pipe_buffer_write: Wrote %ld bytes to buffer (offset: %u, length: %u).\n",
+    pr_debug("pipe_buffer_write: Wrote %3ld bytes to buffer (offset: %3u, length: %3u).\n",
              bytes_to_write, pipe_buffer->offset, pipe_buffer->len);
 
     return bytes_to_write;
@@ -897,7 +897,6 @@ static ssize_t pipe_read(vfs_file_t *file, char *buffer, off_t offset, size_t nb
 
     // Acquire the pipe mutex to ensure safe access.
     mutex_lock(&pipe_info->mutex, task->pid);
-    pr_debug("pipe_read: Mutex locked by process %d for reading.\n", task->pid);
 
     ssize_t bytes_read = 0;
 
@@ -919,13 +918,14 @@ static ssize_t pipe_read(vfs_file_t *file, char *buffer, off_t offset, size_t nb
         // Calculate bytes to read in this iteration, considering the remaining requested bytes.
         ssize_t bytes_to_read = pipe_buffer_read(pipe_buffer, buffer + bytes_read, nbyte - bytes_read);
         if (bytes_to_read < 0) {
-            if (bytes_to_read == -ENODATA) {
+            if (bytes_to_read == -EAGAIN) {
                 // If in blocking mode, put the process to sleep until data is available.
                 if (pipe_is_blocking(file)) {
                     pr_warning("pipe_read: No data available in pipe buffer. Handling in blocking mode.\n");
                     pipe_put_process_to_sleep(pipe_info, &pipe_info->read_wait, pipe_read_wake_function, "pipe_read");
                 } else {
                     pr_warning("pipe_read: No data available in pipe buffer. Handling in non-blocking mode.\n");
+                    bytes_read = -EAGAIN;
                 }
 
             } else {
@@ -935,25 +935,16 @@ static ssize_t pipe_read(vfs_file_t *file, char *buffer, off_t offset, size_t nb
             break;
         }
 
-        // Update bytes_read with the actual number of bytes read in this iteration.
-        bytes_read += bytes_to_read;
-
-        // Advance the linear read index by the number of bytes read.
-        pipe_info->read_index += bytes_to_read;
+        // Update the total bytes read and the read index.
+        bytes_read            = bytes_read + bytes_to_read;
+        pipe_info->read_index = pipe_info->read_index + bytes_to_read;
 
         // Wake up tasks that might be waiting to write to the pipe.
         pipe_wake_up_tasks(&pipe_info->write_wait, "pipe_read");
-
-        // If the buffer is empty after reading, advance to the next buffer.
-        if (pipe_buffer_empty(pipe_buffer)) {
-            pr_debug("pipe_read: Buffer %u is empty, advancing to the next buffer.\n", buffer_index);
-            pipe_info->read_index++;
-        }
     }
 
     // Release the mutex after reading.
     mutex_unlock(&pipe_info->mutex);
-    pr_debug("pipe_read: Mutex unlocked by process %d.\n", task->pid);
 
     return bytes_read;
 }
@@ -989,7 +980,6 @@ static ssize_t pipe_write(vfs_file_t *file, const void *buffer, off_t offset, si
 
     // Acquire the pipe mutex to ensure safe access.
     mutex_lock(&pipe_info->mutex, task->pid);
-    pr_debug("pipe_write: Mutex locked by process %d for writing.\n", task->pid);
 
     ssize_t bytes_written = 0;
 
@@ -1013,13 +1003,14 @@ static ssize_t pipe_write(vfs_file_t *file, const void *buffer, off_t offset, si
         ssize_t bytes_to_write = pipe_buffer_write(pipe_buffer, (const char *)buffer + bytes_written, nbyte - bytes_written);
         if (bytes_to_write < 0) {
             // Handle buffer full condition.
-            if (bytes_to_write == -ENOSPC) {
+            if (bytes_to_write == -EAGAIN) {
                 // Blocking behavior: Put the process to sleep until space is available.
                 if (pipe_is_blocking(file)) {
                     pr_warning("pipe_write: Pipe buffer is full, no data written. Handling in blocking mode.\n");
                     pipe_put_process_to_sleep(pipe_info, &pipe_info->write_wait, pipe_write_wake_function, "pipe_write");
                 } else {
                     pr_warning("pipe_write: Pipe buffer is full, no data written. Handling in non-blocking mode.\n");
+                    bytes_written = -EAGAIN;
                 }
             } else {
                 // Other errors: Log and return immediately.
@@ -1029,25 +1020,16 @@ static ssize_t pipe_write(vfs_file_t *file, const void *buffer, off_t offset, si
             break;
         }
 
-        pr_debug("pipe_write: Wrote %d bytes to buffer %u.\n", bytes_to_write, buffer_index);
-
         // Update the total bytes written and the write index.
-        bytes_written += bytes_to_write;
-        pipe_info->write_index += bytes_to_write;
+        bytes_written          = bytes_written + bytes_to_write;
+        pipe_info->write_index = pipe_info->write_index + bytes_to_write;
 
         // Wake up tasks waiting to read from the pipe.
         pipe_wake_up_tasks(&pipe_info->read_wait, "pipe_write");
-
-        // Advance to the next buffer if the current one is full.
-        if (pipe_buffer->len >= pipe_buffer_capacity(pipe_buffer)) {
-            pr_debug("pipe_write: Buffer %u is now full. Advancing to the next buffer.\n", buffer_index);
-            pipe_info->write_index++;
-        }
     }
 
     // Release the mutex after the write operation is complete.
     mutex_unlock(&pipe_info->mutex);
-    pr_debug("pipe_write: Mutex unlocked by process %d.\n", task->pid);
 
     return bytes_written;
 }
@@ -1060,6 +1042,43 @@ static off_t pipe_lseek(vfs_file_t *file, off_t offset, int whence)
 static int pipe_fstat(vfs_file_t *file, stat_t *stat)
 {
     return -1;
+}
+
+/// @brief Performs a fcntl operation on a pipe file descriptor
+/// @param file Pointer to the vfs_file_t structure representing the pipe file.
+/// @param request The fcntl command (e.g., F_GETFL, F_SETFL)
+/// @param data Additional argument for setting flags (used with F_SETFL)
+/// @return On success, returns 0 for F_SETFL or current flags for F_GETFL; -1 on error with errno set.
+static long pipe_fcntl(vfs_file_t *file, unsigned int request, unsigned long data)
+{
+    if (!file) {
+        errno = EBADF;
+        pr_err("pipe_fcntl: Invalid file descriptor.\n");
+        return -1;
+    }
+
+    switch (request) {
+    case F_GETFL:
+        pr_debug("pipe_fcntl: Retrieving flags for pipe.\n");
+        return file->flags; // Return the current flags for the file descriptor
+
+    case F_SETFL:
+        pr_debug("pipe_fcntl: Setting flags for pipe.\n");
+        // Only handle O_NONBLOCK for simplicity
+        if (data & O_NONBLOCK) {
+            file->flags |= O_NONBLOCK;
+            pr_debug("pipe_fcntl: Set O_NONBLOCK flag.\n");
+        } else {
+            file->flags &= ~O_NONBLOCK;
+            pr_debug("pipe_fcntl: Cleared O_NONBLOCK flag.\n");
+        }
+        return 0;
+
+    default:
+        errno = EINVAL;
+        pr_err("pipe_fcntl: Unsupported request %u.\n", request);
+        return -1;
+    }
 }
 
 /// @brief Creates a file descriptor for one end of a pipe.

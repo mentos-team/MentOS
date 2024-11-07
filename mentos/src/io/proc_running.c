@@ -11,7 +11,7 @@
 #include "process/process.h"
 #include "stdio.h"
 #include "string.h"
-#include "sys/errno.h"
+#include "errno.h"
 
 /// @brief Returns the character identifying the process state.
 /// @param state the process state.

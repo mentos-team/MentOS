@@ -388,3 +388,17 @@ int sys_uname(utsname_t *buf);
 /// @param fds Array to store read and write file descriptors.
 /// @return 0 on success, or -1 on error.
 int sys_pipe(int fds[2]);
+
+/// @brief Executes a device-specific control operation on a file descriptor.
+/// @param fd The file descriptor for the device or file being operated on.
+/// @param request The `ioctl` command, defining the action or configuration.
+/// @param data Additional data needed for the `ioctl` command, often a pointer to user-provided data.
+/// @return Returns 0 on success; on error, returns a negative error code.
+long sys_ioctl(int fd, unsigned int request, unsigned long data);
+
+/// @brief Provides control operations on an open file descriptor.
+/// @param fd The file descriptor on which to perform the operation.
+/// @param request The `fcntl` command, defining the operation (e.g., `F_GETFL`, `F_SETFL`).
+/// @param data Additional data required by certain `fcntl` commands (e.g., flags or pointer).
+/// @return Returns 0 on success; on error, returns a negative error code.
+long sys_fcntl(int fd, unsigned int request, unsigned long data);

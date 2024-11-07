@@ -18,7 +18,7 @@
 #include "process/scheduler_feedback.h"
 #include "process/wait.h"
 #include "strerror.h"
-#include "sys/errno.h"
+#include "errno.h"
 #include "system/panic.h"
 
 /// @brief          Assembly function setting the kernel stack to jump into

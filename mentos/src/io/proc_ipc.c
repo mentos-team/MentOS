@@ -7,7 +7,7 @@
 #include "fs/procfs.h"
 #include "io/debug.h"
 #include "string.h"
-#include "sys/errno.h"
+#include "errno.h"
 #include "sys/msg.h"
 #include "sys/sem.h"
 #include "sys/shm.h"

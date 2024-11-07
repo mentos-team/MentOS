@@ -10,7 +10,7 @@
 /// See LICENSE.md for details.
 
 #include <unistd.h>
-#include <sys/errno.h>
+#include <errno.h>
 #include <sys/stat.h>
 #include <sys/msg.h>
 #include <sys/ipc.h>
