@@ -19,8 +19,7 @@ set(TEST_LIST
     t_exec.c
     t_sleep.c
     t_periodic2.c
-    t_pipe_child.c
-    t_pipe_single.c
+    t_pipe_blocking.c
     t_pipe_non_blocking.c
     t_sigfpe.c
     t_sigmask.c

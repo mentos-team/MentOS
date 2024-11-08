@@ -83,26 +83,6 @@ boot_info_t boot_info;
 /// Flag indicating if we are running tests instead of an interactive session
 int runtests = 0;
 
-static struct pt_regs *current_pt_regs;
-
-void set_current_pt_regs(struct pt_regs *f)
-{
-    // Check if the provided pointer is valid
-    assert(f && "Error: Attempt to set current_pt_regs with a NULL pointer.\n");
-
-    // Copy the contents of the provided pt_regs structure to current_pt_regs
-    current_pt_regs = f;
-}
-
-struct pt_regs *get_current_pt_regs()
-{
-    // Check if the current_pt_regs pointer is valid before returning.
-    assert(current_pt_regs && "Error: Attempt to set current_pt_regs with a NULL pointer.\n");
-
-    // Return the address of current_pt_regs
-    return current_pt_regs;
-}
-
 /// @brief Prints [OK] at the current row and column 60.
 static inline void print_ok(void)
 {
