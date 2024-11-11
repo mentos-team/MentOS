@@ -3,12 +3,6 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-// Setup the logging for this file (do this before any other include).
-#include "sys/kernel_levels.h"           // Include kernel log levels.
-#define __DEBUG_HEADER__ "[PRINTF]"      ///< Change header.
-#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
-#include "io/debug.h"                    // Include debugging functions.
-
 #include "sys/bitops.h"
 #include "ctype.h"
 #include "fcvt.h"
@@ -45,7 +39,6 @@ static inline int skip_atoi(const char **s)
 {
     // Error check to ensure that the string pointer is valid.
     if (s == NULL || *s == NULL) {
-        pr_crit("skip_atoi: Invalid string pointer.\n");
         return -1;
     }
 
@@ -86,7 +79,6 @@ static char *number(char *str, char *end, long num, int base, int size, int32_t 
 
     // Error handling: base must be between 2 and 36.
     if (base < 2 || base > 36) {
-        pr_crit("number: Unsupported base %d.\n", base);
         return 0; // Return NULL if the base is invalid.
     }
 

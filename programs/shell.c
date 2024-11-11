@@ -3,19 +3,12 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-// Setup the logging for this file (do this before any other include).
-#include "sys/kernel_levels.h"           // Include kernel log levels.
-#define __DEBUG_HEADER__ "[SHELL ]"      ///< Change header.
-#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
-#include "io/debug.h"                    // Include debugging functions.
-
 #include <unistd.h>
 #include <sys/wait.h>
 #include <fcntl.h>
 #include <libgen.h>
 #include <sys/stat.h>
 #include <signal.h>
-#include <io/debug.h>
 #include <io/ansi_colors.h>
 #include <sys/bitops.h>
 #include <stdbool.h>
@@ -85,7 +78,7 @@ static inline int __count_words(const char *sentence)
 {
     // Check if the input sentence is valid.
     if (sentence == NULL) {
-        pr_crit("__count_words: Invalid input, sentence is NULL.\n");
+        fprintf(stderr, "__count_words: Invalid input, sentence is NULL.\n");
         return -1; // Return -1 to indicate an error.
     }
     int result     = 0;
@@ -122,13 +115,11 @@ static inline int __folder_contains(
 {
     // Validate input parameters.
     if ((folder == NULL) || (entry == NULL) || (result == NULL)) {
-        pr_crit("__folder_contains: Invalid input parameters.\n");
         return 0; // Return 0 to indicate an error.
     }
     // Attempt to open the folder with read-only and directory flags.
     int fd = open(folder, O_RDONLY | O_DIRECTORY, 0);
     if (fd == -1) {
-        pr_crit("__folder_contains: Failed to open folder: %s\n", folder);
         return 0; // Return 0 if the folder couldn't be opened.
     }
     // Prepare variables for the search.
@@ -138,7 +129,6 @@ static inline int __folder_contains(
     // Calculate the length of the entry name.
     entry_len = strlen(entry);
     if (entry_len == 0) {
-        pr_crit("__folder_contains: Invalid entry name (empty).\n");
         close(fd); // Close the folder before returning.
         return 0;  // Return 0 if the entry name is empty.
     }
@@ -170,7 +160,7 @@ static inline int __search_in_path(const char *entry, dirent_t *result)
 {
     // Validate input parameters.
     if ((entry == NULL) || (result == NULL)) {
-        pr_crit("__search_in_path: Invalid input parameters.\n");
+        fprintf(stderr, "__search_in_path: Invalid input parameters.\n");
         return 0; // Return 0 to indicate an error.
     }
     // Retrieve the PATH environment variable.
@@ -199,7 +189,7 @@ static inline void __prompt_print(void)
     // Get the current working directory.
     char CWD[PATH_MAX];
     if (getcwd(CWD, PATH_MAX) == NULL) {
-        pr_crit("__prompt_print: Failed to get current working directory.\n");
+        fprintf(stderr, "__prompt_print: Failed to get current working directory.\n");
         strcpy(CWD, "error");
     }
     // Get the HOME environment variable.
@@ -213,19 +203,19 @@ static inline void __prompt_print(void)
     // Get the USER environment variable.
     char *USER = getenv("USER");
     if (USER == NULL) {
-        pr_crit("__prompt_print: Failed to get USER environment variable.\n");
+        fprintf(stderr, "__prompt_print: Failed to get USER environment variable.\n");
         USER = "error";
     }
     // Get the current time.
     time_t rawtime = time(NULL);
     if (rawtime == (time_t)(-1)) {
-        pr_crit("__prompt_print: Failed to get current time.\n");
+        fprintf(stderr, "__prompt_print: Failed to get current time.\n");
         rawtime = 0; // Set to 0 in case of failure.
     }
     // Convert time to local time format.
     tm_t *timeinfo = localtime(&rawtime);
     if (timeinfo == NULL) {
-        pr_crit("__prompt_print: Failed to convert time to local time.\n");
+        fprintf(stderr, "__prompt_print: Failed to convert time to local time.\n");
         // Use a default value to avoid segmentation faults.
         static tm_t default_time = { 0 };
         timeinfo                 = &default_time;
@@ -234,7 +224,7 @@ static inline void __prompt_print(void)
     char *HOSTNAME;
     utsname_t buffer;
     if (uname(&buffer) < 0) {
-        pr_crit("__prompt_print: Failed to get hostname using uname.\n");
+        fprintf(stderr, "__prompt_print: Failed to get hostname using uname.\n");
         HOSTNAME = "error";
     } else {
         HOSTNAME = buffer.nodename;
@@ -284,7 +274,7 @@ static void ___expand_env(char *str, size_t str_len, char *buf, size_t buf_len, 
 {
     // Input validation: Ensure that str and buf are not NULL, and that buf_len is valid.
     if ((str == NULL) || (buf == NULL) || (buf_len == 0)) {
-        pr_crit("Error: Invalid input parameters to ___expand_env.\n");
+        fprintf(stderr, "Error: Invalid input parameters to ___expand_env.\n");
         return;
     }
     // Buffer where we store the name of the variable.
@@ -526,18 +516,6 @@ static int __cd(int argc, char *argv[])
     return 0;
 }
 
-void __history_print(void)
-{
-    rb_history_entry_t entry;
-    rb_history_init_entry(&entry);
-    pr_notice("H[S:%2u, C:%2u] :\n", history.size, history.count);
-    for (unsigned i = 0; i < history.count; i++) {
-        rb_history_get(&history, i, &entry);
-        pr_notice("[%2u] %s\n", i, entry.buffer);
-    }
-    pr_notice("\n");
-}
-
 /// @brief Push the command inside the history.
 /// @param entry The history entry to be added.
 /// @return Returns 1 if the entry was successfully added, 0 if it was a duplicate.
@@ -546,7 +524,7 @@ static inline int __history_push(rb_history_entry_t *entry)
     rb_history_entry_t previous_entry;
     // Validate input parameter.
     if (entry == NULL) {
-        pr_crit("__history_push: Invalid entry.\n");
+        fprintf(stderr, "__history_push: Invalid entry.\n");
         return 0;
     }
     // Check if there's an existing entry at the back of the history.
@@ -602,12 +580,12 @@ static inline int __command_append(
 {
     // Input validation: Ensure entry, index, and length are valid.
     if ((entry == NULL) || (index == NULL) || (length == NULL)) {
-        pr_crit("Error: Invalid input to __command_append.\n");
+        fprintf(stderr, "Error: Invalid input to __command_append.\n");
         return 1;
     }
     // Ensure index does not exceed the buffer size limit.
     if ((*index) >= entry->size) {
-        pr_crit("Error: Index exceeds buffer size.\n");
+        fprintf(stderr, "Error: Index exceeds buffer size.\n");
         return 1;
     }
     // Insert the new character at the current index in the buffer, then
@@ -636,13 +614,13 @@ static inline void __command_clear(rb_history_entry_t *entry, int *index, int *l
 {
     // Validate the input parameters to avoid null pointer dereference.
     if ((entry == NULL) || (index == NULL) || (length == NULL)) {
-        pr_crit("Invalid parameters passed to __command_clear.\n");
+        fprintf(stderr, "Invalid parameters passed to __command_clear.\n");
         return;
     }
     // Ensure index and length are greater than zero and index does not exceed
     // length.
     if ((*index < 0) || (*length < 0) || (*index > *length)) {
-        pr_crit("Invalid index or length values: index=%d, length=%d.\n", *index, *length);
+        fprintf(stderr, "shell: Invalid index or length values: index=%d, length=%d.\n", *index, *length);
         return;
     }
     // Move the cursor to the end of the current command.
@@ -710,7 +688,19 @@ static int __command_complete(
     int *index,
     int *length)
 {
-    pr_debug("__command_complete(%s, %2d, %2d)\n", entry->buffer, *index, *length);
+    // Validate input parameters.
+    if (entry == NULL) {
+        fprintf(stderr, "__command_complete: 'entry' parameter is NULL.\n");
+        return 0;
+    }
+    if (index == NULL) {
+        fprintf(stderr, "__command_complete: 'index' parameter is NULL.\n");
+        return 0;
+    }
+    if (length == NULL) {
+        fprintf(stderr, "__command_complete: 'length' parameter is NULL.\n");
+        return 0;
+    }
 
     char cwd[PATH_MAX]; // Buffer to store the current working directory.
     int words;          // Variable to store the word count.
@@ -721,22 +711,19 @@ static int __command_complete(
 
     // If there are no words in the command buffer, log it and return.
     if (words == 0) {
-        pr_debug("__command_complete(%s, %2d, %2d) : No words.\n", entry->buffer, *index, *length);
         return 0;
     }
 
     // Determines if we are at the beginning of a new argument, last character is space.
     if (__is_separator(entry->buffer[(*index) - 1])) {
-        pr_debug("__command_complete(%s, %2d, %2d) : Separator.\n", entry->buffer, *index, *length);
         return 0;
     }
 
     // If the last two characters are two dots `..` append a slash `/`, and
     // continue.
     if (((*index) >= 2) && ((entry->buffer[(*index) - 1] == '.') && (entry->buffer[(*index) - 2] == '.'))) {
-        pr_debug("__command_complete(%s, %2d, %2d) : Append '/'.\n", entry->buffer, *index, *length);
         if (__command_append(entry, index, length, '/')) {
-            pr_crit("Failed to append character.\n");
+            fprintf(stderr, "Failed to append character.\n");
             return 1;
         }
     }
@@ -744,7 +731,7 @@ static int __command_complete(
     // Attempt to retrieve the current working directory.
     if (getcwd(cwd, PATH_MAX) == NULL) {
         // Error handling: If getcwd fails, it returns NULL
-        pr_crit("Failed to get current working directory.\n");
+        fprintf(stderr, "Failed to get current working directory.\n");
         return 1;
     }
 
@@ -756,8 +743,6 @@ static int __command_complete(
     // If there is only one word, we are searching for a command.
     if (is_run_cmd) {
         if (__folder_contains(cwd, entry->buffer + 2, 0, &dent)) {
-            pr_debug("__command_complete(%s, %2d, %2d) : Suggest run '%s' -> '%s'.\n", entry->buffer, *index, *length,
-                     entry->buffer + 2, dent.d_name);
             __command_suggest(
                 dent.d_name,
                 dent.d_type,
@@ -779,8 +764,6 @@ static int __command_complete(
             return 0;
         }
         if (__folder_contains(_dirname, _basename, 0, &dent)) {
-            pr_debug("__command_complete(%s, %2d, %2d) : Suggest abs '%s' -> '%s'.\n", entry->buffer, *index, *length,
-                     entry->buffer, dent.d_name);
             __command_suggest(
                 dent.d_name,
                 dent.d_type,
@@ -791,8 +774,6 @@ static int __command_complete(
         }
     } else if (words == 1) {
         if (__search_in_path(entry->buffer, &dent)) {
-            pr_debug("__command_complete(%s, %2d, %2d) : Suggest in path '%s' -> '%s'.\n", entry->buffer, *index, *length,
-                     entry->buffer, dent.d_name);
             __command_suggest(
                 dent.d_name,
                 dent.d_type,
@@ -809,25 +790,21 @@ static int __command_complete(
         last_argument = last_argument ? last_argument + 1 : NULL;
         // If there is no last argument.
         if (last_argument == NULL) {
-            pr_crit("__command_complete: No last argument found in buffer '%s'.\n", entry->buffer);
+            fprintf(stderr, "__command_complete: No last argument found in buffer '%s'.\n", entry->buffer);
             return 0;
         }
         char _dirname[PATH_MAX];
         if (!dirname(last_argument, _dirname, sizeof(_dirname))) {
-            pr_crit("__command_complete: Failed to extract directory name from '%s'.\n", last_argument);
+            fprintf(stderr, "__command_complete: Failed to extract directory name from '%s'.\n", last_argument);
             return 0;
         }
         const char *_basename = basename(last_argument);
         if (!_basename) {
-            pr_crit("__command_complete: Failed to extract basename from '%s'.\n", last_argument);
+            fprintf(stderr, "__command_complete: Failed to extract basename from '%s'.\n", last_argument);
             return 0;
         }
-        pr_debug("__command_complete(%s, %2d, %2d) : dirname='%s', basename='%s', last_argument='%s'.\n", entry->buffer, *index, *length,
-                 _dirname, _basename, last_argument);
         if ((*_dirname != 0) && (*_basename != 0)) {
             if (__folder_contains(_dirname, _basename, 0, &dent)) {
-                pr_debug("__command_complete(%s, %2d, %2d) : Suggest 1 '%s' -> '%s'.\n", entry->buffer, *index, *length,
-                         last_argument, dent.d_name);
                 __command_suggest(
                     dent.d_name,
                     dent.d_type,
@@ -838,8 +815,6 @@ static int __command_complete(
             }
         } else if (*_basename != 0) {
             if (__folder_contains(cwd, _basename, 0, &dent)) {
-                pr_debug("__command_complete(%s, %2d, %2d) : Suggest 2 '%s' -> '%s'.\n", entry->buffer, *index, *length,
-                         last_argument, dent.d_name);
                 __command_suggest(
                     dent.d_name,
                     dent.d_type,
@@ -951,7 +926,6 @@ static inline int __read_command(rb_history_entry_t *entry)
                 }
                 // LEFT ARROW
                 else if (c == 'D') {
-                    pr_debug("%d > 0\n", index);
                     if (index > 0) {
                         puts("\033[1D"); // Move the cursor left
                         index--;         // Decrease index
@@ -959,7 +933,6 @@ static inline int __read_command(rb_history_entry_t *entry)
                 }
                 // RIGHT ARROW
                 else if (c == 'C') {
-                    pr_debug("%d < %d\n", index, length);
                     if (index < length) {
                         puts("\033[1C"); // Move the cursor right
                         index++;         // Increase index
@@ -1382,7 +1355,7 @@ static void __interactive_mode(void)
 
         // Get the input command.
         if (__read_command(&entry) < 0) {
-            pr_crit("Error reading command...\n");
+            fprintf(stderr, "Error reading command...\n");
             // Restore terminal attributes
             tcgetattr(STDIN_FILENO, &_termios);
             _termios.c_lflag |= (ICANON | ECHO | ISIG); // Re-enable canonical mode and echo

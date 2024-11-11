@@ -8,7 +8,6 @@
 #include <err.h>
 #include <fcntl.h>
 #include <stdio.h>
-#include <io/debug.h>
 #include <stdlib.h>
 #include <strerror.h>
 #include <string.h>

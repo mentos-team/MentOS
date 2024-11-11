@@ -15,12 +15,6 @@
 #include <sys/wait.h>
 #include <limits.h>
 
-// Setup the logging for this file (do this before any other include).
-#include "sys/kernel_levels.h"         // Include kernel log levels.
-#define __DEBUG_HEADER__ "[TRUNS ]"    ///< Change header.
-#define __DEBUG_LEVEL__  LOGLEVEL_INFO ///< Set log level.
-#include "io/debug.h"                  // Include debugging functions.
-
 #define SHUTDOWN_PORT 0x604
 /// Second serial port for QEMU.
 #define SERIAL_COM2 0x02F8
@@ -228,7 +222,7 @@ int runtests_main(int argc, char **argv)
 
     char *test_argv[32];
     for (int i = 0; i < testsc; i++) {
-        pr_info("Running test (%2d/%2d): %s\n", i + 1, testsc, tests[i]);
+        printf("Running test (%2d/%2d): %s\n", i + 1, testsc, tests[i]);
         run_test(i + 1, tests[i]);
     }
 

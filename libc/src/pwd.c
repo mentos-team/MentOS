@@ -6,7 +6,6 @@
 #include "pwd.h"
 #include "assert.h"
 #include "fcntl.h"
-#include "io/debug.h"
 #include "readline.h"
 #include "stdio.h"
 #include "string.h"
@@ -140,7 +139,7 @@ int getpwnam_r(const char *name, passwd_t *pwd, char *buf, size_t buflen, passwd
     }
     int fd = open("/etc/passwd", O_RDONLY, 0);
     if (fd == -1) {
-        pr_debug("Cannot open `/etc/passwd`\n");
+        perror("Cannot open `/etc/passwd`\n");
         errno   = ENOENT;
         *result = NULL;
         return 0;
@@ -165,7 +164,6 @@ int getpwuid_r(uid_t uid, passwd_t *pwd, char *buf, size_t buflen, passwd_t **re
 {
     int fd = open("/etc/passwd", O_RDONLY, 0);
     if (fd == -1) {
-        pr_debug("Cannot open `/etc/passwd`\n");
         errno   = ENOENT;
         *result = NULL;
         return 0;

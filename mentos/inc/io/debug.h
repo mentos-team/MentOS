@@ -119,9 +119,31 @@ const char *dec_to_binary(unsigned long value, unsigned length);
 #ifdef __KERNEL__
 
 struct pt_regs;
-
-/// @brief Prints the registers on debug output.
-/// @param frame Pointer to the register.
-void dbg_print_regs(struct pt_regs *frame);
+/// @brief Prints the registers using the specified debug function.
+/// @param dbg_fn The debug function to use for printing.
+/// @param frame The registers to print.
+#define PRINT_REGS(dbg_fn, frame)                     \
+    do {                                              \
+        dbg_fn("Interrupt stack frame:\n");           \
+        dbg_fn("GS     = 0x%-04x\n", frame->gs);      \
+        dbg_fn("FS     = 0x%-04x\n", frame->fs);      \
+        dbg_fn("ES     = 0x%-04x\n", frame->es);      \
+        dbg_fn("DS     = 0x%-04x\n", frame->ds);      \
+        dbg_fn("EDI    = 0x%-09x\n", frame->edi);     \
+        dbg_fn("ESI    = 0x%-09x\n", frame->esi);     \
+        dbg_fn("EBP    = 0x%-09x\n", frame->ebp);     \
+        dbg_fn("ESP    = 0x%-09x\n", frame->esp);     \
+        dbg_fn("EBX    = 0x%-09x\n", frame->ebx);     \
+        dbg_fn("EDX    = 0x%-09x\n", frame->edx);     \
+        dbg_fn("ECX    = 0x%-09x\n", frame->ecx);     \
+        dbg_fn("EAX    = 0x%-09x\n", frame->eax);     \
+        dbg_fn("INT_NO = %-9d\n", frame->int_no);     \
+        dbg_fn("ERR_CD = %-9d\n", frame->err_code);   \
+        dbg_fn("EIP    = 0x%-09x\n", frame->eip);     \
+        dbg_fn("CS     = 0x%-04x\n", frame->cs);      \
+        dbg_fn("EFLAGS = 0x%-09x\n", frame->eflags);  \
+        dbg_fn("UESP   = 0x%-09x\n", frame->useresp); \
+        dbg_fn("SS     = 0x%-04x\n", frame->ss);      \
+    } while (0)
 
 #endif

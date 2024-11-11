@@ -27,6 +27,7 @@
 #include "sys/shm.h"
 #include "sys/utsname.h"
 #include "system/syscall.h"
+#include "system/printk.h"
 
 /// The signature of a function call.
 typedef int (*SystemCall)(void);
@@ -99,6 +100,7 @@ void syscall_init(void)
     sys_call_table[__NR_reboot]         = (SystemCall)sys_reboot;
     sys_call_table[__NR_mmap]           = (SystemCall)sys_mmap;
     sys_call_table[__NR_munmap]         = (SystemCall)sys_munmap;
+    sys_call_table[__NR_syslog]         = (SystemCall)sys_syslog;
     sys_call_table[__NR_fchmod]         = (SystemCall)sys_fchmod;
     sys_call_table[__NR_fchown]         = (SystemCall)sys_fchown;
     sys_call_table[__NR_setitimer]      = (SystemCall)sys_setitimer;

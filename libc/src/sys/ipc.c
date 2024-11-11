@@ -10,8 +10,8 @@
 #include "sys/msg.h"
 #include "errno.h"
 #include "sys/stat.h"
-#include "io/debug.h"
 #include "system/syscall_types.h"
+#include "stdio.h"
 
 _syscall3(void *, shmat, int, shmid, const void *, shmaddr, int, shmflg)
 
@@ -62,14 +62,14 @@ long semop(int semid, struct sembuf *sops, unsigned nsops)
 
     // The pointer to the operation is NULL.
     if (!sops) {
-        pr_err("The pointer to the operation is NULL.\n");
+        perror("The pointer to the operation is NULL.\n");
         errno = EINVAL;
         return -1;
     }
 
     // The value of nsops is negative.
     if (nsops <= 0) {
-        pr_err("The value of nsops is negative.\n");
+        perror("The value of nsops is negative.\n");
         errno = EINVAL;
         return -1;
     }
@@ -109,7 +109,7 @@ key_t ftok(char *path, int id)
     // file we use to generate the key.
     struct stat st;
     if (stat(path, &st) < 0) {
-        pr_err("Cannot stat the file `%s`...\n", path);
+        printf("Cannot stat the file `%s`.\n");
         errno = ENOENT;
         return -1;
     }

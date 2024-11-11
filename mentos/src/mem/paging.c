@@ -601,7 +601,7 @@ static void __page_fault_panic(pt_regs *f, uint32_t addr)
         pr_err("Instruction fetch ");
     }
     pr_err("]\n");
-    dbg_print_regs(f);
+    PRINT_REGS(pr_err, f);
 
     kernel_panic("Page fault!");
 

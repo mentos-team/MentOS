@@ -10,7 +10,6 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <sys/wait.h>
-#include <io/debug.h>
 #include <time.h>
 
 int main(int argc, char *argv[])
@@ -37,7 +36,6 @@ int main(int argc, char *argv[])
     }
 
     printf("Allocating memory!\n");
-    pr_warning("Allocating memory!\n");
 
     // Allocate memory for an array of row pointers (rows x cols matrix)
     int **M = (int **)malloc(rows * sizeof(int *));
@@ -63,7 +61,6 @@ int main(int argc, char *argv[])
     // Simulate delay for demonstration purposes
     sleep(5);
     printf("Writing memory!\n");
-    pr_warning("Writing memory!\n");
 
     // Write values to the 2D array (fill with i + j)
     for (int i = 0; i < rows; ++i) {
@@ -75,7 +72,6 @@ int main(int argc, char *argv[])
     // Simulate delay for demonstration purposes
     sleep(5);
     printf("Freeing memory (1)!\n");
-    pr_warning("Freeing memory (1)!\n");
 
     // Free the memory for odd-indexed rows
     for (int i = 0; i < rows; ++i) {
@@ -85,7 +81,6 @@ int main(int argc, char *argv[])
     }
 
     printf("Freeing memory (2)!\n");
-    pr_warning("Freeing memory (2)!\n");
 
     // Free the memory for even-indexed rows
     for (int i = 0; i < rows; ++i) {
@@ -99,7 +94,6 @@ int main(int argc, char *argv[])
 
     // Simulate delay before exiting
     sleep(5);
-    pr_warning("Exiting!\n");
 
     return EXIT_SUCCESS;
 }

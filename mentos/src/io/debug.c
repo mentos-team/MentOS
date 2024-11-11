@@ -165,29 +165,3 @@ const char *dec_to_binary(unsigned long value, unsigned length)
     buffer[length] = 0;
     return buffer;
 }
-
-/// @brief Prints the registers.
-/// @param frame the registers to print.
-void dbg_print_regs(pt_regs *frame)
-{
-    pr_debug("Interrupt stack frame:\n");
-    pr_debug("GS     = 0x%-04x\n", frame->gs);
-    pr_debug("FS     = 0x%-04x\n", frame->fs);
-    pr_debug("ES     = 0x%-04x\n", frame->es);
-    pr_debug("DS     = 0x%-04x\n", frame->ds);
-    pr_debug("EDI    = 0x%-09x\n", frame->edi);
-    pr_debug("ESI    = 0x%-09x\n", frame->esi);
-    pr_debug("EBP    = 0x%-09x\n", frame->ebp);
-    pr_debug("ESP    = 0x%-09x\n", frame->esp);
-    pr_debug("EBX    = 0x%-09x\n", frame->ebx);
-    pr_debug("EDX    = 0x%-09x\n", frame->edx);
-    pr_debug("ECX    = 0x%-09x\n", frame->ecx);
-    pr_debug("EAX    = 0x%-09x\n", frame->eax);
-    pr_debug("INT_NO = %-9d\n", frame->int_no);
-    pr_debug("ERR_CD = %-9d\n", frame->err_code);
-    pr_debug("EIP    = 0x%-09x\n", frame->eip);
-    pr_debug("CS     = 0x%-04x\n", frame->cs);
-    pr_debug("EFLAGS = 0x%-09x\n", frame->eflags);
-    pr_debug("UESP   = 0x%-09x\n", frame->useresp);
-    pr_debug("SS     = 0x%-04x\n", frame->ss);
-}

@@ -42,6 +42,7 @@ set(TEST_LIST
     t_shm_read.c
     t_spwd.c
     t_big_write.c
+    t_syslog.c
 )
 
 # Set the directory where the compiled binaries will be placed.

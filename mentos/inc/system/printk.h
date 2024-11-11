@@ -5,8 +5,9 @@
 
 #pragma once
 
-/// @brief Write formatted output to stdout.
-/// @param format Output formatted as for printf.
-/// @param ... List of arguments.
-/// @return The number of bytes written in syslog.
-int sys_syslog(const char *format, ...);
+/// @brief Sends a message to the system log using a specified log level.
+/// @param type The log level or priority (e.g., LOG_INFO, LOG_ERR).
+/// @param buf Pointer to the message buffer to log.
+/// @param len The length of the message in bytes.
+/// @return The number of bytes written to the system log, or -1 on failure.
+int sys_syslog(int type, char *buf, int len);

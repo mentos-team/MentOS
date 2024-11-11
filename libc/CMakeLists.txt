@@ -27,9 +27,9 @@ add_library(
     ${CMAKE_SOURCE_DIR}/libc/src/setenv.c
     ${CMAKE_SOURCE_DIR}/libc/src/assert.c
     ${CMAKE_SOURCE_DIR}/libc/src/abort.c
+    ${CMAKE_SOURCE_DIR}/libc/src/syslog.c
     ${CMAKE_SOURCE_DIR}/libc/src/crypt/sha256.c
     ${CMAKE_SOURCE_DIR}/libc/src/io/mm_io.c
-    ${CMAKE_SOURCE_DIR}/libc/src/io/debug.c
     ${CMAKE_SOURCE_DIR}/libc/src/sys/ipc.c
     ${CMAKE_SOURCE_DIR}/libc/src/sys/unistd.c
     ${CMAKE_SOURCE_DIR}/libc/src/sys/errno.c
