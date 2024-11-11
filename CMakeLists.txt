@@ -175,18 +175,21 @@ add_custom_target(filesystem
 
 # Set the emulator.
 set(EMULATOR qemu-system-i386)
+# Set the type of video.
+set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -vga std)
+# Set the amount of memory.
+set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -m 1096M)
+# Disables all default devices (e.g., serial ports, network cards, VGA
+# adapters). Only devices we explicitly specify will be added.
+set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -nodefaults)
 # Set the debug type.
 if(${EMULATOR_OUTPUT_TYPE} STREQUAL OUTPUT_LOG)
     set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -serial file:${CMAKE_BINARY_DIR}/serial.log)
 elseif(${EMULATOR_OUTPUT_TYPE} STREQUAL OUTPUT_STDIO)
     set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -serial stdio)
 endif(${EMULATOR_OUTPUT_TYPE} STREQUAL OUTPUT_LOG)
-# Set the type of video.
-set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -vga std)
-# Set the amount of memory.
-set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -m 1096M)
 # Set the EXT2 drive.
-set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -drive file=${CMAKE_BINARY_DIR}/rootfs.img,format=raw,index=0,media=disk)
+set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -drive file=${CMAKE_BINARY_DIR}/rootfs.img,format=raw,if=ide,index=0,media=disk)
 
 # =============================================================================
 # Booting with QEMU for fun

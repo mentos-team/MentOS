@@ -141,6 +141,16 @@ super_block_t *vfs_get_superblock(const char *path)
     return last_sb;
 }
 
+void vfs_dump_superblocks(int log_level)
+{
+    list_for_each_decl(it, &vfs_super_blocks)
+    {
+        super_block_t *sb = list_entry(it, super_block_t, mounts);
+        pr_log(log_level, "\tname=%s, path=%s, root=%p, type=%p\n",
+               sb->name, sb->path, (void *)sb->root, (void *)sb->type);
+    }
+}
+
 vfs_file_t *vfs_open_abspath(const char *absolute_path, int flags, mode_t mode)
 {
     super_block_t *sb = vfs_get_superblock(absolute_path);

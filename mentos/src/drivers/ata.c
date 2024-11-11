@@ -705,12 +705,12 @@ static inline int ata_dma_free(uintptr_t logical_addr)
 
     // Free the allocated pages.
     if (__free_pages(page) < 0) {
-        pr_debug("Failed to free allocated pages 0x%p with order %d.\n", page, order);
+        pr_debug("Failed to free allocated pages 0x%p.\n", page);
         return 1;
     }
 
     // Debugging information.
-    pr_debug("Successfully freed DMA memory at logical address 0x%lx with order %d.\n", logical_addr, order);
+    pr_debug("Successfully freed DMA memory at logical address 0x%p.\n", logical_addr);
 
     return 0; // Success.
 }
@@ -1701,6 +1701,9 @@ int ata_initialize(void)
     ata_device_detect(&ata_primary_slave);
     ata_device_detect(&ata_secondary_master);
     ata_device_detect(&ata_secondary_slave);
+
+    pr_notice("Superblocks:\n");
+    vfs_dump_superblocks(LOGLEVEL_NOTICE);
 
     return 0;
 }

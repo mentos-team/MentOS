@@ -57,6 +57,17 @@ const char *to_human_size(unsigned long bytes);
 /// @return String representing the binary value.
 const char *dec_to_binary(unsigned long value, unsigned length);
 
+/// Prints an emergency message.
+
+/// General logging macro that logs a message at the specified log level.
+/// Only logs messages if the specified log level is less than or equal to __DEBUG_LEVEL__.
+#define pr_log(level, ...)                                                                      \
+    do {                                                                                        \
+        if (level <= __DEBUG_LEVEL__) {                                                         \
+            dbg_printf(__FILENAME__, __func__, __LINE__, __DEBUG_HEADER__, level, __VA_ARGS__); \
+        }                                                                                       \
+    } while (0)
+
 /// Prints a default message, which is always shown.
 #define pr_default(...) dbg_printf(__FILENAME__, __func__, __LINE__, __DEBUG_HEADER__, LOGLEVEL_DEFAULT, __VA_ARGS__)
 

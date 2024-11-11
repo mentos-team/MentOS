@@ -3701,7 +3701,8 @@ static vfs_file_t *ext2_mount_callback(const char *path, const char *device)
 {
     super_block_t *sb = vfs_get_superblock(device);
     if (sb == NULL) {
-        pr_err("mount_callback(%s, %s): Cannot find the superblock!\n", path, device);
+        pr_err("mount_callback(%s, %s): Cannot find the superblock (%s)!\n", path, device, device);
+        vfs_dump_superblocks(LOGLEVEL_ERR);
         return NULL;
     }
     vfs_file_t *block_device = sb->root;
