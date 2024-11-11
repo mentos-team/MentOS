@@ -38,9 +38,6 @@ typedef int (*SystemCall6)(uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uin
 /// The list of function call.
 SystemCall sys_call_table[SYSCALL_NUMBER];
 
-/// Last interupt stack frame
-static pt_regs *current_interrupt_stack_frame;
-
 /// @brief A Not Implemented (NI) system-call.
 /// @return Always returns -ENOSYS.
 /// @details
@@ -134,17 +131,8 @@ void syscall_init(void)
     isr_install_handler(SYSTEM_CALL, &syscall_handler, "syscall_handler");
 }
 
-pt_regs *get_current_interrupt_stack_frame(void)
-{
-    return current_interrupt_stack_frame;
-}
-
 void syscall_handler(pt_regs *f)
 {
-    // Saves current interrupt stack frame
-    current_interrupt_stack_frame = f;
-
-    // dbg_print_regs(f);
     // Save current process fpu state.
     switch_fpu();
 

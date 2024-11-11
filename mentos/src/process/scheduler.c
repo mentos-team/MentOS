@@ -256,25 +256,6 @@ wait_queue_entry_t *sleep_on(wait_queue_head_t *wq)
     // Set the task state to uninterruptible to indicate it is sleeping.
     sleeping_task->state = TASK_UNINTERRUPTIBLE;
 
-#if 0
-    // Store the context of the current interrupt frame.
-    pt_regs *f = get_current_interrupt_stack_frame();
-    if (!f) {
-        pr_err("sleep_on: Failed to retrieve interrupt stack frame.\n");
-        return NULL;
-    }
-
-    // Save the process context.
-    scheduler_store_context(f, sleeping_task);
-
-    // Select the next runnable task, which cannot be the sleeping task.
-    task_struct *next = scheduler_pick_next_task(&runqueue);
-    assert((next != sleeping_task) && "The next selected process in the runqueue is the sleeping process");
-
-    // Restore the context of the selected task.
-    scheduler_restore_context(next, f);
-#endif
-
     // Allocate memory for a new wait queue entry.
     wait_queue_entry_t *wait_queue_entry = wait_queue_entry_alloc();
     if (!wait_queue_entry) {

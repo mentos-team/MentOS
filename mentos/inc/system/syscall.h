@@ -18,8 +18,6 @@
 /// @brief Initialize the system calls.
 void syscall_init(void);
 
-pt_regs *get_current_interrupt_stack_frame(void);
-
 /// @brief Handler for the system calls.
 /// @param f The interrupt stack frame.
 void syscall_handler(pt_regs *f);
