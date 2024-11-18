@@ -33,8 +33,9 @@ int main(int argc, char **argv)
             pid_t ppid_child = getppid();
             pid_t sid_child  = getsid(ppid_child);
 
-            // Sleep for a number of seconds based on the loop index.
-            sleep(i + 1);
+            // Request to sleep for (i * 100 ms).
+            struct timespec req = { 0, i * 100000000 };
+            nanosleep(&req, NULL);
 
             // Print the IDs of the child process and its parent.
             printf("%d) pid_child: %d, gid_child: %d, ppid_child: %d, sid_child: %d\n",

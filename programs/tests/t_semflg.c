@@ -62,7 +62,9 @@ int main(int argc, char *argv[])
         op_child.sem_op  = 1; // Increment by 1.
         op_child.sem_flg = 0; // No special flags.
 
-        sleep(3); // Simulate delay before child performs the operation.
+        // Sleep for 200 ms.
+        timespec_t req = { 0, 200000000 };
+        nanosleep(&req, NULL);
 
         // Perform the increment operation on the semaphore.
         if (semop(semid, &op_child, 1) < 0) {

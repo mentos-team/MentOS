@@ -69,6 +69,9 @@ int main(int argc, char *argv[])
     key_t key;
     int msqid;
 
+    // Request to sleep for 200 ms.
+    struct timespec req = { 0, 200000000 };
+
     // ========================================================================
     // Generating a key using ftok
     key = ftok("/README.md", 5);
@@ -94,14 +97,16 @@ int main(int argc, char *argv[])
     __receive_message(msqid, 1, &message);
     // Create child process.
     if (!fork()) {
-        sleep(3);
+        // Sleep for 200 ms.
+        nanosleep(&req, NULL);
         // Send the message.
         __send_message(msqid, 1, &message, "General Kenobi...");
         return EXIT_SUCCESS;
     }
     // Receive the message.
     __receive_message(msqid, 1, &message);
-    sleep(3);
+    // Sleep for 200 ms.
+    nanosleep(&req, NULL);
 
     // ========================================================================
     // Send multiple messages.

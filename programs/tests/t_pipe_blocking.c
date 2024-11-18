@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <sys/wait.h>
+#include <time.h>
 #include <errno.h>
 
 int main()
@@ -54,7 +55,9 @@ int main()
         // Parent process: writes to the pipe.
         close(fds[0]); // Close unused read end.
 
-        sleep(2);
+        // Sleep for 200 ms.
+        timespec_t req = { 0, 200000000 };
+        nanosleep(&req, NULL);
 
         printf("Parent writing to pipe...\n");
         bytes_written = write(fds[1], write_msg, sizeof(write_msg));
@@ -66,7 +69,8 @@ int main()
             error_code = 1;
         }
 
-        sleep(1);
+        // Sleep for 200 ms.
+        nanosleep(&req, NULL);
 
         close(fds[1]); // Close write end.
         wait(NULL);    // Wait for child to finish

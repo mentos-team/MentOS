@@ -14,58 +14,57 @@
 #include <unistd.h>
 #include <sys/wait.h>
 #include <limits.h>
+#include <syslog.h>
 
 #define SHUTDOWN_PORT 0x604
 /// Second serial port for QEMU.
 #define SERIAL_COM2 0x02F8
 
 static char *all_tests[] = {
-    "t_exit",
     "t_abort",
     "t_alarm",
+    // "t_big_write",
     "t_chdir",
-    "t_time",
-    /* "t_big_write", */
     "t_creat",
     "t_dup",
-    "t_exec execl",
-    "t_exec execlp",
-    "t_exec execle",
-    "t_exec execlpe",
-    "t_exec execv",
-    "t_exec execvp",
-    "t_exec execve",
-    "t_exec execvpe",
-    "t_fork 10",
+    "t_environ",
+    "t_exit",
+    "t_exec",
+    "t_fork",
     "t_gid",
     "t_grp",
     "t_groups",
+    "t_hashmap",
     "t_itimer",
     "t_kill",
-    /* "t_mem", */
+    "t_list",
+    "t_mem",
     "t_mkdir",
     "t_msgget",
-    /* "t_periodic1", */
-    /* "t_periodic2", */
-    /* "t_periodic3", */
+    "t_ndtree",
+    // "t_periodic1",
+    // "t_periodic2",
+    // "t_periodic3",
+    "t_pipe_blocking",
+    "t_pipe_non_blocking",
     "t_pwd",
     "t_schedfb",
     "t_semflg",
     "t_semget",
     "t_semop",
-    "t_setenv",
+    "t_shm",
     "t_shmget",
-    /* "t_shm_read", */
-    /* "t_shm_write", */
     "t_sigaction",
     "t_sigfpe",
     "t_siginfo",
     "t_sigmask",
     "t_sigusr",
     "t_sleep",
+    "t_spwd",
     "t_stopcont",
+    "t_syslog",
+    "t_time",
     "t_write_read",
-    "t_pipe_non_blocking"
 };
 
 static char **tests = &all_tests[0];
@@ -222,7 +221,7 @@ int runtests_main(int argc, char **argv)
 
     char *test_argv[32];
     for (int i = 0; i < testsc; i++) {
-        printf("Running test (%2d/%2d): %s\n", i + 1, testsc, tests[i]);
+        syslog(LOG_INFO, "Running test (%2d/%2d): %s\n", i + 1, testsc, tests[i]);
         run_test(i + 1, tests[i]);
     }
 

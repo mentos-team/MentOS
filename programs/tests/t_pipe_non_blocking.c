@@ -9,7 +9,7 @@
 #include <string.h>
 #include <errno.h>
 #include <sys/wait.h>
-#include <time.h> // For nanosleep
+#include <time.h>
 
 int main()
 {
@@ -33,10 +33,6 @@ int main()
         return 1;
     }
 
-    struct timespec req, rem;
-    req.tv_sec  = 0;         // seconds
-    req.tv_nsec = 200000000; // nanoseconds (200 milliseconds)
-
     // Fork a child process.
     pid_t pid = fork();
 
@@ -48,6 +44,9 @@ int main()
     } else if (pid == 0) {
         // Child process: reads from the pipe.
         close(fds[1]); // Close unused write end
+
+        // Request to sleep for 100 ms.
+        struct timespec req = { 0, 100000000 };
 
         printf("Child waiting to read from pipe...\n");
         do {
@@ -61,7 +60,7 @@ int main()
                     break;
                 } else {
                     printf("Child has nothing to read...\n");
-                    nanosleep(&req, &rem);
+                    nanosleep(&req, NULL);
                 }
             }
         } while (bytes_read != 0);
@@ -73,7 +72,11 @@ int main()
         // Parent process: writes to the pipe.
         close(fds[0]); // Close unused read end.
 
-        sleep(2);
+        // Request to sleep for 500 ms.
+        struct timespec req = { 0, 500000000 };
+
+        // Sleep for 500 ms.
+        nanosleep(&req, NULL);
 
         printf("Parent writing to pipe...\n");
         bytes_written = write(fds[1], write_msg, sizeof(write_msg));
@@ -85,7 +88,8 @@ int main()
             error_code = 1;
         }
 
-        sleep(1);
+        // Sleep for 500 ms.
+        nanosleep(&req, NULL);
 
         close(fds[1]); // Close write end.
         wait(NULL);    // Wait for child to finish

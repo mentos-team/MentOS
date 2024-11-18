@@ -8,22 +8,20 @@
 #include <signal.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <strerror.h>
 #include <string.h>
 #include <sys/wait.h>
 #include <time.h>
 
 int main(int argc, char *argv[])
 {
-    printf("Sleeping for 4 seconds... ");
+    // Sleep for 500 ms.
+    struct timespec req = { 0, 500000000 }; // 500 ms = 500,000,000 nanoseconds
 
-    // Pause the program execution for 4 seconds. Error checking is included to
-    // ensure that sleep is successful.
-    if (sleep(4) != 0) {
-        perror("sleep");
+    if (nanosleep(&req, NULL) != 0) {
+        fprintf(stderr, "nanosleep error: %s\n", strerror(errno));
         return EXIT_FAILURE;
     }
-
-    printf("COMPLETED.\n");
 
     return EXIT_SUCCESS;
 }
