@@ -15,7 +15,6 @@
 #include "fs/procfs.h"
 #include "fs/namei.h"
 #include "fs/vfs.h"
-#include "klib/hashmap.h"
 #include "klib/spinlock.h"
 #include "libgen.h"
 #include "process/scheduler.h"
@@ -26,12 +25,10 @@
 #include "system/syscall.h"
 #include "fs/pipe.h"
 
-/// The hashmap that associates a type of Filesystem `name` to its `mount` function;
-static hashmap_t *vfs_filesystems;
 /// The list of superblocks.
 static list_head vfs_super_blocks;
-/// The maximum number of filesystem types.
-static const unsigned vfs_filesystems_max = 10;
+/// The list of filesystems.
+static list_head vfs_filesystems;
 /// Lock for refcount field.
 static spinlock_t vfs_spinlock_refcount;
 /// Spinlock for the entire virtual filesystem.
@@ -46,72 +43,108 @@ void vfs_init(void)
 {
     // Initialize the list of superblocks.
     list_head_init(&vfs_super_blocks);
+    // Initialize the list of filesystems.
+    list_head_init(&vfs_filesystems);
     // Initialize the caches for superblocks and files.
     vfs_superblock_cache = KMEM_CREATE(super_block_t);
     vfs_file_cache       = KMEM_CREATE(vfs_file_t);
-    // Allocate the hashmap for the different filesystems.
-    vfs_filesystems = hashmap_create(
-        vfs_filesystems_max,
-        hashmap_str_hash,
-        hashmap_str_comp,
-        hashmap_do_not_duplicate,
-        hashmap_do_not_free);
     // Initialize the spinlock.
     spinlock_init(&vfs_spinlock);
     spinlock_init(&vfs_spinlock_refcount);
 }
 
+/// @brief Finds a filesystem type by its name.
+/// @param name The name of the filesystem to find.
+/// @return Pointer to the filesystem type if found, or NULL if not found.
+file_system_type_t *__vfs_find_filesystem(const char *name)
+{
+    list_for_each_decl(it, &vfs_filesystems)
+    {
+        file_system_type_t *fs = list_entry(it, file_system_type_t, list);
+        if (strcmp(fs->name, name) == 0) {
+            return fs;
+        }
+    }
+    return NULL;
+}
+
 int vfs_register_filesystem(file_system_type_t *fs)
 {
-    if (hashmap_set(vfs_filesystems, fs->name, fs) != NULL) {
-        pr_err("Filesystem already registered.\n");
-        return 0;
-    }
+    assert(__vfs_find_filesystem(fs->name) == NULL && "Filesytem already registered.");
     pr_debug("vfs_register_filesystem(name: %s)\n", fs->name);
+    list_head_insert_before(&fs->list, &vfs_filesystems);
     return 1;
 }
 
 int vfs_unregister_filesystem(file_system_type_t *fs)
 {
-    if (hashmap_remove(vfs_filesystems, (void *)fs->name) != NULL) {
-        pr_err("Filesystem not present to unregister.\n");
-        return 0;
-    }
     pr_debug("vfs_unregister_filesystem(name: %s)\n", fs->name);
+    list_head_remove(&fs->list);
     return 1;
+}
+
+static inline void vfs_dump_superblock(int log_level, super_block_t *sb)
+{
+    assert(sb && "vfs_dump_superblock: Received NULL suberblock.");
+    pr_log(log_level, "\tname=%s, path=%s, root=%p, type=%p\n", sb->name, sb->path, (void *)sb->root, (void *)sb->type);
+}
+
+void vfs_dump_superblocks(int log_level)
+{
+    list_for_each_decl(it, &vfs_super_blocks)
+    {
+        vfs_dump_superblock(log_level, list_entry(it, super_block_t, mounts));
+    }
 }
 
 int vfs_register_superblock(const char *name, const char *path, file_system_type_t *type, vfs_file_t *root)
 {
-    pr_debug("vfs_register_superblock(name: %s, path: %s, type: %s)\n", name, path, type->name);
+    pr_debug("vfs_register_superblock(name: %s, path: %s, type: %s, root: %p)\n", name, path, type->name, root);
+    // Validate input parameters.
+    if (!name) {
+        pr_err("vfs_register_superblock: NULL name provided\n");
+        return 0;
+    }
+    if (!path) {
+        pr_err("vfs_register_superblock: NULL path provided\n");
+        return 0;
+    }
+    if (!type) {
+        pr_err("vfs_register_superblock: NULL file system type provided\n");
+        return 0;
+    }
+    if (!root) {
+        pr_err("vfs_register_superblock: NULL root file provided\n");
+        return 0;
+    }
     // Lock the vfs spinlock.
     spinlock_lock(&vfs_spinlock);
     // Create the superblock.
     super_block_t *sb = kmem_cache_alloc(vfs_superblock_cache, GFP_KERNEL);
-    // Check if the superblock was correctly allocated.
-    assert(sb && "Cannot allocate memory for the superblock.\n");
-    // Copy the name.
-    strcpy(sb->name, name);
-    // Copy the path.
-    strcpy(sb->path, path);
-    // Set the pointer.
-    sb->root = root;
-    // Set the type.
-    sb->type = type;
-    // Add the superblock to the list.
-    list_head_insert_after(&sb->mounts, &vfs_super_blocks);
-
-    pr_debug("Superblocks:\n");
-    list_for_each_decl(it, &vfs_super_blocks)
-    {
-        super_block_t *_sb = list_entry(it, super_block_t, mounts);
-        pr_debug("    Name: %-12s, Path: %-12s, Type: %-12s\n", _sb->name, _sb->path, _sb->type->name);
+    if (!sb) {
+        pr_crit("vfs_register_superblock: Failed to allocate memory for superblock\n");
+        spinlock_unlock(&vfs_spinlock); // Unlock before returning.
+        return 0;
     }
-    pr_debug("\n");
+    // Copy the name of the superblock.
+    strncpy(sb->name, name, sizeof(sb->name) - 1);
+    sb->name[sizeof(sb->name) - 1] = '\0';
+
+    // Copy the mount path of the superblock.
+    strncpy(sb->path, path, sizeof(sb->path) - 1);
+    sb->path[sizeof(sb->path) - 1] = '\0';
+
+    // Initialize the root file and file system type.
+    sb->root = root;
+    sb->type = type;
+
+    // Insert the superblock into the global list of superblocks.
+    list_head_insert_after(&sb->mounts, &vfs_super_blocks);
 
     // Unlock the vfs spinlock.
     spinlock_unlock(&vfs_spinlock);
-    return 1;
+
+    return 1; // Return success.
 }
 
 int vfs_unregister_superblock(super_block_t *sb)
@@ -139,16 +172,6 @@ super_block_t *vfs_get_superblock(const char *path)
         }
     }
     return last_sb;
-}
-
-void vfs_dump_superblocks(int log_level)
-{
-    list_for_each_decl(it, &vfs_super_blocks)
-    {
-        super_block_t *sb = list_entry(it, super_block_t, mounts);
-        pr_log(log_level, "\tname=%s, path=%s, root=%p, type=%p\n",
-               sb->name, sb->path, (void *)sb->root, (void *)sb->type);
-    }
 }
 
 vfs_file_t *vfs_open_abspath(const char *absolute_path, int flags, mode_t mode)
@@ -243,7 +266,7 @@ int vfs_close(vfs_file_t *file)
         return ret; // Return the specific error from close_f
     }
 
-    pr_debug("vfs_close: Successfully closed file \"%s\" (ino: %d).\n", file->name, file->ino);
+    pr_debug("vfs_close: Successfully closed file.\n");
 
     return 0;
 }
@@ -500,7 +523,7 @@ int vfs_stat(const char *path, stat_t *buf)
     // If the first character is not the '/' then get the absolute path.
     int ret = resolve_path(path, absolute_path, PATH_MAX, REMOVE_TRAILING_SLASH);
     if (ret < 0) {
-        pr_err("vfs_stat(%s): Cannot get the absolute path.", path);
+        pr_err("vfs_stat(%s): Cannot get the absolute path.\n", path);
         return ret;
     }
     super_block_t *sb = vfs_get_superblock(absolute_path);
@@ -510,12 +533,12 @@ int vfs_stat(const char *path, stat_t *buf)
     }
     vfs_file_t *sb_root = sb->root;
     if (sb_root == NULL) {
-        pr_err("vfs_stat(%s): Cannot find the superblock root.", path);
+        pr_err("vfs_stat(%s): Cannot find the superblock root.\n", path);
         return -ENOENT;
     }
     // Check if the function is implemented.
     if (sb_root->sys_operations->stat_f == NULL) {
-        pr_err("vfs_stat(%s): Function not supported in current filesystem.", path);
+        pr_err("vfs_stat(%s): Function not supported in current filesystem.\n", path);
         return -ENOSYS;
     }
     // Reset the structure.
@@ -545,7 +568,7 @@ int vfs_fstat(vfs_file_t *file, stat_t *buf)
 
 int vfs_mount(const char *type, const char *path, const char *args)
 {
-    file_system_type_t *fst = (file_system_type_t *)hashmap_get(vfs_filesystems, type);
+    file_system_type_t *fst = __vfs_find_filesystem(type);
     if (fst == NULL) {
         pr_err("Unknown filesystem type: %s\n", type);
         return -ENODEV;

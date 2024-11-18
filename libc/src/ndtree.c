@@ -225,18 +225,14 @@ int ndtree_tree_remove_node(ndtree_t *tree, ndtree_node_t *node, ndtree_tree_nod
     // Remove the node from its sibling list.
     list_head_remove(&node->siblings);
 
-    // If the node has children, reassign them to a new parent or orphan them.
+    // If the node has children, orphan them.
     if (!list_head_empty(&node->children)) {
-        ndtree_node_t *new_parent = node->parent;
-        list_head *new_list       = new_parent ? &new_parent->children : &tree->orphans;
-
-        // Reassign each child’s parent and append children to the new list.
         list_for_each_decl(it, &node->children)
         {
             ndtree_node_t *child = list_entry(it, ndtree_node_t, siblings);
-            child->parent        = new_parent;
+            child->parent        = NULL;
         }
-        list_head_append(new_list, &node->children);
+        list_head_append(&tree->orphans, &node->children);
     }
 
     // Call the callback function if provided.

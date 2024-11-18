@@ -43,7 +43,6 @@
 
 #include "assert.h"
 #include "fcntl.h"
-#include "klib/list.h"
 #include "process/process.h"
 #include "process/scheduler.h"
 #include "stdio.h"

@@ -104,8 +104,8 @@ static int __alloc_slab_page(kmem_cache_t *cachep, gfp_t flags)
     // Update object counters for the page.
     // The total number of objects in the slab is determined by the slab size
     // divided by the size of each object in the cache.
-    page->slab_objcnt  = slab_size / cachep->size; // Total number of objects.
-    page->slab_objfree = page->slab_objcnt;        // Initially, all objects are free.
+    page->slab_objcnt  = slab_size / cachep->aligned_object_size; // Total number of objects.
+    page->slab_objfree = page->slab_objcnt;                       // Initially, all objects are free.
 
     // Get the starting physical address of the allocated slab page.
     unsigned int pg_addr = get_virtual_address_from_page(page);
@@ -120,7 +120,7 @@ static int __alloc_slab_page(kmem_cache_t *cachep, gfp_t flags)
     // Each object is inserted into the free list, indicating that it is available.
     for (unsigned int i = 0; i < page->slab_objcnt; i++) {
         // Calculate the object's address by adding the offset (i * object size) to the page address.
-        kmem_obj_t *obj = KMEM_OBJ_FROM_ADDR(pg_addr + cachep->size * i);
+        kmem_obj_t *obj = KMEM_OBJ_FROM_ADDR(pg_addr + cachep->aligned_object_size * i);
 
         // Insert the object into the slab's free list, making it available for allocation.
         list_head_insert_after(&obj->objlist, &page->slab_freelist);
@@ -170,7 +170,7 @@ static int __compute_size_and_order(kmem_cache_t *cachep)
     // Check for invalid or uninitialized object sizes or alignment.
     // If `object_size` or `align` is zero, the cache cannot be correctly
     // configured.
-    if (cachep->object_size == 0) {
+    if (cachep->raw_object_size == 0) {
         pr_crit("Object size is invalid (0), cannot compute cache size and order.\n");
         return -1;
     }
@@ -183,12 +183,12 @@ static int __compute_size_and_order(kmem_cache_t *cachep)
     // The object size is padded based on either the `KMEM_OBJ_OVERHEAD` or the
     // provided alignment requirement. Ensure that the object size is at least
     // as large as the overhead and is aligned to the cache's alignment.
-    cachep->size = round_up(
-        max(cachep->object_size, KMEM_OBJ_OVERHEAD), // Ensure object size is larger than the overhead.
-        max(8, cachep->align));                      // Ensure alignment is at least 8 bytes for proper memory alignment.
+    cachep->aligned_object_size = round_up(
+        max(cachep->raw_object_size, KMEM_OBJ_OVERHEAD), // Ensure object size is larger than the overhead.
+        max(8, cachep->align));                          // Ensure alignment is at least 8 bytes for proper memory alignment.
 
     // Check if the computed size is valid.
-    if (cachep->size == 0) {
+    if (cachep->aligned_object_size == 0) {
         pr_crit("Computed object size is invalid (0), cannot proceed with cache allocation.\n");
         return -1;
     }
@@ -196,7 +196,7 @@ static int __compute_size_and_order(kmem_cache_t *cachep)
     // Compute the `gfp_order` based on the total object size and page size.
     // The `gfp_order` determines how many contiguous pages will be allocated
     // for the slab.
-    unsigned int size = round_up(cachep->size, PAGE_SIZE) / PAGE_SIZE;
+    unsigned int size = round_up(cachep->aligned_object_size, PAGE_SIZE) / PAGE_SIZE;
 
     // Reset `gfp_order` to 0 before calculating.
     cachep->gfp_order = 0;
@@ -215,7 +215,7 @@ static int __compute_size_and_order(kmem_cache_t *cachep)
 
     // Additional consistency check (optional):
     // Verify that the calculated gfp_order leads to a valid page allocation size.
-    if ((cachep->gfp_order == 0) && (cachep->size > PAGE_SIZE)) {
+    if ((cachep->gfp_order == 0) && (cachep->aligned_object_size > PAGE_SIZE)) {
         pr_crit("Calculated gfp_order is 0, but object size exceeds one page. Potential issue in size computation.\n");
         return -1;
     }
@@ -260,12 +260,12 @@ static int __kmem_cache_create(
 
     // Set up the basic properties of the cache.
     *cachep = (kmem_cache_t){
-        .name        = name,
-        .object_size = size,
-        .align       = align,
-        .flags       = flags,
-        .ctor        = ctor,
-        .dtor        = dtor
+        .name            = name,
+        .raw_object_size = size,
+        .align           = align,
+        .flags           = flags,
+        .ctor            = ctor,
+        .dtor            = dtor
     };
 
     // Initialize the list heads for free, partial, and full slabs.
@@ -468,11 +468,7 @@ int kmem_cache_destroy(kmem_cache_t *cachep)
     return 0; // Return success.
 }
 
-#ifdef ENABLE_CACHE_TRACE
 void *pr_kmem_cache_alloc(const char *file, const char *fun, int line, kmem_cache_t *cachep, gfp_t flags)
-#else
-void *kmem_cache_alloc(kmem_cache_t *cachep, gfp_t flags)
-#endif
 {
     // Check if there are any partially filled slabs.
     if (list_head_empty(&cachep->slabs_partial)) {
@@ -533,14 +529,10 @@ void *kmem_cache_alloc(kmem_cache_t *cachep, gfp_t flags)
     return ptr; // Return pointer to the allocated object.
 }
 
-#ifdef ENABLE_CACHE_TRACE
-void pr_kmem_cache_free(const char *file, const char *fun, int line, void *ptr)
-#else
-void kmem_cache_free(void *ptr)
-#endif
+int pr_kmem_cache_free(const char *file, const char *fun, int line, void *addr)
 {
     // Get the slab page corresponding to the given pointer.
-    page_t *slab_page = get_page_from_virtual_address((uint32_t)ptr);
+    page_t *slab_page = get_page_from_virtual_address((uint32_t)addr);
 
     // If the slab main page is a low memory page, update to the root page.
     if (is_lowmem_page_struct(slab_page->container.slab_main_page)) {
@@ -555,11 +547,11 @@ void kmem_cache_free(void *ptr)
 #endif
     // Call the destructor if defined.
     if (cachep->dtor) {
-        cachep->dtor(ptr);
+        cachep->dtor(addr);
     }
 
     // Get the kmem_obj from the pointer.
-    kmem_obj_t *obj = KMEM_OBJ_FROM_ADDR(ptr);
+    kmem_obj_t *obj = KMEM_OBJ_FROM_ADDR(addr);
 
     // Add object to the free list of the slab.
     list_head_insert_after(&obj->objlist, &slab_page->slab_freelist);
@@ -580,13 +572,10 @@ void kmem_cache_free(void *ptr)
         // Add the page to the partial list.
         list_head_insert_after(&slab_page->slabs, &cachep->slabs_partial);
     }
+    return 0;
 }
 
-#ifdef ENABLE_ALLOC_TRACE
 void *pr_kmalloc(const char *file, const char *fun, int line, unsigned int size)
-#else
-void *kmalloc(unsigned int size)
-#endif
 {
     unsigned int order = 0;
 
@@ -610,11 +599,7 @@ void *kmalloc(unsigned int size)
     return ptr; // Return pointer to the allocated memory.
 }
 
-#ifdef ENABLE_ALLOC_TRACE
 void pr_kfree(const char *file, const char *fun, int line, void *ptr)
-#else
-void kfree(void *ptr)
-#endif
 {
 #ifdef ENABLE_ALLOC_TRACE
     pr_notice("KFREE   0x%p at %s:%d\n", ptr, file, line);

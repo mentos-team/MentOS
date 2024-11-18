@@ -4,10 +4,10 @@
 /// See LICENSE.md for details.
 
 // Setup the logging for this file (do this before any other include).
-#include "sys/kernel_levels.h"           // Include kernel log levels.
-#define __DEBUG_HEADER__ "[EXT2  ]"      ///< Change header.
+#include "sys/kernel_levels.h"          // Include kernel log levels.
+#define __DEBUG_HEADER__ "[EXT2  ]"     ///< Change header.
 #define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
-#include "io/debug.h"                    // Include debugging functions.
+#include "io/debug.h"                   // Include debugging functions.
 // If defined, ETX2 will debug everything.
 // #define EXT2_FULL_DEBUG
 
@@ -597,7 +597,7 @@ static void ext2_dump_bgdt(ext2_filesystem_t *fs)
     // Allocate the cache.
     uint8_t *cache = kmem_cache_alloc(fs->ext2_buffer_cache, GFP_KERNEL);
     // Clean the cache.
-    memset(cache, 0, fs->ext2_buffer_cache->size);
+    memset(cache, 0, fs->ext2_buffer_cache->aligned_object_size);
     for (uint32_t i = 0; i < fs->block_groups_count; ++i) {
         // Get the pointer to the current group descriptor.
         ext2_group_descriptor_t *gd = &(fs->block_groups[i]);
@@ -666,7 +666,7 @@ static inline uint8_t *ext2_alloc_cache(ext2_filesystem_t *fs)
     // Allocate the cache.
     uint8_t *cache = kmem_cache_alloc(fs->ext2_buffer_cache, GFP_KERNEL);
     // Clean the cache.
-    memset(cache, 0, fs->ext2_buffer_cache->size);
+    memset(cache, 0, fs->ext2_buffer_cache->aligned_object_size);
     // Check the cache.
     assert(cache && "Failed to allocate cache for EXT2 operations.");
     return cache;
@@ -1193,7 +1193,7 @@ static uint32_t ext2_allocate_block(ext2_filesystem_t *fs)
         pr_warning("Failed to write superblock.\n");
     }
     // Empty out the new block content.
-    memset(cache, 0, fs->ext2_buffer_cache->size);
+    memset(cache, 0, fs->ext2_buffer_cache->aligned_object_size);
     // Write the empty content of the new block.
     if (ext2_write_block(fs, block_index, cache) < 0) {
         pr_err("We failed to clean the content of the newly allocated block.\n");
@@ -1860,7 +1860,7 @@ static int ext2_clean_inode_content(ext2_filesystem_t *fs, ext2_inode_t *inode, 
     // Allocate the cache.
     uint8_t *cache = ext2_alloc_cache(fs);
     // Get the cache size.
-    size_t cache_size = fs->ext2_buffer_cache->size;
+    size_t cache_size = fs->ext2_buffer_cache->aligned_object_size;
     //
     int ret = 0;
     for (ssize_t offset = 0, to_write; offset < inode->size;) {
@@ -3001,8 +3001,8 @@ static int ext2_close(vfs_file_t *file)
         pr_debug("ext2_close: Removed file `%s` from the opened file list.\n", file->name);
 
         // Free the file from cache.
+        pr_debug("ext2_close: Freeing memory for file `%s`.\n", file->name);
         kmem_cache_free(file);
-        pr_debug("ext2_close: Freed memory for file `%s`.\n", file->name);
     }
 
     return 0;

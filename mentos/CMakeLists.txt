@@ -13,8 +13,6 @@ set(BUDDY_SYSTEM_FILE ${CMAKE_SOURCE_DIR}/mentos/src/mem/libbuddysystem.a)
 
 # Add the memory option.
 option(USE_BUDDY_SYSTEM "Build using the buddysystem written by the user." OFF)
-# Enables cache tracing.
-option(ENABLE_CACHE_TRACE "Enables cache tracing." OFF)
 # Enables memory allocation tracing.
 option(ENABLE_ALLOC_TRACE "Enables memory allocation tracing." OFF)
 # Enables scheduling feedback on terminal.
@@ -143,13 +141,6 @@ target_compile_definitions(
 if(${EMULATOR_OUTPUT_TYPE} STREQUAL OUTPUT_LOG)
     target_compile_definitions(${KERNEL_NAME} PUBLIC EMULATOR_OUTPUT_LOG)
 endif()
-
-
-# =============================================================================
-# Enables cache tracing.
-if(ENABLE_CACHE_TRACE)
-    target_compile_definitions(${KERNEL_NAME} PUBLIC ENABLE_CACHE_TRACE)
-endif(ENABLE_CACHE_TRACE)
 
 # =============================================================================
 # Enables memory allocation tracing.

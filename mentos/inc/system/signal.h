@@ -7,7 +7,7 @@
 
 #include "klib/stdatomic.h"
 #include "klib/spinlock.h"
-#include "sys/list_head.h"
+#include "list_head.h"
 #include "system/syscall.h"
 
 /// @brief Signal codes.

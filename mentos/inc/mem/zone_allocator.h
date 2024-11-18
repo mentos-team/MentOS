@@ -8,7 +8,7 @@
 #include "mem/gfp.h"
 #include "math.h"
 #include "stdint.h"
-#include "sys/list_head.h"
+#include "list_head.h"
 #include "sys/bitops.h"
 #include "klib/stdatomic.h"
 #include "boot.h"

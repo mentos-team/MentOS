@@ -12,7 +12,7 @@
 // Setup the logging for this file (do this before any other include).
 #include "sys/kernel_levels.h"          // Include kernel log levels.
 #define __DEBUG_HEADER__ "[PIPE  ]"     ///< Change header.
-#define __DEBUG_LEVEL__  LOGLEVEL_DEBUG ///< Set log level.
+#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
 #include "io/debug.h"                   // Include debugging functions.
 // ============================================================================
 
@@ -25,12 +25,11 @@
 #include "string.h"
 #include "errno.h"
 #include "strerror.h"
-#include "sys/list_head.h"
+#include "list_head.h"
 #include "fs/vfs.h"
 #include "sys/stat.h"
 #include "fcntl.h"
 #include "time.h"
-#include "klib/hashmap.h"
 #include "system/syscall.h"
 
 // ============================================================================

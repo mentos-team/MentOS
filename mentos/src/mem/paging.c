@@ -18,8 +18,8 @@
 #include "stddef.h"
 #include "stdint.h"
 #include "string.h"
-#include "sys/list_head.h"
-#include "sys/list_head_algorithm.h"
+#include "list_head.h"
+#include "list_head_algorithm.h"
 #include "sys/mman.h"
 #include "system/panic.h"
 
@@ -767,8 +767,6 @@ static inline int __set_pg_entry_frame(page_dir_entry_t *entry, page_table_t *ta
     // Set the frame attribute in the page directory entry (shifted by 12 bits
     // to represent the frame number).
     entry->frame = phy_addr >> 12u;
-
-    pr_debug("Set page directory entry frame to 0x%x for table: %p\n", entry->frame, table);
 
     return 0; // Return 0 on success.
 }

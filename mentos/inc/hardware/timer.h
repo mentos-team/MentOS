@@ -7,7 +7,7 @@
 
 #include "kernel.h"
 #include "stdint.h"
-#include "sys/list_head.h"
+#include "list_head.h"
 #include "klib/spinlock.h"
 #include "process/process.h"
 #include "time.h"

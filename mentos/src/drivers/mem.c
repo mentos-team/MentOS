@@ -166,10 +166,6 @@ static vfs_file_t *null_mount_callback(const char *path, const char *device)
 }
 
 /// @brief Creates a null memory device.
-///
-/// @details This function allocates memory for a new null device and its associated
-/// file, initializes the file structure, and sets appropriate operations.
-///
 /// @param name The name of the null device to be created.
 /// @return A pointer to the newly created memory device, or NULL if creation fails.
 static struct memdev *null_device_create(const char *name)
@@ -181,39 +177,38 @@ static struct memdev *null_device_create(const char *name)
     }
 
     // Allocate memory for the new device.
-    struct memdev *dev = kmalloc(sizeof(struct memdev));
+    struct memdev *dev = (struct memdev *)kmalloc(sizeof(struct memdev));
     if (dev == NULL) {
         pr_err("null_device_create: Failed to allocate memory for device\n");
         return NULL;
     }
     dev->next = NULL;
 
-    // Allocate memory for the associated file.
-    vfs_file_t *file = kmem_cache_alloc(vfs_file_cache, GFP_KERNEL);
-    if (file == NULL) {
+    // Allocate memory for the associated file structure.
+    dev->file = kmem_cache_alloc(vfs_file_cache, GFP_KERNEL);
+    if (dev->file == NULL) {
         pr_err("null_device_create: Failed to allocate memory for file\n");
         kfree(dev); // Free the previously allocated device memory.
         return NULL;
     }
-    dev->file = file;
 
     // Set the device name, ensuring it doesn't exceed NAME_MAX.
-    strncpy(file->name, name, NAME_MAX - 1);
-    file->name[NAME_MAX - 1] = '\0'; // Ensure null termination.
+    strncpy(dev->file->name, name, NAME_MAX - 1);
+    dev->file->name[NAME_MAX - 1] = '\0'; // Ensure null termination.
 
     // Initialize file fields.
-    file->count  = 0;
-    file->uid    = 0;
-    file->gid    = 0;
-    file->mask   = 0x2000 | 0666;  // Regular file with rw-rw-rw- permissions.
-    file->atime  = sys_time(NULL); // Set access time.
-    file->mtime  = sys_time(NULL); // Set modification time.
-    file->ctime  = sys_time(NULL); // Set change time.
-    file->length = 0;              // Initialize file length to 0.
+    dev->file->count  = 0;
+    dev->file->uid    = 0;
+    dev->file->gid    = 0;
+    dev->file->mask   = 0x2000 | 0666;  // Regular file with rw-rw-rw- permissions.
+    dev->file->atime  = sys_time(NULL); // Set access time.
+    dev->file->mtime  = sys_time(NULL); // Set modification time.
+    dev->file->ctime  = sys_time(NULL); // Set change time.
+    dev->file->length = 0;              // Initialize file length to 0.
 
     // Set the file system and system operations for the file.
-    file->sys_operations = &mem_sys_operations;
-    file->fs_operations  = &null_fs_operations;
+    dev->file->sys_operations = &mem_sys_operations;
+    dev->file->fs_operations  = &null_fs_operations;
 
     return dev;
 }

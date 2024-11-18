@@ -21,7 +21,7 @@
 #include "stdlib.h"
 #include "string.h"
 #include "sys/bitops.h"
-#include "sys/list_head.h"
+#include "list_head.h"
 
 /// @brief The size of the heap in bytes, defined as 4 megabytes.
 #define HEAP_SIZE (4 * M)

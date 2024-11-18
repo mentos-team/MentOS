@@ -74,7 +74,6 @@ if (DOXYGEN_FOUND)
         ${CMAKE_SOURCE_DIR}/mentos/inc/klib/irqflags.h
         ${CMAKE_SOURCE_DIR}/mentos/inc/klib/spinlock.h
         ${CMAKE_SOURCE_DIR}/mentos/inc/klib/stdatomic.h
-        ${CMAKE_SOURCE_DIR}/mentos/inc/klib/ndtree.h
         ${CMAKE_SOURCE_DIR}/mentos/inc/klib/stack_helper.h
         ${CMAKE_SOURCE_DIR}/mentos/inc/klib/mutex.h
         ${CMAKE_SOURCE_DIR}/mentos/inc/klib/compiler.h
@@ -139,13 +138,13 @@ if (DOXYGEN_FOUND)
         ${CMAKE_SOURCE_DIR}/libc/inc/sys/msg.h
         ${CMAKE_SOURCE_DIR}/libc/inc/sys/ipc.h
         ${CMAKE_SOURCE_DIR}/libc/inc/sys/wait.h
-        ${CMAKE_SOURCE_DIR}/libc/inc/sys/list_head.h
         ${CMAKE_SOURCE_DIR}/libc/inc/sys/kernel_levels.h
         ${CMAKE_SOURCE_DIR}/libc/inc/sys/ioctl.h
         ${CMAKE_SOURCE_DIR}/libc/inc/sys/mman.h
         ${CMAKE_SOURCE_DIR}/libc/inc/sys/utsname.h
         ${CMAKE_SOURCE_DIR}/libc/inc/sys/stat.h
-        ${CMAKE_SOURCE_DIR}/libc/inc/sys/list_head_algorithm.h
+        ${CMAKE_SOURCE_DIR}/libc/inc/list_head.h
+        ${CMAKE_SOURCE_DIR}/libc/inc/list_head_algorithm.h
         ${CMAKE_SOURCE_DIR}/libc/inc/grp.h
         ${CMAKE_SOURCE_DIR}/libc/inc/unistd.h
         ${CMAKE_SOURCE_DIR}/libc/inc/dirent.h

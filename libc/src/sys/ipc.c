@@ -103,7 +103,7 @@ long semop(int semid, struct sembuf *sops, unsigned nsops)
     __syscall_return(long, __res);
 }
 
-key_t ftok(char *path, int id)
+key_t ftok(const char *path, int id)
 {
     // Create a struct containing the serial number and the device number of the
     // file we use to generate the key.

@@ -5,7 +5,7 @@
 
 #pragma once
 
-#include "sys/list_head.h"
+#include "list_head.h"
 #include "bits/stat.h"
 #include "stdint.h"
 #include "dirent.h"
@@ -41,6 +41,8 @@ typedef struct file_system_type {
     int fs_flags;
     /// Mount function.
     struct vfs_file *(*mount)(const char *, const char *);
+    /// List head for linking filesystem types.
+    struct list_head list;
 } file_system_type_t;
 
 /// @brief Set of functions used to perform operations on a filesystem.

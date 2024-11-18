@@ -5,7 +5,7 @@
 
 #pragma once
 
-#include "sys/list_head.h"
+#include "list_head.h"
 #include "klib/stdatomic.h"
 #include "stdint.h"
 

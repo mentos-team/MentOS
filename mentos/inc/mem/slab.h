@@ -5,7 +5,7 @@
 
 #pragma once
 
-#include "sys/list_head.h"
+#include "list_head.h"
 #include "stddef.h"
 #include "mem/gfp.h"
 
@@ -25,33 +25,33 @@ typedef void (*kmem_fun_t)(void *);
 
 /// @brief Stores the information of a cache.
 typedef struct kmem_cache_t {
-    /// Handler for placing it inside a lists of caches.
+    /// Link to place this cache in a global list of caches.
     list_head cache_list;
     /// Name of the cache.
     const char *name;
-    /// Size of the cache.
-    unsigned int size;
-    /// Size of the objects contained in the cache.
-    unsigned int object_size;
-    /// Alignment requirement of the type of objects.
+    /// Total size of each object in the cache, including alignment and padding.
+    unsigned int aligned_object_size;
+    /// Original, unaligned size of the objects requested by the user.
+    unsigned int raw_object_size;
+    /// Alignment requirement for objects in the cache.
     unsigned int align;
-    /// The total number of slabs.
+    /// Total number of objects allocated across all slabs.
     unsigned int total_num;
-    /// The number of free slabs.
+    /// Number of free objects available across all slabs.
     unsigned int free_num;
-    /// The Get Free Pages (GFP) flags.
+    /// Flags for page allocation behavior.
     slab_flags_t flags;
-    /// The order for getting free pages.
+    /// Page allocation order (power of 2 pages) used for slab allocation.
     unsigned int gfp_order;
-    /// Constructor for the elements.
+    /// Constructor function for initializing objects.
     kmem_fun_t ctor;
-    /// Destructor for the elements.
+    /// Destructor function for cleaning up objects.
     kmem_fun_t dtor;
-    /// Handler for the full slabs list.
+    /// List of fully occupied slabs.
     list_head slabs_full;
-    /// Handler for the partial slabs list.
+    /// List of partially occupied slabs.
     list_head slabs_partial;
-    /// Handler for the free slabs list.
+    /// List of completely free slabs.
     list_head slabs_free;
 } kmem_cache_t;
 
@@ -91,8 +91,6 @@ kmem_cache_t *kmem_cache_create(
 /// @return Returns 0 on success, or -1 if an error occurs.
 int kmem_cache_destroy(kmem_cache_t *cachep);
 
-#ifdef ENABLE_CACHE_TRACE
-
 /// @brief Allocs a new object using the provided cache.
 /// @param file   File where the object is allocated.
 /// @param fun    Function where the object is allocated.
@@ -107,29 +105,8 @@ void *pr_kmem_cache_alloc(const char *file, const char *fun, int line, kmem_cach
 /// @param fun  Function where the object is deallocated.
 /// @param line Line inside the file.
 /// @param addr Address of the object.
-void pr_kmem_cache_free(const char *file, const char *fun, int line, void *addr);
-
-/// Wrapper that provides the filename, the function and line where the alloc is happening.
-#define kmem_cache_alloc(...) pr_kmem_cache_alloc(__FILE__, __func__, __LINE__, __VA_ARGS__)
-
-/// Wrapper that provides the filename, the function and line where the free is happening.
-#define kmem_cache_free(...) pr_kmem_cache_free(__FILE__, __func__, __LINE__, __VA_ARGS__)
-
-#else
-
-/// @brief Allocates an object from the specified kmem_cache_t.
-/// @param cachep Pointer to the cache from which to allocate the object.
-/// @param flags Flags for the allocation (e.g., GFP_KERNEL).
-/// @return Pointer to the allocated object, or NULL if allocation fails.
-void *kmem_cache_alloc(kmem_cache_t *cachep, gfp_t flags);
-
-/// @brief Frees an object previously allocated from a kmem_cache_t.
-/// @param addr Pointer to the object to free.
-void kmem_cache_free(void *addr);
-
-#endif
-
-#ifdef ENABLE_ALLOC_TRACE
+/// @return 0 on success, 1 on error.
+int pr_kmem_cache_free(const char *file, const char *fun, int line, void *addr);
 
 /// @brief Provides dynamically allocated memory in kernel space.
 /// @param file File where the object is allocated.
@@ -147,20 +124,13 @@ void *pr_kmalloc(const char *file, const char *fun, int line, unsigned int size)
 void pr_kfree(const char *file, const char *fun, int line, void *addr);
 
 /// Wrapper that provides the filename, the function and line where the alloc is happening.
+#define kmem_cache_alloc(...) pr_kmem_cache_alloc(__FILE__, __func__, __LINE__, __VA_ARGS__)
+
+/// Wrapper that provides the filename, the function and line where the free is happening.
+#define kmem_cache_free(...) pr_kmem_cache_free(__FILE__, __func__, __LINE__, __VA_ARGS__)
+
+/// Wrapper that provides the filename, the function and line where the alloc is happening.
 #define kmalloc(...) pr_kmalloc(__FILE__, __func__, __LINE__, __VA_ARGS__)
 
 /// Wrapper that provides the filename, the function and line where the free is happening.
 #define kfree(...) pr_kfree(__FILE__, __func__, __LINE__, __VA_ARGS__)
-
-#else
-
-/// @brief Allocates memory of the specified size using kmalloc.
-/// @param size Size of the memory to allocate.
-/// @return Pointer to the allocated memory, or NULL if allocation fails.
-void *kmalloc(unsigned int size);
-
-/// @brief Frees memory allocated by kmalloc or kmem_cache_alloc.
-/// @param ptr Pointer to the memory to free.
-void kfree(void *ptr);
-
-#endif
