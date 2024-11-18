@@ -1702,9 +1702,6 @@ int ata_initialize(void)
     ata_device_detect(&ata_secondary_master);
     ata_device_detect(&ata_secondary_slave);
 
-    pr_notice("Superblocks:\n");
-    vfs_dump_superblocks(LOGLEVEL_NOTICE);
-
     return 0;
 }
 
