@@ -1,7 +1,7 @@
 #include <syslog.h>
 #include <unistd.h>
 
-int main()
+int main(void)
 {
     // Open syslog connection with identifier "syslog_test"
     openlog("syslog_test", LOG_CONS | LOG_PID, LOG_USER);

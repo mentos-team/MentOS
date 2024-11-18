@@ -245,12 +245,12 @@ typedef struct sigpending_t {
 
 /// @brief Handle the return from a signal handler.
 /// @return never.
-long sys_sigreturn();
+long sys_sigreturn(struct pt_regs *f);
 
 /// @brief Handles the signals of the current process.
 /// @return If we are handling a signal, thus, `regs` have been modified
 ///          to handle it (e.g., eip is now poiting at the handler).
-int do_signal();
+int do_signal(struct pt_regs *f);
 
 /// @brief Initialize the signals.
 /// @return 1 on success, 0 on failure.

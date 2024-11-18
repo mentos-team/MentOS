@@ -37,7 +37,7 @@ void print_node(ndtree_node_t *node)
     printf("Node value: %d\n", *(int *)(node->value));
 }
 
-int main()
+int main(void)
 {
     // Initialize the tree
     ndtree_t tree;

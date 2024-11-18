@@ -11,7 +11,7 @@
 #include <sys/wait.h>
 #include <time.h>
 
-int main()
+int main(void)
 {
     int fds[2];
     char write_msg[]                 = "Blocking test message";

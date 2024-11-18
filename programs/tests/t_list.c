@@ -25,7 +25,7 @@ void node_dealloc(listnode_t *node)
     free(node);
 }
 
-int main()
+int main(void)
 {
     // Initialize lists with custom alloc/dealloc functions
     list_t list1, list2;

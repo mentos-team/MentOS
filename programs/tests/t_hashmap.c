@@ -26,7 +26,7 @@ void dealloc_entry(hashmap_entry_t *entry)
     free(entry); // Free the entry itself
 }
 
-int main()
+int main(void)
 {
     hashmap_t map;
     hashmap_init(&map, alloc_entry, dealloc_entry);

@@ -27,7 +27,7 @@ void timer_handler(int signum)
     timer_count++;
 }
 
-int main()
+int main(void)
 {
     struct itimerval timer;
     time_t start_time, current_time;
