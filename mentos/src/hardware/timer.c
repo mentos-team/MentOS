@@ -646,7 +646,7 @@ int sys_nanosleep(const struct timespec *req, struct timespec *rem)
     sleep_timer->data     = (unsigned long)sleep_data;
     // Add the timer.
     add_timer(sleep_timer);
-    return -1;
+    return 0;
 }
 
 unsigned sys_alarm(int seconds)
