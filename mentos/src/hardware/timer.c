@@ -399,10 +399,12 @@ static inline void __sleep_data_dealloc(sleep_data_t *sleep_data)
 /// @param timer where the final values should be stored.
 static inline void __values_to_itimerval(time_t interval, time_t value, struct itimerval *timer)
 {
+    // Validate input.
+    assert(timer && "__timespec_to_ticks: Input timer is NULL.");
     timer->it_interval.tv_sec  = interval / TICKS_PER_SECOND;
-    timer->it_interval.tv_usec = (interval * 1000) / TICKS_PER_SECOND;
+    timer->it_interval.tv_usec = (interval % TICKS_PER_SECOND) * 1000000 / TICKS_PER_SECOND;
     timer->it_value.tv_sec     = value / TICKS_PER_SECOND;
-    timer->it_value.tv_usec    = (value * 1000) / TICKS_PER_SECOND;
+    timer->it_value.tv_usec    = (value % TICKS_PER_SECOND) * 1000000 / TICKS_PER_SECOND;
 }
 
 /// @brief Transforms an interval timer to values.
@@ -411,10 +413,36 @@ static inline void __values_to_itimerval(time_t interval, time_t value, struct i
 /// @param timer the timer used to initialize the values.
 static inline void __itimerval_to_values(time_t *interval, time_t *value, const struct itimerval *timer)
 {
-    *interval = (timer->it_interval.tv_sec * TICKS_PER_SECOND) +
-                (timer->it_interval.tv_usec * TICKS_PER_SECOND) / 1000;
-    *value = (timer->it_value.tv_sec * TICKS_PER_SECOND) +
-             (timer->it_value.tv_usec * TICKS_PER_SECOND) / 1000;
+    // Validate input.
+    assert(interval && "__timespec_to_ticks: Input interval is NULL.");
+    assert(value && "__timespec_to_ticks: Input value is NULL.");
+    assert(timer && "__timespec_to_ticks: Input timer is NULL.");
+    *interval = (timer->it_interval.tv_sec * TICKS_PER_SECOND) + (timer->it_interval.tv_usec * TICKS_PER_SECOND) / 1000000;
+    *value    = (timer->it_value.tv_sec * TICKS_PER_SECOND) + (timer->it_value.tv_usec * TICKS_PER_SECOND) / 1000000;
+}
+
+/// @brief Convert timespec to ticks.
+/// @param ts Pointer to the timespec structure to be converted.
+/// @return The equivalent number of ticks.
+static inline unsigned long __timespec_to_ticks(const timespec_t *ts)
+{
+    // Validate input.
+    assert(ts && "__timespec_to_ticks: Input ts is NULL.");
+    // Convert seconds to ticks and add the conversion for nanoseconds.
+    return (unsigned long)(ts->tv_sec * TICKS_PER_SECOND) +
+           (unsigned long)(ts->tv_nsec / (1000000000 / TICKS_PER_SECOND));
+}
+
+/// @brief Convert timeval to ticks.
+/// @param tv Pointer to the timeval structure to be converted.
+/// @return The equivalent number of ticks.
+static inline unsigned long __timeval_to_ticks(const timeval_t *tv)
+{
+    // Validate input.
+    assert(tv && "__timeval_to_ticks: Input ts is NULL.");
+    // Convert seconds to ticks and add the conversion for microseconds.
+    return (unsigned long)(tv->tv_sec * TICKS_PER_SECOND) +
+           (unsigned long)(tv->tv_usec / (1000000 / TICKS_PER_SECOND));
 }
 
 /// @brief Updates the timer for the given task.
@@ -442,30 +470,6 @@ static void __update_task_itimerval(int which, const struct itimerval *timer)
         task->it_prof_value = value;
         break;
     }
-}
-
-/// @brief Convert timespec to ticks.
-/// @param ts Pointer to the timespec structure to be converted.
-/// @return The equivalent number of ticks.
-static inline unsigned long timespec_to_ticks(const timespec_t *ts)
-{
-    // Validate input.
-    assert(ts && "timespec_to_ticks: Input ts is NULL.");
-    // Convert seconds to ticks and add the conversion for nanoseconds.
-    return (unsigned long)(ts->tv_sec * TICKS_PER_SECOND) +
-           (unsigned long)(ts->tv_nsec / (1000000000 / TICKS_PER_SECOND));
-}
-
-/// @brief Convert timeval to ticks.
-/// @param tv Pointer to the timeval structure to be converted.
-/// @return The equivalent number of ticks.
-unsigned long timeval_to_ticks(const timeval_t *tv)
-{
-    // Validate input.
-    assert(tv && "timespec_to_ticks: Input ts is NULL.");
-    // Convert seconds to ticks and add the conversion for microseconds.
-    return (unsigned long)(tv->tv_sec * TICKS_PER_SECOND) +
-           (unsigned long)(tv->tv_usec / (1000000 / TICKS_PER_SECOND));
 }
 
 //======================================================================================
@@ -637,7 +641,7 @@ int sys_nanosleep(const struct timespec *req, struct timespec *rem)
     sleep_data->remaining        = rem;
     sleep_data->wait_queue_entry = sleep_on(&sleep_queue);
     // Setup the timer.
-    sleep_timer->expires  = timer_get_ticks() + timespec_to_ticks(req);
+    sleep_timer->expires  = timer_get_ticks() + __timespec_to_ticks(req);
     sleep_timer->function = &sleep_timeout;
     sleep_timer->data     = (unsigned long)sleep_data;
     // Add the timer.
@@ -710,7 +714,7 @@ int sys_setitimer(int which, const struct itimerval *new_value, struct itimerval
         sys_getitimer(which, old_value);
     }
     // Get ticks of interval.
-    time_t new_interval_ticks = timeval_to_ticks(&new_value->it_interval);
+    time_t new_interval_ticks = __timeval_to_ticks(&new_value->it_interval);
     // If interval is 0 removes timer
     struct task_struct *task = scheduler_get_current_process();
     if (new_interval_ticks == 0) {
