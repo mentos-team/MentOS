@@ -4,10 +4,10 @@
 /// See LICENSE.md for details.
 
 // Setup the logging for this file (do this before any other include).
-#include "sys/kernel_levels.h"          // Include kernel log levels.
-#define __DEBUG_HEADER__ "[EXT2  ]"     ///< Change header.
+#include "sys/kernel_levels.h"           // Include kernel log levels.
+#define __DEBUG_HEADER__ "[EXT2  ]"      ///< Change header.
 #define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
-#include "io/debug.h"                   // Include debugging functions.
+#include "io/debug.h"                    // Include debugging functions.
 // If defined, ETX2 will debug everything.
 // #define EXT2_FULL_DEBUG
 
@@ -597,7 +597,7 @@ static void ext2_dump_bgdt(ext2_filesystem_t *fs)
     // Allocate the cache.
     uint8_t *cache = kmem_cache_alloc(fs->ext2_buffer_cache, GFP_KERNEL);
     // Clean the cache.
-    memset(cache, 0, fs->ext2_buffer_cache->aligned_object_size);
+    memset(cache, 0, fs->block_size);
     for (uint32_t i = 0; i < fs->block_groups_count; ++i) {
         // Get the pointer to the current group descriptor.
         ext2_group_descriptor_t *gd = &(fs->block_groups[i]);
@@ -663,12 +663,23 @@ static void ext2_dump_filesystem(ext2_filesystem_t *fs)
 /// @return a pointer to the cache.
 static inline uint8_t *ext2_alloc_cache(ext2_filesystem_t *fs)
 {
+    // Validate input.
+    if (!fs) {
+        pr_err("Invalid input: filesystem pointer is NULL.");
+        return NULL;
+    }
+
     // Allocate the cache.
     uint8_t *cache = kmem_cache_alloc(fs->ext2_buffer_cache, GFP_KERNEL);
+    if (!cache) {
+        // Log critical error if cache allocation fails.
+        pr_crit("Failed to allocate cache for EXT2 operations.");
+        return NULL;
+    }
+
     // Clean the cache.
-    memset(cache, 0, fs->ext2_buffer_cache->aligned_object_size);
-    // Check the cache.
-    assert(cache && "Failed to allocate cache for EXT2 operations.");
+    memset(cache, 0, fs->block_size);
+
     return cache;
 }
 
@@ -676,12 +687,14 @@ static inline uint8_t *ext2_alloc_cache(ext2_filesystem_t *fs)
 /// @param cache pointer to the cache.
 static inline void ext2_dealloc_cache(uint8_t *cache)
 {
-    // Check the cache.
-    assert(cache && "Received invalid EXT2 cache.");
+    // Validate the input.
+    if (!cache) {
+        pr_err("Invalid input: cache pointer is NULL or already freed.");
+        return;
+    }
+
     // Free the cache.
     kmem_cache_free(cache);
-    // Clean pointer.
-    *cache = 0;
 }
 
 /// @brief Returns the rec_len from the given name.
@@ -689,6 +702,13 @@ static inline void ext2_dealloc_cache(uint8_t *cache)
 /// @return the rec_len value.
 static inline uint32_t ext2_get_rec_len_from_name(const char *name)
 {
+    // Validate input.
+    if (!name) {
+        pr_err("Invalid input: name is NULL.");
+        return 0;
+    }
+    
+    // Compute and return the record length.
     return round_up(sizeof(ext2_dirent_t) + strlen(name) + 1, 4);
 }
 
@@ -1193,7 +1213,7 @@ static uint32_t ext2_allocate_block(ext2_filesystem_t *fs)
         pr_warning("Failed to write superblock.\n");
     }
     // Empty out the new block content.
-    memset(cache, 0, fs->ext2_buffer_cache->aligned_object_size);
+    memset(cache, 0, fs->block_size);
     // Write the empty content of the new block.
     if (ext2_write_block(fs, block_index, cache) < 0) {
         pr_err("We failed to clean the content of the newly allocated block.\n");
@@ -1860,7 +1880,7 @@ static int ext2_clean_inode_content(ext2_filesystem_t *fs, ext2_inode_t *inode, 
     // Allocate the cache.
     uint8_t *cache = ext2_alloc_cache(fs);
     // Get the cache size.
-    size_t cache_size = fs->ext2_buffer_cache->aligned_object_size;
+    size_t cache_size = fs->block_size;
     //
     int ret = 0;
     for (ssize_t offset = 0, to_write; offset < inode->size;) {
@@ -3583,6 +3603,17 @@ static vfs_file_t *ext2_mount(vfs_file_t *block_device, const char *path)
         GFP_KERNEL,
         NULL,
         NULL);
+
+    // uint8_t *caches[100];
+    // for (size_t i = 0; i < 100; ++i) {
+    //     caches[i] = ext2_alloc_cache(fs);
+    // }
+    // for (size_t i = 0; i < 100; ++i) {
+    //     kmem_cache_free(caches[i]);
+    // }
+
+    // while (1) {}
+
     // Compute the maximum number of inodes per block.
     fs->inodes_per_block_count = fs->block_size / fs->superblock.inode_size;
     // Compute the number of blocks per block. This value is mostly used for
