@@ -67,8 +67,9 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
-    // Pause for a short period before sending the next signal.
-    sleep(2);
+    // Pause for a short period (200 ms) before sending the next signal.
+    timespec_t req = { 0, 200000000 };
+    nanosleep(&req, NULL);
 
     // Send SIGUSR2 signal to the current process.
     if (kill(getpid(), SIGUSR2) == -1) {

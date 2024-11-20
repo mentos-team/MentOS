@@ -5,8 +5,10 @@
 
 #pragma once
 
-/// @brief Write formatted output to stdout.
-/// @param format Output formatted as for printf.
-/// @param ... List of arguments.
-/// @return The number of bytes written in syslog.
-int sys_syslog(const char *format, ...);
+/// @brief Sends a message to the system log using a specified log level.
+/// @param file the name of the file.
+/// @param fun the name of the function.
+/// @param line the line inside the file.
+/// @param log_level the log level.
+/// @param format the format to used, see printf.
+void sys_syslog(const char *file, const char *fun, int line, short log_level, const char *format);

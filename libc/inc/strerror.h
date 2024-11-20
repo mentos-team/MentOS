@@ -5,7 +5,7 @@
 
 #pragma once
 
-#include <sys/errno.h>
+#include <errno.h>
 
 /// @brief Returns the string representing the error number.
 /// @param errnum The error number.

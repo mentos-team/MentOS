@@ -14,7 +14,7 @@
 #include "io/debug.h"
 #include "fs/vfs.h"
 #include "string.h"
-#include "sys/errno.h"
+#include "errno.h"
 #include "system/syscall.h"
 #include "process/scheduler.h"
 #include "fcntl.h"
@@ -99,7 +99,7 @@ static ssize_t null_read(vfs_file_t *file, char *buffer, off_t offset, size_t si
 static int null_fstat(vfs_file_t *file, stat_t *stat);
 
 /// @brief Filesystem type structure for the null device.
-static file_system_type null_file_system_type = {
+static file_system_type_t null_file_system_type = {
     .name     = "null",
     .fs_flags = 0,
     .mount    = null_mount_callback
@@ -166,10 +166,6 @@ static vfs_file_t *null_mount_callback(const char *path, const char *device)
 }
 
 /// @brief Creates a null memory device.
-///
-/// @details This function allocates memory for a new null device and its associated
-/// file, initializes the file structure, and sets appropriate operations.
-///
 /// @param name The name of the null device to be created.
 /// @return A pointer to the newly created memory device, or NULL if creation fails.
 static struct memdev *null_device_create(const char *name)
@@ -181,39 +177,38 @@ static struct memdev *null_device_create(const char *name)
     }
 
     // Allocate memory for the new device.
-    struct memdev *dev = kmalloc(sizeof(struct memdev));
+    struct memdev *dev = (struct memdev *)kmalloc(sizeof(struct memdev));
     if (dev == NULL) {
         pr_err("null_device_create: Failed to allocate memory for device\n");
         return NULL;
     }
     dev->next = NULL;
 
-    // Allocate memory for the associated file.
-    vfs_file_t *file = kmem_cache_alloc(vfs_file_cache, GFP_KERNEL);
-    if (file == NULL) {
+    // Allocate memory for the associated file structure.
+    dev->file = kmem_cache_alloc(vfs_file_cache, GFP_KERNEL);
+    if (dev->file == NULL) {
         pr_err("null_device_create: Failed to allocate memory for file\n");
         kfree(dev); // Free the previously allocated device memory.
         return NULL;
     }
-    dev->file = file;
 
     // Set the device name, ensuring it doesn't exceed NAME_MAX.
-    strncpy(file->name, name, NAME_MAX - 1);
-    file->name[NAME_MAX - 1] = '\0'; // Ensure null termination.
+    strncpy(dev->file->name, name, NAME_MAX - 1);
+    dev->file->name[NAME_MAX - 1] = '\0'; // Ensure null termination.
 
     // Initialize file fields.
-    file->count  = 0;
-    file->uid    = 0;
-    file->gid    = 0;
-    file->mask   = 0x2000 | 0666;  // Regular file with rw-rw-rw- permissions.
-    file->atime  = sys_time(NULL); // Set access time.
-    file->mtime  = sys_time(NULL); // Set modification time.
-    file->ctime  = sys_time(NULL); // Set change time.
-    file->length = 0;              // Initialize file length to 0.
+    dev->file->count  = 0;
+    dev->file->uid    = 0;
+    dev->file->gid    = 0;
+    dev->file->mask   = 0x2000 | 0666;  // Regular file with rw-rw-rw- permissions.
+    dev->file->atime  = sys_time(NULL); // Set access time.
+    dev->file->mtime  = sys_time(NULL); // Set modification time.
+    dev->file->ctime  = sys_time(NULL); // Set change time.
+    dev->file->length = 0;              // Initialize file length to 0.
 
     // Set the file system and system operations for the file.
-    file->sys_operations = &mem_sys_operations;
-    file->fs_operations  = &null_fs_operations;
+    dev->file->sys_operations = &mem_sys_operations;
+    dev->file->fs_operations  = &null_fs_operations;
 
     return dev;
 }
@@ -271,26 +266,34 @@ static vfs_file_t *null_open(const char *path, int flags, mode_t mode)
 }
 
 /// @brief Closes a null device file.
-///
 /// @param file A pointer to the vfs_file_t structure representing the file to close.
-/// @return 0 on success, -EINVAL if the file is NULL.
+/// @return 0 on success, -errno on failure.
 static int null_close(vfs_file_t *file)
 {
-    // Check if the file is NULL.
+    // Check if the file pointer is NULL.
     if (file == NULL) {
-        pr_crit("null_close: Received NULL file\n");
-        return -EINVAL; // Return an error if the file is NULL.
+        pr_crit("null_close: Received NULL file pointer.\n");
+        return -EINVAL;
     }
 
-    // Decrease the reference count.
-    if (file->count > 0) {
-        file->count--;
-    } else {
-        pr_warning("null_close: Attempt to close a file with zero reference count\n");
+    pr_debug("null_close(ino: %d, file: \"%s\", count: %d)\n", file->ino, file->name, file->count);
+
+    // Decrement the reference count for the file.
+    if (--file->count == 0) {
+        pr_debug("null_close: Closing file `%s` (ino: %d).\n", file->name, file->ino);
+
+        // Remove the file from the list of opened files.
+        list_head_remove(&file->siblings);
+        pr_debug("null_close: Removed file `%s` from the opened file list.\n", file->name);
+
+        // Free the file from cache.
+        kmem_cache_free(file);
+        pr_debug("null_close: Freed memory for file `%s`.\n", file->name);
     }
 
     return 0;
 }
+
 /// @brief Writes data to a null device file.
 ///
 /// @param file A pointer to the vfs_file_t structure representing the file to write to.

@@ -4,7 +4,13 @@
 /// See LICENSE.md for details.
 
 #include "unistd.h"
-#include "sys/errno.h"
+#include "errno.h"
 #include "system/syscall_types.h"
 
-_syscall0(pid_t, getpid)
+// _syscall0(pid_t, getpid)
+pid_t getpid(void)
+{
+    long __res;
+    __inline_syscall_0(__res, getpid);
+    __syscall_return(pid_t, __res);
+}

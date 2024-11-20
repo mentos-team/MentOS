@@ -17,18 +17,6 @@
 /// Determines the log level.
 static int max_log_level = LOGLEVEL_DEBUG;
 
-void dbg_putchar(char c)
-{
-    outportb(SERIAL_COM1, (uint8_t)c);
-}
-
-void dbg_puts(const char *s)
-{
-    while ((*s) != 0) {
-        dbg_putchar(*s++);
-    }
-}
-
 /// @brief Prints the correct header for the given debug level.
 /// @param file the file origin of the debug message.
 /// @param fun the function where the debug message was called.
@@ -67,7 +55,7 @@ static inline void __debug_print_header(const char *file, const char *fun, int l
     // Print the file and line.
     sprintf(tmp_prefix, "%s:%d", file, line);
     // Print the message.
-    sprintf(final_prefix, " %-20s ", tmp_prefix);
+    sprintf(final_prefix, " %-40s ", tmp_prefix);
     // Print the actual message.
     dbg_puts(final_prefix);
 #if 0
@@ -94,6 +82,48 @@ void set_log_level(int level)
 int get_log_level(void)
 {
     return max_log_level;
+}
+
+const char *to_human_size(unsigned long bytes)
+{
+    static char output[200];
+    const char *suffix[] = { "B", "KB", "MB", "GB", "TB" };
+    char length          = sizeof(suffix) / sizeof(suffix[0]);
+    int i                = 0;
+    double dblBytes      = bytes;
+    if (bytes > 1024) {
+        for (i = 0; (bytes / 1024) > 0 && i < length - 1; i++, bytes /= 1024) {
+            dblBytes = bytes / 1024.0;
+        }
+    }
+    sprintf(output, "%.02lf %2s", dblBytes, suffix[i]);
+    return output;
+}
+
+const char *dec_to_binary(unsigned long value, unsigned length)
+{
+    static char buffer[33];
+    // Adjust the length.
+    length = min(max(0, length), 32U);
+    // Build the binary.
+    for (unsigned i = 0, j = 32U - length; j < 32U; ++i, ++j) {
+        buffer[i] = bit_check(value, 31 - j) ? '1' : '0';
+    }
+    // Close the string.
+    buffer[length] = 0;
+    return buffer;
+}
+
+void dbg_putchar(char c)
+{
+    outportb(SERIAL_COM1, (uint8_t)c);
+}
+
+void dbg_puts(const char *s)
+{
+    while ((*s) != 0) {
+        dbg_putchar(*s++);
+    }
 }
 
 void dbg_printf(const char *file, const char *fun, int line, char *header, short log_level, const char *format, ...)
@@ -134,60 +164,4 @@ void dbg_printf(const char *file, const char *fun, int line, char *header, short
             __debug_print_header(file, fun, line, log_level, header);
         }
     }
-}
-
-const char *to_human_size(unsigned long bytes)
-{
-    static char output[200];
-    const char *suffix[] = { "B", "KB", "MB", "GB", "TB" };
-    char length          = sizeof(suffix) / sizeof(suffix[0]);
-    int i                = 0;
-    double dblBytes      = bytes;
-    if (bytes > 1024) {
-        for (i = 0; (bytes / 1024) > 0 && i < length - 1; i++, bytes /= 1024) {
-            dblBytes = bytes / 1024.0;
-        }
-    }
-    sprintf(output, "%.02lf %2s", dblBytes, suffix[i]);
-    return output;
-}
-
-const char *dec_to_binary(unsigned long value, unsigned length)
-{
-    static char buffer[33];
-    // Adjust the length.
-    length = min(max(0, length), 32U);
-    // Build the binary.
-    for (unsigned i = 0, j = 32U - length; j < 32U; ++i, ++j) {
-        buffer[i] = bit_check(value, 31 - j) ? '1' : '0';
-    }
-    // Close the string.
-    buffer[length] = 0;
-    return buffer;
-}
-
-/// @brief Prints the registers.
-/// @param frame the registers to print.
-void dbg_print_regs(pt_regs *frame)
-{
-    pr_debug("Interrupt stack frame:\n");
-    pr_debug("GS     = 0x%-04x\n", frame->gs);
-    pr_debug("FS     = 0x%-04x\n", frame->fs);
-    pr_debug("ES     = 0x%-04x\n", frame->es);
-    pr_debug("DS     = 0x%-04x\n", frame->ds);
-    pr_debug("EDI    = 0x%-09x\n", frame->edi);
-    pr_debug("ESI    = 0x%-09x\n", frame->esi);
-    pr_debug("EBP    = 0x%-09x\n", frame->ebp);
-    pr_debug("ESP    = 0x%-09x\n", frame->esp);
-    pr_debug("EBX    = 0x%-09x\n", frame->ebx);
-    pr_debug("EDX    = 0x%-09x\n", frame->edx);
-    pr_debug("ECX    = 0x%-09x\n", frame->ecx);
-    pr_debug("EAX    = 0x%-09x\n", frame->eax);
-    pr_debug("INT_NO = %-9d\n", frame->int_no);
-    pr_debug("ERR_CD = %-9d\n", frame->err_code);
-    pr_debug("EIP    = 0x%-09x\n", frame->eip);
-    pr_debug("CS     = 0x%-04x\n", frame->cs);
-    pr_debug("EFLAGS = 0x%-09x\n", frame->eflags);
-    pr_debug("UESP   = 0x%-09x\n", frame->useresp);
-    pr_debug("SS     = 0x%-04x\n", frame->ss);
 }

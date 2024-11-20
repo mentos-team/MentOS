@@ -9,6 +9,7 @@
 #error "Never include <bits/stat.h> directly; use <sys/stat.h> instead."
 #endif
 
+#include "sys/types.h"
 #include "stddef.h"
 #include "time.h"
 
@@ -18,14 +19,22 @@ typedef struct stat {
     dev_t st_dev;
     /// File serial number.
     ino_t st_ino;
-    /// Mode of file.
+    /// Mode of file (file type and permissions).
     mode_t st_mode;
-    /// File user id.
+    /// Number of hard links to the file.
+    nlink_t st_nlink;
+    /// File user ID.
     uid_t st_uid;
-    /// File group id.
+    /// File group ID.
     gid_t st_gid;
-    /// File Size.
+    /// Device ID (if special file).
+    dev_t st_rdev;
+    /// File size in bytes.
     off_t st_size;
+    /// Preferred block size for filesystem I/O.
+    blksize_t st_blksize;
+    /// Number of blocks allocated for the file.
+    blkcnt_t st_blocks;
     /// Time of last access.
     time_t st_atime;
     /// Time of last data modification.

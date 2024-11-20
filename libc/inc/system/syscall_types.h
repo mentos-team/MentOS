@@ -400,113 +400,43 @@
 //
 
 /// @brief Heart of the code that calls a system call with 0 parameters.
-#define __inline_syscall0(res, name) \
-    __asm__ __volatile__("int $0x80" \
-                         : "=a"(res) \
+#define __inline_syscall_0(res, name) \
+    __asm__ __volatile__("int $0x80"  \
+                         : "=a"(res)  \
                          : "0"(__NR_##name))
 
 /// @brief Heart of the code that calls a system call with 1 parameter.
-#define __inline_syscall1(res, name, arg1)                                 \
+#define __inline_syscall_1(res, name, arg1)                                \
     __asm__ __volatile__("push %%ebx; movl %2,%%ebx; int $0x80; pop %%ebx" \
                          : "=a"(res)                                       \
                          : "0"(__NR_##name), "ri"(arg1)                    \
                          : "memory");
 
 /// @brief Heart of the code that calls a system call with 2 parameters.
-#define __inline_syscall2(res, name, arg1, arg2)                           \
+#define __inline_syscall_2(res, name, arg1, arg2)                          \
     __asm__ __volatile__("push %%ebx; movl %2,%%ebx; int $0x80; pop %%ebx" \
                          : "=a"(res)                                       \
                          : "0"(__NR_##name), "ri"(arg1), "c"(arg2)         \
                          : "memory");
 
 /// @brief Heart of the code that calls a system call with 3 parameters.
-#define __inline_syscall3(res, name, arg1, arg2, arg3)                        \
+#define __inline_syscall_3(res, name, arg1, arg2, arg3)                       \
     __asm__ __volatile__("push %%ebx; movl %2,%%ebx; int $0x80; pop %%ebx"    \
                          : "=a"(res)                                          \
                          : "0"(__NR_##name), "ri"(arg1), "c"(arg2), "d"(arg3) \
                          : "memory");
 
 /// @brief Heart of the code that calls a system call with 4 parameters.
-#define __inline_syscall4(res, name, arg1, arg2, arg3, arg4)                             \
+#define __inline_syscall_4(res, name, arg1, arg2, arg3, arg4)                            \
     __asm__ __volatile__("push %%ebx; movl %2,%%ebx; int $0x80; pop %%ebx"               \
                          : "=a"(res)                                                     \
                          : "0"(__NR_##name), "ri"(arg1), "c"(arg2), "d"(arg3), "S"(arg4) \
                          : "memory");
 
 /// @brief Heart of the code that calls a system call with 5 parameters.
-#define __inline_syscall5(res, name, arg1, arg2, arg3, arg4, arg5)                                  \
+#define __inline_syscall_5(res, name, arg1, arg2, arg3, arg4, arg5)                                 \
     __asm__ __volatile__("push %%ebx; movl %2,%%ebx; movl %1,%%eax; "                               \
                          "int $0x80; pop %%ebx"                                                     \
                          : "=a"(res)                                                                \
                          : "i"(__NR_##name), "ri"(arg1), "c"(arg2), "d"(arg3), "S"(arg4), "D"(arg5) \
                          : "memory");
-
-/// @brief System call with 0 parameters.
-#define _syscall0(type, name)           \
-    type name(void)                     \
-    {                                   \
-        long __res;                     \
-        __inline_syscall0(__res, name); \
-        __syscall_return(type, __res);  \
-    }
-
-/// @brief System call with 1 parameter.
-#define _syscall1(type, name, type1, arg1)    \
-    type name(type1 arg1)                     \
-    {                                         \
-        long __res;                           \
-        __inline_syscall1(__res, name, arg1); \
-        __syscall_return(type, __res);        \
-    }
-
-/// @brief System call with 2 parameters.
-#define _syscall2(type, name, type1, arg1, type2, arg2) \
-    type name(type1 arg1, type2 arg2)                   \
-    {                                                   \
-        long __res;                                     \
-        __inline_syscall2(__res, name, arg1, arg2);     \
-        __syscall_return(type, __res);                  \
-    }
-
-/// @brief System call with 3 parameters.
-#define _syscall3(type, name, type1, arg1, type2, arg2, type3, arg3) \
-    type name(type1 arg1, type2 arg2, type3 arg3)                    \
-    {                                                                \
-        long __res;                                                  \
-        __inline_syscall3(__res, name, arg1, arg2, arg3);            \
-        __syscall_return(type, __res);                               \
-    }
-
-/// @brief System call with 4 parameters.
-#define _syscall4(type, name, type1, arg1, type2, arg2, type3, arg3, type4, arg4) \
-    type name(type1 arg1, type2 arg2, type3 arg3, type4 arg4)                     \
-    {                                                                             \
-        long __res;                                                               \
-        __inline_syscall4(__res, name, arg1, arg2, arg3, arg4);                   \
-        __syscall_return(type, __res);                                            \
-    }
-
-/// @brief System call with 5 parameters.
-#define _syscall5(type, name, type1, arg1, type2, arg2, type3, arg3, type4, arg4, type5, arg5) \
-    type name(type1 arg1, type2 arg2, type3 arg3, type4 arg4, type5 arg5)                      \
-    {                                                                                          \
-        long __res;                                                                            \
-        __inline_syscall5(__res, name, arg1, arg2, arg3, arg4, arg5);                          \
-        __syscall_return(type, __res);                                                         \
-    }
-
-/// @brief System call with 5 parameters.
-#define _syscall6(type, name, type1, arg1, type2, arg2, type3, arg3, type4, arg4, type5, arg5, type6, arg6) \
-    type name(type1 arg1, type2 arg2, type3 arg3, type4 arg4, type5 arg5, type6 arg6)                       \
-    {                                                                                                       \
-        long __res;                                                                                         \
-        unsigned args[6] = { 0 };                                                                           \
-        args[0]          = (unsigned)arg1;                                                                  \
-        args[1]          = (unsigned)arg2;                                                                  \
-        args[2]          = (unsigned)arg3;                                                                  \
-        args[3]          = (unsigned)arg4;                                                                  \
-        args[4]          = (unsigned)arg5;                                                                  \
-        args[5]          = (unsigned)arg6;                                                                  \
-        __inline_syscall1(__res, name, args);                                                               \
-        __syscall_return(type, __res);                                                                      \
-    }

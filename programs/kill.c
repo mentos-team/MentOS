@@ -9,7 +9,6 @@
 #include <limits.h>
 #include <strerror.h>
 #include <ctype.h>
-#include <io/debug.h>
 
 static inline int is_number(char *s)
 {

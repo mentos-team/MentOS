@@ -14,7 +14,6 @@
 #include <sys/stat.h>
 #include <libgen.h>
 #include <sys/bitops.h>
-#include <io/debug.h>
 #include <io/ansi_colors.h>
 
 #define FLAG_L (1U << 0U)
@@ -23,6 +22,22 @@
 #define FLAG_1 (1U << 3U)
 
 #define DENTS_NUM 12
+
+static inline const char *to_human_size(unsigned long bytes)
+{
+    static char output[200];
+    const char *suffix[] = { "B", "KB", "MB", "GB", "TB" };
+    char length          = sizeof(suffix) / sizeof(suffix[0]);
+    int i                = 0;
+    double dblBytes      = bytes;
+    if (bytes > 1024) {
+        for (i = 0; (bytes / 1024) > 0 && i < length - 1; i++, bytes /= 1024) {
+            dblBytes = bytes / 1024.0;
+        }
+    }
+    sprintf(output, "%.02lf %2s", dblBytes, suffix[i]);
+    return output;
+}
 
 static inline void print_dir_entry_name(const char *name, mode_t st_mode)
 {

@@ -13,8 +13,6 @@ set(BUDDY_SYSTEM_FILE ${CMAKE_SOURCE_DIR}/mentos/src/mem/libbuddysystem.a)
 
 # Add the memory option.
 option(USE_BUDDY_SYSTEM "Build using the buddysystem written by the user." OFF)
-# Enables cache tracing.
-option(ENABLE_CACHE_TRACE "Enables cache tracing." OFF)
 # Enables memory allocation tracing.
 option(ENABLE_ALLOC_TRACE "Enables memory allocation tracing." OFF)
 # Enables scheduling feedback on terminal.
@@ -42,10 +40,12 @@ set(KERNEL_SOURCES
     ${CMAKE_SOURCE_DIR}/mentos/src/fs/vfs.c
     ${CMAKE_SOURCE_DIR}/mentos/src/fs/read_write.c
     ${CMAKE_SOURCE_DIR}/mentos/src/fs/open.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/fs/pipe.c
     ${CMAKE_SOURCE_DIR}/mentos/src/fs/stat.c
     ${CMAKE_SOURCE_DIR}/mentos/src/fs/readdir.c
     ${CMAKE_SOURCE_DIR}/mentos/src/fs/procfs.c
     ${CMAKE_SOURCE_DIR}/mentos/src/fs/ioctl.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/fs/fcntl.c
     ${CMAKE_SOURCE_DIR}/mentos/src/fs/namei.c
     ${CMAKE_SOURCE_DIR}/mentos/src/fs/ext2.c
     ${CMAKE_SOURCE_DIR}/mentos/src/hardware/timer.c
@@ -137,17 +137,14 @@ target_compile_definitions(
     ${KERNEL_NAME} PUBLIC
     __KERNEL__
 )
+target_compile_definitions(
+    ${KERNEL_NAME} PUBLIC
+    MENTOS_ROOT="${CMAKE_SOURCE_DIR}"
+)
 # If the emulator is set to output on a log file, tell that to the C code.
 if(${EMULATOR_OUTPUT_TYPE} STREQUAL OUTPUT_LOG)
     target_compile_definitions(${KERNEL_NAME} PUBLIC EMULATOR_OUTPUT_LOG)
 endif()
-
-
-# =============================================================================
-# Enables cache tracing.
-if(ENABLE_CACHE_TRACE)
-    target_compile_definitions(${KERNEL_NAME} PUBLIC ENABLE_CACHE_TRACE)
-endif(ENABLE_CACHE_TRACE)
 
 # =============================================================================
 # Enables memory allocation tracing.

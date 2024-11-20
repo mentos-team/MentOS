@@ -3,12 +3,6 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-// Setup the logging for this file (do this before any other include).
-#include "sys/kernel_levels.h"           // Include kernel log levels.
-#define __DEBUG_HEADER__ "[EDIT  ]"      ///< Change header.
-#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
-#include "io/debug.h"                    // Include debugging functions.
-
 #include <unistd.h>
 #include <sys/stat.h>
 #include <strerror.h>
@@ -342,12 +336,9 @@ void edit_file(char *lines, size_t bufsize, int num_lines, const char *filename,
 
         // Handle arrow keys and escape sequences.
         if (c == '\033') {
-            pr_debug("[ ](%d)\n", c);
             c = getchar();
-            pr_debug("[%c](%d)\n", c, c);
             if (c == '[') {
                 c = getchar();
-                pr_debug("[%c](%d)\n", c, c);
                 // UP Arrow.
                 if (c == 'A') {
                     if (cy > 0) {
@@ -436,15 +427,12 @@ void edit_file(char *lines, size_t bufsize, int num_lines, const char *filename,
                 // Handle Ctrl + Arrows.
                 else if (c == '1') {
                     c = getchar();
-                    pr_debug("[%c](%d)\n", c, c);
 
                     // CTRL + ARROW
                     if (c == ';') {
                         c = getchar();
-                        pr_debug("[%c](%d)\n", c, c);
                         if (c == '5') {
                             c = getchar();
-                            pr_debug("[%c](%d)\n", c, c);
                             // Handle Ctrl+Right Arrow (Move to the beginning of the next word).
                             if (c == 'C') {
                                 // Skip spaces first

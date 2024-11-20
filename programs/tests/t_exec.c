@@ -9,56 +9,44 @@
 #include <sys/wait.h>
 #include <string.h>
 
-static inline void __print_usage(int argc, char *argv[])
-{
-    if (argc > 0) {
-        printf("%s: Usage: %s <exec_type>\n", argv[0], argv[0]);
-        printf("exec_type: execl, execlp, execle, execlpe, execv, execvp, execve, execvpe\n");
-    }
-}
-
 int main(int argc, char *argv[])
 {
+    pid_t pid;
     int status;
-    if (argc != 2) {
-        __print_usage(argc, argv);
-        return 1;
+
+    // Fork a new process
+    pid = fork();
+
+    if (pid < 0) {
+        // Error in forking
+        perror("fork");
+        return EXIT_FAILURE;
     }
 
-    if (setenv("ENV_VAR", "pwd0", 0) == -1) {
-        printf("Failed to set env: `ENV_VAR`\n");
-        return 1;
-    }
+    if (pid == 0) {
+        // Child process: Use exec to replace the child process image
 
-    char *file        = "echo";
-    char *path        = "/bin/echo";
-    char *exec_argv[] = { "echo", "ENV_VAR: ${ENV_VAR}", NULL };
-    char *exec_envp[] = { "PATH=/bin", "ENV_VAR=pwd1", NULL };
+        // Program to execute: /bin/echo
+        // Arguments: /bin/echo "Exec test successful"
+        execl("/bin/echo", "echo", "Exec test successful", (char *)NULL);
 
-    if (fork() == 0) {
-        if (strcmp(argv[1], "execl") == 0) {
-            execl(path, "echo", "ENV_VAR: ${ENV_VAR}", NULL);
-        } else if (strcmp(argv[1], "execlp") == 0) {
-            execlp(file, "echo", "ENV_VAR: ${ENV_VAR}", NULL);
-        } else if (strcmp(argv[1], "execle") == 0) {
-            execle(path, "echo", "ENV_VAR: ${ENV_VAR}", exec_envp, NULL);
-        } else if (strcmp(argv[1], "execlpe") == 0) {
-            execlpe(file, "echo", "ENV_VAR: ${ENV_VAR}", exec_envp, NULL);
-        } else if (strcmp(argv[1], "execv") == 0) {
-            execv(path, exec_argv);
-        } else if (strcmp(argv[1], "execvp") == 0) {
-            execvp(file, exec_argv);
-        } else if (strcmp(argv[1], "execve") == 0) {
-            execve(path, exec_argv, exec_envp);
-        } else if (strcmp(argv[1], "execvpe") == 0) {
-            execvpe(file, exec_argv, exec_envp);
-        } else {
-            __print_usage(argc, argv);
-            return 1;
+        // If exec fails, print an error and exit
+        perror("execl");
+        exit(EXIT_FAILURE);
+    } else {
+        // Parent process: Wait for the child process to complete
+        if (waitpid(pid, &status, 0) == -1) {
+            perror("waitpid");
+            return EXIT_FAILURE;
         }
-        printf("Exec failed.\n");
-        return 1;
+
+        // Check if the child terminated successfully
+        if (WIFEXITED(status) && WEXITSTATUS(status) == 0) {
+            // exec worked
+            return EXIT_SUCCESS;
+        } else {
+            // exec failed or child terminated abnormally
+            return EXIT_FAILURE;
+        }
     }
-    wait(&status);
-    return 0;
 }

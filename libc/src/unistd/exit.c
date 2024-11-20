@@ -9,6 +9,6 @@
 void exit(int status)
 {
     long __res;
-    __inline_syscall1(__res, exit, status);
+    __inline_syscall_1(__res, exit, status);
     // The process never returns from this system call!
 }

@@ -10,16 +10,11 @@
 ///     http://csrc.nist.gov/publications/fips/fips180-2/fips180-2withchangenotice.pdf
 /// This implementation uses little endian byte order.
 
-// Setup the logging for this file (do this before any other include).
-#include "sys/kernel_levels.h"           // Include kernel log levels.
-#define __DEBUG_HEADER__ "[SHA256]"      ///< Change header.
-#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
-#include "io/debug.h"                    // Include debugging functions.
-
 #include "crypt/sha256.h"
 
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 
 /// @brief Rotate left operation on a 32-bit unsigned integer.
 /// @param a The value to rotate.
@@ -90,11 +85,11 @@ static inline void __sha256_transform(SHA256_ctx_t *ctx, const uint8_t data[])
 {
     // Error checks: Ensure the input parameters are not NULL.
     if (!ctx) {
-        pr_err("SHA256 context is NULL.\n");
+        perror("SHA256 context is NULL.\n");
         return;
     }
     if (!data) {
-        pr_err("Input data is NULL.\n");
+        perror("Input data is NULL.\n");
         return;
     }
 
@@ -161,7 +156,7 @@ void sha256_bytes_to_hex(uint8_t *src, size_t src_length, char *out, size_t out_
 {
     // Check if the output buffer is large enough to hold the hex string
     if (out_length < (src_length * 2 + 1)) {
-        pr_err("Output buffer is too small for the hex representation.\n");
+        perror("Output buffer is too small for the hex representation.\n");
         return; // Return early if the buffer is insufficient.
     }
 
@@ -181,7 +176,7 @@ void sha256_init(SHA256_ctx_t *ctx)
 {
     // Error check: Ensure the input context is not NULL.
     if (!ctx) {
-        pr_err("SHA256 context is NULL.\n");
+        perror("SHA256 context is NULL.\n");
         return; // Return early if the context is NULL to prevent crashes.
     }
 
@@ -206,12 +201,12 @@ void sha256_update(SHA256_ctx_t *ctx, const uint8_t data[], size_t len)
 {
     // Error check: Ensure the input context and data are not NULL.
     if (!ctx) {
-        pr_err("SHA256 context is NULL.\n");
+        perror("SHA256 context is NULL.\n");
         return; // Return early if the context is NULL to prevent crashes.
     }
 
     if (!data) {
-        pr_err("Input data is NULL.\n");
+        perror("Input data is NULL.\n");
         return; // Return early if the data is NULL to prevent errors.
     }
 
@@ -239,11 +234,11 @@ void sha256_final(SHA256_ctx_t *ctx, uint8_t hash[])
 {
     // Error check: Ensure the input context and hash are not NULL.
     if (!ctx) {
-        pr_err("SHA256 context is NULL.\n");
+        perror("SHA256 context is NULL.\n");
         return; // Return early if the context is NULL to prevent crashes.
     }
     if (!hash) {
-        pr_err("Output hash buffer is NULL.\n");
+        perror("Output hash buffer is NULL.\n");
         return; // Return early if the output buffer is NULL to prevent errors.
     }
 

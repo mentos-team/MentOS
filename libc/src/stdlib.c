@@ -46,7 +46,7 @@ void *malloc(unsigned int size)
     }
     void *ptr;
     // Allocate the memory.
-    __inline_syscall1(ptr, brk, size + sizeof(malloc_header_t));
+    __inline_syscall_1(ptr, brk, size + sizeof(malloc_header_t));
     // Check for errors from the brk.
     if (ptr == 0) {
         return NULL;
@@ -104,7 +104,7 @@ void free(void *ptr)
     ptr = (char *)ptr - sizeof(malloc_header_t);
     // Call the free.
     int _res;
-    __inline_syscall1(_res, brk, (char *)header);
+    __inline_syscall_1(_res, brk, (char *)header);
 }
 
 /// Seed used to generate random numbers.

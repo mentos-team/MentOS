@@ -14,6 +14,8 @@
 #define MAP_SHARED  0x01 ///< The memory is shared.
 #define MAP_PRIVATE 0x02 ///< The memory is private.
 
+#if 0
+
 /// @brief creates a new mapping in the virtual address space of the calling process.
 /// @param addr the starting address for the new mapping.
 /// @param length specifies the length of the mapping (which must be greater than 0).
@@ -29,3 +31,5 @@ void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset)
 /// @param length the length of the mapped area.
 /// @return 0 on success, -1 on falure and errno is set.
 int munmap(void *addr, size_t length);
+
+#endif

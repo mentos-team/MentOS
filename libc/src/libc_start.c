@@ -7,7 +7,7 @@
 #include "assert.h"
 #include "stdlib.h"
 #include "string.h"
-#include "sys/errno.h"
+#include "errno.h"
 #include "system/syscall_types.h"
 
 /// @brief Reference to the `environ` variable in `setenv.c`.

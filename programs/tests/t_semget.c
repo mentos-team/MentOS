@@ -7,7 +7,7 @@
 /// This file is distributed under the MIT License. See LICENSE.md for details.
 
 #include <unistd.h>
-#include <sys/errno.h>
+#include <errno.h>
 #include <sys/stat.h>
 #include <strerror.h>
 #include <sys/wait.h>
@@ -70,7 +70,9 @@ int main(int argc, char *argv[])
         op_child.sem_op  = 1; // Increment semaphore by 1.
         op_child.sem_flg = 0; // No special flags.
 
-        sleep(3); // Simulate some work before modifying the semaphore.
+        // Simulate some work before modifying the semaphore.
+        timespec_t req = { 0, 200000000 };
+        nanosleep(&req, NULL);
 
         // Increment the semaphore, unblocking the parent.
         if (semop(semid, &op_child, 1) < 0) {
@@ -88,7 +90,7 @@ int main(int argc, char *argv[])
         printf("[child] Semaphore value is %d (expected: 2)\n", ret);
 
         // Sleep and perform another increment operation.
-        sleep(3);
+        nanosleep(&req, NULL);
         if (semop(semid, &op_child, 1) < 0) {
             perror("Failed to perform second child semaphore operation");
             return 1;

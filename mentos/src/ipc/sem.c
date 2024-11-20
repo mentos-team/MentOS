@@ -43,13 +43,12 @@
 
 #include "assert.h"
 #include "fcntl.h"
-#include "klib/list.h"
 #include "process/process.h"
 #include "process/scheduler.h"
 #include "stdio.h"
 #include "stdlib.h"
 #include "string.h"
-#include "sys/errno.h"
+#include "errno.h"
 
 ///@brief A value to compute the semid value.
 int __sem_id = 0;

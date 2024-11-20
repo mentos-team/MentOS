@@ -75,25 +75,25 @@ int readlink(const char *path, char *buffer, size_t bufsize);
 /// @return pid_t process identifier.
 pid_t getpid(void);
 
-///@brief  Return session id of the given process.
+/// @brief  Return session id of the given process.
 ///        If pid == 0 return the SID of the calling process
 ///        If pid != 0 return the SID corresponding to the process having identifier == pid
-///@param pid process identifier from wich we want the SID
-///@return On success return SID of the session
+/// @param pid process identifier from wich we want the SID
+/// @return On success return SID of the session
 ///        Otherwise return -1 with errno set on: EPERM or ESRCH
 pid_t getsid(pid_t pid);
 
-///@brief creates a new session if the calling process is not a
+/// @brief creates a new session if the calling process is not a
 ///       process group leader.  The calling process is the leader of the
 ///       new session (i.e., its session ID is made the same as its process
 ///       ID).  The calling process also becomes the process group leader
 ///       of a new process group in the session (i.e., its process group ID
 ///       is made the same as its process ID).
-///@return On success return SID of the session just created
+/// @return On success return SID of the session just created
 ///        Otherwise return -1 with errno : EPERM
 pid_t setsid(void);
 
-///@brief returns the Process Group ID (PGID) of the process specified by pid.
+/// @brief returns the Process Group ID (PGID) of the process specified by pid.
 /// If pid is zero, the process ID of the calling process is used.
 /// @param pid process of which we want to know the PGID.
 /// @return the PGID of the specified process.
@@ -106,45 +106,44 @@ pid_t getpgid(pid_t pid);
 /// @return returns zero. On error, -1 is returned, and errno is set appropriately.
 int setpgid(pid_t pid, pid_t pgid);
 
-///@brief returns the real group ID of the calling process.
-///@return GID of the current process
+/// @brief returns the real group ID of the calling process.
+/// @return GID of the current process
 gid_t getgid(void);
 
-///@brief returns the effective group ID of the calling process.
-///@return GID of the current process
+/// @brief returns the effective group ID of the calling process.
+/// @return GID of the current process
 gid_t getegid(void);
 
-///@brief sets the group IDs of the calling process.
-///@param gid the Group ID to set
-///@return On success, zero is returned.
-///        Otherwise returns -1 with errno set to :EINVAL or EPERM
+/// @brief sets the group IDs of the calling process.
+/// @param gid the Group ID to set
+/// @return On success, zero is returned. Otherwise returns -1 with errno.
 int setgid(gid_t gid);
 
-///@brief sets the real and effective group IDs of the calling process.
-///@param rgid the new real Group ID.
-///@param egid the effective real Group ID.
-///@return On success, zero is returned.
+/// @brief sets the real and effective group IDs of the calling process.
+/// @param rgid the new real Group ID.
+/// @param egid the effective real Group ID.
+/// @return On success, zero is returned.
 ///        Otherwise returns -1 with errno set EPERM
 int setregid(gid_t rgid, gid_t egid);
 
-///@brief Returns the real User ID of the calling process.
-///@return User ID of the current process.
+/// @brief Returns the real User ID of the calling process.
+/// @return User ID of the current process.
 uid_t getuid(void);
 
-///@brief Returns the effective User ID of the calling process.
-///@return User ID of the current process.
+/// @brief Returns the effective User ID of the calling process.
+/// @return User ID of the current process.
 uid_t geteuid(void);
 
-///@brief Sets the User IDs of the calling process.
-///@param uid the new User ID.
-///@return On success, zero is returned.
+/// @brief Sets the User IDs of the calling process.
+/// @param uid the new User ID.
+/// @return On success, zero is returned.
 ///        Otherwise returns -1 with errno set to :EINVAL or EPERM
 int setuid(uid_t uid);
 
-///@brief Sets the effective and real User IDs of the calling process.
-///@param ruid the new real User ID.
-///@param euid the effective real User ID.
-///@return On success, zero is returned.
+/// @brief Sets the effective and real User IDs of the calling process.
+/// @param ruid the new real User ID.
+/// @param euid the effective real User ID.
+/// @return On success, zero is returned.
 ///        Otherwise returns -1 with errno set to EPERM
 int setreuid(uid_t ruid, uid_t euid);
 
@@ -306,3 +305,16 @@ int fchown(int fd, uid_t owner, gid_t group);
 /// @return On success, 0 is returned.
 ///         On error, -1 is returned, and errno is set appropriately.
 int lchown(const char *pathname, uid_t owner, gid_t group);
+
+/// @brief Causes the calling thread to sleep either until the number of
+///        real-time seconds specified in seconds have elapsed or
+///        until a signal arrives which is not ignored.
+/// @param seconds The number of seconds we want to sleep.
+/// @return Zero if the requested time has elapsed, or the number of seconds
+///         left to sleep, if the call was interrupted by a signal handler.
+unsigned int sleep(unsigned int seconds);
+
+/// @brief System call to create a new pipe.
+/// @param fds Array to store read and write file descriptors.
+/// @return 0 on success, or -1 on error.
+int pipe(int fds[2]);

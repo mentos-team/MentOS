@@ -15,7 +15,7 @@
 #include "mem/paging.h"
 #include "mem/zone_allocator.h"
 #include "string.h"
-#include "sys/list_head.h"
+#include "list_head.h"
 
 /// @brief Aligns the given address down to the nearest page boundary.
 /// @param addr The address to align.

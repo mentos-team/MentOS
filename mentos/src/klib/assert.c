@@ -7,14 +7,20 @@
 #include "stdio.h"
 #include "system/panic.h"
 
+// Setup the logging for this file (do this before any other include).
+#include "sys/kernel_levels.h"           // Include kernel log levels.
+#define __DEBUG_HEADER__ "[ASSERT]"      ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
+#include "io/debug.h"                    // Include debugging functions.
+
 void __assert_fail(const char *assertion, const char *file, const char *function, unsigned int line)
 {
-    char message[1024];
-    sprintf(message,
-            "FILE: %s\n"
-            "FUNC: %s\n"
-            "LINE: %d\n\n"
-            "Assertion `%s` failed.\n",
-            file, (function ? function : "NO_FUN"), line, assertion);
-    kernel_panic(message);
+    pr_emerg("\n=== ASSERTION FAILED ===\n"
+             "Assertion: %s\n"
+             "Location : %s:%d\n"
+             "Function : %s\n\n",
+             assertion,
+             file, line,
+             (function ? function : "Unknown function"));
+    kernel_panic("Assertion failed.");
 }

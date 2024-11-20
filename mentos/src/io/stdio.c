@@ -9,7 +9,7 @@
 #include "io/video.h"
 #include "stdio.h"
 #include "string.h"
-#include "sys/errno.h"
+#include "errno.h"
 
 int atoi(const char *str)
 {

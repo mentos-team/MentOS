@@ -8,7 +8,7 @@
 #include "fs/vfs.h"
 #include "fs/vfs_types.h"
 #include "stdio.h"
-#include "sys/errno.h"
+#include "errno.h"
 #include "system/panic.h"
 
 ssize_t sys_read(int fd, void *buf, size_t nbytes)

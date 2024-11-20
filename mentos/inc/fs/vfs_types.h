@@ -5,7 +5,7 @@
 
 #pragma once
 
-#include "sys/list_head.h"
+#include "list_head.h"
 #include "bits/stat.h"
 #include "stdint.h"
 #include "dirent.h"
@@ -15,46 +15,23 @@
 #define PATH_UP               ".." ///< The path to the parent.
 #define PATH_DOT              "."  ///< The path to the current directory.
 
-/// Forward declaration of the VFS file.
-typedef struct vfs_file_t vfs_file_t;
-
-/// Forward declaration of the inode attributes.
-struct iattr;
-
-/// Function used to create a directory.
-typedef int (*vfs_mkdir_callback)(const char *, mode_t);
-/// Function used to remove a directory.
-typedef int (*vfs_rmdir_callback)(const char *);
-/// Function used to open a file (or directory).
-typedef vfs_file_t *(*vfs_creat_callback)(const char *, mode_t);
-/// Function used to read the entries of a directory.
-typedef ssize_t (*vfs_getdents_callback)(vfs_file_t *, dirent_t *, off_t, size_t);
-/// Function used to open a file (or directory).
-typedef vfs_file_t *(*vfs_open_callback)(const char *, int, mode_t);
-/// Function used to remove a file.
-typedef int (*vfs_unlink_callback)(const char *);
-/// Function used to close a file.
-typedef int (*vfs_close_callback)(vfs_file_t *);
-/// Function used to read from a file.
-typedef ssize_t (*vfs_read_callback)(vfs_file_t *, char *, off_t, size_t);
-/// Function used to write inside a file.
-typedef ssize_t (*vfs_write_callback)(vfs_file_t *, const void *, off_t, size_t);
-/// Function used to reposition the file offset inside a file.
-typedef off_t (*vfs_lseek_callback)(vfs_file_t *, off_t, int);
-/// Function used to stat fs entries.
-typedef int (*vfs_stat_callback)(const char *, stat_t *);
-/// Function used to stat files.
-typedef int (*vfs_fstat_callback)(vfs_file_t *, stat_t *);
-/// Function used to perform ioctl on files.
-typedef int (*vfs_ioctl_callback)(vfs_file_t *, int, void *);
-/// Function for creating symbolic links.
-typedef int (*vfs_symlink_callback)(const char *, const char *);
-/// Function that reads the symbolic link data associated with a file.
-typedef ssize_t (*vfs_readlink_callback)(const char *, char *, size_t);
-/// Function used to modify the attributes of an fs entry.
-typedef int (*vfs_setattr_callback)(const char *, struct iattr *);
-/// Function used to modify the attributes of a file.
-typedef int (*vfs_fsetattr_callback)(vfs_file_t *, struct iattr *);
+/// @brief Data structure containing attributes of a file.
+struct iattr {
+    /// Validity check on iattr struct.
+    unsigned int ia_valid;
+    /// Access mode.
+    mode_t ia_mode;
+    /// Owner uid.
+    uid_t ia_uid;
+    /// Owner gid.
+    gid_t ia_gid;
+    /// Time of last access.
+    uint32_t ia_atime;
+    /// Time of last data modification.
+    uint32_t ia_mtime;
+    /// Time of last status change.
+    uint32_t ia_ctime;
+};
 
 /// @brief Filesystem information.
 typedef struct file_system_type {
@@ -63,53 +40,57 @@ typedef struct file_system_type {
     /// Flags of the filesystem.
     int fs_flags;
     /// Mount function.
-    vfs_file_t *(*mount)(const char *, const char *);
-} file_system_type;
+    struct vfs_file *(*mount)(const char *, const char *);
+    /// List head for linking filesystem types.
+    struct list_head list;
+} file_system_type_t;
 
-/// @brief Set of functions used to perform operations on filesystem.
-typedef struct vfs_sys_operations_t {
+/// @brief Set of functions used to perform operations on a filesystem.
+typedef struct vfs_sys_operations {
     /// Creates a directory.
-    vfs_mkdir_callback mkdir_f;
+    int (*mkdir_f)(const char *, mode_t);
     /// Removes a directory.
-    vfs_rmdir_callback rmdir_f;
-    /// Stat function.
-    vfs_stat_callback stat_f;
-    /// File creation function.
-    vfs_creat_callback creat_f;
-    /// Symbolic link creation function.
-    vfs_symlink_callback symlink_f;
-    /// Modifies the attributes of a file.
-    vfs_setattr_callback setattr_f;
+    int (*rmdir_f)(const char *);
+    /// Retrieves file status information.
+    int (*stat_f)(const char *, stat_t *);
+    /// Creates a new file or directory.
+    struct vfs_file *(*creat_f)(const char *, mode_t);
+    /// Creates a symbolic link.
+    int (*symlink_f)(const char *, const char *);
+    /// Modifies the attributes of a filesystem entry.
+    int (*setattr_f)(const char *, struct iattr *);
 } vfs_sys_operations_t;
 
 /// @brief Set of functions used to perform operations on files.
-typedef struct vfs_file_operations_t {
-    /// Open a file.
-    vfs_open_callback open_f;
-    /// Remove a file.
-    vfs_unlink_callback unlink_f;
-    /// Close a file.
-    vfs_close_callback close_f;
-    /// Read from a file.
-    vfs_read_callback read_f;
-    /// Write inside a file.
-    vfs_write_callback write_f;
-    /// Reposition the file offset inside a file.
-    vfs_lseek_callback lseek_f;
-    /// Stat the file.
-    vfs_fstat_callback stat_f;
-    /// Perform ioctl on file.
-    vfs_ioctl_callback ioctl_f;
-    /// Read entries inside the directory.
-    vfs_getdents_callback getdents_f;
-    /// Reads the symbolik link data.
-    vfs_readlink_callback readlink_f;
-    /// Modifies the attributes of a file.
-    vfs_fsetattr_callback setattr_f;
+typedef struct vfs_file_operations {
+    /// Opens a file.
+    struct vfs_file *(*open_f)(const char *, int, mode_t);
+    /// Removes a file.
+    int (*unlink_f)(const char *);
+    /// Closes a file.
+    int (*close_f)(struct vfs_file *);
+    /// Reads data from a file.
+    ssize_t (*read_f)(struct vfs_file *, char *, off_t, size_t);
+    /// Writes data to a file.
+    ssize_t (*write_f)(struct vfs_file *, const void *, off_t, size_t);
+    /// Repositions the file offset within a file.
+    off_t (*lseek_f)(struct vfs_file *, off_t, int);
+    /// Retrieves status information of an open file.
+    int (*stat_f)(struct vfs_file *, stat_t *);
+    /// Performs an ioctl operation on a file.
+    long (*ioctl_f)(struct vfs_file *, unsigned int, unsigned long);
+    /// Performs a fcntl operation on a file.
+    long (*fcntl_f)(struct vfs_file *, unsigned int, unsigned long);
+    /// Reads entries within a directory.
+    ssize_t (*getdents_f)(struct vfs_file *, dirent_t *, off_t, size_t);
+    /// Reads the target of a symbolic link.
+    ssize_t (*readlink_f)(const char *, char *, size_t);
+    /// Modifies the attributes of an open file.
+    int (*setattr_f)(struct vfs_file *, struct iattr *);
 } vfs_file_operations_t;
 
 /// @brief Data structure that contains information about the mounted filesystems.
-struct vfs_file_t {
+typedef struct vfs_file {
     /// The filename.
     char name[NAME_MAX];
     /// Device object (optional).
@@ -148,49 +129,31 @@ struct vfs_file_t {
     uint32_t nlink;
     /// List to hold all active files associated with a specific entry in a filesystem.
     list_head siblings;
-    /// TODO: Comment.
+    /// Reference count for this file.
     int32_t refcount;
-};
+} vfs_file_t;
 
 /// @brief A structure that represents an instance of a filesystem, i.e., a mounted filesystem.
-typedef struct super_block_t {
+typedef struct super_block {
     /// Name of the superblock.
     char name[NAME_MAX];
     /// Path of the superblock.
     char path[PATH_MAX];
     /// Pointer to the root file of the given filesystem.
-    vfs_file_t *root;
+    struct vfs_file *root;
     /// Pointer to the information regarding the filesystem.
-    file_system_type *type;
+    file_system_type_t *type;
     /// List to hold all active mounting points.
     list_head mounts;
 } super_block_t;
 
 /// @brief Data structure containing information about an open file.
-typedef struct vfs_file_descriptor_t {
+typedef struct vfs_file_descriptor {
     /// the underlying file structure
-    vfs_file_t *file_struct;
+    struct vfs_file *file_struct;
     /// Flags for file opening modes.
     int flags_mask;
 } vfs_file_descriptor_t;
-
-/// @brief Data structure containing attributes of a file.
-struct iattr {
-    /// Validity check on iattr struct.
-    unsigned int ia_valid;
-    /// Access mode.
-    mode_t ia_mode;
-    /// Owner uid.
-    uid_t ia_uid;
-    /// Owner gid.
-    gid_t ia_gid;
-    /// Time of last access.
-    uint32_t ia_atime;
-    /// Time of last data modification.
-    uint32_t ia_mtime;
-    /// Time of last status change.
-    uint32_t ia_ctime;
-};
 
 #define ATTR_MODE  (1 << 0) ///< Flag set to specify the validity of MODE.
 #define ATTR_UID   (1 << 1) ///< Flag set to specify the validity of UID.

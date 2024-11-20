@@ -21,7 +21,7 @@
 #include "process/scheduler.h"
 #include "process/wait.h"
 #include "string.h"
-#include "sys/errno.h"
+#include "errno.h"
 #include "system/panic.h"
 #include "fs/vfs.h"
 #include "fs/namei.h"
@@ -29,8 +29,6 @@
 
 /// Cache for creating the task structs.
 static kmem_cache_t *task_struct_cache;
-/// @brief The task_struct of the init process.
-static task_struct *init_proc;
 
 /// @brief Counts the number of arguments.
 /// @param args the array of arguments, it must be NULL terminated.
@@ -343,8 +341,12 @@ int init_tasking(void)
 task_struct *process_create_init(const char *path)
 {
     pr_debug("Building init process...\n");
+
     // Allocate the memory for the process.
-    init_proc = __alloc_task(NULL, NULL, "init");
+    task_struct *init_proc = __alloc_task(NULL, NULL, "init");
+
+    // Active the current process.
+    scheduler_enqueue_task(init_proc);
 
     // == INITIALIZE `/proc/video` ============================================
     // Check that the fd_list is initialized.
@@ -418,12 +420,21 @@ task_struct *process_create_init(const char *path)
     paging_switch_directory(crtdir);
     // ------------------------------------------------------------------------
 
-    // Active the current process.
-    scheduler_enqueue_task(init_proc);
-
     pr_debug("Executing '%s' (pid: %d)...\n", init_proc->name, init_proc->pid);
 
     return init_proc;
+}
+
+vfs_file_descriptor_t *fget(int fd)
+{
+    task_struct *current = scheduler_get_current_process();
+    assert(current && "There is no current task running.");
+    // Check the current FD.
+    if (fd < 0 || fd >= current->max_fd) {
+        return NULL;
+    }
+    // Retrieve the file structure from the table.
+    return current->fd_list + fd;
 }
 
 char *sys_getcwd(char *buf, size_t size)

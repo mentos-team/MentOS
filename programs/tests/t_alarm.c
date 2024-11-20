@@ -18,21 +18,21 @@ void alarm_handler(int sig)
 {
     printf("handler(%d) : Starting handler.\n", sig);
     if (sig == SIGALRM) {
-        // Set an alarm to go off after 5 seconds.
-        alarm(5);
+        // Set an alarm to go off after 1 seconds.
+        alarm(1);
 
-        // Set another alarm to go off after 5 seconds and get the remaining time of the previous alarm.
-        int rest = alarm(5);
+        // Set another alarm to go off after 1 seconds and get the remaining time of the previous alarm.
+        int rest = alarm(1);
 
-        // Expected value:  5 (since the previous alarm was just set to 5 seconds).
-        printf("handler(%d) : alarm(5) result: %d.\n", sig, rest);
+        // Expected value:  1 (since the previous alarm was just set to 1 seconds).
+        printf("handler(%d) : alarm(1) result: %d.\n", sig, rest);
 
         // Cancel the alarm and get the remaining time of the previous alarm.
         rest = alarm(0);
 
-        // Expected value: ~4 (since the previous alarm was just set to 5
+        // Expected value: ~4 (since the previous alarm was just set to 1
         // seconds again). This small delay between the two alarm calls is why
-        // you see the value 4 instead of 5. The exact value can vary slightly
+        // you see the value 4 instead of 1. The exact value can vary slightly
         // depending on the system’s execution speed and the time taken to
         // execute the intermediate code.
         printf("handler(%d) : alarm(0) result: %d.\n", sig, rest);
@@ -56,8 +56,8 @@ int main(int argc, char *argv[])
         exit(EXIT_FAILURE);
     }
 
-    // Set an alarm to go off after 5 seconds.
-    alarm(5);
+    // Set an alarm to go off after 1 seconds.
+    alarm(1);
 
     // Infinite loop to keep the program running until the alarm signal is received.
     while (1) {}

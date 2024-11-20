@@ -3,7 +3,6 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "io/debug.h"
 #include "stddef.h"
 #include <fcntl.h>
 #include <stdio.h>

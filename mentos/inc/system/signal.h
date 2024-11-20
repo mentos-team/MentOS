@@ -7,7 +7,7 @@
 
 #include "klib/stdatomic.h"
 #include "klib/spinlock.h"
-#include "sys/list_head.h"
+#include "list_head.h"
 #include "system/syscall.h"
 
 /// @brief Signal codes.
@@ -244,15 +244,14 @@ typedef struct sigpending_t {
 #define SEND_SIG_NOINFO ((siginfo_t *)0)
 
 /// @brief Handle the return from a signal handler.
-/// @param f The stack frame when returning from a signal handler.
-/// @return never.
+/// @param f Pointer to the pt_regs structure.
+/// @return This function does not return (never).
 long sys_sigreturn(struct pt_regs *f);
 
 /// @brief Handles the signals of the current process.
-/// @param f The address of the stack area where the User Mode register
-///          contents of the current process are saved.
-/// @return If we are handling a signal, thus, `regs` have been modified
-///          to handle it (e.g., eip is now poiting at the handler).
+/// @param f Pointer to the pt_regs structure.
+/// @return 1 if a signal is being handled and registers have been modified;
+/// otherwise, 0.
 int do_signal(struct pt_regs *f);
 
 /// @brief Initialize the signals.

@@ -5,11 +5,10 @@
 
 #include "unistd.h"
 #include "fcntl.h"
-#include "io/debug.h"
 #include "stdarg.h"
 #include "stdlib.h"
 #include "string.h"
-#include "sys/errno.h"
+#include "errno.h"
 #include "sys/stat.h"
 #include "system/syscall_types.h"
 #include "limits.h"
@@ -62,7 +61,7 @@ static inline int __find_in_path(const char *file, char *buf, size_t buf_len)
 int execve(const char *path, char *const argv[], char *const envp[])
 {
     long __res;
-    __inline_syscall3(__res, execve, path, argv, envp);
+    __inline_syscall_3(__res, execve, path, argv, envp);
     __syscall_return(int, __res);
 }
 

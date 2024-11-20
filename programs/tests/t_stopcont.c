@@ -38,15 +38,21 @@ int main(int argc, char *argv[])
 
         printf("Child process (PID: %d) started.\n", getpid());
 
+        // Sleep for 100 ms.
+        timespec_t req = { 0, 100000000 };
+
         while (1) {
             printf("Child process running...\n");
-            sleep(1);
+            nanosleep(&req, NULL);
         }
 
     } else { // Parent process.
 
+        // Sleep for 300 ms.
+        timespec_t req = { 0, 300000000 };
+
         // Let the child process run for a bit.
-        sleep(3);
+        nanosleep(&req, NULL);
         if (kill(pid, SIGSTOP) == -1) {
             perror("failed to send SIGSTOP");
             exit(EXIT_FAILURE);
@@ -54,7 +60,7 @@ int main(int argc, char *argv[])
         printf("Parent sending SIGSTOP to child (PID: %d).\n", pid);
 
         // Wait for a bit before continuing the child process.
-        sleep(3);
+        nanosleep(&req, NULL);
         if (kill(pid, SIGCONT) == -1) {
             perror("failed to send SIGCONT");
             exit(EXIT_FAILURE);
@@ -62,7 +68,7 @@ int main(int argc, char *argv[])
         printf("Parent sending SIGCONT to child (PID: %d).\n", pid);
 
         // Wait for a bit before terminating the child process.
-        sleep(3);
+        nanosleep(&req, NULL);
         if (kill(pid, SIGTERM) == -1) {
             perror("failed to send SIGTERM");
             exit(EXIT_FAILURE);

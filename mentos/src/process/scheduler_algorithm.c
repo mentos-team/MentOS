@@ -15,7 +15,7 @@
 #include "process/scheduler.h"
 #include "process/scheduler_feedback.h"
 #include "process/wait.h"
-#include "sys/list_head.h"
+#include "list_head.h"
 
 /// @brief Updates task execution statistics.
 /// @param task the task to update.

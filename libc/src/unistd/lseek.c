@@ -4,7 +4,13 @@
 /// See LICENSE.md for details.
 
 #include "unistd.h"
-#include "sys/errno.h"
+#include "errno.h"
 #include "system/syscall_types.h"
 
-_syscall3(off_t, lseek, int, fd, off_t, offset, int, whence)
+// _syscall3(off_t, lseek, int, fd, off_t, offset, int, whence)
+off_t lseek(int fd, off_t offset, int whence)
+{
+    long __res;
+    __inline_syscall_3(__res, lseek, fd, offset, whence);
+    __syscall_return(off_t, __res);
+}

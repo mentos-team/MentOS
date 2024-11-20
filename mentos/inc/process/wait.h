@@ -5,7 +5,7 @@
 
 #pragma once
 
-#include "sys/list_head.h"
+#include "list_head.h"
 #include "klib/spinlock.h"
 
 /// @brief Return immediately if no child is there to be waited for.
@@ -77,8 +77,14 @@ typedef struct wait_queue_entry_t {
     int (*func)(struct wait_queue_entry_t *wait, unsigned mode, int sync);
     /// Handler for placing the entry inside a waiting queue double linked-list.
     struct list_head task_list;
+    /// Additional context or data, typically a pointer to relevant information
+    /// for the wake function.
+    void *private;
 } wait_queue_entry_t;
 
+/// @brief Initializes a wait queue head.
+/// @param head Pointer to the wait queue head to initialize.
+void wait_queue_head_init(wait_queue_head_t *head);
 
 /// @brief Allocates the memory for a wait_queue_entry.
 /// @return a pointer to the allocated wait_queue_entry.
@@ -91,7 +97,7 @@ void wait_queue_entry_dealloc(wait_queue_entry_t * wait_queue_entry);
 /// @brief Initialize the waiting queue entry.
 /// @param wq   The entry we initialize.
 /// @param task The task associated with the entry.
-void init_waitqueue_entry(wait_queue_entry_t *wq, struct task_struct *task);
+void wait_queue_entry_init(wait_queue_entry_t *wq, struct task_struct *task);
 
 /// @brief Adds the element to the waiting queue.
 /// @param head The head of the waiting queue.

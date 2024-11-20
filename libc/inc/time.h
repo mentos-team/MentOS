@@ -61,9 +61,9 @@ typedef struct timespec {
     long tv_nsec;  ///< Nanoseconds.
 } timespec_t;
 
-/// @brief Returns the current time.
-/// @param t Where the time should be stored.
-/// @return The current time.
+/// @brief Retrieves the current time.
+/// @param t Pointer to a `time_t` variable to store the current time, or NULL if not needed.
+/// @return The current time as `time_t`, or (time_t)-1 on failure.
 time_t time(time_t *t);
 
 /// @brief Converts the given time to a string representing the local time.
@@ -108,14 +108,6 @@ size_t strftime(char *s, size_t max, const char *format, const tm_t *tm);
 /// invocation of a handler in the calling thread or that terminates
 /// the process.
 int nanosleep(const struct timespec *req, struct timespec *rem);
-
-/// @brief Causes the calling thread to sleep either until the number of
-///        real-time seconds specified in seconds have elapsed or
-///        until a signal arrives which is not ignored.
-/// @param seconds The number of seconds we want to sleep.
-/// @return Zero if the requested time has elapsed, or the number of seconds
-///         left to sleep, if the call was interrupted by a signal handler.
-unsigned int sleep(unsigned int seconds);
 
 /// @brief Fills the structure pointed to by curr_value with the current setting
 /// for the timer specified by which.

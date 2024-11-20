@@ -12,16 +12,17 @@ set(TEST_LIST
     t_gid.c
     t_alarm.c
     t_periodic3.c
-    t_setenv.c
+    t_environ.c
     t_itimer.c
     t_fork.c
     t_semget.c
     t_exec.c
     t_sleep.c
     t_periodic2.c
+    t_pipe_blocking.c
+    t_pipe_non_blocking.c
     t_sigfpe.c
     t_sigmask.c
-    t_getenv.c
     t_sigusr.c
     t_shmget.c
     t_stopcont.c
@@ -35,11 +36,14 @@ set(TEST_LIST
     t_msgget.c
     t_periodic1.c
     t_kill.c
-    t_shm_write.c
+    t_shm.c
     t_mem.c
-    t_shm_read.c
     t_spwd.c
     t_big_write.c
+    t_syslog.c
+    t_ndtree.c
+    t_list.c
+    t_hashmap.c
 )
 
 # Set the directory where the compiled binaries will be placed.

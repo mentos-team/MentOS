@@ -3,12 +3,6 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-// Setup the logging for this file (do this before any other include).
-#include "sys/kernel_levels.h"           // Include kernel log levels.
-#define __DEBUG_HEADER__ "[LOGIN ]"      ///< Change header.
-#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
-#include "io/debug.h"                    // Include debugging functions.
-
 #include <string.h>
 #include <ctype.h>
 #include <stdbool.h>
@@ -77,8 +71,6 @@ static inline int __read_input(char *buffer, size_t size, int show)
 
     do {
         c = getchar(); // Read a character from input
-
-        pr_debug("%c\n", c);
 
         // Ignore EOF and null or tab characters
         if (c == EOF || c == 0 || c == '\t') {

@@ -3,14 +3,13 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "fs/ioctl.h"
 #include "fs/vfs.h"
 #include "process/scheduler.h"
 #include "stdio.h"
-#include "sys/errno.h"
+#include "errno.h"
 #include "system/printk.h"
 
-int sys_ioctl(int fd, int request, void *data)
+long sys_ioctl(int fd, unsigned int request, unsigned long data)
 {
     // Get the current task.
     task_struct *task = scheduler_get_current_process();
@@ -23,12 +22,12 @@ int sys_ioctl(int fd, int request, void *data)
     // Get the file descriptor.
     vfs_file_descriptor_t *vfd = &task->fd_list[fd];
 
-    // Get the file.
+    // Verify that the file exists.
     vfs_file_t *file = vfd->file_struct;
     if (file == NULL) {
         return -ENOSYS;
     }
 
-    // Perform the ioctl.
+    // Perform the ioctl operation.
     return vfs_ioctl(file, request, data);
 }

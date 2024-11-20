@@ -74,24 +74,19 @@ if (DOXYGEN_FOUND)
         ${CMAKE_SOURCE_DIR}/mentos/inc/klib/irqflags.h
         ${CMAKE_SOURCE_DIR}/mentos/inc/klib/spinlock.h
         ${CMAKE_SOURCE_DIR}/mentos/inc/klib/stdatomic.h
-        ${CMAKE_SOURCE_DIR}/mentos/inc/klib/ndtree.h
         ${CMAKE_SOURCE_DIR}/mentos/inc/klib/stack_helper.h
         ${CMAKE_SOURCE_DIR}/mentos/inc/klib/mutex.h
         ${CMAKE_SOURCE_DIR}/mentos/inc/klib/compiler.h
         ${CMAKE_SOURCE_DIR}/mentos/inc/klib/rbtree.h
-        ${CMAKE_SOURCE_DIR}/mentos/inc/klib/hashmap.h
-        ${CMAKE_SOURCE_DIR}/mentos/inc/klib/list.h
         ${CMAKE_SOURCE_DIR}/mentos/inc/boot.h
-        ${CMAKE_SOURCE_DIR}/mentos/inc/sys/types.h
-        ${CMAKE_SOURCE_DIR}/mentos/inc/sys/reboot.h
         ${CMAKE_SOURCE_DIR}/mentos/inc/sys/module.h
-        ${CMAKE_SOURCE_DIR}/mentos/inc/sys/utsname.h
         ${CMAKE_SOURCE_DIR}/mentos/inc/io/vga/vga_font.h
         ${CMAKE_SOURCE_DIR}/mentos/inc/io/vga/vga.h
         ${CMAKE_SOURCE_DIR}/mentos/inc/io/vga/vga_palette.h
         ${CMAKE_SOURCE_DIR}/mentos/inc/io/vga/vga_mode.h
         ${CMAKE_SOURCE_DIR}/mentos/inc/io/proc_modules.h
         ${CMAKE_SOURCE_DIR}/mentos/inc/io/video.h
+        ${CMAKE_SOURCE_DIR}/mentos/inc/io/debug.h
         ${CMAKE_SOURCE_DIR}/mentos/inc/devices/pci.h
         ${CMAKE_SOURCE_DIR}/mentos/inc/devices/fpu.h
         ${CMAKE_SOURCE_DIR}/mentos/inc/system/printk.h
@@ -100,65 +95,12 @@ if (DOXYGEN_FOUND)
         ${CMAKE_SOURCE_DIR}/mentos/inc/system/signal.h
         ${CMAKE_SOURCE_DIR}/mentos/inc/fs/vfs.h
         ${CMAKE_SOURCE_DIR}/mentos/inc/fs/ext2.h
+        ${CMAKE_SOURCE_DIR}/mentos/inc/fs/pipe.h
         ${CMAKE_SOURCE_DIR}/mentos/inc/fs/namei.h
         ${CMAKE_SOURCE_DIR}/mentos/inc/fs/attr.h
         ${CMAKE_SOURCE_DIR}/mentos/inc/fs/procfs.h
         ${CMAKE_SOURCE_DIR}/mentos/inc/fs/vfs_types.h
-        ${CMAKE_SOURCE_DIR}/mentos/inc/fs/ioctl.h
-        ${CMAKE_SOURCE_DIR}/libc/inc/limits.h
-        ${CMAKE_SOURCE_DIR}/libc/inc/stdbool.h
-        ${CMAKE_SOURCE_DIR}/libc/inc/stdint.h
-        ${CMAKE_SOURCE_DIR}/libc/inc/time.h
-        ${CMAKE_SOURCE_DIR}/libc/inc/bits/termios-struct.h
-        ${CMAKE_SOURCE_DIR}/libc/inc/bits/ioctls.h
-        ${CMAKE_SOURCE_DIR}/libc/inc/bits/stat.h
-        ${CMAKE_SOURCE_DIR}/libc/inc/shadow.h
-        ${CMAKE_SOURCE_DIR}/libc/inc/fcvt.h
-        ${CMAKE_SOURCE_DIR}/libc/inc/string.h
-        ${CMAKE_SOURCE_DIR}/libc/inc/pwd.h
-        ${CMAKE_SOURCE_DIR}/libc/inc/readline.h
-        ${CMAKE_SOURCE_DIR}/libc/inc/crypt/sha256.h
-        ${CMAKE_SOURCE_DIR}/libc/inc/termios.h
-        ${CMAKE_SOURCE_DIR}/libc/inc/stdlib.h
-        ${CMAKE_SOURCE_DIR}/libc/inc/fcntl.h
-        ${CMAKE_SOURCE_DIR}/libc/inc/stdio.h
-        ${CMAKE_SOURCE_DIR}/libc/inc/ring_buffer.h
-        ${CMAKE_SOURCE_DIR}/libc/inc/err.h
-        ${CMAKE_SOURCE_DIR}/libc/inc/stdarg.h
-        ${CMAKE_SOURCE_DIR}/libc/inc/libgen.h
-        ${CMAKE_SOURCE_DIR}/libc/inc/sched.h
-        ${CMAKE_SOURCE_DIR}/libc/inc/assert.h
-        ${CMAKE_SOURCE_DIR}/libc/inc/stddef.h
-        ${CMAKE_SOURCE_DIR}/libc/inc/signal.h
-        ${CMAKE_SOURCE_DIR}/libc/inc/sys/errno.h
-        ${CMAKE_SOURCE_DIR}/libc/inc/sys/shm.h
-        ${CMAKE_SOURCE_DIR}/libc/inc/sys/bitops.h
-        ${CMAKE_SOURCE_DIR}/libc/inc/sys/types.h
-        ${CMAKE_SOURCE_DIR}/libc/inc/sys/sem.h
-        ${CMAKE_SOURCE_DIR}/libc/inc/sys/reboot.h
-        ${CMAKE_SOURCE_DIR}/libc/inc/sys/msg.h
-        ${CMAKE_SOURCE_DIR}/libc/inc/sys/ipc.h
-        ${CMAKE_SOURCE_DIR}/libc/inc/sys/wait.h
-        ${CMAKE_SOURCE_DIR}/libc/inc/sys/list_head.h
-        ${CMAKE_SOURCE_DIR}/libc/inc/sys/kernel_levels.h
-        ${CMAKE_SOURCE_DIR}/libc/inc/sys/ioctl.h
-        ${CMAKE_SOURCE_DIR}/libc/inc/sys/mman.h
-        ${CMAKE_SOURCE_DIR}/libc/inc/sys/utsname.h
-        ${CMAKE_SOURCE_DIR}/libc/inc/sys/stat.h
-        ${CMAKE_SOURCE_DIR}/libc/inc/sys/list_head_algorithm.h
-        ${CMAKE_SOURCE_DIR}/libc/inc/grp.h
-        ${CMAKE_SOURCE_DIR}/libc/inc/unistd.h
-        ${CMAKE_SOURCE_DIR}/libc/inc/dirent.h
-        ${CMAKE_SOURCE_DIR}/libc/inc/io/ansi_colors.h
-        ${CMAKE_SOURCE_DIR}/libc/inc/io/mm_io.h
-        ${CMAKE_SOURCE_DIR}/libc/inc/io/debug.h
-        ${CMAKE_SOURCE_DIR}/libc/inc/io/port_io.h
-        ${CMAKE_SOURCE_DIR}/libc/inc/ctype.h
-        ${CMAKE_SOURCE_DIR}/libc/inc/system/syscall_types.h
-        ${CMAKE_SOURCE_DIR}/libc/inc/array.h
-        ${CMAKE_SOURCE_DIR}/libc/inc/strerror.h
-        ${CMAKE_SOURCE_DIR}/libc/inc/math.h
-
+        ${CMAKE_SOURCE_DIR}/mentos/kernel.lds
         ${CMAKE_SOURCE_DIR}/mentos/src/drivers/mouse.c
         ${CMAKE_SOURCE_DIR}/mentos/src/drivers/rtc.c
         ${CMAKE_SOURCE_DIR}/mentos/src/drivers/mem.c
@@ -170,6 +112,7 @@ if (DOXYGEN_FOUND)
         ${CMAKE_SOURCE_DIR}/mentos/src/elf/elf.c
         ${CMAKE_SOURCE_DIR}/mentos/src/process/scheduler_feedback.c
         ${CMAKE_SOURCE_DIR}/mentos/src/process/process.c
+        ${CMAKE_SOURCE_DIR}/mentos/src/process/user.S
         ${CMAKE_SOURCE_DIR}/mentos/src/process/scheduler_algorithm.c
         ${CMAKE_SOURCE_DIR}/mentos/src/process/scheduler.c
         ${CMAKE_SOURCE_DIR}/mentos/src/process/wait.c
@@ -177,17 +120,23 @@ if (DOXYGEN_FOUND)
         ${CMAKE_SOURCE_DIR}/mentos/src/mem/zone_allocator.c
         ${CMAKE_SOURCE_DIR}/mentos/src/mem/paging.c
         ${CMAKE_SOURCE_DIR}/mentos/src/mem/buddysystem.c
+        ${CMAKE_SOURCE_DIR}/mentos/src/mem/libbuddysystem.a
         ${CMAKE_SOURCE_DIR}/mentos/src/mem/kheap.c
         ${CMAKE_SOURCE_DIR}/mentos/src/mem/slab.c
         ${CMAKE_SOURCE_DIR}/mentos/src/mem/vmem_map.c
         ${CMAKE_SOURCE_DIR}/mentos/src/hardware/timer.c
         ${CMAKE_SOURCE_DIR}/mentos/src/hardware/pic8259.c
         ${CMAKE_SOURCE_DIR}/mentos/src/hardware/cpuid.c
+        ${CMAKE_SOURCE_DIR}/mentos/src/descriptor_tables/exception.S
+        ${CMAKE_SOURCE_DIR}/mentos/src/descriptor_tables/idt.S
+        ${CMAKE_SOURCE_DIR}/mentos/src/descriptor_tables/interrupt.S
         ${CMAKE_SOURCE_DIR}/mentos/src/descriptor_tables/gdt.c
         ${CMAKE_SOURCE_DIR}/mentos/src/descriptor_tables/interrupt.c
         ${CMAKE_SOURCE_DIR}/mentos/src/descriptor_tables/exception.c
+        ${CMAKE_SOURCE_DIR}/mentos/src/descriptor_tables/gdt.S
         ${CMAKE_SOURCE_DIR}/mentos/src/descriptor_tables/tss.c
         ${CMAKE_SOURCE_DIR}/mentos/src/descriptor_tables/idt.c
+        ${CMAKE_SOURCE_DIR}/mentos/src/descriptor_tables/tss.S
         ${CMAKE_SOURCE_DIR}/mentos/src/ipc/sem.c
         ${CMAKE_SOURCE_DIR}/mentos/src/ipc/msg.c
         ${CMAKE_SOURCE_DIR}/mentos/src/ipc/ipc.c
@@ -209,6 +158,7 @@ if (DOXYGEN_FOUND)
         ${CMAKE_SOURCE_DIR}/mentos/src/klib/ctype.c
         ${CMAKE_SOURCE_DIR}/mentos/src/klib/spinlock.c
         ${CMAKE_SOURCE_DIR}/mentos/src/klib/math.c
+        ${CMAKE_SOURCE_DIR}/mentos/src/boot.S
         ${CMAKE_SOURCE_DIR}/mentos/src/sys/utsname.c
         ${CMAKE_SOURCE_DIR}/mentos/src/sys/module.c
         ${CMAKE_SOURCE_DIR}/mentos/src/io/debug.c
@@ -234,14 +184,73 @@ if (DOXYGEN_FOUND)
         ${CMAKE_SOURCE_DIR}/mentos/src/fs/readdir.c
         ${CMAKE_SOURCE_DIR}/mentos/src/fs/ext2.c
         ${CMAKE_SOURCE_DIR}/mentos/src/fs/read_write.c
+        ${CMAKE_SOURCE_DIR}/mentos/src/fs/fcntl.c
         ${CMAKE_SOURCE_DIR}/mentos/src/fs/stat.c
         ${CMAKE_SOURCE_DIR}/mentos/src/fs/ioctl.c
         ${CMAKE_SOURCE_DIR}/mentos/src/fs/vfs.c
         ${CMAKE_SOURCE_DIR}/mentos/src/fs/attr.c
+        ${CMAKE_SOURCE_DIR}/mentos/src/fs/pipe.c
         ${CMAKE_SOURCE_DIR}/mentos/src/fs/procfs.c
         ${CMAKE_SOURCE_DIR}/mentos/src/fs/namei.c
         ${CMAKE_SOURCE_DIR}/mentos/src/multiboot.c
         ${CMAKE_SOURCE_DIR}/mentos/src/kernel/sys.c
+
+        ${CMAKE_SOURCE_DIR}/libc/inc/errno.h
+        ${CMAKE_SOURCE_DIR}/libc/inc/limits.h
+        ${CMAKE_SOURCE_DIR}/libc/inc/stdbool.h
+        ${CMAKE_SOURCE_DIR}/libc/inc/stdint.h
+        ${CMAKE_SOURCE_DIR}/libc/inc/time.h
+        ${CMAKE_SOURCE_DIR}/libc/inc/bits/termios-struct.h
+        ${CMAKE_SOURCE_DIR}/libc/inc/bits/ioctls.h
+        ${CMAKE_SOURCE_DIR}/libc/inc/bits/stat.h
+        ${CMAKE_SOURCE_DIR}/libc/inc/shadow.h
+        ${CMAKE_SOURCE_DIR}/libc/inc/fcvt.h
+        ${CMAKE_SOURCE_DIR}/libc/inc/string.h
+        ${CMAKE_SOURCE_DIR}/libc/inc/pwd.h
+        ${CMAKE_SOURCE_DIR}/libc/inc/readline.h
+        ${CMAKE_SOURCE_DIR}/libc/inc/crypt/sha256.h
+        ${CMAKE_SOURCE_DIR}/libc/inc/termios.h
+        ${CMAKE_SOURCE_DIR}/libc/inc/syslog.h
+        ${CMAKE_SOURCE_DIR}/libc/inc/stdlib.h
+        ${CMAKE_SOURCE_DIR}/libc/inc/fcntl.h
+        ${CMAKE_SOURCE_DIR}/libc/inc/stdio.h
+        ${CMAKE_SOURCE_DIR}/libc/inc/ring_buffer.h
+        ${CMAKE_SOURCE_DIR}/libc/inc/err.h
+        ${CMAKE_SOURCE_DIR}/libc/inc/stdarg.h
+        ${CMAKE_SOURCE_DIR}/libc/inc/libgen.h
+        ${CMAKE_SOURCE_DIR}/libc/inc/sched.h
+        ${CMAKE_SOURCE_DIR}/libc/inc/assert.h
+        ${CMAKE_SOURCE_DIR}/libc/inc/stddef.h
+        ${CMAKE_SOURCE_DIR}/libc/inc/signal.h
+        ${CMAKE_SOURCE_DIR}/libc/inc/sys/shm.h
+        ${CMAKE_SOURCE_DIR}/libc/inc/sys/bitops.h
+        ${CMAKE_SOURCE_DIR}/libc/inc/sys/types.h
+        ${CMAKE_SOURCE_DIR}/libc/inc/sys/sem.h
+        ${CMAKE_SOURCE_DIR}/libc/inc/sys/reboot.h
+        ${CMAKE_SOURCE_DIR}/libc/inc/sys/msg.h
+        ${CMAKE_SOURCE_DIR}/libc/inc/sys/ipc.h
+        ${CMAKE_SOURCE_DIR}/libc/inc/sys/wait.h
+        ${CMAKE_SOURCE_DIR}/libc/inc/sys/kernel_levels.h
+        ${CMAKE_SOURCE_DIR}/libc/inc/sys/ioctl.h
+        ${CMAKE_SOURCE_DIR}/libc/inc/sys/mman.h
+        ${CMAKE_SOURCE_DIR}/libc/inc/sys/utsname.h
+        ${CMAKE_SOURCE_DIR}/libc/inc/sys/stat.h
+        ${CMAKE_SOURCE_DIR}/libc/inc/list_head.h
+        ${CMAKE_SOURCE_DIR}/libc/inc/grp.h
+        ${CMAKE_SOURCE_DIR}/libc/inc/ndtree.h
+        ${CMAKE_SOURCE_DIR}/libc/inc/io/ansi_colors.h
+        ${CMAKE_SOURCE_DIR}/libc/inc/io/mm_io.h
+        ${CMAKE_SOURCE_DIR}/libc/inc/io/port_io.h
+        ${CMAKE_SOURCE_DIR}/libc/inc/ctype.h
+        ${CMAKE_SOURCE_DIR}/libc/inc/dirent.h
+        ${CMAKE_SOURCE_DIR}/libc/inc/hashmap.h
+        ${CMAKE_SOURCE_DIR}/libc/inc/system/syscall_types.h
+        ${CMAKE_SOURCE_DIR}/libc/inc/list.h
+        ${CMAKE_SOURCE_DIR}/libc/inc/array.h
+        ${CMAKE_SOURCE_DIR}/libc/inc/strerror.h
+        ${CMAKE_SOURCE_DIR}/libc/inc/math.h
+        ${CMAKE_SOURCE_DIR}/libc/inc/unistd.h
+        ${CMAKE_SOURCE_DIR}/libc/inc/list_head_algorithm.h
         ${CMAKE_SOURCE_DIR}/libc/src/stdlib.c
         ${CMAKE_SOURCE_DIR}/libc/src/libc_start.c
         ${CMAKE_SOURCE_DIR}/libc/src/setenv.c
@@ -257,6 +266,7 @@ if (DOXYGEN_FOUND)
         ${CMAKE_SOURCE_DIR}/libc/src/unistd/symlink.c
         ${CMAKE_SOURCE_DIR}/libc/src/unistd/getsid.c
         ${CMAKE_SOURCE_DIR}/libc/src/unistd/read.c
+        ${CMAKE_SOURCE_DIR}/libc/src/unistd/fcntl.c
         ${CMAKE_SOURCE_DIR}/libc/src/unistd/readlink.c
         ${CMAKE_SOURCE_DIR}/libc/src/unistd/chmod.c
         ${CMAKE_SOURCE_DIR}/libc/src/unistd/mkdir.c
@@ -274,6 +284,7 @@ if (DOXYGEN_FOUND)
         ${CMAKE_SOURCE_DIR}/libc/src/unistd/close.c
         ${CMAKE_SOURCE_DIR}/libc/src/unistd/waitpid.c
         ${CMAKE_SOURCE_DIR}/libc/src/unistd/chown.c
+        ${CMAKE_SOURCE_DIR}/libc/src/unistd/pipe.c
         ${CMAKE_SOURCE_DIR}/libc/src/unistd/creat.c
         ${CMAKE_SOURCE_DIR}/libc/src/unistd/nice.c
         ${CMAKE_SOURCE_DIR}/libc/src/unistd/lseek.c
@@ -293,10 +304,15 @@ if (DOXYGEN_FOUND)
         ${CMAKE_SOURCE_DIR}/libc/src/pwd.c
         ${CMAKE_SOURCE_DIR}/libc/src/libgen.c
         ${CMAKE_SOURCE_DIR}/libc/src/string.c
+        ${CMAKE_SOURCE_DIR}/libc/src/crt0.S
+        ${CMAKE_SOURCE_DIR}/libc/src/hashmap.c
+        ${CMAKE_SOURCE_DIR}/libc/src/ndtree.c
         ${CMAKE_SOURCE_DIR}/libc/src/assert.c
         ${CMAKE_SOURCE_DIR}/libc/src/grp.c
         ${CMAKE_SOURCE_DIR}/libc/src/shadow.c
         ${CMAKE_SOURCE_DIR}/libc/src/sched.c
+        ${CMAKE_SOURCE_DIR}/libc/src/list.c
+        ${CMAKE_SOURCE_DIR}/libc/src/syslog.c
         ${CMAKE_SOURCE_DIR}/libc/src/strerror.c
         ${CMAKE_SOURCE_DIR}/libc/src/sys/mman.c
         ${CMAKE_SOURCE_DIR}/libc/src/sys/errno.c
@@ -307,17 +323,7 @@ if (DOXYGEN_FOUND)
         ${CMAKE_SOURCE_DIR}/libc/src/ctype.c
         ${CMAKE_SOURCE_DIR}/libc/src/readline.c
         ${CMAKE_SOURCE_DIR}/libc/src/termios.c
-        ${CMAKE_SOURCE_DIR}/libc/src/io/debug.c
         ${CMAKE_SOURCE_DIR}/libc/src/io/mm_io.c
         ${CMAKE_SOURCE_DIR}/libc/src/math.c
-
-        ${CMAKE_SOURCE_DIR}/mentos/src/process/user.S
-        ${CMAKE_SOURCE_DIR}/mentos/src/descriptor_tables/exception.S
-        ${CMAKE_SOURCE_DIR}/mentos/src/descriptor_tables/idt.S
-        ${CMAKE_SOURCE_DIR}/mentos/src/descriptor_tables/interrupt.S
-        ${CMAKE_SOURCE_DIR}/mentos/src/descriptor_tables/gdt.S
-        ${CMAKE_SOURCE_DIR}/mentos/src/descriptor_tables/tss.S
-        ${CMAKE_SOURCE_DIR}/mentos/src/boot.S
-        ${CMAKE_SOURCE_DIR}/libc/src/crt0.S
     )
 endif (DOXYGEN_FOUND)

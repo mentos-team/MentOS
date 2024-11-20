@@ -22,7 +22,7 @@
 #include "process/scheduler.h"
 #include "stdio.h"
 #include "string.h"
-#include "sys/errno.h"
+#include "errno.h"
 #include "sys/stat.h"
 
 #define EXT2_SUPERBLOCK_MAGIC  0xEF53 ///< Magic value used to identify an ext2 filesystem.
@@ -368,7 +368,7 @@ static ssize_t ext2_read(vfs_file_t *file, char *buffer, off_t offset, size_t nb
 static ssize_t ext2_write(vfs_file_t *file, const void *buffer, off_t offset, size_t nbyte);
 static off_t ext2_lseek(vfs_file_t *file, off_t offset, int whence);
 static int ext2_fstat(vfs_file_t *file, stat_t *stat);
-static int ext2_ioctl(vfs_file_t *file, int request, void *data);
+static long ext2_ioctl(vfs_file_t *file, unsigned int request, unsigned long data);
 static ssize_t ext2_getdents(vfs_file_t *file, dirent_t *dirp, off_t doff, size_t count);
 static ssize_t ext2_readlink(const char *path, char *buffer, size_t bufsize);
 static int ext2_fsetattr(vfs_file_t *file, struct iattr *attr);
@@ -597,7 +597,7 @@ static void ext2_dump_bgdt(ext2_filesystem_t *fs)
     // Allocate the cache.
     uint8_t *cache = kmem_cache_alloc(fs->ext2_buffer_cache, GFP_KERNEL);
     // Clean the cache.
-    memset(cache, 0, fs->ext2_buffer_cache->size);
+    memset(cache, 0, fs->block_size);
     for (uint32_t i = 0; i < fs->block_groups_count; ++i) {
         // Get the pointer to the current group descriptor.
         ext2_group_descriptor_t *gd = &(fs->block_groups[i]);
@@ -663,12 +663,23 @@ static void ext2_dump_filesystem(ext2_filesystem_t *fs)
 /// @return a pointer to the cache.
 static inline uint8_t *ext2_alloc_cache(ext2_filesystem_t *fs)
 {
+    // Validate input.
+    if (!fs) {
+        pr_err("Invalid input: filesystem pointer is NULL.");
+        return NULL;
+    }
+
     // Allocate the cache.
     uint8_t *cache = kmem_cache_alloc(fs->ext2_buffer_cache, GFP_KERNEL);
+    if (!cache) {
+        // Log critical error if cache allocation fails.
+        pr_crit("Failed to allocate cache for EXT2 operations.");
+        return NULL;
+    }
+
     // Clean the cache.
-    memset(cache, 0, fs->ext2_buffer_cache->size);
-    // Check the cache.
-    assert(cache && "Failed to allocate cache for EXT2 operations.");
+    memset(cache, 0, fs->block_size);
+
     return cache;
 }
 
@@ -676,12 +687,14 @@ static inline uint8_t *ext2_alloc_cache(ext2_filesystem_t *fs)
 /// @param cache pointer to the cache.
 static inline void ext2_dealloc_cache(uint8_t *cache)
 {
-    // Check the cache.
-    assert(cache && "Received invalid EXT2 cache.");
+    // Validate the input.
+    if (!cache) {
+        pr_err("Invalid input: cache pointer is NULL or already freed.");
+        return;
+    }
+
     // Free the cache.
     kmem_cache_free(cache);
-    // Clean pointer.
-    *cache = 0;
 }
 
 /// @brief Returns the rec_len from the given name.
@@ -689,6 +702,13 @@ static inline void ext2_dealloc_cache(uint8_t *cache)
 /// @return the rec_len value.
 static inline uint32_t ext2_get_rec_len_from_name(const char *name)
 {
+    // Validate input.
+    if (!name) {
+        pr_err("Invalid input: name is NULL.");
+        return 0;
+    }
+    
+    // Compute and return the record length.
     return round_up(sizeof(ext2_dirent_t) + strlen(name) + 1, 4);
 }
 
@@ -1193,7 +1213,7 @@ static uint32_t ext2_allocate_block(ext2_filesystem_t *fs)
         pr_warning("Failed to write superblock.\n");
     }
     // Empty out the new block content.
-    memset(cache, 0, fs->ext2_buffer_cache->size);
+    memset(cache, 0, fs->block_size);
     // Write the empty content of the new block.
     if (ext2_write_block(fs, block_index, cache) < 0) {
         pr_err("We failed to clean the content of the newly allocated block.\n");
@@ -1860,7 +1880,7 @@ static int ext2_clean_inode_content(ext2_filesystem_t *fs, ext2_inode_t *inode, 
     // Allocate the cache.
     uint8_t *cache = ext2_alloc_cache(fs);
     // Get the cache size.
-    size_t cache_size = fs->ext2_buffer_cache->size;
+    size_t cache_size = fs->block_size;
     //
     int ret = 0;
     for (ssize_t offset = 0, to_write; offset < inode->size;) {
@@ -2971,21 +2991,40 @@ early_exit:
 /// @return 0 on success, -errno on failure.
 static int ext2_close(vfs_file_t *file)
 {
-    // Get the filesystem.
+    // Validate the file pointer.
+    if (file == NULL) {
+        pr_err("ext2_close: Invalid file pointer (NULL).\n");
+        return -EINVAL; // Invalid argument error
+    }
+
+    // Get the filesystem from the device.
     ext2_filesystem_t *fs = (ext2_filesystem_t *)file->device;
     if (fs == NULL) {
-        pr_err("The file does not belong to an EXT2 filesystem `%s`.\n", file->name);
-        return -1;
+        pr_err("ext2_close: File `%s` does not belong to a valid EXT2 filesystem.\n", file->name);
+        return -EINVAL;
     }
-    // We cannot close the root.
+
+    // Ensure we are not trying to close the root.
     if (file == fs->root) {
-        return -1;
+        pr_warning("ext2_close: Attempted to close the root file `%s`.\n", file->name);
+        return -EPERM;
     }
-    pr_debug("ext2_close(ino: %d, file: \"%s\")\n", file->ino, file->name);
-    // Remove the file from the list of opened files.
-    list_head_remove(&file->siblings);
-    // Free the cache.
-    kmem_cache_free(file);
+
+    pr_debug("ext2_close(ino: %d, file: \"%s\", count: %d)\n", file->ino, file->name, file->count - 1);
+
+    // Decrement the reference count for the file and close if last reference.
+    if (--file->count == 0) {
+        pr_debug("ext2_close: Closing file `%s` (ino: %d).\n", file->name, file->ino);
+
+        // Remove the file from the list of opened files.
+        list_head_remove(&file->siblings);
+        pr_debug("ext2_close: Removed file `%s` from the opened file list.\n", file->name);
+
+        // Free the file from cache.
+        pr_debug("ext2_close: Freeing memory for file `%s`.\n", file->name);
+        kmem_cache_free(file);
+    }
+
     return 0;
 }
 
@@ -3102,18 +3141,26 @@ static off_t ext2_lseek(vfs_file_t *file, off_t offset, int whence)
 }
 
 /// @brief Saves the information concerning the file.
-/// @param inode The inode containing the data.
-/// @param stat The structure where the information are stored.
-/// @return 0 if success.
-static int __ext2_stat(ext2_inode_t *inode, stat_t *stat)
+/// @param fs The ext2 filesystem containing the file.
+/// @param inode The inode containing the file data.
+/// @param inode_index The index of the inode in the filesystem.
+/// @param stat The structure where the information is stored.
+/// @return 0 on success, or a negative error code on failure.
+static int __ext2_stat(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t inode_index, stat_t *stat)
 {
-    stat->st_mode  = inode->mode;
-    stat->st_uid   = inode->uid;
-    stat->st_gid   = inode->gid;
-    stat->st_size  = inode->size;
-    stat->st_atime = inode->atime;
-    stat->st_mtime = inode->mtime;
-    stat->st_ctime = inode->ctime;
+    stat->st_dev     = fs->block_device->ino;
+    stat->st_ino     = inode_index;
+    stat->st_mode    = inode->mode;
+    stat->st_nlink   = inode->links_count;
+    stat->st_uid     = inode->uid;
+    stat->st_gid     = inode->gid;
+    stat->st_rdev    = 0;
+    stat->st_size    = inode->size;
+    stat->st_blksize = fs->block_size;
+    stat->st_blocks  = inode->blocks_count;
+    stat->st_atime   = inode->atime;
+    stat->st_mtime   = inode->mtime;
+    stat->st_ctime   = inode->ctime;
     return 0;
 }
 
@@ -3144,12 +3191,8 @@ static int ext2_fstat(vfs_file_t *file, stat_t *stat)
         pr_err("Failed to read the inode `%s`.\n", file->name);
         return -ENOENT;
     }
-    /// ID of device containing file.
-    stat->st_dev = fs->block_device->ino;
-    // Set the inode.
-    stat->st_ino = file->ino;
     // Set the rest of the structure.
-    return __ext2_stat(&inode, stat);
+    return __ext2_stat(fs, &inode, file->ino, stat);
 }
 
 /// @brief Retrieves information concerning the file at the given position.
@@ -3178,12 +3221,8 @@ static int ext2_stat(const char *path, stat_t *stat)
         pr_err("ext2_stat(path: %s): Failed to read the inode of `%s`.\n", path, search.direntry.name);
         return -ENOENT;
     }
-    /// ID of device containing file.
-    stat->st_dev = fs->block_device->ino;
-    // Set the inode.
-    stat->st_ino = search.direntry.inode;
     // Set the rest of the structure.
-    return __ext2_stat(&inode, stat);
+    return __ext2_stat(fs, &inode, search.direntry.inode, stat);
 }
 
 /// @brief Perform the I/O control operation specified by REQUEST on FD. One
@@ -3192,7 +3231,7 @@ static int ext2_stat(const char *path, stat_t *stat)
 /// @param request the device-dependent request code
 /// @param data an untyped pointer to memory.
 /// @return Return value depends on REQUEST. Usually -1 indicates error.
-static int ext2_ioctl(vfs_file_t *file, int request, void *data)
+static long ext2_ioctl(vfs_file_t *file, unsigned int request, unsigned long data)
 {
     return -1;
 }
@@ -3566,6 +3605,17 @@ static vfs_file_t *ext2_mount(vfs_file_t *block_device, const char *path)
         GFP_KERNEL,
         NULL,
         NULL);
+
+    // uint8_t *caches[100];
+    // for (size_t i = 0; i < 100; ++i) {
+    //     caches[i] = ext2_alloc_cache(fs);
+    // }
+    // for (size_t i = 0; i < 100; ++i) {
+    //     kmem_cache_free(caches[i]);
+    // }
+
+    // while (1) {}
+
     // Compute the maximum number of inodes per block.
     fs->inodes_per_block_count = fs->block_size / fs->superblock.inode_size;
     // Compute the number of blocks per block. This value is mostly used for
@@ -3684,7 +3734,8 @@ static vfs_file_t *ext2_mount_callback(const char *path, const char *device)
 {
     super_block_t *sb = vfs_get_superblock(device);
     if (sb == NULL) {
-        pr_err("mount_callback(%s, %s): Cannot find the superblock!\n", path, device);
+        pr_err("mount_callback(%s, %s): Cannot find the superblock (%s)!\n", path, device, device);
+        vfs_dump_superblocks(LOGLEVEL_ERR);
         return NULL;
     }
     vfs_file_t *block_device = sb->root;
@@ -3700,7 +3751,7 @@ static vfs_file_t *ext2_mount_callback(const char *path, const char *device)
 }
 
 /// Filesystem information.
-static file_system_type ext2_file_system_type = {
+static file_system_type_t ext2_file_system_type = {
     .name     = "ext2",
     .fs_flags = 0,
     .mount    = ext2_mount_callback

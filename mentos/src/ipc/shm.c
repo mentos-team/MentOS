@@ -20,8 +20,8 @@
 #include "stdio.h"
 #include "stdlib.h"
 #include "string.h"
-#include "sys/errno.h"
-#include "sys/list_head.h"
+#include "errno.h"
+#include "list_head.h"
 
 // #include "process/process.h"
 

@@ -5,17 +5,20 @@
 
 #pragma once
 
-/// The type of process id.
+/// @brief The type of process id.
 typedef signed int pid_t;
-
-/// The type of process user variable.
+/// @brief The type of process user variable.
 typedef unsigned int user_t;
-
-/// The type of process status.
+/// @brief The type of process status.
 typedef unsigned int status_t;
-
-/// Type for system keys.
+/// @brief Type for system keys.
 typedef int key_t;
+/// @brief Represents the number of hard links to a file.
+typedef unsigned int nlink_t;
+/// @brief Represents the preferred block size for filesystem I/O.
+typedef long blksize_t;
+/// @brief Represents the number of 512B blocks allocated to a file.
+typedef long blkcnt_t;
 
 /// Defines the list of flags of a process.
 typedef enum eflags_list {

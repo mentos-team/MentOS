@@ -4,18 +4,33 @@
 /// See LICENSE.md for details.
 
 #include <fcntl.h>
-#include <io/debug.h>
 #include <grp.h>
 #include <pwd.h>
 #include <stdio.h>
 #include <strerror.h>
 #include <string.h>
 #include <sys/bitops.h>
-#include <sys/errno.h>
+#include <errno.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <limits.h>
 #include <stdlib.h>
+
+static inline const char *to_human_size(unsigned long bytes)
+{
+    static char output[200];
+    const char *suffix[] = { "B", "KB", "MB", "GB", "TB" };
+    char length          = sizeof(suffix) / sizeof(suffix[0]);
+    int i                = 0;
+    double dblBytes      = bytes;
+    if (bytes > 1024) {
+        for (i = 0; (bytes / 1024) > 0 && i < length - 1; i++, bytes /= 1024) {
+            dblBytes = bytes / 1024.0;
+        }
+    }
+    sprintf(output, "%.02lf %2s", dblBytes, suffix[i]);
+    return output;
+}
 
 static void __print_time(const char *prefix, time_t *time)
 {
