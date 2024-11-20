@@ -120,7 +120,7 @@ void *pr_kmalloc(const char *file, const char *fun, int line, unsigned int size)
 /// @param file File where the object is deallocated.
 /// @param fun  Function where the object is deallocated.
 /// @param line Line inside the file.
-/// @param ptr The pointer to the allocated memory.
+/// @param addr The pointer to the allocated memory.
 void pr_kfree(const char *file, const char *fun, int line, void *addr);
 
 /// Wrapper that provides the filename, the function and line where the alloc is happening.
