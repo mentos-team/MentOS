@@ -758,8 +758,6 @@ sighandler_t sys_signal(int signum, sighandler_t handler, uint32_t sigreturn_add
     current_process->sigreturn_addr = sigreturn_addr;
     // Get the old sigaction.
     sigaction_t *old_sigaction = &current_process->sighand.action[signum - 1];
-    pr_err("sys_signal(%d, %p): Signal action ptr %p\n", signum, handler, old_sigaction);
-    pr_err("sys_signal(%d, %p): Old signal handler %p\n", signum, handler, old_sigaction->sa_handler);
     // Get the old handler (to return).
     sighandler_t old_handler = current_process->sighand.action[signum - 1].sa_handler;
     // Set the new action.
