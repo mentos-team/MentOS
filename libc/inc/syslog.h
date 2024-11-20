@@ -5,6 +5,8 @@
 
 #pragma once
 
+#include "string.h"
+
 // Log levels for setting the severity of log messages.
 #define LOG_EMERG   0 ///< Emergency: system unusable.
 #define LOG_ALERT   1 ///< Alert: immediate action required.
@@ -75,7 +77,8 @@ int __syslog(const char *file, const char *fun, int line, short log_level, const
 ///     MENTOS_ROOT = "/path/to/mentos" and
 ///     __FILE__    = "/path/to/mentos/src/kernel/main.c", the result will be
 ///                                   "src/kernel/main.c".
-#define __RELATIVE_PATH__ (__FILE__ + sizeof(MENTOS_ROOT))
+#define __RELATIVE_PATH__ \
+    (strncmp(__FILE__, MENTOS_ROOT, sizeof(MENTOS_ROOT) - 1) == 0 ? (&__FILE__[sizeof(MENTOS_ROOT)]) : __FILE__)
 
 // Wrapper macro to simplify usage
-#define syslog(log_level, format, ...) __syslog(__RELATIVE_PATH__, __func__, __LINE__, log_level, format, ##__VA_ARGS__)
+#define syslog(...) __syslog(__RELATIVE_PATH__, __func__, __LINE__, __VA_ARGS__)
