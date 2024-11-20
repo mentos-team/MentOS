@@ -17,12 +17,20 @@
 #define __DEBUG_HEADER__ 0
 #endif
 
-/// @brief Extract the filename from the full path provided by __FILE__.
-#define __FILENAME__ (__builtin_strrchr(__FILE__, '/') ? __builtin_strrchr(__FILE__, '/') + 1 : __FILE__)
-
 /// @brief Sets the loglevel.
 /// @param level The new loglevel.
 void set_log_level(int level);
+
+/// @brief Transforms the given amount of bytes to a readable string.
+/// @param bytes The bytes to turn to string.
+/// @return String representing the bytes in human readable form.
+const char *to_human_size(unsigned long bytes);
+
+/// @brief Transforms the given value to a binary string.
+/// @param value to print.
+/// @param length of the binary output.
+/// @return String representing the binary value.
+const char *dec_to_binary(unsigned long value, unsigned length);
 
 /// @brief Returns the current loglevel.
 /// @return The current loglevel
@@ -46,88 +54,75 @@ void dbg_puts(const char *s);
 /// @param ... the list of arguments.
 void dbg_printf(const char *file, const char *fun, int line, char *header, short log_level, const char *format, ...);
 
-/// @brief Transforms the given amount of bytes to a readable string.
-/// @param bytes The bytes to turn to string.
-/// @return String representing the bytes in human readable form.
-const char *to_human_size(unsigned long bytes);
-
-/// @brief Transforms the given value to a binary string.
-/// @param value to print.
-/// @param length of the binary output.
-/// @return String representing the binary value.
-const char *dec_to_binary(unsigned long value, unsigned length);
-
-/// Prints an emergency message.
+#define __RELATIVE_PATH__ (__FILE__ + sizeof(MENTOS_ROOT))
 
 /// General logging macro that logs a message at the specified log level.
 /// Only logs messages if the specified log level is less than or equal to __DEBUG_LEVEL__.
-#define pr_log(level, ...)                                                                      \
-    do {                                                                                        \
-        if (level <= __DEBUG_LEVEL__) {                                                         \
-            dbg_printf(__FILENAME__, __func__, __LINE__, __DEBUG_HEADER__, level, __VA_ARGS__); \
-        }                                                                                       \
+#define pr_log(level, ...)                                                                           \
+    do {                                                                                             \
+        if (level <= __DEBUG_LEVEL__) {                                                              \
+            dbg_printf(__RELATIVE_PATH__, __func__, __LINE__, __DEBUG_HEADER__, level, __VA_ARGS__); \
+        }                                                                                            \
     } while (0)
 
 /// Prints a default message, which is always shown.
-#define pr_default(...) dbg_printf(__FILENAME__, __func__, __LINE__, __DEBUG_HEADER__, LOGLEVEL_DEFAULT, __VA_ARGS__)
+#define pr_default(...) dbg_printf(__RELATIVE_PATH__, __func__, __LINE__, __DEBUG_HEADER__, LOGLEVEL_DEFAULT, __VA_ARGS__)
 
 /// Prints an emergency message.
 #if __DEBUG_LEVEL__ >= LOGLEVEL_EMERG
-#define pr_emerg(...) dbg_printf(__FILENAME__, __func__, __LINE__, __DEBUG_HEADER__, LOGLEVEL_EMERG, __VA_ARGS__)
+#define pr_emerg(...) dbg_printf(__RELATIVE_PATH__, __func__, __LINE__, __DEBUG_HEADER__, LOGLEVEL_EMERG, __VA_ARGS__)
 #else
 #define pr_emerg(...)
 #endif
 
 /// Prints an alert message.
 #if __DEBUG_LEVEL__ >= LOGLEVEL_ALERT
-#define pr_alert(...) dbg_printf(__FILENAME__, __func__, __LINE__, __DEBUG_HEADER__, LOGLEVEL_ALERT, __VA_ARGS__)
+#define pr_alert(...) dbg_printf(__RELATIVE_PATH__, __func__, __LINE__, __DEBUG_HEADER__, LOGLEVEL_ALERT, __VA_ARGS__)
 #else
 #define pr_alert(...)
 #endif
 
 /// Prints a critical message.
 #if __DEBUG_LEVEL__ >= LOGLEVEL_CRIT
-#define pr_crit(...) dbg_printf(__FILENAME__, __func__, __LINE__, __DEBUG_HEADER__, LOGLEVEL_CRIT, __VA_ARGS__)
+#define pr_crit(...) dbg_printf(__RELATIVE_PATH__, __func__, __LINE__, __DEBUG_HEADER__, LOGLEVEL_CRIT, __VA_ARGS__)
 #else
 #define pr_crit(...)
 #endif
 
 /// Prints an error message.
 #if __DEBUG_LEVEL__ >= LOGLEVEL_ERR
-#define pr_err(...) dbg_printf(__FILENAME__, __func__, __LINE__, __DEBUG_HEADER__, LOGLEVEL_ERR, __VA_ARGS__)
+#define pr_err(...) dbg_printf(__RELATIVE_PATH__, __func__, __LINE__, __DEBUG_HEADER__, LOGLEVEL_ERR, __VA_ARGS__)
 #else
 #define pr_err(...)
 #endif
 
 /// Prints a warning message.
 #if __DEBUG_LEVEL__ >= LOGLEVEL_WARNING
-#define pr_warning(...) dbg_printf(__FILENAME__, __func__, __LINE__, __DEBUG_HEADER__, LOGLEVEL_WARNING, __VA_ARGS__)
+#define pr_warning(...) dbg_printf(__RELATIVE_PATH__, __func__, __LINE__, __DEBUG_HEADER__, LOGLEVEL_WARNING, __VA_ARGS__)
 #else
 #define pr_warning(...)
 #endif
 
 /// Prints a notice message.
 #if __DEBUG_LEVEL__ >= LOGLEVEL_NOTICE
-#define pr_notice(...) dbg_printf(__FILENAME__, __func__, __LINE__, __DEBUG_HEADER__, LOGLEVEL_NOTICE, __VA_ARGS__)
+#define pr_notice(...) dbg_printf(__RELATIVE_PATH__, __func__, __LINE__, __DEBUG_HEADER__, LOGLEVEL_NOTICE, __VA_ARGS__)
 #else
 #define pr_notice(...)
 #endif
 
 /// Prints a info message.
 #if __DEBUG_LEVEL__ >= LOGLEVEL_INFO
-#define pr_info(...) dbg_printf(__FILENAME__, __func__, __LINE__, __DEBUG_HEADER__, LOGLEVEL_INFO, __VA_ARGS__)
+#define pr_info(...) dbg_printf(__RELATIVE_PATH__, __func__, __LINE__, __DEBUG_HEADER__, LOGLEVEL_INFO, __VA_ARGS__)
 #else
 #define pr_info(...)
 #endif
 
 /// Prints a debug message.
 #if __DEBUG_LEVEL__ >= LOGLEVEL_DEBUG
-#define pr_debug(...) dbg_printf(__FILENAME__, __func__, __LINE__, __DEBUG_HEADER__, LOGLEVEL_DEBUG, __VA_ARGS__)
+#define pr_debug(...) dbg_printf(__RELATIVE_PATH__, __func__, __LINE__, __DEBUG_HEADER__, LOGLEVEL_DEBUG, __VA_ARGS__)
 #else
 #define pr_debug(...)
 #endif
-
-#ifdef __KERNEL__
 
 struct pt_regs;
 /// @brief Prints the registers using the specified debug function.
@@ -156,5 +151,3 @@ struct pt_regs;
         dbg_fn("UESP   = 0x%-09x\n", frame->useresp); \
         dbg_fn("SS     = 0x%-04x\n", frame->ss);      \
     } while (0)
-
-#endif

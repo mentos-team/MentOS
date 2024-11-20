@@ -221,7 +221,7 @@ int runtests_main(int argc, char **argv)
 
     char *test_argv[32];
     for (int i = 0; i < testsc; i++) {
-        syslog(LOG_INFO, "Running test (%2d/%2d): %s", i + 1, testsc, tests[i]);
+        syslog(LOG_INFO, "Running test (%2d/%2d): %s\n", i + 1, testsc, tests[i]);
         run_test(i + 1, tests[i]);
     }
 

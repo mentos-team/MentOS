@@ -6,8 +6,10 @@
 #pragma once
 
 /// @brief Sends a message to the system log using a specified log level.
-/// @param type The log level or priority (e.g., LOG_INFO, LOG_ERR).
-/// @param buf Pointer to the message buffer to log.
-/// @param len The length of the message in bytes.
+/// @param file the name of the file.
+/// @param fun the name of the function.
+/// @param line the line inside the file.
+/// @param log_level the log level.
+/// @param format the format to used, see printf.
 /// @return The number of bytes written to the system log, or -1 on failure.
-int sys_syslog(int type, char *buf, int len);
+void sys_syslog(const char *file, const char *fun, int line, short log_level, const char *format);

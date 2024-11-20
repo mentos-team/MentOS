@@ -91,3 +91,8 @@ set_target_properties(libc PROPERTIES PREFIX "")
 if(${EMULATOR_OUTPUT_TYPE} STREQUAL OUTPUT_LOG)
     target_compile_definitions(libc PUBLIC EMULATOR_OUTPUT_LOG)
 endif()
+
+target_compile_definitions(
+    libc PUBLIC
+    MENTOS_ROOT="${CMAKE_SOURCE_DIR}"
+)

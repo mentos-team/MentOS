@@ -51,8 +51,31 @@ int setlogmask(int mask);
 void closelog(void);
 
 /// @brief Sends a formatted message to the system log
-/// @param type Log level, e.g., LOG_ERR, LOG_INFO
-/// @param format Format string for the message, similar to printf
+/// @param file the name of the file.
+/// @param fun the name of the function.
+/// @param line the line inside the file.
+/// @param log_level the log level.
+/// @param format the format to used, see printf.
 /// @param ... Arguments for the format string
 /// @return The number of bytes written or -1 on failure
-int syslog(int type, const char *format, ...);
+int __syslog(const char *file, const char *fun, int line, short log_level, const char *format, ...);
+
+/// @brief Extracts the relative path of the current file from the project root.
+///
+/// This macro calculates the relative path of the file (`__FILE__`) by skipping
+/// the prefix defined by `MENTOS_ROOT`. It is used to simplify file path
+/// logging by removing the absolute path up to the project root.
+///
+/// @note Ensure that `MENTOS_ROOT` is correctly defined as the root path of the
+/// project. If `__FILE__` does not start with `MENTOS_ROOT`, the behavior is
+/// undefined.
+///
+/// @example
+/// If
+///     MENTOS_ROOT = "/path/to/mentos" and
+///     __FILE__    = "/path/to/mentos/src/kernel/main.c", the result will be
+///                                   "src/kernel/main.c".
+#define __RELATIVE_PATH__ (__FILE__ + sizeof(MENTOS_ROOT))
+
+// Wrapper macro to simplify usage
+#define syslog(log_level, format, ...) __syslog(__RELATIVE_PATH__, __func__, __LINE__, log_level, format, ##__VA_ARGS__)

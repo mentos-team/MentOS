@@ -17,18 +17,6 @@
 /// Determines the log level.
 static int max_log_level = LOGLEVEL_DEBUG;
 
-void dbg_putchar(char c)
-{
-    outportb(SERIAL_COM1, (uint8_t)c);
-}
-
-void dbg_puts(const char *s)
-{
-    while ((*s) != 0) {
-        dbg_putchar(*s++);
-    }
-}
-
 /// @brief Prints the correct header for the given debug level.
 /// @param file the file origin of the debug message.
 /// @param fun the function where the debug message was called.
@@ -67,7 +55,7 @@ static inline void __debug_print_header(const char *file, const char *fun, int l
     // Print the file and line.
     sprintf(tmp_prefix, "%s:%d", file, line);
     // Print the message.
-    sprintf(final_prefix, " %-32s ", tmp_prefix);
+    sprintf(final_prefix, " %-40s ", tmp_prefix);
     // Print the actual message.
     dbg_puts(final_prefix);
 #if 0
@@ -94,6 +82,48 @@ void set_log_level(int level)
 int get_log_level(void)
 {
     return max_log_level;
+}
+
+const char *to_human_size(unsigned long bytes)
+{
+    static char output[200];
+    const char *suffix[] = { "B", "KB", "MB", "GB", "TB" };
+    char length          = sizeof(suffix) / sizeof(suffix[0]);
+    int i                = 0;
+    double dblBytes      = bytes;
+    if (bytes > 1024) {
+        for (i = 0; (bytes / 1024) > 0 && i < length - 1; i++, bytes /= 1024) {
+            dblBytes = bytes / 1024.0;
+        }
+    }
+    sprintf(output, "%.02lf %2s", dblBytes, suffix[i]);
+    return output;
+}
+
+const char *dec_to_binary(unsigned long value, unsigned length)
+{
+    static char buffer[33];
+    // Adjust the length.
+    length = min(max(0, length), 32U);
+    // Build the binary.
+    for (unsigned i = 0, j = 32U - length; j < 32U; ++i, ++j) {
+        buffer[i] = bit_check(value, 31 - j) ? '1' : '0';
+    }
+    // Close the string.
+    buffer[length] = 0;
+    return buffer;
+}
+
+void dbg_putchar(char c)
+{
+    outportb(SERIAL_COM1, (uint8_t)c);
+}
+
+void dbg_puts(const char *s)
+{
+    while ((*s) != 0) {
+        dbg_putchar(*s++);
+    }
 }
 
 void dbg_printf(const char *file, const char *fun, int line, char *header, short log_level, const char *format, ...)
@@ -134,34 +164,4 @@ void dbg_printf(const char *file, const char *fun, int line, char *header, short
             __debug_print_header(file, fun, line, log_level, header);
         }
     }
-}
-
-const char *to_human_size(unsigned long bytes)
-{
-    static char output[200];
-    const char *suffix[] = { "B", "KB", "MB", "GB", "TB" };
-    char length          = sizeof(suffix) / sizeof(suffix[0]);
-    int i                = 0;
-    double dblBytes      = bytes;
-    if (bytes > 1024) {
-        for (i = 0; (bytes / 1024) > 0 && i < length - 1; i++, bytes /= 1024) {
-            dblBytes = bytes / 1024.0;
-        }
-    }
-    sprintf(output, "%.02lf %2s", dblBytes, suffix[i]);
-    return output;
-}
-
-const char *dec_to_binary(unsigned long value, unsigned length)
-{
-    static char buffer[33];
-    // Adjust the length.
-    length = min(max(0, length), 32U);
-    // Build the binary.
-    for (unsigned i = 0, j = 32U - length; j < 32U; ++i, ++j) {
-        buffer[i] = bit_check(value, 31 - j) ? '1' : '0';
-    }
-    // Close the string.
-    buffer[length] = 0;
-    return buffer;
 }

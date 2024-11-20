@@ -45,10 +45,10 @@ void closelog(void)
     log_mask        = 0xFF; // Reset mask to allow all levels
 }
 
-int syslog(int type, const char *format, ...)
+int __syslog(const char *file, const char *fun, int line, short log_level, const char *format, ...)
 {
     // Check if the message's priority is allowed by the log mask.
-    if (!(log_mask & (1 << type))) {
+    if (!(log_mask & (1 << log_level))) {
         return 0;
     }
 
@@ -81,7 +81,12 @@ int syslog(int type, const char *format, ...)
     }
 
     // Call the syslog system call to send the formatted message to the system log.
-    __inline_syscall3(len, syslog, type, buf, BUFSIZ);
+    // __inline_syscall5(len, syslog, type, file, func, line, buf);
+    __asm__ __volatile__("push %%ebx; movl %2,%%ebx; movl %1,%%eax; "
+                         "int $0x80; pop %%ebx"
+                         : "=a"(len)
+                         : "i"(__NR_syslog), "ri"(file), "c"(fun), "d"(line), "S"(log_level), "D"(buf)
+                         : "memory");
 
     // If the syslog system call fails and LOG_CONS is set, write to console as a fallback.
     if ((len == -1) && (syslog_options & LOG_CONS)) {
