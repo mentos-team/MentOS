@@ -341,7 +341,7 @@ int init_tasking(void)
 task_struct *process_create_init(const char *path)
 {
     pr_debug("Building init process...\n");
-    
+
     // Allocate the memory for the process.
     task_struct *init_proc = __alloc_task(NULL, NULL, "init");
 
@@ -423,6 +423,18 @@ task_struct *process_create_init(const char *path)
     pr_debug("Executing '%s' (pid: %d)...\n", init_proc->name, init_proc->pid);
 
     return init_proc;
+}
+
+vfs_file_descriptor_t *fget(int fd)
+{
+    task_struct *current = scheduler_get_current_process();
+    assert(current && "There is no current task running.");
+    // Check the current FD.
+    if (fd < 0 || fd >= current->max_fd) {
+        return NULL;
+    }
+    // Retrieve the file structure from the table.
+    return current->fd_list + fd;
 }
 
 char *sys_getcwd(char *buf, size_t size)

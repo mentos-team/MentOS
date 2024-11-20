@@ -7,4 +7,10 @@
 #include "errno.h"
 #include "system/syscall_types.h"
 
-_syscall3(ssize_t, write, int, fd, const void *, buf, size_t, nbytes)
+// _syscall3(ssize_t, write, int, fd, const void *, buf, size_t, nbytes)
+ssize_t write(int fd, const void *buf, size_t nbytes)
+{
+    long __res;
+    __inline_syscall_3(__res, write, fd, buf, nbytes);
+    __syscall_return(ssize_t, __res);
+}

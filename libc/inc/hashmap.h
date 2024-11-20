@@ -5,7 +5,7 @@
 
 #include <stddef.h>
 
-// Define the size of the hashmap
+/// Define the size of the hashmap.
 #define HASHMAP_SIZE 1024
 
 /// @brief Structure representing a hashmap entry.

@@ -51,6 +51,8 @@ int vfs_unregister_superblock(super_block_t *sb);
 /// @return Pointer to the super_block_t of the mountpoint, or NULL if not found.
 super_block_t *vfs_get_superblock(const char *absolute_path);
 
+/// @brief Dumps the list of all superblocks to the log.
+/// @param log_level Logging level to use for the output.
 void vfs_dump_superblocks(int log_level);
 
 /// @brief Open a file given its absolute path.

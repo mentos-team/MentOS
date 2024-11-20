@@ -7,4 +7,10 @@
 #include "fcntl.h"
 #include "errno.h"
 
-_syscall3(long, fcntl, int, fd, unsigned int, request, unsigned long, data)
+// _syscall3(long, fcntl, int, fd, unsigned int, request, unsigned long, data)
+long fcntl(int fd, unsigned int request, unsigned long data)
+{
+    long __res;
+    __inline_syscall_3(__res, fcntl, fd, request, data);
+    __syscall_return(long, __res);
+}

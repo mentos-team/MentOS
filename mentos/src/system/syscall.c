@@ -33,8 +33,6 @@
 typedef int (*SystemCall)(void);
 /// The signature of a function call.
 typedef int (*SystemCall5)(uint32_t, uint32_t, uint32_t, uint32_t, uint32_t);
-/// The signature of a function call.
-typedef int (*SystemCall6)(uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t);
 
 /// The list of function call.
 SystemCall sys_call_table[SYSCALL_NUMBER];
@@ -138,42 +136,36 @@ void syscall_handler(pt_regs *f)
     // Save current process fpu state.
     switch_fpu();
 
-    // The index of the requested system call.
-    uint32_t sc_index = f->eax;
-
     // The result of the system call.
-    int ret;
-    if (sc_index >= SYSCALL_NUMBER) {
-        ret = ENOSYS;
+    if (f->eax >= SYSCALL_NUMBER) {
+        f->eax = ENOSYS;
     } else {
-        uintptr_t ptr = (uintptr_t)sys_call_table[sc_index];
+        // Retrieve the system call function from the system call table.
+        SystemCall5 fun = (SystemCall5)sys_call_table[f->eax];
 
-        uint32_t arg0 = f->ebx;
-        uint32_t arg1 = f->ecx;
-        uint32_t arg2 = f->edx;
-        uint32_t arg3 = f->esi;
-        uint32_t arg4 = f->edi;
-        if ((sc_index == __NR_fork) ||
-            (sc_index == __NR_clone) ||
-            (sc_index == __NR_execve) ||
-            (sc_index == __NR_sigreturn)) {
-            arg0 = (uintptr_t)f;
+        // Initialize an array to hold up to 5 arguments for the system call.
+        unsigned args[5] = { 0 };
+
+        // Special handling for specific system calls that do not follow the standard argument convention.
+        if ((f->eax == __NR_fork) || (f->eax == __NR_clone) || (f->eax == __NR_execve) || (f->eax == __NR_sigreturn)) {
+            args[0] = (uintptr_t)f;
         }
-        if (sc_index == __NR_mmap) {
-            SystemCall6 func = (SystemCall6)ptr;
-            // Get the arguments.
-            unsigned *args = (unsigned *)arg0;
-            // Call the function.
-            ret = func(args[0], args[1], args[2], args[3], args[4], args[5]);
-        } else {
-            SystemCall5 func = (SystemCall5)ptr;
-            ret              = func(arg0, arg1, arg2, arg3, arg4);
+        // Otherwise, populate arguments from the CPU register state.
+        else {
+            args[0] = f->ebx;
+            args[1] = f->ecx;
+            args[2] = f->edx;
+            args[3] = f->esi;
+            args[4] = f->edi;
         }
+
+        // Invoke the system call with the prepared arguments and store the return value in the EAX register.
+        f->eax = fun(args[0], args[1], args[2], args[3], args[4]);
     }
-    f->eax = ret;
 
     // Schedule next process.
     scheduler_run(f);
+    
     // Restore fpu state.
     unswitch_fpu();
 }

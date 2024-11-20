@@ -7,4 +7,10 @@
 #include "errno.h"
 #include "system/syscall_types.h"
 
-_syscall3(int, open, const char *, pathname, int, flags, mode_t, mode)
+// _syscall3(int, open, const char *, pathname, int, flags, mode_t, mode)
+int open(const char *pathname, int flags, mode_t mode)
+{
+    long __res;
+    __inline_syscall_3(__res, open, pathname, flags, mode);
+    __syscall_return(int, __res);
+}

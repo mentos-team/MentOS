@@ -83,9 +83,12 @@ int vfs_unregister_filesystem(file_system_type_t *fs)
     return 1;
 }
 
-static inline void vfs_dump_superblock(int log_level, super_block_t *sb)
+/// @brief Logs the details of a superblock at the specified log level.
+/// @param log_level Logging level to use for the output.
+/// @param sb Pointer to the `super_block_t` structure to dump.
+static inline void __vfs_dump_superblock(int log_level, super_block_t *sb)
 {
-    assert(sb && "vfs_dump_superblock: Received NULL suberblock.");
+    assert(sb && "Received NULL suberblock.");
     pr_log(log_level, "\tname=%s, path=%s, root=%p, type=%p\n", sb->name, sb->path, (void *)sb->root, (void *)sb->type);
 }
 
@@ -93,7 +96,7 @@ void vfs_dump_superblocks(int log_level)
 {
     list_for_each_decl(it, &vfs_super_blocks)
     {
-        vfs_dump_superblock(log_level, list_entry(it, super_block_t, mounts));
+        __vfs_dump_superblock(log_level, list_entry(it, super_block_t, mounts));
     }
 }
 

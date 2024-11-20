@@ -11,5 +11,4 @@
 /// @param line the line inside the file.
 /// @param log_level the log level.
 /// @param format the format to used, see printf.
-/// @return The number of bytes written to the system log, or -1 on failure.
 void sys_syslog(const char *file, const char *fun, int line, short log_level, const char *format);

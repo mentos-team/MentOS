@@ -7,4 +7,10 @@
 #include "system/syscall_types.h"
 #include "errno.h"
 
-_syscall1(int, dup, int, fd)
+// _syscall1(int, dup, int, fd)
+int dup(int fd)
+{
+    long __res;
+    __inline_syscall_1(__res, dup, fd);
+    __syscall_return(int, __res);
+}

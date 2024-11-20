@@ -29,10 +29,16 @@ static const char *months_short[] = {
     "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
 };
 
-/// @brief Time function.
-_syscall1(time_t, time, time_t *, t)
+// _syscall1(time_t, time, time_t *, t)
 
-    time_t difftime(time_t time1, time_t time2)
+time_t time(time_t *t)
+{
+    long __res;
+    __inline_syscall_1(__res, time, t);
+    __syscall_return(time_t, __res);
+}
+
+time_t difftime(time_t time1, time_t time2)
 {
     return time1 - time2;
 }
@@ -427,10 +433,15 @@ size_t strftime(char *str, size_t maxsize, const char *format, const tm_t *timep
     return ret;
 }
 
-/// @brief nanosleep function.
-_syscall2(int, nanosleep, const struct timespec *, req, struct timespec *, rem)
+// _syscall2(int, nanosleep, const struct timespec *, req, struct timespec *, rem)
+int nanosleep(const struct timespec *req, struct timespec *rem)
+{
+    long __res;
+    __inline_syscall_2(__res, nanosleep, req, rem);
+    __syscall_return(int, __res);
+}
 
-    unsigned int sleep(unsigned int seconds)
+unsigned int sleep(unsigned int seconds)
 {
     struct timespec req, rem;
     req.tv_sec = seconds;
@@ -444,6 +455,18 @@ _syscall2(int, nanosleep, const struct timespec *, req, struct timespec *, rem)
     return 0;
 }
 
-_syscall2(int, getitimer, int, which, struct itimerval *, curr_value)
+// _syscall2(int, getitimer, int, which, struct itimerval *, curr_value)
+int getitimer(int which, struct itimerval *curr_value)
+{
+    long __res;
+    __inline_syscall_2(__res, getitimer, which, curr_value);
+    __syscall_return(int, __res);
+}
 
-    _syscall3(int, setitimer, int, which, const struct itimerval *, new_value, struct itimerval *, old_value)
+// _syscall3(int, setitimer, int, which, const struct itimerval *, new_value, struct itimerval *, old_value)
+int setitimer(int which, const struct itimerval *new_value, struct itimerval *old_value)
+{
+    long __res;
+    __inline_syscall_3(__res, setitimer, which, new_value, old_value);
+    __syscall_return(int, __res);
+}

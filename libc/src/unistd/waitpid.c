@@ -17,7 +17,7 @@ pid_t waitpid(pid_t pid, int *status, int options)
     pid_t __res;
     int __status = 0;
     do {
-        __inline_syscall3(__res, waitpid, pid, &__status, options);
+        __inline_syscall_3(__res, waitpid, pid, &__status, options);
         if (__res != 0) {
             break;
         }

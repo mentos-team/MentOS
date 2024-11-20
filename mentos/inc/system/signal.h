@@ -244,12 +244,14 @@ typedef struct sigpending_t {
 #define SEND_SIG_NOINFO ((siginfo_t *)0)
 
 /// @brief Handle the return from a signal handler.
-/// @return never.
+/// @param f Pointer to the pt_regs structure.
+/// @return This function does not return (never).
 long sys_sigreturn(struct pt_regs *f);
 
 /// @brief Handles the signals of the current process.
-/// @return If we are handling a signal, thus, `regs` have been modified
-///          to handle it (e.g., eip is now poiting at the handler).
+/// @param f Pointer to the pt_regs structure.
+/// @return 1 if a signal is being handled and registers have been modified;
+/// otherwise, 0.
 int do_signal(struct pt_regs *f);
 
 /// @brief Initialize the signals.

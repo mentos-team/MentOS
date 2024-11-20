@@ -8,4 +8,11 @@
 #include "errno.h"
 #include "system/syscall_types.h"
 
-_syscall1(int, uname, utsname_t *, buf)
+// _syscall1(int, uname, utsname_t *, buf)
+
+int uname(utsname_t *buf)
+{
+    long __res;
+    __inline_syscall_1(__res, uname, buf);
+    __syscall_return(int, __res);
+}

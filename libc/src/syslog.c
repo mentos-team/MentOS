@@ -81,7 +81,7 @@ int __syslog(const char *file, const char *fun, int line, short log_level, const
     }
 
     // Call the syslog system call to send the formatted message to the system log.
-    // __inline_syscall5(len, syslog, type, file, func, line, buf);
+    // __inline_syscall_5(len, syslog, type, file, func, line, buf);
     __asm__ __volatile__("push %%ebx; movl %2,%%ebx; movl %1,%%eax; "
                          "int $0x80; pop %%ebx"
                          : "=a"(len)

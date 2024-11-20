@@ -3141,9 +3141,11 @@ static off_t ext2_lseek(vfs_file_t *file, off_t offset, int whence)
 }
 
 /// @brief Saves the information concerning the file.
-/// @param inode The inode containing the data.
-/// @param stat The structure where the information are stored.
-/// @return 0 if success.
+/// @param fs The ext2 filesystem containing the file.
+/// @param inode The inode containing the file data.
+/// @param inode_index The index of the inode in the filesystem.
+/// @param stat The structure where the information is stored.
+/// @return 0 on success, or a negative error code on failure.
 static int __ext2_stat(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t inode_index, stat_t *stat)
 {
     stat->st_dev     = fs->block_device->ino;

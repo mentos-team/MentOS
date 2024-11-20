@@ -173,7 +173,6 @@ void ndtree_tree_dealloc(ndtree_t *tree, ndtree_tree_node_f node_cb)
 
 /// @brief Recursively searches for a node with a specified value in the tree.
 /// @param tree The tree to search in.
-/// @param cmp Comparison function to match the node's value.
 /// @param value The value to search for.
 /// @param node The current node in the recursion.
 /// @return Pointer to the found node if successful, NULL otherwise.

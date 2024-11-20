@@ -7,4 +7,10 @@
 #include "errno.h"
 #include "system/syscall_types.h"
 
-_syscall0(pid_t, setsid)
+// _syscall0(pid_t, setsid)
+pid_t setsid(void)
+{
+    long __res;
+    __inline_syscall_0(__res, setsid);
+    __syscall_return(pid_t, __res);
+}

@@ -7,9 +7,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-/// @brief Computes a hash index for a given key using the djb2 algorithm.
-/// @param key The key to hash.
-/// @return The hash index for the key.
 size_t hash(const char *key)
 {
     size_t hash = 5381;
@@ -20,13 +17,6 @@ size_t hash(const char *key)
     return hash % HASHMAP_SIZE;
 }
 
-/// @brief Initializes the hashmap with custom alloc and dealloc functions for
-/// entries. If `alloc_entry` or `dealloc_entry` is NULL, the default functions
-/// are used.
-/// @param map Pointer to the hashmap to initialize.
-/// @param alloc_entry Function to allocate entries, or NULL to use the default.
-/// @param dealloc_entry Function to deallocate entries, or NULL to use the
-/// default.
 void hashmap_init(hashmap_t *map, hashmap_entry_t *(*alloc_fn)(void), void (*dealloc_fn)(hashmap_entry_t *))
 {
     assert(map && "Hashmap is NULL.");
@@ -35,10 +25,6 @@ void hashmap_init(hashmap_t *map, hashmap_entry_t *(*alloc_fn)(void), void (*dea
     map->dealloc_entry = dealloc_fn;
 }
 
-/// @brief Inserts a key-value pair into the hashmap.
-/// @param map Pointer to the hashmap.
-/// @param key The key for the value.
-/// @param value The value to store associated with the key.
 void hashmap_insert(hashmap_t *map, const char *key, void *value)
 {
     assert(map && "Hashmap is NULL.");
@@ -55,10 +41,6 @@ void hashmap_insert(hashmap_t *map, const char *key, void *value)
     map->buckets[index] = new_entry;
 }
 
-/// @brief Retrieves the value associated with a given key.
-/// @param map Pointer to the hashmap.
-/// @param key The key to search for.
-/// @return The value associated with the key, or NULL if the key is not found.
 void *hashmap_get(hashmap_t *map, const char *key)
 {
     assert(map && "Hashmap is NULL.");
@@ -77,9 +59,6 @@ void *hashmap_get(hashmap_t *map, const char *key)
     return NULL; // Key not found
 }
 
-/// @brief Removes a key-value pair from the hashmap.
-/// @param map Pointer to the hashmap.
-/// @param key The key to remove.
 void hashmap_remove(hashmap_t *map, const char *key)
 {
     assert(map && "Hashmap is NULL.");
@@ -105,8 +84,6 @@ void hashmap_remove(hashmap_t *map, const char *key)
     }
 }
 
-/// @brief Destroys the hashmap and frees all allocated memory.
-/// @param map Pointer to the hashmap to destroy.
 void hashmap_destroy(hashmap_t *map)
 {
     assert(map && "Hashmap is NULL.");

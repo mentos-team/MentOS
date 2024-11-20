@@ -7,4 +7,10 @@
 #include "errno.h"
 #include "system/syscall_types.h"
 
-_syscall1(unsigned, alarm, int, seconds)
+// _syscall1(unsigned, alarm, int, seconds)
+unsigned alarm(int seconds)
+{
+    long __res;
+    __inline_syscall_1(__res, alarm, seconds);
+    __syscall_return(unsigned, __res);
+}

@@ -10,10 +10,10 @@
 
 // ============================================================================
 // Setup the logging for this file (do this before any other include).
-#include "sys/kernel_levels.h"          // Include kernel log levels.
-#define __DEBUG_HEADER__ "[PIPE  ]"     ///< Change header.
+#include "sys/kernel_levels.h"           // Include kernel log levels.
+#define __DEBUG_HEADER__ "[PIPE  ]"      ///< Change header.
 #define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
-#include "io/debug.h"                   // Include debugging functions.
+#include "io/debug.h"                    // Include debugging functions.
 // ============================================================================
 
 #include "fs/pipe.h"
@@ -105,9 +105,8 @@ static vfs_file_operations_t pipe_fs_operations = {
 // ============================================================================
 
 /// @brief Initializes a pipe buffer.
-/// @details Sets the initial values for a `pipe_buffer_t` structure and
-/// allocates a memory page to hold the buffer's data.
 /// @param pipe_buffer Pointer to the `pipe_buffer_t` structure to initialize.
+/// @param ops Pointer to the `pipe_buf_operations` structure defining buffer operations.
 /// @return 0 on success, -ENOMEM if page allocation fails.
 static inline int __pipe_buffer_init(pipe_buffer_t *pipe_buffer, struct pipe_buf_operations *ops)
 {
@@ -125,11 +124,9 @@ static inline int __pipe_buffer_init(pipe_buffer_t *pipe_buffer, struct pipe_buf
     return 0;
 }
 
-/// @brief De-initialize a pipe buffer.
-/// @details Frees the memory pages used to store the buffer's data if the
-/// reference count allows, and clears buffer fields.
-/// @param pipe_buffer Pointer to the `pipe_buffer_t` structure to be
-/// de-initialized. This should not be NULL.
+/// @brief De-initializes a pipe buffer.
+/// @param pipe_buffer Pointer to the `pipe_buffer_t` structure to deinitialize.
+/// This should not be NULL.
 static inline void __pipe_buffer_deinit(pipe_buffer_t *pipe_buffer)
 {
     // Check if we received a valid pipe buffer.
@@ -142,10 +139,7 @@ static inline void __pipe_buffer_deinit(pipe_buffer_t *pipe_buffer)
 }
 
 /// @brief Allocates and initializes a new `pipe_inode_info_t` structure.
-/// @details Allocates memory for a `pipe_inode_info_t` structure and
-/// initializes its fields, including synchronization objects (wait queue and
-/// mutex) and an array of `pipe_buffer_t` buffers. The buffer array size is
-/// based on the `INITIAL_NUM_BUFFERS` constant.
+/// @param ops Pointer to the `pipe_buf_operations` structure for buffer operations.
 /// @return Pointer to the allocated and initialized `pipe_inode_info_t`
 /// structure, or NULL if allocation fails.
 static inline pipe_inode_info_t *__pipe_inode_info_alloc(struct pipe_buf_operations *ops)
@@ -239,7 +233,7 @@ static inline int pipe_info_has_data(pipe_inode_info_t *pipe_info)
 {
     // Validate input parameter.
     if (!pipe_info) {
-        pr_err("pipe_info_has_data: pipe_info is NULL.\n");
+        pr_err("pipe_info is NULL.\n");
         return -EINVAL;
     }
 
@@ -261,7 +255,7 @@ static inline int pipe_info_has_space(pipe_inode_info_t *pipe_info)
 {
     // Validate input parameter.
     if (!pipe_info) {
-        pr_err("pipe_info_has_space: pipe_info is NULL.\n");
+        pr_err("pipe_info is NULL.\n");
         return -EINVAL;
     }
 
@@ -283,7 +277,7 @@ static int pipe_buffer_empty(pipe_buffer_t *pipe_buffer)
 {
     // Validate input parameter.
     if (!pipe_buffer) {
-        pr_err("pipe_buffer_empty: pipe_buffer is NULL.\n");
+        pr_err("pipe_buffer is NULL.\n");
         return 0; // Return 0 as there's no buffer to check.
     }
 
@@ -298,7 +292,7 @@ static size_t pipe_buffer_available(pipe_buffer_t *pipe_buffer)
 {
     // Validate input parameter.
     if (!pipe_buffer) {
-        pr_err("pipe_buffer_available: pipe_buffer is NULL.\n");
+        pr_err("pipe_buffer is NULL.\n");
         return 0; // Return 0 as there’s no buffer to check.
     }
 
@@ -313,7 +307,7 @@ static inline size_t pipe_buffer_capacity(pipe_buffer_t *pipe_buffer)
 {
     // Validate input parameter.
     if (!pipe_buffer) {
-        pr_err("pipe_buffer_capacity: pipe_buffer is NULL.\n");
+        pr_err("pipe_buffer is NULL.\n");
         return 0; // Return 0 as there's no buffer to check.
     }
 
@@ -329,17 +323,17 @@ static ssize_t pipe_calculate_bytes_to_read(pipe_buffer_t *pipe_buffer, size_t c
 {
     // Validate input parameters.
     if (!pipe_buffer) {
-        pr_err("pipe_calculate_bytes_to_read: pipe_buffer is NULL.\n");
+        pr_err("pipe_buffer is NULL.\n");
         return -EINVAL;
     }
     if (count == 0) {
-        pr_err("pipe_calculate_bytes_to_read: Invalid read request of 0 bytes (must be positive).\n");
+        pr_err("Invalid read request of 0 bytes (must be positive).\n");
         return -EINVAL;
     }
 
     // Check if there is data available in the buffer.
     if (pipe_buffer_empty(pipe_buffer)) {
-        pr_debug("pipe_calculate_bytes_to_read: No data available in buffer.\n");
+        pr_debug("No data available in buffer.\n");
         return -EAGAIN;
     }
 
@@ -355,18 +349,18 @@ static ssize_t pipe_calculate_bytes_to_write(pipe_buffer_t *pipe_buffer, size_t 
 {
     // Validate input parameters.
     if (!pipe_buffer) {
-        pr_err("pipe_calculate_bytes_to_write: pipe_buffer is NULL.\n");
+        pr_err("pipe_buffer is NULL.\n");
         return -EINVAL;
     }
     if (count == 0) {
-        pr_err("pipe_calculate_bytes_to_write: Invalid write request of %u bytes (must be positive).\n", count);
+        pr_err("Invalid write request of %u bytes (must be positive).\n", count);
         return -EINVAL;
     }
 
     // Calculate available space in the buffer from the current write position.
     size_t capacity = pipe_buffer_capacity(pipe_buffer);
     if (capacity == 0) {
-        pr_debug("pipe_calculate_bytes_to_write: No space available in buffer for writing.\n");
+        pr_debug("No space available in buffer for writing.\n");
         return -EAGAIN;
     }
 
@@ -374,28 +368,27 @@ static ssize_t pipe_calculate_bytes_to_write(pipe_buffer_t *pipe_buffer, size_t 
     return (count < capacity) ? count : capacity;
 }
 
-/// @brief Ensures that the buffer at the specified index is valid and ready to be used.
-/// @param pipe_info Pointer to the pipe information structure.
-/// @param index The index of the buffer to confirm.
+/// @brief Ensures that the pipe buffer is valid and ready to use.
+/// @param pipe_buffer Pointer to the `pipe_buffer_t` structure to confirm.
 /// @return 0 if the buffer is valid, or a non-zero error code if it is not.
 static int pipe_buffer_confirm(pipe_buffer_t *pipe_buffer)
 {
     // Validate input parameters.
     if (!pipe_buffer) {
-        pr_err("pipe_buffer_confirm: pipe_buffer is NULL.\n");
+        pr_err("pipe_buffer is NULL.\n");
         return -EINVAL;
     }
 
     // Ensure length and offset are within valid bounds.
     if ((pipe_buffer->len + pipe_buffer->offset) > PIPE_BUFFER_SIZE) {
-        pr_err("pipe_buffer_confirm: Buffer length and offset exceed bounds: len = %u, offset = %u, PIPE_BUFFER_SIZE = %lu.\n",
+        pr_err("Buffer length and offset exceed bounds: len = %u, offset = %u, PIPE_BUFFER_SIZE = %lu.\n",
                pipe_buffer->len, pipe_buffer->offset, PIPE_BUFFER_SIZE);
         return -EOVERFLOW;
     }
 
     // Ensure operations pointer is valid.
     if (!pipe_buffer->ops) {
-        pr_err("pipe_buffer_confirm: Buffer operations pointer is NULL.\n");
+        pr_err("Buffer operations pointer is NULL.\n");
         return -ENXIO;
     }
 
@@ -403,21 +396,25 @@ static int pipe_buffer_confirm(pipe_buffer_t *pipe_buffer)
 }
 
 /// @brief Reads data from the specified pipe buffer into the provided buffer.
+/// @param pipe_buffer Pointer to the `pipe_buffer_t` structure to read from.
+/// @param dest Pointer to the destination buffer where data will be copied.
+/// @param count Number of bytes to read from the pipe buffer.
+/// @return Number of bytes read on success, or a negative error code on failure.
 static ssize_t pipe_buffer_read(pipe_buffer_t *pipe_buffer, char *dest, size_t count)
 {
     // Validate input parameters.
     if (!pipe_buffer) {
-        pr_err("pipe_buffer_read: pipe_buffer is NULL.\n");
+        pr_err("pipe_buffer is NULL.\n");
         return -EINVAL;
     }
     if (!dest) {
-        pr_err("pipe_buffer_read: Destination buffer is NULL.\n");
+        pr_err("Destination buffer is NULL.\n");
         return -EINVAL;
     }
 
     ssize_t bytes_to_read = pipe_calculate_bytes_to_read(pipe_buffer, count);
     if (bytes_to_read < 0) {
-        pr_debug("pipe_buffer_read: Failed to calculate bytes to read (error[%2d]: %s).\n", -bytes_to_read, strerror(-bytes_to_read));
+        pr_debug("Failed to calculate bytes to read (error[%2d]: %s).\n", -bytes_to_read, strerror(-bytes_to_read));
         return bytes_to_read;
     }
 
@@ -433,7 +430,7 @@ static ssize_t pipe_buffer_read(pipe_buffer_t *pipe_buffer, char *dest, size_t c
         pipe_buffer->offset = 0;
     }
 
-    pr_debug("pipe_buffer_read: Read %3ld bytes from buffer (offset: %3u, length: %3u).\n",
+    pr_debug("Read %3ld bytes from buffer (offset: %3u, length: %3u).\n",
              bytes_to_read, pipe_buffer->offset, pipe_buffer->len);
 
     return bytes_to_read;
@@ -686,6 +683,11 @@ static int pipe_stat(const char *path, stat_t *stat)
     return 0;
 }
 
+/// @brief Opens a pipe file with the specified path, flags, and mode.
+/// @param path The path of the pipe to open.
+/// @param flags File status flags and access modes.
+/// @param mode File mode bits to apply when creating a new pipe.
+/// @return Pointer to the opened vfs_file_t structure, or NULL on failure.
 static vfs_file_t *pipe_open(const char *path, int flags, mode_t mode)
 {
     // Validate the path parameter.
@@ -758,11 +760,11 @@ static int pipe_unlink(const char *path)
 {
     // Validate the path parameter.
     if (!path) {
-        pr_err("pipe_unlink: Invalid path - path is NULL.\n");
+        pr_err("Invalid path - path is NULL.\n");
         return -1;
     }
 
-    pr_debug("pipe_unlink: Attempting to unlink pipe with path: %s\n", path);
+    pr_debug("Attempting to unlink pipe with path: %s\n", path);
 
     // Retrieve the current task structure.
     task_struct *task = scheduler_get_current_process();
@@ -775,29 +777,29 @@ static int pipe_unlink(const char *path)
 
         // Check if the file name matches the specified path.
         if (file && strcmp(file->name, path) == 0) {
-            pr_debug("pipe_unlink: Pipe file found for path %s at FD %d.\n", path, fd);
+            pr_debug("Pipe file found for path %s at FD %d.\n", path, fd);
 
             // Remove from the task's pipe list.
-            pr_debug("pipe_unlink: Removing file from task's pipe list.\n");
+            pr_debug("Removing file from task's pipe list.\n");
             list_head_remove(&file->siblings);
 
             // Free the associated pipe_inode_info and the vfs_file structure.
             if (file->device) {
-                pr_debug("pipe_unlink: Deallocating pipe_inode_info for file.\n");
+                pr_debug("Deallocating pipe_inode_info for file.\n");
                 __pipe_inode_info_dealloc((pipe_inode_info_t *)file->device);
             }
 
             // We can free the file now.
-            pr_debug("pipe_unlink: Freeing vfs_file structure.\n");
+            pr_debug("Freeing vfs_file structure.\n");
             kfree(file);
 
-            pr_info("pipe_unlink: Successfully unlinked pipe: %s\n", path);
+            pr_info("Successfully unlinked pipe: %s\n", path);
             return 0;
         }
     }
 
     // Pipe not found, return an error.
-    pr_err("pipe_unlink: Pipe unlink failed - no pipe found with path %s.\n", path);
+    pr_err("Pipe unlink failed - no pipe found with path %s.\n", path);
     return -1;
 }
 
@@ -809,11 +811,11 @@ static int pipe_close(vfs_file_t *file)
 {
     // Validate input parameters.
     if (!file) {
-        pr_err("pipe_close: Invalid argument - file is NULL.\n");
+        pr_err("Invalid argument - file is NULL.\n");
         return -EINVAL;
     }
     if (!file->device) {
-        pr_err("pipe_close: Invalid file - file device is NULL.\n");
+        pr_err("Invalid file - file device is NULL.\n");
         return -EINVAL;
     }
 
@@ -823,37 +825,37 @@ static int pipe_close(vfs_file_t *file)
     if ((file->flags & O_ACCMODE) == O_WRONLY) {
         if (pipe_info->writers > 0) {
             pipe_info->writers--;
-            pr_debug("pipe_close: Decremented writers (count: %u, readers: %u, writers: %u).\n",
+            pr_debug("Decremented writers (count: %u, readers: %u, writers: %u).\n",
                      file->count, pipe_info->readers, pipe_info->writers);
         } else {
-            pr_warning("pipe_close: Writers count is already zero.\n");
+            pr_warning("Writers count is already zero.\n");
         }
     } else if ((file->flags & O_ACCMODE) == O_RDONLY) {
         if (pipe_info->readers > 0) {
             pipe_info->readers--;
-            pr_debug("pipe_close: Decremented readers (count: %u, readers: %u, writers: %u).\n",
+            pr_debug("Decremented readers (count: %u, readers: %u, writers: %u).\n",
                      file->count, pipe_info->readers, pipe_info->writers);
         } else {
-            pr_warning("pipe_close: Readers count is already zero.\n");
+            pr_warning("Readers count is already zero.\n");
         }
     } else {
-        pr_warning("pipe_close: Unknown pipe file access mode, possibly incorrect flags.\n");
+        pr_warning("Unknown pipe file access mode, possibly incorrect flags.\n");
     }
 
     // If all writers have closed, wake up waiting readers.
     if (pipe_info->writers == 0) {
-        pr_debug("pipe_close: All writers have closed the pipe. Waking up readers.\n");
+        pr_debug("All writers have closed the pipe. Waking up readers.\n");
         pipe_wake_up_tasks(&pipe_info->read_wait, "pipe_close");
     }
 
     // If both readers and writers are zero, free the pipe resources.
     if (--file->count == 0) {
         if ((pipe_info->readers == 0) && (pipe_info->writers == 0)) {
-            pr_debug("pipe_close: Fully closing and deallocating pipe.\n");
+            pr_debug("Fully closing and deallocating pipe.\n");
             // Deallocate the pipe info.
             __pipe_inode_info_dealloc(pipe_info);
         } else {
-            pr_debug("pipe_close: Closing and deallocating just the vfs file.\n");
+            pr_debug("Closing and deallocating just the vfs file.\n");
         }
 
         // Remove the file from the list of opened files.
@@ -876,15 +878,15 @@ static ssize_t pipe_read(vfs_file_t *file, char *buffer, off_t offset, size_t nb
 {
     // Validate input parameters.
     if (!file) {
-        pr_err("pipe_read: Invalid argument - file is NULL.\n");
+        pr_err("Invalid argument - file is NULL.\n");
         return -1;
     }
     if (!buffer) {
-        pr_err("pipe_read: Invalid argument - buffer is NULL.\n");
+        pr_err("Invalid argument - buffer is NULL.\n");
         return -1;
     }
     if (!file->device) {
-        pr_err("pipe_read: Invalid file - file device is NULL.\n");
+        pr_err("Invalid file - file device is NULL.\n");
         return -1;
     }
 
@@ -900,7 +902,7 @@ static ssize_t pipe_read(vfs_file_t *file, char *buffer, off_t offset, size_t nb
 
     // Return 0 if there are no writers left.
     if (pipe_info->writers == 0) {
-        pr_debug("pipe_read: No writers left.\n");
+        pr_debug("No writers left.\n");
         return 0;
     }
 
@@ -918,14 +920,14 @@ static ssize_t pipe_read(vfs_file_t *file, char *buffer, off_t offset, size_t nb
 
             // Confirm that the buffer is ready to be read.
             if (pipe_buffer_confirm(pipe_buffer) < 0) {
-                pr_err("pipe_read: Failed to confirm readiness of buffer %u for reading.\n", buffer_index);
+                pr_err("Failed to confirm readiness of buffer %u for reading.\n", buffer_index);
                 break; // Stop if there’s no data to read.
             }
 
             // Calculate bytes to read in this iteration, considering the remaining requested bytes.
             ssize_t bytes_to_read = pipe_buffer_read(pipe_buffer, buffer + bytes_read, nbyte - bytes_read);
             if (bytes_to_read < 0) {
-                pr_err("pipe_read: Error reading from pipe buffer (error[%2d]: %s).\n", -bytes_to_read, strerror(-bytes_to_read));
+                pr_err("Error reading from pipe buffer (error[%2d]: %s).\n", -bytes_to_read, strerror(-bytes_to_read));
                 bytes_read = -bytes_to_read;
                 break;
             }
@@ -963,15 +965,15 @@ static ssize_t pipe_write(vfs_file_t *file, const void *buffer, off_t offset, si
 {
     // Validate input parameters.
     if (!file) {
-        pr_err("pipe_write: Invalid argument - file is NULL.\n");
+        pr_err("Invalid argument - file is NULL.\n");
         return -1;
     }
     if (!buffer) {
-        pr_err("pipe_write: Invalid argument - buffer is NULL.\n");
+        pr_err("Invalid argument - buffer is NULL.\n");
         return -1;
     }
     if (!file->device) {
-        pr_err("pipe_write: Invalid file - file device is NULL.\n");
+        pr_err("Invalid file - file device is NULL.\n");
         return -1;
     }
 
@@ -1000,7 +1002,7 @@ static ssize_t pipe_write(vfs_file_t *file, const void *buffer, off_t offset, si
 
             // Confirm the buffer is ready for writing.
             if (pipe_buffer_confirm(pipe_buffer) < 0) {
-                pr_err("pipe_write: Failed to confirm readiness of buffer %u for writing.\n", buffer_index);
+                pr_err("Failed to confirm readiness of buffer %u for writing.\n", buffer_index);
                 bytes_written = -1;
                 break;
             }
@@ -1009,7 +1011,7 @@ static ssize_t pipe_write(vfs_file_t *file, const void *buffer, off_t offset, si
             ssize_t bytes_to_write = pipe_buffer_write(pipe_buffer, (const char *)buffer + bytes_written, nbyte - bytes_written);
             if (bytes_to_write < 0) {
                 // Other errors: Log and return immediately.
-                pr_err("pipe_write: Error writing to pipe buffer (error[%2d]: %s).\n", -bytes_to_write, strerror(-bytes_to_write));
+                pr_err("Error writing to pipe buffer (error[%2d]: %s).\n", -bytes_to_write, strerror(-bytes_to_write));
                 bytes_written = -1;
                 break;
             }
@@ -1037,11 +1039,20 @@ static ssize_t pipe_write(vfs_file_t *file, const void *buffer, off_t offset, si
     return bytes_written;
 }
 
+/// @brief Performs a seek operation on a pipe, which is not supported.
+/// @param file Pointer to the `vfs_file_t` structure representing the pipe.
+/// @param offset The seek offset (unused for pipes).
+/// @param whence The seek base (e.g., SEEK_SET, SEEK_CUR, SEEK_END; unused for pipes).
+/// @return Always returns -1 as pipes do not support seeking.
 static off_t pipe_lseek(vfs_file_t *file, off_t offset, int whence)
 {
     return -1;
 }
 
+/// @brief Retrieves file status information for a pipe, which is not supported.
+/// @param file Pointer to the `vfs_file_t` structure representing the pipe.
+/// @param stat Pointer to the `stat_t` structure to hold file status information.
+/// @return Always returns -1 as pipes do not support file status retrieval.
 static int pipe_fstat(vfs_file_t *file, stat_t *stat)
 {
     return -1;
@@ -1056,30 +1067,30 @@ static long pipe_fcntl(vfs_file_t *file, unsigned int request, unsigned long dat
 {
     if (!file) {
         errno = EBADF;
-        pr_err("pipe_fcntl: Invalid file descriptor.\n");
+        pr_err("Invalid file descriptor.\n");
         return -1;
     }
 
     switch (request) {
     case F_GETFL:
-        pr_debug("pipe_fcntl: Retrieving flags for pipe.\n");
+        pr_debug("Retrieving flags for pipe.\n");
         return file->flags; // Return the current flags for the file descriptor
 
     case F_SETFL:
-        pr_debug("pipe_fcntl: Setting flags for pipe.\n");
+        pr_debug("Setting flags for pipe.\n");
         // Only handle O_NONBLOCK for simplicity
         if (data & O_NONBLOCK) {
             file->flags |= O_NONBLOCK;
-            pr_debug("pipe_fcntl: Set O_NONBLOCK flag.\n");
+            pr_debug("Set O_NONBLOCK flag.\n");
         } else {
             file->flags &= ~O_NONBLOCK;
-            pr_debug("pipe_fcntl: Cleared O_NONBLOCK flag.\n");
+            pr_debug("Cleared O_NONBLOCK flag.\n");
         }
         return 0;
 
     default:
         errno = EINVAL;
-        pr_err("pipe_fcntl: Unsupported request %u.\n", request);
+        pr_err("Unsupported request %u.\n", request);
         return -1;
     }
 }
@@ -1093,7 +1104,7 @@ static inline int create_pipe_fd(pipe_inode_info_t *pipe_info, int flags, mode_t
 {
     // Validate the pipe_info parameter.
     if (!pipe_info) {
-        pr_err("Invalid pipe_info: pipe_info is NULL.\n");
+        pr_err("pipe_info is NULL.\n");
         return -1;
     }
 
@@ -1145,15 +1156,15 @@ int vfs_update_pipe_counts(task_struct *task, task_struct *old_task)
                 if ((file->flags & O_ACCMODE) == O_WRONLY) {
                     // Increment the writers count for the pipe.
                     ++pipe_info->writers;
-                    pr_debug("vfs_update_pipe_counts: Increased writers count for pipe associated with fd %d. New count: %d\n",
+                    pr_debug("Increased writers count for pipe associated with fd %d. New count: %d\n",
                              fd, pipe_info->writers);
                 } else if ((file->flags & O_ACCMODE) == O_RDONLY) {
                     // Increment the readers count for the pipe.
                     ++pipe_info->readers;
-                    pr_debug("vfs_update_pipe_counts: Increased readers count for pipe associated with fd %d. New count: %d\n",
+                    pr_debug("Increased readers count for pipe associated with fd %d. New count: %d\n",
                              fd, pipe_info->readers);
                 } else {
-                    pr_warning("vfs_update_pipe_counts: Unknown pipe file access mode, possibly incorrect flags.\n");
+                    pr_warning("Unknown pipe file access mode, possibly incorrect flags.\n");
                 }
             }
         }

@@ -22,6 +22,7 @@
 #include "list_head_algorithm.h"
 #include "sys/mman.h"
 #include "system/panic.h"
+#include "fs/vfs.h"
 
 /// Cache for storing mm_struct.
 kmem_cache_t *mm_cache;
@@ -1411,6 +1412,32 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
 
     // Get the current task.
     task_struct *task = scheduler_get_current_process();
+
+    // Get the file descriptor.
+    vfs_file_descriptor_t *file_descriptor = fget(fd);
+    if (!file_descriptor) {
+        pr_err("Invalid file descriptor.\n");
+        return NULL;
+    }
+
+    // Get the actual file.
+    vfs_file_t *file = file_descriptor->file_struct;
+    if (!file) {
+        pr_err("Invalid file.\n");
+        return NULL;
+    }
+
+    stat_t file_stat;
+    if (vfs_fstat(file, &file_stat) < 0) {
+        pr_err("Failed to get file stat.\n");
+        return NULL;
+    }
+
+    // Ensure the file size is large enough to map
+    if ((offset + length) > file_stat.st_size) {
+        pr_err("File is too small for the requested mapping.\n");
+        return NULL;
+    }
 
     // Check if a specific address was requested for the memory mapping.
     if (addr && is_valid_vm_area(task->mm, (uintptr_t)addr, (uintptr_t)addr + length)) {

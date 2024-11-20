@@ -16,14 +16,12 @@ typedef struct ndtree_node {
 } ndtree_node_t;
 
 /// @brief Function pointer type for comparing elements in the tree.
-/// @param tree The tree containing the elements to compare.
 /// @param lhs Left-hand side value to compare.
 /// @param rhs Right-hand side value to compare.
 /// @return Comparison result: <0 if lhs < rhs, 0 if lhs == rhs, >0 if lhs > rhs.
 typedef int (*ndtree_tree_compare_f)(void *lhs, void *rhs);
 
 /// @brief Callback function type for operating on tree nodes.
-/// @param tree The tree containing the node.
 /// @param node The node to operate on.
 typedef void (*ndtree_tree_node_f)(ndtree_node_t *node);
 
@@ -51,7 +49,6 @@ typedef struct ndtree {
 /// @param compare_node Comparison function for nodes.
 /// @param alloc_node Custom allocator for nodes.
 /// @param free_node Custom deallocator for nodes.
-/// @return Pointer to the initialized tree.
 void ndtree_tree_init(ndtree_t *tree, ndtree_tree_compare_f compare_node, ndtree_alloc_node_f alloc_node, ndtree_free_node_f free_node);
 
 /// @brief Initializes a tree node with a given value.

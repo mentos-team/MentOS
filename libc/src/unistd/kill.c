@@ -7,4 +7,10 @@
 #include "errno.h"
 #include "system/syscall_types.h"
 
-_syscall2(int, kill, pid_t, pid, int, sig)
+// _syscall2(int, kill, pid_t, pid, int, sig)
+int kill(pid_t pid, int sig)
+{
+    long __res;
+    __inline_syscall_2(__res, kill, pid, sig);
+    __syscall_return(int, __res);
+}

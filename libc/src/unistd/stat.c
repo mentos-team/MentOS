@@ -9,6 +9,18 @@
 
 #include "sys/stat.h"
 
-_syscall2(int, stat, const char *, path, stat_t *, buf)
+// _syscall2(int, stat, const char *, path, stat_t *, buf)
+int stat(const char *path, stat_t *buf)
+{
+    long __res;
+    __inline_syscall_2(__res, stat, path, buf);
+    __syscall_return(int, __res);
+}
 
-_syscall2(int, fstat, int, fd, stat_t *, buf)
+// _syscall2(int, fstat, int, fd, stat_t *, buf)
+int fstat(int fd, stat_t *buf)
+{
+    long __res;
+    __inline_syscall_2(__res, fstat, fd, buf);
+    __syscall_return(int, __res);
+}
