@@ -54,7 +54,7 @@ int main(int argc, char *argv[])
     // Attempt to set the signal handler for SIGFPE.
     if (sigaction(SIGFPE, &action, NULL) == -1) {
         // Print error message if sigaction fails.
-        printf("Failed to set signal handler (%s).\n", SIGFPE, strerror(errno));
+        printf("Failed to set signal handler (%s).\n", strerror(errno));
         return 1;
     }
 

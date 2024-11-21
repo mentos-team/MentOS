@@ -43,7 +43,7 @@ int main(int argc, char *argv[])
 
     // Set the SIGUSR1 handler using sigaction.
     if (sigaction(SIGFPE, &action, NULL) == -1) {
-        printf("Failed to set signal handler (%s).\n", SIGFPE, strerror(errno));
+        printf("Failed to set signal handler (%s).\n", strerror(errno));
         return 1;
     }
 

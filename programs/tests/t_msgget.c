@@ -42,7 +42,7 @@ static inline void __send_message(int msqid, long mtype, message_t *message, con
     if (msgsnd(msqid, message, sizeof(message->mesg_text), 0) < 0) {
         perror("Failed to send the message");
     } else {
-        printf("[%2d] Message sent (%2d) `%s`\n", getpid(), message->mesg_type, message->mesg_text);
+        printf("[%2d] Message sent (%2ld) `%s`\n", getpid(), message->mesg_type, message->mesg_text);
     }
 }
 
@@ -58,7 +58,7 @@ static inline void __receive_message(int msqid, long mtype, message_t *message)
     if (msgrcv(msqid, message, sizeof(message->mesg_text), mtype, 0) < 0) {
         perror("Failed to receive the message");
     } else {
-        printf("[%2d] Message received (%2d) `%s` (Query: %2d)\n", getpid(), message->mesg_type, message->mesg_text, mtype);
+        printf("[%2d] Message received (%2ld) `%s` (Query: %2ld)\n", getpid(), message->mesg_type, message->mesg_text, mtype);
     }
 }
 
