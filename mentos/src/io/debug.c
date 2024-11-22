@@ -28,15 +28,15 @@ static inline void __debug_print_header(const char *file, const char *fun, int l
     // "EMERG  ", "ALERT  ", "CRIT   ", "ERR    ", "WARNING", "NOTICE ", "INFO   ", "DEBUG  ", "DEFAULT",
     static const char *log_level_label[] = { " EM ", " AL ", " CR ", " ER ", " WR ", " NT ", " IN ", " DB ", " DF " };
     static const char *log_level_color[] = {
-        FG_RED_BRIGHT,    // "EMERG  "
-        FG_RED_BRIGHT,    // "ALERT  "
-        FG_RED,           // "CRIT   "
-        FG_RED,           // "ERR    "
-        FG_YELLOW_BRIGHT, // "WARNING"
-        FG_RESET,         // "NOTICE "
-        FG_CYAN,          // "INFO   "
-        FG_YELLOW,        // "DEBUG  "
-        FG_RESET          // "DEFAULT"
+        FG_RED_BRIGHT_BOLD, // "EMERG  "
+        FG_RED_BRIGHT,      // "ALERT  "
+        FG_RED_BOLD,        // "CRIT   "
+        FG_RED,             // "ERR    "
+        FG_YELLOW_BRIGHT,   // "WARNING"
+        FG_WHITE,           // "NOTICE "
+        FG_CYAN,            // "INFO   "
+        FG_MAGENTA,         // "DEBUG  "
+        FG_RESET            // "DEFAULT"
     };
     static char tmp_prefix[BUFSIZ], final_prefix[BUFSIZ];
     // Check the log level.
