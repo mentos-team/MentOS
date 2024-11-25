@@ -376,16 +376,23 @@
 #define __NR_shmget                 398 ///<  System-call number for `shmget`
 #define SYSCALL_NUMBER              399 ///< The total number of system-calls.
 
+/// @brief Adjust the result of a system call and set errno if needed.
+/// @param value The variable where the result of the system call is stored.
+#define __syscall_set_errno(value)                           \
+    do {                                                     \
+        if ((unsigned int)(value) >= (unsigned int)(-125)) { \
+            errno   = -(value);                              \
+            (value) = -1;                                    \
+        }                                                    \
+    } while (0)
+
 /// @brief Handle the value returned from a system call.
 /// @param type Specifies the type of the returned value.
-/// @param res  The name of the variable where the result of the SC is stored.
-#define __syscall_return(type, res)                        \
-    do {                                                   \
-        if ((unsigned int)(res) >= (unsigned int)(-125)) { \
-            errno = -(res);                                \
-            (res) = -1;                                    \
-        }                                                  \
-        return (type)(res);                                \
+/// @param value The variable where the result of the system call is stored.
+#define __syscall_return(type, value) \
+    do {                              \
+        __syscall_set_errno(value);   \
+        return (type)(value);         \
     } while (0)
 
 // Few things about what follows:
