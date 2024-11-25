@@ -11,9 +11,12 @@
 #include "errno.h"
 #include "unistd.h"
 #include "system/syscall_types.h"
+#include "syslog.h"
+#include "strerror.h"
 
 pid_t waitpid(pid_t pid, int *status, int options)
 {
+#if 1
     pid_t __res;
     int __status = 0;
     do {
@@ -30,6 +33,44 @@ pid_t waitpid(pid_t pid, int *status, int options)
         *status = __status;
     }
     __syscall_return(pid_t, __res);
+#else
+
+    pid_t ret;
+
+    while (1) {
+        __inline_syscall_3(ret, waitpid, pid, status, options);
+
+        // Success: A child process state has changed.
+        if (ret > 0) {
+            break;
+        }
+
+        if (ret < 0) {
+            __syscall_set_errno(ret);
+
+            // Interrupted by a signal: Retry the syscall.
+            if (errno == EINTR) {
+                continue;
+            }
+
+            // No children to wait for, but WNOHANG allows non-blocking behavior.
+            if (errno == ECHILD) {
+                if (options & WNOHANG) {
+                    // Return 0 to indicate no state change.
+                    ret = 0;
+                    break;
+                }
+                continue;
+            }
+
+            // Unrecoverable error: Return -1 and let the caller handle `errno`.
+            break;
+        }
+    }
+
+    // Return the PID of the child whose state has changed (or 0 for WNOHANG).
+    return ret;
+#endif
 }
 
 pid_t wait(int *status)
