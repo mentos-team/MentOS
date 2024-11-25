@@ -102,6 +102,7 @@ set(KERNEL_SOURCES
     ${CMAKE_SOURCE_DIR}/mentos/src/descriptor_tables/tss.S
     ${CMAKE_SOURCE_DIR}/mentos/src/process/scheduler_algorithm.c
     ${CMAKE_SOURCE_DIR}/mentos/src/process/scheduler_feedback.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/process/pid_manager.c
     ${CMAKE_SOURCE_DIR}/mentos/src/process/scheduler.c
     ${CMAKE_SOURCE_DIR}/mentos/src/process/process.c
     ${CMAKE_SOURCE_DIR}/mentos/src/process/wait.c

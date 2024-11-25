@@ -9,6 +9,9 @@
 #include "process/process.h"
 #include "stddef.h"
 
+// Define the maximum number of processes your OS will support.
+#define MAX_PROCESSES 256
+
 /// @brief Structure that contains information about live processes.
 typedef struct runqueue_t {
     /// Number of queued processes.
@@ -35,12 +38,11 @@ typedef struct sched_param_t {
     bool_t is_periodic;
 } sched_param_t;
 
+// Global reference to the init process.
+extern task_struct *init_process;
+
 /// @brief Initialize the scheduler.
 void scheduler_initialize(void);
-
-/// @brief  Returns a non-decreasing unique process id.
-/// @return Process identifier (PID).
-uint32_t scheduler_getpid(void);
 
 /// @brief Returns the pointer to the current active process.
 /// @return Pointer to the current process.

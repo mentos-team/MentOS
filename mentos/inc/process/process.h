@@ -173,8 +173,8 @@ int init_tasking(void);
 
 /// @brief Create and spawn the init process.
 /// @param path Path of the `init` program.
-/// @return Pointer to init process.
-task_struct *process_create_init(const char *path);
+/// @return 0 on success, 1 on failure.
+int process_create_init(const char *path);
 
 /// @brief Get a file structure from a file descriptor.
 /// @param fd the file descriptor.
