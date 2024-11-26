@@ -5,7 +5,7 @@
 
 #pragma once
 
-#include "mem/buddysystem.h"
+#include "mem/buddy_system.h"
 #include "mem/zone_allocator.h"
 #include "mem/paging.h"
 

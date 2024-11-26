@@ -60,7 +60,7 @@ if (DOXYGEN_FOUND)
         ${CMAKE_SOURCE_DIR}/mentos/inc/mem/slab.h
         ${CMAKE_SOURCE_DIR}/mentos/inc/mem/kheap.h
         ${CMAKE_SOURCE_DIR}/mentos/inc/mem/vmem_map.h
-        ${CMAKE_SOURCE_DIR}/mentos/inc/mem/buddysystem.h
+        ${CMAKE_SOURCE_DIR}/mentos/inc/mem/buddy_system.h
         ${CMAKE_SOURCE_DIR}/mentos/inc/hardware/timer.h
         ${CMAKE_SOURCE_DIR}/mentos/inc/hardware/cpuid.h
         ${CMAKE_SOURCE_DIR}/mentos/inc/hardware/pic8259.h

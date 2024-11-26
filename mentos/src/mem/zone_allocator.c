@@ -11,7 +11,7 @@
 
 #include "assert.h"
 #include "kernel.h"
-#include "mem/buddysystem.h"
+#include "mem/buddy_system.h"
 #include "mem/paging.h"
 #include "mem/zone_allocator.h"
 #include "string.h"
@@ -305,7 +305,7 @@ static int is_memory_clean(gfp_t gfp_mask)
         pr_crit("Number of blocks of free pages is different than expected (%d vs %d).\n", area->nr_free, total_size);
 
         // Dump the current state of the buddy system for debugging purposes.
-        buddy_system_dump(&zone->buddy_system);
+        buddy_system_dump(LOGLEVEL_CRIT, &zone->buddy_system);
 
         // Return 0 to indicate an error.
         return 0;
@@ -315,85 +315,110 @@ static int is_memory_clean(gfp_t gfp_mask)
     return 1;
 }
 
-/// @brief  Checks if the physical memory manager is working properly.
-/// @return If the check was done correctly.
+/// @brief Checks if the physical memory manager is working properly.
+/// @return 1 on success, 0 on failure.
 static int pmm_check(void)
 {
-    pr_debug(
-        "\n=================== ZONE ALLOCATOR TEST ==================== \n");
-
-    pr_debug("\t[STEP1] One page frame in kernel-space... ");
-    pr_debug("\n\t ===== [STEP1] One page frame in kernel-space ====\n");
-    pr_debug("\n\t ----- ALLOC -------------------------------------\n");
-    uint32_t ptr1 = __alloc_page_lowmem(GFP_KERNEL);
-    pr_debug("\n\t ----- FREE --------------------------------------\n");
-    free_page_lowmem(ptr1);
-    if (!is_memory_clean(GFP_KERNEL)) {
-        pr_emerg("Test failed, memory is not clean.\n");
+    zone_t *zone_normal = get_zone_from_flags(GFP_KERNEL);
+    if (!zone_normal) {
+        pr_crit("Failed to retrieve the zone_normal.\n");
         return 0;
     }
-
-    pr_debug("\t[STEP2] Five page frames in user-space... ");
-    pr_debug("\n\t ===== [STEP2] Five page frames in user-space ====\n");
-    page_t *ptr2[5];
-    for (int i = 0; i < 5; i++) {
-        ptr2[i] = _alloc_pages(GFP_HIGHUSER, 0);
-    }
-    for (int i = 0; i < 5; i++) {
-        __free_pages(ptr2[i]);
-    }
-    if (!is_memory_clean(GFP_HIGHUSER)) {
-        pr_emerg("Test failed, memory is not clean.\n");
+    zone_t *zone_highmem = get_zone_from_flags(GFP_HIGHUSER);
+    if (!zone_highmem) {
+        pr_crit("Failed to retrieve the zone_highmem.\n");
         return 0;
     }
-
-    pr_debug("\t[STEP3] 2^{3} page frames in kernel-space... ");
-    pr_debug("\n\t ===== [STEP3] 2^{3} page frames in kernel-space ====\n");
-    uint32_t ptr3 = __alloc_pages_lowmem(GFP_KERNEL, 3);
-    free_pages_lowmem(ptr3);
-    if (!is_memory_clean(GFP_KERNEL)) {
-        pr_emerg("Test failed, memory is not clean.\n");
-        return 0;
+    buddy_system_dump(LOGLEVEL_NOTICE, &zone_normal->buddy_system);
+    buddy_system_dump(LOGLEVEL_NOTICE, &zone_highmem->buddy_system);
+    pr_notice("\tStep 1: Testing allocation in kernel-space...\n");
+    {
+        // Allocate a single page with GFP_KERNEL.
+        page_t *page = alloc_pages(GFP_KERNEL, 0);
+        if (!page) {
+            pr_err("Kernel-space page allocation failed.\n");
+            return 0;
+        }
+        // Free the allocated page.
+        if (free_pages(page) < 0) {
+            pr_err("Kernel-space page deallocation failed.\n");
+            return 0;
+        }
+        // Verify memory state after deallocation.
+        if (!is_memory_clean(GFP_KERNEL)) {
+            pr_err("Kernel-space test failed: Memory not clean.\n");
+            return 0;
+        }
     }
-
-    pr_debug("\t[STEP4] Five 2^{i} page frames in user-space... ");
-    pr_debug("\n\t ===== [STEP4] Five 2^{i} page frames in user-space ====\n");
-    page_t *ptr4[5];
-    for (int i = 0; i < 5; i++) {
-        ptr4[i] = _alloc_pages(GFP_HIGHUSER, i);
+    pr_notice("\tStep 2: Testing allocation in user-space...\n");
+    {
+        // Allocate a single page with GFP_HIGHUSER.
+        page_t *page = alloc_pages(GFP_HIGHUSER, 0);
+        if (!page) {
+            pr_err("User-space page allocation failed.\n");
+            return 0;
+        }
+        // Free the allocated page.
+        if (free_pages(page) < 0) {
+            pr_err("User-space page deallocation failed.\n");
+            return 0;
+        }
+        // Verify memory state after deallocation.
+        if (!is_memory_clean(GFP_HIGHUSER)) {
+            pr_err("User-space test failed: Memory not clean.\n");
+            return 0;
+        }
     }
-    for (int i = 0; i < 5; i++) {
-        __free_pages(ptr4[i]);
+    pr_notice("\tStep 3: Testing allocation of five 2^{i} page frames in user-space...\n");
+    {
+        page_t *pages[5];
+        // Allocate pages with GFP_HIGHUSER.
+        for (int i = 0; i < 5; i++) {
+            pages[i] = alloc_pages(GFP_HIGHUSER, i);
+            if (!pages[i]) {
+                pr_err("User-space page allocation failed.\n");
+                return 0;
+            }
+        }
+        // Free the allocated pages.
+        for (int i = 0; i < 5; i++) {
+            if (free_pages(pages[i]) < 0) {
+                pr_err("User-space page deallocation failed.\n");
+                return 0;
+            }
+        }
+        // Verify memory state after deallocation.
+        if (!is_memory_clean(GFP_HIGHUSER)) {
+            pr_err("User-space test failed: Memory not clean.\n");
+            return 0;
+        }
     }
-    if (!is_memory_clean(GFP_HIGHUSER)) {
-        pr_emerg("Test failed, memory is not clean.\n");
-        return 0;
+    pr_notice("\tStep 4: Testing allocation of five 2^{i} page frames in kernel-space...\n");
+    {
+        page_t *pages[5];
+        // Allocate pages with GFP_KERNEL.
+        for (int i = 0; i < 5; i++) {
+            pages[i] = alloc_pages(GFP_KERNEL, i);
+            if (!pages[i]) {
+                pr_err("Kernel-space page allocation failed.\n");
+                return 0;
+            }
+        }
+        // Free the allocated pages.
+        for (int i = 0; i < 5; i++) {
+            if (free_pages(pages[i]) < 0) {
+                pr_err("Kernel-space page deallocation failed.\n");
+                return 0;
+            }
+        }
+        // Verify memory state after deallocation.
+        if (!is_memory_clean(GFP_KERNEL)) {
+            pr_err("Kernel-space test failed: Memory not clean.\n");
+            return 0;
+        }
     }
-
-    pr_debug("\t[STEP5] Mixed page frames in kernel-space... ");
-    pr_debug("\n\t ===== [STEP5] Mixed page frames in kernel-space ====\n");
-    int **ptr = (int **)__alloc_page_lowmem(GFP_KERNEL);
-    int i     = 0;
-    for (; i < 5; ++i) {
-        ptr[i] = (int *)__alloc_page_lowmem(GFP_KERNEL);
-    }
-    for (; i < 20; ++i) {
-        ptr[i] = (int *)__alloc_pages_lowmem(GFP_KERNEL, 2);
-    }
-
-    int j = 0;
-    for (; j < 5; ++j) {
-        free_page_lowmem((uint32_t)ptr[j]);
-    }
-    for (; j < 20; ++j) {
-        free_pages_lowmem((uint32_t)ptr[j]);
-    }
-    free_page_lowmem(ptr1);
-
-    if (!is_memory_clean(GFP_KERNEL)) {
-        pr_emerg("Test failed, memory is not clean.\n");
-        return 0;
-    }
+    buddy_system_dump(LOGLEVEL_NOTICE, &zone_normal->buddy_system);
+    buddy_system_dump(LOGLEVEL_NOTICE, &zone_highmem->buddy_system);
     return 1;
 }
 
@@ -464,10 +489,6 @@ static int zone_init(char *name, int zone_index, uint32_t adr_from, uint32_t adr
         sizeof(page_t),                  // Size of each page.
         num_page_frames                  // Total number of page frames in the zone.
     );
-
-    // Dump the current state of the buddy system for debugging purposes.
-    buddy_system_dump(&zone->buddy_system);
-
     return 0;
 }
 
@@ -590,128 +611,13 @@ int pmmngr_init(boot_info_t *boot_info)
                  zone->zone_mem_map + zone->size,
                  zone->size);
     }
+
+    pmm_check();
+
     return 1;
 }
 
-page_t *alloc_page_cached(gfp_t gfp_mask)
-{
-    // Get the zone corresponding to the given GFP mask.
-    zone_t *zone = get_zone_from_flags(gfp_mask);
-
-    // Ensure the zone is valid.
-    if (!zone) {
-        pr_crit("Failed to get zone from GFP mask.\n");
-        return NULL; // Return NULL to indicate failure.
-    }
-
-    // Allocate a page from the buddy system of the zone.
-    bb_page_t *bbpage = bb_alloc_page_cached(&zone->buddy_system);
-
-    // Ensure the allocation was successful.
-    if (!bbpage) {
-        pr_crit("Failed to allocate page from buddy system.\n");
-        return NULL; // Return NULL to indicate failure.
-    }
-
-    // Convert the buddy system page structure to the page_t structure.
-    return PG_FROM_BBSTRUCT(bbpage, page_t, bbpage);
-}
-
-int free_page_cached(page_t *page)
-{
-    // Ensure the page pointer is not NULL.
-    if (!page) {
-        pr_crit("Invalid page pointer: NULL.\n");
-        return -1; // Return -1 to indicate failure.
-    }
-
-    // Get the zone that contains the given page.
-    zone_t *zone = get_zone_from_page(page);
-
-    // Ensure the zone is valid.
-    if (!zone) {
-        pr_crit("Failed to get zone from page.\n");
-        return -1; // Return -1 to indicate failure.
-    }
-
-    // Free the page from the buddy system of the zone.
-    bb_free_page_cached(&zone->buddy_system, &page->bbpage);
-
-    return 0; // Return success.
-}
-
-uint32_t __alloc_page_lowmem(gfp_t gfp_mask)
-{
-    // Allocate a cached page based on the given GFP mask.
-    page_t *page = alloc_page_cached(gfp_mask);
-
-    // Ensure the page allocation was successful.
-    if (!page) {
-        pr_crit("Failed to allocate low memory page.\n");
-        return 0; // Return 0 to indicate failure.
-    }
-
-    // Get the low memory address from the allocated page.
-    return get_virtual_address_from_page(page);
-}
-
-int free_page_lowmem(uint32_t addr)
-{
-    // Get the page corresponding to the given low memory address.
-    page_t *page = get_page_from_virtual_address(addr);
-
-    // Ensure the page retrieval was successful.
-    if (!page) {
-        pr_crit("Failed to retrieve page from address: 0x%x\n", addr);
-        return -1; // Return -1 to indicate failure.
-    }
-
-    // Free the cached page.
-    free_page_cached(page);
-
-    return 0; // Return success.
-}
-
-uint32_t __alloc_pages_lowmem(gfp_t gfp_mask, uint32_t order)
-{
-    // Ensure the order is within the valid range.
-    if (order >= MAX_BUDDYSYSTEM_GFP_ORDER) {
-        pr_emerg("Order exceeds the maximum limit.\n");
-        return 0; // Return 0 to indicate failure.
-    }
-
-    // Ensure the GFP mask is correct.
-    if (gfp_mask != GFP_KERNEL) {
-        pr_emerg("Invalid GFP mask. Expected GFP_KERNEL.\n");
-        return 0; // Return 0 to indicate failure.
-    }
-
-    // Allocate the pages based on the given GFP mask and order.
-    page_t *page = _alloc_pages(gfp_mask, order);
-
-    // Ensure the page allocation was successful.
-    if (!page) {
-        pr_emerg("Page allocation failed.\n");
-        return 0; // Return 0 to indicate failure.
-    }
-
-    // Get the low memory address of the first page in the allocated block.
-    uint32_t block_frame_adr = get_virtual_address_from_page(page);
-
-    // Ensure the address retrieval was successful.
-    if (block_frame_adr == (uint32_t)-1) {
-        pr_emerg("Failed to get low memory address from page.\n");
-        return 0; // Return 0 to indicate failure.
-    }
-#if 0
-    pr_debug("BS-G: addr: %p (page: %p order: %d)\n", block_frame_adr, page, order);
-#endif
-
-    // Return the low memory address of the first page in the allocated block.
-    return block_frame_adr;
-}
-
-page_t *_alloc_pages(gfp_t gfp_mask, uint32_t order)
+page_t *alloc_pages(gfp_t gfp_mask, uint32_t order)
 {
     // Calculate the block size based on the order.
     uint32_t block_size = 1UL << order;
@@ -759,24 +665,7 @@ page_t *_alloc_pages(gfp_t gfp_mask, uint32_t order)
     return page;
 }
 
-int free_pages_lowmem(uint32_t addr)
-{
-    // Get the page corresponding to the given low memory address.
-    page_t *page = get_page_from_virtual_address(addr);
-
-    // Ensure the page retrieval was successful.
-    if (!page) {
-        pr_emerg("Failed to retrieve page from address: 0x%x. Page is over memory size.\n", addr);
-        return -1; // Return -1 to indicate failure.
-    }
-
-    // Free the pages starting from the given page.
-    __free_pages(page);
-
-    return 0; // Return success.
-}
-
-int __free_pages(page_t *page)
+int free_pages(page_t *page)
 {
     // Get the zone that contains the given page.
     zone_t *zone = get_zone_from_page(page);
@@ -811,6 +700,62 @@ int __free_pages(page_t *page)
 #if 0
     pr_warning("BS-F: (page: %p order: %d)\n", page, order);
 #endif
+
+    return 0; // Return success.
+}
+
+uint32_t alloc_pages_lowmem(gfp_t gfp_mask, uint32_t order)
+{
+    // Ensure the order is within the valid range.
+    if (order >= MAX_BUDDYSYSTEM_GFP_ORDER) {
+        pr_emerg("Order exceeds the maximum limit.\n");
+        return 0; // Return 0 to indicate failure.
+    }
+
+    // Ensure the GFP mask is correct.
+    if (gfp_mask != GFP_KERNEL) {
+        pr_emerg("Invalid GFP mask. Expected GFP_KERNEL.\n");
+        return 0; // Return 0 to indicate failure.
+    }
+
+    // Allocate the pages based on the given GFP mask and order.
+    page_t *page = alloc_pages(gfp_mask, order);
+
+    // Ensure the page allocation was successful.
+    if (!page) {
+        pr_emerg("Page allocation failed.\n");
+        return 0; // Return 0 to indicate failure.
+    }
+
+    // Get the low memory address of the first page in the allocated block.
+    uint32_t block_frame_adr = get_virtual_address_from_page(page);
+
+    // Ensure the address retrieval was successful.
+    if (block_frame_adr == (uint32_t)-1) {
+        pr_emerg("Failed to get low memory address from page.\n");
+        return 0; // Return 0 to indicate failure.
+    }
+#if 0
+    pr_debug("BS-G: addr: %p (page: %p order: %d)\n", block_frame_adr, page, order);
+#endif
+
+    // Return the low memory address of the first page in the allocated block.
+    return block_frame_adr;
+}
+
+int free_pages_lowmem(uint32_t addr)
+{
+    // Get the page corresponding to the given low memory address.
+    page_t *page = get_page_from_virtual_address(addr);
+
+    // Ensure the page retrieval was successful.
+    if (!page) {
+        pr_emerg("Failed to retrieve page from address: 0x%x. Page is over memory size.\n", addr);
+        return -1; // Return -1 to indicate failure.
+    }
+
+    // Free the pages starting from the given page.
+    free_pages(page);
 
     return 0; // Return success.
 }

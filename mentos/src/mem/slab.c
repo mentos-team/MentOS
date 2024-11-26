@@ -81,7 +81,7 @@ static inline int __alloc_slab_page(kmem_cache_t *cachep, gfp_t flags)
     }
 
     // Allocate the required number of pages for the slab based on cache's `gfp_order`.
-    page_t *page = _alloc_pages(flags, cachep->gfp_order);
+    page_t *page = alloc_pages(flags, cachep->gfp_order);
 
     // Check if page allocation failed.
     if (!page) {
@@ -115,7 +115,7 @@ static inline int __alloc_slab_page(kmem_cache_t *cachep, gfp_t flags)
     if (!pg_addr) {
         pr_crit("Failed to get virtual address for slab page in cache `%s`.\n", cachep->name);
         // Free allocated pages before returning.
-        if (__free_pages(page) < 0) {
+        if (free_pages(page) < 0) {
             pr_crit("Failed to free allocated pages before returning in cache `%s`.\n", cachep->name);
         }
         return -1;
@@ -423,7 +423,7 @@ static inline int __kmem_cache_free_slab(kmem_cache_t *cachep, page_t *slab_page
     }
 
     // Free the memory associated with the slab page.
-    if (__free_pages(slab_page) < 0) {
+    if (free_pages(slab_page) < 0) {
         pr_crit("Failed to free slab page memory for cache `%s`.\n", cachep->name);
         return -1;
     }
@@ -742,7 +742,7 @@ void *pr_kmalloc(const char *file, const char *fun, int line, unsigned int size)
     // Allocate memory. If size exceeds the maximum cache order, allocate raw pages.
     void *ptr;
     if (order >= MAX_KMALLOC_CACHE_ORDER) {
-        ptr = (void *)__alloc_pages_lowmem(GFP_KERNEL, order - 12);
+        ptr = (void *)alloc_pages_lowmem(GFP_KERNEL, order - 12);
         if (!ptr) {
             pr_crit("Failed to allocate raw pages for order %u at %s:%d\n", order, file, line);
         }

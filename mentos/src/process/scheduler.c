@@ -625,7 +625,7 @@ pid_t sys_waitpid(pid_t pid, int *status, int options)
         scheduler_dequeue_task(child);     // Remove from the scheduler.
         kmem_cache_free(child);            // Free the `task_struct`.
 
-        pr_debug("Process %d cleaned up child process %d.\n", current_process->pid, child_pid);
+        pr_debug("Process %d cleaned up child process %d.\n", runqueue.curr->pid, child_pid);
 
         // Return the PID of the cleaned-up child.
         return child_pid;
@@ -661,9 +661,9 @@ void do_exit(int exit_code)
     // If it has children, then init process has to take care of them.
     if (!list_head_empty(&runqueue.curr->children)) {
         pr_debug("Moving children of %s(%d) to init(%d): {\n",
-                 runqueue.curr->name, runqueue.curr->pid, init_proc->pid);
+                 runqueue.curr->name, runqueue.curr->pid, init_process->pid);
         // Change the parent.
-        pr_debug("Moving children (%d): {\n", init_proc->pid);
+        pr_debug("Moving children (%d): {\n", init_process->pid);
         list_for_each_decl(it, &runqueue.curr->children)
         {
             task_struct *entry = list_entry(it, task_struct, sibling);

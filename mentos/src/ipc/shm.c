@@ -76,7 +76,7 @@ static inline shm_info_t *__shm_info_alloc(key_t key, size_t size, int shmflg)
     // Determine the order for memory allocation.
     uint32_t order = find_nearest_order_greater(0, size);
     // Allocate the shared memory pages.
-    shm_info->shm_location = _alloc_pages(GFP_KERNEL, order);
+    shm_info->shm_location = alloc_pages(GFP_KERNEL, order);
     // Check if memory allocation for shm_location failed.
     if (!shm_info->shm_location) {
         pr_err("Failed to allocate shared memory pages.\n");
@@ -93,7 +93,7 @@ static inline void __shm_info_dealloc(shm_info_t *shm_info)
 {
     assert(shm_info && "Received a NULL pointer.");
     // Free the shared memory.
-    __free_pages(shm_info->shm_location);
+    free_pages(shm_info->shm_location);
     // Deallocate the shmid memory.
     kfree(shm_info);
 }

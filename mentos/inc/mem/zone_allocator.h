@@ -12,7 +12,7 @@
 #include "sys/bitops.h"
 #include "klib/stdatomic.h"
 #include "boot.h"
-#include "mem/buddysystem.h"
+#include "mem/buddy_system.h"
 #include "mem/slab.h"
 
 #define page_count(p)        atomic_read(&(p)->count)   ///< Reads the page count.
@@ -126,41 +126,32 @@ uint32_t find_nearest_order_greater(uint32_t base_addr, uint32_t amount);
 /// @return Outcome of the operation.
 int pmmngr_init(boot_info_t *boot_info);
 
-/// @brief Allocates a cached page based on the given GFP mask.
-/// @param gfp_mask The GFP mask specifying the allocation constraints.
-/// @return A pointer to the allocated page, or NULL if allocation fails.
-page_t *alloc_page_cached(gfp_t gfp_mask);
-
-/// @brief Free a page allocated with alloc_page_cached.
-/// @param page Pointer to the page to free.
-/// @return Returns 0 on success, or -1 if an error occurs.
-int free_page_cached(page_t *page);
-
-/// @brief Find the first free page frame, set it allocated and return the
-/// memory address of the page frame.
-/// @param gfp_mask GFP_FLAGS to decide the zone allocation.
-/// @return The low memory address of the allocated page, or 0 if allocation fails.
-uint32_t __alloc_page_lowmem(gfp_t gfp_mask);
-
-/// @brief Frees the given page frame address.
-/// @param addr The block address.
-/// @return Returns 0 on success, or -1 if an error occurs.
-int free_page_lowmem(uint32_t addr);
-
-/// @brief Find the first free 2^order amount of page frames, set it allocated
-/// and return the memory address of the first page frame allocated.
-/// @param gfp_mask GFP_FLAGS to decide the zone allocation.
-/// @param order    The logarithm of the size of the page frame.
-/// @return Memory address of the first free page frame allocated.
-uint32_t __alloc_pages_lowmem(gfp_t gfp_mask, uint32_t order);
-
 /// @brief Find the first free 2^order amount of page frames, set it allocated
 /// and return the memory address of the first page frame allocated.
 /// @param gfp_mask GFP_FLAGS to decide the zone allocation.
 /// @param order    The logarithm of the size of the page frame.
 /// @return Memory address of the first free page frame allocated, or NULL if
 /// allocation fails.
-page_t *_alloc_pages(gfp_t gfp_mask, uint32_t order);
+page_t *alloc_pages(gfp_t gfp_mask, uint32_t order);
+
+/// @brief Frees from the given page frame address up to 2^order amount of page
+/// frames.
+/// @param page The page.
+/// @return Returns 0 on success, or -1 if an error occurs.
+int free_pages(page_t *page);
+
+/// @brief Find the first free 2^order amount of page frames, set it allocated
+/// and return the memory address of the first page frame allocated.
+/// @param gfp_mask GFP_FLAGS to decide the zone allocation.
+/// @param order    The logarithm of the size of the page frame.
+/// @return Memory address of the first free page frame allocated.
+uint32_t alloc_pages_lowmem(gfp_t gfp_mask, uint32_t order);
+
+/// @brief Frees from the given page frame address up to 2^order amount of page
+/// frames.
+/// @param addr The page frame address.
+/// @return Returns 0 on success, or -1 if an error occurs.
+int free_pages_lowmem(uint32_t addr);
 
 /// @brief Converts a page structure to its corresponding low memory virtual address.
 /// @param page Pointer to the page structure.
@@ -183,18 +174,6 @@ page_t *get_page_from_physical_address(uint32_t paddr);
 /// @param vaddr the virtual address to convert.
 /// @return A pointer to the corresponding page, or NULL if the address is out of range.
 page_t *get_page_from_virtual_address(uint32_t vaddr);
-
-/// @brief Frees from the given page frame address up to 2^order amount of page
-/// frames.
-/// @param addr The page frame address.
-/// @return Returns 0 on success, or -1 if an error occurs.
-int free_pages_lowmem(uint32_t addr);
-
-/// @brief Frees from the given page frame address up to 2^order amount of page
-/// frames.
-/// @param page The page.
-/// @return Returns 0 on success, or -1 if an error occurs.
-int __free_pages(page_t *page);
 
 /// @brief Retrieves the total space of the zone corresponding to the given GFP mask.
 /// @param gfp_mask The GFP mask specifying the allocation constraints.

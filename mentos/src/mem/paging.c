@@ -152,7 +152,7 @@ vm_area_struct_t *create_vm_area(mm_struct_t *mm,
         // Otherwise, set the update address flag and allocate physical pages.
         pgflags = pgflags | MM_UPDADDR;
 
-        page_t *page = _alloc_pages(gfpflags, order);
+        page_t *page = alloc_pages(gfpflags, order);
         if (!page) {
             pr_crit("Failed to allocate pages\n");
             kmem_cache_free(segment);
@@ -206,7 +206,7 @@ uint32_t clone_vm_area(mm_struct_t *mm, vm_area_struct_t *area, int cow, uint32_
 
     if (!cow) {
         // If not copy-on-write, allocate directly the physical pages
-        page_t *dst_page = _alloc_pages(gfpflags, order);
+        page_t *dst_page = alloc_pages(gfpflags, order);
         if (!dst_page) {
             pr_crit("Failed to allocate physical pages for the new vm_area\n");
             // Free the newly allocated segment on failure.
@@ -221,7 +221,7 @@ uint32_t clone_vm_area(mm_struct_t *mm, vm_area_struct_t *area, int cow, uint32_
                             MM_RW | MM_PRESENT | MM_UPDADDR | MM_USER) < 0) {
             pr_crit("Failed to update virtual memory area in page directory\n");
             // Free the allocated pages on failure.
-            __free_pages(dst_page);
+            free_pages(dst_page);
             // Free the newly allocated segment.
             kmem_cache_free(new_segment);
             return -1; // Return -1 to indicate failure.
@@ -300,7 +300,7 @@ int destroy_vm_area(mm_struct_t *mm, vm_area_struct_t *area)
             }
         } else {
             // If not copy-on-write, free the allocated pages.
-            __free_pages(phy_page);
+            free_pages(phy_page);
         }
 
         // Update the remaining size and starting address for the next iteration.
@@ -633,7 +633,7 @@ static int __page_handle_cow(page_table_entry_t *entry)
         // If the page is not currently present (not allocated in physical memory).
         if (!entry->present) {
             // Allocate a new physical page using high user memory flag.
-            page_t *page = _alloc_pages(GFP_HIGHUSER, 0);
+            page_t *page = alloc_pages(GFP_HIGHUSER, 0);
             if (!page) {
                 pr_crit("Failed to allocate a new page.\n");
                 return 1; // Return error if the page allocation fails.

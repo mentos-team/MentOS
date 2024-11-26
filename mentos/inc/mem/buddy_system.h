@@ -1,4 +1,4 @@
-/// @file buddysystem.h
+/// @file buddy_system.h
 /// @brief Buddy System.
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
@@ -57,7 +57,7 @@ typedef struct bb_instance_t {
     /// Size of the current cache
     unsigned long free_pages_cache_size;
     /// Buddysystem instance size in number of pages.
-    unsigned long size;
+    unsigned long total_pages;
     /// Address of the first managed page
     bb_page_t *base_page;
     /// Size of the (padded) wrapper page structure
@@ -104,8 +104,9 @@ void buddy_system_init(
     uint32_t pages_count);
 
 /// @brief Print the size of free_list of each free_area.
+/// @param log_level the log level to use for dumping the buddy system.
 /// @param instance A buddy system instance.
-void buddy_system_dump(bb_instance_t *instance);
+void buddy_system_dump(int log_level, bb_instance_t *instance);
 
 /// @brief Returns the total space for the given instance.
 /// @param instance A buddy system instance.
