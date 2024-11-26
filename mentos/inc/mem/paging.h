@@ -13,16 +13,16 @@
 #include "stdint.h"
 
 /// 4KB pages (2^12 = 4096 bytes)
-#define PAGE_SHIFT 12
+#define PAGE_SHIFT 12UL
 /// Size of a page (4096 bytes).
-#define PAGE_SIZE (1 << PAGE_SHIFT)
+#define PAGE_SIZE (1UL << PAGE_SHIFT)
 /// Maximum number of physical page frame numbers (PFNs).
-#define MAX_PHY_PFN (1UL << (32 - PAGE_SHIFT))
+#define MAX_PHY_PFN (1UL << (32UL - PAGE_SHIFT))
 
 /// The start of the process area.
-#define PROCAREA_START_ADDR 0x00000000
+#define PROCAREA_START_ADDR 0x00000000UL
 /// The end of the process area (and start of the kernel area).
-#define PROCAREA_END_ADDR 0xC0000000
+#define PROCAREA_END_ADDR 0xC0000000UL
 
 /// For a single page table in a 32-bit system.
 #define MAX_PAGE_TABLE_ENTRIES 1024
