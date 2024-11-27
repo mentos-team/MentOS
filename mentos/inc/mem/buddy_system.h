@@ -103,22 +103,22 @@ void buddy_system_init(
     uint32_t pages_stride,
     uint32_t pages_count);
 
-/// @brief Print the size of free_list of each free_area.
-/// @param log_level the log level to use for dumping the buddy system.
+/// @brief Dumps the buddy system state into a static string.
 /// @param instance A buddy system instance.
-void buddy_system_dump(int log_level, bb_instance_t *instance);
+/// @return A pointer to a static string containing the formatted output.
+const char* buddy_system_to_string(const bb_instance_t *instance);
 
 /// @brief Returns the total space for the given instance.
 /// @param instance A buddy system instance.
 /// @return The requested total sapce.
-unsigned long buddy_system_get_total_space(bb_instance_t *instance);
+unsigned long buddy_system_get_total_space(const bb_instance_t *instance);
 
 /// @brief Returns the free space for the given instance.
 /// @param instance A buddy system instance.
 /// @return The requested total sapce.
-unsigned long buddy_system_get_free_space(bb_instance_t *instance);
+unsigned long buddy_system_get_free_space(const bb_instance_t *instance);
 
 /// @brief Returns the cached space for the given instance.
 /// @param instance A buddy system instance.
 /// @return The requested total sapce.
-unsigned long buddy_system_get_cached_space(bb_instance_t *instance);
+unsigned long buddy_system_get_cached_space(const bb_instance_t *instance);

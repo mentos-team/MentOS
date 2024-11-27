@@ -9,9 +9,6 @@
 #include "mem/zone_allocator.h"
 #include "mem/paging.h"
 
-/// Size of the virtual memory.
-#define VIRTUAL_MEMORY_SIZE_MB 128
-
 /// @brief Virtual mapping manager.
 typedef struct virt_map_page_manager_t {
     /// The buddy system used to manage the pages.
@@ -46,11 +43,6 @@ virt_map_page_t *virt_map_alloc(uint32_t size);
 /// @param size The size of the memory area to map.
 /// @return The starting virtual address of the mapped area, or 0 on failure.
 uint32_t virt_map_vaddress(mm_struct_t *mm, virt_map_page_t *vpage, uint32_t vaddr, uint32_t size);
-
-/// @brief Checks if an address belongs to the virtual memory mapping.
-/// @param addr The address to check.
-/// @return 1 if it belongs to the virtual memory mapping, 0 otherwise.
-int virtual_check_address(uint32_t addr);
 
 /// @brief Unmaps a virtual address from the virtual memory.
 /// @param addr The virtual address to unmap.

@@ -63,7 +63,7 @@ page_directory_t *paging_get_main_directory(void)
     // Ensure the main_mm structure is initialized.
     if (!main_mm) {
         pr_crit("main_mm is not initialized\n");
-        return NULL; // Return NULL to indicate failure.
+        return NULL;
     }
 
     // Return the pointer to the main page directory.
@@ -74,7 +74,6 @@ int is_current_pgd(page_directory_t *pgd)
 {
     // Check if the pgd pointer is NULL
     if (pgd == NULL) {
-        // Return 0 (false) if the pgd pointer is NULL
         return 0;
     }
     // Compare the given pgd with the current page directory
@@ -86,27 +85,27 @@ int paging_switch_directory_va(page_directory_t *dir)
     // Ensure the directory pointer is valid.
     if (!dir) {
         pr_crit("Invalid page directory pointer\n");
-        return -1; // Return -1 to indicate failure.
+        return -1;
     }
 
     // Get the low memory page corresponding to the given directory address.
     page_t *page = get_page_from_virtual_address((uintptr_t)dir);
     if (!page) {
         pr_crit("Failed to get low memory page from address\n");
-        return -1; // Return -1 to indicate failure.
+        return -1;
     }
 
     // Get the physical address of the low memory page.
     uintptr_t phys_addr = get_physical_address_from_page(page);
     if (!phys_addr) {
         pr_crit("Failed to get physical address from page\n");
-        return -1; // Return -1 to indicate failure.
+        return -1;
     }
 
     // Switch to the new paging directory using the physical address.
     paging_switch_directory((page_directory_t *)phys_addr);
 
-    return 0; // Return success.
+    return 0;
 }
 
 void paging_flush_tlb_single(unsigned long addr)
@@ -115,12 +114,22 @@ void paging_flush_tlb_single(unsigned long addr)
                          : "memory");
 }
 
-vm_area_struct_t *create_vm_area(mm_struct_t *mm,
-                                 uint32_t vm_start,
-                                 size_t size,
-                                 uint32_t pgflags,
-                                 uint32_t gfpflags)
+vm_area_struct_t *create_vm_area(mm_struct_t *mm, uint32_t vm_start, size_t size, uint32_t pgflags, uint32_t gfpflags)
 {
+    // Validate inputs.
+    if (!mm) {
+        pr_crit("Invalid arguments: mm is NULL.");
+        return NULL;
+    }
+    if (!vm_start) {
+        pr_crit("Invalid arguments: vm_start is 0.");
+        return NULL;
+    }
+    if (!size) {
+        pr_crit("Invalid arguments: size is 0.");
+        return NULL;
+    }
+
     uint32_t vm_end, phy_start, order;
     vm_area_struct_t *segment;
 
@@ -130,14 +139,14 @@ vm_area_struct_t *create_vm_area(mm_struct_t *mm,
     // Check if the range is already occupied.
     if (is_valid_vm_area(mm, vm_start, vm_end) <= 0) {
         pr_crit("The virtual memory area range [%p, %p] is already in use.\n", vm_start, vm_end);
-        return NULL; // Return NULL to indicate failure.
+        return NULL;
     }
 
     // Allocate on kernel space the structure for the segment.
     segment = kmem_cache_alloc(vm_area_cache, GFP_KERNEL);
     if (!segment) {
-        pr_crit("Failed to allocate vm_area_struct\n");
-        return NULL; // Return NULL to indicate failure.
+        pr_crit("Failed to allocate memory for vm_area_struct\n");
+        return NULL;
     }
 
     // Find the nearest order for the given memory size.
@@ -154,17 +163,26 @@ vm_area_struct_t *create_vm_area(mm_struct_t *mm,
 
         page_t *page = alloc_pages(gfpflags, order);
         if (!page) {
-            pr_crit("Failed to allocate pages\n");
+            pr_crit("Failed to allocate physical pages for vm_area at [%p, %p].\n", vm_start, vm_end);
             kmem_cache_free(segment);
-            return NULL; // Return NULL to indicate failure.
+            return NULL;
         }
 
         // Retrieve the physical address from the allocated page.
         phy_start = get_physical_address_from_page(page);
+        if (!phy_start) {
+            pr_crit("Failed to retrieve physical address for allocated page.\n");
+            kmem_cache_free(segment);
+            return NULL;
+        }
     }
 
     // Update the virtual memory area in the page directory.
-    mem_upd_vm_area(mm->pgd, vm_start, phy_start, size, pgflags);
+    if (mem_upd_vm_area(mm->pgd, vm_start, phy_start, size, pgflags) != 0) {
+        pr_crit("Failed to update vm_area in page directory\n");
+        kmem_cache_free(segment);
+        return NULL;
+    }
 
     // Update vm_area_struct info.
     segment->vm_start = vm_start;
@@ -182,16 +200,27 @@ vm_area_struct_t *create_vm_area(mm_struct_t *mm,
     mm->map_count++;
     mm->total_vm += (1U << order);
 
-    return segment; // Return the created vm_area_struct.
+    // Return the created vm_area_struct.
+    return segment;
 }
 
 uint32_t clone_vm_area(mm_struct_t *mm, vm_area_struct_t *area, int cow, uint32_t gfpflags)
 {
+    // Validate inputs.
+    if (!mm) {
+        pr_crit("Invalid arguments: mm is NULL.");
+        return -1;
+    }
+    if (!area) {
+        pr_crit("Invalid arguments: area is NULL.");
+        return -1;
+    }
+
     // Allocate a new vm_area_struct for the cloned area.
     vm_area_struct_t *new_segment = kmem_cache_alloc(vm_area_cache, GFP_KERNEL);
     if (!new_segment) {
         pr_crit("Failed to allocate memory for new vm_area_struct\n");
-        return -1; // Return -1 to indicate failure.
+        return -1;
     }
 
     // Copy the content of the existing vm_area_struct to the new segment.
@@ -211,7 +240,7 @@ uint32_t clone_vm_area(mm_struct_t *mm, vm_area_struct_t *area, int cow, uint32_
             pr_crit("Failed to allocate physical pages for the new vm_area\n");
             // Free the newly allocated segment on failure.
             kmem_cache_free(new_segment);
-            return -1; // Return -1 to indicate failure.
+            return -1;
         }
 
         uint32_t phy_vm_start = get_physical_address_from_page(dst_page);
@@ -224,19 +253,18 @@ uint32_t clone_vm_area(mm_struct_t *mm, vm_area_struct_t *area, int cow, uint32_
             free_pages(dst_page);
             // Free the newly allocated segment.
             kmem_cache_free(new_segment);
-            return -1; // Return -1 to indicate failure.
+            return -1;
         }
 
         // Copy virtual memory from source area into destination area using a virtual mapping.
         virt_memcpy(mm, area->vm_start, area->vm_mm, area->vm_start, size);
     } else {
         // If copy-on-write, set the original pages as read-only.
-        if (mem_upd_vm_area(area->vm_mm->pgd, area->vm_start, 0, size,
-                            MM_COW | MM_PRESENT | MM_USER) < 0) {
+        if (mem_upd_vm_area(area->vm_mm->pgd, area->vm_start, 0, size, MM_COW | MM_PRESENT | MM_USER) < 0) {
             pr_crit("Failed to mark original pages as copy-on-write\n");
             // Free the newly allocated segment.
             kmem_cache_free(new_segment);
-            return -1; // Return -1 to indicate failure.
+            return -1;
         }
 
         // Perform a COW of the whole virtual memory area, handling fragmented physical memory.
@@ -249,7 +277,7 @@ uint32_t clone_vm_area(mm_struct_t *mm, vm_area_struct_t *area, int cow, uint32_
             pr_crit("Failed to clone virtual memory area\n");
             // Free the newly allocated segment.
             kmem_cache_free(new_segment);
-            return -1; // Return -1 to indicate failure.
+            return -1;
         }
     }
 
@@ -286,7 +314,7 @@ int destroy_vm_area(mm_struct_t *mm, vm_area_struct_t *area)
         // Check if the page was successfully retrieved.
         if (!phy_page) {
             pr_crit("Failed to retrieve physical page for virtual address %p\n", (void *)area_start);
-            return -1; // Return -1 to indicate error.
+            return -1;
         }
 
         // If the pages are marked as copy-on-write, do not deallocate them.
@@ -317,7 +345,7 @@ int destroy_vm_area(mm_struct_t *mm, vm_area_struct_t *area)
     // Decrement the counter for the number of memory-mapped areas.
     --mm->map_count;
 
-    return 0; // Return 0 to indicate success.
+    return 0;
 }
 
 vm_area_struct_t *find_vm_area(mm_struct_t *mm, uint32_t vm_start)
@@ -335,7 +363,8 @@ vm_area_struct_t *find_vm_area(mm_struct_t *mm, uint32_t vm_start)
 
         // Check if the starting address matches the requested vm_start.
         if (segment->vm_start == vm_start) {
-            return segment; // Return the found segment.
+            // Return the found segment.
+            return segment;
         }
     }
 
@@ -346,16 +375,13 @@ vm_area_struct_t *find_vm_area(mm_struct_t *mm, uint32_t vm_start)
 int is_valid_vm_area(mm_struct_t *mm, uintptr_t vm_start, uintptr_t vm_end)
 {
     // Check for a valid memory descriptor.
-    if (!mm || !vm_start || !vm_end) {
-        pr_crit("Invalid arguments: mm or vm_start or vm_end is NULL.");
-        return -1; // Return -1 to indicate error due to invalid input.
+    if (!mm) {
+        pr_crit("Invalid arguments: mm is NULL.\n");
+        return -1;
     }
-
-    // Check if the ending address is less than or equal to the starting address.
-    if (vm_end <= vm_start) {
-        pr_crit("Invalid virtual memory area: vm_end (%p) must be greater than vm_start (%p)",
-                (void *)vm_end, (void *)vm_start);
-        return -1; // Return -1 to indicate an error due to invalid input.
+    if (vm_start >= vm_end) {
+        pr_crit("Invalid arguments: vm_start >= vm_end (0x%p >= 0x%p).\n", vm_start, vm_end);
+        return -1;
     }
 
     // Iterate through the list of memory areas to check for overlaps.
@@ -368,26 +394,26 @@ int is_valid_vm_area(mm_struct_t *mm, uintptr_t vm_start, uintptr_t vm_end)
         // Check if the area is NULL.
         if (!area) {
             pr_crit("Encountered a NULL area in the list.");
-            return -1; // Return -1 to indicate an error due to a NULL area.
+            return -1;
         }
 
         // Check if the new area overlaps with the current area.
         if ((vm_start > area->vm_start) && (vm_start < area->vm_end)) {
             pr_crit("Overlap detected at start: %p <= %p <= %p",
                     (void *)area->vm_start, (void *)vm_start, (void *)area->vm_end);
-            return 0; // Return 0 to indicate an overlap with an existing area.
+            return 0;
         }
 
         if ((vm_end > area->vm_start) && (vm_end < area->vm_end)) {
             pr_crit("Overlap detected at end: %p <= %p <= %p",
                     (void *)area->vm_start, (void *)vm_end, (void *)area->vm_end);
-            return 0; // Return 0 to indicate an overlap with an existing area.
+            return 0;
         }
 
         if ((vm_start < area->vm_start) && (vm_end > area->vm_end)) {
             pr_crit("Wrap-around detected: %p <= (%p, %p) <= %p",
                     (void *)vm_start, (void *)area->vm_start, (void *)area->vm_end, (void *)vm_end);
-            return 0; // Return 0 to indicate the new area wraps around an existing area.
+            return 0;
         }
     }
 
@@ -400,7 +426,7 @@ int find_free_vm_area(mm_struct_t *mm, size_t length, uintptr_t *vm_start)
     // Check for a valid memory descriptor.
     if (!mm || !length || !vm_start) {
         pr_crit("Invalid arguments: mm or length or vm_start is NULL.");
-        return -1; // Return -1 to indicate error due to invalid input.
+        return -1;
     }
 
     vm_area_struct_t *area, *prev_area;
@@ -414,7 +440,7 @@ int find_free_vm_area(mm_struct_t *mm, size_t length, uintptr_t *vm_start)
         // Check if the current area is NULL.
         if (!area) {
             pr_crit("Encountered a NULL area in the list.");
-            return -1; // Return -1 to indicate an error due to a NULL area.
+            return -1;
         }
 
         // Check the previous segment if it exists.
@@ -424,7 +450,7 @@ int find_free_vm_area(mm_struct_t *mm, size_t length, uintptr_t *vm_start)
             // Check if the previous area is NULL.
             if (!prev_area) {
                 pr_crit("Encountered a NULL previous area in the list.");
-                return -1; // Return -1 to indicate an error due to a NULL area.
+                return -1;
             }
 
             // Compute the available space between the current area and the previous area.
@@ -434,7 +460,7 @@ int find_free_vm_area(mm_struct_t *mm, size_t length, uintptr_t *vm_start)
             // return the starting address.
             if (available_space >= length) {
                 *vm_start = area->vm_start - length;
-                return 0; // Return 0 to indicate success.
+                return 0;
             }
         }
     }
@@ -462,49 +488,49 @@ int paging_init(boot_info_t *info)
     // Check if the info pointer is valid.
     if (!info) {
         pr_crit("Invalid boot info provided.\n");
-        return -1; // Return -1 if memory cache creation fails.
+        return -1;
     }
 
     // Create memory cache for managing mm_struct.
     mm_cache = KMEM_CREATE(mm_struct_t);
     if (!mm_cache) {
         pr_crit("Failed to create mm_cache.\n");
-        return -1; // Return -1 if memory cache creation fails.
+        return -1;
     }
 
     // Create memory cache for managing vm_area_struct.
     vm_area_cache = KMEM_CREATE(vm_area_struct_t);
     if (!vm_area_cache) {
         pr_crit("Failed to create vm_area_cache.\n");
-        return -1; // Return -1 if memory cache creation fails.
+        return -1;
     }
 
     // Create cache for page directory with custom constructor function.
     pgdir_cache = KMEM_CREATE_CTOR(page_directory_t, __init_pagedir);
     if (!pgdir_cache) {
         pr_crit("Failed to create pgdir_cache.\n");
-        return -1; // Return -1 if page directory cache creation fails.
+        return -1;
     }
 
     // Create cache for page table with custom constructor function.
     pgtbl_cache = KMEM_CREATE_CTOR(page_table_t, __init_pagetable);
     if (!pgtbl_cache) {
         pr_crit("Failed to create pgtbl_cache.\n");
-        return -1; // Return -1 if page table cache creation fails.
+        return -1;
     }
 
     // Allocate the main memory management structure.
     main_mm = kmem_cache_alloc(mm_cache, GFP_KERNEL);
     if (!main_mm) {
         pr_crit("Failed to allocate main_mm.\n");
-        return -1; // Return -1 if allocation for mm_struct fails.
+        return -1;
     }
 
     // Allocate the page directory for the main memory management structure.
     main_mm->pgd = kmem_cache_alloc(pgdir_cache, GFP_KERNEL);
     if (!main_mm->pgd) {
         pr_crit("Failed to allocate main_mm page directory.\n");
-        return -1; // Return -1 if allocation for page directory fails.
+        return -1;
     }
 
     // Calculate the size of low kernel memory.
@@ -514,20 +540,20 @@ int paging_init(boot_info_t *info)
     if (mem_upd_vm_area(main_mm->pgd, 0, 0, 1024 * 1024,
                         MM_RW | MM_PRESENT | MM_GLOBAL | MM_UPDADDR) < 0) {
         pr_crit("Failed to map the first 1MB of memory.\n");
-        return -1; // Return -1 if memory mapping fails.
+        return -1;
     }
 
     // Map the kernel memory region into the virtual memory space.
     if (mem_upd_vm_area(main_mm->pgd, info->kernel_start, info->kernel_phy_start, lowkmem_size,
                         MM_RW | MM_PRESENT | MM_GLOBAL | MM_UPDADDR) < 0) {
         pr_crit("Failed to map kernel memory region.\n");
-        return -1; // Return -1 if memory mapping fails.
+        return -1;
     }
 
     // Install the page fault interrupt service routine (ISR) handler.
     if (isr_install_handler(PAGE_FAULT, page_fault_handler, "page_fault_handler") < 0) {
         pr_crit("Failed to install page fault handler.\n");
-        return -1; // Return -1 if ISR installation fails.
+        return -1;
     }
 
     // Switch to the newly created page directory.
@@ -536,7 +562,7 @@ int paging_init(boot_info_t *info)
     // Enable paging.
     paging_enable();
 
-    return 0; // Return 0 on success.
+    return 0;
 }
 
 // Error code interpretation.
@@ -622,7 +648,7 @@ static int __page_handle_cow(page_table_entry_t *entry)
     // Check if the entry pointer is valid.
     if (!entry) {
         pr_crit("Invalid page table entry provided.\n");
-        return 1; // Return error if the entry is null.
+        return 1;
     }
 
     // Check if the page is Copy On Write (COW).
@@ -636,14 +662,14 @@ static int __page_handle_cow(page_table_entry_t *entry)
             page_t *page = alloc_pages(GFP_HIGHUSER, 0);
             if (!page) {
                 pr_crit("Failed to allocate a new page.\n");
-                return 1; // Return error if the page allocation fails.
+                return 1;
             }
 
             // Map the allocated physical page to a virtual address.
             uint32_t vaddr = virt_map_physical_pages(page, 1);
             if (!vaddr) {
                 pr_crit("Failed to map the physical page to virtual address.\n");
-                return 1; // Return error if virtual mapping fails.
+                return 1;
             }
 
             // Clear the new page by setting all its bytes to 0.
@@ -658,13 +684,16 @@ static int __page_handle_cow(page_table_entry_t *entry)
             // Mark the page as present in memory.
             entry->present = 1;
 
-            return 0; // Success, COW handled and page allocated.
+            // Success, COW handled and page allocated.
+            return 0;
         }
     }
 
     // If the page is not marked as COW, print an error.
     pr_err("Page not marked as copy-on-write (COW)!\n");
-    return 1; // Return error as the page is not COW.
+
+    // Return error as the page is not COW.
+    return 1;
 }
 
 /// @brief Allocates memory for a page table entry.
@@ -679,7 +708,7 @@ static page_table_t *__mem_pg_entry_alloc(page_dir_entry_t *entry, uint32_t flag
     // Check if the page directory entry is valid.
     if (!entry) {
         pr_crit("Invalid page directory entry provided.\n");
-        return NULL; // Return NULL to indicate error.
+        return NULL;
     }
 
     // If the page table is not present, allocate a new one.
@@ -696,10 +725,11 @@ static page_table_t *__mem_pg_entry_alloc(page_dir_entry_t *entry, uint32_t flag
         page_table_t *new_table = kmem_cache_alloc(pgtbl_cache, GFP_KERNEL);
         if (!new_table) {
             pr_crit("Failed to allocate memory for page table.\n");
-            return NULL; // Return NULL if allocation fails.
+            return NULL;
         }
 
-        return new_table; // Return the newly allocated page table.
+        // Return the newly allocated page table.
+        return new_table;
     }
 
     // If the page table is already present, update the flags accordingly.
@@ -720,17 +750,18 @@ static page_table_t *__mem_pg_entry_alloc(page_dir_entry_t *entry, uint32_t flag
     page_t *page = get_page_from_physical_address(((uint32_t)entry->frame) << 12U);
     if (!page) {
         pr_crit("Failed to retrieve page from physical address.\n");
-        return NULL; // Return NULL if the page retrieval fails.
+        return NULL;
     }
 
     // Convert the physical address into a low memory address.
     page_table_t *lowmem_addr = (page_table_t *)get_virtual_address_from_page(page);
     if (!lowmem_addr) {
         pr_crit("Failed to map page to low memory address.\n");
-        return NULL; // Return NULL if the low memory mapping fails.
+        return NULL;
     }
 
-    return lowmem_addr; // Return the mapped page table.
+    // Return the mapped page table.
+    return lowmem_addr;
 }
 
 /// @brief Sets the frame attribute of a page directory entry based on the page table's physical address.
@@ -742,34 +773,34 @@ static inline int __set_pg_entry_frame(page_dir_entry_t *entry, page_table_t *ta
     // Ensure the entry is not NULL.
     if (!entry) {
         pr_crit("Invalid page directory entry provided.\n");
-        return -1; // Return -1 if the entry is NULL (error).
+        return -1;
     }
 
     // Ensure the table is not NULL.
     if (!table) {
         pr_crit("Invalid page table provided.\n");
-        return -1; // Return -1 if the table is NULL (error).
+        return -1;
     }
 
     // Retrieve the low memory page structure from the virtual address of the table.
     page_t *table_page = get_page_from_virtual_address((uint32_t)table);
     if (!table_page) {
         pr_crit("Failed to retrieve low memory page from table address: %p\n", table);
-        return -1; // Return -1 if the low memory page retrieval fails (error).
+        return -1;
     }
 
     // Retrieve the physical address from the page structure.
     uint32_t phy_addr = get_physical_address_from_page(table_page);
     if (!phy_addr) {
         pr_crit("Failed to retrieve physical address from page: %p\n", table_page);
-        return -1; // Return -1 if the physical address retrieval fails (error).
+        return -1;
     }
 
     // Set the frame attribute in the page directory entry (shifted by 12 bits
     // to represent the frame number).
     entry->frame = phy_addr >> 12u;
 
-    return 0; // Return 0 on success.
+    return 0;
 }
 
 void page_fault_handler(pt_regs *f)
@@ -875,7 +906,7 @@ void page_fault_handler(pt_regs *f)
 
     // There was a page fault on a virtual mapped address, so we must first
     // update the original mapped page
-    if (virtual_check_address(faulting_addr)) {
+    if (is_valid_virtual_address(faulting_addr)) {
         // Get the original page table entry from the virtually mapped one.
         page_table_entry_t *orig_entry = (page_table_entry_t *)(*(uint32_t *)entry);
         if (!orig_entry) {
@@ -897,8 +928,8 @@ void page_fault_handler(pt_regs *f)
     } else {
         // Check if the page is Copy on Write (CoW).
         if (__page_handle_cow(entry)) {
-            pr_crit("ERR(2): %d%d%d\n", err_user, err_rw, err_present);
-
+            pr_crit("Page fault caused by Copy on Write (CoW). Flags: user=%d, rw=%d, present=%d\n",
+                    err_user, err_rw, err_present);
             // If the fault was caused by a user process, send a SIGSEGV signal.
             if (err_user && err_rw && err_present) {
                 // Get the current process.
@@ -913,9 +944,11 @@ void page_fault_handler(pt_regs *f)
                     scheduler_run(f);
                     return;
                 }
-                pr_crit("ERR(2): There is no task.\n");
+                pr_crit("No task found for current process, unable to send SIGSEGV.\n");
+            } else {
+                pr_crit("Invalid flags for CoW handling, continuing...\n");
             }
-            pr_crit("ERR(2): We continued...\n");
+            pr_crit("Continuing with page fault handling, triggering panic.\n");
             __page_fault_panic(f, faulting_addr);
         }
     }
@@ -949,7 +982,7 @@ static int __pg_iter_init(page_iterator_t *iter,
     // Ensure that the base page table index is within valid range.
     if (base_pgt >= MAX_PAGE_TABLE_ENTRIES) {
         pr_crit("Base page table index %u is out of bounds.\n", base_pgt);
-        return -1; // Return -1 to indicate error.
+        return -1;
     }
 
     // Initialize the iterator's entry pointer to point to the corresponding page directory entry.
@@ -965,13 +998,13 @@ static int __pg_iter_init(page_iterator_t *iter,
     // Check if the allocation was successful.
     if (!iter->table) {
         pr_crit("Failed to allocate memory for page table entry.\n");
-        return -1; // Return -1 to indicate error.
+        return -1;
     }
 
     // Set the frame for the page entry.
     __set_pg_entry_frame(iter->entry, iter->table);
 
-    return 0; // Return 0 to indicate success.
+    return 0;
 }
 
 /// @brief Checks if the iterator has a next entry.
@@ -982,7 +1015,7 @@ static int __pg_iter_has_next(page_iterator_t *iter)
     // Check for a null iterator pointer to avoid dereferencing a null pointer.
     if (!iter) {
         pr_crit("The page iterator is null.\n");
-        return 0; // Return 0, indicating there are no entries to iterate.
+        return 0;
     }
 
     // Check if the current page frame number (pfn) is less than the last page frame number (last_pfn).
@@ -998,7 +1031,7 @@ static pg_iter_entry_t __pg_iter_next(page_iterator_t *iter)
     // Check for a null iterator pointer to avoid dereferencing a null pointer.
     if (!iter) {
         pr_crit("The page iterator is null.\n");
-        return (pg_iter_entry_t){ 0 }; // Return a default entry indicating an error.
+        return (pg_iter_entry_t){ 0 };
     }
 
     // Initialize the result entry with the current page frame number (pfn).
@@ -1020,7 +1053,7 @@ static pg_iter_entry_t __pg_iter_next(page_iterator_t *iter)
                 iter->table = __mem_pg_entry_alloc(iter->entry, iter->flags);
                 if (!iter->table) {
                     pr_crit("Failed to allocate memory for new page entry.\n");
-                    return (pg_iter_entry_t){ 0 }; // Return a default entry indicating an error.
+                    return (pg_iter_entry_t){ 0 };
                 }
 
                 // Set the frame for the newly allocated entry.
@@ -1029,7 +1062,8 @@ static pg_iter_entry_t __pg_iter_next(page_iterator_t *iter)
         }
     }
 
-    return result; // Return the current entry after moving to the next.
+    // Return the current entry after moving to the next.
+    return result;
 }
 
 page_t *mem_virtual_to_page(page_directory_t *pgd, uint32_t virt_start, size_t *size)
@@ -1037,7 +1071,7 @@ page_t *mem_virtual_to_page(page_directory_t *pgd, uint32_t virt_start, size_t *
     // Check for null pointer to the page directory to avoid dereferencing.
     if (!pgd) {
         pr_crit("The page directory is null.\n");
-        return NULL; // Return NULL to indicate an error.
+        return NULL;
     }
 
     // Calculate the page frame number and page table index from the virtual address.
@@ -1046,20 +1080,20 @@ page_t *mem_virtual_to_page(page_directory_t *pgd, uint32_t virt_start, size_t *
     uint32_t virt_pgt_offset = virt_pfn % 1024; // Offset within the page table.
 
     // Get the physical page for the page directory entry.
-    page_t *pgd_page = mem_map + pgd->entries[virt_pgt].frame;
+    page_t *pgd_page = memory.mem_map + pgd->entries[virt_pgt].frame;
 
     // Get the low memory address of the page table.
     page_table_t *pgt_address = (page_table_t *)get_virtual_address_from_page(pgd_page);
     if (!pgt_address) {
         pr_crit("Failed to get low memory address from page directory entry.\n");
-        return NULL; // Return NULL if unable to retrieve page table address.
+        return NULL;
     }
 
     // Get the physical frame number for the corresponding entry in the page table.
     uint32_t pfn = pgt_address->pages[virt_pgt_offset].frame;
 
     // Map the physical frame number to a physical page.
-    page_t *page = mem_map + pfn;
+    page_t *page = memory.mem_map + pfn;
 
     // FIXME: handle unaligned page mapping to return the correct to-block-end
     // size instead of returning 0 (1 page at a time).
@@ -1069,7 +1103,8 @@ page_t *mem_virtual_to_page(page_directory_t *pgd, uint32_t virt_start, size_t *
         *size                = min(*size, bytes_count);  // Store the size, ensuring it doesn't exceed the maximum.
     }
 
-    return page; // Return the pointer to the mapped physical page.
+    // Return the pointer to the mapped physical page.
+    return page;
 }
 
 int mem_upd_vm_area(page_directory_t *pgd,
@@ -1081,14 +1116,14 @@ int mem_upd_vm_area(page_directory_t *pgd,
     // Check for null pointer to the page directory to avoid dereferencing.
     if (!pgd) {
         pr_crit("The page directory is null.\n");
-        return -1; // Return -1 to indicate error.
+        return -1;
     }
 
     // Initialize the page iterator for the virtual memory area.
     page_iterator_t virt_iter;
     if (__pg_iter_init(&virt_iter, pgd, virt_start, size, flags) < 0) {
         pr_crit("Failed to initialize source page iterator\n");
-        return -1; // Return -1 to indicate error.
+        return -1;
     }
 
     // Calculate the starting page frame number for the physical address.
@@ -1103,7 +1138,7 @@ int mem_upd_vm_area(page_directory_t *pgd,
             // Ensure the physical frame number is valid before assignment.
             if (phy_pfn >= MAX_PHY_PFN) {
                 pr_crit("Physical frame number exceeds maximum limit.\n");
-                return -1; // Return -1 to indicate error.
+                return -1;
             }
             it.entry->frame = phy_pfn++;
             // Flush the TLB only if the page directory is the current one.
@@ -1114,7 +1149,7 @@ int mem_upd_vm_area(page_directory_t *pgd,
         __set_pg_table_flags(it.entry, flags);
     }
 
-    return 0; // Return 0 to indicate success.
+    return 0;
 }
 
 int mem_clone_vm_area(page_directory_t *src_pgd,
@@ -1127,13 +1162,13 @@ int mem_clone_vm_area(page_directory_t *src_pgd,
     // Check for null pointer.
     if (!src_pgd) {
         pr_crit("The source page directory is null.\n");
-        return -1; // Return -1 to indicate error.
+        return -1;
     }
 
     // Check for null pointer.
     if (!dst_pgd) {
         pr_crit("The source page directory is null.\n");
-        return -1; // Return -1 to indicate error.
+        return -1;
     }
 
     // Initialize iterators for both source and destination page directories.
@@ -1142,13 +1177,13 @@ int mem_clone_vm_area(page_directory_t *src_pgd,
     // Initialize the source iterator to iterate through the source page directory.
     if (__pg_iter_init(&src_iter, src_pgd, src_start, size, flags) < 0) {
         pr_crit("Failed to initialize source page iterator\n");
-        return -1; // Return -1 to indicate error.
+        return -1;
     }
 
     // Initialize the destination iterator to iterate through the destination page directory.
     if (__pg_iter_init(&dst_iter, dst_pgd, dst_start, size, flags) < 0) {
         pr_crit("Failed to initialize destination page iterator\n");
-        return -1; // Return -1 to indicate error.
+        return -1;
     }
 
     // Iterate over the pages in the source and destination page directories.
@@ -1175,7 +1210,7 @@ int mem_clone_vm_area(page_directory_t *src_pgd,
         paging_flush_tlb_single(dst_it.pfn * PAGE_SIZE);
     }
 
-    return 0; // Return 0 to indicate success.
+    return 0;
 }
 
 mm_struct_t *create_blank_process_image(size_t stack_size)
@@ -1184,7 +1219,7 @@ mm_struct_t *create_blank_process_image(size_t stack_size)
     mm_struct_t *mm = kmem_cache_alloc(mm_cache, GFP_KERNEL);
     if (!mm) {
         pr_crit("Failed to allocate memory for mm_struct\n");
-        return NULL; // Return NULL to indicate error in allocation.
+        return NULL;
     }
 
     // Initialize the allocated mm_struct to zero.
@@ -1199,7 +1234,7 @@ mm_struct_t *create_blank_process_image(size_t stack_size)
     // Error handling: Failed to get the main page directory.
     if (!main_pgd) {
         pr_crit("Failed to get the main page directory\n");
-        return NULL; // Return NULL to indicate error.
+        return NULL;
     }
 
     // Allocate a new page directory structure and copy the main page directory.
@@ -1208,7 +1243,7 @@ mm_struct_t *create_blank_process_image(size_t stack_size)
         pr_crit("Failed to allocate memory for page directory\n");
         // Free previously allocated mm_struct.
         kmem_cache_free(mm);
-        return NULL; // Return NULL to indicate error in allocation.
+        return NULL;
     }
 
     // Initialize the allocated page_directory to zero.
@@ -1229,13 +1264,13 @@ mm_struct_t *create_blank_process_image(size_t stack_size)
         kmem_cache_free(pdir_cpy);
         // Free mm_struct as well.
         kmem_cache_free(mm);
-        return NULL; // Return NULL to indicate error in stack allocation.
+        return NULL;
     }
 
     // Update the start of the stack in the mm_struct.
     mm->start_stack = segment->vm_start;
 
-    return mm; // Return the initialized mm_struct for the new process.
+    return mm;
 }
 
 mm_struct_t *clone_process_image(mm_struct_t *mmp)
@@ -1243,14 +1278,14 @@ mm_struct_t *clone_process_image(mm_struct_t *mmp)
     // Check if the input mm_struct pointer is valid.
     if (!mmp) {
         pr_crit("Invalid source mm_struct pointer.\n");
-        return NULL; // Return NULL to indicate error.
+        return NULL;
     }
 
     // Allocate the mm_struct for the new process image.
     mm_struct_t *mm = kmem_cache_alloc(mm_cache, GFP_KERNEL);
     if (!mm) {
         pr_crit("Failed to allocate memory for mm_struct\n");
-        return NULL; // Return NULL to indicate error in allocation.
+        return NULL;
     }
 
     // Copy the contents of the source mm_struct to the new one.
@@ -1261,7 +1296,7 @@ mm_struct_t *clone_process_image(mm_struct_t *mmp)
     // Error handling: Failed to get the main page directory.
     if (!main_pgd) {
         pr_crit("Failed to get the main page directory\n");
-        return NULL; // Return NULL to indicate error.
+        return NULL;
     }
 
     // Allocate a new page directory to avoid data races on page tables.
@@ -1270,7 +1305,7 @@ mm_struct_t *clone_process_image(mm_struct_t *mmp)
         pr_crit("Failed to allocate page directory for new process.\n");
         // Free the previously allocated mm_struct.
         kmem_cache_free(mm);
-        return NULL; // Return NULL to indicate error.
+        return NULL;
     }
 
     // Initialize the new page directory by copying from the main directory.
@@ -1297,11 +1332,12 @@ mm_struct_t *clone_process_image(mm_struct_t *mmp)
             kmem_cache_free(mm);
             // Free the previously allocated page_directory.
             kmem_cache_free(pdir_cpy);
-            return NULL; // Return NULL to indicate error.
+            return NULL;
         }
     }
 
-    return mm; // Return the newly cloned mm_struct.
+    // Return the newly cloned mm_struct.
+    return mm;
 }
 
 int destroy_process_image(mm_struct_t *mm)
@@ -1309,7 +1345,7 @@ int destroy_process_image(mm_struct_t *mm)
     // Check if the input mm_struct pointer is valid.
     if (!mm) {
         pr_crit("Invalid source mm_struct pointer.\n");
-        return -1; // Return -1 to indicate error.
+        return -1;
     }
 
     // Get the main page directory.
@@ -1317,28 +1353,28 @@ int destroy_process_image(mm_struct_t *mm)
     // Error handling: Failed to get the main page directory.
     if (!main_pgd) {
         pr_crit("Failed to get the main page directory\n");
-        return -1; // Return -1 to indicate error.
+        return -1;
     }
 
     // Retrieve the current page directory.
     uint32_t current_paging_dir = (uint32_t)paging_get_current_directory();
     if (current_paging_dir == 0) {
         pr_crit("Failed to retrieve the current paging directory.\n");
-        return -1; // Return -1 to indicate error.
+        return -1;
     }
 
     // Get the low memory page associated with the given mm_struct.
     page_t *lowmem_page = get_page_from_virtual_address((uint32_t)mm->pgd);
     if (!lowmem_page) {
         pr_crit("Failed to get low memory page from mm->pgd address: %p\n", (void *)mm->pgd);
-        return -1; // Return -1 to indicate error.
+        return -1;
     }
 
     // Step 2: Get the physical address from the low memory page.
     uint32_t mm_pgd_phys_addr = get_physical_address_from_page(lowmem_page);
     if (mm_pgd_phys_addr == 0) {
         pr_crit("Failed to get physical address from low memory page: %p.\n", lowmem_page);
-        return -1; // Return -1 to indicate error.
+        return -1;
     }
 
     // Compare the current page directory with the one associated with the process.
@@ -1346,7 +1382,7 @@ int destroy_process_image(mm_struct_t *mm)
         // Switch to the main directory if they are the same.
         if (paging_switch_directory_va(main_pgd) < 0) {
             pr_crit("Failed to switch to the main directory.\n");
-            return -1; // Return -1 to indicate error.
+            return -1;
         }
     }
 
@@ -1447,7 +1483,7 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
         // Find an empty spot if no specific address was provided or the provided one is invalid.
         if (find_free_vm_area(task->mm, length, &vm_start)) {
             pr_err("Failed to find a suitable spot for a new virtual memory area.\n");
-            return NULL; // Return NULL to indicate failure in finding a suitable memory area.
+            return NULL;
         }
     }
 
@@ -1460,7 +1496,7 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
         GFP_HIGHUSER);
     if (!segment) {
         pr_err("Failed to allocate virtual memory area segment.\n");
-        return NULL; // Return NULL to indicate allocation failure.
+        return NULL;
     }
 
     // Set the memory flags for the mapping.
@@ -1488,7 +1524,7 @@ int sys_munmap(void *addr, size_t length)
         // Check if the segment is valid.
         if (!segment) {
             pr_crit("Found a NULL area in the mmap list.\n");
-            return -1; // Return -1 to indicate an error due to NULL segment.
+            return -1;
         }
 
         // Compute the size of the current segment.
@@ -1503,13 +1539,13 @@ int sys_munmap(void *addr, size_t length)
             if (destroy_vm_area(task->mm, segment) < 0) {
                 pr_err("Failed to destroy the virtual memory area at [0x%p:0x%p].\n",
                        (void *)segment->vm_start, (void *)segment->vm_end);
-                return -1; // Return -1 to indicate an error during destruction.
+                return -1;
             }
 
-            return 0; // Return 0 to indicate success.
+            return 0;
         }
     }
 
     pr_err("No matching memory area found for unmapping at address 0x%p with length %zu.\n", addr, length);
-    return 1; // Return 1 to indicate no matching area found.
+    return 1;
 }

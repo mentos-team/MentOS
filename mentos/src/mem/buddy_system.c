@@ -10,9 +10,10 @@
 #include "io/debug.h"                    // Include debugging functions.
 
 #include "mem/buddy_system.h"
-#include "mem/paging.h"
 #include "system/panic.h"
+#include "mem/paging.h"
 #include "assert.h"
+#include "stdio.h"
 
 /// @brief Cache level low limit after which allocation starts.
 #define LOW_WATERMARK_LEVEL 10
@@ -345,8 +346,6 @@ void bb_free_pages(bb_instance_t *instance, bb_page_t *page)
 
 #if 0
     pr_info("Page successfully freed (index: %lu, order: %u).\n", page_idx, order);
-
-    buddy_system_dump(instance);
 #endif
 }
 
@@ -415,23 +414,46 @@ void buddy_system_init(bb_instance_t *instance,
     assert(page == last_page && "Memory size is not aligned to MAX_ORDER size!");
 }
 
-void buddy_system_dump(int log_level, bb_instance_t *instance)
+const char *buddy_system_to_string(const bb_instance_t *instance)
 {
-    // Print free_list's size of each area of the zone.
-    pr_log(log_level, "Zone %-12s ", instance->name);
-    for (int order = 0; order < MAX_BUDDYSYSTEM_GFP_ORDER; order++) {
-        bb_free_area_t *area = instance->free_area + order;
-        pr_log(log_level, "%2d ", area->nr_free);
+    // Static buffer for the formatted string.
+    static char buffer[1024];
+    // Validate the input.
+    if (!instance) {
+        snprintf(buffer, sizeof(buffer), "Invalid buddy system instance.\n");
+        return buffer;
     }
-    pr_log(log_level, ": %s\n", to_human_size(buddy_system_get_free_space(instance)));
+    // Add the zone name.
+    int offset = snprintf(buffer, sizeof(buffer), "    %-12s ", instance->name);
+    if (offset < 0 || offset >= sizeof(buffer)) {
+        snprintf(buffer, sizeof(buffer), "String formatting error.\n");
+        return buffer;
+    }
+    // Add the free list sizes for each order.
+    for (int order = 0; order < MAX_BUDDYSYSTEM_GFP_ORDER; order++) {
+        const bb_free_area_t *area = &instance->free_area[order];
+        offset += snprintf(buffer + offset, sizeof(buffer) - offset, "%2d ", area->nr_free);
+        if (offset < 0 || offset >= sizeof(buffer)) {
+            snprintf(buffer, sizeof(buffer), "String formatting error.\n");
+            return buffer;
+        }
+    }
+    // Add the total free space in human-readable format.
+    offset += snprintf(buffer + offset, sizeof(buffer) - offset, ": %s",
+                       to_human_size(buddy_system_get_free_space(instance)));
+    if (offset < 0 || offset >= sizeof(buffer)) {
+        snprintf(buffer, sizeof(buffer), "String formatting error.\n");
+        return buffer;
+    }
+    return buffer;
 }
 
-unsigned long buddy_system_get_total_space(bb_instance_t *instance)
+unsigned long buddy_system_get_total_space(const bb_instance_t *instance)
 {
     return instance->total_pages * PAGE_SIZE;
 }
 
-unsigned long buddy_system_get_free_space(bb_instance_t *instance)
+unsigned long buddy_system_get_free_space(const bb_instance_t *instance)
 {
     unsigned int size = 0;
     for (int order = 0; order < MAX_BUDDYSYSTEM_GFP_ORDER; ++order)
@@ -439,7 +461,7 @@ unsigned long buddy_system_get_free_space(bb_instance_t *instance)
     return size;
 }
 
-unsigned long buddy_system_get_cached_space(bb_instance_t *instance)
+unsigned long buddy_system_get_cached_space(const bb_instance_t *instance)
 {
     unsigned int size = 0;
     for (int order = 0; order < MAX_BUDDYSYSTEM_GFP_ORDER; ++order)

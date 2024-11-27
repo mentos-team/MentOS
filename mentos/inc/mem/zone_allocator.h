@@ -74,18 +74,20 @@ enum zone_type {
 
 /// @brief Data structure to differentiate memory zone.
 typedef struct zone_t {
-    /// Number of free pages in the zone.
-    unsigned long free_pages;
-    /// Buddy system managing this zone
-    bb_instance_t buddy_system;
+    /// Zone's name.
+    char *name;
     /// Pointer to first page descriptor of the zone.
     page_t *zone_mem_map;
     /// Index of the first page frame of the zone.
     uint32_t zone_start_pfn;
-    /// Zone's name.
-    char *name;
     /// Zone's size in number of pages.
-    unsigned long size;
+    size_t num_pages;
+    /// Number of free pages in the zone.
+    size_t free_pages;
+    /// Total size of the zone.
+    size_t total_size;
+    /// Buddy system managing this zone
+    bb_instance_t buddy_system;
 } zone_t;
 
 /// @brief Data structure to rapresent a memory node. In Uniform memory access
@@ -109,8 +111,34 @@ typedef struct pg_data_t {
     struct pg_data_t *node_next;
 } pg_data_t;
 
-extern page_t *mem_map;
-extern pg_data_t *contig_page_data;
+/// @brief Structure to represent a memory zone (LowMem or HighMem).
+typedef struct memory_zone {
+    uint32_t start_addr; ///< Start address of the zone (physical).
+    uint32_t end_addr;   ///< End address of the zone (physical).
+    uint32_t virt_start; ///< Virtual start address of the zone.
+    uint32_t virt_end;   ///< Virtual end address of the zone.
+    uint32_t size;       ///< Total size of the zone in bytes.
+} memory_zone_t;
+
+/// @brief Structure to encapsulate system memory management data.
+typedef struct memory_info {
+    page_t *mem_map;         ///< Pointer to the array of all physical memory blocks.
+    pg_data_t *page_data;    ///< Pointer to the contiguous memory node descriptor.
+    uint32_t mem_size;       ///< Total size of available physical memory (bytes).
+    uint32_t mem_map_num;    ///< Total number of memory frames (pages) available.
+    uint32_t page_index_min; ///< Minimum page index.
+    uint32_t page_index_max; ///< Maximum page index.
+    memory_zone_t low_mem;   ///< Low memory zone (normal zone).
+    memory_zone_t high_mem;  ///< High memory zone.
+} memory_info_t;
+
+/// @brief Keeps track of system memory management data.
+extern memory_info_t memory;
+
+// @brief Checks if a virtual address is valid within the low or high memory zones.
+/// @param vaddr The virtual address to be checked.
+/// @return 1 if the virtual address is valid, 0 otherwise.
+int is_valid_virtual_address(uint32_t vaddr);
 
 /// @brief Finds the nearest order of memory allocation that can accommodate a
 /// given amount of memory.
@@ -149,9 +177,9 @@ uint32_t alloc_pages_lowmem(gfp_t gfp_mask, uint32_t order);
 
 /// @brief Frees from the given page frame address up to 2^order amount of page
 /// frames.
-/// @param addr The page frame address.
+/// @param vaddr The page frame address.
 /// @return Returns 0 on success, or -1 if an error occurs.
-int free_pages_lowmem(uint32_t addr);
+int free_pages_lowmem(uint32_t vaddr);
 
 /// @brief Converts a page structure to its corresponding low memory virtual address.
 /// @param page Pointer to the page structure.
@@ -196,8 +224,8 @@ unsigned long get_zone_cached_space(gfp_t gfp_mask);
 /// @return 1 if it belongs to lowmem, 0 otherwise.
 static inline int is_lowmem_page_struct(void *addr)
 {
-    uint32_t start_lowm_map  = (uint32_t)contig_page_data->node_zones[ZONE_NORMAL].zone_mem_map;
-    uint32_t lowmem_map_size = sizeof(page_t) * contig_page_data->node_zones[ZONE_NORMAL].size;
+    uint32_t start_lowm_map  = (uint32_t)memory.page_data->node_zones[ZONE_NORMAL].zone_mem_map;
+    uint32_t lowmem_map_size = sizeof(page_t) * memory.page_data->node_zones[ZONE_NORMAL].num_pages;
     uint32_t map_index       = (uint32_t)addr - start_lowm_map;
     return map_index < lowmem_map_size;
 }

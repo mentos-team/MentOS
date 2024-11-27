@@ -39,106 +39,101 @@
     (((addr) & (~((PAGE_SIZE << (MAX_BUDDYSYSTEM_GFP_ORDER - 1)) - 1))) + \
      (PAGE_SIZE << (MAX_BUDDYSYSTEM_GFP_ORDER - 1)))
 
-/// @brief Array of all physical memory blocks (pages).
-/// @details This variable points to an array of `page_t` structures
-/// representing all physical memory blocks (pages) in the system. It is used to
-/// track the state of each page in memory.
-page_t *mem_map = NULL;
+/// @brief Keeps track of system memory management data.
+memory_info_t memory;
 
-/// @brief Memory node descriptor for contiguous memory.
-/// @details This variable points to the `pg_data_t` structure, which represents
-/// a memory node (usually for NUMA systems). It typically describes the memory
-/// properties and zones for a contiguous block of physical memory.
-pg_data_t *contig_page_data = NULL;
+/// @brief Prints the details of a memory zone.
+/// @param log_level the log level.
+/// @param name The name of the memory zone (e.g., "LowMem", "HighMem").
+/// @param mem_zone Pointer to the memory zone structure.
+static inline void __print_memory_zone(int log_level, const char *name, const memory_zone_t *mem_zone)
+{
+    if (!name) {
+        pr_crit("Invalid memory zone name.\n");
+        return;
+    }
+    if (!mem_zone) {
+        pr_crit("Invalid memory zone pointer for %s.\n", name);
+        return;
+    }
 
-/// @brief Virtual base address of the low memory (lowmem) zone.
-/// @details This variable stores the base virtual address of the low memory
-/// region. The kernel uses this address to access low memory (directly
-/// addressable memory).
-uint32_t lowmem_virt_base = 0;
+    pr_log(log_level, "    %s Zone:\n", name);
+    pr_log(log_level, "        Physical : 0x%08x to 0x%08x\n", mem_zone->start_addr, mem_zone->end_addr);
+    pr_log(log_level, "        Virtual  : 0x%08x to 0x%08x\n", mem_zone->virt_start, mem_zone->virt_end);
+    pr_log(log_level, "        Size     : %s\n", to_human_size(mem_zone->size));
+}
 
-/// @brief Physical base address of the low memory (lowmem) zone.
-/// @details This variable stores the base physical address of the low memory
-/// region. It represents the starting point of the lowmem pages in physical
-/// memory.
-uint32_t lowmem_page_base = 0;
+/// @brief Prints the details of the system memory management information.
+/// @param log_level the log level.
+/// @param mem_info Pointer to the memory information structure.
+static inline void __print_memory_info(int log_level, const memory_info_t *mem_info)
+{
+    if (!mem_info) {
+        pr_crit("Invalid memory information pointer.\n");
+        return;
+    }
 
-/// @brief Physical start address of low memory (lowmem) zone.
-/// @details This variable stores the physical address where the low memory
-/// (which is directly addressable by the kernel) begins.
-uint32_t lowmem_phy_start;
+    pr_log(log_level, "System Memory Information:\n");
+    pr_log(log_level, "    Total Memory Size       : %s\n", to_human_size(mem_info->mem_size));
+    pr_log(log_level, "    Page Indices            : Min: %u, Max: %u\n", mem_info->page_index_min, mem_info->page_index_max);
+    pr_log(log_level, "Memory Map:\n");
+    pr_log(log_level, "    Total Page Frames       : %u\n", mem_info->mem_map_num);
+    pr_log(log_level, "    Size                    : %s\n", to_human_size(sizeof(page_t) * mem_info->mem_map_num));
+    pr_log(log_level, "Memory Zones:\n");
+    __print_memory_zone(log_level, "LowMem", &mem_info->low_mem);
+    __print_memory_zone(log_level, "HighMem", &mem_info->high_mem);
+}
 
-/// @brief Virtual start address of low memory (lowmem) zone.
-/// @details This variable stores the virtual address corresponding to the start
-/// of the low memory region in the kernel's virtual address space.
-uint32_t lowmem_virt_start;
-
-/// @brief Total size of available physical memory in bytes.
-/// @details This variable holds the total amount of memory available on the
-/// system (both low and high memory).
-uint32_t mem_size;
-
-/// @brief Total number of memory frames (pages) available.
-/// @details The number of physical memory frames available in the system,
-/// calculated as the total memory divided by the size of a memory page.
-uint32_t mem_map_num;
-
-/// @brief Start address of the normal (lowmem) zone.
-/// @details This variable holds the starting physical address of the normal
-/// memory zone, also known as low memory, which is directly addressable by the
-/// kernel.
-uint32_t normal_start_addr;
-
-/// @brief End address of the normal (lowmem) zone.
-/// @details This variable holds the ending physical address of the normal
-/// memory zone (low memory), marking the boundary between lowmem and highmem.
-uint32_t normal_end_addr;
-
-/// @brief Total size of the normal (lowmem) zone.
-/// @details The size of the normal memory zone in bytes, which is the portion
-/// of memory directly addressable by the kernel.
-uint32_t normal_size;
-
-/// @brief Start address of the high memory (highmem) zone.
-/// @details This variable stores the starting physical address of the high
-/// memory zone, which is memory not directly addressable by the kernel and
-/// requires special handling.
-uint32_t high_start_addr;
-
-/// @brief End address of the high memory (highmem) zone.
-/// @details This variable holds the ending physical address of the high memory
-/// zone, which marks the limit of available physical memory.
-uint32_t high_end_addr;
-
-/// @brief Total size of the high memory (highmem) zone.
-/// @details The size of the high memory zone in bytes. High memory requires
-/// special handling as it is not directly accessible by the kernel's virtual
-/// address space.
-uint32_t high_size;
+/// @brief Prints the details of a memory zone.
+/// @param log_level the log level.
+/// @param zone Pointer to the zone structure to be printed.
+static inline void __print_zone(int log_level, const zone_t *zone)
+{
+    if (!zone) {
+        pr_crit("Invalid zone pointer\n");
+        return;
+    }
+    pr_log(log_level, "Zone: %s\n", zone->name);
+    pr_log(log_level, "    Number of Pages      : %lu\n", zone->num_pages);
+    pr_log(log_level, "    Number of Free Pages : %lu\n", zone->free_pages);
+    pr_log(log_level, "    Startint PFN         : %u\n", zone->zone_start_pfn);
+    pr_log(log_level, "    Zone Size            : %s\n", to_human_size(zone->total_size));
+    pr_log(log_level, "    Zone Memory Map      : 0x%p\n", (uintptr_t)zone->zone_mem_map);
+    pr_log(log_level, "    Buddy System Status  :\n        %s\n", buddy_system_to_string(&zone->buddy_system));
+}
 
 uint32_t get_virtual_address_from_page(page_t *page)
 {
     // Check for NULL page pointer. If it is NULL, print an error and return 0.
     if (!page) {
         pr_err("Invalid page pointer: NULL value provided.\n");
-        return 0; // Return 0 to indicate an error in retrieving the address.
+        return 0;
     }
 
     // Calculate the index of the page in the memory map.
-    unsigned int page_index = page - mem_map;
+    uint32_t page_index = page - memory.mem_map;
 
     // Check if the calculated page index is within valid bounds.
-    if ((page_index < lowmem_page_base) || (page_index >= mem_map_num)) {
-        pr_err("Page %p at index %u is out of bounds. Valid range: %u to %u.\n",
-               (void *)page, page_index, lowmem_page_base, mem_map_num - 1);
+    if ((page_index < memory.page_index_min) || (page_index > memory.page_index_max)) {
+        pr_err("Page index %u is out of bounds. Valid range: %u to %u.\n",
+               page_index, memory.page_index_min, memory.page_index_max - 1);
         return 0;
     }
 
     // Calculate the offset from the low memory base address.
-    unsigned int offset = page_index - lowmem_page_base;
+    uint32_t offset = page_index - memory.page_index_min;
 
-    // Return the corresponding low memory virtual address.
-    return lowmem_virt_base + (offset * PAGE_SIZE);
+    // Calculate the corresponding low memory virtual address.
+    uint32_t vaddr = memory.low_mem.virt_start + (offset * PAGE_SIZE);
+
+    // Validate the computed virtual address.
+    if (!is_valid_virtual_address(vaddr)) {
+        pr_err("Computed virtual address 0x%p is invalid.\n", vaddr);
+        return 0;
+    }
+
+    // Return the valid virtual address.
+    return vaddr;
 }
 
 uint32_t get_physical_address_from_page(page_t *page)
@@ -146,16 +141,16 @@ uint32_t get_physical_address_from_page(page_t *page)
     // Ensure the page pointer is not NULL. If it is NULL, print an error and return 0.
     if (!page) {
         pr_err("Invalid page pointer: NULL value provided.\n");
-        return 0; // Return 0 to indicate an error in retrieving the address.
+        return 0;
     }
 
     // Calculate the index of the page in the memory map.
-    unsigned int page_index = page - mem_map;
+    uint32_t page_index = page - memory.mem_map;
 
     // Check if the calculated page index is within valid bounds.
-    if ((page_index < lowmem_page_base) || (page_index >= mem_map_num)) {
-        pr_err("Page %p at index %u is out of bounds. Valid range: %u to %u.\n",
-               (void *)page, page_index, lowmem_page_base, mem_map_num - 1);
+    if ((page_index < memory.page_index_min) || (page_index > memory.page_index_max)) {
+        pr_err("Page index %u is out of bounds. Valid range: %u to %u.\n",
+               page_index, memory.page_index_min, memory.page_index_max - 1);
         return 0;
     }
 
@@ -166,27 +161,27 @@ uint32_t get_physical_address_from_page(page_t *page)
 
 page_t *get_page_from_virtual_address(uint32_t vaddr)
 {
-    // Ensure the address is within the valid range.
-    if (vaddr < lowmem_virt_base) {
-        pr_crit("Address is below low memory virtual base.\n");
-        return NULL; // Return NULL to indicate failure.
+    // Ensure it is a valid virtual address.
+    if (!is_valid_virtual_address(vaddr)) {
+        pr_crit("The provided address 0x%p is not a valid virtual address.\n", vaddr);
+        return NULL;
     }
 
     // Calculate the offset from the low memory virtual base address.
-    unsigned int offset = vaddr - lowmem_virt_base;
+    uint32_t offset = vaddr - memory.low_mem.virt_start;
 
     // Determine the index of the corresponding page structure in the memory map.
-    unsigned int page_index = lowmem_page_base + (offset / PAGE_SIZE);
+    uint32_t page_index = memory.page_index_min + (offset / PAGE_SIZE);
 
     // Check if the page index exceeds the memory map limit.
-    if (page_index >= mem_map_num) {
-        pr_crit("Page index %u is out of bounds. Maximum allowed index is %u.\n",
-                page_index, mem_map_num - 1);
-        return NULL; // Return NULL to indicate failure.
+    if ((page_index < memory.page_index_min) || (page_index > memory.page_index_max)) {
+        pr_err("Page index %u is out of bounds. Valid range: %u to %u.\n",
+               page_index, memory.page_index_min, memory.page_index_max - 1);
+        return NULL;
     }
 
     // Return the pointer to the page structure.
-    return mem_map + page_index;
+    return memory.mem_map + page_index;
 }
 
 page_t *get_page_from_physical_address(uint32_t phy_addr)
@@ -194,21 +189,21 @@ page_t *get_page_from_physical_address(uint32_t phy_addr)
     // Ensure the physical address is valid and aligned to page boundaries.
     if (phy_addr % PAGE_SIZE != 0) {
         pr_crit("Address must be page-aligned. Received address: 0x%08x\n", phy_addr);
-        return NULL; // Return NULL to indicate failure due to misalignment.
+        return NULL;
     }
 
     // Calculate the index of the page in the memory map.
-    unsigned int page_index = phy_addr / PAGE_SIZE;
+    uint32_t page_index = phy_addr / PAGE_SIZE;
 
     // Check if the calculated page index is within valid bounds.
-    if ((page_index < lowmem_page_base) || (page_index >= mem_map_num)) {
+    if ((page_index < memory.page_index_min) || (page_index > memory.page_index_max)) {
         pr_err("Page index %u is out of bounds. Valid range: %u to %u.\n",
-               page_index, lowmem_page_base, mem_map_num - 1);
-        return NULL; // Return NULL to indicate failure.
+               page_index, memory.page_index_min, memory.page_index_max - 1);
+        return NULL;
     }
 
     // Return the pointer to the corresponding page structure in the memory map.
-    return mem_map + page_index;
+    return memory.mem_map + page_index;
 }
 
 /// @brief Get the zone that contains a page frame.
@@ -220,22 +215,25 @@ static zone_t *get_zone_from_page(page_t *page)
     // Validate the input parameter.
     if (!page) {
         pr_crit("Invalid input: page is NULL.\n");
-        return NULL; // Return NULL to indicate failure due to NULL input.
+        return NULL;
     }
 
     // Iterate over all the zones in the contiguous page data structure.
-    for (int zone_index = 0; zone_index < contig_page_data->nr_zones; zone_index++) {
+    for (int zone_index = 0; zone_index < memory.page_data->nr_zones; zone_index++) {
         // Get the zone at the given index.
-        zone_t *zone = contig_page_data->node_zones + zone_index;
+        zone_t *zone = &memory.page_data->node_zones[zone_index];
 
-        // Get the first and last page of the zone by adding the zone size to
-        // the base of the memory map.
+        // Get the first and last page of the zone. You might be inclide to
+        // multiply by the sizeof(page_t), but that is wrong.
+        // Considering that it's a sum to a `page_t *`, the arithmetic of
+        // pointers takes care of moving the pointer by sizeof(page_t)
+        // multiplied by the number of pages.
         page_t *first_page = zone->zone_mem_map;
-        page_t *last_page  = zone->zone_mem_map + zone->size;
+        page_t *last_page  = zone->zone_mem_map + zone->num_pages;
 
-        // Check if the given page is within the current zone.
+        // Return the zone if the page is within its range.
         if ((page >= first_page) && (page < last_page)) {
-            return zone; // Return the zone if the page is within its range.
+            return zone;
         }
     }
 
@@ -251,10 +249,10 @@ static zone_t *get_zone_from_page(page_t *page)
 /// recognized.
 static zone_t *get_zone_from_flags(gfp_t gfp_mask)
 {
-    // Ensure that contig_page_data is initialized and valid.
-    if (!contig_page_data) {
-        pr_crit("contig_page_data is NULL.\n");
-        return NULL; // Return NULL to indicate failure due to uninitialized data.
+    // Ensure that page_data is initialized and valid.
+    if (!memory.page_data) {
+        pr_crit("page_data is NULL.\n");
+        return NULL;
     }
 
     // Determine the appropriate zone based on the given GFP mask.
@@ -265,53 +263,38 @@ static zone_t *get_zone_from_flags(gfp_t gfp_mask)
     case GFP_NOIO:
     case GFP_NOWAIT:
         // Return the normal zone for these GFP flags.
-        return &contig_page_data->node_zones[ZONE_NORMAL];
+        return &memory.page_data->node_zones[ZONE_NORMAL];
 
     case GFP_HIGHUSER:
         // Return the high memory zone for GFP_HIGHUSER.
-        return &contig_page_data->node_zones[ZONE_HIGHMEM];
+        return &memory.page_data->node_zones[ZONE_HIGHMEM];
 
     default:
         // If the gfp_mask does not match any recognized flags, log an error and return NULL.
         pr_crit("Unrecognized gfp_mask: %u.\n", gfp_mask);
-        return NULL; // Return NULL to indicate that the input was not valid.
+        return NULL;
     }
 }
 
 /// @brief Checks if the specified memory zone is clean (i.e., all pages are free).
-/// @param gfp_mask The mask that specifies the zone of interest for memory allocation.
-/// @return 1 if the memory is clean, 0 if there is an error or if the memory is not clean.
-static int is_memory_clean(gfp_t gfp_mask)
+/// @param zone The memory zone to check.
+/// @return 1 if the memory is clean (all pages are free), 0 if there is an error or the memory is not clean.
+static inline int is_memory_clean(zone_t *zone)
 {
-    // Get the corresponding zone based on the gfp_mask.
-    zone_t *zone = get_zone_from_flags(gfp_mask);
+    // Validate input.
     if (!zone) {
-        pr_crit("Failed to retrieve the zone for gfp_mask: %u.\n", gfp_mask);
-        return 0; // Return 0 to indicate an error due to invalid zone.
-    }
-
-    // Get the last free area list of the buddy system.
-    bb_free_area_t *area = zone->buddy_system.free_area + (MAX_BUDDYSYSTEM_GFP_ORDER - 1);
-    if (!area) {
-        pr_crit("Failed to retrieve the last free_area for the zone.\n");
-        return 0; // Return 0 to indicate an error due to invalid area.
-    }
-
-    // Compute the total size of the zone.
-    unsigned int total_size = (zone->size / (1UL << (MAX_BUDDYSYSTEM_GFP_ORDER - 1)));
-
-    // Check if the size of the zone matches the number of free pages in the area.
-    if (area->nr_free != total_size) {
-        pr_crit("Number of blocks of free pages is different than expected (%d vs %d).\n", area->nr_free, total_size);
-
-        // Dump the current state of the buddy system for debugging purposes.
-        buddy_system_dump(LOGLEVEL_CRIT, &zone->buddy_system);
-
-        // Return 0 to indicate an error.
+        pr_crit("Memory zone check failed: provided zone is NULL.\n");
         return 0;
     }
-
-    // Return 1 if the memory is clean (i.e., the sizes match).
+    // Check if the total size of the zone matches the free space in the buddy system.
+    unsigned long free_space = buddy_system_get_free_space(&zone->buddy_system);
+    if (zone->total_size != free_space) {
+        pr_crit("Memory zone check failed for zone '%s'.\n", zone->name);
+        pr_crit("Expected free space %lu bytes, but found %lu bytes.\n", zone->total_size, free_space);
+        pr_crit("Buddy system state for zone '%s':\n", zone->name);
+        pr_crit("    %s\n", buddy_system_to_string(&zone->buddy_system));
+        return 0;
+    }
     return 1;
 }
 
@@ -329,8 +312,9 @@ static int pmm_check(void)
         pr_crit("Failed to retrieve the zone_highmem.\n");
         return 0;
     }
-    buddy_system_dump(LOGLEVEL_NOTICE, &zone_normal->buddy_system);
-    buddy_system_dump(LOGLEVEL_NOTICE, &zone_highmem->buddy_system);
+    pr_notice("Zones status before testing:\n");
+    pr_notice("    %s\n", buddy_system_to_string(&zone_normal->buddy_system));
+    pr_notice("    %s\n", buddy_system_to_string(&zone_highmem->buddy_system));
     pr_notice("\tStep 1: Testing allocation in kernel-space...\n");
     {
         // Allocate a single page with GFP_KERNEL.
@@ -345,7 +329,7 @@ static int pmm_check(void)
             return 0;
         }
         // Verify memory state after deallocation.
-        if (!is_memory_clean(GFP_KERNEL)) {
+        if (!is_memory_clean(zone_normal)) {
             pr_err("Kernel-space test failed: Memory not clean.\n");
             return 0;
         }
@@ -364,7 +348,7 @@ static int pmm_check(void)
             return 0;
         }
         // Verify memory state after deallocation.
-        if (!is_memory_clean(GFP_HIGHUSER)) {
+        if (!is_memory_clean(zone_highmem)) {
             pr_err("User-space test failed: Memory not clean.\n");
             return 0;
         }
@@ -388,7 +372,7 @@ static int pmm_check(void)
             }
         }
         // Verify memory state after deallocation.
-        if (!is_memory_clean(GFP_HIGHUSER)) {
+        if (!is_memory_clean(zone_highmem)) {
             pr_err("User-space test failed: Memory not clean.\n");
             return 0;
         }
@@ -412,13 +396,14 @@ static int pmm_check(void)
             }
         }
         // Verify memory state after deallocation.
-        if (!is_memory_clean(GFP_KERNEL)) {
+        if (!is_memory_clean(zone_normal)) {
             pr_err("Kernel-space test failed: Memory not clean.\n");
             return 0;
         }
     }
-    buddy_system_dump(LOGLEVEL_NOTICE, &zone_normal->buddy_system);
-    buddy_system_dump(LOGLEVEL_NOTICE, &zone_highmem->buddy_system);
+    pr_notice("Zones status after testing:\n");
+    pr_notice("    %s\n", buddy_system_to_string(&zone_normal->buddy_system));
+    pr_notice("    %s\n", buddy_system_to_string(&zone_highmem->buddy_system));
     return 1;
 }
 
@@ -449,14 +434,14 @@ static int zone_init(char *name, int zone_index, uint32_t adr_from, uint32_t adr
     }
 
     // Ensure that the zone_index is within the valid range.
-    if ((zone_index < 0) || (zone_index >= contig_page_data->nr_zones)) {
+    if ((zone_index < 0) || (zone_index >= memory.page_data->nr_zones)) {
         pr_crit("The zone_index (%d) is out of bounds (max: %d).\n",
-                zone_index, contig_page_data->nr_zones - 1);
+                zone_index, memory.page_data->nr_zones - 1);
         return -1; // Return -1 to indicate an error.
     }
 
     // Take the zone_t structure that corresponds to the zone_index.
-    zone_t *zone = contig_page_data->node_zones + zone_index;
+    zone_t *zone = &memory.page_data->node_zones[zone_index];
 
     // Ensure that the zone was retrieved successfully.
     if (!zone) {
@@ -471,14 +456,15 @@ static int zone_init(char *name, int zone_index, uint32_t adr_from, uint32_t adr
     uint32_t first_page_frame = adr_from / PAGE_SIZE;
 
     // Update zone information.
-    zone->name           = name;                       // Set the zone's name.
-    zone->size           = num_page_frames;            // Set the total number of page frames.
-    zone->free_pages     = num_page_frames;            // Initialize free pages to the total number.
-    zone->zone_mem_map   = mem_map + first_page_frame; // Map the memory for the zone.
-    zone->zone_start_pfn = first_page_frame;           // Set the starting page frame number.
+    zone->name           = name;                              // Set the zone's name.
+    zone->num_pages      = num_page_frames;                   // Set the total number of page frames.
+    zone->free_pages     = num_page_frames;                   // Initialize free pages to the total number.
+    zone->zone_mem_map   = memory.mem_map + first_page_frame; // Map the memory for the zone.
+    zone->zone_start_pfn = first_page_frame;                  // Set the starting page frame number.
+    zone->total_size     = adr_to - adr_from;                 // Save the total size of the zone in bytes.
 
     // Clear the page structures in the memory map.
-    memset(zone->zone_mem_map, 0, zone->size * sizeof(page_t));
+    memset(zone->zone_mem_map, 0, zone->num_pages * sizeof(page_t));
 
     // Initialize the buddy system for the new zone.
     buddy_system_init(
@@ -489,6 +475,20 @@ static int zone_init(char *name, int zone_index, uint32_t adr_from, uint32_t adr
         sizeof(page_t),                  // Size of each page.
         num_page_frames                  // Total number of page frames in the zone.
     );
+
+    __print_zone(LOGLEVEL_NOTICE, zone);
+
+    return 0;
+}
+
+int is_valid_virtual_address(uint32_t addr)
+{
+    if ((addr >= memory.low_mem.virt_start) && (addr < memory.low_mem.virt_end)) {
+        return 1;
+    }
+    if ((addr >= memory.high_mem.virt_start) && (addr < memory.high_mem.virt_end)) {
+        return 1;
+    }
     return 0;
 }
 
@@ -498,7 +498,7 @@ static int zone_init(char *name, int zone_index, uint32_t adr_from, uint32_t adr
  *
  * */
 
-unsigned int find_nearest_order_greater(uint32_t base_addr, uint32_t amount)
+uint32_t find_nearest_order_greater(uint32_t base_addr, uint32_t amount)
 {
     // Calculate the starting page frame number (PFN) based on the base address.
     uint32_t start_pfn = base_addr / PAGE_SIZE;
@@ -514,7 +514,7 @@ unsigned int find_nearest_order_greater(uint32_t base_addr, uint32_t amount)
 
     // Find the fitting order (power of two) that can accommodate the required
     // number of pages.
-    unsigned int order = 0;
+    uint32_t order = 0;
     while ((1UL << order) < npages) {
         ++order;
     }
@@ -522,99 +522,143 @@ unsigned int find_nearest_order_greater(uint32_t base_addr, uint32_t amount)
     return order; // Return the calculated order.
 }
 
+/// @brief Initializes the array of page_t structures for memory management.
+/// @param boot_info Boot information.
+/// @param offset Offset from lowmem_start where the pages will be placed.
+/// @return int Returns the amount of memory used on success, or -1 on error.
+ssize_t pmmngr_initialize_pages(const boot_info_t *boot_info, size_t offset)
+{
+    // Ensure input pointers are valid.
+    if (!boot_info) {
+        pr_crit("Invalid input parameters to initialize_pages\n");
+        return -1;
+    }
+
+    pr_debug("Initializing low memory map structure...\n");
+
+    // Compute the size of memory.
+    memory.mem_size = boot_info->highmem_phy_end;
+    if (memory.mem_size == 0) {
+        pr_crit("Memory size is zero, cannot initialize pages\n");
+        return -1;
+    }
+
+    // Calculate the total number of pages (all LowMem + HighMem RAM).
+    memory.mem_map_num = memory.mem_size / PAGE_SIZE;
+
+    // Set the base address for the page_t array.
+    uintptr_t mem_start = boot_info->lowmem_start + offset;
+    // Compute the memory usage.
+    size_t mem_usage = sizeof(page_t) * memory.mem_map_num;
+    // Get the pointer to where we want to place the structure.
+    memory.mem_map = (page_t *)mem_start;
+
+    // Ensure the memory usage does not exceed LowMem.
+    if ((mem_start + mem_usage) > boot_info->lowmem_end) {
+        pr_crit("Insufficient LowMem to allocate memory map\n");
+        return -1;
+    }
+
+    // Initialize each page_t structure.
+    for (size_t i = 0; i < memory.mem_map_num; ++i) {
+        // Mark page as free by setting its count to 0.
+        set_page_count(&memory.mem_map[i], 0);
+    }
+
+    pr_debug("Memory map structure initialized with %zu pages\n", memory.mem_map_num);
+
+    return (ssize_t)mem_usage;
+}
+
+/// @brief Initializes the contiguous page data node.
+/// @param boot_info Boot information.
+/// @param offset Virtual memory offset from the base address.
+/// @return int Returns the amount of memory used on success, or -1 on error.
+ssize_t pmmngr_initialize_page_data(const boot_info_t *boot_info, size_t offset)
+{
+    // Ensure input pointers are valid.
+    if (!boot_info || !memory.mem_map) {
+        pr_crit("Invalid input parameters to initialize_contig_page_data\n");
+        return -1;
+    }
+
+    pr_debug("Initializing page_data node...\n");
+
+    // Calculate the virtual start address for page_data.
+    uintptr_t virt_start = boot_info->lowmem_start + offset;
+    // Compute the memory usage.
+    size_t mem_usage = sizeof(pg_data_t);
+    // Get the pointer to where we want to place the structure.
+    memory.page_data = (pg_data_t *)virt_start;
+
+    // Initialize the page_data fields.
+    memory.page_data->nr_zones         = __MAX_NR_ZONES;     // Number of memory zones.
+    memory.page_data->node_id          = 0;                  // Node ID (0 for UMA systems).
+    memory.page_data->node_mem_map     = memory.mem_map;     // Corresponding to mem_map.
+    memory.page_data->node_next        = NULL;               // No next node in UMA.
+    memory.page_data->node_size        = memory.mem_map_num; // Total number of pages.
+    memory.page_data->node_start_mapnr = 0;                  // Start index in mem_map.
+    memory.page_data->node_start_paddr = 0x0;                // Physical address of the first page.
+
+    // Ensure the memory usage does not exceed LowMem.
+
+    if (virt_start + mem_usage > boot_info->lowmem_end) {
+        pr_crit("Insufficient LowMem to allocate page_data\n");
+        return -1;
+    }
+
+    pr_debug("page_data node initialized: %p\n", memory.page_data);
+
+    return (ssize_t)mem_usage;
+}
+
 int pmmngr_init(boot_info_t *boot_info)
 {
-    //=======================================================================
-    lowmem_phy_start = boot_info->lowmem_phy_start;
-    // Now we have skipped all modules in physical space, is time to consider
-    // also virtual lowmem space!
-    lowmem_virt_start = boot_info->lowmem_start;
-    //=======================================================================
+    // Place the pages in memory.
+    ssize_t offset_pages = pmmngr_initialize_pages(boot_info, 0U);
 
-    //==== Initialize array of page_t =======================================
-    pr_debug("Initializing low memory map structure...\n");
-    mem_map = (page_t *)lowmem_virt_start;
-    // Compute the size of memory.
-    mem_size = boot_info->highmem_phy_end;
-    // Total number of blocks (all lowmem+highmem RAM).
-    mem_map_num = mem_size / PAGE_SIZE;
-    // Initialize each page_t.
-    for (unsigned i = 0; i < mem_map_num; ++i) {
-        // Mark page as free.
-        set_page_count(&mem_map[i], 0);
-    }
-    // Skip memory space used for page_t[]
-    lowmem_phy_start += sizeof(page_t) * mem_map_num;
-    lowmem_virt_start += sizeof(page_t) * mem_map_num;
-    //=======================================================================
+    // Place the page data in memory.
+    ssize_t offset_page_data = pmmngr_initialize_page_data(boot_info, offset_pages);
 
-    //==== Initialize contig_page_data node =================================
-    pr_debug("Initializing contig_page_data node...\n");
-    contig_page_data = (pg_data_t *)lowmem_virt_start;
-    // ZONE_NORMAL and ZONE_HIGHMEM
-    contig_page_data->nr_zones = __MAX_NR_ZONES;
-    // NID start from 0.
-    contig_page_data->node_id = 0;
-    // Corresponds with mem_map.
-    contig_page_data->node_mem_map = mem_map;
-    // In UMA we have only one node.
-    contig_page_data->node_next = NULL;
-    // All the memory.
-    contig_page_data->node_size = mem_map_num;
-    // mem_map[0].
-    contig_page_data->node_start_mapnr = 0;
-    // The first physical page.
-    contig_page_data->node_start_paddr = 0x0;
-    // Skip memory space used for pg_data_t.
-    lowmem_phy_start += sizeof(pg_data_t);
-    lowmem_virt_start += sizeof(pg_data_t);
-    //=======================================================================
+    // Compute the physical and virtual start addresses for the LowMem zone
+    uint32_t tmp_normal_phy_start  = boot_info->lowmem_phy_start + offset_pages + offset_page_data;
+    uint32_t tmp_normal_virt_start = boot_info->lowmem_start + offset_pages + offset_page_data;
+    // Align the physical start address of the LowMem zone to the nearest valid boundary.
+    memory.low_mem.start_addr = MAX_PAGE_ALIGN(tmp_normal_phy_start);
+    // Align the physical end address of the LowMem zone to the nearest lower valid boundary.
+    memory.low_mem.end_addr = MIN_PAGE_ALIGN(boot_info->lowmem_phy_end);
+    // Calculate the size of the LowMem zone, ensuring it is aligned to the buddy system order.
+    memory.low_mem.size = MIN_ORDER_ALIGN(memory.low_mem.end_addr - memory.low_mem.start_addr);
+    // Recalculate the end address of the LowMem zone based on the adjusted size.
+    memory.low_mem.end_addr = memory.low_mem.start_addr + memory.low_mem.size;
+    // Compute the virtual addresses for LowMem, offset by the adjusted physical start address.
+    memory.low_mem.virt_start = tmp_normal_virt_start + (memory.low_mem.start_addr - tmp_normal_phy_start);
+    memory.low_mem.virt_end   = boot_info->lowmem_end;
 
-    pr_debug("Initializing zones...\n");
+    // Align the physical start address of the HighMem zone to the nearest valid boundary.
+    memory.high_mem.start_addr = MAX_PAGE_ALIGN((uint32_t)boot_info->highmem_phy_start);
+    // Align the physical end address of the HighMem zone to the nearest lower valid boundary.
+    memory.high_mem.end_addr = MIN_PAGE_ALIGN((uint32_t)boot_info->highmem_phy_end);
+    // Calculate the size of the HighMem zone, ensuring it is aligned to the buddy system order.
+    memory.high_mem.size = MIN_ORDER_ALIGN(memory.high_mem.end_addr - memory.high_mem.start_addr);
+    // Recalculate the aligned physical end address of the HighMem zone based on the adjusted size.
+    memory.high_mem.end_addr = memory.high_mem.start_addr + memory.high_mem.size;
+    // Compute the virtual addresses for the HighMem zone.
+    memory.high_mem.virt_start = memory.low_mem.virt_end;
+    memory.high_mem.virt_end   = memory.high_mem.virt_start + memory.high_mem.size;
 
-    //==== Initialize ZONE_NORMAL ==========================================
-    // ZONE_NORMAL   [ memory_start - mem_size / 4 ]
-    normal_start_addr = MAX_PAGE_ALIGN(lowmem_phy_start);
-    normal_end_addr   = MIN_PAGE_ALIGN(boot_info->lowmem_phy_end);
-    // Move the stop address so that the size is a multiple of max buddysystem
-    // order.
-    normal_size      = MIN_ORDER_ALIGN(normal_end_addr - normal_start_addr);
-    normal_end_addr  = normal_start_addr + normal_size;
-    lowmem_virt_base = lowmem_virt_start + (normal_start_addr - lowmem_phy_start);
-    lowmem_page_base = normal_start_addr / PAGE_SIZE;
-    //==== Initialize ZONE_HIGHMEM ==========================================
-    // ZONE_HIGHMEM  [ mem_size/4 - mem_size ]
-    high_start_addr = MAX_PAGE_ALIGN((uint32_t)boot_info->highmem_phy_start);
-    high_end_addr   = MIN_PAGE_ALIGN(boot_info->highmem_phy_end);
-    // Move the stop address so that the size is a multiple of max buddysystem
-    // order.
-    high_size     = MIN_ORDER_ALIGN(high_end_addr - high_start_addr);
-    high_end_addr = high_start_addr + high_size;
-    //=======================================================================
+    // Calculate the minimum page index (start of LowMem).
+    memory.page_index_min = memory.low_mem.start_addr / PAGE_SIZE;
+    // Calculate the maximum page index (end of HighMem).
+    memory.page_index_max = (memory.high_mem.end_addr / PAGE_SIZE) - 1;
 
-    zone_init("Normal", ZONE_NORMAL, normal_start_addr, normal_end_addr);
-    zone_init("HighMem", ZONE_HIGHMEM, high_start_addr, high_end_addr);
+    zone_init("Normal", ZONE_NORMAL, memory.low_mem.start_addr, memory.low_mem.end_addr);
 
-    pr_debug("Memory addresses:\n");
-    pr_debug("    LowMem  (phy): 0x%p to 0x%p\n", boot_info->lowmem_phy_start, boot_info->lowmem_phy_end);
-    pr_debug("    HighMem (phy): 0x%p to 0x%p\n", boot_info->highmem_phy_start, boot_info->highmem_phy_end);
-    pr_debug("    LowMem  (vrt): 0x%p to 0x%p\n", boot_info->lowmem_start, boot_info->lowmem_end);
-    pr_debug("Memory map  size      : %s\n", to_human_size(sizeof(page_t) * mem_map_num));
-    pr_debug("Memory size           : %s\n", to_human_size(mem_size));
-    pr_debug("Page size             : %s\n", to_human_size(PAGE_SIZE));
-    pr_debug("Number of page frames : %u\n", mem_map_num);
-    for (unsigned i = 0; i < __MAX_NR_ZONES; ++i) {
-        zone_t *zone = &contig_page_data->node_zones[i];
-        pr_debug("Zone %9s, first page: 0x%p, last page: 0x%p, # pages: %6d\n",
-                 zone->name,
-                 zone->zone_mem_map,
-                 zone->zone_mem_map + zone->size,
-                 zone->size);
-    }
+    zone_init("HighMem", ZONE_HIGHMEM, memory.high_mem.start_addr, memory.high_mem.end_addr);
 
-    pmm_check();
+    __print_memory_info(LOGLEVEL_NOTICE, &memory);
 
-    return 1;
+    return pmm_check();
 }
 
 page_t *alloc_pages(gfp_t gfp_mask, uint32_t order)
@@ -701,7 +745,7 @@ int free_pages(page_t *page)
     pr_warning("BS-F: (page: %p order: %d)\n", page, order);
 #endif
 
-    return 0; // Return success.
+    return 0;
 }
 
 uint32_t alloc_pages_lowmem(gfp_t gfp_mask, uint32_t order)
@@ -743,21 +787,27 @@ uint32_t alloc_pages_lowmem(gfp_t gfp_mask, uint32_t order)
     return block_frame_adr;
 }
 
-int free_pages_lowmem(uint32_t addr)
+int free_pages_lowmem(uint32_t vaddr)
 {
+    // Ensure it is a valid virtual address.
+    if (!is_valid_virtual_address(vaddr)) {
+        pr_crit("The provided address 0x%p is not a valid virtual address.\n", vaddr);
+        return -1;
+    }
+
     // Get the page corresponding to the given low memory address.
-    page_t *page = get_page_from_virtual_address(addr);
+    page_t *page = get_page_from_virtual_address(vaddr);
 
     // Ensure the page retrieval was successful.
     if (!page) {
-        pr_emerg("Failed to retrieve page from address: 0x%x. Page is over memory size.\n", addr);
-        return -1; // Return -1 to indicate failure.
+        pr_emerg("Failed to retrieve page from address: 0x%p. Page is over memory size.\n", vaddr);
+        return -1;
     }
 
     // Free the pages starting from the given page.
     free_pages(page);
 
-    return 0; // Return success.
+    return 0;
 }
 
 unsigned long get_zone_total_space(gfp_t gfp_mask)
