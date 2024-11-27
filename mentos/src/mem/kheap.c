@@ -4,10 +4,10 @@
 /// See LICENSE.md for details.
 
 // Setup the logging for this file (do this before any other include).
-#include "sys/kernel_levels.h"         // Include kernel log levels.
-#define __DEBUG_HEADER__ "[KHEAP ]"    ///< Change header.
-#define __DEBUG_LEVEL__  LOGLEVEL_INFO ///< Set log level.
-#include "io/debug.h"                  // Include debugging functions.
+#include "sys/kernel_levels.h"           // Include kernel log levels.
+#define __DEBUG_HEADER__ "[KHEAP ]"      ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
+#include "io/debug.h"                    // Include debugging functions.
 
 #include "assert.h"
 #include "kernel.h"
@@ -128,49 +128,47 @@ static inline const char *__block_to_string(block_t *block)
 
 /// @brief Dumpts debug information about the heap.
 /// @param header the heap header.
-static inline void __blkmngr_dump(heap_header_t *header)
+static inline void __blkmngr_dump(int log_level, heap_header_t *header)
 {
-#if __DEBUG_LEVEL__ == LOGLEVEL_DEBUG
     assert(header && "Received a NULL heap header.");
-    pr_debug("\n");
+    pr_log(log_level, "\n");
     // Get the current process.
     task_struct *task = scheduler_get_current_process();
     assert(task && "There is no current task!\n");
     block_t *block;
-    pr_debug("[%s] LIST (0x%p):\n", task->name, &header->list);
+    pr_log(log_level, "[%s] LIST (0x%p):\n", task->name, &header->list);
     list_for_each_decl(it, &header->list)
     {
         block = list_entry(it, block_t, list);
-        pr_debug("[%s]     %s{", task->name, __block_to_string(block));
+        pr_log(log_level, "[%s]     %s{", task->name, __block_to_string(block));
         if (it->prev != &header->list)
-            pr_debug("0x%p", list_entry(it->prev, block_t, list));
+            pr_log(log_level, "0x%p", list_entry(it->prev, block_t, list));
         else
-            pr_debug("   HEAD   ");
-        pr_debug(", ");
+            pr_log(log_level, "   HEAD   ");
+        pr_log(log_level, ", ");
         if (it->next != &header->list)
-            pr_debug("0x%p", list_entry(it->next, block_t, list));
+            pr_log(log_level, "0x%p", list_entry(it->next, block_t, list));
         else
-            pr_debug("   HEAD   ");
-        pr_debug("}\n");
+            pr_log(log_level, "   HEAD   ");
+        pr_log(log_level, "}\n");
     }
-    pr_debug("[%s] FREE (0x%p):\n", task->name, &header->free);
+    pr_log(log_level, "[%s] FREE (0x%p):\n", task->name, &header->free);
     list_for_each_decl(it, &header->free)
     {
         block = list_entry(it, block_t, free);
-        pr_debug("[%s]     %s{", task->name, __block_to_string(block));
+        pr_log(log_level, "[%s]     %s{", task->name, __block_to_string(block));
         if (it->prev != &header->free)
-            pr_debug("0x%p", list_entry(it->prev, block_t, free));
+            pr_log(log_level, "0x%p", list_entry(it->prev, block_t, free));
         else
-            pr_debug("   HEAD   ");
-        pr_debug(", ");
+            pr_log(log_level, "   HEAD   ");
+        pr_log(log_level, ", ");
         if (it->next != &header->free)
-            pr_debug("0x%p", list_entry(it->next, block_t, free));
+            pr_log(log_level, "0x%p", list_entry(it->next, block_t, free));
         else
-            pr_debug("   HEAD   ");
-        pr_debug("}\n");
+            pr_log(log_level, "   HEAD   ");
+        pr_log(log_level, "}\n");
     }
-    pr_debug("\n");
-#endif
+    pr_log(log_level, "\n");
 }
 
 /// @brief Find the best fitting block in the memory pool.
@@ -551,7 +549,7 @@ static void *__do_malloc(vm_area_struct_t *heap, size_t size)
     block->is_free = 0;
 
     // Optionally dump the current state of the heap for debugging.
-    __blkmngr_dump(header);
+    __blkmngr_dump(LOGLEVEL_DEBUG, header);
 
     // Return a pointer to the memory area, skipping the block header.
     return (void *)((char *)block + OVERHEAD);
@@ -619,7 +617,7 @@ static int __do_free(vm_area_struct_t *heap, void *ptr)
     }
 
     // Dump the current state of the heap for debugging purposes.
-    __blkmngr_dump(header);
+    __blkmngr_dump(LOGLEVEL_DEBUG, header);
 
     return 0; // Return success.
 }
@@ -704,7 +702,7 @@ void *sys_brk(void *addr)
         block->is_free = 1;
 
         // Dump the state of the memory manager for debugging.
-        __blkmngr_dump(header);
+        __blkmngr_dump(LOGLEVEL_DEBUG, header);
     }
 
     // Variable to hold the return pointer.
