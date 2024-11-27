@@ -258,17 +258,15 @@ void boot_main(uint32_t magic, multiboot_info_t *header, uint32_t esp)
     // size of the kernel (virt_high - virt_low).
     boot_info.kernel_phy_end = boot_info.kernel_phy_start + boot_info.kernel_size;
 
-    boot_info.lowmem_phy_start = __align_rup(boot_info.kernel_phy_end, PAGE_SIZE);
-    boot_info.lowmem_phy_end   = 896 * 1024 * 1024; // 896 MB of low memory max
-
-    uint32_t lowmem_size = boot_info.lowmem_phy_end - boot_info.lowmem_phy_start;
-
-    boot_info.lowmem_start = __align_rup(boot_info.kernel_end, PAGE_SIZE);
-    boot_info.lowmem_end   = boot_info.lowmem_start + lowmem_size;
+    boot_info.lowmem_phy_start  = __align_rup(boot_info.kernel_phy_end, PAGE_SIZE);
+    boot_info.lowmem_phy_end    = 896 * 1024 * 1024; // 896 MB of low memory max
+    boot_info.lowmem_size       = boot_info.lowmem_phy_end - boot_info.lowmem_phy_start;
+    boot_info.lowmem_virt_start = __align_rup(boot_info.kernel_end, PAGE_SIZE);
+    boot_info.lowmem_virt_end   = boot_info.lowmem_virt_start + boot_info.lowmem_size;
 
     boot_info.highmem_phy_start = boot_info.lowmem_phy_end;
     boot_info.highmem_phy_end   = header->mem_upper * 1024;
-    boot_info.stack_end         = boot_info.lowmem_end;
+    boot_info.stack_end         = boot_info.lowmem_virt_end;
 
     // Setup the page directory and page tables for the boot.
     __debug_puts("[bootloader] Setting up paging...\n");
@@ -283,9 +281,9 @@ void boot_main(uint32_t magic, multiboot_info_t *header, uint32_t esp)
     paging_enable();
 
     // Reserve space for the kernel stack at the end of lowmem.
-    boot_info.stack_base     = boot_info.lowmem_end;
-    boot_info.lowmem_phy_end = boot_info.lowmem_phy_end - KERNEL_STACK_SIZE;
-    boot_info.lowmem_end     = boot_info.lowmem_end - KERNEL_STACK_SIZE;
+    boot_info.stack_base      = boot_info.lowmem_virt_end;
+    boot_info.lowmem_phy_end  = boot_info.lowmem_phy_end - KERNEL_STACK_SIZE;
+    boot_info.lowmem_virt_end = boot_info.lowmem_virt_end - KERNEL_STACK_SIZE;
 
     __debug_puts("[bootloader] Relocating kernel image...\n");
     __relocate_kernel_image(elf_hdr);

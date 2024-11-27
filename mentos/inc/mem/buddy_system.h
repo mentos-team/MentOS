@@ -95,7 +95,8 @@ void bb_free_page_cached(bb_instance_t *instance, bb_page_t *page);
 ///                      bb_page_t struct.
 /// @param pages_stride  The (padded) size of the whole page structure
 /// @param pages_count   The number of pages in this region
-void buddy_system_init(
+/// @return 1 on success, 0 on failure.
+int buddy_system_init(
     bb_instance_t *instance,
     const char *name,
     void *pages_start,
@@ -106,7 +107,7 @@ void buddy_system_init(
 /// @brief Dumps the buddy system state into a static string.
 /// @param instance A buddy system instance.
 /// @return A pointer to a static string containing the formatted output.
-const char* buddy_system_to_string(const bb_instance_t *instance);
+const char *buddy_system_to_string(const bb_instance_t *instance);
 
 /// @brief Returns the total space for the given instance.
 /// @param instance A buddy system instance.

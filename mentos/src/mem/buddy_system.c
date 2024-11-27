@@ -224,7 +224,7 @@ block_found:
     __bb_clear_flag(page, FREE_PAGE);
 
 #if 0
-    pr_info("Page successfully allocated (page: 0x%p).\n", page);
+    pr_notice("Page successfully allocated (page: 0x%p).\n", page);
 #endif
     return page;
 }
@@ -345,17 +345,35 @@ void bb_free_pages(bb_instance_t *instance, bb_page_t *page)
     instance->free_area[order].nr_free++;
 
 #if 0
-    pr_info("Page successfully freed (index: %lu, order: %u).\n", page_idx, order);
+    pr_notice("Page successfully freed (index: %lu, order: %u).\n", page_idx, order);
 #endif
 }
 
-void buddy_system_init(bb_instance_t *instance,
-                       const char *name,
-                       void *pages_start,
-                       uint32_t bbpage_offset,
-                       uint32_t pages_stride,
-                       uint32_t pages_count)
+int buddy_system_init(bb_instance_t *instance,
+                      const char *name,
+                      void *pages_start,
+                      uint32_t bbpage_offset,
+                      uint32_t pages_stride,
+                      uint32_t pages_count)
 {
+    // Validate input parameters.
+    if (!instance) {
+        pr_crit("Buddy system initialization failed: instance is NULL.\n");
+        return 0;
+    }
+    if (!pages_start) {
+        pr_crit("Buddy system initialization failed: pages_start is NULL.\n");
+        return 0;
+    }
+    if (!name) {
+        pr_crit("Buddy system initialization failed: name is NULL.\n");
+        return 0;
+    }
+    if (pages_count == 0) {
+        pr_crit("Buddy system initialization failed: pages_count is zero.\n");
+        return 0;
+    }
+
     // Compute the base base page of the buddysystem instance.
     instance->base_page = ((bb_page_t *)(((uint32_t)pages_start) + bbpage_offset));
     // Save all needed page info.
@@ -410,8 +428,13 @@ void buddy_system_init(bb_instance_t *instance,
         // Move to the next page.
         page = __get_page_from_base(instance, page, block_size);
     }
-    // Check that the page we have reached with the iteration is the last page.
-    assert(page == last_page && "Memory size is not aligned to MAX_ORDER size!");
+
+    // Validate alignment of memory to MAX_ORDER size.
+    if (page != last_page) {
+        pr_crit("Memory size is not aligned to MAX_ORDER size! Remaining memory is not accounted for.\n");
+        return 0;
+    }
+    return 1;
 }
 
 const char *buddy_system_to_string(const bb_instance_t *instance)
