@@ -127,6 +127,7 @@ static inline const char *__block_to_string(block_t *block)
 }
 
 /// @brief Dumpts debug information about the heap.
+/// @param log_level Logging level to use for the output.
 /// @param header the heap header.
 static inline void __blkmngr_dump(int log_level, heap_header_t *header)
 {

@@ -9,7 +9,7 @@
 #include "process/process.h"
 #include "stddef.h"
 
-// Define the maximum number of processes your OS will support.
+/// @brief Define the maximum number of processes your OS will support.
 #define MAX_PROCESSES 256
 
 /// @brief Structure that contains information about live processes.
@@ -38,7 +38,7 @@ typedef struct sched_param_t {
     bool_t is_periodic;
 } sched_param_t;
 
-// Global reference to the init process.
+/// @brief Global reference to the init process.
 extern task_struct *init_process;
 
 /// @brief Initialize the scheduler.

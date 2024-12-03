@@ -213,63 +213,6 @@ void scheduler_enter_user_jmp(uintptr_t location, uintptr_t stack)
     enter_userspace(location, stack);
 }
 
-/// @brief Awakens a sleeping process.
-/// @param process The process that should be awakened
-/// @param mode The type of wait (TASK_INTERRUPTIBLE or TASK_UNINTERRUPTIBLE).
-/// @param sync Specifies if the wakeup should be synchronous.
-/// @return 1 on success, 0 on failure.
-static inline int try_to_wake_up(task_struct *process, unsigned mode, int sync)
-{
-    // Only tasks in the state TASK_UNINTERRUPTIBLE can be woke up
-    if (process->state == TASK_UNINTERRUPTIBLE || process->state == TASK_STOPPED) {
-        // TODO(enrico): Recalc task priority
-        process->state = TASK_RUNNING;
-        return 1;
-    }
-    return 0;
-}
-
-int default_wake_function(wait_queue_entry_t *wait, unsigned mode, int sync)
-{
-    task_struct *p = wait->task;
-    return try_to_wake_up(p, mode, sync);
-}
-
-wait_queue_entry_t *sleep_on(wait_queue_head_t *wq)
-{
-    // Validate input parameters.
-    if (!wq) {
-        pr_err("sleep_on: Wait queue head is NULL.\n");
-        return NULL;
-    }
-
-    // Retrieve the current process/task.
-    task_struct *sleeping_task = scheduler_get_current_process();
-    if (!sleeping_task) {
-        pr_err("sleep_on: Failed to retrieve the current process.\n");
-        return NULL;
-    }
-
-    // Set the task state to uninterruptible to indicate it is sleeping.
-    sleeping_task->state = TASK_UNINTERRUPTIBLE;
-
-    // Allocate memory for a new wait queue entry.
-    wait_queue_entry_t *wait_queue_entry = wait_queue_entry_alloc();
-    if (!wait_queue_entry) {
-        pr_err("sleep_on: Failed to allocate memory for wait queue entry.\n");
-        return NULL;
-    }
-
-    // Initialize the wait queue entry with the current task.
-    wait_queue_entry_init(wait_queue_entry, sleeping_task);
-
-    // Add the wait queue entry to the specified wait queue.
-    add_wait_queue(wq, wait_queue_entry);
-    pr_debug("sleep_on: Added process %d to the wait queue.\n", sleeping_task->pid);
-
-    return wait_queue_entry;
-}
-
 int is_orphaned_pgrp(pid_t pgid)
 {
     pid_t sid = 0;

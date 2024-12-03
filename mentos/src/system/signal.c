@@ -9,15 +9,16 @@
 #define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
 #include "io/debug.h"                    // Include debugging functions.
 
-#include "assert.h"
+#include "system/signal.h"
+
 #include "klib/irqflags.h"
 #include "klib/stack_helper.h"
 #include "process/process.h"
 #include "process/scheduler.h"
 #include "process/wait.h"
 #include "string.h"
+#include "assert.h"
 #include "errno.h"
-#include "system/signal.h"
 
 /// @brief Extracts the exit status.
 #define GET_EXIT_STATUS(status) (((status) & 0x00FF) << 8)
@@ -26,7 +27,7 @@
 static kmem_cache_t *sigqueue_cachep;
 
 /// Contains all stopped process waiting for a continue signal
-static struct wait_queue_head_t stopped_queue;
+static wait_queue_head_t stopped_queue;
 
 /// @brief The list of signal names.
 static const char *sys_siglist[] = {
@@ -641,18 +642,17 @@ void handle_stop_signal(int sig, siginfo_t *info, struct task_struct *p)
 
         list_for_each_safe_decl(it, store, &stopped_queue.task_list)
         {
-            struct wait_queue_entry_t *wait_queue_entry = list_entry(it, struct wait_queue_entry_t, task_list);
+            wait_queue_entry_t *entry = list_entry(it, wait_queue_entry_t, task_list);
 
-            // Select only the waiting entry for the timer task pid
-            task_struct *task = wait_queue_entry->task;
+            // Select only the waiting entry for the timer task pid.
+            task_struct *task = entry->task;
             if (task->pid == p->pid) {
                 // Executed entry's wakeup test function
-                if (wait_queue_entry->func(wait_queue_entry, 0, 0)) {
+                if (entry->func(entry, 0, 0)) {
                     // Removes entry from list and memory
-                    remove_wait_queue(&stopped_queue, wait_queue_entry);
+                    remove_wait_queue(&stopped_queue, entry);
                     // Free its memory.
-                    wait_queue_entry_dealloc(wait_queue_entry);
-
+                    wait_queue_entry_dealloc(entry);
                     pr_debug("Process (pid: %d) restored from stop\n", p->pid);
                 }
                 break;
