@@ -57,11 +57,22 @@ int default_wake_function(wait_queue_entry_t *entry, unsigned mode, int sync)
         pr_err("Variable entry is NULL.\n");
         return 0;
     }
-    // Only tasks in the state TASK_UNINTERRUPTIBLE can be woke up.
-    if ((entry->task->state == TASK_UNINTERRUPTIBLE) || (entry->task->state == TASK_STOPPED)) {
-        entry->task->state = TASK_RUNNING;
+    if (!entry->task) {
+        pr_err("Variable entry->task is NULL.\n");
+        return 0;
+    }
+    // Only wake up tasks in TASK_INTERRUPTIBLE or TASK_UNINTERRUPTIBLE states.
+    if ((entry->task->state == TASK_INTERRUPTIBLE) || (entry->task->state == TASK_UNINTERRUPTIBLE)) {
+        // Set the task state to the specified mode.
+        entry->task->state = mode;
+
+        // Optionally handle sync-specific operations here if needed.
+        // For now, sync is unused.
+
         return 1;
     }
+
+    // Task is not in a wakeable state.
     return 0;
 }
 
@@ -117,9 +128,11 @@ void wait_queue_entry_init(wait_queue_entry_t *entry, struct task_struct *task)
         pr_err("Variable head is NULL.\n");
         return;
     }
-    entry->flags = 0;
-    entry->task  = task;
-    entry->func  = default_wake_function;
+    entry->flags   = 0;
+    entry->task    = task;
+    entry->func    = default_wake_function;
+    entry->private = NULL;
+    list_head_init(&entry->task_list);
 }
 
 void add_wait_queue(wait_queue_head_t *head, wait_queue_entry_t *entry)
