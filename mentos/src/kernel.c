@@ -40,6 +40,7 @@
 #include "ipc/ipc.h"
 #include "system/syscall.h"
 #include "version.h"
+#include "resource_tracing.h"
 
 /// Describe start address of grub multiboot modules.
 char *module_start[MAX_MODULES];
@@ -120,6 +121,10 @@ int kmain(boot_info_t *boot_informations)
     initial_esp = boot_info.stack_base;
     // Dump the multiboot structure.
     dump_multiboot(boot_info.multiboot_header);
+
+    //==========================================================================
+    pr_notice("Initialize resource registry...\n");
+    resource_register_init();
 
     //==========================================================================
     pr_notice("Initialize the video...\n");

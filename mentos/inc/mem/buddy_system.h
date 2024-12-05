@@ -104,10 +104,12 @@ int buddy_system_init(
     uint32_t pages_stride,
     uint32_t pages_count);
 
-/// @brief Dumps the buddy system state into a static string.
-/// @param instance A buddy system instance.
-/// @return A pointer to a static string containing the formatted output.
-const char *buddy_system_to_string(const bb_instance_t *instance);
+/// @brief Formats the buddy system state into a provided buffer.
+/// @param instance A pointer to a buddy system instance. Must not be NULL.
+/// @param buffer A pointer to the buffer where the formatted string will be written.
+/// @param bufsize The size of the provided buffer, in bytes. Must be greater than 0.
+/// @return The number of characters written to the buffer, or a negative value if an error occurs.
+int buddy_system_to_string(const bb_instance_t *instance, char *buffer, size_t bufsize);
 
 /// @brief Returns the total space for the given instance.
 /// @param instance A buddy system instance.

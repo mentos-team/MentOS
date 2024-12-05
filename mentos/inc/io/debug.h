@@ -6,7 +6,7 @@
 #pragma once
 
 #include "sys/kernel_levels.h"
-#include "string.h"
+#include "os_root_path.h"
 
 #ifndef __DEBUG_LEVEL__
 /// Defines the debug level, by default we set it to notice.
@@ -54,17 +54,6 @@ void dbg_puts(const char *s);
 /// @param format the format to used, see printf.
 /// @param ... the list of arguments.
 void dbg_printf(const char *file, const char *fun, int line, char *header, short log_level, const char *format, ...);
-
-/// @brief Extracts the relative path of the current file from the project root.
-/// @details This macro calculates the relative path of the file (`__FILE__`) by
-/// skipping the prefix defined by `MENTOS_ROOT`. It is used to simplify file
-/// path logging by removing the absolute path up to the project root.
-/// If
-///     MENTOS_ROOT = "/path/to/mentos" and
-///     __FILE__    = "/path/to/mentos/src/kernel/main.c", the result will be
-///                                   "src/kernel/main.c".
-#define __RELATIVE_PATH__ \
-    (strncmp(__FILE__, MENTOS_ROOT, sizeof(MENTOS_ROOT) - 1) == 0 ? (&__FILE__[sizeof(MENTOS_ROOT)]) : __FILE__)
 
 /// General logging macro that logs a message at the specified log level.
 /// Only logs messages if the specified log level is less than or equal to __DEBUG_LEVEL__.

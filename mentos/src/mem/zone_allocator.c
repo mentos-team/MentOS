@@ -93,13 +93,15 @@ static inline void __print_zone(int log_level, const zone_t *zone)
         pr_crit("Invalid zone pointer\n");
         return;
     }
+    char buddy_status[512] = { 0 };
+    buddy_system_to_string(&zone->buddy_system, buddy_status, sizeof(buddy_status));
     pr_log(log_level, "Zone: %s\n", zone->name);
     pr_log(log_level, "    Number of Pages      : %lu\n", zone->num_pages);
     pr_log(log_level, "    Number of Free Pages : %lu\n", zone->free_pages);
     pr_log(log_level, "    Startint PFN         : %u\n", zone->zone_start_pfn);
     pr_log(log_level, "    Zone Size            : %s\n", to_human_size(zone->total_size));
     pr_log(log_level, "    Zone Memory Map      : 0x%p\n", (uintptr_t)zone->zone_mem_map);
-    pr_log(log_level, "    Buddy System Status  :\n        %s\n", buddy_system_to_string(&zone->buddy_system));
+    pr_log(log_level, "    Buddy System Status  : %s\n", buddy_status);
 }
 
 uint32_t get_virtual_address_from_page(page_t *page)
@@ -294,7 +296,9 @@ static inline int is_memory_clean(gfp_t gfp_mask)
         pr_crit("Memory zone check failed for zone '%s'.\n", zone->name);
         pr_crit("Expected free space %lu bytes, but found %lu bytes.\n", zone->total_size, free_space);
         pr_crit("Buddy system state for zone '%s':\n", zone->name);
-        pr_crit("    %s\n", buddy_system_to_string(&zone->buddy_system));
+        char buddy_status[512] = { 0 };
+        buddy_system_to_string(&zone->buddy_system, buddy_status, sizeof(buddy_status));
+        pr_crit("    %s\n", buddy_status);
         return 0;
     }
     return 1;
@@ -324,9 +328,12 @@ static int pmm_check(void)
         return 0;
     }
 
+    char buddy_status[512] = { 0 };
     pr_notice("Zones status before testing:\n");
-    pr_notice("    %s\n", buddy_system_to_string(&zone_normal->buddy_system));
-    pr_notice("    %s\n", buddy_system_to_string(&zone_highmem->buddy_system));
+    buddy_system_to_string(&zone_normal->buddy_system, buddy_status, sizeof(buddy_status));
+    pr_notice("    %s\n", buddy_status);
+    buddy_system_to_string(&zone_highmem->buddy_system, buddy_status, sizeof(buddy_status));
+    pr_notice("    %s\n", buddy_status);
 
     pr_notice("\tStep 1: Testing allocation in kernel-space...\n");
     {
@@ -677,7 +684,7 @@ int pmmngr_init(boot_info_t *boot_info)
     return pmm_check();
 }
 
-page_t *alloc_pages(gfp_t gfp_mask, uint32_t order)
+page_t *pr_alloc_pages(const char *file, const char *func, int line, gfp_t gfp_mask, uint32_t order)
 {
     // Calculate the block size based on the order.
     uint32_t block_size = 1UL << order;
@@ -717,15 +724,14 @@ page_t *alloc_pages(gfp_t gfp_mask, uint32_t order)
     // Decrement the number of free pages in the zone.
     zone->free_pages -= block_size;
 
-#if 0
-    pr_warning("BS-A: (page: %p order: %d)\n", page, order);
+#ifdef ENABLE_PAGE_TRACE
+    pr_notice("BS-A: (page: %p order: %d)\n", page, order);
 #endif
-
     // Return the pointer to the first page in the allocated block.
     return page;
 }
 
-int free_pages(page_t *page)
+int pr_free_pages(const char *file, const char *func, int line, page_t *page)
 {
     // Get the zone that contains the given page.
     zone_t *zone = get_zone_from_page(page);
@@ -757,8 +763,8 @@ int free_pages(page_t *page)
     // Increment the number of free pages in the zone.
     zone->free_pages += block_size;
 
-#if 0
-    pr_warning("BS-F: (page: %p order: %d)\n", page, order);
+#ifdef ENABLE_PAGE_TRACE
+    pr_notice("BS-F: (page: %p order: %d)\n", page, order);
 #endif
 
     return 0;
@@ -869,4 +875,18 @@ unsigned long get_zone_cached_space(gfp_t gfp_mask)
 
     // Return the cached space of the zone.
     return buddy_system_get_cached_space(&zone->buddy_system);
+}
+
+int get_zone_buddy_system_status(gfp_t gfp_mask, char *buffer, size_t bufsize)
+{
+    // Get the zone corresponding to the given GFP mask.
+    zone_t *zone = get_zone_from_flags(gfp_mask);
+
+    // Ensure the zone retrieval was successful.
+    if (!zone) {
+        pr_emerg("Cannot retrieve the correct zone for GFP mask: 0x%x.\n", gfp_mask);
+        return 0; // Return 0 to indicate failure.
+    }
+
+    return buddy_system_to_string(&zone->buddy_system, buffer, bufsize);
 }

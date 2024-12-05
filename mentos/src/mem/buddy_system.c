@@ -437,38 +437,39 @@ int buddy_system_init(bb_instance_t *instance,
     return 1;
 }
 
-const char *buddy_system_to_string(const bb_instance_t *instance)
+int buddy_system_to_string(const bb_instance_t *instance, char *buffer, size_t bufsize)
 {
-    // Static buffer for the formatted string.
-    static char buffer[1024];
     // Validate the input.
-    if (!instance) {
-        snprintf(buffer, sizeof(buffer), "Invalid buddy system instance.\n");
-        return buffer;
+    if (!instance || !buffer || bufsize == 0) {
+        return snprintf(buffer, bufsize, "Invalid buddy system instance or buffer.\n");
     }
+
+    int offset = 0;
+
     // Add the zone name.
-    int offset = snprintf(buffer, sizeof(buffer), "    %-12s ", instance->name);
-    if (offset < 0 || offset >= sizeof(buffer)) {
-        snprintf(buffer, sizeof(buffer), "String formatting error.\n");
-        return buffer;
+    offset = snprintf(buffer, bufsize, "%-8s ", instance->name);
+    if (offset < 0 || (size_t)offset >= bufsize) {
+        return snprintf(buffer, bufsize, "String formatting error.\n");
     }
+
     // Add the free list sizes for each order.
     for (int order = 0; order < MAX_BUDDYSYSTEM_GFP_ORDER; order++) {
         const bb_free_area_t *area = &instance->free_area[order];
-        offset += snprintf(buffer + offset, sizeof(buffer) - offset, "%2d ", area->nr_free);
-        if (offset < 0 || offset >= sizeof(buffer)) {
-            snprintf(buffer, sizeof(buffer), "String formatting error.\n");
-            return buffer;
+        int written                = snprintf(buffer + offset, bufsize - offset, "%2d ", area->nr_free);
+        if (written < 0 || (size_t)(offset + written) >= bufsize) {
+            return snprintf(buffer, bufsize, "String formatting error.\n");
         }
+        offset += written;
     }
+
     // Add the total free space in human-readable format.
-    offset += snprintf(buffer + offset, sizeof(buffer) - offset, ": %s",
-                       to_human_size(buddy_system_get_free_space(instance)));
-    if (offset < 0 || offset >= sizeof(buffer)) {
-        snprintf(buffer, sizeof(buffer), "String formatting error.\n");
-        return buffer;
+    int written = snprintf(buffer + offset, bufsize - offset, ": %s",
+                           to_human_size(buddy_system_get_free_space(instance)));
+    if (written < 0 || (size_t)(offset + written) >= bufsize) {
+        return snprintf(buffer, bufsize, "String formatting error.\n");
     }
-    return buffer;
+
+    return offset + written;
 }
 
 unsigned long buddy_system_get_total_space(const bb_instance_t *instance)

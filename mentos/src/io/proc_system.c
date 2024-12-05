@@ -101,7 +101,7 @@ static vfs_file_operations_t procs_fs_operations = {
 int procs_module_init(void)
 {
     proc_dir_entry_t *system_entry;
-    char* entry_names[] = {"uptime", "version", "mounts", "cpuinfo", "meminfo", "stat"};
+    char *entry_names[] = { "uptime", "version", "mounts", "cpuinfo", "meminfo", "stat" };
     for (int i = 0; i < count_of(entry_names); i++) {
         char *entry_name = entry_names[i];
         if ((system_entry = proc_create_entry(entry_name, NULL)) == NULL) {
@@ -169,22 +169,33 @@ static ssize_t procs_do_cpuinfo(char *buffer, size_t bufsize)
 static ssize_t procs_do_meminfo(char *buffer, size_t bufsize)
 {
     double total_space = get_zone_total_space(GFP_KERNEL) +
-                         get_zone_total_space(GFP_USER),
+                         get_zone_total_space(GFP_HIGHUSER),
            free_space = get_zone_free_space(GFP_KERNEL) +
-                        get_zone_free_space(GFP_USER),
+                        get_zone_free_space(GFP_HIGHUSER),
            cached_space = get_zone_cached_space(GFP_KERNEL) +
-                          get_zone_cached_space(GFP_USER),
+                          get_zone_cached_space(GFP_HIGHUSER),
            used_space = total_space - free_space;
-    return sprintf(
+    // Buddy system status strings.
+    char kernel_buddy_status[512] = { 0 };
+    char user_buddy_status[512]   = { 0 };
+    get_zone_buddy_system_status(GFP_KERNEL, kernel_buddy_status, sizeof(kernel_buddy_status));
+    get_zone_buddy_system_status(GFP_HIGHUSER, user_buddy_status, sizeof(user_buddy_status));
+    // Format and return the information for the buffer.
+    return snprintf(
         buffer,
-        "MemTotal : %12.2f Kb\n"
-        "MemFree  : %12.2f Kb\n"
-        "MemUsed  : %12.2f Kb\n"
-        "Cached   : %12.2f Kb\n",
+        bufsize,
+        "MemTotal       : %12.2f Kb\n"
+        "MemFree        : %12.2f Kb\n"
+        "MemUsed        : %12.2f Kb\n"
+        "Cached         : %12.2f Kb\n"
+        "Kernel Zone    : %s\n"
+        "User Zone      : %s\n",
         total_space / (double)K,
         free_space / (double)K,
         used_space / (double)K,
-        cached_space / (double)K);
+        cached_space / (double)K,
+        kernel_buddy_status,
+        user_buddy_status);
 }
 
 /// @brief Write the process statistics inside the buffer.
