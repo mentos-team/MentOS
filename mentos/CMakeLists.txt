@@ -16,11 +16,8 @@ option(ENABLE_ALLOC_TRACE "Enables memory allocation tracing." OFF)
 option(ENABLE_SCHEDULER_FEEDBACK "Enables scheduling feedback on terminal." OFF)
 
 # =============================================================================
-# SOURCES
-# =============================================================================
-
-# Define the list of files.
-set(KERNEL_SOURCES
+# Add the kernel library with its sources.
+add_library(${KERNEL_NAME}
     ${CMAKE_SOURCE_DIR}/mentos/src/kernel.c
     ${CMAKE_SOURCE_DIR}/mentos/src/multiboot.c
     ${CMAKE_SOURCE_DIR}/mentos/src/devices/pci.c
@@ -113,10 +110,6 @@ set(KERNEL_SOURCES
     ${CMAKE_SOURCE_DIR}/mentos/src/system/signal.c
     ${CMAKE_SOURCE_DIR}/mentos/src/system/syscall.c
 )
-
-# =============================================================================
-# Add kernel library.
-add_library(${KERNEL_NAME} ${KERNEL_SOURCES})
 
 # Add the includes.
 target_include_directories(
