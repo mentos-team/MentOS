@@ -57,8 +57,8 @@ int main(int argc, char **argv)
         if ((fd = open(directory, O_RDONLY | O_DIRECTORY, 0)) != -1) {
             dirent_t dent;
             while (getdents(fd, &dent, sizeof(dirent_t)) == sizeof(dirent_t)) {
-                strcpy(fullpath, directory);
-                strcat(fullpath, dent.d_name);
+                strncpy(fullpath, directory, PATH_MAX);
+                strncat(fullpath, dent.d_name, PATH_MAX);
                 if (dent.d_type == DT_REG) {
                     if (unlink(fullpath) == 0) {
                         if (lseek(fd, -1, SEEK_CUR) != -1) {

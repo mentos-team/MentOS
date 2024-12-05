@@ -9,15 +9,16 @@
 #define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
 #include "io/debug.h"                    // Include debugging functions.
 
-#include "assert.h"
+#include "system/signal.h"
+
 #include "klib/irqflags.h"
 #include "klib/stack_helper.h"
 #include "process/process.h"
 #include "process/scheduler.h"
 #include "process/wait.h"
 #include "string.h"
+#include "assert.h"
 #include "errno.h"
-#include "system/signal.h"
 
 /// @brief Extracts the exit status.
 #define GET_EXIT_STATUS(status) (((status) & 0x00FF) << 8)
@@ -26,7 +27,7 @@
 static kmem_cache_t *sigqueue_cachep;
 
 /// Contains all stopped process waiting for a continue signal
-static struct wait_queue_head_t stopped_queue;
+static wait_queue_head_t stopped_queue;
 
 /// @brief The list of signal names.
 static const char *sys_siglist[] = {
@@ -425,6 +426,32 @@ static void __rm_from_queue(sigset_t *mask, sigpending_t *q)
     }
 }
 
+int stop_wake_function(wait_queue_entry_t *entry, unsigned mode, int sync)
+{
+    // Validate the input.
+    if (!entry) {
+        pr_err("Variable entry is NULL.\n");
+        return 0;
+    }
+    if (!entry->task) {
+        pr_err("Variable entry->task is NULL.\n");
+        return 0;
+    }
+    // Only wake up tasks in TASK_STOPPED state.
+    if (entry->task->state == TASK_STOPPED) {
+        // Set the task state to the specified mode.
+        entry->task->state = mode;
+
+        // Optionally handle sync-specific operations here if needed.
+        // For now, sync is unused.
+
+        return 1;
+    }
+
+    // Task is not in a wakeable state.
+    return 0;
+}
+
 /// @brief We do not consider group stopping because for now we don't have thread groups.
 /// @param current the current process.
 /// @param f the stack frame.
@@ -439,10 +466,14 @@ static void __do_signal_stop(struct task_struct *current, struct pt_regs *f, int
             pr_warning("Failed to notify parent with signal: %d", signr);
         }
     }
+
     // The state is now TASK_UNINTERRUPTABLE
-    sleep_on(&stopped_queue);
-    current->state     = TASK_STOPPED;
-    current->exit_code = signr;
+    wait_queue_entry_t *entry = sleep_on(&stopped_queue);
+    entry->task->state        = TASK_STOPPED;
+    entry->task->exit_code    = signr;
+    entry->func               = stop_wake_function;
+
+    // Call the scheduler.
     scheduler_run(f);
 }
 
@@ -641,19 +672,19 @@ void handle_stop_signal(int sig, siginfo_t *info, struct task_struct *p)
 
         list_for_each_safe_decl(it, store, &stopped_queue.task_list)
         {
-            struct wait_queue_entry_t *wait_queue_entry = list_entry(it, struct wait_queue_entry_t, task_list);
+            wait_queue_entry_t *entry = list_entry(it, wait_queue_entry_t, task_list);
 
-            // Select only the waiting entry for the timer task pid
-            task_struct *task = wait_queue_entry->task;
-            if (task->pid == p->pid) {
+            // Select only the waiting entry for the timer task pid.
+            if (entry->task->pid == p->pid) {
                 // Executed entry's wakeup test function
-                if (wait_queue_entry->func(wait_queue_entry, 0, 0)) {
+                if (entry->func(entry, TASK_RUNNING, 0)) {
                     // Removes entry from list and memory
-                    remove_wait_queue(&stopped_queue, wait_queue_entry);
+                    remove_wait_queue(&stopped_queue, entry);
                     // Free its memory.
-                    wait_queue_entry_dealloc(wait_queue_entry);
-
-                    pr_debug("Process (pid: %d) restored from stop\n", p->pid);
+                    wait_queue_entry_dealloc(entry);
+                    pr_debug("Restored process (%d) from stop.\n", p->pid);
+                } else {
+                    pr_err("Failed to restore process (%d) from stop.\n", p->pid);
                 }
                 break;
             }

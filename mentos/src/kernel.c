@@ -419,19 +419,20 @@ int kmain(boot_info_t *boot_informations)
                bitmask_check(boot_info.multiboot_header->flags, MULTIBOOT_FLAG_CMDLINE) &&
                strcmp((char *)boot_info.multiboot_header->cmdline, "runtests") == 0;
 
-    task_struct *init_p;
     if (runtests) {
         pr_notice("Creating runtests process...\n");
         printf("Creating runtests process...");
-        init_p = process_create_init("/bin/runtests");
+        if (process_create_init("/bin/runtests")) {
+            print_fail();
+            return 1;
+        }
     } else {
         pr_notice("Creating init process...\n");
         printf("Creating init process...");
-        init_p = process_create_init("/bin/init");
-    }
-    if (!init_p) {
-        print_fail();
-        return 1;
+        if (process_create_init("/bin/init")) {
+            print_fail();
+            return 1;
+        }
     }
     print_ok();
 
@@ -456,13 +457,13 @@ int kmain(boot_info_t *boot_informations)
     // We have completed the booting procedure.
     pr_notice("Booting done, jumping into init process.\n");
     // Switch to the page directory of init.
-    paging_switch_directory_va(init_p->mm->pgd);
+    paging_switch_directory_va(init_process->mm->pgd);
     // Jump into init process.
     scheduler_enter_user_jmp(
         // Entry point.
-        init_p->thread.regs.eip,
+        init_process->thread.regs.eip,
         // Stack pointer.
-        init_p->thread.regs.useresp);
+        init_process->thread.regs.useresp);
     // Enable interrupt requests.
     sti();
     for (;;) {}

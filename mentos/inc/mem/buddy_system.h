@@ -1,4 +1,4 @@
-/// @file buddysystem.h
+/// @file buddy_system.h
 /// @brief Buddy System.
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
@@ -57,7 +57,7 @@ typedef struct bb_instance_t {
     /// Size of the current cache
     unsigned long free_pages_cache_size;
     /// Buddysystem instance size in number of pages.
-    unsigned long size;
+    unsigned long total_pages;
     /// Address of the first managed page
     bb_page_t *base_page;
     /// Size of the (padded) wrapper page structure
@@ -95,7 +95,8 @@ void bb_free_page_cached(bb_instance_t *instance, bb_page_t *page);
 ///                      bb_page_t struct.
 /// @param pages_stride  The (padded) size of the whole page structure
 /// @param pages_count   The number of pages in this region
-void buddy_system_init(
+/// @return 1 on success, 0 on failure.
+int buddy_system_init(
     bb_instance_t *instance,
     const char *name,
     void *pages_start,
@@ -103,21 +104,22 @@ void buddy_system_init(
     uint32_t pages_stride,
     uint32_t pages_count);
 
-/// @brief Print the size of free_list of each free_area.
+/// @brief Dumps the buddy system state into a static string.
 /// @param instance A buddy system instance.
-void buddy_system_dump(bb_instance_t *instance);
+/// @return A pointer to a static string containing the formatted output.
+const char *buddy_system_to_string(const bb_instance_t *instance);
 
 /// @brief Returns the total space for the given instance.
 /// @param instance A buddy system instance.
 /// @return The requested total sapce.
-unsigned long buddy_system_get_total_space(bb_instance_t *instance);
+unsigned long buddy_system_get_total_space(const bb_instance_t *instance);
 
 /// @brief Returns the free space for the given instance.
 /// @param instance A buddy system instance.
 /// @return The requested total sapce.
-unsigned long buddy_system_get_free_space(bb_instance_t *instance);
+unsigned long buddy_system_get_free_space(const bb_instance_t *instance);
 
 /// @brief Returns the cached space for the given instance.
 /// @param instance A buddy system instance.
 /// @return The requested total sapce.
-unsigned long buddy_system_get_cached_space(bb_instance_t *instance);
+unsigned long buddy_system_get_cached_space(const bb_instance_t *instance);

@@ -10,88 +10,196 @@
 #include "io/debug.h"                    // Include debugging functions.
 
 #include "process/wait.h"
+
+#include "process/scheduler.h"
 #include "mem/slab.h"
 #include "assert.h"
 #include "string.h"
 
 /// @brief Adds the entry to the wait queue.
 /// @param head the wait queue.
-/// @param wq the entry.
-static inline void __add_wait_queue(wait_queue_head_t *head, wait_queue_entry_t *wq)
+/// @param entry the entry.
+static inline void __add_wait_queue(wait_queue_head_t *head, wait_queue_entry_t *entry)
 {
-    list_head_insert_before(&wq->task_list, &head->task_list);
+    // Validate the input.
+    if (!head) {
+        pr_err("Variable head is NULL.\n");
+        return;
+    }
+    if (!entry) {
+        pr_err("Variable entry is NULL.\n");
+        return;
+    }
+    list_head_insert_before(&entry->task_list, &head->task_list);
 }
 
 /// @brief Removes the entry from the wait queue.
 /// @param head the wait queue.
-/// @param wq the entry.
-static inline void __remove_wait_queue(wait_queue_head_t *head, wait_queue_entry_t *wq)
+/// @param entry the entry.
+static inline void __remove_wait_queue(wait_queue_head_t *head, wait_queue_entry_t *entry)
 {
-    list_head_remove(&wq->task_list);
+    // Validate the input.
+    if (!head) {
+        pr_err("Variable head is NULL.\n");
+        return;
+    }
+    if (!entry) {
+        pr_err("Variable entry is NULL.\n");
+        return;
+    }
+    list_head_remove(&entry->task_list);
+}
+
+int default_wake_function(wait_queue_entry_t *entry, unsigned mode, int sync)
+{
+    // Validate the input.
+    if (!entry) {
+        pr_err("Variable entry is NULL.\n");
+        return 0;
+    }
+    if (!entry->task) {
+        pr_err("Variable entry->task is NULL.\n");
+        return 0;
+    }
+    // Only wake up tasks in TASK_INTERRUPTIBLE or TASK_UNINTERRUPTIBLE states.
+    if ((entry->task->state == TASK_INTERRUPTIBLE) || (entry->task->state == TASK_UNINTERRUPTIBLE)) {
+        // Set the task state to the specified mode.
+        entry->task->state = mode;
+
+        // Optionally handle sync-specific operations here if needed.
+        // For now, sync is unused.
+
+        return 1;
+    }
+
+    // Task is not in a wakeable state.
+    return 0;
 }
 
 void wait_queue_head_init(wait_queue_head_t *head)
 {
-    // Validate the queue pointer.
+    // Validate the input.
     if (!head) {
-        pr_err("init_wait_queue_head: head is NULL.\n");
+        pr_err("Variable head is NULL.\n");
         return;
     }
-
     // Initialize the spinlock for the wait queue.
     spinlock_init(&head->lock);
-
     // Initialize the task list as an empty list.
     list_head_init(&head->task_list);
-
-    pr_debug("wait_queue_head_init: Initialized wait queue head at %p.\n", head);
+    pr_debug("Initialized wait queue head at %p.\n", head);
 }
 
 wait_queue_entry_t *wait_queue_entry_alloc(void)
 {
     // Allocate the memory.
-    wait_queue_entry_t *wait_queue_entry = (wait_queue_entry_t *)kmalloc(sizeof(wait_queue_entry_t));
-    pr_debug("ALLOCATE wait_queue_entry_t 0x%p\n", wait_queue_entry);
+    wait_queue_entry_t *entry = (wait_queue_entry_t *)kmalloc(sizeof(wait_queue_entry_t));
+    pr_debug("ALLOCATE wait_queue_entry_t 0x%p\n", entry);
     // Check the allocated memory.
-    assert(wait_queue_entry && "Failed to allocate memory for a wait_queue_entry_t.");
+    assert(entry && "Failed to allocate memory for a wait_queue_entry_t.");
     // Clean the memory.
-    memset(wait_queue_entry, 0, sizeof(wait_queue_entry_t));
+    memset(entry, 0, sizeof(wait_queue_entry_t));
     // Initialize the element.
-    wait_queue_entry->flags   = 0;
-    wait_queue_entry->task    = NULL;
-    wait_queue_entry->func    = NULL;
-    wait_queue_entry->private = NULL;
-    list_head_init(&wait_queue_entry->task_list);
+    entry->flags   = 0;
+    entry->task    = NULL;
+    entry->func    = NULL;
+    entry->private = NULL;
+    list_head_init(&entry->task_list);
     // Return the element.
-    return wait_queue_entry;
+    return entry;
 }
 
-void wait_queue_entry_dealloc(wait_queue_entry_t *wait_queue_entry)
+void wait_queue_entry_dealloc(wait_queue_entry_t *entry)
 {
-    assert(wait_queue_entry && "Received a NULL pointer.");
-    pr_debug("FREE     wait_queue_entry_t 0x%p\n", wait_queue_entry);
+    assert(entry && "Received a NULL pointer.");
+    pr_debug("FREE     wait_queue_entry_t 0x%p\n", entry);
     // Deallocate the memory.
-    kfree(wait_queue_entry);
+    kfree(entry);
 }
 
-void wait_queue_entry_init(wait_queue_entry_t *wq, struct task_struct *task)
+void wait_queue_entry_init(wait_queue_entry_t *entry, struct task_struct *task)
 {
-    wq->flags = 0;
-    wq->task  = task;
-    wq->func  = default_wake_function;
+    // Validate the input.
+    if (!entry) {
+        pr_err("Variable entry is NULL.\n");
+        return;
+    }
+    if (!task) {
+        pr_err("Variable head is NULL.\n");
+        return;
+    }
+    entry->flags   = 0;
+    entry->task    = task;
+    entry->func    = default_wake_function;
+    entry->private = NULL;
+    list_head_init(&entry->task_list);
 }
 
-void add_wait_queue(wait_queue_head_t *head, wait_queue_entry_t *wq)
+void add_wait_queue(wait_queue_head_t *head, wait_queue_entry_t *entry)
 {
-    wq->flags &= ~WQ_FLAG_EXCLUSIVE;
+    // Validate the input.
+    if (!head) {
+        pr_err("Variable head is NULL.\n");
+        return;
+    }
+    if (!entry) {
+        pr_err("Variable entry is NULL.\n");
+        return;
+    }
+    entry->flags &= ~WQ_FLAG_EXCLUSIVE;
     spinlock_lock(&head->lock);
-    __add_wait_queue(head, wq);
+    __add_wait_queue(head, entry);
     spinlock_unlock(&head->lock);
 }
 
-void remove_wait_queue(wait_queue_head_t *head, wait_queue_entry_t *wq)
+void remove_wait_queue(wait_queue_head_t *head, wait_queue_entry_t *entry)
 {
+    // Validate the input.
+    if (!head) {
+        pr_err("Variable head is NULL.\n");
+        return;
+    }
+    if (!entry) {
+        pr_err("Variable entry is NULL.\n");
+        return;
+    }
     spinlock_lock(&head->lock);
-    __remove_wait_queue(head, wq);
+    __remove_wait_queue(head, entry);
     spinlock_unlock(&head->lock);
+}
+
+wait_queue_entry_t *sleep_on(wait_queue_head_t *head)
+{
+    // Validate input parameters.
+    if (!head) {
+        pr_err("Wait queue head is NULL.\n");
+        return NULL;
+    }
+
+    // Retrieve the current process/task.
+    task_struct *sleeping_task = scheduler_get_current_process();
+    if (!sleeping_task) {
+        pr_err("Failed to retrieve the current process.\n");
+        return NULL;
+    }
+
+    // Set the task state to uninterruptible to indicate it is sleeping.
+    sleeping_task->state = TASK_UNINTERRUPTIBLE;
+
+    // Allocate memory for a new wait queue entry.
+    wait_queue_entry_t *entry = wait_queue_entry_alloc();
+    if (!entry) {
+        pr_err("Failed to allocate memory for wait queue entry.\n");
+        return NULL;
+    }
+
+    // Initialize the wait queue entry with the current task.
+    wait_queue_entry_init(entry, sleeping_task);
+
+    // Add the wait queue entry to the specified wait queue.
+    add_wait_queue(head, entry);
+
+    pr_debug("Added process %d to the wait queue.\n", sleeping_task->pid);
+
+    return entry;
 }

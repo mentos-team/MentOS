@@ -61,7 +61,7 @@ int main(void)
             current_time = time(NULL);
 
             // Print the elapsed time since the start
-            printf("Timer event %d fired at %ld seconds since start\n", timer_count, current_time - start_time);
+            printf("Timer event %d fired at %u seconds since start\n", timer_count, current_time - start_time);
         }
     }
 

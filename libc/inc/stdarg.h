@@ -20,6 +20,7 @@ typedef char *va_list;
 
 /// @brief The start of a variadic list.
 #define va_start(ap, last_arg) (ap = ((va_list)(&last_arg) + va_size(last_arg)))
+
 /// @brief The end of a variadic list.
 #define va_end(ap) ((void)0)
 

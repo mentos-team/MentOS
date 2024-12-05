@@ -54,7 +54,7 @@ static inline task_struct *__scheduler_rr(runqueue_t *runqueue, bool_t skip_peri
         }
         // Get the current entry.
         entry = list_entry(it, task_struct, run_list);
-        // We consider only runnable processes
+        // We consider only runnable processes.
         if (entry->state != TASK_RUNNING) {
             continue;
         }

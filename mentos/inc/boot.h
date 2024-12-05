@@ -54,11 +54,12 @@ typedef struct boot_info_t {
     unsigned int lowmem_phy_start;
     /// lowmem physical addressable end
     unsigned int lowmem_phy_end;
-
     /// lowmem addressable start
-    unsigned int lowmem_start;
+    unsigned int lowmem_virt_start;
     /// lowmem addressable end
-    unsigned int lowmem_end;
+    unsigned int lowmem_virt_end;
+    /// lowmem size
+    unsigned int lowmem_size;
 
     /// stack end (comes after lowmem_end, and is the end of the low mapped memory)
     unsigned int stack_end;

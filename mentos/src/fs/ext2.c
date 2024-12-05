@@ -707,7 +707,7 @@ static inline uint32_t ext2_get_rec_len_from_name(const char *name)
         pr_err("Invalid input: name is NULL.");
         return 0;
     }
-    
+
     // Compute and return the record length.
     return round_up(sizeof(ext2_dirent_t) + strlen(name) + 1, 4);
 }
@@ -1600,19 +1600,32 @@ static int ext2_allocate_inode_block(ext2_filesystem_t *fs, ext2_inode_t *inode,
 /// @return the amount of data we read, or negative value for an error.
 static ssize_t ext2_read_inode_block(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t block_index, uint8_t *buffer)
 {
+    // Check if inode has no blocks allocated.
+    if (inode->blocks_count == 0) {
+        pr_debug("File has no allocated blocks (inode blocks count is zero)\n");
+        return 0;
+    }
+
+    // Check if block index is out of range.
     if (block_index >= (inode->blocks_count / fs->blocks_per_block_count)) {
+        pr_err("Invalid block index: %u (inode blocks count: %u, blocks per block count: %u)\n",
+               block_index, inode->blocks_count, fs->blocks_per_block_count);
         return -1;
     }
-    // Get the real index.
+
+    // Get the real block index
     uint32_t real_index = ext2_get_real_block_index(fs, inode, block_index);
     if (real_index == 0) {
+        pr_err("Failed to resolve real block index for block: %u\n", block_index);
         return -1;
     }
-    // Log the address to the inode block.
+
+    // Log the resolved block index (debug level)
 #ifdef EXT2_FULL_DEBUG
     pr_debug("ext2_read_inode_block(block: %4u, real: %4u)\n", block_index, real_index);
 #endif
-    // Read the block.
+
+    // Read the block and return the result
     return ext2_read_block(fs, real_index, buffer);
 }
 
@@ -1625,20 +1638,40 @@ static ssize_t ext2_read_inode_block(ext2_filesystem_t *fs, ext2_inode_t *inode,
 /// @return the amount of data we wrote, or negative value for an error.
 static ssize_t ext2_write_inode_block(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t inode_index, uint32_t block_index, uint8_t *buffer)
 {
-    while (block_index >= (inode->blocks_count / fs->blocks_per_block_count)) {
-        if (ext2_allocate_inode_block(fs, inode, inode_index, (inode->blocks_count / fs->blocks_per_block_count)) < 0) {
-            pr_crit("Failed to write allocate inode block\n");
-        }
+    uint32_t total_blocks_needed, allocated_blocks, blocks_to_allocate, real_index;
+
+    // Calculate total blocks needed.
+    total_blocks_needed = block_index + 1;
+
+    // Calculate currently allocated blocks.
+    allocated_blocks = inode->blocks_count / fs->blocks_per_block_count;
+
+    // Determine additional blocks to allocate.
+    blocks_to_allocate = 0;
+    if (total_blocks_needed > allocated_blocks) {
+        blocks_to_allocate = total_blocks_needed - allocated_blocks;
     }
+
+    // Allocate necessary blocks
+    while (blocks_to_allocate > 0) {
+        if (ext2_allocate_inode_block(fs, inode, inode_index, allocated_blocks++) < 0) {
+            pr_crit("Failed to allocate inode block\n");
+            return -1;
+        }
+        blocks_to_allocate--;
+    }
+
     // Get the real index.
-    uint32_t real_index = ext2_get_real_block_index(fs, inode, block_index);
+    real_index = ext2_get_real_block_index(fs, inode, block_index);
     if (real_index == 0) {
         return -1;
     }
+
     // Log the address to the inode block.
 #ifdef EXT2_FULL_DEBUG
     pr_debug("ext2_write_inode_block(block: %4u, inode: %4u, real: %4u)\n", block_index, inode_index, real_index);
 #endif
+
     // Write the block.
     return ext2_write_block(fs, real_index, buffer);
 }

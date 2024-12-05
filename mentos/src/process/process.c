@@ -19,6 +19,7 @@
 #include "process/prio.h"
 #include "process/process.h"
 #include "process/scheduler.h"
+#include "process/pid_manager.h"
 #include "process/wait.h"
 #include "string.h"
 #include "errno.h"
@@ -234,7 +235,7 @@ static inline task_struct *__alloc_task(task_struct *source, task_struct *parent
     // Clear the memory.
     memset(proc, 0, sizeof(task_struct));
     // Set the id of the process.
-    proc->pid = scheduler_getpid();
+    proc->pid = pid_manager_get_free_pid();
     // Set the state of the process as running.
     proc->state = TASK_RUNNING;
     // Set the current opened file descriptors and the maximum number of file descriptors.
@@ -338,48 +339,48 @@ int init_tasking(void)
     return 1;
 }
 
-task_struct *process_create_init(const char *path)
+int process_create_init(const char *path)
 {
     pr_debug("Building init process...\n");
 
     // Allocate the memory for the process.
-    task_struct *init_proc = __alloc_task(NULL, NULL, "init");
+    init_process = __alloc_task(NULL, NULL, "init");
 
     // Active the current process.
-    scheduler_enqueue_task(init_proc);
+    scheduler_enqueue_task(init_process);
 
     // == INITIALIZE `/proc/video` ============================================
     // Check that the fd_list is initialized.
-    assert(init_proc->fd_list && "File descriptor list not initialized.");
-    assert((init_proc->max_fd > 3) && "File descriptor list cannot contain the standard IOs.");
+    assert(init_process->fd_list && "File descriptor list not initialized.");
+    assert((init_process->max_fd > 3) && "File descriptor list cannot contain the standard IOs.");
 
     // Create STDIN descriptor.
     vfs_file_t *vfs_stdin = vfs_open("/proc/video", O_RDONLY, 0);
     vfs_stdin->count++;
-    init_proc->fd_list[STDIN_FILENO].file_struct = vfs_stdin;
-    init_proc->fd_list[STDIN_FILENO].flags_mask  = O_RDONLY;
+    init_process->fd_list[STDIN_FILENO].file_struct = vfs_stdin;
+    init_process->fd_list[STDIN_FILENO].flags_mask  = O_RDONLY;
     pr_debug("`/proc/video` stdin  : %p\n", vfs_stdin);
 
     // Create STDOUT descriptor.
     vfs_file_t *vfs_stdout = vfs_open("/proc/video", O_WRONLY, 0);
     vfs_stdout->count++;
-    init_proc->fd_list[STDOUT_FILENO].file_struct = vfs_stdout;
-    init_proc->fd_list[STDOUT_FILENO].flags_mask  = O_WRONLY;
+    init_process->fd_list[STDOUT_FILENO].file_struct = vfs_stdout;
+    init_process->fd_list[STDOUT_FILENO].flags_mask  = O_WRONLY;
     pr_debug("`/proc/video` stdout : %p\n", vfs_stdout);
 
     // Create STDERR descriptor.
     vfs_file_t *vfs_stderr = vfs_open("/proc/video", O_WRONLY, 0);
     vfs_stderr->count++;
-    init_proc->fd_list[STDERR_FILENO].file_struct = vfs_stderr;
-    init_proc->fd_list[STDERR_FILENO].flags_mask  = O_WRONLY;
+    init_process->fd_list[STDERR_FILENO].file_struct = vfs_stderr;
+    init_process->fd_list[STDERR_FILENO].flags_mask  = O_WRONLY;
     pr_debug("`/proc/video` stderr : %p\n", vfs_stderr);
     // ------------------------------------------------------------------------
 
     // == INITIALIZE TASK MEMORY ==============================================
     // Load the executable.
-    if (__load_executable(path, init_proc, &init_proc->thread.regs.eip) <= 0) {
-        pr_err("Entry for init: %d\n", init_proc->thread.regs.eip);
-        kernel_panic("Init not valid (%d)!");
+    if (__load_executable(path, init_process, &init_process->thread.regs.eip) <= 0) {
+        pr_err("Entry for init: %d\n", init_process->thread.regs.eip);
+        return 1;
     }
     // ------------------------------------------------------------------------
 
@@ -387,7 +388,7 @@ task_struct *process_create_init(const char *path)
     // Save the current page directory.
     page_directory_t *crtdir = paging_get_current_directory();
     // Switch to init page directory.
-    paging_switch_directory_va(init_proc->mm->pgd);
+    paging_switch_directory_va(init_process->mm->pgd);
 
     // Prepare argv and envp for the init process.
     char **argv_ptr, **envp_ptr;
@@ -400,29 +401,29 @@ task_struct *process_create_init(const char *path)
         (char *)NULL
     };
     // Save where the arguments start.
-    init_proc->mm->arg_start = init_proc->thread.regs.useresp;
+    init_process->mm->arg_start = init_process->thread.regs.useresp;
     // Push the arguments on the stack.
-    argv_ptr = __push_args_on_stack(&init_proc->thread.regs.useresp, argv);
+    argv_ptr = __push_args_on_stack(&init_process->thread.regs.useresp, argv);
     // Save where the arguments end.
-    init_proc->mm->arg_end = init_proc->thread.regs.useresp;
+    init_process->mm->arg_end = init_process->thread.regs.useresp;
     // Save where the environmental variables start.
-    init_proc->mm->env_start = init_proc->thread.regs.useresp;
+    init_process->mm->env_start = init_process->thread.regs.useresp;
     // Push the environment on the stack.
-    envp_ptr = __push_args_on_stack(&init_proc->thread.regs.useresp, envp);
+    envp_ptr = __push_args_on_stack(&init_process->thread.regs.useresp, envp);
     // Save where the environmental variables end.
-    init_proc->mm->env_end = init_proc->thread.regs.useresp;
+    init_process->mm->env_end = init_process->thread.regs.useresp;
     // Push the `main` arguments on the stack (argc, argv, envp).
-    PUSH_VALUE_ON_STACK(init_proc->thread.regs.useresp, envp_ptr);
-    PUSH_VALUE_ON_STACK(init_proc->thread.regs.useresp, argv_ptr);
-    PUSH_VALUE_ON_STACK(init_proc->thread.regs.useresp, argc);
+    PUSH_VALUE_ON_STACK(init_process->thread.regs.useresp, envp_ptr);
+    PUSH_VALUE_ON_STACK(init_process->thread.regs.useresp, argv_ptr);
+    PUSH_VALUE_ON_STACK(init_process->thread.regs.useresp, argc);
 
     // Restore previous pgdir
     paging_switch_directory(crtdir);
     // ------------------------------------------------------------------------
 
-    pr_debug("Executing '%s' (pid: %d)...\n", init_proc->name, init_proc->pid);
+    pr_debug("Executing '%s' (pid: %d)...\n", init_process->name, init_process->pid);
 
-    return init_proc;
+    return 0;
 }
 
 vfs_file_descriptor_t *fget(int fd)

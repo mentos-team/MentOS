@@ -483,7 +483,15 @@ static ssize_t pipe_buffer_write(pipe_buffer_t *pipe_buffer, const char *src, si
 /// @return 1 if the process is woken up, 0 if it remains in the wait queue.
 int pipe_read_wake_function(wait_queue_entry_t *wait, unsigned mode, int sync)
 {
+    // Retrieve private data associated with this wait queue entry.
     pipe_inode_info_t *pipe_info = (pipe_inode_info_t *)wait->private;
+
+    // Check the private data.
+    if (pipe_info == NULL) {
+        pr_err("The private data is not a pipe_inode_info_t.\n");
+        return -1;
+    }
+
     // Validate that data is available in the pipe for reading.
     if ((pipe_info_has_data(pipe_info) > 0) || (pipe_info->writers == 0)) {
         // Check if the task is in an appropriate sleep state to be woken up.
@@ -492,13 +500,13 @@ int pipe_read_wake_function(wait_queue_entry_t *wait, unsigned mode, int sync)
             wait->task->state = mode;
 
             // Signal that the task has been woken up.
-            pr_debug("pipe_read_wake_function: Data available or no more writers, waking up reader %d.\n", wait->task->pid);
+            pr_debug("Data available or no more writers, waking up reader %d.\n", wait->task->pid);
             return 1;
         } else {
-            pr_debug("pipe_read_wake_function: Reader %d not in the correct state for wake-up.\n", wait->task->pid);
+            pr_debug("Reader %d not in the correct state for wake-up.\n", wait->task->pid);
         }
     } else {
-        pr_debug("pipe_read_wake_function: No data available, reader %d should continue waiting.\n", wait->task->pid);
+        pr_debug("No data available, reader %d should continue waiting.\n", wait->task->pid);
     }
 
     // No wake-up action taken, continue waiting.
@@ -512,21 +520,30 @@ int pipe_read_wake_function(wait_queue_entry_t *wait, unsigned mode, int sync)
 /// @return 1 if the process is woken up, 0 if it remains in the wait queue.
 int pipe_write_wake_function(wait_queue_entry_t *wait, unsigned mode, int sync)
 {
+    // Retrieve private data associated with this wait queue entry.
+    pipe_inode_info_t *pipe_info = (pipe_inode_info_t *)wait->private;
+
+    // Check the private data.
+    if (pipe_info == NULL) {
+        pr_err("The private data is not a pipe_inode_info_t.\n");
+        return -1;
+    }
+
     // Check if there is available space in the pipe for writing.
-    if (pipe_info_has_space((pipe_inode_info_t *)wait->private) > 0) {
+    if (pipe_info_has_space(pipe_info) > 0) {
         // Only tasks in the state TASK_UNINTERRUPTIBLE or TASK_STOPPED can be woken up.
         if ((wait->task->state == TASK_UNINTERRUPTIBLE) || (wait->task->state == TASK_STOPPED)) {
             // Set the wake-up mode for the task.
             wait->task->state = mode;
 
             // Signal that the task has been woken up.
-            pr_debug("pipe_write_wake_function: Space available, waking up writer %d.\n", wait->task->pid);
+            pr_debug("Space available, waking up writer %d.\n", wait->task->pid);
             return 1;
         } else {
-            pr_debug("pipe_write_wake_function: Writer %d not in the correct state for wake-up.\n", wait->task->pid);
+            pr_debug("Writer %d not in the correct state for wake-up.\n", wait->task->pid);
         }
     } else {
-        pr_debug("pipe_write_wake_function: No space available, writer %d should continue waiting.\n", wait->task->pid);
+        pr_debug("No space available, writer %d should continue waiting.\n", wait->task->pid);
     }
 
     // No wake-up action taken, continue waiting.
@@ -935,9 +952,6 @@ static ssize_t pipe_read(vfs_file_t *file, char *buffer, off_t offset, size_t nb
             // Update the total bytes read and the read index.
             bytes_read            = bytes_read + bytes_to_read;
             pipe_info->read_index = pipe_info->read_index + bytes_to_read;
-
-            // Wake up tasks that might be waiting to write to the pipe.
-            pipe_wake_up_tasks(&pipe_info->write_wait, "pipe_read");
         }
     } else {
         // If in blocking mode, put the process to sleep until data is available.
@@ -951,6 +965,11 @@ static ssize_t pipe_read(vfs_file_t *file, char *buffer, off_t offset, size_t nb
 
     // Release the mutex after reading.
     mutex_unlock(&pipe_info->mutex);
+
+    // Wake up tasks that might be waiting to write to the pipe.
+    if (bytes_read > 0) {
+        pipe_wake_up_tasks(&pipe_info->write_wait, "pipe_read");
+    }
 
     return bytes_read;
 }
@@ -1019,9 +1038,6 @@ static ssize_t pipe_write(vfs_file_t *file, const void *buffer, off_t offset, si
             // Update the total bytes written and the write index.
             bytes_written          = bytes_written + bytes_to_write;
             pipe_info->write_index = pipe_info->write_index + bytes_to_write;
-
-            // Wake up tasks waiting to read from the pipe.
-            pipe_wake_up_tasks(&pipe_info->read_wait, "pipe_write");
         }
     } else {
         // Blocking behavior: Put the process to sleep until space is available.
@@ -1035,6 +1051,11 @@ static ssize_t pipe_write(vfs_file_t *file, const void *buffer, off_t offset, si
 
     // Release the mutex after the write operation is complete.
     mutex_unlock(&pipe_info->mutex);
+
+    // Wake up tasks waiting to read from the pipe.
+    if (bytes_written > 0) {
+        pipe_wake_up_tasks(&pipe_info->read_wait, "pipe_write");
+    }
 
     return bytes_written;
 }

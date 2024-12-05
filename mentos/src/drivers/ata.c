@@ -649,10 +649,10 @@ static inline uintptr_t ata_dma_alloc(size_t size, uintptr_t *physical)
     // memory to be aligned to specific boundaries (e.g., 4KB or 64KB).
     uint32_t order = find_nearest_order_greater(0, size);
 
-    // Allocate a contiguous block of memory pages. Ensure that _alloc_pages
+    // Allocate a contiguous block of memory pages. Ensure that alloc_pages
     // returns physically contiguous pages suitable for DMA, as DMA transfers
     // usually require physically contiguous memory.
-    page_t *page = _alloc_pages(GFP_KERNEL, order);
+    page_t *page = alloc_pages(GFP_KERNEL, order);
     if (!page) {
         pr_crit("Failed to allocate pages for DMA memory (order = %d).\n", order);
         return 0;
@@ -704,7 +704,7 @@ static inline int ata_dma_free(uintptr_t logical_addr)
     }
 
     // Free the allocated pages.
-    if (__free_pages(page) < 0) {
+    if (free_pages(page) < 0) {
         pr_debug("Failed to free allocated pages 0x%p.\n", page);
         return 1;
     }

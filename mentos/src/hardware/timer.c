@@ -573,7 +573,7 @@ static inline void sleep_timeout(unsigned long data)
     // Get the wait_queue_entry.
     wait_queue_entry_t *wait_queue_entry = sleep_data->wait_queue_entry;
     // Executed entry's wakeup test function
-    if (wait_queue_entry->func(wait_queue_entry, 0, 0) == 1) {
+    if (wait_queue_entry->func(wait_queue_entry, TASK_RUNNING, 0) == 1) {
         pr_debug("Process (pid: %d) restored from sleep\n", wait_queue_entry->task->pid);
         // Removes entry from list and memory.
         remove_wait_queue(&sleep_queue, wait_queue_entry);

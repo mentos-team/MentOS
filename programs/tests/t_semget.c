@@ -41,7 +41,7 @@ int main(int argc, char *argv[])
         perror("Failed to create semaphore set");
         return 1;
     }
-    printf("[father] Created semaphore set (id : %d)\n", semid);
+    printf("[father] Created semaphore set (id : %ld)\n", semid);
 
     // ========================================================================
     // Set the value of the semaphore to 1.
@@ -51,7 +51,7 @@ int main(int argc, char *argv[])
         perror("Failed to set semaphore value");
         return 1;
     }
-    printf("[father] Set semaphore value to 1 (id : %d)\n", semid);
+    printf("[father] Set semaphore value to 1 (id : %ld)\n", semid);
 
     // ========================================================================
     // Verify that the semaphore value is set correctly.
@@ -60,7 +60,7 @@ int main(int argc, char *argv[])
         perror("Failed to get semaphore value");
         return 1;
     }
-    printf("[father] Semaphore value is %d (expected: 1)\n", ret);
+    printf("[father] Semaphore value is %ld (expected: 1)\n", ret);
 
     // ========================================================================
     // Fork a child process.
@@ -79,7 +79,7 @@ int main(int argc, char *argv[])
             perror("Failed to perform child semaphore operation");
             return 1;
         }
-        printf("[child] Performed first semaphore operation (id: %d)\n", semid);
+        printf("[child] Performed first semaphore operation (id: %ld)\n", semid);
 
         // Verify the updated semaphore value.
         ret = semctl(semid, 0, GETVAL, NULL);
@@ -87,7 +87,7 @@ int main(int argc, char *argv[])
             perror("Failed to get semaphore value in child");
             return 1;
         }
-        printf("[child] Semaphore value is %d (expected: 2)\n", ret);
+        printf("[child] Semaphore value is %ld (expected: 2)\n", ret);
 
         // Sleep and perform another increment operation.
         nanosleep(&req, NULL);
@@ -95,7 +95,7 @@ int main(int argc, char *argv[])
             perror("Failed to perform second child semaphore operation");
             return 1;
         }
-        printf("[child] Performed second semaphore operation (id: %d)\n", semid);
+        printf("[child] Performed second semaphore operation (id: %ld)\n", semid);
 
         // Check final semaphore value.
         ret = semctl(semid, 0, GETVAL, NULL);
@@ -103,7 +103,7 @@ int main(int argc, char *argv[])
             perror("Failed to get final semaphore value in child");
             return 1;
         }
-        printf("[child] Final semaphore value is %d\n", ret);
+        printf("[child] Final semaphore value is %ld\n", ret);
 
         // Delete the semaphore set.
         ret = semctl(semid, 0, IPC_RMID, 0);
@@ -111,7 +111,7 @@ int main(int argc, char *argv[])
             perror("Failed to remove semaphore set in child");
             return 1;
         }
-        printf("[child] Removed semaphore set (id: %d)\n", semid);
+        printf("[child] Removed semaphore set (id: %ld)\n", semid);
 
         // Exit the child process.
         return 0;
@@ -137,7 +137,7 @@ int main(int argc, char *argv[])
         perror("Failed to perform parent semaphore operations");
         return 1;
     }
-    printf("[father] Performed semaphore operations (id: %d)\n", semid);
+    printf("[father] Performed semaphore operations (id: %ld)\n", semid);
 
     // Verify that the semaphore value is updated correctly.
     ret = semctl(semid, 0, GETVAL, NULL);
@@ -145,7 +145,7 @@ int main(int argc, char *argv[])
         perror("Failed to get semaphore value in parent");
         return 1;
     }
-    printf("[father] Semaphore value is %d (expected: 0)\n", ret);
+    printf("[father] Semaphore value is %ld (expected: 0)\n", ret);
 
     // Wait for the child process to terminate.
     if (wait(NULL) == -1) {

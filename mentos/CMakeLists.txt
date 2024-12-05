@@ -5,14 +5,11 @@
 # Set the target naming.
 set(KERNEL_NAME       kernel)
 set(BOOTLOADER_NAME   bootloader)
-set(BUDDY_SYSTEM_FILE ${CMAKE_SOURCE_DIR}/mentos/src/mem/libbuddysystem.a)
 
 # =============================================================================
 # OPTIONS
 # =============================================================================
 
-# Add the memory option.
-option(USE_BUDDY_SYSTEM "Build using the buddysystem written by the user." OFF)
 # Enables memory allocation tracing.
 option(ENABLE_ALLOC_TRACE "Enables memory allocation tracing." OFF)
 # Enables scheduling feedback on terminal.
@@ -88,6 +85,7 @@ set(KERNEL_SOURCES
     ${CMAKE_SOURCE_DIR}/mentos/src/mem/slab.c
     ${CMAKE_SOURCE_DIR}/mentos/src/mem/vmem_map.c
     ${CMAKE_SOURCE_DIR}/mentos/src/mem/zone_allocator.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/mem/buddy_system.c
     ${CMAKE_SOURCE_DIR}/mentos/src/elf/elf.c
     ${CMAKE_SOURCE_DIR}/mentos/src/crypt/sha256.c
     ${CMAKE_SOURCE_DIR}/mentos/src/descriptor_tables/gdt.c
@@ -102,6 +100,7 @@ set(KERNEL_SOURCES
     ${CMAKE_SOURCE_DIR}/mentos/src/descriptor_tables/tss.S
     ${CMAKE_SOURCE_DIR}/mentos/src/process/scheduler_algorithm.c
     ${CMAKE_SOURCE_DIR}/mentos/src/process/scheduler_feedback.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/process/pid_manager.c
     ${CMAKE_SOURCE_DIR}/mentos/src/process/scheduler.c
     ${CMAKE_SOURCE_DIR}/mentos/src/process/process.c
     ${CMAKE_SOURCE_DIR}/mentos/src/process/wait.c
@@ -117,30 +116,26 @@ set(KERNEL_SOURCES
 
 # =============================================================================
 # Add kernel library.
-if(USE_BUDDY_SYSTEM)
-    # Add the library with `buddysystem.c`.
-    add_library(${KERNEL_NAME} ${KERNEL_SOURCES} src/mem/buddysystem.c)
-else(USE_BUDDY_SYSTEM)
-    # Add the library without `buddysystem.c`.
-    add_library(${KERNEL_NAME} ${KERNEL_SOURCES})
-    # Link the exercise libraries.
-    target_link_libraries(${KERNEL_NAME} ${BUDDY_SYSTEM_FILE})
-endif(USE_BUDDY_SYSTEM)
+add_library(${KERNEL_NAME} ${KERNEL_SOURCES})
+
 # Add the includes.
 target_include_directories(
     ${KERNEL_NAME} PUBLIC
     ${CMAKE_SOURCE_DIR}/mentos/inc
     ${CMAKE_SOURCE_DIR}/libc/inc
 )
+
 # Define that this code is kernel code.
 target_compile_definitions(
     ${KERNEL_NAME} PUBLIC
     __KERNEL__
 )
+
 target_compile_definitions(
     ${KERNEL_NAME} PUBLIC
     MENTOS_ROOT="${CMAKE_SOURCE_DIR}"
 )
+
 # If the emulator is set to output on a log file, tell that to the C code.
 if(${EMULATOR_OUTPUT_TYPE} STREQUAL OUTPUT_LOG)
     target_compile_definitions(${KERNEL_NAME} PUBLIC EMULATOR_OUTPUT_LOG)
