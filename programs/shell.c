@@ -266,9 +266,9 @@ static char *__getenv(const char *var)
 
 /// @brief Expands environmental variables in a string and stores the result in the buffer.
 /// @param str The input string containing potential environmental variables.
+/// @param str_len The length of the input string.
 /// @param buf The buffer where the expanded string will be stored.
 /// @param buf_len The maximum length of the buffer.
-/// @param str_len The length of the input string (if provided, otherwise it will be calculated).
 /// @param null_terminate If true, the resulting buffer will be null-terminated.
 static void ___expand_env(char *str, size_t str_len, char *buf, size_t buf_len, bool_t null_terminate)
 {
@@ -385,7 +385,7 @@ static void ___expand_env(char *str, size_t str_len, char *buf, size_t buf_len, 
 /// @param buf_len The size of the buffer.
 static void __expand_env(char *str, char *buf, size_t buf_len)
 {
-    ___expand_env(str, 0, buf, buf_len, false);
+    ___expand_env(str, strlen(str), buf, buf_len, false);
 }
 
 /// @brief Sets environment variables based on arguments.

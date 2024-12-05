@@ -108,7 +108,7 @@ char *realpath(const char *path, char *buffer, size_t buflen)
 static inline int __is_a_link(const char *path)
 {
     stat_t statbuf;
-    if (vfs_stat(path, &statbuf) > 0) {
+    if (vfs_stat(path, &statbuf) == 0) {
         return S_ISLNK(statbuf.st_mode);
     }
     return 0;
