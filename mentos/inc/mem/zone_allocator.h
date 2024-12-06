@@ -160,13 +160,19 @@ int pmmngr_init(boot_info_t *boot_info);
 /// @param order    The logarithm of the size of the page frame.
 /// @return Memory address of the first free page frame allocated, or NULL if
 /// allocation fails.
-page_t *alloc_pages(gfp_t gfp_mask, uint32_t order);
+page_t *pr_alloc_pages(const char *file, const char *func, int line, gfp_t gfp_mask, uint32_t order);
 
 /// @brief Frees from the given page frame address up to 2^order amount of page
 /// frames.
 /// @param page The page.
 /// @return Returns 0 on success, or -1 if an error occurs.
-int free_pages(page_t *page);
+int pr_free_pages(const char *file, const char *func, int line, page_t *page);
+
+/// Wrapper that provides the filename, the function and line where the alloc is happening.
+#define alloc_pages(...) pr_alloc_pages(__RELATIVE_PATH__, __func__, __LINE__, __VA_ARGS__)
+
+/// Wrapper that provides the filename, the function and line where the free is happening.
+#define free_pages(...) pr_free_pages(__RELATIVE_PATH__, __func__, __LINE__, __VA_ARGS__)
 
 /// @brief Find the first free 2^order amount of page frames, set it allocated
 /// and return the memory address of the first page frame allocated.
@@ -217,6 +223,13 @@ unsigned long get_zone_free_space(gfp_t gfp_mask);
 /// @param gfp_mask The GFP mask specifying the allocation constraints.
 /// @return The cached space of the zone, or 0 if the zone cannot be retrieved.
 unsigned long get_zone_cached_space(gfp_t gfp_mask);
+
+/// @brief Retrieves the buddy system status for the zone associated with the given GFP mask.
+/// @param gfp_mask The GFP mask specifying the memory zone (e.g., GFP_KERNEL, GFP_HIGHUSER).
+/// @param buffer A pointer to the buffer where the formatted status string will be written.
+/// @param bufsize The size of the provided buffer, in bytes. Must be greater than 0.
+/// @return The number of characters written to the buffer, or a negative value if an error occurs.
+int get_zone_buddy_system_status(gfp_t gfp_mask, char *buffer, size_t bufsize);
 
 /// @brief Checks if the specified address points to a page_t (or field) that
 /// belongs to lowmem.

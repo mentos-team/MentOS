@@ -5,7 +5,7 @@
 
 #pragma once
 
-#include "string.h"
+#include "os_root_path.h"
 
 // Log levels for setting the severity of log messages.
 #define LOG_EMERG   0 ///< Emergency: system unusable.
@@ -61,17 +61,6 @@ void closelog(void);
 /// @param ... Arguments for the format string
 /// @return The number of bytes written or -1 on failure
 int __syslog(const char *file, const char *fun, int line, short log_level, const char *format, ...);
-
-/// @brief Extracts the relative path of the current file from the project root.
-/// @details This macro calculates the relative path of the file (`__FILE__`) by
-/// skipping the prefix defined by `MENTOS_ROOT`. It is used to simplify file
-/// path logging by removing the absolute path up to the project root.
-/// If
-///     MENTOS_ROOT = "/path/to/mentos" and
-///     __FILE__    = "/path/to/mentos/src/kernel/main.c", the result will be
-///                                   "src/kernel/main.c".
-#define __RELATIVE_PATH__ \
-    (strncmp(__FILE__, MENTOS_ROOT, sizeof(MENTOS_ROOT) - 1) == 0 ? (&__FILE__[sizeof(MENTOS_ROOT)]) : __FILE__)
 
 /// @brief Wrapper macro to simplify usage.
 #define syslog(...) __syslog(__RELATIVE_PATH__, __func__, __LINE__, __VA_ARGS__)

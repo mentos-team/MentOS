@@ -11,17 +11,16 @@ set(BOOTLOADER_NAME   bootloader)
 # =============================================================================
 
 # Enables memory allocation tracing.
-option(ENABLE_ALLOC_TRACE "Enables memory allocation tracing." OFF)
+option(ENABLE_KMEM_TRACE "Enables kmalloc tracing." OFF)
+option(ENABLE_PAGE_TRACE "Enables page allocation tracing." OFF)
 # Enables scheduling feedback on terminal.
 option(ENABLE_SCHEDULER_FEEDBACK "Enables scheduling feedback on terminal." OFF)
 
 # =============================================================================
-# SOURCES
-# =============================================================================
-
-# Define the list of files.
-set(KERNEL_SOURCES
+# Add the kernel library with its sources.
+add_library(${KERNEL_NAME}
     ${CMAKE_SOURCE_DIR}/mentos/src/kernel.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/resource_tracing.c
     ${CMAKE_SOURCE_DIR}/mentos/src/multiboot.c
     ${CMAKE_SOURCE_DIR}/mentos/src/devices/pci.c
     ${CMAKE_SOURCE_DIR}/mentos/src/devices/fpu.c
@@ -114,10 +113,6 @@ set(KERNEL_SOURCES
     ${CMAKE_SOURCE_DIR}/mentos/src/system/syscall.c
 )
 
-# =============================================================================
-# Add kernel library.
-add_library(${KERNEL_NAME} ${KERNEL_SOURCES})
-
 # Add the includes.
 target_include_directories(
     ${KERNEL_NAME} PUBLIC
@@ -143,9 +138,12 @@ endif()
 
 # =============================================================================
 # Enables memory allocation tracing.
-if(ENABLE_ALLOC_TRACE)
-    target_compile_definitions(${KERNEL_NAME} PUBLIC ENABLE_ALLOC_TRACE)
-endif(ENABLE_ALLOC_TRACE)
+if(ENABLE_KMEM_TRACE)
+target_compile_definitions(${KERNEL_NAME} PUBLIC ENABLE_KMEM_TRACE)
+endif(ENABLE_KMEM_TRACE)
+if(ENABLE_PAGE_TRACE)
+    target_compile_definitions(${KERNEL_NAME} PUBLIC ENABLE_PAGE_TRACE)
+endif(ENABLE_PAGE_TRACE)
 
 # =============================================================================
 # Enables scheduling feedback on terminal.
@@ -224,6 +222,10 @@ target_include_directories(
 target_compile_definitions(
     ${BOOTLOADER_NAME} PUBLIC
     __KERNEL__
+)
+target_compile_definitions(
+    ${BOOTLOADER_NAME} PUBLIC
+    MENTOS_ROOT="${CMAKE_SOURCE_DIR}"
 )
 
 # =============================================================================

@@ -53,8 +53,22 @@ void video_cartridge_return(void);
 ///        reaches the last position of the screen.
 void video_shift_one_line_up(void);
 
+/// @brief Shifts the screen content down by one line, loading the previous line
+/// from the buffer if available.
+void video_shift_one_line_down(void);
+
 /// @brief The whole screen is shifted up by one page.
 void video_shift_one_page_up(void);
 
 /// @brief The whole screen is shifted down by one page.
 void video_shift_one_page_down(void);
+
+/// @brief Scrolls the screen up by a specified number of lines, showing
+/// previous lines from the buffer.
+/// @param lines The number of lines to scroll up.
+void video_scroll_up(int lines);
+
+/// @brief Scrolls the screen down by a specified number of lines, restoring
+/// lines from the buffer or the original content.
+/// @param lines The number of lines to scroll down.
+void video_scroll_down(int lines);

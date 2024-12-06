@@ -976,13 +976,13 @@ static inline int __read_command(rb_history_entry_t *entry)
                 // PAGE_UP
                 else if (c == '5') {
                     if (getchar() == '~') {
-                        // Nothing to do.
+                        printf("\033[25S");
                     }
                 }
                 // PAGE_DOWN
                 else if (c == '6') {
                     if (getchar() == '~') {
-                        // Nothing to do.
+                        printf("\033[25T");
                     }
                 }
                 // CTRL+ARROW

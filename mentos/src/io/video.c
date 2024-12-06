@@ -3,11 +3,16 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
+// Setup the logging for this file (do this before any other include).
+#include "sys/kernel_levels.h"           // Include kernel log levels.
+#define __DEBUG_HEADER__ "[VIDEO ]"      ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
+#include "io/debug.h"                    // Include debugging functions.
+
 #include "io/port_io.h"
 #include "ctype.h"
 #include "io/vga/vga.h"
 #include "io/video.h"
-#include "io/debug.h"
 #include "stdbool.h"
 #include "stdio.h"
 #include "string.h"
@@ -17,7 +22,7 @@
 #define W2           (WIDTH * 2)          ///< The width of the
 #define TOTAL_SIZE   (HEIGHT * WIDTH * 2) ///< The total size of the screen.
 #define ADDR         (char *)0xB8000U     ///< The address of the
-#define STORED_PAGES 3                    ///< The number of stored pages.
+#define STORED_PAGES 10                   ///< The number of stored pages.
 
 /// @brief Stores the association between ANSI colors and pure VIDEO colors.
 struct ansi_color_map_t {
@@ -79,8 +84,8 @@ char escape_buffer[256];
 char upper_buffer[STORED_PAGES * TOTAL_SIZE] = { 0 };
 /// Buffer where we store the lower scroll history.
 char original_page[TOTAL_SIZE] = { 0 };
-/// Determines if the screen is currently scrolled.
-int scrolled_page = 0;
+/// Determines the screen is currently scrolled, and by how many lines.
+int scrolled_lines = 0;
 
 /// @brief Get the current column number.
 /// @return The column number.
@@ -100,6 +105,9 @@ static inline unsigned __get_y(void)
 /// @param c The character to draw.
 static inline void __draw_char(char c)
 {
+    if (scrolled_lines) {
+        video_scroll_up(scrolled_lines);
+    }
     for (char *ptr = (ADDR + TOTAL_SIZE + (WIDTH * 2)); ptr > pointer; ptr -= 2) {
         *(ptr)     = *(ptr - 2);
         *(ptr + 1) = *(ptr - 1);
@@ -315,6 +323,20 @@ void video_putc(int c)
             else if (c == 'q') {
                 __parse_cursor_escape_code(atoi(escape_buffer));
             }
+            // Custom command for scrolling up.
+            else if (c == 'S') {
+                int lines_to_scroll = atoi(escape_buffer);
+                video_scroll_down(lines_to_scroll);
+                escape_index = -1;
+                return;
+            }
+            // Custom command for scrolling down.
+            else if (c == 'T') {
+                int lines_to_scroll = atoi(escape_buffer);
+                video_scroll_up(lines_to_scroll);
+                escape_index = -1;
+                return;
+            }
             escape_index = -1;
         }
         return;
@@ -455,93 +477,110 @@ void video_cartridge_return(void)
     video_update_cursor_position();
 }
 
+/// @brief Shifts the buffer up or down by one line.
+/// @param buffer Pointer to the buffer to shift.
+/// @param lines Number of lines we want to shift.
+/// @param direction 1 to shift up, -1 to shift down.
+static inline void __shift_buffer(char *buffer, int lines, int direction)
+{
+    // Shift up: Move each line to the previous slot.
+    if (direction == 1) {
+        for (int row = 0; row < lines - 1; ++row) {
+            memcpy(buffer + W2 * row, buffer + W2 * (row + 1), W2);
+        }
+    }
+    // Shift down: Move each line to the next slot.
+    else if (direction == -1) {
+        for (int row = lines - 1; row > 0; --row) {
+            memcpy(buffer + W2 * row, buffer + W2 * (row - 1), W2);
+        }
+    }
+}
+
+/// @brief Shifts the screen content up by one line. When not scrolled, moves
+/// the top line into the `upper_buffer`.
+static void __shift_screen_up(void)
+{
+    if (scrolled_lines == 0) {
+        // Move the upper buffer up by one line.
+        __shift_buffer(upper_buffer, STORED_PAGES * HEIGHT, +1);
+        // Copy the first line on the screen inside the last line of the upper buffer.
+        memcpy(upper_buffer + (TOTAL_SIZE * STORED_PAGES - W2), ADDR, W2);
+    }
+    // Move the screen up by one line.
+    __shift_buffer(ADDR, HEIGHT + 1, +1);
+}
+
+/// @brief Shifts the screen content down by one line. Restores the topmost line
+/// from the `upper_buffer`.
+static void __shift_screen_down(void)
+{
+    // Move the screen content down by one line.
+    __shift_buffer(ADDR, HEIGHT, -1);
+    // Restore from the `upper_buffer`.
+    memcpy(ADDR, upper_buffer + W2 * (STORED_PAGES * HEIGHT - scrolled_lines), W2);
+}
+
 void video_shift_one_line_up(void)
 {
+    // Push the top screen line into the upper buffer and shift the screen up.
     if (pointer >= ADDR + TOTAL_SIZE) {
-        // Move the upper buffer up by one line.
-        for (int row = 0; row < (STORED_PAGES * HEIGHT); ++row) {
-            memcpy(upper_buffer + W2 * row, upper_buffer + W2 * (row + 1), 2 * WIDTH);
-        }
-        // Copy the first line on the screen inside the last line of the upper buffer.
-        memcpy(upper_buffer + (TOTAL_SIZE * STORED_PAGES - W2), ADDR, 2 * WIDTH);
-        // Move the screen up by one line.
-        for (int row = 0; row < HEIGHT; ++row) {
-            memcpy(ADDR + (W2 * row), ADDR + (W2 * (row + 1)), 2 * WIDTH);
-        }
+        // Shift the upper buffer up.
+        __shift_screen_up();
         // Update the pointer.
         pointer = ADDR + ((pointer - ADDR) / W2 - 1) * W2;
+    }
+    // Restore the bottom line from the original content or clear it.
+    else if (scrolled_lines) {
+        // Shift the upper buffer up.
+        __shift_screen_up();
+        // Restore or clear the bottom line.
+        memcpy(ADDR + W2 * (HEIGHT - 1), original_page + W2 * (TOTAL_SIZE / W2 - scrolled_lines), W2);
+        // Decrement scrolled_lines since we're restoring content.
+        --scrolled_lines;
+    }
+}
+
+void video_shift_one_line_down(void)
+{
+    if (scrolled_lines < (STORED_PAGES * HEIGHT)) {
+        // Save the current screen into `original_page` if starting to scroll.
+        if (scrolled_lines == 0) {
+            memcpy(original_page, ADDR, TOTAL_SIZE);
+        }
+        // Increment scrolled_lines and shift the screen content down.
+        ++scrolled_lines;
+        // Shift the screen content down.
+        __shift_screen_down();
+        // Restore the top line from the scrollback buffer or original content.
+        memcpy(ADDR, upper_buffer + W2 * (STORED_PAGES * HEIGHT - scrolled_lines), W2);
     }
 }
 
 void video_shift_one_page_up(void)
 {
-    if (scrolled_page > 0) {
-        // Decrese the number of scrolled pages, and compute which page must be loaded.
-        int page_to_load = (STORED_PAGES - (--scrolled_page));
-        // If we have reached 0, restore the original page.
-        if (scrolled_page == 0) {
-            memcpy(ADDR, original_page, TOTAL_SIZE);
-        } else {
-            memcpy(ADDR, upper_buffer + (page_to_load * TOTAL_SIZE), TOTAL_SIZE);
-        }
+    for (int i = 0; i < HEIGHT; ++i) {
+        video_shift_one_line_up();
     }
 }
 
 void video_shift_one_page_down(void)
 {
-    if (scrolled_page < STORED_PAGES) {
-        // Increase the number of scrolled pages, and compute which page must be loaded.
-        int page_to_load = (STORED_PAGES - (++scrolled_page));
-        // If we are loading the first history page, save the original.
-        if (scrolled_page == 1) {
-            memcpy(original_page, ADDR, TOTAL_SIZE);
-        }
-        // Load the specific page.
-        memcpy(ADDR, upper_buffer + (page_to_load * TOTAL_SIZE), TOTAL_SIZE);
+    for (int i = 0; i < HEIGHT; ++i) {
+        video_shift_one_line_down();
     }
 }
 
-#if 0
-void video_scroll_up(void)
+void video_scroll_up(int lines)
 {
-    if (is_scrolled)
-        return;
-    char *ptr = memory = pointer;
-    for (unsigned int it = 0; it < TOTAL_SIZE; it++) {
-        downbuffer[y][x] = *ptr;
-        *ptr++           = upbuffer[y][x];
+    for (int i = 0; i < lines; ++i) {
+        video_shift_one_line_up();
     }
-
-    is_scrolled = true;
-
-    stored_x = video_get_column();
-
-    stored_y = video_get_line();
-
-    video_move_cursor(width, height);
 }
 
-void video_scroll_down(void)
+void video_scroll_down(int lines)
 {
-    char *ptr = memory;
-
-    // If PAGEUP hasn't been pressed, it's useless to go down, there is nothing.
-    if (!is_scrolled) {
-        return;
+    for (int i = 0; i < lines; ++i) {
+        video_shift_one_line_down();
     }
-    for (uint32_t y = 0; y < height; y++) {
-        for (uint32_t x = 0; x < width * 2; x++) {
-            *ptr++ = downbuffer[y][x];
-        }
-    }
-
-    is_scrolled = false;
-
-    video_move_cursor(stored_x, stored_y);
-
-    stored_x = 0;
-
-    stored_y = 0;
 }
-
-#endif

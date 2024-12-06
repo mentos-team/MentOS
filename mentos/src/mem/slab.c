@@ -16,9 +16,12 @@
 #include "mem/paging.h"
 #include "mem/slab.h"
 #include "mem/zone_allocator.h"
+#include "resource_tracing.h"
 
-/// @brief Enables cache tracing.
-// #define ENABLE_CACHE_TRACE
+#ifdef ENABLE_KMEM_TRACE
+/// @brief Tracks the unique ID of the currently registered resource.
+static int resource_id = -1;
+#endif
 
 /// @brief Structure to represent an individual memory object within a slab.
 /// @details This structure is used to manage individual objects allocated from
@@ -438,6 +441,10 @@ int kmem_cache_init(void)
     // Initialize the list of caches to keep track of all memory caches.
     list_head_init(&kmem_caches_list);
 
+#ifdef ENABLE_KMEM_TRACE
+    resource_id = register_resource("kmem");
+#endif
+
     // Create a cache to store metadata about kmem_cache_t structures.
     if (__kmem_cache_create(
             &kmem_cache,
@@ -753,10 +760,11 @@ void *pr_kmalloc(const char *file, const char *fun, int line, unsigned int size)
         }
     }
 
-#ifdef ENABLE_ALLOC_TRACE
+#ifdef ENABLE_KMEM_TRACE
     if (ptr) {
-        pr_notice("kmalloc 0x%p of size %u at %s:%d\n", ptr, size, file, line);
+        pr_notice("kmalloc 0x%p of order %u at %s:%d\n", ptr, order, file, line);
     }
+    store_resource_info(resource_id, file, line, ptr);
 #endif
     return ptr;
 }
@@ -767,10 +775,6 @@ void pr_kfree(const char *file, const char *fun, int line, void *ptr)
         pr_warning("Attempt to free NULL pointer at %s:%d\n", file, line);
         return;
     }
-
-#ifdef ENABLE_ALLOC_TRACE
-    pr_notice("kfree   0x%p at %s:%d\n", ptr, file, line);
-#endif
 
     // Get the slab page from the pointer's address.
     page_t *page = get_page_from_virtual_address((uint32_t)ptr);
@@ -792,4 +796,10 @@ void pr_kfree(const char *file, const char *fun, int line, void *ptr)
             pr_crit("Failed to free raw pages for address 0x%p at %s:%d\n", ptr, file, line);
         }
     }
+
+#ifdef ENABLE_KMEM_TRACE
+    pr_notice("kfree   0x%p at %s:%d\n", ptr, file, line);
+    clear_resource_info(ptr);
+    print_resource_usage(resource_id, NULL);
+#endif
 }
