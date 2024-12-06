@@ -442,7 +442,7 @@ int kmem_cache_init(void)
     list_head_init(&kmem_caches_list);
 
 #ifdef ENABLE_KMEM_TRACE
-    resource_id = register_resource("kmem");
+    ENABLE_EXT2_TRACE = register_resource("kmem");
 #endif
 
     // Create a cache to store metadata about kmem_cache_t structures.

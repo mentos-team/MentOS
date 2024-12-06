@@ -25,6 +25,12 @@
 #include "system/syscall.h"
 #include "fs/pipe.h"
 
+#ifdef ENABLE_FILE_TRACE
+#include "resource_tracing.h"
+/// @brief Tracks the unique ID of the currently registered resource.
+static int resource_id = -1;
+#endif
+
 /// The list of superblocks.
 static list_head vfs_super_blocks;
 /// The list of filesystems.
@@ -37,7 +43,7 @@ static spinlock_t vfs_spinlock;
 static kmem_cache_t *vfs_superblock_cache;
 
 /// VFS memory cache for files.
-kmem_cache_t *vfs_file_cache;
+static kmem_cache_t *vfs_file_cache;
 
 void vfs_init(void)
 {
@@ -48,9 +54,77 @@ void vfs_init(void)
     // Initialize the caches for superblocks and files.
     vfs_superblock_cache = KMEM_CREATE(super_block_t);
     vfs_file_cache       = KMEM_CREATE(vfs_file_t);
+    // Register the resouces.
+#ifdef ENABLE_FILE_TRACE
+    resource_id = register_resource("vfs_file");
+#endif
     // Initialize the spinlock.
     spinlock_init(&vfs_spinlock);
     spinlock_init(&vfs_spinlock_refcount);
+}
+
+vfs_file_t *pr_vfs_alloc_file(const char *file, const char *fun, int line)
+{
+    // Validate that the cache is initialized.
+    if (!vfs_file_cache) {
+        pr_err("VFS file cache is not initialized.\n");
+        return NULL;
+    }
+
+    // Allocate the cache.
+    vfs_file_t *vfs_file = (vfs_file_t *)kmem_cache_alloc(vfs_file_cache, GFP_KERNEL);
+
+    // Log a critical error if cache allocation fails.
+    if (!vfs_file) {
+        pr_crit("Failed to allocate cache for VFS file operations.\n");
+        return NULL;
+    }
+
+#ifdef ENABLE_FILE_TRACE
+    // Store trace information for debugging resource usage.
+    store_resource_info(resource_id, file, line, vfs_file);
+#endif
+
+    // Zero out the allocated structure to ensure clean initialization.
+    memset(vfs_file, 0, sizeof(vfs_file_t));
+
+    return vfs_file;
+}
+
+static const char *__vfs_print_file_details(void *ptr)
+{
+    vfs_file_t *file = (vfs_file_t *)ptr;
+    static char buffer[NAME_MAX];
+    sprintf(buffer, "(0x%p) [%2u] %s", ptr, file->ino, file->name);
+    return buffer;
+}
+
+void pr_vfs_dealloc_file(const char *file, const char *fun, int line, vfs_file_t *vfs_file)
+{
+    // Validate the input pointer.
+    if (!vfs_file) {
+        pr_err("Cannot deallocate a NULL VFS file pointer.\n");
+        return;
+    }
+
+    // Validate that the cache is initialized.
+    if (!vfs_file_cache) {
+        pr_err("VFS file cache is not initialized.\n");
+        return;
+    }
+
+#ifdef ENABLE_FILE_TRACE
+    // Clear trace information for debugging resource usage.
+    clear_resource_info(vfs_file);
+#endif
+
+    // Free the VFS file back to the cache.
+    kmem_cache_free(vfs_file);
+
+#ifdef ENABLE_FILE_TRACE
+    // Clear trace information for debugging resource usage.
+    print_resource_usage(resource_id, __vfs_print_file_details);
+#endif
 }
 
 /// @brief Finds a filesystem type by its name.

@@ -14,9 +14,6 @@
 #include "ctype.h"
 #include "limits.h"
 
-/// Defines the buffer size for reading lines from the shadow file.
-#define LINE_LIM 256
-
 /// @brief Converts a string to a long integer.
 ///
 /// @details Parses a string into a long integer and advances the string pointer.
@@ -83,57 +80,91 @@ int __parsespent(char *s, struct spwd *sp)
 struct spwd *getspnam(const char *name)
 {
     static struct spwd spwd_buf;
-    static char *line;
     struct spwd *result;
+    char buffer[BUFSIZ];
     int e;
     int orig_errno = errno;
 
-    if (!line) line = malloc(LINE_LIM);
-    if (!line) return 0;
-    e     = getspnam_r(name, &spwd_buf, line, LINE_LIM, &result);
+    // Call the reentrant function to get the shadow password entry.
+    e = getspnam_r(name, &spwd_buf, buffer, BUFSIZ, &result);
+
+    // Propagate error from getspnam_r if it fails.
     errno = e ? e : orig_errno;
+
     return result;
 }
 
 int getspnam_r(const char *name, struct spwd *spwd_buf, char *buf, size_t buflen, struct spwd **result)
 {
-    char path[20 + NAME_MAX];
-    int rv = 0;
-    int fd;
-    size_t k, l = strlen(name);
-    int skip = 0;
-    int cs;
-    int orig_errno = errno;
+    int rv = 0;                    // Return value to track errors (e.g., ERANGE).
+    int fd;                        // File descriptor for the shadow file.
+    size_t k;                      // Length of the current line read from the file.
+    size_t l       = strlen(name); // Length of the username to search for.
+    int skip       = 0;            // Flag to indicate whether the current line should be skipped.
+    int orig_errno = errno;        // Preserve the original errno value for later restoration.
 
+    if (!spwd_buf) {
+        fprintf(stderr, "spwd_buf is NULL in getspnam_r.\n");
+        return errno = EINVAL;
+    }
+    if (!result) {
+        fprintf(stderr, "result is NULL in getspnam_r.\n");
+        return errno = EINVAL;
+    }
+
+    // Initialize the result to NULL, indicating no match found yet.
     *result = 0;
 
-    /* Disallow potentially-malicious user names */
-    if (*name == '.' || strchr(name, '/') || !l)
+    // Validate the user name for security:
+    // - Disallow names starting with '.' or containing '/' (to prevent path traversal attacks).
+    // - Disallow empty names.
+    if (*name == '.' || strchr(name, '/') || !l) {
         return errno = EINVAL;
+    }
 
-    /* Buffer size must at least be able to hold name, plus some.. */
-    if (buflen < l + 100)
+    // Ensure the buffer is large enough to hold the username and additional data.
+    if (buflen < l + 100) {
         return errno = ERANGE;
+    }
 
+    // Open the shadow file for reading.
     fd = open(SHADOW, O_RDONLY, 0);
     if (fd < 0) {
         return errno;
     }
 
+    // Read lines from the shadow file.
     while (fgets(buf, buflen, fd) && (k = strlen(buf)) > 0) {
+        // If skipping the line (due to being too long), or if the line does not match the user name:
         if (skip || strncmp(name, buf, l) || buf[l] != ':') {
+            // Set skip if the line does not end with a newline.
             skip = buf[k - 1] != '\n';
             continue;
         }
+
+        // If the line does not end with a newline, the buffer is too small.
         if (buf[k - 1] != '\n') {
+            // Buffer overflow risk; set return value to ERANGE.
             rv = ERANGE;
             break;
         }
 
-        if (__parsespent(buf, spwd_buf) < 0) continue;
+        // Parse the shadow entry from the line.
+        // If parsing fails, continue to the next line.
+        if (__parsespent(buf, spwd_buf) < 0) {
+            continue;
+        }
+
+        // Set the result to the parsed shadow entry.
         *result = spwd_buf;
+        // Exit the loop after finding the match.
         break;
     }
+
+    // Close the file descriptor.
+    close(fd);
+    // Restore errno to its original value unless an error occurred.
     errno = rv ? rv : orig_errno;
+    // Return 0 on success or an error code.
     return rv;
 }

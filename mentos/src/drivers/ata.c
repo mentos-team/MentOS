@@ -1300,7 +1300,7 @@ static int ata_close(vfs_file_t *file)
         pr_debug("ata_close: Removed file `%s` from the opened file list.\n", file->name);
 
         // Free the file from cache.
-        kmem_cache_free(file);
+        vfs_dealloc_file(file);
         pr_debug("ata_close: Freed memory for file `%s`.\n", file->name);
     }
 
@@ -1552,7 +1552,7 @@ static vfs_file_operations_t ata_fs_operations = {
 static vfs_file_t *ata_device_create(ata_device_t *dev)
 {
     // Create the file.
-    vfs_file_t *file = kmem_cache_alloc(vfs_file_cache, GFP_KERNEL);
+    vfs_file_t *file = vfs_alloc_file();
     if (file == NULL) {
         pr_err("Failed to create ATA device.\n");
         return NULL;
@@ -1613,7 +1613,7 @@ static ata_device_type_t ata_device_detect(ata_device_t *dev)
         if (!vfs_register_superblock(dev->fs_root->name, dev->path, &ata_file_system_type, dev->fs_root)) {
             pr_alert("Failed to mount ata device!\n");
             // Free the memory.
-            kmem_cache_free(dev->fs_root);
+            vfs_dealloc_file(dev->fs_root);
             return ata_dev_type_unknown;
         }
         // Increment the drive letter.

@@ -317,7 +317,7 @@ static inline vfs_file_t *procfs_create_file_struct(procfs_file_t *procfs_file)
         pr_err("procfs_create_file_struct(%p): Procfs file not valid!\n", procfs_file);
         return NULL;
     }
-    vfs_file_t *vfs_file = kmem_cache_alloc(vfs_file_cache, GFP_KERNEL);
+    vfs_file_t *vfs_file = vfs_alloc_file();
     if (!vfs_file) {
         pr_err("procfs_create_file_struct(%p): Failed to allocate memory for VFS file!\n", procfs_file);
         return NULL;
@@ -557,7 +557,7 @@ static int procfs_close(vfs_file_t *file)
         pr_debug("procfs_close: Removed file `%s` from the opened file list.\n", file->name);
 
         // Free the file from cache.
-        kmem_cache_free(file);
+        vfs_dealloc_file(file);
         pr_debug("procfs_close: Freed memory for file `%s`.\n", file->name);
     }
 
