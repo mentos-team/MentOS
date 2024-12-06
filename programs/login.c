@@ -185,13 +185,13 @@ static inline int __read_input(char *buffer, size_t size, int show)
                 // PAGE_UP
                 else if (c == '5') {
                     if (getchar() == '~') {
-                        // Nothing to do.
+                        printf("\033[25S");
                     }
                 }
                 // PAGE_DOWN
                 else if (c == '6') {
                     if (getchar() == '~') {
-                        // Nothing to do.
+                        printf("\033[25T");
                     }
                 }
             }
