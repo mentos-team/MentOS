@@ -268,13 +268,12 @@ int main(int argc, char **argv)
             continue; // Retry after error
         }
 
-        struct spwd *spwd;
-        if ((spwd = getspnam(username)) == NULL) {
+        struct spwd *shadow;
+        if ((shadow = getspnam(username)) == NULL) {
             printf("Could not retrieve the secret password of %s: %s\n", username, strerror(errno));
             continue; // Retry if unable to get shadow password
         }
 
-        // Hash the input password for verification
         unsigned char hash[SHA256_BLOCK_SIZE]       = { 0 };
         char hash_string[SHA256_BLOCK_SIZE * 2 + 1] = { 0 };
         SHA256_ctx_t ctx;
@@ -286,7 +285,7 @@ int main(int argc, char **argv)
         sha256_bytes_to_hex(hash, SHA256_BLOCK_SIZE, hash_string, SHA256_BLOCK_SIZE * 2 + 1);
 
         // Verify the password against the stored hash
-        if (strcmp(spwd->sp_pwdp, hash_string) != 0) {
+        if (strcmp(shadow->sp_pwdp, hash_string) != 0) {
             printf("Wrong password.\n");
             continue; // Retry on incorrect password
         }

@@ -6,13 +6,11 @@
 #pragma once
 
 #include "fs/vfs_types.h"
+#include "os_root_path.h"
 #include "mem/slab.h"
 
 /// Maximum number of opened file.
 #define MAX_OPEN_FD 16
-
-/// Cache for file structures in the VFS.
-extern kmem_cache_t *vfs_file_cache;
 
 /// @brief Forward declaration of task_struct.
 /// Used for task management in the VFS.
@@ -22,6 +20,26 @@ struct task_struct;
 /// This function sets up necessary resources and structures for the VFS. It
 /// must be called before any other VFS functions.
 void vfs_init(void);
+
+/// @brief Allocates a VFS file structure from the cache.
+/// @param file Source file where the allocation is requested (for logging).
+/// @param fun Function name where the allocation is requested (for logging).
+/// @param line Line number where the allocation is requested (for logging).
+/// @return Pointer to the allocated VFS file structure, or NULL if allocation fails.
+vfs_file_t *pr_vfs_alloc_file(const char *file, const char *fun, int line);
+
+/// @brief Frees a VFS file structure back to the cache.
+/// @param file Source file where the deallocation is requested (for logging).
+/// @param fun Function name where the deallocation is requested (for logging).
+/// @param line Line number where the deallocation is requested (for logging).
+/// @param vfs_file Pointer to the VFS file structure to free.
+void pr_vfs_dealloc_file(const char *file, const char *fun, int line, vfs_file_t *vfs_file);
+
+/// Wrapper that provides the filename, the function and line where the alloc is happening.
+#define vfs_alloc_file(...) pr_vfs_alloc_file(__RELATIVE_PATH__, __func__, __LINE__)
+
+/// Wrapper that provides the filename, the function and line where the free is happening.
+#define vfs_dealloc_file(...) pr_vfs_dealloc_file(__RELATIVE_PATH__, __func__, __LINE__, __VA_ARGS__)
 
 /// @brief Register a new filesystem.
 /// @param fs A pointer to the information concerning the new filesystem.

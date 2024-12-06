@@ -185,7 +185,7 @@ static struct memdev *null_device_create(const char *name)
     dev->next = NULL;
 
     // Allocate memory for the associated file structure.
-    dev->file = kmem_cache_alloc(vfs_file_cache, GFP_KERNEL);
+    dev->file = vfs_alloc_file();
     if (dev->file == NULL) {
         pr_err("null_device_create: Failed to allocate memory for file\n");
         kfree(dev); // Free the previously allocated device memory.
@@ -287,7 +287,7 @@ static int null_close(vfs_file_t *file)
         pr_debug("null_close: Removed file `%s` from the opened file list.\n", file->name);
 
         // Free the file from cache.
-        kmem_cache_free(file);
+        vfs_dealloc_file(file);
         pr_debug("null_close: Freed memory for file `%s`.\n", file->name);
     }
 

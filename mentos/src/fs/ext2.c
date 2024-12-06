@@ -11,6 +11,12 @@
 // If defined, ETX2 will debug everything.
 // #define EXT2_FULL_DEBUG
 
+#ifdef ENABLE_EXT2_TRACE
+#include "resource_tracing.h"
+/// @brief Tracks the unique ID of the currently registered resource.
+static int resource_id = -1;
+#endif
+
 #include "assert.h"
 #include "fcntl.h"
 #include "fs/ext2.h"
@@ -468,6 +474,53 @@ static const char *time_to_string(uint32_t time)
     return s;
 }
 
+/// @brief Allocate cache for EXT2 operations.
+/// @param fs file system we are working with.
+/// @return a pointer to the cache.
+static inline uint8_t *ext2_alloc_cache(ext2_filesystem_t *fs)
+{
+    // Validate input.
+    if (!fs) {
+        pr_err("Invalid input: filesystem pointer is NULL.");
+        return NULL;
+    }
+
+    // Allocate the cache.
+    uint8_t *cache = kmem_cache_alloc(fs->ext2_buffer_cache, GFP_KERNEL);
+    if (!cache) {
+        // Log critical error if cache allocation fails.
+        pr_crit("Failed to allocate cache for EXT2 operations.");
+        return NULL;
+    }
+
+#ifdef ENABLE_EXT2_TRACE
+    store_resource_info(resource_id, __RELATIVE_PATH__, 0, cache);
+#endif
+
+    // Clean the cache.
+    memset(cache, 0, fs->block_size);
+
+    return cache;
+}
+
+/// @brief Free the cache.
+/// @param cache pointer to the cache.
+static inline void ext2_dealloc_cache(uint8_t *cache)
+{
+    // Validate the input.
+    if (!cache) {
+        pr_err("Invalid input: cache pointer is NULL or already freed.");
+        return;
+    }
+
+#ifdef ENABLE_EXT2_TRACE
+    clear_resource_info(cache);
+#endif
+
+    // Free the cache.
+    kmem_cache_free(cache);
+}
+
 /// @brief Dumps on debugging output the superblock.
 /// @param sb the object to dump.
 static void ext2_dump_superblock(ext2_superblock_t *sb)
@@ -595,9 +648,7 @@ static void ext2_dump_dirent(ext2_dirent_t *dirent)
 static void ext2_dump_bgdt(ext2_filesystem_t *fs)
 {
     // Allocate the cache.
-    uint8_t *cache = kmem_cache_alloc(fs->ext2_buffer_cache, GFP_KERNEL);
-    // Clean the cache.
-    memset(cache, 0, fs->block_size);
+    uint8_t *cache = ext2_alloc_cache(fs);
     for (uint32_t i = 0; i < fs->block_groups_count; ++i) {
         // Get the pointer to the current group descriptor.
         ext2_group_descriptor_t *gd = &(fs->block_groups[i]);
@@ -633,7 +684,7 @@ static void ext2_dump_bgdt(ext2_filesystem_t *fs)
             }
         }
     }
-    kmem_cache_free(cache);
+    ext2_dealloc_cache(cache);
 }
 
 /// @brief Dumps on debugging output the filesystem.
@@ -657,45 +708,6 @@ static void ext2_dump_filesystem(ext2_filesystem_t *fs)
 // ============================================================================
 // EXT2 Core Functions
 // ============================================================================
-
-/// @brief Allocate cache for EXT2 operations.
-/// @param fs file system we are working with.
-/// @return a pointer to the cache.
-static inline uint8_t *ext2_alloc_cache(ext2_filesystem_t *fs)
-{
-    // Validate input.
-    if (!fs) {
-        pr_err("Invalid input: filesystem pointer is NULL.");
-        return NULL;
-    }
-
-    // Allocate the cache.
-    uint8_t *cache = kmem_cache_alloc(fs->ext2_buffer_cache, GFP_KERNEL);
-    if (!cache) {
-        // Log critical error if cache allocation fails.
-        pr_crit("Failed to allocate cache for EXT2 operations.");
-        return NULL;
-    }
-
-    // Clean the cache.
-    memset(cache, 0, fs->block_size);
-
-    return cache;
-}
-
-/// @brief Free the cache.
-/// @param cache pointer to the cache.
-static inline void ext2_dealloc_cache(uint8_t *cache)
-{
-    // Validate the input.
-    if (!cache) {
-        pr_err("Invalid input: cache pointer is NULL or already freed.");
-        return;
-    }
-
-    // Free the cache.
-    kmem_cache_free(cache);
-}
 
 /// @brief Returns the rec_len from the given name.
 /// @param name the name we use to compute the rec_len.
@@ -2787,7 +2799,7 @@ static vfs_file_t *ext2_creat(const char *path, mode_t mode)
         vfs_file_t *file = ext2_find_vfs_file_with_inode(fs, search.direntry.inode);
         if (file == NULL) {
             // Allocate the memory for the file.
-            file = kmem_cache_alloc(vfs_file_cache, GFP_KERNEL);
+            file = vfs_alloc_file();
             if (file == NULL) {
                 pr_err("Failed to allocate memory for the EXT2 file.\n");
                 goto close_parent_return_null;
@@ -2829,7 +2841,7 @@ static vfs_file_t *ext2_creat(const char *path, mode_t mode)
         goto close_parent_return_null;
     }
     // Allocate the memory for the file.
-    vfs_file_t *new_file = kmem_cache_alloc(vfs_file_cache, GFP_KERNEL);
+    vfs_file_t *new_file = vfs_alloc_file();
     if (new_file == NULL) {
         pr_err("Failed to allocate memory for the EXT2 file.\n");
         goto close_parent_return_null;
@@ -2916,7 +2928,7 @@ static vfs_file_t *ext2_open(const char *path, int flags, mode_t mode)
     vfs_file_t *file = ext2_find_vfs_file_with_inode(fs, search.direntry.inode);
     if (file == NULL) {
         // Allocate the memory for the file.
-        file = kmem_cache_alloc(vfs_file_cache, GFP_KERNEL);
+        file = vfs_alloc_file();
         if (file == NULL) {
             pr_err("ext2_open(path: '%s', flags: %d, mode: %d): Failed to allocate memory for the EXT2 file.\n",
                    path, flags, mode);
@@ -3037,16 +3049,16 @@ static int ext2_close(vfs_file_t *file)
         return -EINVAL;
     }
 
-    // Ensure we are not trying to close the root.
-    if (file == fs->root) {
-        pr_warning("ext2_close: Attempted to close the root file `%s`.\n", file->name);
-        return -EPERM;
-    }
-
     pr_debug("ext2_close(ino: %d, file: \"%s\", count: %d)\n", file->ino, file->name, file->count - 1);
 
     // Decrement the reference count for the file and close if last reference.
     if (--file->count == 0) {
+        // Ensure we are not trying to free the memory of the root.
+        if (file == fs->root) {
+            pr_warning("ext2_close: Attempted to close the root file `%s`.\n", file->name);
+            return -EPERM;
+        }
+
         pr_debug("ext2_close: Closing file `%s` (ino: %d).\n", file->name, file->ino);
 
         // Remove the file from the list of opened files.
@@ -3055,7 +3067,7 @@ static int ext2_close(vfs_file_t *file)
 
         // Free the file from cache.
         pr_debug("ext2_close: Freeing memory for file `%s`.\n", file->name);
-        kmem_cache_free(file);
+        vfs_dealloc_file(file);
     }
 
     return 0;
@@ -3639,6 +3651,10 @@ static vfs_file_t *ext2_mount(vfs_file_t *block_device, const char *path)
         NULL,
         NULL);
 
+#ifdef ENABLE_EXT2_TRACE
+    resource_id = register_resource("ext2");
+#endif
+
     // uint8_t *caches[100];
     // for (size_t i = 0; i < 100; ++i) {
     //     caches[i] = ext2_alloc_cache(fs);
@@ -3716,7 +3732,7 @@ static vfs_file_t *ext2_mount(vfs_file_t *block_device, const char *path)
         goto free_block_buffer;
     }
     // Allocate the memory for the root.
-    fs->root = kmem_cache_alloc(vfs_file_cache, GFP_KERNEL);
+    fs->root = vfs_alloc_file();
     if (!fs->root) {
         pr_err("Failed to allocate memory for the EXT2 root file!\n");
         // Free the block_buffer, the block_groups and the filesystem.
@@ -3727,6 +3743,8 @@ static vfs_file_t *ext2_mount(vfs_file_t *block_device, const char *path)
         // Free the block_buffer, the block_groups and the filesystem.
         goto free_all;
     }
+    // Set the count for the root to 1.
+    fs->root->count = 1;
     // Add the root to the list of opened files.
     list_head_insert_before(&fs->root->siblings, &fs->opened_files);
 
@@ -3741,7 +3759,7 @@ static vfs_file_t *ext2_mount(vfs_file_t *block_device, const char *path)
 
 free_all:
     // Free the memory occupied by the root.
-    kmem_cache_free(fs->root);
+    vfs_dealloc_file(fs->root);
 free_block_buffer:
     // Free the memory occupied by the block buffer.
     kmem_cache_destroy(fs->ext2_buffer_cache);

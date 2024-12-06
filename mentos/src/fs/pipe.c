@@ -630,7 +630,7 @@ static inline int pipe_is_blocking(vfs_file_t *file)
 static inline vfs_file_t *pipe_create_file_struct(const char *path, int flags, mode_t mode)
 {
     // Allocate memory for the VFS file structure.
-    vfs_file_t *vfs_file = kmem_cache_alloc(vfs_file_cache, GFP_KERNEL);
+    vfs_file_t *vfs_file = vfs_alloc_file();
     if (!vfs_file) {
         pr_err("Failed to allocate memory for VFS file!\n");
         return NULL;
@@ -879,7 +879,7 @@ static int pipe_close(vfs_file_t *file)
         list_head_remove(&file->siblings);
 
         // Free the file from cache.
-        kmem_cache_free(file);
+        vfs_dealloc_file(file);
     }
 
     return 0;

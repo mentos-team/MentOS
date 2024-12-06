@@ -13,6 +13,8 @@ set(BOOTLOADER_NAME   bootloader)
 # Enables memory allocation tracing.
 option(ENABLE_KMEM_TRACE "Enables kmalloc tracing." OFF)
 option(ENABLE_PAGE_TRACE "Enables page allocation tracing." OFF)
+option(ENABLE_EXT2_TRACE "Enables EXT2 allocation tracing." OFF)
+option(ENABLE_FILE_TRACE "Enables vfs_file allocation tracing." OFF)
 # Enables scheduling feedback on terminal.
 option(ENABLE_SCHEDULER_FEEDBACK "Enables scheduling feedback on terminal." OFF)
 
@@ -144,6 +146,12 @@ endif(ENABLE_KMEM_TRACE)
 if(ENABLE_PAGE_TRACE)
     target_compile_definitions(${KERNEL_NAME} PUBLIC ENABLE_PAGE_TRACE)
 endif(ENABLE_PAGE_TRACE)
+if(ENABLE_EXT2_TRACE)
+    target_compile_definitions(${KERNEL_NAME} PUBLIC ENABLE_EXT2_TRACE)
+endif(ENABLE_EXT2_TRACE)
+if(ENABLE_FILE_TRACE)
+    target_compile_definitions(${KERNEL_NAME} PUBLIC ENABLE_FILE_TRACE)
+endif(ENABLE_FILE_TRACE)
 
 # =============================================================================
 # Enables scheduling feedback on terminal.
