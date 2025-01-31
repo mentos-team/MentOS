@@ -101,3 +101,8 @@ stack_bottom:
 global stack_top
 stack_top:
     ; the top of the stack is the bottom because the stack counts down
+
+; -----------------------------------------------------------------------------
+; SECTION (note) - Inform the linker that the stack does not need to be executable
+; -----------------------------------------------------------------------------
+section .note.GNU-stack

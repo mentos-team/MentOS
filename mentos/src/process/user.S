@@ -84,4 +84,9 @@ enter_userspace:
     pop ebp
     ret
 
-    ; WE SHOULD NOT STILL BE HERE! :(p
+    ; WE SHOULD NOT STILL BE HERE! :(
+
+; -----------------------------------------------------------------------------
+; SECTION (note) - Inform the linker that the stack does not need to be executable
+; -----------------------------------------------------------------------------
+section .note.GNU-stack

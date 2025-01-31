@@ -89,3 +89,8 @@ irq_common:
     ; return to process
     iret                        ; pops 5 things at once:
                                 ;   CS, EIP, EFLAGS, SS, and ESP
+
+; -----------------------------------------------------------------------------
+; SECTION (note) - Inform the linker that the stack does not need to be executable
+; -----------------------------------------------------------------------------
+section .note.GNU-stack

@@ -28,3 +28,8 @@ flush:
     mov gs, ax
     mov ss, ax
     ret
+
+; -----------------------------------------------------------------------------
+; SECTION (note) - Inform the linker that the stack does not need to be executable
+; -----------------------------------------------------------------------------
+section .note.GNU-stack
