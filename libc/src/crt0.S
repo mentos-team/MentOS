@@ -13,3 +13,8 @@ _start:                     ; _start is the entry point known to the linker
     mov ebx, eax            ; Move `main` return value to ebx.
     mov eax, 1              ; Call the `exit` function by using `int 80` (i.e., a system call)
     int 0x80
+
+; -----------------------------------------------------------------------------
+; SECTION (note) - Inform the linker that the stack does not need to be executable
+; -----------------------------------------------------------------------------
+section .note.GNU-stack
