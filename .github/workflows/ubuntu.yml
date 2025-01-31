@@ -94,7 +94,7 @@ jobs:
             - name: Install test dependencies
               run: |
                   sudo apt-get update
-                  sudo apt-get install -y nasm qemu-system-x86 mtools
+                  sudo apt-get install -y nasm qemu-system-x86 mtools xorriso
 
             - name: Run tests
               run: |
