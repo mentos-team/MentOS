@@ -241,7 +241,7 @@ target_compile_definitions(
 add_custom_target(
     ${BOOTLOADER_NAME}.bin ALL
     COMMAND ${CMAKE_LINKER} -melf_i386 -static --oformat elf32-i386 --output kernel.bin --script ${CMAKE_CURRENT_SOURCE_DIR}/kernel.lds -Map kernel.map -u kmain $<TARGET_FILE_NAME:${KERNEL_NAME}> ${BUDDY_SYSTEM_FILE}
-    COMMAND objcopy -I binary -O elf32-i386 -B i386 kernel.bin kernel.bin.o
+    COMMAND ${CMAKE_OBJCOPY} -I binary -O elf32-i386 -B i386 kernel.bin kernel.bin.o
     COMMAND ${CMAKE_LINKER} -melf_i386 -static --oformat elf32-i386 --output ${BOOTLOADER_NAME}.bin --script ${CMAKE_CURRENT_SOURCE_DIR}/boot.lds -Map bootloader.map kernel.bin.o $<TARGET_FILE_NAME:${BOOTLOADER_NAME}>
     DEPENDS ${KERNEL_NAME}
     DEPENDS ${BOOTLOADER_NAME}
