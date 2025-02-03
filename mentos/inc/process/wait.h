@@ -5,21 +5,21 @@
 
 #pragma once
 
-#include "list_head.h"
 #include "klib/spinlock.h"
+#include "list_head.h"
 
 /// @brief Return immediately if no child is there to be waited for.
-#define WNOHANG 0x00000001
+#define WNOHANG             0x00000001
 /// @brief Return for children that are stopped, and whose status has not
 ///        been reported.
-#define WUNTRACED 0x00000002
+#define WUNTRACED           0x00000002
 /// @brief returns true if the child process exited because of a signal that
 ///        was not caught.
 #define WIFSIGNALED(status) (!WIFSTOPPED(status) && !WIFEXITED(status))
 /// @brief returns true if the child process that caused the return is
 ///        currently stopped; this is only possible if the call was done using
 ///        WUNTRACED().
-#define WIFSTOPPED(status) (((status) & 0xff) == 0x7f)
+#define WIFSTOPPED(status)  (((status) & 0xff) == 0x7f)
 /// @brief evaluates to the least significant eight bits of the return code
 ///        of the child that terminated, which may have been set as the argument
 ///        to a call to exit() or as the argument for a return statement in the
@@ -29,12 +29,12 @@
 /// @brief returns the number of the signal that caused the child process to
 ///        terminate. This macro can only be evaluated if WIFSIGNALED() returned
 ///        nonzero.
-#define WTERMSIG(status) ((status) & 0x7f)
+#define WTERMSIG(status)    ((status) & 0x7f)
 /// @brief Is nonzero if the child exited normally.
-#define WIFEXITED(status) (WTERMSIG(status) == 0)
+#define WIFEXITED(status)   (WTERMSIG(status) == 0)
 /// @brief returns the number of the signal that caused the child to stop.
 ///        This macro can only be evaluated if WIFSTOPPED() returned nonzero.
-#define WSTOPSIG(status) (WEXITSTATUS(status))
+#define WSTOPSIG(status)    (WEXITSTATUS(status))
 
 //==== Task States ============================================================
 #define TASK_RUNNING         0x00     ///< The process is either: 1) running on CPU or 2) waiting in a run queue.

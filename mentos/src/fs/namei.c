@@ -9,43 +9,36 @@
 #define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
 #include "io/debug.h"                    // Include debugging functions.
 
-#include "fs/namei.h"
 #include "assert.h"
-#include "limits.h"
-#include "fcntl.h"
-#include "sys/stat.h"
-#include "fs/vfs.h"
-#include "process/scheduler.h"
 #include "errno.h"
+#include "fcntl.h"
+#include "fs/namei.h"
+#include "fs/vfs.h"
+#include "limits.h"
+#include "process/scheduler.h"
 #include "strerror.h"
 #include "string.h"
+#include "sys/stat.h"
 
 /// Appends the path with a "/" as separator.
-#define APPEND_PATH_SEPARATOR(buffer, buflen)                                             \
-    {                                                                                     \
-        if (buffer[strnlen(buffer, buflen) - 1] != '/') { strncat(buffer, "/", buflen); } \
+#define APPEND_PATH_SEPARATOR(buffer, buflen)                                                                          \
+    {                                                                                                                  \
+        if (buffer[strnlen(buffer, buflen) - 1] != '/') {                                                              \
+            strncat(buffer, "/", buflen);                                                                              \
+        }                                                                                                              \
     }
 
 /// Appends the path.
-#define APPEND_PATH(buffer, token)             \
-    {                                          \
-        strncat(buffer, token, strlen(token)); \
+#define APPEND_PATH(buffer, token)                                                                                     \
+    {                                                                                                                  \
+        strncat(buffer, token, strlen(token));                                                                         \
     }
 
-int sys_unlink(const char *path)
-{
-    return vfs_unlink(path);
-}
+int sys_unlink(const char *path) { return vfs_unlink(path); }
 
-int sys_mkdir(const char *path, mode_t mode)
-{
-    return vfs_mkdir(path, mode);
-}
+int sys_mkdir(const char *path, mode_t mode) { return vfs_mkdir(path, mode); }
 
-int sys_rmdir(const char *path)
-{
-    return vfs_rmdir(path);
-}
+int sys_rmdir(const char *path) { return vfs_rmdir(path); }
 
 int sys_creat(const char *path, mode_t mode)
 {
@@ -71,10 +64,7 @@ int sys_creat(const char *path, mode_t mode)
     return fd;
 }
 
-int sys_symlink(const char *linkname, const char *path)
-{
-    return vfs_symlink(linkname, path);
-}
+int sys_symlink(const char *linkname, const char *path) { return vfs_symlink(linkname, path); }
 
 int sys_readlink(const char *path, char *buffer, size_t bufsize)
 {
@@ -139,9 +129,9 @@ static inline int __get_link_content(const char *path, char *buffer, size_t bufl
 /// @return -errno on fail, 1 on success.
 int __resolve_path(const char *path, char *abspath, size_t buflen, int flags, int link_depth)
 {
-    char token[NAME_MAX]    = { 0 };
-    char buffer[PATH_MAX]   = { 0 };
-    char linkpath[PATH_MAX] = { 0 };
+    char token[NAME_MAX]    = {0};
+    char buffer[PATH_MAX]   = {0};
+    char linkpath[PATH_MAX] = {0};
     size_t offset = 0, linklen = 0, tokenlen = 0;
     int contains_links = 0;
     stat_t statbuf;

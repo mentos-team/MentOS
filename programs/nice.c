@@ -3,11 +3,11 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include <unistd.h>
-#include <string.h>
 #include <stdio.h>
+#include <string.h>
+#include <unistd.h>
 
-int main(int argc, char** argv)
+int main(int argc, char **argv)
 {
     if (argc == 1) {
         int current = nice(0);

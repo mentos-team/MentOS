@@ -24,15 +24,15 @@
 #include "stdint.h"
 
 /// The maximum dimension of the IDT.
-#define IDT_SIZE 256
+#define IDT_SIZE    256
 /// When an exception occurs whose entry is a Task Gate, a task switch results.
-#define TASK_GATE 0x5
+#define TASK_GATE   0x5
 /// Used to specify an interrupt service routine (16-bit).
-#define INT16_GATE 0x6
+#define INT16_GATE  0x6
 /// @brief Similar to an Interrupt gate (16-bit).
 #define TRAP16_GATE 0x7
 /// Used to specify an interrupt service routine (32-bit).
-#define INT32_GATE 0xE
+#define INT32_GATE  0xE
 /// @brief Similar to an Interrupt gate (32-bit).
 #define TRAP32_GATE 0xF
 

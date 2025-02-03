@@ -3,13 +3,13 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "system/syscall.h"
+#include "libgen.h"
 #include "assert.h"
 #include "io/debug.h"
-#include "libgen.h"
 #include "limits.h"
 #include "mem/paging.h"
 #include "string.h"
+#include "system/syscall.h"
 
 int dirname(const char *path, char *buffer, size_t buflen)
 {

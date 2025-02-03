@@ -8,12 +8,12 @@
 /// See LICENSE.md for details.
 
 #include <signal.h>
-#include <stdlib.h>
 #include <stdio.h>
-#include <string.h>
-#include <time.h>
+#include <stdlib.h>
 #include <strerror.h>
+#include <string.h>
 #include <sys/wait.h>
+#include <time.h>
 #include <unistd.h>
 
 // Global variables to track timer events

@@ -5,8 +5,8 @@
 
 #include "system/syscall_types.h"
 
-#include "unistd.h"
 #include "errno.h"
+#include "unistd.h"
 
 // _syscall1(int, setgid, pid_t, gid)
 int setgid(gid_t gid)

@@ -27,7 +27,4 @@ void mutex_lock(mutex_t *mutex, uint32_t owner)
     }
 }
 
-void mutex_unlock(mutex_t *mutex)
-{
-    mutex->state = 0;
-}
+void mutex_unlock(mutex_t *mutex) { mutex->state = 0; }

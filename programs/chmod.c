@@ -4,35 +4,34 @@
 /// See LICENSE.md for details.
 
 #include <errno.h>
-#include <sys/stat.h>
-#include <strerror.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <strerror.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 int main(int argc, char *argv[])
 {
-   mode_t mode = 0;
-   char *endptr;
-   gid_t gid = -1;
+    mode_t mode = 0;
+    char *endptr;
+    gid_t gid = -1;
 
-   if (argc != 3) {
-       fprintf(STDERR_FILENO, "%s: MODE FILE\n", argv[0]);
-       exit(EXIT_FAILURE);
-   }
+    if (argc != 3) {
+        fprintf(STDERR_FILENO, "%s: MODE FILE\n", argv[0]);
+        exit(EXIT_FAILURE);
+    }
 
-   mode = strtol(argv[1], &endptr, 8);
-   if (*endptr != '\0') {
-       fprintf(STDERR_FILENO, "%s: invalid mode: '%s'\n", argv[0], argv[1]);
-       exit(EXIT_FAILURE);
-   }
+    mode = strtol(argv[1], &endptr, 8);
+    if (*endptr != '\0') {
+        fprintf(STDERR_FILENO, "%s: invalid mode: '%s'\n", argv[0], argv[1]);
+        exit(EXIT_FAILURE);
+    }
 
-   if (chmod(argv[2], mode) == -1) {
-       fprintf(STDERR_FILENO, "%s: changing permissions of %s: %s\n",
-               argv[0], argv[2], strerror(errno));
-       exit(EXIT_FAILURE);
-   }
+    if (chmod(argv[2], mode) == -1) {
+        fprintf(STDERR_FILENO, "%s: changing permissions of %s: %s\n", argv[0], argv[2], strerror(errno));
+        exit(EXIT_FAILURE);
+    }
 
-   exit(EXIT_SUCCESS);
+    exit(EXIT_SUCCESS);
 }

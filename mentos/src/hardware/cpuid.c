@@ -21,8 +21,7 @@ void get_cpuid(cpuinfo_t *cpuinfo)
 void call_cpuid(pt_regs *registers)
 {
     __asm__("cpuid\n\t"
-            : "=a"(registers->eax), "=b"(registers->ebx), "=c"(registers->ecx),
-              "=d"(registers->edx)
+            : "=a"(registers->eax), "=b"(registers->ebx), "=c"(registers->ecx), "=d"(registers->edx)
             : "a"(registers->eax));
 }
 
@@ -117,34 +116,33 @@ void cpuid_feature_edx(cpuinfo_t *cpuinfo, uint32_t edx)
     }
 }
 
-inline uint32_t cpuid_get_byte(uint32_t reg, uint32_t position, uint32_t value)
-{
-    return ((reg >> position) & value);
-}
+inline uint32_t cpuid_get_byte(uint32_t reg, uint32_t position, uint32_t value) { return ((reg >> position) & value); }
 
 char *cpuid_brand_index(pt_regs *f)
 {
-    char *indexes[21] = { "Reserved",
-                          "Intel Celeron",
-                          "Intel Pentium III",
-                          "Intel Pentium III Xeon",
-                          "Mobile Intel Pentium III",
-                          "Mobile Intel Celeron",
-                          "Intel Pentium 4",
-                          "Intel Pentium 4",
-                          "Intel Celeron",
-                          "Intel Xeon MP",
-                          "Intel Xeon MP",
-                          "Mobile Intel Pentium 4",
-                          "Mobile Intel Celeron",
-                          "Mobile Genuine Intel",
-                          "Intel Celeron M",
-                          "Mobile Intel Celeron",
-                          "Intel Celeron",
-                          "Mobile Genuine Intel",
-                          "Intel Pentium M",
-                          "Mobile Intel Celeron",
-                          NULL };
+    char *indexes[21] = {
+        "Reserved",
+        "Intel Celeron",
+        "Intel Pentium III",
+        "Intel Pentium III Xeon",
+        "Mobile Intel Pentium III",
+        "Mobile Intel Celeron",
+        "Intel Pentium 4",
+        "Intel Pentium 4",
+        "Intel Celeron",
+        "Intel Xeon MP",
+        "Intel Xeon MP",
+        "Mobile Intel Pentium 4",
+        "Mobile Intel Celeron",
+        "Mobile Genuine Intel",
+        "Intel Celeron M",
+        "Mobile Intel Celeron",
+        "Intel Celeron",
+        "Mobile Genuine Intel",
+        "Intel Pentium M",
+        "Mobile Intel Celeron",
+        NULL,
+    };
 
     uint32_t bx = (f->ebx & 0xFF);
 
@@ -162,14 +160,10 @@ char *cpuid_brand_string(pt_regs *f)
     for (f->eax = 0x80000002; f->eax <= 0x80000004; (f->eax)++) {
         f->ebx = f->ecx = f->edx = 0;
         call_cpuid(f);
-        temp =
-            strncat(temp, (const char *)f->eax, strlen((const char *)f->eax));
-        temp =
-            strncat(temp, (const char *)f->ebx, strlen((const char *)f->ebx));
-        temp =
-            strncat(temp, (const char *)f->ecx, strlen((const char *)f->ecx));
-        temp =
-            strncat(temp, (const char *)f->edx, strlen((const char *)f->edx));
+        temp = strncat(temp, (const char *)f->eax, strlen((const char *)f->eax));
+        temp = strncat(temp, (const char *)f->ebx, strlen((const char *)f->ebx));
+        temp = strncat(temp, (const char *)f->ecx, strlen((const char *)f->ecx));
+        temp = strncat(temp, (const char *)f->edx, strlen((const char *)f->edx));
     }
 
     return temp;

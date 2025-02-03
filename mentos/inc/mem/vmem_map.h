@@ -6,8 +6,8 @@
 #pragma once
 
 #include "mem/buddy_system.h"
-#include "mem/zone_allocator.h"
 #include "mem/paging.h"
+#include "mem/zone_allocator.h"
 
 /// @brief Virtual mapping manager.
 typedef struct virt_map_page_manager_t {
@@ -60,9 +60,4 @@ int virt_unmap_pg(virt_map_page_t *page);
 /// @param src_mm The source memory struct
 /// @param src_vaddr The source memory address
 /// @param size The size in bytes of the copy
-void virt_memcpy(
-    mm_struct_t *dst_mm,
-    uint32_t dst_vaddr,
-    mm_struct_t *src_mm,
-    uint32_t src_vaddr,
-    uint32_t size);
+void virt_memcpy(mm_struct_t *dst_mm, uint32_t dst_vaddr, mm_struct_t *src_mm, uint32_t src_vaddr, uint32_t size);

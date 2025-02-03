@@ -9,10 +9,10 @@
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/stat.h>
-#include <unistd.h>
 #include <strerror.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 int main(int argc, char *argv[])
 {
@@ -106,7 +106,7 @@ int main(int argc, char *argv[])
     }
 
     // Buffer to read the file content.
-    char buf[7] = { 0 };
+    char buf[7] = {0};
 
     // Read the content of the file.
     if (read(fd1, buf, 6) < 0) {

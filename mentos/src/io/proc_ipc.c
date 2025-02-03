@@ -3,11 +3,11 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "process/process.h"
+#include "errno.h"
 #include "fs/procfs.h"
 #include "io/debug.h"
+#include "process/process.h"
 #include "string.h"
-#include "errno.h"
 #include "sys/msg.h"
 #include "sys/sem.h"
 #include "sys/shm.h"
@@ -71,7 +71,7 @@ static vfs_file_operations_t procipc_shm_fs_operations = {
 
 int procipc_module_init(void)
 {
-    int err = 0;
+    int err                  = 0;
     proc_dir_entry_t *folder = NULL, *entry = NULL;
 
     // First, we need to create the `/proc/ipc` folder.

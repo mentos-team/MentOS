@@ -4,13 +4,13 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
+#include <math.h>
 #include <shadow.h>
-#include <unistd.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdio.h>
-#include <math.h>
 #include <time.h>
+#include <unistd.h>
 
 #include <crypt/sha256.h>
 
@@ -19,13 +19,13 @@
 int test_generate(void)
 {
     // Buffer to hold the hashed output.
-    unsigned char buffer[SHA256_BLOCK_SIZE] = { 0 };
+    unsigned char buffer[SHA256_BLOCK_SIZE] = {0};
 
     // Input string to be hashed.
     const char input[] = "Knowledge is power, but enthusiasm pulls the switch.";
 
     // Buffer to hold the hexadecimal representation of the hash.
-    char output[SHA256_BLOCK_SIZE * 2 + 1] = { 0 };
+    char output[SHA256_BLOCK_SIZE * 2 + 1] = {0};
 
     // Input string to be hashed.
     const char expected[] = "6a1399bdcf1fa1ced3d7148a3f5472a5105ff30f730069fc8bdb73bdc018cb42";

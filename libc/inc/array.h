@@ -5,34 +5,26 @@
 
 #pragma once
 
-#ifdef __KERNEL__
-/// Function for allocating memory for the array.
-#define ARRAY_ALLOC kmalloc
-/// Function for freeing the memory for the array.
-#define ARRAY_FREE  kfree
-#else
-/// Function for allocating memory for the array.
-#define ARRAY_ALLOC malloc
-/// Function for freeing the memory for the array.
-#define ARRAY_FREE  free
-#endif
-
-/// @brief Declares a new dynamic-size array structure.
-#define DECLARE_ARRAY(type, name)                                                     \
-    typedef struct arr_##name##_t {                                                   \
-        const unsigned size;                                                          \
-        type *buffer;                                                                 \
-    } arr_##name##_t;                                                                 \
-    arr_##name##_t alloc_arr_##name(unsigned len)                                     \
-    {                                                                                 \
-        arr_##name##_t a = { len, len > 0 ? ARRAY_ALLOC(sizeof(type) * len) : NULL }; \
-        memset(a.buffer, 0, sizeof(type) * len);                                      \
-        return a;                                                                     \
-    }                                                                                 \
-    static inline void free_arr_##name(arr_##name##_t *arr)                           \
-    {                                                                                 \
-        ARRAY_FREE(arr->buffer);                                                      \
-    }
-
-#undef ARRAY_ALLOC
-#undef ARRAY_FREE
+/// @brief Declares a new dynamic-size array structure with external allocation.
+///
+/// @details This macro defines a structure for a dynamic array and functions to
+/// allocate and free it, where the allocation and deallocation functions are
+/// provided as arguments.
+///
+/// @param type The data type of the array elements.
+/// @param name The base name for the generated structure and functions.
+#define DECLARE_ARRAY(type, name)                                                                                      \
+    typedef struct arr_##name##_t {                                                                                    \
+        const unsigned size;                                                                                           \
+        type *buffer;                                                                                                  \
+    } arr_##name##_t;                                                                                                  \
+                                                                                                                       \
+    static inline arr_##name##_t alloc_arr_##name(unsigned len, void *(*alloc_func)(size_t))                           \
+    {                                                                                                                  \
+        arr_##name##_t a = {len, len > 0 ? alloc_func(sizeof(type) * len) : NULL};                                     \
+        if (a.buffer)                                                                                                  \
+            memset(a.buffer, 0, sizeof(type) * len);                                                                   \
+        return a;                                                                                                      \
+    }                                                                                                                  \
+                                                                                                                       \
+    static inline void free_arr_##name(arr_##name##_t *arr, void (*free_func)(void *)) { free_func(arr->buffer); }

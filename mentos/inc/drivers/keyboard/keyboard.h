@@ -10,8 +10,8 @@
 
 #pragma once
 
-#include "ring_buffer.h"
 #include "kernel.h"
+#include "ring_buffer.h"
 
 DECLARE_FIXED_SIZE_RING_BUFFER(int, keybuffer, 256, -1)
 

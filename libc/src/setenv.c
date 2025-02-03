@@ -11,7 +11,7 @@
 char **environ;
 
 /// @brief Global environ list.
-static char **__environ = NULL;
+static char **__environ      = NULL;
 /// @brief Size of the global environ list.
 static size_t __environ_size = 0;
 
@@ -38,7 +38,9 @@ static void __clone_environ(void)
     if (environ) {
         // Count the number of variables.
         __environ_size = 0;
-        for (char **ptr = environ; *ptr; ++ptr) { ++__environ_size; }
+        for (char **ptr = environ; *ptr; ++ptr) {
+            ++__environ_size;
+        }
         // Allocate the space.
         __environ = malloc(sizeof(char *) * (__environ_size + 2));
         for (int i = 0; i < __environ_size; ++i) {
@@ -83,7 +85,7 @@ int setenv(const char *name, const char *value, int replace)
         }
     } else {
         // Get the size of environ;
-        index = __environ_size - 2;
+        index              = __environ_size - 2;
         // Extend the environ dynamically allocated memory.
         char **new_environ = (char **)realloc(environ, sizeof(char *) * (__environ_size + 1));
         // Check the pointer.
@@ -127,7 +129,7 @@ int unsetenv(const char *name)
     }
     size_t len = strlen(name);
     //LOCK;
-    char **ep = environ;
+    char **ep  = environ;
     while (*ep != NULL) {
         if (!strncmp(*ep, name, len) && (*ep)[len] == '=') {
             /* Found it.  Remove this pointer by moving later ones back.  */

@@ -11,9 +11,9 @@
 
 #include "process/wait.h"
 
-#include "process/scheduler.h"
-#include "mem/slab.h"
 #include "assert.h"
+#include "mem/slab.h"
+#include "process/scheduler.h"
 #include "string.h"
 
 /// @brief Adds the entry to the wait queue.

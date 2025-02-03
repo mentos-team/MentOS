@@ -5,10 +5,10 @@
 
 #include "grp.h"
 #include "assert.h"
+#include "errno.h"
 #include "fcntl.h"
 #include "stdio.h"
 #include "string.h"
-#include "errno.h"
 #include "unistd.h"
 
 /// Holds the file descriptor while we are working with `/etc/group`.

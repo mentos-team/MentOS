@@ -4,13 +4,13 @@
 /// See LICENSE.md for details.
 
 #include <stdio.h>
-#include <string.h>
 #include <stdlib.h>
+#include <string.h>
 
 int main(int argc, char **argv)
 {
     int newline = 1;
-    int eflag = 0;
+    int eflag   = 0;
     char buffer[BUFSIZ];
     char *buf = buffer;
     char *arg;
@@ -52,7 +52,7 @@ int main(int argc, char **argv)
                     *buf++ = '\n';
                     break;
                 default:
-                    *buf++ =  *(arg-1);
+                    *buf++ = *(arg - 1);
                     *buf++ = *arg;
                 }
                 arg++;
@@ -62,9 +62,9 @@ int main(int argc, char **argv)
         *buf = 0;
         puts(buffer);
 
-next_word:
+    next_word:
         // Add space if there are more words and the last word did not end with a new line
-        if ((*(argv+1) != NULL) && *(buf-1) != '\n') {
+        if ((*(argv + 1) != NULL) && *(buf - 1) != '\n') {
             putchar(' ');
         }
         // reset buf pointer

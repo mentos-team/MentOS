@@ -25,23 +25,18 @@ uint8_t saves[512] __attribute__((aligned(16)));
 
 /// @brief Set the FPU control word.
 /// @param cw What to set the control word to.
-static inline void __set_fpu_cw(const uint16_t cw)
-{
-    __asm__ __volatile__("fldcw %0" ::"m"(cw));
-}
+static inline void __set_fpu_cw(const uint16_t cw) { __asm__ __volatile__("fldcw %0" ::"m"(cw)); }
 
 /// @brief Enable the FPU and SSE.
 static inline void __enable_fpu(void)
 {
     __asm__ __volatile__("clts");
     size_t t;
-    __asm__ __volatile__("mov %%cr0, %0"
-                         : "=r"(t));
+    __asm__ __volatile__("mov %%cr0, %0" : "=r"(t));
     t &= ~(1U << 2U);
     t |= (1U << 1U);
     __asm__ __volatile__("mov %0, %%cr0" ::"r"(t));
-    __asm__ __volatile__("mov %%cr4, %0"
-                         : "=r"(t));
+    __asm__ __volatile__("mov %%cr4, %0" : "=r"(t));
     t |= 3U << 9U;
     __asm__ __volatile__("mov %0, %%cr4" ::"r"(t));
 }
@@ -51,8 +46,7 @@ static inline void __disable_fpu(void)
 {
     size_t t;
 
-    __asm__ __volatile__("mov %%cr0, %0"
-                         : "=r"(t));
+    __asm__ __volatile__("mov %%cr0, %0" : "=r"(t));
 
     t |= 1U << 3U;
 
@@ -82,10 +76,7 @@ static inline void __save_fpu(task_struct *proc)
 }
 
 /// Initialize the FPU.
-static inline void __init_fpu(void)
-{
-    __asm__ __volatile__("fninit");
-}
+static inline void __init_fpu(void) { __asm__ __volatile__("fninit"); }
 
 /// Kernel trap for FPU usage when FPU is disabled.
 /// @param f The interrupt stack frame.
@@ -157,15 +148,9 @@ static int __fpu_test(void)
     return (a == 60957114488184560000000000000000000000000000000000000.0);
 }
 
-void switch_fpu(void)
-{
-    __save_fpu(scheduler_get_current_process());
-}
+void switch_fpu(void) { __save_fpu(scheduler_get_current_process()); }
 
-void unswitch_fpu(void)
-{
-    __restore_fpu(scheduler_get_current_process());
-}
+void unswitch_fpu(void) { __restore_fpu(scheduler_get_current_process()); }
 
 int fpu_install(void)
 {

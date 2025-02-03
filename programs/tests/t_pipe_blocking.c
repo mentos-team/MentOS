@@ -3,18 +3,18 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
+#include <errno.h>
 #include <stdio.h>
-#include <unistd.h>
 #include <string.h>
 #include <sys/wait.h>
 #include <time.h>
-#include <errno.h>
+#include <unistd.h>
 
 int main(void)
 {
     int fds[2];
     char write_msg[]                 = "Blocking test message";
-    char read_msg[sizeof(write_msg)] = { 0 };
+    char read_msg[sizeof(write_msg)] = {0};
     ssize_t bytes_written, bytes_read;
     int error_code = 0;
 
@@ -56,7 +56,7 @@ int main(void)
         close(fds[0]); // Close unused read end.
 
         // Sleep for 200 ms.
-        timespec_t req = { 0, 200000000 };
+        timespec_t req = {0, 200000000};
         nanosleep(&req, NULL);
 
         printf("Parent writing to pipe...\n");

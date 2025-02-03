@@ -3,12 +3,12 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include <stdio.h>
-#include <signal.h>
-#include <string.h>
-#include <limits.h>
-#include <strerror.h>
 #include <ctype.h>
+#include <limits.h>
+#include <signal.h>
+#include <stdio.h>
+#include <strerror.h>
+#include <string.h>
 
 static inline int is_number(char *s)
 {
@@ -57,12 +57,10 @@ static inline int send_signal(int pid, int signr)
 {
     int ret = kill(pid, signr);
     if (ret == -1) {
-        printf("[%d] %5d failed sending signal %d (%s) : %s\n",
-               ret, pid, signr, strsignal(signr), strerror(errno));
+        printf("[%d] %5d failed sending signal %d (%s) : %s\n", ret, pid, signr, strsignal(signr), strerror(errno));
         return 0;
     }
-    printf("[%d] %5d sent signal %d (%s).\n",
-           ret, pid, signr, strsignal(signr));
+    printf("[%d] %5d sent signal %d (%s).\n", ret, pid, signr, strsignal(signr));
     return 1;
 }
 

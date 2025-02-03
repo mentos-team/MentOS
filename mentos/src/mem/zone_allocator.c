@@ -11,11 +11,11 @@
 
 #include "assert.h"
 #include "kernel.h"
+#include "list_head.h"
 #include "mem/buddy_system.h"
 #include "mem/paging.h"
 #include "mem/zone_allocator.h"
 #include "string.h"
-#include "list_head.h"
 
 /// @brief Aligns the given address down to the nearest page boundary.
 /// @param addr The address to align.
@@ -35,8 +35,8 @@
 /// @brief Aligns the given address up to the nearest order boundary.
 /// @param addr The address to align.
 /// @return The aligned address.
-#define MAX_ORDER_ALIGN(addr)                                             \
-    (((addr) & (~((PAGE_SIZE << (MAX_BUDDYSYSTEM_GFP_ORDER - 1)) - 1))) + \
+#define MAX_ORDER_ALIGN(addr)                                                                                          \
+    (((addr) & (~((PAGE_SIZE << (MAX_BUDDYSYSTEM_GFP_ORDER - 1)) - 1))) +                                              \
      (PAGE_SIZE << (MAX_BUDDYSYSTEM_GFP_ORDER - 1)))
 
 /// @brief Keeps track of system memory management data.
@@ -75,7 +75,9 @@ static inline void __print_memory_info(int log_level, const memory_info_t *mem_i
 
     pr_log(log_level, "System Memory Information:\n");
     pr_log(log_level, "    Total Memory Size       : %s\n", to_human_size(mem_info->mem_size));
-    pr_log(log_level, "    Page Indices            : Min: %u, Max: %u\n", mem_info->page_index_min, mem_info->page_index_max);
+    pr_log(
+        log_level, "    Page Indices            : Min: %u, Max: %u\n", mem_info->page_index_min,
+        mem_info->page_index_max);
     pr_log(log_level, "Memory Map:\n");
     pr_log(log_level, "    Total Page Frames       : %u\n", mem_info->mem_map_num);
     pr_log(log_level, "    Size                    : %s\n", to_human_size(sizeof(page_t) * mem_info->mem_map_num));
@@ -93,7 +95,7 @@ static inline void __print_zone(int log_level, const zone_t *zone)
         pr_crit("Invalid zone pointer\n");
         return;
     }
-    char buddy_status[512] = { 0 };
+    char buddy_status[512] = {0};
     buddy_system_to_string(&zone->buddy_system, buddy_status, sizeof(buddy_status));
     pr_log(log_level, "Zone: %s\n", zone->name);
     pr_log(log_level, "    Number of Pages      : %lu\n", zone->num_pages);
@@ -117,8 +119,9 @@ uint32_t get_virtual_address_from_page(page_t *page)
 
     // Check if the calculated page index is within valid bounds.
     if ((page_index < memory.page_index_min) || (page_index > memory.page_index_max)) {
-        pr_err("Page index %u is out of bounds. Valid range: %u to %u.\n",
-               page_index, memory.page_index_min, memory.page_index_max - 1);
+        pr_err(
+            "Page index %u is out of bounds. Valid range: %u to %u.\n", page_index, memory.page_index_min,
+            memory.page_index_max - 1);
         return 0;
     }
 
@@ -151,8 +154,9 @@ uint32_t get_physical_address_from_page(page_t *page)
 
     // Check if the calculated page index is within valid bounds.
     if ((page_index < memory.page_index_min) || (page_index > memory.page_index_max)) {
-        pr_err("Page index %u is out of bounds. Valid range: %u to %u.\n",
-               page_index, memory.page_index_min, memory.page_index_max - 1);
+        pr_err(
+            "Page index %u is out of bounds. Valid range: %u to %u.\n", page_index, memory.page_index_min,
+            memory.page_index_max - 1);
         return 0;
     }
 
@@ -177,8 +181,9 @@ page_t *get_page_from_virtual_address(uint32_t vaddr)
 
     // Check if the page index exceeds the memory map limit.
     if ((page_index < memory.page_index_min) || (page_index > memory.page_index_max)) {
-        pr_err("Page index %u is out of bounds. Valid range: %u to %u.\n",
-               page_index, memory.page_index_min, memory.page_index_max - 1);
+        pr_err(
+            "Page index %u is out of bounds. Valid range: %u to %u.\n", page_index, memory.page_index_min,
+            memory.page_index_max - 1);
         return NULL;
     }
 
@@ -199,8 +204,9 @@ page_t *get_page_from_physical_address(uint32_t phy_addr)
 
     // Check if the calculated page index is within valid bounds.
     if ((page_index < memory.page_index_min) || (page_index > memory.page_index_max)) {
-        pr_err("Page index %u is out of bounds. Valid range: %u to %u.\n",
-               page_index, memory.page_index_min, memory.page_index_max - 1);
+        pr_err(
+            "Page index %u is out of bounds. Valid range: %u to %u.\n", page_index, memory.page_index_min,
+            memory.page_index_max - 1);
         return NULL;
     }
 
@@ -296,7 +302,7 @@ static inline int is_memory_clean(gfp_t gfp_mask)
         pr_crit("Memory zone check failed for zone '%s'.\n", zone->name);
         pr_crit("Expected free space %lu bytes, but found %lu bytes.\n", zone->total_size, free_space);
         pr_crit("Buddy system state for zone '%s':\n", zone->name);
-        char buddy_status[512] = { 0 };
+        char buddy_status[512] = {0};
         buddy_system_to_string(&zone->buddy_system, buddy_status, sizeof(buddy_status));
         pr_crit("    %s\n", buddy_status);
         return 0;
@@ -328,7 +334,7 @@ static int pmm_check(void)
         return 0;
     }
 
-    char buddy_status[512] = { 0 };
+    char buddy_status[512] = {0};
     pr_notice("Zones status before testing:\n");
     buddy_system_to_string(&zone_normal->buddy_system, buddy_status, sizeof(buddy_status));
     pr_notice("    %s\n", buddy_status);
@@ -373,7 +379,8 @@ static int pmm_check(void)
             return 0;
         }
     }
-    pr_notice("\tStep 3: Testing allocation of five 2^{i} page frames in user-space...\n");
+    pr_notice("\tStep 3: Testing allocation of five 2^{i} page frames in "
+              "user-space...\n");
     {
         page_t *pages[5];
         // Allocate pages with GFP_HIGHUSER.
@@ -397,7 +404,8 @@ static int pmm_check(void)
             return 0;
         }
     }
-    pr_notice("\tStep 4: Testing allocation of five 2^{i} page frames in kernel-space...\n");
+    pr_notice("\tStep 4: Testing allocation of five 2^{i} page frames in "
+              "kernel-space...\n");
     {
         page_t *pages[5];
         // Allocate pages with GFP_KERNEL.
@@ -434,7 +442,10 @@ static int zone_init(char *name, int zone_index, uint32_t adr_from, uint32_t adr
 {
     // Ensure that the provided addresses are valid: adr_from must be less than adr_to.
     if (adr_from >= adr_to) {
-        pr_crit("Invalid block addresses: adr_from (%u) must be less than adr_to (%u).\n", adr_from, adr_to);
+        pr_crit(
+            "Invalid block addresses: adr_from (%u) must be less than adr_to "
+            "(%u).\n",
+            adr_from, adr_to);
         return 0;
     }
 
@@ -452,8 +463,7 @@ static int zone_init(char *name, int zone_index, uint32_t adr_from, uint32_t adr
 
     // Ensure that the zone_index is within the valid range.
     if ((zone_index < 0) || (zone_index >= memory.page_data->nr_zones)) {
-        pr_crit("The zone_index (%d) is out of bounds (max: %d).\n",
-                zone_index, memory.page_data->nr_zones - 1);
+        pr_crit("The zone_index (%d) is out of bounds (max: %d).\n", zone_index, memory.page_data->nr_zones - 1);
         return 0;
     }
 
@@ -569,9 +579,9 @@ ssize_t pmmngr_initialize_pages(const boot_info_t *boot_info, size_t offset)
     // Set the base address for the page_t array.
     uintptr_t mem_start = boot_info->lowmem_virt_start + offset;
     // Compute the memory usage.
-    size_t mem_usage = sizeof(page_t) * memory.mem_map_num;
+    size_t mem_usage    = sizeof(page_t) * memory.mem_map_num;
     // Get the pointer to where we want to place the structure.
-    memory.mem_map = (page_t *)mem_start;
+    memory.mem_map      = (page_t *)mem_start;
 
     // Ensure the memory usage does not exceed LowMem.
     if ((mem_start + mem_usage) > boot_info->lowmem_virt_end) {
@@ -607,9 +617,9 @@ ssize_t pmmngr_initialize_page_data(const boot_info_t *boot_info, size_t offset)
     // Calculate the virtual start address for page_data.
     uintptr_t virt_start = boot_info->lowmem_virt_start + offset;
     // Compute the memory usage.
-    size_t mem_usage = sizeof(pg_data_t);
+    size_t mem_usage     = sizeof(pg_data_t);
     // Get the pointer to where we want to place the structure.
-    memory.page_data = (pg_data_t *)virt_start;
+    memory.page_data     = (pg_data_t *)virt_start;
 
     // Initialize the page_data fields.
     memory.page_data->nr_zones         = __MAX_NR_ZONES;     // Number of memory zones.
@@ -644,25 +654,25 @@ int pmmngr_init(boot_info_t *boot_info)
     uint32_t tmp_normal_phy_start  = boot_info->lowmem_phy_start + offset_pages + offset_page_data;
     uint32_t tmp_normal_virt_start = boot_info->lowmem_virt_start + offset_pages + offset_page_data;
     // Align the physical start address of the LowMem zone to the nearest valid boundary.
-    memory.low_mem.start_addr = MAX_PAGE_ALIGN(tmp_normal_phy_start);
+    memory.low_mem.start_addr      = MAX_PAGE_ALIGN(tmp_normal_phy_start);
     // Align the physical end address of the LowMem zone to the nearest lower valid boundary.
-    memory.low_mem.end_addr = MIN_PAGE_ALIGN(boot_info->lowmem_phy_end);
+    memory.low_mem.end_addr        = MIN_PAGE_ALIGN(boot_info->lowmem_phy_end);
     // Calculate the size of the LowMem zone, ensuring it is aligned to the buddy system order.
-    memory.low_mem.size = MIN_ORDER_ALIGN(memory.low_mem.end_addr - memory.low_mem.start_addr);
+    memory.low_mem.size            = MIN_ORDER_ALIGN(memory.low_mem.end_addr - memory.low_mem.start_addr);
     // Recalculate the end address of the LowMem zone based on the adjusted size.
-    memory.low_mem.end_addr = memory.low_mem.start_addr + memory.low_mem.size;
+    memory.low_mem.end_addr        = memory.low_mem.start_addr + memory.low_mem.size;
     // Compute the virtual addresses for LowMem, offset by the adjusted physical start address.
-    memory.low_mem.virt_start = tmp_normal_virt_start + (memory.low_mem.start_addr - tmp_normal_phy_start);
-    memory.low_mem.virt_end   = boot_info->lowmem_virt_end;
+    memory.low_mem.virt_start      = tmp_normal_virt_start + (memory.low_mem.start_addr - tmp_normal_phy_start);
+    memory.low_mem.virt_end        = boot_info->lowmem_virt_end;
 
     // Align the physical start address of the HighMem zone to the nearest valid boundary.
     memory.high_mem.start_addr = MAX_PAGE_ALIGN((uint32_t)boot_info->highmem_phy_start);
     // Align the physical end address of the HighMem zone to the nearest lower valid boundary.
-    memory.high_mem.end_addr = MIN_PAGE_ALIGN((uint32_t)boot_info->highmem_phy_end);
+    memory.high_mem.end_addr   = MIN_PAGE_ALIGN((uint32_t)boot_info->highmem_phy_end);
     // Calculate the size of the HighMem zone, ensuring it is aligned to the buddy system order.
-    memory.high_mem.size = MIN_ORDER_ALIGN(memory.high_mem.end_addr - memory.high_mem.start_addr);
+    memory.high_mem.size       = MIN_ORDER_ALIGN(memory.high_mem.end_addr - memory.high_mem.start_addr);
     // Recalculate the aligned physical end address of the HighMem zone based on the adjusted size.
-    memory.high_mem.end_addr = memory.high_mem.start_addr + memory.high_mem.size;
+    memory.high_mem.end_addr   = memory.high_mem.start_addr + memory.high_mem.size;
     // Compute the virtual addresses for the HighMem zone.
     memory.high_mem.virt_start = memory.low_mem.virt_end;
     memory.high_mem.virt_end   = memory.high_mem.virt_start + memory.high_mem.size;
@@ -822,7 +832,10 @@ int free_pages_lowmem(uint32_t vaddr)
 
     // Ensure the page retrieval was successful.
     if (!page) {
-        pr_emerg("Failed to retrieve page from address: 0x%p. Page is over memory size.\n", vaddr);
+        pr_emerg(
+            "Failed to retrieve page from address: 0x%p. Page is over memory "
+            "size.\n",
+            vaddr);
         return -1;
     }
 

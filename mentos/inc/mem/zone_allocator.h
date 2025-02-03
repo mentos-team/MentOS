@@ -5,15 +5,15 @@
 
 #pragma once
 
-#include "mem/gfp.h"
-#include "math.h"
-#include "stdint.h"
-#include "list_head.h"
-#include "sys/bitops.h"
-#include "klib/stdatomic.h"
 #include "boot.h"
+#include "klib/stdatomic.h"
+#include "list_head.h"
+#include "math.h"
 #include "mem/buddy_system.h"
+#include "mem/gfp.h"
 #include "mem/slab.h"
+#include "stdint.h"
+#include "sys/bitops.h"
 
 #define page_count(p)        atomic_read(&(p)->count)   ///< Reads the page count.
 #define set_page_count(p, v) atomic_set(&(p)->count, v) ///< Sets the page count.

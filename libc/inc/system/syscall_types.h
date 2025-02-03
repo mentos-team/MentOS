@@ -378,21 +378,21 @@
 
 /// @brief Adjust the result of a system call and set errno if needed.
 /// @param value The variable where the result of the system call is stored.
-#define __syscall_set_errno(value)                           \
-    do {                                                     \
-        if ((unsigned int)(value) >= (unsigned int)(-125)) { \
-            errno   = -(value);                              \
-            (value) = -1;                                    \
-        }                                                    \
+#define __syscall_set_errno(value)                                                                                     \
+    do {                                                                                                               \
+        if ((unsigned int)(value) >= (unsigned int)(-125)) {                                                           \
+            errno   = -(value);                                                                                        \
+            (value) = -1;                                                                                              \
+        }                                                                                                              \
     } while (0)
 
 /// @brief Handle the value returned from a system call.
 /// @param type Specifies the type of the returned value.
 /// @param value The variable where the result of the system call is stored.
-#define __syscall_return(type, value) \
-    do {                              \
-        __syscall_set_errno(value);   \
-        return (type)(value);         \
+#define __syscall_return(type, value)                                                                                  \
+    do {                                                                                                               \
+        __syscall_set_errno(value);                                                                                    \
+        return (type)(value);                                                                                          \
     } while (0)
 
 // Few things about what follows:
@@ -407,43 +407,40 @@
 //
 
 /// @brief Heart of the code that calls a system call with 0 parameters.
-#define __inline_syscall_0(res, name) \
-    __asm__ __volatile__("int $0x80"  \
-                         : "=a"(res)  \
-                         : "0"(__NR_##name))
+#define __inline_syscall_0(res, name) __asm__ __volatile__("int $0x80" : "=a"(res) : "0"(__NR_##name))
 
 /// @brief Heart of the code that calls a system call with 1 parameter.
-#define __inline_syscall_1(res, name, arg1)                                \
-    __asm__ __volatile__("push %%ebx; movl %2,%%ebx; int $0x80; pop %%ebx" \
-                         : "=a"(res)                                       \
-                         : "0"(__NR_##name), "ri"(arg1)                    \
+#define __inline_syscall_1(res, name, arg1)                                                                            \
+    __asm__ __volatile__("push %%ebx; movl %2,%%ebx; int $0x80; pop %%ebx"                                             \
+                         : "=a"(res)                                                                                   \
+                         : "0"(__NR_##name), "ri"(arg1)                                                                \
                          : "memory");
 
 /// @brief Heart of the code that calls a system call with 2 parameters.
-#define __inline_syscall_2(res, name, arg1, arg2)                          \
-    __asm__ __volatile__("push %%ebx; movl %2,%%ebx; int $0x80; pop %%ebx" \
-                         : "=a"(res)                                       \
-                         : "0"(__NR_##name), "ri"(arg1), "c"(arg2)         \
+#define __inline_syscall_2(res, name, arg1, arg2)                                                                      \
+    __asm__ __volatile__("push %%ebx; movl %2,%%ebx; int $0x80; pop %%ebx"                                             \
+                         : "=a"(res)                                                                                   \
+                         : "0"(__NR_##name), "ri"(arg1), "c"(arg2)                                                     \
                          : "memory");
 
 /// @brief Heart of the code that calls a system call with 3 parameters.
-#define __inline_syscall_3(res, name, arg1, arg2, arg3)                       \
-    __asm__ __volatile__("push %%ebx; movl %2,%%ebx; int $0x80; pop %%ebx"    \
-                         : "=a"(res)                                          \
-                         : "0"(__NR_##name), "ri"(arg1), "c"(arg2), "d"(arg3) \
+#define __inline_syscall_3(res, name, arg1, arg2, arg3)                                                                \
+    __asm__ __volatile__("push %%ebx; movl %2,%%ebx; int $0x80; pop %%ebx"                                             \
+                         : "=a"(res)                                                                                   \
+                         : "0"(__NR_##name), "ri"(arg1), "c"(arg2), "d"(arg3)                                          \
                          : "memory");
 
 /// @brief Heart of the code that calls a system call with 4 parameters.
-#define __inline_syscall_4(res, name, arg1, arg2, arg3, arg4)                            \
-    __asm__ __volatile__("push %%ebx; movl %2,%%ebx; int $0x80; pop %%ebx"               \
-                         : "=a"(res)                                                     \
-                         : "0"(__NR_##name), "ri"(arg1), "c"(arg2), "d"(arg3), "S"(arg4) \
+#define __inline_syscall_4(res, name, arg1, arg2, arg3, arg4)                                                          \
+    __asm__ __volatile__("push %%ebx; movl %2,%%ebx; int $0x80; pop %%ebx"                                             \
+                         : "=a"(res)                                                                                   \
+                         : "0"(__NR_##name), "ri"(arg1), "c"(arg2), "d"(arg3), "S"(arg4)                               \
                          : "memory");
 
 /// @brief Heart of the code that calls a system call with 5 parameters.
-#define __inline_syscall_5(res, name, arg1, arg2, arg3, arg4, arg5)                                 \
-    __asm__ __volatile__("push %%ebx; movl %2,%%ebx; movl %1,%%eax; "                               \
-                         "int $0x80; pop %%ebx"                                                     \
-                         : "=a"(res)                                                                \
-                         : "i"(__NR_##name), "ri"(arg1), "c"(arg2), "d"(arg3), "S"(arg4), "D"(arg5) \
+#define __inline_syscall_5(res, name, arg1, arg2, arg3, arg4, arg5)                                                    \
+    __asm__ __volatile__("push %%ebx; movl %2,%%ebx; movl %1,%%eax; "                                                  \
+                         "int $0x80; pop %%ebx"                                                                        \
+                         : "=a"(res)                                                                                   \
+                         : "i"(__NR_##name), "ri"(arg1), "c"(arg2), "d"(arg3), "S"(arg4), "D"(arg5)                    \
                          : "memory");

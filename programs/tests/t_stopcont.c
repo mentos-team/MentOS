@@ -3,12 +3,12 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include <unistd.h>
-#include <sys/wait.h>
-#include <stdlib.h>
 #include <signal.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <sys/wait.h>
 #include <time.h>
+#include <unistd.h>
 
 /// @brief Signal handler for SIGCONT.
 /// @param sig The signal number.
@@ -39,7 +39,7 @@ int main(int argc, char *argv[])
         printf("Child process (PID: %d) started.\n", getpid());
 
         // Sleep for 100 ms.
-        timespec_t req = { 0, 100000000 };
+        timespec_t req = {0, 100000000};
 
         while (1) {
             printf("Child process running...\n");
@@ -49,7 +49,7 @@ int main(int argc, char *argv[])
     } else { // Parent process.
 
         // Sleep for 300 ms.
-        timespec_t req = { 0, 300000000 };
+        timespec_t req = {0, 300000000};
 
         // Let the child process run for a bit.
         nanosleep(&req, NULL);

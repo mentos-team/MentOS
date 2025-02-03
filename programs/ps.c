@@ -3,13 +3,13 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include <unistd.h>
-#include <sys/stat.h>
+#include <ctype.h>
 #include <fcntl.h>
 #include <stdio.h>
-#include <string.h>
 #include <stdlib.h>
-#include <ctype.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 #define FORMAT_S "%5s %5s %6s %s\n"
 #define FORMAT   "%5d %5d %6c %s\n"
@@ -17,16 +17,26 @@
 static inline int __is_number(const char *str)
 {
     // Check for NULL pointer.
-    if (str == NULL) { return 0; }
+    if (str == NULL) {
+        return 0;
+    }
     // Skip leading whitespace.
-    while (isspace((unsigned char)*str)) { str++; }
+    while (isspace((unsigned char)*str)) {
+        str++;
+    }
     // Check if there is a sign at the beginning.
-    if (*str == '-' || *str == '+') { str++; }
+    if (*str == '-' || *str == '+') {
+        str++;
+    }
     // Check if the string is empty or only contains a sign.
-    if (*str == '\0') { return 0; }
+    if (*str == '\0') {
+        return 0;
+    }
     // Check each character to ensure it's a digit
     while (*str) {
-        if (!isdigit((unsigned char)*str)) { return 0; }
+        if (!isdigit((unsigned char)*str)) {
+            return 0;
+        }
         str++;
     }
     // If we reach here, all characters were digits.
@@ -39,14 +49,14 @@ static inline void __iterate_proc_dirs(int proc_fd)
     // Holds the file descriptor of the stat file.
     int stat_fd;
     // Buffer used to read the stat file.
-    char stat_buffer[BUFSIZ] = { 0 };
+    char stat_buffer[BUFSIZ] = {0};
     // Variables used to read the stat file.
     // (1) pid   %d
     // (2) comm  %s
     // (3) state %c
     // (4) ppid  %d
     pid_t pid;
-    char comm[BUFSIZ] = { 0 };
+    char comm[BUFSIZ] = {0};
     char state;
     pid_t ppid;
     // The directory entry.

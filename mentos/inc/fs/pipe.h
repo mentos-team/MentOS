@@ -5,9 +5,9 @@
 
 #pragma once
 
+#include "klib/mutex.h"
 #include "process/process.h"
 #include "process/wait.h"
-#include "klib/mutex.h"
 
 /// @brief This constant specifies the size of the buffer allocated for each
 /// pipe, and its value can affect the performance and capacity of pipes.

@@ -9,8 +9,8 @@
 #include <sys/ipc.h>
 #include <sys/sem.h>
 #include <sys/shm.h>
-#include <unistd.h>
 #include <sys/wait.h>
+#include <unistd.h>
 
 /// Define the size of shared memory to hold two integers.
 #define MEM_SIZE sizeof(int) * 2
@@ -51,7 +51,8 @@ int main(void)
     }
 
     // Wait for the child to finish.
-    while (wait(NULL) != -1) continue;
+    while (wait(NULL) != -1)
+        continue;
 
     printf("F: %p\n", array);
     array[1] = 2;

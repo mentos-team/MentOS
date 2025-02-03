@@ -9,11 +9,11 @@
 #define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
 #include "io/debug.h"                    // Include debugging functions.
 
-#include "system/panic.h"
-#include "descriptor_tables/isr.h"
 #include "descriptor_tables/idt.h"
+#include "descriptor_tables/isr.h"
 #include "process/scheduler.h"
 #include "stdio.h"
+#include "system/panic.h"
 
 /// @brief Default error messages for exceptions.
 static const char *exception_messages[32] = {
@@ -48,8 +48,7 @@ static const char *exception_messages[32] = {
     "Reserved",
     "Reserved",
     "Security exception",
-    "Triple fault"
-};
+    "Triple fault"};
 
 /// @brief Array of interrupt service routines for execptions and interrupts.
 static interrupt_handler_t isr_routines[IDT_SIZE];
@@ -62,9 +61,9 @@ static inline void default_isr_handler(pt_regs *f)
 {
     uint32_t irq_line = f->int_no;
     PRINT_REGS(pr_emerg, f);
-    pr_emerg("No handler for execption: %d (%s)\n",
-             irq_line,
-             (irq_line < 32) ? exception_messages[irq_line] : "no description");
+    pr_emerg(
+        "No handler for execption: %d (%s)\n", irq_line,
+        (irq_line < 32) ? exception_messages[irq_line] : "no description");
     kernel_panic("Missing ISR handler.");
 }
 

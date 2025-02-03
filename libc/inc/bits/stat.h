@@ -9,8 +9,8 @@
 #error "Never include <bits/stat.h> directly; use <sys/stat.h> instead."
 #endif
 
-#include "sys/types.h"
 #include "stddef.h"
+#include "sys/types.h"
 #include "time.h"
 
 /// @brief Data structure which contains information about a file.

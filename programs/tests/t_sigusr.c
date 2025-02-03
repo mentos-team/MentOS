@@ -5,14 +5,14 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include <unistd.h>
 #include <signal.h>
-#include <stdlib.h>
 #include <stdio.h>
-#include <string.h>
+#include <stdlib.h>
 #include <strerror.h>
+#include <string.h>
 #include <sys/wait.h>
 #include <time.h>
+#include <unistd.h>
 
 /// @brief Signal handler for SIGUSR1 and SIGUSR2.
 /// @param sig Signal number (should be SIGUSR1 or SIGUSR2).
@@ -68,7 +68,7 @@ int main(int argc, char *argv[])
     }
 
     // Pause for a short period (200 ms) before sending the next signal.
-    timespec_t req = { 0, 200000000 };
+    timespec_t req = {0, 200000000};
     nanosleep(&req, NULL);
 
     // Send SIGUSR2 signal to the current process.
@@ -78,7 +78,8 @@ int main(int argc, char *argv[])
     }
 
     // Infinite loop to keep the program running and waiting for signals.
-    while (1) {}
+    while (1) {
+    }
 
     // This point will never be reached due to the infinite loop.
     return EXIT_SUCCESS;

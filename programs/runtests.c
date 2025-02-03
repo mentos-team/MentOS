@@ -3,22 +3,22 @@
 /// @copyright (c) 2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
+#include <errno.h>
 #include <fcntl.h>
 #include <io/port_io.h>
+#include <limits.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <strerror.h>
 #include <string.h>
-#include <errno.h>
-#include <unistd.h>
 #include <sys/wait.h>
-#include <limits.h>
 #include <syslog.h>
+#include <unistd.h>
 
 #define SHUTDOWN_PORT 0x604
 /// Second serial port for QEMU.
-#define SERIAL_COM2 0x02F8
+#define SERIAL_COM2   0x02F8
 
 static char *all_tests[] = {
     "t_abort",
@@ -78,12 +78,12 @@ static int test_err_fd;
 
 static int init;
 
-#define append(...)                             \
-    do {                                        \
-        bufpos += sprintf(bufpos, __VA_ARGS__); \
-        if (bufpos >= buf + sizeof(buf)) {      \
-            return -1;                          \
-        }                                       \
+#define append(...)                                                                                                    \
+    do {                                                                                                               \
+        bufpos += sprintf(bufpos, __VA_ARGS__);                                                                        \
+        if (bufpos >= buf + sizeof(buf)) {                                                                             \
+            return -1;                                                                                                 \
+        }                                                                                                              \
     } while (0);
 
 static int test_out_flush(void)
@@ -240,7 +240,9 @@ int main(int argc, char **argv)
     if (init) {
         pid_t runtests = fork();
         if (runtests) {
-            while (1) { wait(NULL); }
+            while (1) {
+                wait(NULL);
+            }
         }
     }
 

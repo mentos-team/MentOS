@@ -11,15 +11,15 @@
 
 #include "assert.h"
 #include "descriptor_tables/tss.h"
+#include "errno.h"
 #include "fs/vfs.h"
 #include "hardware/timer.h"
-#include "process/prio.h"
 #include "process/pid_manager.h"
+#include "process/prio.h"
 #include "process/scheduler.h"
 #include "process/scheduler_feedback.h"
 #include "process/wait.h"
 #include "strerror.h"
-#include "errno.h"
 #include "system/panic.h"
 
 /// @brief          Assembly function setting the kernel stack to jump into
@@ -41,22 +41,18 @@ void scheduler_initialize(void)
     // Initialize the PID manager.
     pid_manager_init();
     // Reset the current task.
-    runqueue.curr = NULL;
+    runqueue.curr       = NULL;
     // Reset the number of active tasks.
     runqueue.num_active = 0;
 }
 
-task_struct *scheduler_get_current_process(void)
-{
-    return runqueue.curr;
-}
+task_struct *scheduler_get_current_process(void) { return runqueue.curr; }
 
 time_t scheduler_get_maximum_vruntime(void)
 {
     time_t vruntime = 0;
     task_struct *entry;
-    list_for_each_decl(it, &runqueue.queue)
-    {
+    list_for_each_decl (it, &runqueue.queue) {
         // Check if we reached the head of list_head, and skip it.
         if (it == &runqueue.queue) {
             continue;
@@ -76,16 +72,12 @@ time_t scheduler_get_maximum_vruntime(void)
     return vruntime;
 }
 
-size_t scheduler_get_active_processes(void)
-{
-    return runqueue.num_active;
-}
+size_t scheduler_get_active_processes(void) { return runqueue.num_active; }
 
 task_struct *scheduler_get_running_process(pid_t pid)
 {
     task_struct *entry;
-    list_for_each_decl(it, &runqueue.queue)
-    {
+    list_for_each_decl (it, &runqueue.queue) {
         entry = list_entry(it, task_struct, run_list);
         if (entry->pid == pid) {
             return entry;
@@ -192,7 +184,7 @@ void scheduler_restore_context(task_struct *process, pt_regs *f)
     // Switch to the next process.
     runqueue.curr = process;
     // Restore the registers.
-    *f = process->thread.regs;
+    *f            = process->thread.regs;
     // TODO(enrico): Explain paging switch (ring 0 doesn't need page switching)
     // Switch to process page directory
     paging_switch_directory_va(process->mm->pgd);
@@ -258,13 +250,15 @@ pid_t sys_getsid(pid_t pid)
     }
 
     // If pid != 0, search for the process with the specified PID.
-    list_for_each_decl(it, &runqueue.queue)
-    {
+    list_for_each_decl (it, &runqueue.queue) {
         task_struct *task = list_entry(it, task_struct, run_list);
         if (task->pid == pid) {
             // Check if the current process belongs to the same session.
             if (runqueue.curr->sid != task->sid) {
-                pr_debug("Access denied: Process %d is not in the same session as the caller.", pid);
+                pr_debug(
+                    "Access denied: Process %d is not in the same session as "
+                    "the caller.",
+                    pid);
                 return -EPERM;
             }
             // Return the session ID of the target process.
@@ -342,7 +336,10 @@ int sys_setpgid(pid_t pid, pid_t pgid)
 
     // If the process is a session leader, it cannot change its process group.
     if (task->pgid == task->pid) {
-        pr_debug("Process %d is already a session leader and cannot change its process group.", task->pid);
+        pr_debug(
+            "Process %d is already a session leader and cannot change its "
+            "process group.",
+            task->pid);
         return -EPERM;
     }
 
@@ -355,57 +352,51 @@ int sys_setpgid(pid_t pid, pid_t pgid)
 }
 
 /// Returns the attributes of the runnign process.
-#define RETURN_PROCESS_ATTR_OR_EPERM(attr)             \
-    if (runqueue.curr) { return runqueue.curr->attr; } \
+#define RETURN_PROCESS_ATTR_OR_EPERM(attr)                                                                             \
+    if (runqueue.curr) {                                                                                               \
+        return runqueue.curr->attr;                                                                                    \
+    }                                                                                                                  \
     return -EPERM;
 
-uid_t sys_getuid(void)
-{
-    RETURN_PROCESS_ATTR_OR_EPERM(ruid);
-}
-uid_t sys_geteuid(void)
-{
-    RETURN_PROCESS_ATTR_OR_EPERM(uid);
-}
+uid_t sys_getuid(void) { RETURN_PROCESS_ATTR_OR_EPERM(ruid); }
+uid_t sys_geteuid(void) { RETURN_PROCESS_ATTR_OR_EPERM(uid); }
 
-gid_t sys_getgid(void)
-{
-    RETURN_PROCESS_ATTR_OR_EPERM(rgid);
-}
-gid_t sys_getegid(void)
-{
-    RETURN_PROCESS_ATTR_OR_EPERM(gid);
-}
+gid_t sys_getgid(void) { RETURN_PROCESS_ATTR_OR_EPERM(rgid); }
+gid_t sys_getegid(void) { RETURN_PROCESS_ATTR_OR_EPERM(gid); }
 
 /// Checks the given ID.
-#define FAIL_ON_INV_ID(id) \
-    if (id < 0) { return -EINVAL; }
+#define FAIL_ON_INV_ID(id)                                                                                             \
+    if (id < 0) {                                                                                                      \
+        return -EINVAL;                                                                                                \
+    }
 
 /// Checks the ID, and if there is a running process.
-#define FAIL_ON_INV_ID_OR_PROC(id) \
-    FAIL_ON_INV_ID(id)             \
-    if (!runqueue.curr) { return -EPERM; }
+#define FAIL_ON_INV_ID_OR_PROC(id)                                                                                     \
+    FAIL_ON_INV_ID(id)                                                                                                 \
+    if (!runqueue.curr) {                                                                                              \
+        return -EPERM;                                                                                                 \
+    }
 
 /// If the process is ROOT, set the attribute and return 0.
-#define IF_PRIVILEGED_SET_ALL_AND_RETURN(attr)               \
-    if (runqueue.curr->uid == 0) {                           \
-        runqueue.curr->r##attr = runqueue.curr->attr = attr; \
-        return 0;                                            \
+#define IF_PRIVILEGED_SET_ALL_AND_RETURN(attr)                                                                         \
+    if (runqueue.curr->uid == 0) {                                                                                     \
+        runqueue.curr->r##attr = runqueue.curr->attr = attr;                                                           \
+        return 0;                                                                                                      \
     }
 
 /// Checks the attributes, resets them, and returns 0.
-#define IF_RESET_SET_AND_RETURN(attr)     \
-    if (runqueue.curr->r##attr == attr) { \
-        runqueue.curr->attr = attr;       \
-        return 0;                         \
+#define IF_RESET_SET_AND_RETURN(attr)                                                                                  \
+    if (runqueue.curr->r##attr == attr) {                                                                              \
+        runqueue.curr->attr = attr;                                                                                    \
+        return 0;                                                                                                      \
     }
 
 /// If the process is ROOT set the attribute, otherwise return failure.
-#define SET_IF_PRIVILEGED_OR_FAIL(attr) \
-    if (runqueue.curr->uid == 0) {      \
-        runqueue.curr->attr = attr;     \
-    } else {                            \
-        return -EPERM;                  \
+#define SET_IF_PRIVILEGED_OR_FAIL(attr)                                                                                \
+    if (runqueue.curr->uid == 0) {                                                                                     \
+        runqueue.curr->attr = attr;                                                                                    \
+    } else {                                                                                                           \
+        return -EPERM;                                                                                                 \
     }
 
 int sys_setuid(uid_t uid)
@@ -426,7 +417,9 @@ int sys_setgid(gid_t gid)
 
 int sys_setreuid(uid_t ruid, uid_t euid)
 {
-    if (!runqueue.curr) { return -EPERM; }
+    if (!runqueue.curr) {
+        return -EPERM;
+    }
 
     if (euid != -1) {
         FAIL_ON_INV_ID(euid);
@@ -447,7 +440,9 @@ int sys_setreuid(uid_t ruid, uid_t euid)
 
 int sys_setregid(gid_t rgid, gid_t egid)
 {
-    if (!runqueue.curr) { return -EPERM; }
+    if (!runqueue.curr) {
+        return -EPERM;
+    }
 
     if (egid != -1) {
         FAIL_ON_INV_ID(rgid);
@@ -591,24 +586,23 @@ void do_exit(int exit_code)
     // Set the termination code of the process.
     runqueue.curr->exit_code = exit_code;
     // Set the state of the process to zombie.
-    runqueue.curr->state = EXIT_ZOMBIE;
+    runqueue.curr->state     = EXIT_ZOMBIE;
     // Send a SIGCHLD to the parent process.
     if (runqueue.curr->parent) {
         int ret = sys_kill(runqueue.curr->parent->pid, SIGCHLD);
         if (ret == -1) {
-            pr_err("[%d] %5d failed sending signal %d : %s\n", ret, runqueue.curr->parent->pid,
-                   SIGCHLD, strerror(errno));
+            pr_err(
+                "[%d] %5d failed sending signal %d : %s\n", ret, runqueue.curr->parent->pid, SIGCHLD, strerror(errno));
         }
     }
 
     // If it has children, then init process has to take care of them.
     if (!list_head_empty(&runqueue.curr->children)) {
-        pr_debug("Moving children of %s(%d) to init(%d): {\n",
-                 runqueue.curr->name, runqueue.curr->pid, init_process->pid);
+        pr_debug(
+            "Moving children of %s(%d) to init(%d): {\n", runqueue.curr->name, runqueue.curr->pid, init_process->pid);
         // Change the parent.
         pr_debug("Moving children (%d): {\n", init_process->pid);
-        list_for_each_decl(it, &runqueue.curr->children)
-        {
+        list_for_each_decl (it, &runqueue.curr->children) {
             task_struct *entry = list_entry(it, task_struct, sibling);
             pr_debug("    [%d] %s\n", entry->pid, entry->name);
             entry->parent = init_process;
@@ -618,8 +612,7 @@ void do_exit(int exit_code)
         list_head_append(&init_process->children, &runqueue.curr->children);
         // Print the list of children.
         pr_debug("New list of init children (%d): {\n", init_process->pid);
-        list_for_each_decl(it, &init_process->children)
-        {
+        list_for_each_decl (it, &init_process->children) {
             task_struct *entry = list_entry(it, task_struct, sibling);
             pr_debug("    [%d] %s\n", entry->pid, entry->name);
         }
@@ -631,10 +624,7 @@ void do_exit(int exit_code)
     pr_debug("Process %d exited with value %d\n", runqueue.curr->pid, exit_code);
 }
 
-void sys_exit(int exit_code)
-{
-    do_exit(exit_code << 8);
-}
+void sys_exit(int exit_code) { do_exit(exit_code << 8); }
 
 int sys_sched_setparam(pid_t pid, const sched_param_t *param)
 {
@@ -689,8 +679,7 @@ static int __response_time_analysis(void)
 {
     task_struct *entry, *previous;
     time_t r, previous_r = 0;
-    list_for_each_decl(it, &runqueue.queue)
-    {
+    list_for_each_decl (it, &runqueue.queue) {
         // Get the curent entry in the list.
         entry = list_entry(it, task_struct, run_list);
         // If the process is not periodic we skip it.
@@ -706,17 +695,14 @@ static int __response_time_analysis(void)
             // Save the previous response time.
             previous_r = r;
             // Initialize response time.
-            r = entry->se.worst_case_exec;
-            list_for_each_decl(it2, &runqueue.queue)
-            {
+            r          = entry->se.worst_case_exec;
+            list_for_each_decl (it2, &runqueue.queue) {
                 previous = list_entry(it2, task_struct, run_list);
                 // Check the interferences of higher priority processes.
                 if (previous->se.is_periodic && (previous->se.period < entry->se.period)) {
-                    pr_debug("%d += (%.2f / %.2f) * %d\n",
-                             r,
-                             (double)previous_r,
-                             (double)previous->se.period,
-                             previous->se.worst_case_exec);
+                    pr_debug(
+                        "%d += (%.2f / %.2f) * %d\n", r, (double)previous_r, (double)previous->se.period,
+                        previous->se.worst_case_exec);
 
                     // Update the response time.
                     r += (int)ceil((double)previous_r / (double)previous->se.period) * previous->se.worst_case_exec;
@@ -740,8 +726,7 @@ static inline double __compute_utilization_factor(void)
 {
     task_struct *entry;
     double U = 0;
-    list_for_each_decl(it, &runqueue.queue)
-    {
+    list_for_each_decl (it, &runqueue.queue) {
         // Get the entry.
         entry = list_entry(it, task_struct, run_list);
         // Sum the utilization factor of all periodic tasks.
@@ -782,7 +767,7 @@ int sys_waitperiod(void)
         // Set the WCET as the total execution time of the process.
         current->se.worst_case_exec = current->se.sum_exec_runtime;
         // This will keep track if the process can be scheduled.
-        bool_t is_not_schedulable = false;
+        bool_t is_not_schedulable   = false;
 #if defined(SCHEDULER_EDF)
         // Compute the total utilization factor.
         double u = __compute_utilization_factor();
@@ -794,7 +779,7 @@ int sys_waitperiod(void)
         pr_warning("Utilization factor is : %.2f\n", u);
 #elif defined(SCHEDULER_RM)
         // Compute the total utilization factor.
-        double u = __compute_utilization_factor();
+        double u    = __compute_utilization_factor();
         // Calculating Least Upper Bound of utilization factor. For large amount
         // of processes ulub asymptotically should reach ln(2).
         double ulub = (runqueue.num_periodic * (pow(2, (1.0 / runqueue.num_periodic)) - 1));
@@ -819,8 +804,8 @@ int sys_waitperiod(void)
         // The task has been executed as non-periodic process so that his
         // deadline is not been updated by the scheduling algorithm of periodic
         // tasks. We need to update it manually.
-        current->se.next_period = current_time;
-        current->se.deadline    = current_time + current->se.period;
+        current->se.next_period       = current_time;
+        current->se.deadline          = current_time + current->se.period;
     }
     // If the current time is ahead of the deadline, we need to print a warning.
     if (current_time > current->se.deadline) {

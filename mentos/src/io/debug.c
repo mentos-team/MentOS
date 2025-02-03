@@ -26,7 +26,7 @@ static int max_log_level = LOGLEVEL_DEBUG;
 static inline void __debug_print_header(const char *file, const char *fun, int line, short log_level, char *header)
 {
     // "EMERG  ", "ALERT  ", "CRIT   ", "ERR    ", "WARNING", "NOTICE ", "INFO   ", "DEBUG  ", "DEFAULT",
-    static const char *log_level_label[] = { " EM ", " AL ", " CR ", " ER ", " WR ", " NT ", " IN ", " DB ", " DF " };
+    static const char *log_level_label[] = {" EM ", " AL ", " CR ", " ER ", " WR ", " NT ", " IN ", " DB ", " DF "};
     static const char *log_level_color[] = {
         FG_RED_BRIGHT_BOLD, // "EMERG  "
         FG_RED_BRIGHT,      // "ALERT  "
@@ -79,15 +79,12 @@ void set_log_level(int level)
     }
 }
 
-int get_log_level(void)
-{
-    return max_log_level;
-}
+int get_log_level(void) { return max_log_level; }
 
 const char *to_human_size(unsigned long bytes)
 {
     static char output[200];
-    const char *suffix[] = { "B", "KB", "MB", "GB", "TB" };
+    const char *suffix[] = {"B", "KB", "MB", "GB", "TB"};
     char length          = sizeof(suffix) / sizeof(suffix[0]);
     int i                = 0;
     double dblBytes      = bytes;
@@ -114,10 +111,7 @@ const char *dec_to_binary(unsigned long value, unsigned length)
     return buffer;
 }
 
-void dbg_putchar(char c)
-{
-    outportb(SERIAL_COM1, (uint8_t)c);
-}
+void dbg_putchar(char c) { outportb(SERIAL_COM1, (uint8_t)c); }
 
 void dbg_puts(const char *s)
 {

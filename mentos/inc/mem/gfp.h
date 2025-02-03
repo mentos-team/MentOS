@@ -38,11 +38,11 @@ typedef unsigned int gfp_t;
 /// be used in bit comparisons.
 /// @{
 
-#define __GFP_DMA     ___GFP_DMA ///< DMA
+#define __GFP_DMA     ___GFP_DMA     ///< DMA
 #define __GFP_HIGHMEM ___GFP_HIGHMEM ///< HIGHMEM
-#define __GFP_DMA32   ___GFP_DMA32 ///< DMA32
+#define __GFP_DMA32   ___GFP_DMA32   ///< DMA32
 /// All of the above.
-#define GFP_ZONEMASK (__GFP_DMA | __GFP_HIGHMEM | __GFP_DMA32)
+#define GFP_ZONEMASK  (__GFP_DMA | __GFP_HIGHMEM | __GFP_DMA32)
 
 /// @}
 

@@ -3,11 +3,11 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
+#include "errno.h"
 #include "fs/procfs.h"
 #include "io/debug.h"
 #include "process/process.h"
 #include "string.h"
-#include "errno.h"
 
 /// @brief Reads data from the /proc/feedback file.
 ///

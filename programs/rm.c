@@ -3,13 +3,13 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
+#include <fcntl.h>
+#include <libgen.h>
+#include <stdbool.h>
 #include <stdio.h>
+#include <strerror.h>
 #include <string.h>
 #include <unistd.h>
-#include <fcntl.h>
-#include <strerror.h>
-#include <stdbool.h>
-#include <libgen.h>
 
 bool_t has_option(int argc, char **argv, const char *first, ...)
 {

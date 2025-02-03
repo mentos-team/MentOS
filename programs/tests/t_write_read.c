@@ -4,13 +4,13 @@
 /// See LICENSE.md for details.
 
 #include <fcntl.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <strerror.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
-#include <math.h>
 
 /// @brief Creates a file with the specified name and mode.
 /// @param filename The name of the file to create.
@@ -74,8 +74,7 @@ int check_content(const char *filename, const char *content, int length)
 int write_content(const char *filename, const char *content, int length, int truncate, int append)
 {
     // Set write options.
-    int flags = O_WRONLY | (truncate ? O_TRUNC : append ? O_APPEND :
-                                                          0);
+    int flags = O_WRONLY | (truncate ? O_TRUNC : append ? O_APPEND : 0);
 
     // Open the file with the specified flags.
     int fd = open(filename, flags, 0);
@@ -101,7 +100,7 @@ int write_content(const char *filename, const char *content, int length, int tru
 /// @return EXIT_SUCCESS on success, or EXIT_FAILURE on failure.
 int test_write_read(const char *filename)
 {
-    char buf[7] = { 0 }; // Buffer for reading content.
+    char buf[7] = {0}; // Buffer for reading content.
 
     // Create the file.
     if (create_file(filename, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP)) {

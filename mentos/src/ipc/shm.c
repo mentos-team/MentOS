@@ -15,13 +15,13 @@
 #include "sys/shm.h"
 
 #include "assert.h"
+#include "errno.h"
 #include "fcntl.h"
+#include "list_head.h"
 #include "mem/kheap.h"
 #include "stdio.h"
 #include "stdlib.h"
 #include "string.h"
-#include "errno.h"
-#include "list_head.h"
 
 // #include "process/process.h"
 
@@ -74,9 +74,9 @@ static inline shm_info_t *__shm_info_alloc(key_t key, size_t size, int shmflg)
     shm_info->shmid.shm_lpid   = 0;
     shm_info->shmid.shm_nattch = 0;
     // Determine the order for memory allocation.
-    uint32_t order = find_nearest_order_greater(0, size);
+    uint32_t order             = find_nearest_order_greater(0, size);
     // Allocate the shared memory pages.
-    shm_info->shm_location = alloc_pages(GFP_KERNEL, order);
+    shm_info->shm_location     = alloc_pages(GFP_KERNEL, order);
     // Check if memory allocation for shm_location failed.
     if (!shm_info->shm_location) {
         pr_err("Failed to allocate shared memory pages.\n");
@@ -109,8 +109,7 @@ static inline shm_info_t *__list_find_shm_info_by_id(int shmid)
 {
     shm_info_t *shm_info;
     // Iterate through the list of shared memories.
-    list_for_each_decl(it, &shm_list)
-    {
+    list_for_each_decl (it, &shm_list) {
         // Get the current entry.
         shm_info = list_entry(it, shm_info_t, list);
         // If shared memories is valid, check the id.
@@ -128,8 +127,7 @@ static inline shm_info_t *__list_find_shm_info_by_key(key_t key)
 {
     shm_info_t *shm_info;
     // Iterate through the list of shared memories.
-    list_for_each_decl(it, &shm_list)
-    {
+    list_for_each_decl (it, &shm_list) {
         // Get the current entry.
         shm_info = list_entry(it, shm_info_t, list);
         // If shared memories is valid, check the id.
@@ -147,8 +145,7 @@ static inline shm_info_t *__list_find_shm_info_by_page(page_t *page)
 {
     shm_info_t *shm_info;
     // Iterate through the list of shared memories.
-    list_for_each_decl(it, &shm_list)
-    {
+    list_for_each_decl (it, &shm_list) {
         // Get the current entry.
         shm_info = list_entry(it, shm_info_t, list);
         // If shared memories is valid, check the id.
@@ -210,18 +207,21 @@ long sys_shmget(key_t key, size_t size, int shmflg)
         shm_info = __list_find_shm_info_by_key(key);
         // Check if no shared memory exists for the given key and the flags did not specify IPC_CREAT.
         if (!shm_info && !(shmflg & IPC_CREAT)) {
-            pr_err("No shared memory exists for the given key and the flags did not specify IPC_CREAT.\n");
+            pr_err("No shared memory exists for the given key and the flags "
+                   "did not specify IPC_CREAT.\n");
             return -ENOENT;
         }
         // Check if IPC_CREAT and IPC_EXCL were specified, but a shared memory already exists for key.
         if (shm_info && (shmflg & IPC_CREAT) && (shmflg & IPC_EXCL)) {
-            pr_err("IPC_CREAT and IPC_EXCL were specified, but a shared memory already exists for key.\n");
+            pr_err("IPC_CREAT and IPC_EXCL were specified, but a shared memory "
+                   "already exists for key.\n");
             return -EEXIST;
         }
         // Check if the shared memory exists for the given key, but the calling
         // process does not have permission to access the set.
         if (shm_info && !ipc_valid_permissions(shmflg, &shm_info->shmid.shm_perm)) {
-            pr_err("The shared memory exists for the given key, but the calling process does not have permission to access the set.\n");
+            pr_err("The shared memory exists for the given key, but the calling "
+                   "process does not have permission to access the set.\n");
             return -EACCES;
         }
         // If the shared memory does not exist we need to create a new one.
@@ -255,20 +255,23 @@ void *sys_shmat(int shmid, const void *shmaddr, int shmflg)
     shm_info = __list_find_shm_info_by_id(shmid);
     // Check if no shared memory exists for the given key and the flags did not specify IPC_CREAT.
     if (!shm_info) {
-        pr_err("No shared memory exists for the given id and the flags did not specify IPC_CREAT.\n");
+        pr_err("No shared memory exists for the given id and the flags did not "
+               "specify IPC_CREAT.\n");
         return (void *)-ENOENT;
     }
     // Check if the shared memory exists for the given key, but the calling
     // process does not have permission to access the set.
     if (shmflg & SHM_RDONLY) {
         if (!ipc_valid_permissions(O_RDONLY, &shm_info->shmid.shm_perm)) {
-            pr_err("The shared memory exists for the given key, but the calling process does not have permission to access the set.\n");
+            pr_err("The shared memory exists for the given key, but the calling "
+                   "process does not have permission to access the set.\n");
             return (void *)-EACCES;
         }
         // Remove the read-write flag.
         flags = bitmask_clear(flags, MM_RW);
     } else if (!ipc_valid_permissions(O_RDWR, &shm_info->shmid.shm_perm)) {
-        pr_err("The shared memory exists for the given key, but the calling process does not have permission to access the set.\n");
+        pr_err("The shared memory exists for the given key, but the calling "
+               "process does not have permission to access the set.\n");
         return (void *)-EACCES;
     }
     // Get the calling task.
@@ -281,12 +284,7 @@ void *sys_shmat(int shmid, const void *shmaddr, int shmflg)
         pr_err("We failed to find space for the new virtual memory area.\n");
         return (void *)-EACCES;
     }
-    mem_upd_vm_area(
-        task->mm->pgd,
-        vm_start,
-        phy_start,
-        shm_info->shmid.shm_segsz,
-        flags);
+    mem_upd_vm_area(task->mm->pgd, vm_start, phy_start, shm_info->shmid.shm_segsz, flags);
     return (void *)vm_start;
 }
 
@@ -317,12 +315,7 @@ long sys_shmdt(const void *shmaddr)
     // Get the phyisical address from the allocated pages.
     phy_start = get_physical_address_from_page(shm_info->shm_location);
     // Set all virtual pages as not present.
-    mem_upd_vm_area(
-        task->mm->pgd,
-        (uint32_t)shmaddr,
-        phy_start,
-        shm_info->shmid.shm_segsz,
-        MM_GLOBAL);
+    mem_upd_vm_area(task->mm->pgd, (uint32_t)shmaddr, phy_start, shm_info->shmid.shm_segsz, MM_GLOBAL);
     return 0;
 }
 
@@ -346,7 +339,8 @@ long sys_shmctl(int shmid, int cmd, struct shmid_ds *buf)
     if (cmd == IPC_RMID) {
         // Remove the shared memory; any processes blocked is awakened (errno set to EIDRM); no argument required.
         if ((shm_info->shmid.shm_perm.uid != task->uid) && (shm_info->shmid.shm_perm.cuid != task->uid)) {
-            pr_err("The calling process is not the creator or the owner of the shared memory.\n");
+            pr_err("The calling process is not the creator or the owner of the "
+                   "shared memory.\n");
             return -EPERM;
         }
         // Remove the set from the list.
@@ -384,31 +378,22 @@ ssize_t procipc_shm_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyte
     memset(buffer, 0, BUFSIZ);
 
     // Prepare the header.
-    ret = sprintf(buffer, "key      shmid perms      segsz   uid   gid  cuid  cgid      atime      dtime      ctime   cpid   lpid nattch\n");
+    ret = sprintf(
+        buffer, "key      shmid perms      segsz   uid   gid  cuid  cgid      "
+                "atime      dtime      ctime   cpid   lpid nattch\n");
 
     // Iterate through the list of shared memory.
-    list_for_each_decl(it, &shm_list)
-    {
+    list_for_each_decl (it, &shm_list) {
         // Get the current entry from the list.
         shm_info = list_entry(it, shm_info_t, list);
 
         // Add information about the current shared memory entry to the buffer.
         ret += sprintf(
             buffer + ret, "%8d %5d %10d %7d %5d %4d %5d %9d %10d %10d %10d %5d %5d %5d\n",
-            abs(shm_info->shmid.shm_perm.key),
-            shm_info->id,
-            shm_info->shmid.shm_perm.mode,
-            shm_info->shmid.shm_segsz,
-            shm_info->shmid.shm_perm.uid,
-            shm_info->shmid.shm_perm.gid,
-            shm_info->shmid.shm_perm.cuid,
-            shm_info->shmid.shm_perm.cgid,
-            shm_info->shmid.shm_atime,
-            shm_info->shmid.shm_dtime,
-            shm_info->shmid.shm_ctime,
-            shm_info->shmid.shm_cpid,
-            shm_info->shmid.shm_lpid,
-            shm_info->shmid.shm_nattch);
+            abs(shm_info->shmid.shm_perm.key), shm_info->id, shm_info->shmid.shm_perm.mode, shm_info->shmid.shm_segsz,
+            shm_info->shmid.shm_perm.uid, shm_info->shmid.shm_perm.gid, shm_info->shmid.shm_perm.cuid,
+            shm_info->shmid.shm_perm.cgid, shm_info->shmid.shm_atime, shm_info->shmid.shm_dtime,
+            shm_info->shmid.shm_ctime, shm_info->shmid.shm_cpid, shm_info->shmid.shm_lpid, shm_info->shmid.shm_nattch);
     }
 
     // Terminate the buffer with a newline.

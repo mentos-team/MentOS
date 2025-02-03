@@ -4,30 +4,24 @@
 /// See LICENSE.md for details.
 
 #include "time.h"
+#include "errno.h"
 #include "stdio.h"
 #include "string.h"
-#include "errno.h"
 #include "system/syscall_types.h"
 
 /// @brief List of week days name.
-static const char *weekdays[] = {
-    "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"
-};
+static const char *weekdays[] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
 
 /// @brief List of week days shortened name.
-static const char *weekdays_short[] = {
-    "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"
-};
+static const char *weekdays_short[] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
 
 /// @brief List of months name.
-static const char *months[] = {
-    "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"
-};
+static const char *months[] = {"January", "February", "March",     "April",   "May",      "June",
+                               "July",    "August",   "September", "October", "November", "December"};
 
 /// @brief List of months shortened name.
 static const char *months_short[] = {
-    "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
-};
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
 
 // _syscall1(time_t, time, time_t *, t)
 
@@ -38,15 +32,12 @@ time_t time(time_t *t)
     __syscall_return(time_t, __res);
 }
 
-time_t difftime(time_t time1, time_t time2)
-{
-    return time1 - time2;
-}
+time_t difftime(time_t time1, time_t time2) { return time1 - time2; }
 
 char *ctime(const time_t *timer)
 {
     // Buffer to hold the time string (ctime returns a 26-character string).
-    static char buffer[26] = { 0 };
+    static char buffer[26] = {0};
 
     // Check if the timer is NULL..
     if (timer == NULL) {
@@ -63,14 +54,15 @@ char *ctime(const time_t *timer)
 
     // Format the broken-down time into the expected ctime format:
     // Www Mmm dd hh:mm:ss yyyy\n
-    int written = snprintf(buffer, sizeof(buffer), "%3s %3s %02d %02d:%02d:%02d %4d",
-                           weekdays_short[local_time->tm_wday], // Day of the week
-                           months_short[local_time->tm_mon],    // Month
-                           local_time->tm_mday,                 // Day of the month
-                           local_time->tm_hour,                 // Hour
-                           local_time->tm_min,                  // Minutes
-                           local_time->tm_sec,                  // Seconds
-                           local_time->tm_year + 1900);         // Year
+    int written = snprintf(
+        buffer, sizeof(buffer), "%3s %3s %02d %02d:%02d:%02d %4d",
+        weekdays_short[local_time->tm_wday], // Day of the week
+        months_short[local_time->tm_mon],    // Month
+        local_time->tm_mday,                 // Day of the month
+        local_time->tm_hour,                 // Hour
+        local_time->tm_min,                  // Minutes
+        local_time->tm_sec,                  // Seconds
+        local_time->tm_year + 1900);         // Year
 
     // Check if snprintf succeeded.
     if (written < 0 || written >= (int)sizeof(buffer)) {
@@ -169,49 +161,49 @@ size_t strftime(char *str, size_t maxsize, const char *format, const tm_t *timep
                     break;
 #endif
             case 'b': // Abbreviated month name
-                {
-                    strncat(s, months[timeptr->tm_mon], 3);
-                    break;
-                }
+            {
+                strncat(s, months[timeptr->tm_mon], 3);
+                break;
+            }
             case 'B': // Full month name
-                {
-                    unsigned int i = (unsigned int)timeptr->tm_mon;
-                    strcat(s, months[i]);
-                    break;
-                }
+            {
+                unsigned int i = (unsigned int)timeptr->tm_mon;
+                strcat(s, months[i]);
+                break;
+            }
             case 'd': /* day of month as decimal number (01-31) */
-                {
-                    value  = timeptr->tm_mday;
-                    (*s++) = (char)('0' + ((value / 10) % 10));
-                    (*s++) = (char)('0' + (value % 10));
-                    break;
-                }
+            {
+                value  = timeptr->tm_mday;
+                (*s++) = (char)('0' + ((value / 10) % 10));
+                (*s++) = (char)('0' + (value % 10));
+                break;
+            }
             case 'H': /* hour (24-hour clock) as decimal (00-23) */
-                {
-                    value  = timeptr->tm_hour;
-                    (*s++) = (char)('0' + ((value / 10) % 10));
-                    (*s++) = (char)('0' + (value % 10));
-                    break;
-                }
+            {
+                value  = timeptr->tm_hour;
+                (*s++) = (char)('0' + ((value / 10) % 10));
+                (*s++) = (char)('0' + (value % 10));
+                break;
+            }
 #if 0
                 case 'I':    /* hour (12-hour clock) as decimal (01-12) */
                     SPRINTF("%02d", ((timeptr->tm_hour + 11) % 12) + 1);
                     break;
 #endif
             case 'j': // Day of year as decimal number (001-366)
-                {
-                    value  = timeptr->tm_yday;
-                    (*s++) = (char)('0' + ((value / 10) % 10));
-                    (*s++) = (char)('0' + (value % 10));
-                    break;
-                }
+            {
+                value  = timeptr->tm_yday;
+                (*s++) = (char)('0' + ((value / 10) % 10));
+                (*s++) = (char)('0' + (value % 10));
+                break;
+            }
             case 'm': // Month as decimal number (01-12)
-                {
-                    value  = timeptr->tm_mon;
-                    (*s++) = (char)('0' + ((value / 10) % 10));
-                    (*s++) = (char)('0' + (value % 10));
-                    break;
-                }
+            {
+                value  = timeptr->tm_mon;
+                (*s++) = (char)('0' + ((value / 10) % 10));
+                (*s++) = (char)('0' + (value % 10));
+                break;
+            }
 #if 0
                 case 'M':    /* month as decimal number (00-59) */
                     SPRINTF("%02d", timeptr->tm_min);
@@ -276,24 +268,24 @@ size_t strftime(char *str, size_t maxsize, const char *format, const tm_t *timep
 
 #if 0
 #define PUT_CH(c) (ret < maxsize ? (*dp++ = (c), ret++) : 0)
-#define PUT_STR(str)   \
-    p = (char *)(str); \
+#define PUT_STR(str)                                                                                                   \
+    p = (char *)(str);                                                                                                 \
     goto dostr;
-#define PUT_STRN(str, n) \
-    p   = (char *)(str); \
-    len = (n);           \
+#define PUT_STRN(str, n)                                                                                               \
+    p   = (char *)(str);                                                                                               \
+    len = (n);                                                                                                         \
     goto dostrn;
-#define SPRINTF(fmt, arg)      \
-    sprintf(tmpbuf, fmt, arg); \
-    p = tmpbuf;                \
+#define SPRINTF(fmt, arg)                                                                                              \
+    sprintf(tmpbuf, fmt, arg);                                                                                         \
+    p = tmpbuf;                                                                                                        \
     goto dostr;
-#define RECUR(fmt)                                            \
-    {                                                         \
-        size_t r = strftime(dp, maxsize - ret, fmt, timeptr); \
-        if (r <= 0)                                           \
-            return r;                                         \
-        dp += r;                                              \
-        ret += r;                                             \
+#define RECUR(fmt)                                                                                                     \
+    {                                                                                                                  \
+        size_t r = strftime(dp, maxsize - ret, fmt, timeptr);                                                          \
+        if (r <= 0)                                                                                                    \
+            return r;                                                                                                  \
+        dp += r;                                                                                                       \
+        ret += r;                                                                                                      \
     }
 
     char* fp = (char*) format;
@@ -446,7 +438,7 @@ unsigned int sleep(unsigned int seconds)
     struct timespec req, rem;
     req.tv_sec = seconds;
     // Call the nanosleep.
-    int __ret = nanosleep(&req, &rem);
+    int __ret  = nanosleep(&req, &rem);
     // If the call to the nanosleep is interrupted by a signal handler,
     // then it returns -1 with errno set to EINTR.
     if ((__ret == -1) && (errno == EINTR)) {

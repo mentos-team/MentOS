@@ -14,13 +14,13 @@
 #include "ctype.h"
 #include "drivers/keyboard/keyboard.h"
 #include "drivers/keyboard/keymap.h"
+#include "errno.h"
 #include "fcntl.h"
 #include "fs/procfs.h"
 #include "fs/vfs.h"
 #include "io/video.h"
 #include "process/scheduler.h"
 #include "sys/bitops.h"
-#include "errno.h"
 
 /// @brief Prints the ring-buffer.
 /// @param rb the ring-buffer to print.
@@ -49,7 +49,7 @@ static ssize_t procv_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyt
     // Get the currently running process.
     task_struct *process = scheduler_get_current_process();
     // Get a pointer to its keyboard ring buffer.
-    rb_keybuffer_t *rb = &process->keyboard_rb;
+    rb_keybuffer_t *rb   = &process->keyboard_rb;
 
     // Pre-check the terminal flags.
     bool_t flg_icanon = bitmask_check(process->termios.c_lflag, ICANON) == ICANON;

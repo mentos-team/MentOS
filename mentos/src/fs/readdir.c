@@ -3,13 +3,13 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "dirent.h"
 #include "assert.h"
+#include "dirent.h"
+#include "errno.h"
 #include "fs/vfs.h"
 #include "process/scheduler.h"
 #include "stdio.h"
 #include "string.h"
-#include "errno.h"
 #include "system/printk.h"
 #include "system/syscall.h"
 

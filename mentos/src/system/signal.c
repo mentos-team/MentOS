@@ -11,14 +11,14 @@
 
 #include "system/signal.h"
 
+#include "assert.h"
+#include "errno.h"
 #include "klib/irqflags.h"
 #include "klib/stack_helper.h"
 #include "process/process.h"
 #include "process/scheduler.h"
 #include "process/wait.h"
 #include "string.h"
-#include "assert.h"
-#include "errno.h"
 
 /// @brief Extracts the exit status.
 #define GET_EXIT_STATUS(status) (((status) & 0x00FF) << 8)
@@ -31,70 +31,29 @@ static wait_queue_head_t stopped_queue;
 
 /// @brief The list of signal names.
 static const char *sys_siglist[] = {
-    "HUP",
-    "INT",
-    "QUIT",
-    "ILL",
-    "TRAP",
-    "ABRT",
-    "EMT",
-    "FPE",
-    "KILL",
-    "BUS",
-    "SEGV",
-    "SYS",
-    "PIPE",
-    "ALRM",
-    "TERM",
-    "USR1",
-    "USR2",
-    "CHLD",
-    "PWR",
-    "WINCH",
-    "URG",
-    "POLL",
-    "STOP",
-    "TSTP",
-    "CONT",
-    "TTIN",
-    "TTOU",
-    "VTALRM",
-    "PROF",
-    "XCPU",
-    "XFSZ",
-    NULL,
+    "HUP",  "INT",  "QUIT", "ILL",  "TRAP", "ABRT",   "EMT",  "FPE",  "KILL",  "BUS", "SEGV",
+    "SYS",  "PIPE", "ALRM", "TERM", "USR1", "USR2",   "CHLD", "PWR",  "WINCH", "URG", "POLL",
+    "STOP", "TSTP", "CONT", "TTIN", "TTOU", "VTALRM", "PROF", "XCPU", "XFSZ",  NULL,
 };
 
 /// @brief Copies the sigaction.
 /// @param to the target.
 /// @param from the source.
-static inline void __copy_sigaction(sigaction_t *to, const sigaction_t *from)
-{
-    memcpy(to, from, sizeof(sigaction_t));
-}
+static inline void __copy_sigaction(sigaction_t *to, const sigaction_t *from) { memcpy(to, from, sizeof(sigaction_t)); }
 
 /// @brief Copies a signal set.
 /// @param to the target.
 /// @param from the source.
-static inline void __copy_sigset(sigset_t *to, const sigset_t *from)
-{
-    memcpy(to, from, sizeof(sigset_t));
-}
+static inline void __copy_sigset(sigset_t *to, const sigset_t *from) { memcpy(to, from, sizeof(sigset_t)); }
 
 /// @brief Copies a signal information structure.
 /// @param to the target.
 /// @param from the source.
-static inline void __copy_siginfo(siginfo_t *to, const siginfo_t *from)
-{
-    memcpy(to, from, sizeof(siginfo_t));
-}
+static inline void __copy_siginfo(siginfo_t *to, const siginfo_t *from) { memcpy(to, from, sizeof(siginfo_t)); }
 
 /// @brief Clears the memory of a signal information structure.
 /// @param info the signal information structure.
-static inline void __clear_siginfo(siginfo_t *info)
-{
-    memset(info, 0, sizeof(siginfo_t));
-}
+static inline void __clear_siginfo(siginfo_t *info) { memset(info, 0, sizeof(siginfo_t)); }
 
 /// @brief Locks the signal handling of a given task.
 /// @param t the task.
@@ -177,19 +136,22 @@ static int __send_signal(int sig, siginfo_t *info, struct task_struct *t)
 {
     // Lock the signal handling for the given task.
     __lock_task_sighand(t);
-    pr_debug("Trying to add signal (%2d:%s) to task (%2d:%s), currently pending `%d, %d`.\n",
-             sig, strsignal(sig), t->pid, t->name, t->pending.signal.sig[0], t->pending.signal.sig[1]);
+    pr_debug(
+        "Trying to add signal (%2d:%s) to task (%2d:%s), currently pending "
+        "`%d, %d`.\n",
+        sig, strsignal(sig), t->pid, t->name, t->pending.signal.sig[0], t->pending.signal.sig[1]);
     // Check if the signal is ignored.
     if (__sig_is_ignored(t, sig)) {
-        pr_debug("Trying to send signal (%2d:%s) to task (%2d:%s): ignored.\n",
-                 sig, strsignal(sig), t->pid, t->name);
+        pr_debug("Trying to send signal (%2d:%s) to task (%2d:%s): ignored.\n", sig, strsignal(sig), t->pid, t->name);
         __unlock_task_sighand(t);
         return 0;
     }
     // Check if the process is in an invalid status.
     if ((t->state == EXIT_ZOMBIE) || (t->state == EXIT_DEAD)) {
-        pr_debug("Trying to send signal (%2d:%s) to task (%2d:%s): zombie or dead.\n",
-                 sig, strsignal(sig), t->pid, t->name);
+        pr_debug(
+            "Trying to send signal (%2d:%s) to task (%2d:%s): zombie or "
+            "dead.\n",
+            sig, strsignal(sig), t->pid, t->name);
         __unlock_task_sighand(t);
         return -EINVAL;
     }
@@ -204,8 +166,9 @@ static int __send_signal(int sig, siginfo_t *info, struct task_struct *t)
     }
     // Set that there is a signal pending.
     sigaddset(&t->pending.signal, sig);
-    pr_debug("Added pending signal (%2d:%s) to task (%2d:%s), pending `%d, %d`.\n",
-             sig, strsignal(sig), t->pid, t->name, t->pending.signal.sig[0], t->pending.signal.sig[1]);
+    pr_debug(
+        "Added pending signal (%2d:%s) to task (%2d:%s), pending `%d, %d`.\n", sig, strsignal(sig), t->pid, t->name,
+        t->pending.signal.sig[0], t->pending.signal.sig[1]);
     __unlock_task_sighand(t);
     return 0;
 }
@@ -245,16 +208,20 @@ static inline void __collect_signal(int sig, sigpending_t *list, siginfo_t *info
     bool_t still_pending    = false;
     // Collect the siginfo appropriate to this signal. Check if
     // there is another siginfo for the same signal.
-    list_for_each_decl(it, &list->list)
-    {
+    list_for_each_decl (it, &list->list) {
         sigqueue_t *q = list_entry(it, sigqueue_t, list);
-        pr_debug("__collect_signal(%2d:%s, %p, %p) : Signal in queue : %p(%d : %s).\n", sig, strsignal(sig), list, info,
-                 q, q->info.si_signo, strsignal(q->info.si_signo));
+        pr_debug(
+            "__collect_signal(%2d:%s, %p, %p) : Signal in queue : %p(%d : "
+            "%s).\n",
+            sig, strsignal(sig), list, info, q, q->info.si_signo, strsignal(q->info.si_signo));
         if (q->info.si_signo == sig) {
             // If the entry is already set, this means that there are several handlers
             // pending for this particular signal.
             if (queue_entry) {
-                pr_debug("__collect_signal(%2d:%s, %p, %p) : Still pending, do not remove from set.\n", sig, strsignal(sig), list, info);
+                pr_debug(
+                    "__collect_signal(%2d:%s, %p, %p) : Still pending, do not "
+                    "remove from set.\n",
+                    sig, strsignal(sig), list, info);
                 still_pending = true;
                 break;
             }
@@ -266,12 +233,16 @@ static inline void __collect_signal(int sig, sigpending_t *list, siginfo_t *info
     // remove the signal from the set.
     if (!still_pending) {
         sigdelset(&list->signal, sig);
-        pr_debug("__collect_signal(%2d:%s, %p, %p) : Remove signal from set: %d.\n", sig, strsignal(sig), list, info,
-                 list->signal.sig[0]);
+        pr_debug(
+            "__collect_signal(%2d:%s, %p, %p) : Remove signal from set: %d.\n", sig, strsignal(sig), list, info,
+            list->signal.sig[0]);
     }
     // If we have found an entry.
     if (queue_entry) {
-        pr_debug("__collect_signal(%2d:%s, %p, %p) : Remove and delete sigqueue entry : %p.\n", sig, strsignal(sig), list, info, queue_entry);
+        pr_debug(
+            "__collect_signal(%2d:%s, %p, %p) : Remove and delete sigqueue "
+            "entry : %p.\n",
+            sig, strsignal(sig), list, info, queue_entry);
         // Remove the entry from the queue.
         list_head_remove(&queue_entry->list);
         // Copy the details about the entry inside the info structure.
@@ -279,7 +250,10 @@ static inline void __collect_signal(int sig, sigpending_t *list, siginfo_t *info
         // Free the memory for the queue entry.
         __sigqueue_dealloc(queue_entry);
     } else {
-        pr_debug("__collect_signal(%2d:%s, %p, %p) : Cannot find the signal in the queue.\n", sig, strsignal(sig), list, info);
+        pr_debug(
+            "__collect_signal(%2d:%s, %p, %p) : Cannot find the signal in the "
+            "queue.\n",
+            sig, strsignal(sig), list, info);
         // Ok, it wasn't in the queue, zero out the info.
         __clear_siginfo(info);
         // Get the current process.
@@ -536,7 +510,8 @@ int do_signal(struct pt_regs *f)
         // and therefore considers another pending signal.
         if (ka->sa_handler == SIG_IGN) {
             if (signr == SIGCHLD) {
-                while (sys_waitpid(-1, NULL, WNOHANG) > 0) {}
+                while (sys_waitpid(-1, NULL, WNOHANG) > 0) {
+                }
             }
             continue;
         }
@@ -780,7 +755,7 @@ sighandler_t sys_signal(int signum, sighandler_t handler, uint32_t sigreturn_add
     // Set the handler.
     new_sigaction.sa_handler = handler;
     // Set the handler.
-    new_sigaction.sa_flags = SA_RESETHAND | SA_NODEFER;
+    new_sigaction.sa_flags   = SA_RESETHAND | SA_NODEFER;
     // Reset the set for the signal action.
     sigemptyset(&new_sigaction.sa_mask);
     // Lock the signal handling for the given task.
@@ -788,9 +763,9 @@ sighandler_t sys_signal(int signum, sighandler_t handler, uint32_t sigreturn_add
     // Set the address of the sigreturn.
     current_process->sigreturn_addr = sigreturn_addr;
     // Get the old sigaction.
-    sigaction_t *old_sigaction = &current_process->sighand.action[signum - 1];
+    sigaction_t *old_sigaction      = &current_process->sighand.action[signum - 1];
     // Get the old handler (to return).
-    sighandler_t old_handler = current_process->sighand.action[signum - 1].sa_handler;
+    sighandler_t old_handler        = current_process->sighand.action[signum - 1].sa_handler;
     // Set the new action.
     __copy_sigaction(old_sigaction, &new_sigaction);
     // Unlock the signal handling for the given task.
@@ -819,7 +794,7 @@ int sys_sigaction(int signum, const sigaction_t *act, sigaction_t *oldact, uint3
     // Lock the signal handling for the given task.
     __lock_task_sighand(current_process);
     // Set the address of the sigreturn.
-    current_process->sigreturn_addr = sigreturn_addr;
+    current_process->sigreturn_addr        = sigreturn_addr;
     // Get a pointer to the entry in the sighand.action array.
     sigaction_t *current_process_sigaction = &current_process->sighand.action[signum - 1];
     pr_debug("sys_sigaction(%d, %p, %p): : Signal old action ptr %p\n", signum, act, oldact, current_process_sigaction);

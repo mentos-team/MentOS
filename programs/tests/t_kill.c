@@ -9,12 +9,12 @@
 /// See LICENSE.md for details.
 
 #include <signal.h>
-#include <stdlib.h>
 #include <stdio.h>
-#include <string.h>
-#include <time.h>
+#include <stdlib.h>
 #include <strerror.h>
+#include <string.h>
 #include <sys/wait.h>
+#include <time.h>
 #include <unistd.h>
 
 /// @brief Signal handler for SIGUSR1 in the child process.
@@ -49,7 +49,7 @@ int main(int argc, char *argv[])
         }
 
         // Request to sleep for 100 ms.
-        struct timespec req = { 0, 100000000 };
+        struct timespec req = {0, 100000000};
 
         // Child process loop - waiting for signals
         while (1) {
@@ -63,7 +63,7 @@ int main(int argc, char *argv[])
         printf("I'm the parent (pid: %d)!\n", getpid());
 
         // Request to sleep for 500 ms.
-        struct timespec req = { 0, 500000000 };
+        struct timespec req = {0, 500000000};
 
         // Sleep for 500 ms.
         nanosleep(&req, NULL);

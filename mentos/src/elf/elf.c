@@ -112,7 +112,8 @@ static inline const char *elf_get_section_header_name(elf_header_t *header, elf_
 /// @param section_header a pointer to the section header.
 /// @param symbol a pointer to the symbol we want to get the name for.
 /// @return a pointer to the section header string table, or NULL on failure.
-static inline const char *elf_get_symbol_name(elf_header_t *header, elf_section_header_t *section_header, elf_symbol_t *symbol)
+static inline const char *
+elf_get_symbol_name(elf_header_t *header, elf_section_header_t *section_header, elf_symbol_t *symbol)
 {
     const char *strtab = elf_get_symbol_string_table(header, section_header);
     if (strtab == NULL) {
@@ -135,7 +136,7 @@ static inline elf_section_header_t *elf_find_section_header(elf_header_t *header
         // Get the section header.
         elf_section_header_t *section_header = elf_get_section_header(header, i);
         // Get the section header name.
-        const char *section_header_name = elf_get_section_header_name(header, section_header);
+        const char *section_header_name      = elf_get_section_header_name(header, section_header);
         if (section_header_name) {
             // Check the section header name.
             if (strcmp(section_header_name, name) == 0) {
@@ -160,11 +161,11 @@ static inline elf_symbol_t *elf_find_symbol(elf_header_t *header, const char *na
             // Count the number of entries.
             unsigned symtab_entries = section_header->size / section_header->entsize;
             // Get the addresss of the symbol table.
-            elf_symbol_t *symtab = (elf_symbol_t *)((uintptr_t)header + section_header->offset);
+            elf_symbol_t *symtab    = (elf_symbol_t *)((uintptr_t)header + section_header->offset);
             // Iterate the entries.
             for (unsigned j = 0; j < symtab_entries; ++j) {
                 // Get the symbol.
-                elf_symbol_t *symbol = &symtab[j];
+                elf_symbol_t *symbol    = &symtab[j];
                 // Get the name of the symbol.
                 const char *symbol_name = elf_get_symbol_name(header, section_header, symbol);
                 if (symbol_name) {
@@ -187,18 +188,19 @@ static inline elf_symbol_t *elf_find_symbol(elf_header_t *header, const char *na
 /// @param header a pointer to the ELF header.
 static inline void elf_dump_section_headers(elf_header_t *header)
 {
-    pr_debug("[Nr] Name                 Type            Addr     Off    Size   ES Flg Lk Inf Al\n");
+    pr_debug("[Nr] Name                 Type            Addr     Off    Size   "
+             "ES Flg Lk Inf Al\n");
     for (unsigned idx = 0; idx < header->shnum; ++idx) {
         // Get the section header.
         elf_section_header_t *section_header = elf_get_section_header(header, idx);
         // Get the section header name.
-        const char *section_header_name = elf_get_section_header_name(header, section_header);
+        const char *section_header_name      = elf_get_section_header_name(header, section_header);
         // Dump the information.
-        pr_debug("[%2d] %-20s %-15s %08x %06x %06x %2u %3u %2u %3u %2u\n",
-                 idx, section_header_name, elf_section_header_type_to_string(section_header->type),
-                 section_header->addr, section_header->offset, section_header->size,
-                 section_header->entsize, section_header->flags, section_header->link,
-                 section_header->info, section_header->addralign);
+        pr_debug(
+            "[%2d] %-20s %-15s %08x %06x %06x %2u %3u %2u %3u %2u\n", idx, section_header_name,
+            elf_section_header_type_to_string(section_header->type), section_header->addr, section_header->offset,
+            section_header->size, section_header->entsize, section_header->flags, section_header->link,
+            section_header->info, section_header->addralign);
     }
 }
 
@@ -215,11 +217,11 @@ static inline void elf_dump_symbol_table(elf_header_t *header)
         // Count the number of entries.
         uint32_t symtab_entries = section_header->size / section_header->entsize;
         // Get the addresss of the symbol table.
-        elf_symbol_t *symtab = (elf_symbol_t *)((uintptr_t)header + section_header->offset);
+        elf_symbol_t *symtab    = (elf_symbol_t *)((uintptr_t)header + section_header->offset);
         // Dump the table.
         for (int j = 0; j < symtab_entries; ++j) {
             // Get the symbol.
-            elf_symbol_t *symbol = &symtab[j];
+            elf_symbol_t *symbol    = &symtab[j];
             // Get the name of the symbol.
             const char *symbol_name = elf_get_symbol_name(header, section_header, symbol);
             if (symbol_name == NULL) {
@@ -227,10 +229,10 @@ static inline void elf_dump_symbol_table(elf_header_t *header)
                 return;
             }
             // Dump the symbol.
-            pr_debug("[%4d] %08x %5d %-7s %-6s %-8s %3d %s\n", j, symbol->value, symbol->size,
-                     elf_symbol_type_to_string(ELF32_ST_TYPE(symbol->info)),
-                     elf_symbol_bind_to_string(ELF32_ST_BIND(symbol->info)),
-                     "-", symbol->ndx, symbol_name);
+            pr_debug(
+                "[%4d] %08x %5d %-7s %-6s %-8s %3d %s\n", j, symbol->value, symbol->size,
+                elf_symbol_type_to_string(ELF32_ST_TYPE(symbol->info)),
+                elf_symbol_bind_to_string(ELF32_ST_BIND(symbol->info)), "-", symbol->ndx, symbol_name);
         }
     }
 }
@@ -255,19 +257,13 @@ static inline int elf_load_exec(elf_header_t *header, task_struct *task)
         // Get the header.
         program_header = elf_get_program_header(header, i);
         // Dump the information about the header.
-        pr_debug(" %-9s | %9s | %9s | 0x%08x - 0x%08x\n",
-                 elf_type_to_string(program_header->type),
-                 to_human_size(program_header->memsz),
-                 to_human_size(program_header->filesz),
-                 program_header->vaddr,
-                 program_header->vaddr + program_header->memsz);
+        pr_debug(
+            " %-9s | %9s | %9s | 0x%08x - 0x%08x\n", elf_type_to_string(program_header->type),
+            to_human_size(program_header->memsz), to_human_size(program_header->filesz), program_header->vaddr,
+            program_header->vaddr + program_header->memsz);
         if (program_header->type == PT_LOAD) {
             segment = create_vm_area(
-                task->mm,
-                program_header->vaddr,
-                program_header->memsz,
-                MM_USER | MM_RW | MM_COW,
-                GFP_KERNEL);
+                task->mm, program_header->vaddr, program_header->memsz, MM_USER | MM_RW | MM_COW, GFP_KERNEL);
             vpage    = virt_map_alloc(program_header->memsz);
             dst_addr = virt_map_vaddress(task->mm, vpage, segment->vm_start, program_header->memsz);
 
@@ -299,7 +295,10 @@ int elf_load_file(task_struct *task, vfs_file_t *file, uint32_t *entry)
     // Allocate the memory for the file.
     char *buffer = kmalloc(stat_buf.st_size);
     if (buffer == NULL) {
-        pr_err("Failed to allocate %d bytes of memory for reading the file `%s`.\n", stat_buf.st_size, file->name);
+        pr_err(
+            "Failed to allocate %d bytes of memory for reading the file "
+            "`%s`.\n",
+            stat_buf.st_size, file->name);
         return false;
     }
     // Clean the memory.
@@ -421,43 +420,66 @@ int elf_check_magic_number(elf_header_t *header)
 
 const char *elf_type_to_string(int type)
 {
-    if (type == PT_LOAD) return "LOAD";
-    if (type == PT_DYNAMIC) return "DYNAMIC";
-    if (type == PT_INTERP) return "INTERP";
-    if (type == PT_NOTE) return "NOTE";
-    if (type == PT_SHLIB) return "SHLIB";
-    if (type == PT_PHDR) return "PHDR";
-    if (type == PT_EH_FRAME) return "EH_FRAME";
-    if (type == PT_GNU_STACK) return "GNU_STACK";
-    if (type == PT_GNU_RELRO) return "GNU_RELRO";
-    if (type == PT_LOPROC) return "LOPROC";
-    if (type == PT_HIPROC) return "HIPROC";
+    if (type == PT_LOAD)
+        return "LOAD";
+    if (type == PT_DYNAMIC)
+        return "DYNAMIC";
+    if (type == PT_INTERP)
+        return "INTERP";
+    if (type == PT_NOTE)
+        return "NOTE";
+    if (type == PT_SHLIB)
+        return "SHLIB";
+    if (type == PT_PHDR)
+        return "PHDR";
+    if (type == PT_EH_FRAME)
+        return "EH_FRAME";
+    if (type == PT_GNU_STACK)
+        return "GNU_STACK";
+    if (type == PT_GNU_RELRO)
+        return "GNU_RELRO";
+    if (type == PT_LOPROC)
+        return "LOPROC";
+    if (type == PT_HIPROC)
+        return "HIPROC";
     return "NULL";
 }
 
 const char *elf_section_header_type_to_string(int type)
 {
-    if (type == SHT_PROGBITS) return "PROGBITS";
-    if (type == SHT_SYMTAB) return "SYMTAB";
-    if (type == SHT_STRTAB) return "STRTAB";
-    if (type == SHT_RELA) return "RELA";
-    if (type == SHT_NOBITS) return "NOBITS";
-    if (type == SHT_REL) return "REL";
+    if (type == SHT_PROGBITS)
+        return "PROGBITS";
+    if (type == SHT_SYMTAB)
+        return "SYMTAB";
+    if (type == SHT_STRTAB)
+        return "STRTAB";
+    if (type == SHT_RELA)
+        return "RELA";
+    if (type == SHT_NOBITS)
+        return "NOBITS";
+    if (type == SHT_REL)
+        return "REL";
     return "NULL";
 }
 
 const char *elf_symbol_type_to_string(int type)
 {
-    if (type == STT_NOTYPE) return "NOTYPE";
-    if (type == STT_OBJECT) return "OBJECT";
-    if (type == STT_FUNC) return "FUNC";
+    if (type == STT_NOTYPE)
+        return "NOTYPE";
+    if (type == STT_OBJECT)
+        return "OBJECT";
+    if (type == STT_FUNC)
+        return "FUNC";
     return "-1";
 }
 
 const char *elf_symbol_bind_to_string(int bind)
 {
-    if (bind == STB_LOCAL) return "LOCAL";
-    if (bind == STB_GLOBAL) return "GLOBAL";
-    if (bind == STB_WEAK) return "WEAK";
+    if (bind == STB_LOCAL)
+        return "LOCAL";
+    if (bind == STB_GLOBAL)
+        return "GLOBAL";
+    if (bind == STB_WEAK)
+        return "WEAK";
     return "-1";
 }

@@ -3,14 +3,14 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include <unistd.h>
-#include <sys/wait.h>
-#include <strerror.h>
-#include <stdlib.h>
-#include <string.h>
 #include <signal.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <strerror.h>
+#include <string.h>
+#include <sys/wait.h>
 #include <time.h>
+#include <unistd.h>
 
 /// @brief Signal handler for SIGALRM.
 /// @param sig The signal number.
@@ -60,7 +60,8 @@ int main(int argc, char *argv[])
     alarm(1);
 
     // Infinite loop to keep the program running until the alarm signal is received.
-    while (1) {}
+    while (1) {
+    }
 
     return EXIT_SUCCESS;
 }

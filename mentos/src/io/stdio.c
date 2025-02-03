@@ -3,13 +3,13 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "system/syscall.h"
+#include "stdio.h"
 #include "ctype.h"
 #include "drivers/keyboard/keyboard.h"
-#include "io/video.h"
-#include "stdio.h"
-#include "string.h"
 #include "errno.h"
+#include "io/video.h"
+#include "string.h"
+#include "system/syscall.h"
 
 int atoi(const char *str)
 {
@@ -50,8 +50,7 @@ long strtol(const char *str, char **endptr, int base)
             c = *s++;
         }
     }
-    if ((base == 0 || base == 16) &&
-        c == '0' && (*s == 'x' || *s == 'X')) {
+    if ((base == 0 || base == 16) && c == '0' && (*s == 'x' || *s == 'X')) {
         c = s[1];
         s += 2;
         base = 16;

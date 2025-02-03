@@ -11,7 +11,7 @@
 /// @brief The maximum number of digits of an integer.
 #define MAX_DIGITS_IN_INTEGER 11
 /// @brief The size of 'gets' buffer.
-#define GETS_BUFFERSIZE 255
+#define GETS_BUFFERSIZE       255
 
 #ifndef EOF
 /// @brief Define the End-Of-File.

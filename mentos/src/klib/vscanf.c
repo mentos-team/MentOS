@@ -3,8 +3,8 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "fs/vfs.h"
 #include "ctype.h"
+#include "fs/vfs.h"
 #include "io/debug.h"
 #include "stdio.h"
 #include "string.h"

@@ -4,15 +4,15 @@
 /// @copyright (c) 2014-2024
 /// This file is distributed under the MIT License. See LICENSE.md for details.
 
-#include <unistd.h>
 #include <errno.h>
+#include <fcntl.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/ipc.h>
+#include <sys/sem.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
-#include <sys/sem.h>
-#include <sys/ipc.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <fcntl.h>
+#include <unistd.h>
 
 int main(int argc, char *argv[])
 {
@@ -61,7 +61,7 @@ int main(int argc, char *argv[])
 
     // ========================================================================
     // Set initial semaphore values: {0, 0, 0, 1}
-    unsigned short values[] = { 0, 0, 0, 1 }; // Last semaphore is initialized to 1 for control.
+    unsigned short values[] = {0, 0, 0, 1}; // Last semaphore is initialized to 1 for control.
     union semun arg;
     arg.array = values;
 

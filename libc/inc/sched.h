@@ -3,9 +3,9 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
+#include "stdbool.h"
 #include "sys/types.h"
 #include "time.h"
-#include "stdbool.h"
 
 /// @brief Structure that describes scheduling parameters.
 typedef struct sched_param {

@@ -5,15 +5,15 @@
 
 #pragma once
 
-#include "system/syscall_types.h"
+#include "dirent.h"
 #include "fs/vfs_types.h"
-#include "sys/utsname.h"
-#include "sys/types.h"
+#include "kernel.h"
 #include "sys/msg.h"
 #include "sys/sem.h"
 #include "sys/shm.h"
-#include "kernel.h"
-#include "dirent.h"
+#include "sys/types.h"
+#include "sys/utsname.h"
+#include "system/syscall_types.h"
 
 /// @brief Initialize the system calls.
 void syscall_init(void);

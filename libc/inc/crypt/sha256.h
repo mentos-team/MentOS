@@ -12,8 +12,8 @@
 
 #pragma once
 
-#include <stdint.h>
 #include <stddef.h>
+#include <stdint.h>
 
 /// @brief SHA256 outputs a 32 byte digest.
 #define SHA256_BLOCK_SIZE 32

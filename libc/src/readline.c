@@ -42,7 +42,7 @@ int readline(int fd, char *buffer, size_t buflen, ssize_t *read_len)
     if (newline == NULL) {
         found_newline = 0;
         // Search for EOF.
-        newline = strchr(buffer, EOF);
+        newline       = strchr(buffer, EOF);
         if (newline == NULL) {
             // Search for null terminator.
             newline = strchr(buffer, '\0');

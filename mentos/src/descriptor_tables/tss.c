@@ -9,12 +9,12 @@
 #define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
 #include "io/debug.h"                    // Include debugging functions.
 
+#include "descriptor_tables/gdt.h"
 #include "descriptor_tables/tss.h"
 #include "string.h"
-#include "descriptor_tables/gdt.h"
 
-/// @brief The kernel 
-/// 
+/// @brief The kernel
+///
 static tss_entry_t kernel_tss;
 
 void tss_init(uint8_t idx, uint32_t ss0)
@@ -53,7 +53,7 @@ void tss_init(uint8_t idx, uint32_t ss0)
 void tss_set_stack(uint32_t kss, uint32_t kesp)
 {
     // Kernel data segment.
-    kernel_tss.ss0 = kss;
+    kernel_tss.ss0  = kss;
     // Kernel stack address.
     kernel_tss.esp0 = kesp;
 }

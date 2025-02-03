@@ -9,14 +9,14 @@
 
 /// @brief This timer counts down in real (i.e., wall clock) time. At each
 /// expiration, a SIGALRM signal is generated.
-#define ITIMER_REAL 0
+#define ITIMER_REAL    0
 /// @brief This timer counts down against the user-mode CPU time consumed by the
 /// process. At each expiration, a SIGVTALRM signal is generated.
 #define ITIMER_VIRTUAL 1
 /// @brief This timer counts down against the total (i.e., both user and system)
 /// CPU time consumed by the process. At each expiration, a SIGPROF signal is
 /// generated.
-#define ITIMER_PROF 2
+#define ITIMER_PROF    2
 
 /// Used to store time values.
 typedef unsigned int time_t;

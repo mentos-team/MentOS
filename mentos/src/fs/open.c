@@ -3,15 +3,15 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "process/scheduler.h"
+#include "errno.h"
 #include "fcntl.h"
 #include "fs/vfs.h"
 #include "io/debug.h"
 #include "limits.h"
 #include "process/process.h"
+#include "process/scheduler.h"
 #include "stdio.h"
 #include "string.h"
-#include "errno.h"
 #include "system/printk.h"
 #include "system/syscall.h"
 

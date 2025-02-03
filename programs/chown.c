@@ -3,14 +3,13 @@
 /// @copyright (c) 2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
+#include <errno.h>
 #include <grp.h>
 #include <pwd.h>
-#include <strerror.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <strerror.h>
 #include <string.h>
-#include <errno.h>
-#include <unistd.h>
 #include <unistd.h>
 
 int main(int argc, char *argv[])
@@ -29,10 +28,10 @@ int main(int argc, char *argv[])
     }
 
     idptr = strtok_r(argv[1], ":", &saveptr);
-    if (argv[1][0] != ':') {               /* Skip the username */
-        uid = strtol(idptr, &endptr, 10);  /* Allow a numeric string */
-        if (*endptr != '\0') {             /* Was not pure numeric string */
-            pwd = getpwnam(idptr);         /* Try getting UID for username */
+    if (argv[1][0] != ':') {              /* Skip the username */
+        uid = strtol(idptr, &endptr, 10); /* Allow a numeric string */
+        if (*endptr != '\0') {            /* Was not pure numeric string */
+            pwd = getpwnam(idptr);        /* Try getting UID for username */
             if (pwd == NULL) {
                 fprintf(STDERR_FILENO, "%s: invalid user: %s\n", argv[0], idptr);
                 exit(EXIT_FAILURE);
@@ -44,9 +43,9 @@ int main(int argc, char *argv[])
     }
 
     if (idptr != NULL) {
-        gid = strtol(idptr, &endptr, 10);  /* Allow a numeric string */
-        if (*endptr != '\0') {             /* Was not pure numeric string */
-            grp = getgrnam(idptr);         /* Try getting GID for groupname */
+        gid = strtol(idptr, &endptr, 10); /* Allow a numeric string */
+        if (*endptr != '\0') {            /* Was not pure numeric string */
+            grp = getgrnam(idptr);        /* Try getting GID for groupname */
             if (grp == NULL) {
                 fprintf(STDERR_FILENO, "%s: invalid group: %s\n", argv[0], idptr);
                 exit(EXIT_FAILURE);
@@ -57,8 +56,7 @@ int main(int argc, char *argv[])
     }
 
     if (chown(argv[2], uid, gid) == -1) {
-        fprintf(STDERR_FILENO, "%s: changing ownership of %s: %s\n",
-                argv[0], argv[2], strerror(errno));
+        fprintf(STDERR_FILENO, "%s: changing ownership of %s: %s\n", argv[0], argv[2], strerror(errno));
         exit(EXIT_FAILURE);
     }
 

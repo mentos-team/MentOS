@@ -5,13 +5,13 @@
 
 #include "sys/ipc.h"
 
-#include "sys/shm.h"
-#include "sys/sem.h"
-#include "sys/msg.h"
 #include "errno.h"
+#include "stdio.h"
+#include "sys/msg.h"
+#include "sys/sem.h"
+#include "sys/shm.h"
 #include "sys/stat.h"
 #include "system/syscall_types.h"
-#include "stdio.h"
 
 // _syscall3(void *, shmat, int, shmid, const void *, shmaddr, int, shmflg)
 void *shmat(int shmid, const void *shmaddr, int shmflg)

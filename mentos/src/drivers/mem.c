@@ -11,14 +11,14 @@
 
 #include "assert.h"
 #include "drivers/mem.h"
-#include "io/debug.h"
-#include "fs/vfs.h"
-#include "string.h"
 #include "errno.h"
-#include "system/syscall.h"
-#include "process/scheduler.h"
 #include "fcntl.h"
+#include "fs/vfs.h"
+#include "io/debug.h"
+#include "process/scheduler.h"
+#include "string.h"
 #include "sys/stat.h"
+#include "system/syscall.h"
 
 /// @brief Structure representing a memory device.
 struct memdev {
@@ -42,7 +42,8 @@ static int add_device(struct memdev *device)
     }
     struct memdev *dit = devices;
     // Traverse to the end of the list.
-    for (; dit && dit->next; dit = dit->next);
+    for (; dit && dit->next; dit = dit->next)
+        ;
     // Add the device to the list.
     if (dit == NULL) {
         devices = device;
@@ -99,11 +100,7 @@ static ssize_t null_read(vfs_file_t *file, char *buffer, off_t offset, size_t si
 static int null_fstat(vfs_file_t *file, stat_t *stat);
 
 /// @brief Filesystem type structure for the null device.
-static file_system_type_t null_file_system_type = {
-    .name     = "null",
-    .fs_flags = 0,
-    .mount    = null_mount_callback
-};
+static file_system_type_t null_file_system_type = {.name = "null", .fs_flags = 0, .mount = null_mount_callback};
 
 /// @brief File operations for the null device.
 static vfs_file_operations_t null_fs_operations = {
@@ -115,8 +112,7 @@ static vfs_file_operations_t null_fs_operations = {
     .lseek_f    = NULL,
     .stat_f     = null_fstat,
     .ioctl_f    = NULL,
-    .getdents_f = NULL
-};
+    .getdents_f = NULL};
 
 /// @brief Retrieves the status information of a memory device file.
 ///

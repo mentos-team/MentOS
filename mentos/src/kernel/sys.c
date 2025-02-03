@@ -3,10 +3,10 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "stdio.h"
+#include "errno.h"
 #include "klib/mutex.h"
 #include "klib/stdatomic.h"
-#include "errno.h"
+#include "stdio.h"
 #include "sys/reboot.h"
 
 /// @brief Powers off the machine.
@@ -37,9 +37,8 @@ int sys_reboot(int magic1, int magic2, unsigned int cmd, void *arg)
     static mutex_t reboot_mutex;
 
     // For safety, we require "magic" arguments.
-    if (magic1 != LINUX_REBOOT_MAGIC1 ||
-        (magic2 != LINUX_REBOOT_MAGIC2 && magic2 != LINUX_REBOOT_MAGIC2A &&
-         magic2 != LINUX_REBOOT_MAGIC2B && magic2 != LINUX_REBOOT_MAGIC2C)) {
+    if (magic1 != LINUX_REBOOT_MAGIC1 || (magic2 != LINUX_REBOOT_MAGIC2 && magic2 != LINUX_REBOOT_MAGIC2A &&
+                                          magic2 != LINUX_REBOOT_MAGIC2B && magic2 != LINUX_REBOOT_MAGIC2C)) {
         return -EINVAL;
     }
 

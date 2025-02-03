@@ -13,8 +13,7 @@ int tcgetattr(int fd, termios_t *termios_p)
     int retval;
     __asm__ volatile("int $0x80"
                      : "=a"(retval)
-                     : "0"(__NR_ioctl), "b"((long)(fd)), "c"((long)(TCGETS)),
-                       "d"((long)(termios_p)));
+                     : "0"(__NR_ioctl), "b"((long)(fd)), "c"((long)(TCGETS)), "d"((long)(termios_p)));
     if (retval < 0) {
         errno  = -retval;
         retval = -1;
@@ -27,8 +26,7 @@ int tcsetattr(int fd, int optional_actions, const termios_t *termios_p)
     int retval;
     __asm__ volatile("int $0x80"
                      : "=a"(retval)
-                     : "0"(__NR_ioctl), "b"((long)(fd)), "c"((long)(TCSETS)),
-                       "d"((long)(termios_p)));
+                     : "0"(__NR_ioctl), "b"((long)(fd)), "c"((long)(TCSETS)), "d"((long)(termios_p)));
     if (retval < 0) {
         errno  = -retval;
         retval = -1;

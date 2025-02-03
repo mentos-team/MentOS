@@ -4,11 +4,10 @@
 /// See LICENSE.md for details.
 
 #include <err.h>
-#include <stdio.h>
 #include <stdarg.h>
 #include <stdio.h>
-#include <unistd.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 void verr(int status, const char *fmt, va_list ap)
 {
@@ -22,7 +21,8 @@ void verr(int status, const char *fmt, va_list ap)
 
 void verrx(int status, const char *fmt, va_list ap)
 {
-    if (fmt) vfprintf(STDERR_FILENO, fmt, ap);
+    if (fmt)
+        vfprintf(STDERR_FILENO, fmt, ap);
     fprintf(STDERR_FILENO, "\n");
     exit(status);
 }

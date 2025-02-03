@@ -10,7 +10,11 @@
 // ============================================================================
 // Init functions.
 
-void ndtree_tree_init(ndtree_t *tree, ndtree_tree_compare_f compare_node, ndtree_alloc_node_f alloc_node, ndtree_free_node_f free_node)
+void ndtree_tree_init(
+    ndtree_t *tree,
+    ndtree_tree_compare_f compare_node,
+    ndtree_alloc_node_f alloc_node,
+    ndtree_free_node_f free_node)
 {
     // Validate that the tree and function pointers are not NULL.
     assert(tree && "ndtree_tree_init: Variable tree is NULL.");
@@ -189,8 +193,7 @@ static ndtree_node_t *__ndtree_tree_find_rec(ndtree_t *tree, void *value, ndtree
     }
 
     // Recursively search in each child of the current node.
-    list_for_each_decl(it, &node->children)
-    {
+    list_for_each_decl (it, &node->children) {
         ndtree_node_t *child  = list_entry(it, ndtree_node_t, siblings);
         ndtree_node_t *result = __ndtree_tree_find_rec(tree, value, child);
         if (result) {
@@ -226,8 +229,7 @@ int ndtree_tree_remove_node(ndtree_t *tree, ndtree_node_t *node, ndtree_tree_nod
 
     // If the node has children, orphan them.
     if (!list_head_empty(&node->children)) {
-        list_for_each_decl(it, &node->children)
-        {
+        list_for_each_decl (it, &node->children) {
             ndtree_node_t *child = list_entry(it, ndtree_node_t, siblings);
             child->parent        = NULL;
         }
@@ -257,7 +259,11 @@ int ndtree_tree_remove_node(ndtree_t *tree, ndtree_node_t *node, ndtree_tree_nod
 /// @param node The current node being visited.
 /// @param enter_fun Function to call upon entering each node, or NULL to skip.
 /// @param exit_fun Function to call upon exiting each node, or NULL to skip.
-static void __ndtree_tree_visitor_rec(ndtree_t *tree, ndtree_node_t *node, ndtree_tree_node_f enter_fun, ndtree_tree_node_f exit_fun)
+static void __ndtree_tree_visitor_rec(
+    ndtree_t *tree,
+    ndtree_node_t *node,
+    ndtree_tree_node_f enter_fun,
+    ndtree_tree_node_f exit_fun)
 {
     // Ensure that the tree and node are valid.
     assert(tree && "ndtree_tree_visitor_rec: Variable tree is NULL.");
@@ -270,8 +276,7 @@ static void __ndtree_tree_visitor_rec(ndtree_t *tree, ndtree_node_t *node, ndtre
 
     // Recursively visit each child node.
     if (!list_head_empty(&node->children)) {
-        list_for_each_decl(it, &node->children)
-        {
+        list_for_each_decl (it, &node->children) {
             __ndtree_tree_visitor_rec(tree, list_entry(it, ndtree_node_t, siblings), enter_fun, exit_fun);
         }
     }

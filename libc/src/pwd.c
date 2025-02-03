@@ -5,11 +5,11 @@
 
 #include "pwd.h"
 #include "assert.h"
+#include "errno.h"
 #include "fcntl.h"
 #include "readline.h"
 #include "stdio.h"
 #include "string.h"
-#include "errno.h"
 #include "unistd.h"
 
 /// @brief Parses the input buffer and fills pwd with its details.
@@ -71,8 +71,7 @@ static inline char *__search_entry(int fd, char *buffer, int buflen, const char 
             char *name_end = strchr(buffer, ':');
             if (name_end) {
                 *name_end = '\0';
-                if (strlen(name) == strlen(buffer) &&
-                    strncmp(buffer, name, strlen(name)) == 0) {
+                if (strlen(name) == strlen(buffer) && strncmp(buffer, name, strlen(name)) == 0) {
                     *name_end = ':';
                     return buffer;
                 }
@@ -94,7 +93,7 @@ static inline char *__search_entry(int fd, char *buffer, int buflen, const char 
             if (ptr == NULL) {
                 continue;
             }
-            *ptr = '\0';
+            *ptr          = '\0';
             // Parse the uid.
             int found_uid = atoi(uid_start);
             // Check the uid.

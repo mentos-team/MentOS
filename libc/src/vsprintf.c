@@ -3,13 +3,13 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "sys/bitops.h"
 #include "ctype.h"
 #include "fcvt.h"
 #include "stdarg.h"
 #include "stdint.h"
 #include "stdio.h"
 #include "string.h"
+#include "sys/bitops.h"
 #include "unistd.h"
 
 /// Size of the buffer used to call cvt functions.
@@ -64,7 +64,7 @@ static inline int skip_atoi(const char **s)
 /// @return the resulting string after number transformation.
 static char *number(char *str, char *end, long num, int base, int size, int32_t precision, unsigned flags)
 {
-    char tmp[66] = { 0 };   // Temporary buffer to hold the number in reverse order
+    char tmp[66] = {0};     // Temporary buffer to hold the number in reverse order
     char *dig    = _digits; // Default digits for base conversion (lowercase)
 
     // Check for uppercase conversion flag.
@@ -549,7 +549,8 @@ static void cropzeros(char *buffer, size_t bufsize)
 
         // Shift the string forward to overwrite any unnecessary characters
         // (trailing zeros or decimal point).
-        while (buffer < end && (*++buffer = *stop++)) {}
+        while (buffer < end && (*++buffer = *stop++)) {
+        }
 
         // Ensure null-termination if buffer exceeded.
         if (buffer >= end) {
@@ -878,17 +879,17 @@ int vsprintf(char *str, const char *fmt, va_list args)
 
         // Process the integer value.
         if (bitmask_check(flags, FLAGS_SIGN)) {
-            long num = (qualifier == 'l') ? va_arg(args, long) :
-                       (qualifier == 'h') ? va_arg(args, short) :
-                                            va_arg(args, int);
+            long num = (qualifier == 'l')   ? va_arg(args, long)
+                       : (qualifier == 'h') ? va_arg(args, short)
+                                            : va_arg(args, int);
             // Add the number.
-            tmp = number(tmp, NULL, num, base, field_width, precision, flags);
+            tmp      = number(tmp, NULL, num, base, field_width, precision, flags);
         } else {
-            unsigned long num = (qualifier == 'l') ? va_arg(args, unsigned long) :
-                                (qualifier == 'h') ? va_arg(args, unsigned short) :
-                                                     va_arg(args, unsigned int);
+            unsigned long num = (qualifier == 'l')   ? va_arg(args, unsigned long)
+                                : (qualifier == 'h') ? va_arg(args, unsigned short)
+                                                     : va_arg(args, unsigned int);
             // Add the number.
-            tmp = number(tmp, NULL, num, base, field_width, precision, flags);
+            tmp               = number(tmp, NULL, num, base, field_width, precision, flags);
         }
     }
 
@@ -1110,17 +1111,17 @@ int vsnprintf(char *str, size_t bufsize, const char *fmt, va_list args)
 
         // Process the integer value.
         if (bitmask_check(flags, FLAGS_SIGN)) {
-            long num = (qualifier == 'l') ? va_arg(args, long) :
-                       (qualifier == 'h') ? va_arg(args, short) :
-                                            va_arg(args, int);
+            long num = (qualifier == 'l')   ? va_arg(args, long)
+                       : (qualifier == 'h') ? va_arg(args, short)
+                                            : va_arg(args, int);
             // Add the number.
-            tmp = number(tmp, end, num, base, field_width, precision, flags);
+            tmp      = number(tmp, end, num, base, field_width, precision, flags);
         } else {
-            unsigned long num = (qualifier == 'l') ? va_arg(args, unsigned long) :
-                                (qualifier == 'h') ? va_arg(args, unsigned short) :
-                                                     va_arg(args, unsigned int);
+            unsigned long num = (qualifier == 'l')   ? va_arg(args, unsigned long)
+                                : (qualifier == 'h') ? va_arg(args, unsigned short)
+                                                     : va_arg(args, unsigned int);
             // Add the number.
-            tmp = number(tmp, end, num, base, field_width, precision, flags);
+            tmp               = number(tmp, end, num, base, field_width, precision, flags);
         }
     }
 
@@ -1134,7 +1135,7 @@ int vsnprintf(char *str, size_t bufsize, const char *fmt, va_list args)
 
 int printf(const char *format, ...)
 {
-    char buffer[4096] = { 0 };
+    char buffer[4096] = {0};
     va_list ap;
     int len;
     // Start variabile argument's list.

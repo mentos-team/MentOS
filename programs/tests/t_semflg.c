@@ -8,16 +8,16 @@
 /// @copyright (c) 2014-2024
 /// This file is distributed under the MIT License. See LICENSE.md for details.
 
-#include <unistd.h>
 #include <errno.h>
-#include <sys/stat.h>
-#include <sys/sem.h>
-#include <sys/ipc.h>
-#include <stdlib.h>
 #include <fcntl.h>
 #include <stdio.h>
-#include <string.h>
+#include <stdlib.h>
 #include <strerror.h>
+#include <string.h>
+#include <sys/ipc.h>
+#include <sys/sem.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 int main(int argc, char *argv[])
 {
@@ -63,7 +63,7 @@ int main(int argc, char *argv[])
         op_child.sem_flg = 0; // No special flags.
 
         // Sleep for 200 ms.
-        timespec_t req = { 0, 200000000 };
+        timespec_t req = {0, 200000000};
         nanosleep(&req, NULL);
 
         // Perform the increment operation on the semaphore.

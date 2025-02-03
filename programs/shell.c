@@ -3,35 +3,32 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include <unistd.h>
-#include <sys/wait.h>
+#include <ctype.h>
 #include <fcntl.h>
-#include <libgen.h>
-#include <sys/stat.h>
-#include <signal.h>
 #include <io/ansi_colors.h>
-#include <sys/bitops.h>
+#include <libgen.h>
+#include <limits.h>
+#include <ring_buffer.h>
+#include <signal.h>
 #include <stdbool.h>
 #include <stddef.h>
-#include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <strerror.h>
-#include <termios.h>
-#include <limits.h>
+#include <string.h>
+#include <sys/bitops.h>
+#include <sys/stat.h>
 #include <sys/utsname.h>
-#include <ctype.h>
-#include <ring_buffer.h>
+#include <sys/wait.h>
+#include <termios.h>
+#include <unistd.h>
 
 /// Maximum length of commands.
-#define CMD_LEN 64
+#define CMD_LEN     64
 /// Maximum lenght of the history.
 #define HISTORY_MAX 10
 
-static inline void rb_history_entry_copy(char *dest, const char *src, unsigned size)
-{
-    strncpy(dest, src, size);
-}
+static inline void rb_history_entry_copy(char *dest, const char *src, unsigned size) { strncpy(dest, src, size); }
 
 /// Initialize the two-dimensional ring buffer for integers.
 DECLARE_FIXED_SIZE_2D_RING_BUFFER(char, history, HISTORY_MAX, CMD_LEN, 0)
@@ -46,9 +43,9 @@ static rb_history_t history;
 // History reading index.
 static unsigned history_index;
 // Store the last command status
-static int status = 0;
+static int status         = 0;
 // Store the last command status as string
-static char status_buf[4] = { 0 };
+static char status_buf[4] = {0};
 
 static sigset_t oldmask;
 
@@ -61,10 +58,7 @@ static void __block_sigchld(void)
     sigprocmask(SIG_BLOCK, &mask, &oldmask);
 }
 
-static void __unblock_sigchld(void)
-{
-    sigprocmask(SIG_SETMASK, &oldmask, NULL);
-}
+static void __unblock_sigchld(void) { sigprocmask(SIG_SETMASK, &oldmask, NULL); }
 
 static inline int __is_separator(char c)
 {
@@ -107,11 +101,7 @@ static inline int __count_words(const char *sentence)
 /// @param accepted_type The type of entry to search for (e.g., file, directory).
 /// @param result Pointer to store the found entry, if any.
 /// @return Returns 1 if the entry is found, 0 otherwise or in case of an error.
-static inline int __folder_contains(
-    const char *folder,
-    const char *entry,
-    int accepted_type,
-    dirent_t *result)
+static inline int __folder_contains(const char *folder, const char *entry, int accepted_type, dirent_t *result)
 {
     // Validate input parameters.
     if ((folder == NULL) || (entry == NULL) || (result == NULL)) {
@@ -170,8 +160,8 @@ static inline int __search_in_path(const char *entry, dirent_t *result)
         PATH_VAR = "/bin:/usr/bin";
     }
     // Prepare for tokenizing the path using custom logic.
-    char token[NAME_MAX] = { 0 }; // Buffer to hold each token (directory).
-    size_t offset        = 0;     // Offset for the tokenizer.
+    char token[NAME_MAX] = {0}; // Buffer to hold each token (directory).
+    size_t offset        = 0;   // Offset for the tokenizer.
     // Iterate through each directory in the PATH.
     while (tokenize(PATH_VAR, ":", &offset, token, NAME_MAX)) {
         // Search for the entry in the current directory (tokenized directory).
@@ -217,7 +207,7 @@ static inline void __prompt_print(void)
     if (timeinfo == NULL) {
         fprintf(stderr, "__prompt_print: Failed to convert time to local time.\n");
         // Use a default value to avoid segmentation faults.
-        static tm_t default_time = { 0 };
+        static tm_t default_time = {0};
         timeinfo                 = &default_time;
     }
     // Get the hostname using uname.
@@ -230,8 +220,10 @@ static inline void __prompt_print(void)
         HOSTNAME = buffer.nodename;
     }
     // Print the formatted prompt.
-    printf(FG_GREEN "%s" FG_WHITE "@" FG_CYAN "%s " FG_BLUE_BRIGHT "[%02d:%02d:%02d]" FG_WHITE " [%s] " FG_RESET "\n-> %% ",
-           USER, HOSTNAME, timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec, CWD);
+    printf(
+        FG_GREEN "%s" FG_WHITE "@" FG_CYAN "%s " FG_BLUE_BRIGHT "[%02d:%02d:%02d]" FG_WHITE " [%s] " FG_RESET
+                 "\n-> %% ",
+        USER, HOSTNAME, timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec, CWD);
 }
 
 /// @brief Retrieves the value of the specified environment variable or special shell variables.
@@ -278,15 +270,15 @@ static void ___expand_env(char *str, size_t str_len, char *buf, size_t buf_len, 
         return;
     }
     // Buffer where we store the name of the variable.
-    char buffer[BUFSIZ] = { 0 };
+    char buffer[BUFSIZ] = {0};
     // Flags used to keep track of the special characters.
-    unsigned flags = 0;
+    unsigned flags      = 0;
     // Pointer to where the variable name starts.
-    char *env_start = NULL;
+    char *env_start     = NULL;
     // Pointer to store the retrieved environmental variable value.
-    char *ENV = NULL;
+    char *ENV           = NULL;
     // Position where we are writing on the buffer.
-    int b_pos = 0;
+    int b_pos           = 0;
     // Iterate through the input string.
     for (int s_pos = 0; s_pos < str_len; ++s_pos) {
         // Skip quotes at the start and end of the string.
@@ -383,10 +375,7 @@ static void ___expand_env(char *str, size_t str_len, char *buf, size_t buf_len, 
 /// @param str The input string containing environmental variables.
 /// @param buf The buffer where the expanded result will be stored.
 /// @param buf_len The size of the buffer.
-static void __expand_env(char *str, char *buf, size_t buf_len)
-{
-    ___expand_env(str, strlen(str), buf, buf_len, false);
-}
+static void __expand_env(char *str, char *buf, size_t buf_len) { ___expand_env(str, strlen(str), buf, buf_len, false); }
 
 /// @brief Sets environment variables based on arguments.
 /// @param argc The number of arguments passed.
@@ -394,7 +383,7 @@ static void __expand_env(char *str, char *buf, size_t buf_len)
 /// @return Returns 0 on success, 1 on failure.
 static int __export(int argc, char *argv[])
 {
-    char name[BUFSIZ] = { 0 }, value[BUFSIZ] = { 0 };
+    char name[BUFSIZ] = {0}, value[BUFSIZ] = {0};
     char *first, *last;
     size_t name_len, value_start;
     // Loop through each argument, starting from argv[1].
@@ -429,7 +418,10 @@ static int __export(int argc, char *argv[])
                 return 1; // Return 1 on failure to set the environment variable.
             }
         } else {
-            printf("Invalid variable assignment: '%s'. Name and value must be non-empty.\n", argv[i]);
+            printf(
+                "Invalid variable assignment: '%s'. Name and value must be "
+                "non-empty.\n",
+                argv[i]);
         }
     }
     return 0; // Return 0 on success.
@@ -572,11 +564,7 @@ static rb_history_entry_t *__history_fetch(char direction)
 /// @param length Pointer to the current length of the buffer.
 /// @param c Character to append to the buffer.
 /// @return Returns 1 if the buffer limit is reached, 0 otherwise.
-static inline int __command_append(
-    rb_history_entry_t *entry,
-    int *index,
-    int *length,
-    char c)
+static inline int __command_append(rb_history_entry_t *entry, int *index, int *length, char c)
 {
     // Input validation: Ensure entry, index, and length are valid.
     if ((entry == NULL) || (index == NULL) || (length == NULL)) {
@@ -626,7 +614,9 @@ static inline void __command_clear(rb_history_entry_t *entry, int *index, int *l
     // Move the cursor to the end of the current command.
     printf("\033[%dC", (*length) - (*index));
     // Clear the current command from the display by moving backwards.
-    while ((*length)--) { putchar('\b'); }
+    while ((*length)--) {
+        putchar('\b');
+    }
     // Clear the current command from the buffer by setting it to zero.
     memset(entry->buffer, 0, entry->size);
     // Reset both index and length to zero, as the command is now cleared.
@@ -640,13 +630,8 @@ static inline void __command_clear(rb_history_entry_t *entry, int *index, int *l
 /// @param entry Pointer to the history entry structure.
 /// @param index Pointer to the current index in the buffer.
 /// @param length Pointer to the current length of the buffer.
-static inline void __command_suggest(
-    const char *filename,
-    int filetype,
-    int offset,
-    rb_history_entry_t *entry,
-    int *index,
-    int *length)
+static inline void
+__command_suggest(const char *filename, int filetype, int offset, rb_history_entry_t *entry, int *index, int *length)
 {
     // Check if there is a valid suggestion to process.
     if (filename) {
@@ -683,10 +668,7 @@ static inline void __command_suggest(
 /// @param index The current index in the command buffer.
 /// @param length The total length of the command buffer.
 /// @return Returns 0 on success, 1 on failure.
-static int __command_complete(
-    rb_history_entry_t *entry,
-    int *index,
-    int *length)
+static int __command_complete(rb_history_entry_t *entry, int *index, int *length)
 {
     // Validate input parameters.
     if (entry == NULL) {
@@ -736,20 +718,14 @@ static int __command_complete(
     }
 
     // Determines if we are executing a command from current directory.
-    int is_run_cmd = ((*index) >= 2) && (entry->buffer[0] == '.') && (entry->buffer[1] == '/');
+    int is_run_cmd  = ((*index) >= 2) && (entry->buffer[0] == '.') && (entry->buffer[1] == '/');
     // Determines if we are entering an absolute path.
     int is_abs_path = ((*index) >= 1) && (entry->buffer[0] == '/');
 
     // If there is only one word, we are searching for a command.
     if (is_run_cmd) {
         if (__folder_contains(cwd, entry->buffer + 2, 0, &dent)) {
-            __command_suggest(
-                dent.d_name,
-                dent.d_type,
-                (*index) - 2,
-                entry,
-                index,
-                length);
+            __command_suggest(dent.d_name, dent.d_type, (*index) - 2, entry, index, length);
         }
     } else if (is_abs_path) {
         char _dirname[PATH_MAX];
@@ -764,30 +740,18 @@ static int __command_complete(
             return 0;
         }
         if (__folder_contains(_dirname, _basename, 0, &dent)) {
-            __command_suggest(
-                dent.d_name,
-                dent.d_type,
-                strlen(_basename),
-                entry,
-                index,
-                length);
+            __command_suggest(dent.d_name, dent.d_type, strlen(_basename), entry, index, length);
         }
     } else if (words == 1) {
         if (__search_in_path(entry->buffer, &dent)) {
-            __command_suggest(
-                dent.d_name,
-                dent.d_type,
-                *index,
-                entry,
-                index,
-                length);
+            __command_suggest(dent.d_name, dent.d_type, *index, entry, index, length);
         }
     } else {
         // Search the last occurrence of a space, from there on
         // we will have the last argument.
         char *last_argument = strrchr(entry->buffer, ' ');
         // We need to move ahead of one character if we found the space.
-        last_argument = last_argument ? last_argument + 1 : NULL;
+        last_argument       = last_argument ? last_argument + 1 : NULL;
         // If there is no last argument.
         if (last_argument == NULL) {
             fprintf(stderr, "__command_complete: No last argument found in buffer '%s'.\n", entry->buffer);
@@ -795,7 +759,11 @@ static int __command_complete(
         }
         char _dirname[PATH_MAX];
         if (!dirname(last_argument, _dirname, sizeof(_dirname))) {
-            fprintf(stderr, "__command_complete: Failed to extract directory name from '%s'.\n", last_argument);
+            fprintf(
+                stderr,
+                "__command_complete: Failed to extract directory name from "
+                "'%s'.\n",
+                last_argument);
             return 0;
         }
         const char *_basename = basename(last_argument);
@@ -805,23 +773,11 @@ static int __command_complete(
         }
         if ((*_dirname != 0) && (*_basename != 0)) {
             if (__folder_contains(_dirname, _basename, 0, &dent)) {
-                __command_suggest(
-                    dent.d_name,
-                    dent.d_type,
-                    strlen(_basename),
-                    entry,
-                    index,
-                    length);
+                __command_suggest(dent.d_name, dent.d_type, strlen(_basename), entry, index, length);
             }
         } else if (*_basename != 0) {
             if (__folder_contains(cwd, _basename, 0, &dent)) {
-                __command_suggest(
-                    dent.d_name,
-                    dent.d_type,
-                    strlen(_basename),
-                    entry,
-                    index,
-                    length);
+                __command_suggest(dent.d_name, dent.d_type, strlen(_basename), entry, index, length);
             }
         }
     }
@@ -1200,7 +1156,7 @@ static void __setup_redirects(int *argcp, char ***argvp)
         free(argv[i + 1]);
         (*argvp)[i + 1] = NULL;
         // Open the file for redirection.
-        int fd = open(path, flags, mode);
+        int fd          = open(path, flags, mode);
         if (fd < 0) {
             printf("Error: Failed to open file '%s' for redirection.\n", path);
             exit(1);
@@ -1251,7 +1207,7 @@ static int __execute_command(rb_history_entry_t *entry)
         __cd(_argc, _argv);
     } else if (!strcmp(_argv[0], "..")) {
         // Shortcut for 'cd ..'.
-        const char *__argv[] = { "cd", "..", NULL };
+        const char *__argv[] = {"cd", "..", NULL};
         __cd(2, (char **)__argv);
     } else if (!strcmp(_argv[0], "export")) {
         // Execute the 'export' command.
@@ -1288,11 +1244,12 @@ static int __execute_command(rb_history_entry_t *entry)
             waitpid(cpid, &_status, 0);
             // Handle different exit statuses of the child process.
             if (WIFSIGNALED(_status)) {
-                printf(FG_RED "\nExit status %d, killed by signal %d\n" FG_RESET,
-                       WEXITSTATUS(_status), WTERMSIG(_status));
+                printf(
+                    FG_RED "\nExit status %d, killed by signal %d\n" FG_RESET, WEXITSTATUS(_status), WTERMSIG(_status));
             } else if (WIFSTOPPED(_status)) {
-                printf(FG_YELLOW "\nExit status %d, stopped by signal %d\n" FG_RESET,
-                       WEXITSTATUS(_status), WSTOPSIG(_status));
+                printf(
+                    FG_YELLOW "\nExit status %d, stopped by signal %d\n" FG_RESET, WEXITSTATUS(_status),
+                    WSTOPSIG(_status));
             } else if (WEXITSTATUS(_status) != 0) {
                 printf(FG_RED "\nExit status %d\n" FG_RESET, WEXITSTATUS(_status));
             }
@@ -1379,10 +1336,7 @@ static void __interactive_mode(void)
 #pragma clang diagnostic pop
 }
 
-void wait_for_child(int signum)
-{
-    wait(NULL);
-}
+void wait_for_child(int signum) { wait(NULL); }
 
 int main(int argc, char *argv[])
 {

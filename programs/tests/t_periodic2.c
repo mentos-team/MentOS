@@ -7,11 +7,11 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include <stdio.h>
 #include <sched.h>
-#include <unistd.h>
-#include <strerror.h>
+#include <stdio.h>
 #include <stdlib.h>
+#include <strerror.h>
+#include <unistd.h>
 
 int main(int argc, char *argv[])
 {
@@ -25,10 +25,10 @@ int main(int argc, char *argv[])
     }
 
     // Change scheduling parameters.
-    param.sched_priority = 1; // Set priority (example value, adjust as needed).
-    param.period = 4000;      // Set period to 4000 ms.
-    param.deadline = 4000;    // Set deadline to 4000 ms.
-    param.is_periodic = 1;    // Set as periodic task.
+    param.sched_priority = 1;    // Set priority (example value, adjust as needed).
+    param.period         = 4000; // Set period to 4000 ms.
+    param.deadline       = 4000; // Set deadline to 4000 ms.
+    param.is_periodic    = 1;    // Set as periodic task.
 
     // Set modified scheduling parameters.
     if (sched_setparam(cpid, &param) == -1) {

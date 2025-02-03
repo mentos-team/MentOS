@@ -11,21 +11,21 @@
 
 #include "assert.h"
 #include "elf/elf.h"
+#include "errno.h"
 #include "fcntl.h"
-#include "sys/stat.h"
+#include "fs/namei.h"
+#include "fs/vfs.h"
 #include "hardware/timer.h"
 #include "klib/stack_helper.h"
 #include "libgen.h"
+#include "process/pid_manager.h"
 #include "process/prio.h"
 #include "process/process.h"
 #include "process/scheduler.h"
-#include "process/pid_manager.h"
 #include "process/wait.h"
 #include "string.h"
-#include "errno.h"
+#include "sys/stat.h"
 #include "system/panic.h"
-#include "fs/vfs.h"
-#include "fs/namei.h"
 #include "unistd.h"
 
 /// Cache for creating the task structs.
@@ -49,7 +49,7 @@ static inline int __count_args(char **args)
 static inline int __count_args_bytes(char **args)
 {
     // Count the number of arguments.
-    int argc = __count_args(args);
+    int argc  = __count_args(args);
     // Count the number of characters.
     int nchar = 0;
     for (int i = 0; i < argc; i++) {
@@ -104,11 +104,11 @@ static int __reset_process(task_struct *task)
     // Clean stack space.
     memset((char *)task->mm->start_stack, 0, DEFAULT_STACK_SIZE);
     // Set the base address of the stack.
-    task->thread.regs.ebp = (uintptr_t)(task->mm->start_stack + DEFAULT_STACK_SIZE);
+    task->thread.regs.ebp     = (uintptr_t)(task->mm->start_stack + DEFAULT_STACK_SIZE);
     // Set the top address of the stack.
     task->thread.regs.useresp = task->thread.regs.ebp;
     // Enable the interrupts.
-    task->thread.regs.eflags = task->thread.regs.eflags | EFLAG_IF;
+    task->thread.regs.eflags  = task->thread.regs.eflags | EFLAG_IF;
 
     // Restore previous pgdir
     paging_switch_directory(crtdir);
@@ -235,7 +235,7 @@ static inline task_struct *__alloc_task(task_struct *source, task_struct *parent
     // Clear the memory.
     memset(proc, 0, sizeof(task_struct));
     // Set the id of the process.
-    proc->pid = pid_manager_get_free_pid();
+    proc->pid   = pid_manager_get_free_pid();
     // Set the state of the process as running.
     proc->state = TASK_RUNNING;
     // Set the current opened file descriptors and the maximum number of file descriptors.
@@ -283,13 +283,13 @@ static inline task_struct *__alloc_task(task_struct *source, task_struct *parent
     proc->se.worst_case_exec    = 0;
     proc->se.utilization_factor = 0;
     // Initialize the exit code of the process.
-    proc->exit_code = 0;
+    proc->exit_code             = 0;
     // Copy the name.
     if (name) {
         strcpy(proc->name, name);
     }
     // Do not touch the task's segments.
-    proc->mm = NULL;
+    proc->mm       = NULL;
     // Initialize the error number.
     proc->error_no = 0;
     // Initialize the current working directory.
@@ -320,11 +320,7 @@ static inline task_struct *__alloc_task(task_struct *source, task_struct *parent
 
     // Set the default terminal options.
     proc->termios = (termios_t){
-        .c_cflag = 0,
-        .c_lflag = (ICANON | ECHO | ECHOE | ECHOK | ECHONL | ISIG),
-        .c_oflag = 0,
-        .c_iflag = 0
-    };
+        .c_cflag = 0, .c_lflag = (ICANON | ECHO | ECHOE | ECHOK | ECHONL | ISIG), .c_oflag = 0, .c_iflag = 0};
     // Initialize the ringbuffer.
     rb_keybuffer_init(&proc->keyboard_rb);
 
@@ -392,26 +388,21 @@ int process_create_init(const char *path)
 
     // Prepare argv and envp for the init process.
     char **argv_ptr, **envp_ptr;
-    int argc            = 1;
-    static char *argv[] = {
-        "/bin/init",
-        (char *)NULL
-    };
-    static char *envp[] = {
-        (char *)NULL
-    };
+    int argc                    = 1;
+    static char *argv[]         = {"/bin/init", (char *)NULL};
+    static char *envp[]         = {(char *)NULL};
     // Save where the arguments start.
     init_process->mm->arg_start = init_process->thread.regs.useresp;
     // Push the arguments on the stack.
-    argv_ptr = __push_args_on_stack(&init_process->thread.regs.useresp, argv);
+    argv_ptr                    = __push_args_on_stack(&init_process->thread.regs.useresp, argv);
     // Save where the arguments end.
-    init_process->mm->arg_end = init_process->thread.regs.useresp;
+    init_process->mm->arg_end   = init_process->thread.regs.useresp;
     // Save where the environmental variables start.
     init_process->mm->env_start = init_process->thread.regs.useresp;
     // Push the environment on the stack.
-    envp_ptr = __push_args_on_stack(&init_process->thread.regs.useresp, envp);
+    envp_ptr                    = __push_args_on_stack(&init_process->thread.regs.useresp, envp);
     // Save where the environmental variables end.
-    init_process->mm->env_end = init_process->thread.regs.useresp;
+    init_process->mm->env_end   = init_process->thread.regs.useresp;
     // Push the `main` arguments on the stack (argc, argv, envp).
     PUSH_VALUE_ON_STACK(init_process->thread.regs.useresp, envp_ptr);
     PUSH_VALUE_ON_STACK(init_process->thread.regs.useresp, argv_ptr);
@@ -490,7 +481,8 @@ int sys_fchdir(int fd)
         return -ENOTDIR;
     }
     char absolute_path[PATH_MAX];
-    if (resolve_path(vfd->file_struct->name, absolute_path, sizeof(absolute_path), REMOVE_TRAILING_SLASH | FOLLOW_LINKS) < 0) {
+    if (resolve_path(
+            vfd->file_struct->name, absolute_path, sizeof(absolute_path), REMOVE_TRAILING_SLASH | FOLLOW_LINKS) < 0) {
         pr_err("Cannot get the absolute path for path `%s`.\n", vfd->file_struct->name);
         return -ENOENT;
     }
@@ -511,11 +503,11 @@ pid_t sys_fork(pt_regs *f)
     // to the ones of the child process, except for eax.
     scheduler_store_context(f, current);
     // Allocate the memory for the process.
-    task_struct *proc = __alloc_task(current, current, current->name);
+    task_struct *proc        = __alloc_task(current, current, current->name);
     // Copy the father's stack, memory, heap etc... to the child process
-    proc->mm = clone_process_image(current->mm);
+    proc->mm                 = clone_process_image(current->mm);
     // Set the eax as 0, to indicate the child process
-    proc->thread.regs.eax = 0;
+    proc->thread.regs.eax    = 0;
     // Enable the interrupts.
     proc->thread.regs.eflags = proc->thread.regs.eflags | EFLAG_IF;
 
@@ -530,7 +522,9 @@ pid_t sys_fork(pt_regs *f)
     // Active the new process.
     scheduler_enqueue_task(proc);
 
-    pr_debug("Forked    '%s' (pid: %d, gid: %d, sid: %d, pgid: %d)...\n", proc->name, proc->pid, proc->gid, proc->sid, proc->pgid);
+    pr_debug(
+        "Forked    '%s' (pid: %d, gid: %d, sid: %d, pgid: %d)...\n", proc->name, proc->pid, proc->gid, proc->sid,
+        proc->pgid);
 
     // Return PID of child process to parent.
     return proc->pid;
@@ -585,14 +579,18 @@ int sys_execve(pt_regs *f)
     int envc       = __count_args(origin_envp);
     int envp_bytes = __count_args_bytes(origin_envp);
     if ((argv_bytes < 0) || (envp_bytes < 0)) {
-        pr_err("Failed to count required memory to store arguments and environment (%d + %d).\n",
-               argv_bytes, envp_bytes);
+        pr_err(
+            "Failed to count required memory to store arguments and "
+            "environment (%d + %d).\n",
+            argv_bytes, envp_bytes);
         return -1;
     }
     void *args_mem = kmalloc(argv_bytes + envp_bytes);
     if (!args_mem) {
-        pr_err("Failed to allocate memory for arguments and environment %d (%d + %d).\n",
-               argv_bytes + envp_bytes, argv_bytes, envp_bytes);
+        pr_err(
+            "Failed to allocate memory for arguments and environment %d (%d + "
+            "%d).\n",
+            argv_bytes + envp_bytes, argv_bytes, envp_bytes);
         return -1;
     }
     // Copy the arguments.
@@ -631,8 +629,10 @@ int sys_execve(pt_regs *f)
         int int_argv_bytes = __count_args_bytes(int_argv);
         void *int_args_mem = kmalloc(int_argv_bytes);
         if (!int_args_mem) {
-            pr_err("Failed to allocate memory for interpreter arguments and environment %d (%d + %d).\n",
-                   int_argv_bytes + envp_bytes, int_argv_bytes, envp_bytes);
+            pr_err(
+                "Failed to allocate memory for interpreter arguments and "
+                "environment %d (%d + %d).\n",
+                int_argv_bytes + envp_bytes, int_argv_bytes, envp_bytes);
             return -1;
         }
         // Copy the arguments.
@@ -657,13 +657,13 @@ int sys_execve(pt_regs *f)
     // Save where the arguments start.
     current->mm->arg_start = current->thread.regs.useresp;
     // Push the arguments on the stack.
-    final_argv = __push_args_on_stack(&current->thread.regs.useresp, saved_argv);
+    final_argv             = __push_args_on_stack(&current->thread.regs.useresp, saved_argv);
     // Save where the arguments end, and the env starts.
     current->mm->env_start = current->mm->arg_end = current->thread.regs.useresp;
     // Push the environment on the stack.
-    final_envp = __push_args_on_stack(&current->thread.regs.useresp, saved_envp);
+    final_envp                                    = __push_args_on_stack(&current->thread.regs.useresp, saved_envp);
     // Save where the environmental variables end.
-    current->mm->env_end = current->thread.regs.useresp;
+    current->mm->env_end                          = current->thread.regs.useresp;
     // Push the `main` arguments on the stack (argc, argv, envp).
     PUSH_VALUE_ON_STACK(current->thread.regs.useresp, final_envp);
     PUSH_VALUE_ON_STACK(current->thread.regs.useresp, final_argv);

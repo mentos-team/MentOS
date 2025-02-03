@@ -19,18 +19,18 @@
 #include "fs/pipe.h"
 
 #include "assert.h"
+#include "errno.h"
+#include "fcntl.h"
+#include "fs/vfs.h"
+#include "list_head.h"
 #include "mem/kheap.h"
 #include "stdio.h"
 #include "stdlib.h"
-#include "string.h"
-#include "errno.h"
 #include "strerror.h"
-#include "list_head.h"
-#include "fs/vfs.h"
+#include "string.h"
 #include "sys/stat.h"
-#include "fcntl.h"
-#include "time.h"
 #include "system/syscall.h"
+#include "time.h"
 
 // ============================================================================
 // Virtual FileSystem (VFS) Operaions
@@ -213,18 +213,12 @@ static inline void __pipe_inode_info_dealloc(pipe_inode_info_t *pipe_info)
 /// @brief Converts a linear index to the corresponding buffer index within the buffer limit.
 /// @param index The linear index.
 /// @return The buffer index within [0, PIPE_NUM_BUFFERS - 1].
-static inline size_t pipe_linear_to_buffer_index(size_t index)
-{
-    return (index / PIPE_BUFFER_SIZE) % PIPE_NUM_BUFFERS;
-}
+static inline size_t pipe_linear_to_buffer_index(size_t index) { return (index / PIPE_BUFFER_SIZE) % PIPE_NUM_BUFFERS; }
 
 /// @brief Calculates the offset within the specified buffer from a linear index.
 /// @param index The linear index.
 /// @return The offset within the buffer.
-static inline size_t pipe_linear_to_offset(size_t index)
-{
-    return index % PIPE_BUFFER_SIZE;
-}
+static inline size_t pipe_linear_to_offset(size_t index) { return index % PIPE_BUFFER_SIZE; }
 
 /// @brief Checks if the specified pipe has any data available in its buffers.
 /// @param pipe_info Pointer to the pipe information structure.
@@ -381,8 +375,10 @@ static int pipe_buffer_confirm(pipe_buffer_t *pipe_buffer)
 
     // Ensure length and offset are within valid bounds.
     if ((pipe_buffer->len + pipe_buffer->offset) > PIPE_BUFFER_SIZE) {
-        pr_err("Buffer length and offset exceed bounds: len = %u, offset = %u, PIPE_BUFFER_SIZE = %lu.\n",
-               pipe_buffer->len, pipe_buffer->offset, PIPE_BUFFER_SIZE);
+        pr_err(
+            "Buffer length and offset exceed bounds: len = %u, offset = %u, "
+            "PIPE_BUFFER_SIZE = %lu.\n",
+            pipe_buffer->len, pipe_buffer->offset, PIPE_BUFFER_SIZE);
         return -EOVERFLOW;
     }
 
@@ -430,8 +426,9 @@ static ssize_t pipe_buffer_read(pipe_buffer_t *pipe_buffer, char *dest, size_t c
         pipe_buffer->offset = 0;
     }
 
-    pr_debug("Read %3ld bytes from buffer (offset: %3u, length: %3u).\n",
-             bytes_to_read, pipe_buffer->offset, pipe_buffer->len);
+    pr_debug(
+        "Read %3ld bytes from buffer (offset: %3u, length: %3u).\n", bytes_to_read, pipe_buffer->offset,
+        pipe_buffer->len);
 
     return bytes_to_read;
 }
@@ -456,7 +453,10 @@ static ssize_t pipe_buffer_write(pipe_buffer_t *pipe_buffer, const char *src, si
     // Determine the actual number of bytes we can write into the buffer.
     ssize_t bytes_to_write = pipe_calculate_bytes_to_write(pipe_buffer, count);
     if (bytes_to_write < 0) {
-        pr_debug("pipe_buffer_write: Failed to calculate bytes to write (error[%2d]: %s).\n", -bytes_to_write, strerror(-bytes_to_write));
+        pr_debug(
+            "pipe_buffer_write: Failed to calculate bytes to write "
+            "(error[%2d]: %s).\n",
+            -bytes_to_write, strerror(-bytes_to_write));
         return bytes_to_write;
     }
 
@@ -466,8 +466,10 @@ static ssize_t pipe_buffer_write(pipe_buffer_t *pipe_buffer, const char *src, si
     // Update the buffer's length to reflect the newly added data.
     pipe_buffer->len += bytes_to_write;
 
-    pr_debug("pipe_buffer_write: Wrote %3ld bytes to buffer (offset: %3u, length: %3u).\n",
-             bytes_to_write, pipe_buffer->offset, pipe_buffer->len);
+    pr_debug(
+        "pipe_buffer_write: Wrote %3ld bytes to buffer (offset: %3u, length: "
+        "%3u).\n",
+        bytes_to_write, pipe_buffer->offset, pipe_buffer->len);
 
     return bytes_to_write;
 }
@@ -725,7 +727,8 @@ static vfs_file_t *pipe_open(const char *path, int flags, mode_t mode)
         if (file && S_ISFIFO(file->flags) && (strcmp(file->name, path) == 0)) {
             // Check if the requested flags match existing file access mode.
             if ((flags & O_ACCMODE) != (file->flags & O_ACCMODE)) {
-                pr_err("Requested flags do not match existing pipe access mode.\n");
+                pr_err("Requested flags do not match existing pipe access "
+                       "mode.\n");
                 return NULL;
             }
             return file; // Return existing pipe file.
@@ -735,7 +738,10 @@ static vfs_file_t *pipe_open(const char *path, int flags, mode_t mode)
     // Allocate and initialize a new vfs_file_t structure for the pipe.
     vfs_file_t *new_file = pipe_create_file_struct(path, flags, mode);
     if (!new_file) {
-        pr_err("Failed to allocate memory for vfs_file_t structure for path: %s.\n", path);
+        pr_err(
+            "Failed to allocate memory for vfs_file_t structure for path: "
+            "%s.\n",
+            path);
         return NULL;
     }
 
@@ -842,16 +848,18 @@ static int pipe_close(vfs_file_t *file)
     if ((file->flags & O_ACCMODE) == O_WRONLY) {
         if (pipe_info->writers > 0) {
             pipe_info->writers--;
-            pr_debug("Decremented writers (count: %u, readers: %u, writers: %u).\n",
-                     file->count, pipe_info->readers, pipe_info->writers);
+            pr_debug(
+                "Decremented writers (count: %u, readers: %u, writers: %u).\n", file->count, pipe_info->readers,
+                pipe_info->writers);
         } else {
             pr_warning("Writers count is already zero.\n");
         }
     } else if ((file->flags & O_ACCMODE) == O_RDONLY) {
         if (pipe_info->readers > 0) {
             pipe_info->readers--;
-            pr_debug("Decremented readers (count: %u, readers: %u, writers: %u).\n",
-                     file->count, pipe_info->readers, pipe_info->writers);
+            pr_debug(
+                "Decremented readers (count: %u, readers: %u, writers: %u).\n", file->count, pipe_info->readers,
+                pipe_info->writers);
         } else {
             pr_warning("Readers count is already zero.\n");
         }
@@ -1027,7 +1035,8 @@ static ssize_t pipe_write(vfs_file_t *file, const void *buffer, off_t offset, si
             }
 
             // Attempt to write data into the pipe buffer.
-            ssize_t bytes_to_write = pipe_buffer_write(pipe_buffer, (const char *)buffer + bytes_written, nbyte - bytes_written);
+            ssize_t bytes_to_write =
+                pipe_buffer_write(pipe_buffer, (const char *)buffer + bytes_written, nbyte - bytes_written);
             if (bytes_to_write < 0) {
                 // Other errors: Log and return immediately.
                 pr_err("Error writing to pipe buffer (error[%2d]: %s).\n", -bytes_to_write, strerror(-bytes_to_write));
@@ -1065,19 +1074,13 @@ static ssize_t pipe_write(vfs_file_t *file, const void *buffer, off_t offset, si
 /// @param offset The seek offset (unused for pipes).
 /// @param whence The seek base (e.g., SEEK_SET, SEEK_CUR, SEEK_END; unused for pipes).
 /// @return Always returns -1 as pipes do not support seeking.
-static off_t pipe_lseek(vfs_file_t *file, off_t offset, int whence)
-{
-    return -1;
-}
+static off_t pipe_lseek(vfs_file_t *file, off_t offset, int whence) { return -1; }
 
 /// @brief Retrieves file status information for a pipe, which is not supported.
 /// @param file Pointer to the `vfs_file_t` structure representing the pipe.
 /// @param stat Pointer to the `stat_t` structure to hold file status information.
 /// @return Always returns -1 as pipes do not support file status retrieval.
-static int pipe_fstat(vfs_file_t *file, stat_t *stat)
-{
-    return -1;
-}
+static int pipe_fstat(vfs_file_t *file, stat_t *stat) { return -1; }
 
 /// @brief Performs a fcntl operation on a pipe file descriptor
 /// @param file Pointer to the vfs_file_t structure representing the pipe file.
@@ -1177,15 +1180,20 @@ int vfs_update_pipe_counts(task_struct *task, task_struct *old_task)
                 if ((file->flags & O_ACCMODE) == O_WRONLY) {
                     // Increment the writers count for the pipe.
                     ++pipe_info->writers;
-                    pr_debug("Increased writers count for pipe associated with fd %d. New count: %d\n",
-                             fd, pipe_info->writers);
+                    pr_debug(
+                        "Increased writers count for pipe associated with fd "
+                        "%d. New count: %d\n",
+                        fd, pipe_info->writers);
                 } else if ((file->flags & O_ACCMODE) == O_RDONLY) {
                     // Increment the readers count for the pipe.
                     ++pipe_info->readers;
-                    pr_debug("Increased readers count for pipe associated with fd %d. New count: %d\n",
-                             fd, pipe_info->readers);
+                    pr_debug(
+                        "Increased readers count for pipe associated with fd "
+                        "%d. New count: %d\n",
+                        fd, pipe_info->readers);
                 } else {
-                    pr_warning("Unknown pipe file access mode, possibly incorrect flags.\n");
+                    pr_warning("Unknown pipe file access mode, possibly "
+                               "incorrect flags.\n");
                 }
             }
         }
@@ -1231,8 +1239,12 @@ int sys_pipe(int fds[2])
     int fd_write = create_pipe_fd(pipe_info, O_WRONLY, 0);
     if (fd_read < 0 || fd_write < 0) {
         pr_err("Failed to create file descriptors.\n");
-        if (fd_read >= 0) { sys_close(fd_read); }
-        if (fd_write >= 0) { sys_close(fd_write); }
+        if (fd_read >= 0) {
+            sys_close(fd_read);
+        }
+        if (fd_write >= 0) {
+            sys_close(fd_write);
+        }
         __pipe_inode_info_dealloc(pipe_info);
         return -1;
     }

@@ -13,9 +13,9 @@
 /// Flag to remove any trailing slash from the path.
 #define REMOVE_TRAILING_SLASH 1 << 0
 /// Flag to follow symbolic links during path resolution.
-#define FOLLOW_LINKS 1 << 1
+#define FOLLOW_LINKS          1 << 1
 /// Flag to create the last component of the path if it doesn't exist.
-#define CREAT_LAST_COMPONENT 1 << 2
+#define CREAT_LAST_COMPONENT  1 << 2
 
 /// @brief Resolve the given path by following all symbolic links.
 ///

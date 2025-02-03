@@ -14,39 +14,40 @@
 
 /// @brief Represents the node of a list.
 typedef struct listnode_t {
-  list_head list;   ///< List structure for this node.
-  void *value;      ///< Pointer to node's value.
+    list_head list; ///< List structure for this node.
+    void *value;    ///< Pointer to node's value.
 } listnode_t;
 
 /// @brief Represents the list.
 typedef struct list_t {
-  list_head head;                             ///< Head of the list.
-  unsigned int size;                          ///< Size of the list.
-  listnode_t *(*alloc)(void);                 ///< Node allocation function.
-  void (*dealloc)(listnode_t *);              ///< Node deallocation function.
+    list_head head;                ///< Head of the list.
+    unsigned int size;             ///< Size of the list.
+    listnode_t *(*alloc)(void);    ///< Node allocation function.
+    void (*dealloc)(listnode_t *); ///< Node deallocation function.
 } list_t;
 
 /// @brief Initializes the list with custom alloc and dealloc functions.
 /// @param list The list to initialize.
 /// @param alloc_fn Function to allocate nodes.
 /// @param dealloc_fn Function to deallocate nodes.
-void list_init(list_t *list, listnode_t *(*alloc_fn)(void),
-               void (*dealloc_fn)(listnode_t *));
+void list_init(list_t *list, listnode_t *(*alloc_fn)(void), void (*dealloc_fn)(listnode_t *));
 
 /// @brief Returns the size of the list.
 /// @param list The list to get the size of.
 /// @return The number of elements in the list.
-static inline unsigned int list_size(const list_t *list) {
-  assert(list && "List is null.");
-  return list->size;
+static inline unsigned int list_size(const list_t *list)
+{
+    assert(list && "List is null.");
+    return list->size;
 }
 
 /// @brief Checks if the list is empty.
 /// @param list The list to check.
 /// @return 1 if the list is empty, 0 otherwise.
-static inline int list_empty(const list_t *list) {
-  assert(list && "List is null.");
-  return list_head_empty(&list->head);
+static inline int list_empty(const list_t *list)
+{
+    assert(list && "List is null.");
+    return list_head_empty(&list->head);
 }
 
 /// @brief Insert a new element at the front of the list.

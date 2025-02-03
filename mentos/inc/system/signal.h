@@ -5,22 +5,23 @@
 
 #pragma once
 
-#include "klib/stdatomic.h"
 #include "klib/spinlock.h"
+#include "klib/stdatomic.h"
 #include "list_head.h"
 #include "system/syscall.h"
 
 /// @brief Signal codes.
 typedef enum {
-    SIGHUP    = 1,  ///< Hang up detected on controlling terminal or death of controlling process.
-    SIGINT    = 2,  ///< Issued if the user sends an interrupt signal (Ctrl + C).
-    SIGQUIT   = 3,  ///< Issued if the user sends a quit signal (Ctrl + D).
-    SIGILL    = 4,  ///< Illegal Instruction.
-    SIGTRAP   = 5,  ///< Trace/breakpoint trap.
-    SIGABRT   = 6,  ///< Abort signal from abort().
-    SIGEMT    = 7,  ///< Emulator trap.
-    SIGFPE    = 8,  ///< Floating-point arithmetic exception.
-    SIGKILL   = 9,  ///< If a process gets this signal it must quit immediately and will not perform any clean-up operations.
+    SIGHUP  = 1, ///< Hang up detected on controlling terminal or death of controlling process.
+    SIGINT  = 2, ///< Issued if the user sends an interrupt signal (Ctrl + C).
+    SIGQUIT = 3, ///< Issued if the user sends a quit signal (Ctrl + D).
+    SIGILL  = 4, ///< Illegal Instruction.
+    SIGTRAP = 5, ///< Trace/breakpoint trap.
+    SIGABRT = 6, ///< Abort signal from abort().
+    SIGEMT  = 7, ///< Emulator trap.
+    SIGFPE  = 8, ///< Floating-point arithmetic exception.
+    SIGKILL =
+        9, ///< If a process gets this signal it must quit immediately and will not perform any clean-up operations.
     SIGBUS    = 10, ///< Bus error (bad memory access).
     SIGSEGV   = 11, ///< Invalid memory reference.
     SIGSYS    = 12, ///< Bad system call (SVr4).
@@ -153,9 +154,9 @@ typedef enum {
 /// Type of a signal handler.
 typedef void (*sighandler_t)(int);
 
-#define SIG_DFL ((sighandler_t)0)  ///< Default signal handling.
-#define SIG_IGN ((sighandler_t)1)  ///< ignore signal.
-#define SIG_ERR ((sighandler_t)-1) ///< error return from signal.
+#define SIG_DFL ((sighandler_t)0)    ///< Default signal handling.
+#define SIG_IGN ((sighandler_t)1)    ///< ignore signal.
+#define SIG_ERR ((sighandler_t) - 1) ///< error return from signal.
 
 /// @brief Structure used to mask and unmask signals.
 /// @details

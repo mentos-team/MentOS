@@ -5,10 +5,10 @@
 
 #pragma once
 
-#include "os_root_path.h"
 #include "list_head.h"
-#include "stddef.h"
 #include "mem/gfp.h"
+#include "os_root_path.h"
+#include "stddef.h"
 
 /// @brief Type for slab flags.
 typedef unsigned int slab_flags_t;
@@ -17,11 +17,10 @@ typedef unsigned int slab_flags_t;
 typedef void (*kmem_fun_t)(void *);
 
 /// Create a new cache.
-#define KMEM_CREATE(objtype) \
-    kmem_cache_create(#objtype, sizeof(objtype), alignof(objtype), GFP_KERNEL, NULL, NULL)
+#define KMEM_CREATE(objtype) kmem_cache_create(#objtype, sizeof(objtype), alignof(objtype), GFP_KERNEL, NULL, NULL)
 
 /// Creates a new cache and allows to specify the constructor.
-#define KMEM_CREATE_CTOR(objtype, ctor) \
+#define KMEM_CREATE_CTOR(objtype, ctor)                                                                                \
     kmem_cache_create(#objtype, sizeof(objtype), alignof(objtype), GFP_KERNEL, (kmem_fun_t)(ctor), NULL)
 
 /// @brief Stores the information of a cache.

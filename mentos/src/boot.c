@@ -51,10 +51,7 @@ static inline void __outportb(uint16_t port, uint8_t data)
 
 /// @brief Writes the given character on the debug port.
 /// @param c the character to send to the debug port.
-static inline void __debug_putchar(char c)
-{
-    __outportb(SERIAL_COM1, c);
-}
+static inline void __debug_putchar(char c) { __outportb(SERIAL_COM1, c); }
 
 /// @brief Writes the given string on the debug port.
 /// @param s the string to send to the debug port.
@@ -79,10 +76,7 @@ static inline uint32_t __align_rup(uint32_t addr, uint32_t value)
 /// @param addr the address to align
 /// @param value the value used to align.
 /// @return the aligned address.
-static inline uint32_t __align_rdown(uint32_t addr, uint32_t value)
-{
-    return addr - (addr % value);
-}
+static inline uint32_t __align_rdown(uint32_t addr, uint32_t value) { return addr - (addr % value); }
 
 /// @brief Prepares the page frames.
 /// @param pfn_virt_start The first virtual page frame.
@@ -121,9 +115,9 @@ static inline void __setup_boot_paging(void)
     uint32_t kernel_base_phy_page  = boot_info.kernel_phy_start >> 12U;
     uint32_t kernel_base_virt_page = boot_info.kernel_start >> 12U;
     // Compute the last physical page.
-    uint32_t lowmem_last_phy_page = ((uint32_t)(boot_info.lowmem_phy_end - 1)) >> 12U;
+    uint32_t lowmem_last_phy_page  = ((uint32_t)(boot_info.lowmem_phy_end - 1)) >> 12U;
     // Compute the number of pages.
-    uint32_t num_pages = lowmem_last_phy_page - kernel_base_phy_page + 1;
+    uint32_t num_pages             = lowmem_last_phy_page - kernel_base_phy_page + 1;
     // Map lowmem physical pages also to their physical address (to keep bootloader working)
     __setup_pages(0, 0, lowmem_last_phy_page);
     // Setup kernel virtual address space + lowmem
@@ -150,8 +144,8 @@ static void __get_kernel_low_high(elf_header_t *elf_hdr, uint32_t *virt_low, uin
             segment_start = program_header->vaddr;
             segment_end   = segment_start + program_header->memsz;
             // Take the lowest and highest virtual address.
-            *virt_low  = min(*virt_low, segment_start);
-            *virt_high = max(*virt_high, segment_end);
+            *virt_low     = min(*virt_low, segment_start);
+            *virt_high    = max(*virt_high, segment_end);
         }
     }
 }
@@ -163,7 +157,7 @@ static inline uint32_t __get_address_after_modules(multiboot_info_t *header)
 {
     // We set by default the address to the ending physical address
     // of the bootloader.
-    uint32_t addr = boot_info.bootloader_phy_end;
+    uint32_t addr           = boot_info.bootloader_phy_end;
     // Get the pointer to the mods.
     multiboot_module_t *mod = (multiboot_module_t *)header->mods_addr;
     for (int i = 0; (i < header->mods_count) && (i < MAX_MODULES); ++i, ++mod) {
@@ -184,13 +178,13 @@ static inline void __relocate_kernel_image(elf_header_t *elf_hdr)
     // Get the elf file starting address.
     kernel_start = (char *)elf_hdr;
     // Compute the offset for accessing the program headers.
-    offset = (uint32_t)kernel_start + elf_hdr->phoff;
+    offset       = (uint32_t)kernel_start + elf_hdr->phoff;
     // Iterate over the program headers.
     for (int i = 0; i < elf_hdr->phnum; i++) {
         // Get the program header.
-        program_header = (elf_program_header_t *)(offset + elf_hdr->phentsize * i);
+        program_header   = (elf_program_header_t *)(offset + elf_hdr->phentsize * i);
         // Get the virtual address of the program header.
-        virtual_address = (char *)program_header->vaddr;
+        virtual_address  = (char *)program_header->vaddr;
         // Get the physical address of the program header.
         physical_address = (kernel_start + program_header->offset);
         // Move only the loadable segments.
@@ -242,7 +236,7 @@ void boot_main(uint32_t magic, multiboot_info_t *header, uint32_t esp)
     boot_info.module_end = __get_address_after_modules(header);
 
     // Get the starting address of the physical pages at the end of the modules.
-    uint32_t kernel_phy_page_start = __align_rup(boot_info.module_end, PAGE_SIZE);
+    uint32_t kernel_phy_page_start  = __align_rup(boot_info.module_end, PAGE_SIZE);
     // Get the starting address of the virtual pages.
     uint32_t kernel_virt_page_start = __align_rdown(kernel_virt_low, PAGE_SIZE);
 
@@ -256,7 +250,7 @@ void boot_main(uint32_t magic, multiboot_info_t *header, uint32_t esp)
     boot_info.kernel_phy_start = kernel_phy_page_start + kernel_page_offset;
     // The ending address of the physical memory is just the start plus the
     // size of the kernel (virt_high - virt_low).
-    boot_info.kernel_phy_end = boot_info.kernel_phy_start + boot_info.kernel_size;
+    boot_info.kernel_phy_end   = boot_info.kernel_phy_start + boot_info.kernel_size;
 
     boot_info.lowmem_phy_start  = __align_rup(boot_info.kernel_phy_end, PAGE_SIZE);
     boot_info.lowmem_phy_end    = 896 * 1024 * 1024; // 896 MB of low memory max
