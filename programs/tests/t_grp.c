@@ -7,12 +7,12 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include <grp.h>
 #include <err.h>
+#include <grp.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <strerror.h>
+#include <string.h>
 #include <unistd.h>
 
 /// @brief Test the getgrnam function.
@@ -42,7 +42,7 @@ static void __test_getgrgid(void)
     }
 
     // Test that getgrgid returns a valid entry for existing GIDs.
-    int gids[] = { 0, 1000 };
+    int gids[] = {0, 1000};
     for (int i = 0; i < sizeof(gids) / sizeof(int); i++) {
         if (getgrgid(gids[i]) == NULL) {
             errx(EXIT_FAILURE, "Group entry for gid %d not found", gids[i]);

@@ -41,4 +41,4 @@ void clear_resource_info(void *ptr);
 /// @details If resource_id is -1, checks and prints usage for all resources.
 /// @param resource_id The ID of the resource to check. Use -1 to check all resources.
 /// @param printer A callback function to handle the formatted output for each resource.
-void print_resource_usage(int resource_id, const char* (*printer)(void *ptr));
+void print_resource_usage(int resource_id, const char *(*printer)(void *ptr));

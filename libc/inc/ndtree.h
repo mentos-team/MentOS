@@ -49,7 +49,11 @@ typedef struct ndtree {
 /// @param compare_node Comparison function for nodes.
 /// @param alloc_node Custom allocator for nodes.
 /// @param free_node Custom deallocator for nodes.
-void ndtree_tree_init(ndtree_t *tree, ndtree_tree_compare_f compare_node, ndtree_alloc_node_f alloc_node, ndtree_free_node_f free_node);
+void ndtree_tree_init(
+    ndtree_t *tree,
+    ndtree_tree_compare_f compare_node,
+    ndtree_alloc_node_f alloc_node,
+    ndtree_free_node_f free_node);
 
 /// @brief Initializes a tree node with a given value.
 /// @param node The node to initialize.

@@ -119,7 +119,10 @@ static inline int __alloc_slab_page(kmem_cache_t *cachep, gfp_t flags)
         pr_crit("Failed to get virtual address for slab page in cache `%s`.\n", cachep->name);
         // Free allocated pages before returning.
         if (free_pages(page) < 0) {
-            pr_crit("Failed to free allocated pages before returning in cache `%s`.\n", cachep->name);
+            pr_crit(
+                "Failed to free allocated pages before returning in cache "
+                "`%s`.\n",
+                cachep->name);
         }
         return -1;
     }
@@ -165,7 +168,10 @@ static int __kmem_cache_refill(kmem_cache_t *cachep, unsigned free_num, gfp_t fl
         // Attempt to allocate a new slab page. If allocation fails, print a
         // warning and abort the refill process.
         if (__alloc_slab_page(cachep, flags) < 0) {
-            pr_crit("Failed to allocate a new slab page for cache `%s`, aborting refill.\n", cachep->name);
+            pr_crit(
+                "Failed to allocate a new slab page for cache `%s`, aborting "
+                "refill.\n",
+                cachep->name);
             return -1; // Return -1 if page allocation fails.
         }
     }
@@ -189,7 +195,8 @@ static int __compute_size_and_order(kmem_cache_t *cachep)
         return -1;
     }
     if (cachep->raw_object_size == 0) {
-        pr_crit("Object size is invalid (0), cannot compute cache size and order.\n");
+        pr_crit("Object size is invalid (0), cannot compute cache size and "
+                "order.\n");
         return -1;
     }
     if (cachep->align == 0) {
@@ -202,8 +209,10 @@ static int __compute_size_and_order(kmem_cache_t *cachep)
     // provided alignment requirement. Ensure that the object size is at least
     // as large as the overhead and is aligned to the cache's alignment.
     cachep->aligned_object_size = round_up(
-        max(cachep->raw_object_size, KMEM_OBJ_OVERHEAD), // Ensure object size is larger than the overhead.
-        max(8, cachep->align));                          // Ensure alignment is at least 8 bytes for proper memory alignment.
+        max(cachep->raw_object_size,
+            KMEM_OBJ_OVERHEAD), // Ensure object size is larger than the overhead.
+        max(8,
+            cachep->align)); // Ensure alignment is at least 8 bytes for proper memory alignment.
 
     // Check if the computed size is valid.
     if (cachep->aligned_object_size == 0) {
@@ -227,20 +236,25 @@ static int __compute_size_and_order(kmem_cache_t *cachep)
 
     // Check for a valid `gfp_order`. Ensure that it's within reasonable limits.
     if (cachep->gfp_order > MAX_BUDDYSYSTEM_GFP_ORDER) {
-        pr_crit("Calculated gfp_order (%u) exceeds system limit (%u); limiting to max.\n",
-                cachep->gfp_order, MAX_BUDDYSYSTEM_GFP_ORDER);
+        pr_crit(
+            "Calculated gfp_order (%u) exceeds system limit (%u); limiting to "
+            "max.\n",
+            cachep->gfp_order, MAX_BUDDYSYSTEM_GFP_ORDER);
         cachep->gfp_order = MAX_BUDDYSYSTEM_GFP_ORDER;
     }
 
     // Additional consistency check (optional):
     // Verify that the calculated gfp_order leads to a valid page allocation size.
     if ((cachep->gfp_order == 0) && (cachep->aligned_object_size > PAGE_SIZE)) {
-        pr_crit("gfp_order is 0 but object size exceeds one page; issue in size calculation.\n");
+        pr_crit("gfp_order is 0 but object size exceeds one page; issue in "
+                "size calculation.\n");
         return -1;
     }
 
-    pr_debug("Computed aligned object size `%u` and gfp_order `%u` for cache `%s`.\n",
-             cachep->aligned_object_size, cachep->gfp_order, cachep->name);
+    pr_debug(
+        "Computed aligned object size `%u` and gfp_order `%u` for cache "
+        "`%s`.\n",
+        cachep->aligned_object_size, cachep->gfp_order, cachep->name);
 
     return 0;
 }
@@ -284,16 +298,8 @@ static int __kmem_cache_create(
     // Set up the basic properties of the cache.
     *cachep = (kmem_cache_t){
         // .cache_list          = 0,
-        .name                = name,
-        .aligned_object_size = 0,
-        .raw_object_size     = size,
-        .align               = align,
-        .total_num           = 0,
-        .free_num            = 0,
-        .flags               = flags,
-        .gfp_order           = 0,
-        .ctor                = ctor,
-        .dtor                = dtor,
+        .name = name,  .aligned_object_size = 0, .raw_object_size = size, .align = align, .total_num = 0,
+        .free_num = 0, .flags = flags,           .gfp_order = 0,          .ctor = ctor,   .dtor = dtor,
         // .slabs_full          = 0,
         // .slabs_partial       = 0,
         // .slabs_free          = 0,
@@ -447,14 +453,7 @@ int kmem_cache_init(void)
 
     // Create a cache to store metadata about kmem_cache_t structures.
     if (__kmem_cache_create(
-            &kmem_cache,
-            "kmem_cache_t",
-            sizeof(kmem_cache_t),
-            alignof(kmem_cache_t),
-            GFP_KERNEL,
-            NULL,
-            NULL,
-            32) < 0) {
+            &kmem_cache, "kmem_cache_t", sizeof(kmem_cache_t), alignof(kmem_cache_t), GFP_KERNEL, NULL, NULL, 32) < 0) {
         pr_crit("Failed to create kmem_cache for kmem_cache_t.\n");
         return -1;
     }
@@ -650,7 +649,8 @@ void *pr_kmem_cache_alloc(const char *file, const char *fun, int line, kmem_cach
     if (slab_page->slab_objfree == 0) {
         list_head *slab_full_elem = list_head_pop(&cachep->slabs_partial);
         if (!slab_full_elem) {
-            pr_crit("Retrieved invalid slab from partial list while moving to full list.\n");
+            pr_crit("Retrieved invalid slab from partial list while moving to "
+                    "full list.\n");
             return NULL;
         }
         list_head_insert_after(slab_full_elem, &cachep->slabs_full);
@@ -756,7 +756,10 @@ void *pr_kmalloc(const char *file, const char *fun, int line, unsigned int size)
     } else {
         ptr = kmem_cache_alloc(malloc_blocks[order], GFP_KERNEL);
         if (!ptr) {
-            pr_crit("Failed to allocate from kmalloc cache order %u for size %u at %s:%d\n", order, size, file, line);
+            pr_crit(
+                "Failed to allocate from kmalloc cache order %u for size %u at "
+                "%s:%d\n",
+                order, size, file, line);
         }
     }
 
@@ -788,7 +791,10 @@ void pr_kfree(const char *file, const char *fun, int line, void *ptr)
     // If the address belongs to a cache, free it using kmem_cache_free.
     if (page->container.slab_main_page) {
         if (kmem_cache_free(ptr) < 0) {
-            pr_crit("Failed to free memory from kmem_cache for address 0x%p at %s:%d\n", ptr, file, line);
+            pr_crit(
+                "Failed to free memory from kmem_cache for address 0x%p at "
+                "%s:%d\n",
+                ptr, file, line);
         }
     } else {
         // Otherwise, free the raw pages.

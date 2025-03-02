@@ -53,21 +53,23 @@ typedef unsigned int pgprot_t;
 
 /// It evaluates to the offset (in bytes) of a given member within
 /// a struct or union type, an expression of type size_t.
-#define offsetof(type, member) \
-    ((size_t) & (((type *)0)->member))
+#define offsetof(type, member) ((size_t)&(((type *)0)->member))
 
 /// Retrieve an enclosing structure from a pointer to a nested element.
 #if 1
-#define container_of(ptr, type, member) \
-    ((type *)((char *)(1 ? (ptr) : &((type *)0)->member) - offsetof(type, member)))
+#define container_of(ptr, type, member) ((type *)((char *)(1 ? (ptr) : &((type *)0)->member) - offsetof(type, member)))
 #else
-#define container_of(ptr, type, member) \
-    ((type *)((char *)ptr - offsetof(type, member)))
+#define container_of(ptr, type, member) ((type *)((char *)ptr - offsetof(type, member)))
 #endif
 
 /// Returns the alignment, in bytes, of the specified type.
-#define alignof(type) offsetof( \
-    struct { char c; type member; }, member)
+#define alignof(type)                                                                                                  \
+    offsetof(                                                                                                          \
+        struct {                                                                                                       \
+            char c;                                                                                                    \
+            type member;                                                                                               \
+        },                                                                                                             \
+        member)
 
 /// Counts the number of elements of an array.
 #define count_of(x) ((sizeof(x) / sizeof((x)[0])) / ((size_t)(!(sizeof(x) % sizeof((x)[0])))))
@@ -79,9 +81,9 @@ typedef unsigned int pgprot_t;
 /// if (condition)
 ///     swap(var1, var2)
 /// which otherwise would be wrong.
-#define swap(a, b)             \
-    do {                       \
-        typeof(a) temp = (a);  \
-        (a)            = (b);  \
-        (b)            = temp; \
+#define swap(a, b)                                                                                                     \
+    do {                                                                                                               \
+        typeof(a) temp = (a);                                                                                          \
+        (a)            = (b);                                                                                          \
+        (b)            = temp;                                                                                         \
     } while (0)

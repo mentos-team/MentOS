@@ -3,24 +3,18 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "errno.h"
-#include "ctype.h"
-#include "stdbool.h"
 #include "stdio.h"
+#include "ctype.h"
+#include "errno.h"
+#include "limits.h"
+#include "stdbool.h"
 #include "strerror.h"
 #include "string.h"
 #include "unistd.h"
-#include "limits.h"
 
-void putchar(int character)
-{
-    write(STDOUT_FILENO, &character, 1U);
-}
+void putchar(int character) { write(STDOUT_FILENO, &character, 1U); }
 
-void puts(const char *str)
-{
-    write(STDOUT_FILENO, str, strlen(str));
-}
+void puts(const char *str) { write(STDOUT_FILENO, str, strlen(str)); }
 
 int getchar(void)
 {
@@ -111,8 +105,7 @@ long strtol(const char *str, char **endptr, int base)
             c = (int)*s++;
         }
     }
-    if ((base == 0 || base == 16) &&
-        c == '0' && (*s == 'x' || *s == 'X')) {
+    if ((base == 0 || base == 16) && c == '0' && (*s == 'x' || *s == 'X')) {
         c = (int)s[1];
         s += 2;
         base = 16;

@@ -87,10 +87,11 @@ extern void irq_handler(pt_regs *f);
 #define SIMD_FP_EXC         19 ///< XF Streaming SIMD Exception.
 #define VIRT_EXC            20 ///< Virtualization Exception.
 // Reserved [21-29].
-#define SECURITY_EXC 30 ///< Security Exception.
-#define TRIPLE_FAULT 31 ///< Triple Fault
-#define SYSTEM_CALL  80 ///< System call interrupt.
-                        //==============================================================================
+#define SECURITY_EXC        30 ///< Security Exception.
+#define TRIPLE_FAULT        31 ///< Triple Fault
+#define SYSTEM_CALL         80 ///< System call interrupt.
+
+//==============================================================================
 
 /// @}
 /// @}

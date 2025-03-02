@@ -6,14 +6,14 @@
 #include "stdbool.h"
 #include "stddef.h"
 #include <fcntl.h>
+#include <limits.h>
 #include <stdio.h>
-#include <string.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <strerror.h>
+#include <string.h>
 #include <sys/stat.h>
 #include <termios.h>
-#include <limits.h>
+#include <unistd.h>
 
 // Video dimensions defined in mentos/src/io/video.c
 #define HEIGHT    25

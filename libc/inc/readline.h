@@ -10,7 +10,7 @@
 /// @param buffer The buffer where the read line will be stored. Must not be NULL.
 /// @param buflen The size of the buffer.
 /// @param read_len A pointer to store the length of the read line. Can be NULL if not needed.
-/// @return 1 if a newline was found and the line was read successfully, 
-///         0 if the end of the file was reached, 
+/// @return 1 if a newline was found and the line was read successfully,
+///         0 if the end of the file was reached,
 ///        -1 if no newline was found and partial data was read.
 int readline(int fd, char *buffer, size_t buflen, ssize_t *read_len);

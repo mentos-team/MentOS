@@ -16,23 +16,23 @@
 typedef enum {
     /// @brief If set to 1 the device can respond to I/O Space accesses;
     /// otherwise, the device's response is disabled.
-    pci_command_io_space = 0,
+    pci_command_io_space              = 0,
     /// @brief If set to 1 the device can respond to Memory Space accesses;
     /// otherwise, the device's response is disabled.
-    pci_command_memory_space = 1,
+    pci_command_memory_space          = 1,
     /// @brief If set to 1 the device can behave as a bus master; otherwise, the
     /// device can not generate PCI accesses.
-    pci_command_bus_master = 2,
+    pci_command_bus_master            = 2,
     /// @brief If set to 1 the device can monitor Special Cycle operations;
     /// otherwise, the device will ignore them.
-    pci_command_special_cycles = 3,
+    pci_command_special_cycles        = 3,
     /// @brief If set to 1 the device can generate the Memory Write and
     /// Invalidate command; otherwise, the Memory Write command must be used.
-    pci_command_mw_ie = 4,
+    pci_command_mw_ie                 = 4,
     /// @brief If set to 1 the device does not respond to palette register
     /// writes and will snoop the data; otherwise, the device will trate palette
     /// write accesses like all other accesses.
-    pci_command_vga_palette_snoop = 5,
+    pci_command_vga_palette_snoop     = 5,
     /// @brief If set to 1 the device will take its normal action when a parity
     /// error is detected; otherwise, when an error is detected, the device will
     /// set bit 15 of the Status register (Detected Parity Error Status Bit),
@@ -41,14 +41,14 @@ typedef enum {
     pci_command_parity_error_response = 6,
     /// @brief If set to 1 the SERR# driver is enabled; otherwise, the driver is
     /// disabled.
-    pci_command_serr_enable = 8,
+    pci_command_serr_enable           = 8,
     /// @brief If set to 1 indicates a device is allowed to generate fast
     /// back-to-back transactions; otherwise, fast back-to-back transactions are
     /// only allowed to the same agent.
-    pci_command_fast_bb_enable = 9,
+    pci_command_fast_bb_enable        = 9,
     /// @brief If set to 1 the assertion of the devices INTx# signal is
     /// disabled; otherwise, assertion of the signal is enabled.
-    pci_command_interrupt_disable = 10,
+    pci_command_interrupt_disable     = 10,
 } pci_command_bit_t;
 
 /// @brief Types of PCI status.
@@ -56,18 +56,18 @@ typedef enum {
     /// @brief Represents the state of the device's INTx# signal. If set to 1
     /// and bit 10 of the Command register (Interrupt Disable bit) is set to 0
     /// the signal will be asserted; otherwise, the signal will be ignored.
-    pci_status_interrupt_status = 3,
+    pci_status_interrupt_status         = 3,
     /// @brief If set to 1 the device implements the pointer for a New
     /// Capabilities Linked list at offset 0x34; otherwise, the linked list is
     /// not available.
-    pci_status_capabilities_list = 4,
+    pci_status_capabilities_list        = 4,
     /// @brief If set to 1 the device is capable of running at 66 MHz;
     /// otherwise, the device runs at 33 MHz.
-    pci_status_66_MHz_capable = 5,
+    pci_status_66_MHz_capable           = 5,
     /// @brief If set to 1 the device can accept fast back-to-back transactions
     /// that are not from the same agent; otherwise, transactions can only be
     /// accepted from the same agent.
-    pci_status_fast_bb_capable = 7,
+    pci_status_fast_bb_capable          = 7,
     /// @brief This bit is only set when the following conditions are met. The
     /// bus agent asserted PERR# on a read or observed an assertion of PERR# on
     /// a write, the agent setting the bit acted as the bus master for the
@@ -78,24 +78,24 @@ typedef enum {
     /// assert DEVSEL# for any bus command except Configuration Space read and
     /// writes. Where a value of 0x0 represents fast timing, a value of 0x1
     /// represents medium timing, and a value of 0x2 represents slow timing.
-    pci_status_devsel_timing_low = 9,
+    pci_status_devsel_timing_low        = 9,
     /// @brief The second bit required to set the devsel.
-    pci_status_devsel_timing_high = 10,
+    pci_status_devsel_timing_high       = 10,
     /// @brief This bit will be set to 1 whenever a target device terminates a
     /// transaction with Target-Abort.
-    pci_status_signalled_target_abort = 11,
+    pci_status_signalled_target_abort   = 11,
     /// @brief This bit will be set to 1, by a master device, whenever its
     /// transaction is terminated with Target-Abort.
-    pci_status_received_target_abort = 12,
+    pci_status_received_target_abort    = 12,
     /// @brief This bit will be set to 1, by a master device, whenever its
     /// transaction (except for Special Cycle transactions) is terminated with
     /// Master-Abort.
-    pci_status_received_master_abort = 13,
+    pci_status_received_master_abort    = 13,
     /// @brief This bit will be set to 1 whenever the device asserts SERR#.
-    pci_status_signalled_system_error = 14,
+    pci_status_signalled_system_error   = 14,
     /// @brief This bit will be set to 1 whenever the device detects a parity
     /// error, even if parity error handling is disabled.
-    pci_status_detected_parity_error = 15,
+    pci_status_detected_parity_error    = 15,
 } pci_status_bit_t;
 
 /// @name PCI Configuration Space

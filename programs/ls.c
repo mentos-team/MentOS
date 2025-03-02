@@ -4,17 +4,17 @@
 /// See LICENSE.md for details.
 
 #include <dirent.h>
-#include <stdint.h>
-#include <string.h>
-#include <stdio.h>
-#include <stdbool.h>
-#include <unistd.h>
 #include <fcntl.h>
-#include <strerror.h>
-#include <sys/stat.h>
-#include <libgen.h>
-#include <sys/bitops.h>
 #include <io/ansi_colors.h>
+#include <libgen.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <strerror.h>
+#include <string.h>
+#include <sys/bitops.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 #define FLAG_L (1U << 0U)
 #define FLAG_A (1U << 1U)
@@ -26,7 +26,7 @@
 static inline const char *to_human_size(unsigned long bytes)
 {
     static char output[200];
-    const char *suffix[] = { "B", "KB", "MB", "GB", "TB" };
+    const char *suffix[] = {"B", "KB", "MB", "GB", "TB"};
     char length          = sizeof(suffix) / sizeof(suffix[0]);
     int i                = 0;
     double dblBytes      = bytes;
@@ -112,14 +112,9 @@ static inline void print_dir_entry(dirent_t *dirent, const char *path, unsigned 
         // Add a space.
         putchar(' ');
         // Print the rest.
-        printf("%4d %4d %11s %02d/%02d %02d:%02d ",
-               dstat.st_uid,
-               dstat.st_gid,
-               to_human_size(dstat.st_size),
-               timeinfo->tm_mon,
-               timeinfo->tm_mday,
-               timeinfo->tm_hour,
-               timeinfo->tm_min);
+        printf(
+            "%4d %4d %11s %02d/%02d %02d:%02d ", dstat.st_uid, dstat.st_gid, to_human_size(dstat.st_size),
+            timeinfo->tm_mon, timeinfo->tm_mday, timeinfo->tm_hour, timeinfo->tm_min);
 
         print_dir_entry_name(dirent->d_name, dstat.st_mode);
 

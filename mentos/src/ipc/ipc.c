@@ -6,10 +6,10 @@
 #include "ipc/ipc.h"
 
 #include "assert.h"
-#include "sys/stat.h"
 #include "fcntl.h"
 #include "io/debug.h"
 #include "process/scheduler.h"
+#include "sys/stat.h"
 
 /// @brief Checks IPC permissions for a task.
 /// @param task Pointer to the task structure.
@@ -18,12 +18,7 @@
 /// @param grp Permission flag for group.
 /// @param oth Permission flag for others.
 /// @return 1 if permissions are granted, 0 otherwise.
-static inline int ipc_check_perm(
-    task_struct *task,
-    struct ipc_perm *perm,
-    int usr,
-    int grp,
-    int oth)
+static inline int ipc_check_perm(task_struct *task, struct ipc_perm *perm, int usr, int grp, int oth)
 {
     // Check if task is NULL.
     if (!task) {
@@ -83,7 +78,8 @@ int ipc_valid_permissions(int flags, struct ipc_perm *perm)
     if (((flags & O_WRONLY) == O_WRONLY) && ipc_check_perm(task, perm, S_IWUSR, S_IWGRP, S_IWOTH)) {
         return 1;
     }
-    if (((flags & O_RDWR) == O_RDWR) && ipc_check_perm(task, perm, S_IRUSR | S_IWUSR, S_IRGRP | S_IWGRP, S_IROTH | S_IWOTH)) {
+    if (((flags & O_RDWR) == O_RDWR) &&
+        ipc_check_perm(task, perm, S_IRUSR | S_IWUSR, S_IRGRP | S_IWGRP, S_IROTH | S_IWOTH)) {
         return 1;
     }
     return 0;

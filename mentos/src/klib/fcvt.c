@@ -66,7 +66,7 @@ static void cvt(double arg, int ndigits, int *decpt, int *sign, char *buf, unsig
 
         // Prevent buffer overflow.
         while ((fi != 0) && (p1 > buf)) {
-            fj    = modf(fi / 10, &fi);
+            fj = modf(fi / 10, &fi);
 
             // Convert each digit.
             *--p1 = (int)((fj + .03) * 10) + '0';
@@ -144,7 +144,7 @@ static void cvt(double arg, int ndigits, int *decpt, int *sign, char *buf, unsig
             }
         }
     }
-    
+
     // Terminate the string.
     *p = '\0';
 }

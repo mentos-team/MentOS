@@ -5,6 +5,8 @@
 
 #pragma once
 
+#include "types.h"
+
 /// @brief Return immediately if no child is there to be waited for.
 #define WNOHANG 0x00000001
 

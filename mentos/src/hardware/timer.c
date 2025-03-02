@@ -13,6 +13,7 @@
 #include "descriptor_tables/isr.h"
 #include "devices/fpu.h"
 #include "drivers/rtc.h"
+#include "errno.h"
 #include "hardware/pic8259.h"
 #include "hardware/timer.h"
 #include "io/port_io.h"
@@ -22,10 +23,9 @@
 #include "process/scheduler.h"
 #include "process/wait.h"
 #include "stdint.h"
-#include "errno.h"
-#include "system/signal.h"
-#include "system/panic.h"
 #include "string.h"
+#include "system/panic.h"
+#include "system/signal.h"
 
 /// @defgroup picregs Programmable Interval Timer Registers
 /// @brief The list of registers used to set the PIT.
@@ -37,7 +37,7 @@
 /// @}
 
 /// @brief Frequency divider value (1.193182 MHz).
-#define PIT_DIVISOR 1193182
+#define PIT_DIVISOR       1193182
 /// @brief   Command used to configure the PIT.
 /// @details
 /// Bits         Usage
@@ -69,12 +69,12 @@
 ///     0x34 = 00|11|010|0
 #define PIT_CONFIGURATION 0x34u
 /// Mask used to set the divisor.
-#define PIT_MASK 0xFFu
+#define PIT_MASK          0xFFu
 
 /// The number of ticks since the system started its execution.
 static __volatile__ unsigned long timer_ticks = 0;
 /// Contains timer for each CPU (for now only one)
-static tvec_base_t cpu_base = { 0 };
+static tvec_base_t cpu_base                   = {0};
 /// Contains all process waiting for a sleep.
 static wait_queue_head_t sleep_queue;
 
@@ -120,15 +120,9 @@ void timer_install(void)
     pic8259_irq_enable(IRQ_TIMER);
 }
 
-uint64_t timer_get_seconds(void)
-{
-    return timer_ticks / TICKS_PER_SECOND;
-}
+uint64_t timer_get_seconds(void) { return timer_ticks / TICKS_PER_SECOND; }
 
-unsigned long timer_get_ticks(void)
-{
-    return timer_ticks;
-}
+unsigned long timer_get_ticks(void) { return timer_ticks; }
 
 // ============================================================================
 // SUPPORT FUNCTIONS (tvec_base_t)
@@ -141,8 +135,7 @@ static inline void __print_vector(list_head *vector)
 #if defined(ENABLE_REAL_TIMER_SYSTEM_DUMP) && (__DEBUG_LEVEL__ == LOGLEVEL_DEBUG)
     if (!list_head_empty(vector)) {
         pr_debug("0x%p = [ ", vector);
-        list_for_each_decl(it, vector)
-        {
+        list_for_each_decl (it, vector) {
             pr_debug("0x%p ", it);
         }
         pr_debug("]\n");
@@ -237,7 +230,7 @@ static inline void __timer_cascate_vector(tvec_base_t *base, list_head *current_
         list_for_each_safe_decl(it, save, current_vector)
         {
             // Get the timer.
-            timer = list_entry(it, struct timer_list, entry);
+            timer         = list_entry(it, struct timer_list, entry);
             // Get the new vector.
             target_vector = __timer_get_target_vector(base, timer);
             // If the new vector is different than the current one, move the timer.
@@ -267,9 +260,7 @@ static inline void __timer_cascate_base(tvec_base_t *base)
 {
     for (int i = 3; i >= 0; i--) {
         // Cascate the vector.
-        __timer_cascate_vector(
-            base,
-            base->tvn[i] + ((base->timer_ticks >> TIMER_TICKS_BITS((size_t)i)) & TVN_MASK));
+        __timer_cascate_vector(base, base->tvn[i] + ((base->timer_ticks >> TIMER_TICKS_BITS((size_t)i)) & TVN_MASK));
     }
 }
 
@@ -417,8 +408,9 @@ static inline void __itimerval_to_values(time_t *interval, time_t *value, const 
     assert(interval && "__timespec_to_ticks: Input interval is NULL.");
     assert(value && "__timespec_to_ticks: Input value is NULL.");
     assert(timer && "__timespec_to_ticks: Input timer is NULL.");
-    *interval = (timer->it_interval.tv_sec * TICKS_PER_SECOND) + (timer->it_interval.tv_usec * TICKS_PER_SECOND) / 1000000;
-    *value    = (timer->it_value.tv_sec * TICKS_PER_SECOND) + (timer->it_value.tv_usec * TICKS_PER_SECOND) / 1000000;
+    *interval =
+        (timer->it_interval.tv_sec * TICKS_PER_SECOND) + (timer->it_interval.tv_usec * TICKS_PER_SECOND) / 1000000;
+    *value = (timer->it_value.tv_sec * TICKS_PER_SECOND) + (timer->it_value.tv_usec * TICKS_PER_SECOND) / 1000000;
 }
 
 /// @brief Convert timespec to ticks.
@@ -441,8 +433,7 @@ static inline unsigned long __timeval_to_ticks(const timeval_t *tv)
     // Validate input.
     assert(tv && "__timeval_to_ticks: Input ts is NULL.");
     // Convert seconds to ticks and add the conversion for microseconds.
-    return (unsigned long)(tv->tv_sec * TICKS_PER_SECOND) +
-           (unsigned long)(tv->tv_usec / (1000000 / TICKS_PER_SECOND));
+    return (unsigned long)(tv->tv_sec * TICKS_PER_SECOND) + (unsigned long)(tv->tv_usec / (1000000 / TICKS_PER_SECOND));
 }
 
 /// @brief Updates the timer for the given task.
@@ -561,7 +552,10 @@ void run_timer_softirq(void)
 /// @param data The data.
 static inline void debug_timeout(unsigned long data)
 {
-    pr_debug("The timer has been successfully deactivated: %d, ticks: %d, seconds: %d\n", data, timer_ticks, timer_get_seconds());
+    pr_debug(
+        "The timer has been successfully deactivated: %d, ticks: %d, seconds: "
+        "%d\n",
+        data, timer_ticks, timer_get_seconds());
 }
 
 /// @brief Callback for when a sleep timer expires.
@@ -569,7 +563,7 @@ static inline void debug_timeout(unsigned long data)
 static inline void sleep_timeout(unsigned long data)
 {
     // Get the sleep data.
-    sleep_data_t *sleep_data = (sleep_data_t *)data;
+    sleep_data_t *sleep_data             = (sleep_data_t *)data;
     // Get the wait_queue_entry.
     wait_queue_entry_t *wait_queue_entry = sleep_data->wait_queue_entry;
     // Executed entry's wakeup test function
@@ -609,7 +603,7 @@ static inline void real_timer_timeout(unsigned long task_ptr)
     // If the real incr is not 0 then restart.
     if (task->it_real_incr != 0) {
         // Create new timer for process, the old one is going to be deleted.
-        task->real_timer = __timer_list_alloc();
+        task->real_timer           = __timer_list_alloc();
         // Setup the timer.
         task->real_timer->expires  = timer_get_ticks() + task->it_real_incr;
         task->real_timer->function = &real_timer_timeout;
@@ -637,13 +631,13 @@ int sys_nanosleep(const struct timespec *req, struct timespec *rem)
     // from runqueue and stores it in the waiting queue, this must be done at
     // the end, because it changes the current active page and invalidates the
     // req and rem pointers (?)
-    sleep_data_t *sleep_data     = __sleep_data_alloc();
-    sleep_data->remaining        = rem;
-    sleep_data->wait_queue_entry = sleep_on(&sleep_queue);
+    sleep_data_t *sleep_data       = __sleep_data_alloc();
+    sleep_data->remaining          = rem;
+    sleep_data->wait_queue_entry   = sleep_on(&sleep_queue);
     // Setup the timer.
-    sleep_timer->expires  = timer_get_ticks() + __timespec_to_ticks(req);
-    sleep_timer->function = &sleep_timeout;
-    sleep_timer->data     = (unsigned long)sleep_data;
+    sleep_timer->expires           = timer_get_ticks() + __timespec_to_ticks(req);
+    sleep_timer->function          = &sleep_timeout;
+    sleep_timer->data              = (unsigned long)sleep_data;
     // Add the timer.
     add_timer(sleep_timer);
     return 0;
@@ -653,7 +647,7 @@ unsigned sys_alarm(int seconds)
 {
     struct task_struct *task = scheduler_get_current_process();
     // If there is already a timer running.
-    unsigned remaining_time = 0;
+    unsigned remaining_time  = 0;
     if (task->real_timer) {
         // First, we remove the timer.
         remove_timer(task->real_timer);
@@ -716,7 +710,7 @@ int sys_setitimer(int which, const struct itimerval *new_value, struct itimerval
     // Get ticks of interval.
     time_t new_interval_ticks = __timeval_to_ticks(&new_value->it_interval);
     // If interval is 0 removes timer
-    struct task_struct *task = scheduler_get_current_process();
+    struct task_struct *task  = scheduler_get_current_process();
     if (new_interval_ticks == 0) {
         // Removes real_timer.
         if ((which == ITIMER_REAL) && (task->real_timer != NULL)) {
@@ -728,25 +722,23 @@ int sys_setitimer(int which, const struct itimerval *new_value, struct itimerval
     }
     switch (which) {
     // Uses Dynamic Timers
-    case ITIMER_REAL:
-        {
-            // Remove real_timer if already in use.
-            if (task->real_timer) {
-                remove_timer(task->real_timer);
-            } else {
-                // Alloc new timer
-                task->real_timer = __timer_list_alloc();
-            }
-            // Initialize the timer.
-            init_timer(task->real_timer);
-            // Setup the timer.
-            task->real_timer->expires  = timer_get_ticks() + new_interval_ticks;
-            task->real_timer->function = &real_timer_timeout;
-            task->real_timer->data     = (unsigned long)task;
-            // Add the timer.
-            add_timer(task->real_timer);
+    case ITIMER_REAL: {
+        // Remove real_timer if already in use.
+        if (task->real_timer) {
+            remove_timer(task->real_timer);
+        } else {
+            // Alloc new timer
+            task->real_timer = __timer_list_alloc();
         }
-        break;
+        // Initialize the timer.
+        init_timer(task->real_timer);
+        // Setup the timer.
+        task->real_timer->expires  = timer_get_ticks() + new_interval_ticks;
+        task->real_timer->function = &real_timer_timeout;
+        task->real_timer->data     = (unsigned long)task;
+        // Add the timer.
+        add_timer(task->real_timer);
+    } break;
 
     case ITIMER_VIRTUAL:
     case ITIMER_PROF:

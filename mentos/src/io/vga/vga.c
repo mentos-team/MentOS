@@ -21,35 +21,35 @@
 #include "string.h"
 
 /// Attribute Controller index port.
-#define AC_INDEX 0x03C0
+#define AC_INDEX          0x03C0
 /// Attribute Controller write port.
-#define AC_WRITE 0x03C0
+#define AC_WRITE          0x03C0
 /// Attribute Controller data port.
-#define AC_READ 0x03C1
+#define AC_READ           0x03C1
 /// Miscellaneous output register.
-#define MISC_WRITE 0x03C2
+#define MISC_WRITE        0x03C2
 /// Miscellaneous input register.
-#define MISC_READ 0x03CC
+#define MISC_READ         0x03CC
 /// Sequence controller index.
-#define SC_INDEX 0x03C4
+#define SC_INDEX          0x03C4
 /// Sequence controller data.
-#define SC_DATA 0x03C5
+#define SC_DATA           0x03C5
 /// DAC Mask Register.
-#define PALETTE_MASK 0x03C6
+#define PALETTE_MASK      0x03C6
 /// Controls the DAC.
-#define PALETTE_READ 0x03C7
+#define PALETTE_READ      0x03C7
 /// Controls the DAC index.
-#define PALETTE_INDEX 0x03C8
+#define PALETTE_INDEX     0x03C8
 /// Controls the DAC data.
-#define PALETTE_DATA 0x03C9
+#define PALETTE_DATA      0x03C9
 /// Graphics controller index.
-#define GC_INDEX 0x03CE
+#define GC_INDEX          0x03CE
 /// Graphics controller data.
-#define GC_DATA 0x03CF
+#define GC_DATA           0x03CF
 /// CRT controller index.
-#define CRTC_INDEX 0x03D4
+#define CRTC_INDEX        0x03D4
 /// CRT controller data.
-#define CRTC_DATA 0x03D5
+#define CRTC_DATA         0x03D5
 /// By reading this port it'll go to the index state.
 #define INPUT_STATUS_READ 0x03DA
 
@@ -94,15 +94,15 @@ static vga_driver_t *driver = NULL;
 // ============================================================================
 // == VGA MODEs ===============================================================
 /// Number of sequencer registers.
-#define MODE_NUM_SEQ_REGS 5
+#define MODE_NUM_SEQ_REGS  5
 /// Number of CRTC registers.
 #define MODE_NUM_CRTC_REGS 25
 /// Number of Graphics Controller (GC) registers.
-#define MODE_NUM_GC_REGS 9
+#define MODE_NUM_GC_REGS   9
 /// Number of Attribute Controller (AC) registers.
-#define MODE_NUM_AC_REGS (16 + 5)
+#define MODE_NUM_AC_REGS   (16 + 5)
 /// Total number of registers.
-#define MODE_NUM_REGS (1 + MODE_NUM_SEQ_REGS + MODE_NUM_CRTC_REGS + MODE_NUM_GC_REGS + MODE_NUM_AC_REGS) // 61
+#define MODE_NUM_REGS      (1 + MODE_NUM_SEQ_REGS + MODE_NUM_CRTC_REGS + MODE_NUM_GC_REGS + MODE_NUM_AC_REGS) // 61
 
 /// @brief Returns the video address.
 /// @return pointer to the video.
@@ -192,7 +192,7 @@ static inline void __set_plane(unsigned int plane)
     // Store the current plane.
     __current_plane = plane;
     // Compute the plane mask.
-    pmask = 1 << plane;
+    pmask           = 1 << plane;
 #if 0
     // Set read plane.
     outportb(GC_INDEX, 4);
@@ -218,18 +218,12 @@ static inline unsigned __get_plane(void)
 /// @brief Reads from the video memory.
 /// @param offset where we are going to read.
 /// @return the value we read.
-static unsigned char __read_byte(unsigned int offset)
-{
-    return (unsigned char)(*(driver->address + offset));
-}
+static unsigned char __read_byte(unsigned int offset) { return (unsigned char)(*(driver->address + offset)); }
 
 /// @brief Writes onto the video memory.
 /// @param offset where we are going to write.
 /// @param value the value to write.
-static void __write_byte(unsigned int offset, unsigned char value)
-{
-    *(char *)(driver->address + offset) = value;
-}
+static void __write_byte(unsigned int offset, unsigned char value) { *(char *)(driver->address + offset) = value; }
 
 /// @brief Sets the given mode.
 /// @param vga_mode the new mode we set.
@@ -511,10 +505,7 @@ static inline unsigned __read_pixel_8(int x, int y)
 // = VGA PUBLIC FUNCTIONS
 // ============================================================================
 
-int vga_is_enabled(void)
-{
-    return vga_enable;
-}
+int vga_is_enabled(void) { return vga_enable; }
 
 int vga_width(void)
 {
@@ -532,15 +523,9 @@ int vga_height(void)
     return 0;
 }
 
-void vga_draw_pixel(int x, int y, unsigned char color)
-{
-    driver->ops->write_pixel(x, y, color);
-}
+void vga_draw_pixel(int x, int y, unsigned char color) { driver->ops->write_pixel(x, y, color); }
 
-unsigned int vga_read_pixel(int x, int y)
-{
-    return driver->ops->read_pixel(x, y);
-}
+unsigned int vga_read_pixel(int x, int y) { return driver->ops->read_pixel(x, y); }
 
 void vga_draw_char(int x, int y, unsigned char c, unsigned char color)
 {
@@ -902,7 +887,7 @@ void vga_new_line(void)
     // Just the 5x6 font needs some space.
     const unsigned int vertical_space = (driver->font == &font_5x6);
     // Go back at the beginning of the line.
-    _x = 0;
+    _x                                = 0;
     if ((_y += driver->font->height + vertical_space) >= (driver->height - driver->font->height)) {
         _y = 0;
         vga_clear_screen();
@@ -916,7 +901,4 @@ void vga_update(void)
     }
 }
 
-void vga_set_color(unsigned int color)
-{
-    _color = color;
-}
+void vga_set_color(unsigned int color) { _color = color; }

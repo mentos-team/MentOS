@@ -3,16 +3,16 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "unistd.h"
 #include "errno.h"
 #include "sys/wait.h"
 #include "system/syscall_types.h"
+#include "unistd.h"
 
 #include "errno.h"
-#include "unistd.h"
-#include "system/syscall_types.h"
-#include "syslog.h"
 #include "strerror.h"
+#include "syslog.h"
+#include "system/syscall_types.h"
+#include "unistd.h"
 
 pid_t waitpid(pid_t pid, int *status, int options)
 {
@@ -73,7 +73,4 @@ pid_t waitpid(pid_t pid, int *status, int options)
 #endif
 }
 
-pid_t wait(int *status)
-{
-    return waitpid(-1, status, 0);
-}
+pid_t wait(int *status) { return waitpid(-1, status, 0); }

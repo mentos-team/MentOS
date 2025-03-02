@@ -8,17 +8,18 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include <unistd.h>
-#include <sys/wait.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <strerror.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 int main(int argc, char *argv[])
 {
     pid_t cpid;
 
-    printf("First test: The child processes will sleep, so they will not be scheduled immediately.\n");
+    printf("First test: The child processes will sleep, so they will not be "
+           "scheduled immediately.\n");
 
     // Fork 10 child processes to run the t_alarm test.
     for (int i = 0; i < 10; ++i) {

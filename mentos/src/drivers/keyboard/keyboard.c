@@ -27,7 +27,7 @@
 /// Tracks the state of the leds.
 static uint8_t ledstate = 0;
 /// The flags concerning the keyboard.
-static uint32_t kflags = 0;
+static uint32_t kflags  = 0;
 /// Where we store the keypress.
 rb_keybuffer_t scancodes;
 /// Spinlock to protect access to the scancode buffer.
@@ -401,15 +401,9 @@ void keyboard_update_leds(void)
     outportb(0x60, ledstate);
 }
 
-void keyboard_enable(void)
-{
-    outportb(0x60, 0xF4);
-}
+void keyboard_enable(void) { outportb(0x60, 0xF4); }
 
-void keyboard_disable(void)
-{
-    outportb(0x60, 0xF5);
-}
+void keyboard_disable(void) { outportb(0x60, 0xF5); }
 
 int keyboard_initialize(void)
 {

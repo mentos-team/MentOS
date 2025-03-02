@@ -22,8 +22,7 @@ typedef struct utsname_t {
     char machine[SYS_LEN];
 } utsname_t;
 
-
 /// @brief Returns system information in the structure pointed to by buf.
 /// @param buf Buffer where the info will be placed.
 /// @return 0 on success, a negative value on failure.
-int uname(utsname_t* buf);
+int uname(utsname_t *buf);

@@ -4,9 +4,9 @@
 /// See LICENSE.md for details.
 
 #include <stdio.h>
-#include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 int main(int argc, char *argv[])
 {
@@ -22,7 +22,10 @@ int main(int argc, char *argv[])
                 printf("Successfully changed to the directory.\n");
                 return EXIT_SUCCESS;
             } else {
-                printf("Directory change failed or directory differs: expected %s but got %s\n", directory, cwd);
+                printf(
+                    "Directory change failed or directory differs: expected %s "
+                    "but got %s\n",
+                    directory, cwd);
             }
         } else {
             perror("getcwd failed");

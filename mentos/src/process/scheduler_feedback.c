@@ -17,7 +17,7 @@
 /// Change the header.
 #define __DEBUG_HEADER__ "[SCHFBK]"
 /// Set the log level.
-#define __DEBUG_LEVEL__ LOGLEVEL_NOTICE
+#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE
 #include "io/debug.h"
 
 /// @brief How often the feedback is shown.
@@ -77,10 +77,7 @@ static inline void __scheduler_feedback_deadline_advance(void)
 
 /// @brief Checks if the deadline is passed.
 /// @return 1 if the deadline is passed, 0 otherwise.
-static inline int __scheduler_feedback_deadline_check(void)
-{
-    return (next_log < timer_get_ticks());
-}
+static inline int __scheduler_feedback_deadline_check(void) { return (next_log < timer_get_ticks()); }
 
 /// @brief Logs the scheduling statistics either on file or on the terminal.
 static inline void __scheduler_feedback_log(void)
@@ -104,15 +101,10 @@ static inline void __scheduler_feedback_log(void)
     for (size_t i = 0; i < PID_MAX_LIMIT; ++i) {
         if (arr_stats[i].task) {
             float tcpu = ((float)arr_stats[i].occur * 100.0) / total_occurrences;
-            pr_info("[%3d] | %-18s | -> TCPU: %.2f%% \n",
-                    arr_stats[i].task->pid,
-                    arr_stats[i].task->name,
-                    tcpu);
+            pr_info("[%3d] | %-18s | -> TCPU: %.2f%% \n", arr_stats[i].task->pid, arr_stats[i].task->name, tcpu);
 #ifdef WRITE_ON_FILE
-            written = sprintf(buffer, "[%3d] | %-18s | -> TCPU: %.2f%% \n",
-                              arr_stats[i].task->pid,
-                              arr_stats[i].task->name,
-                              tcpu);
+            written = sprintf(
+                buffer, "[%3d] | %-18s | -> TCPU: %.2f%% \n", arr_stats[i].task->pid, arr_stats[i].task->name, tcpu);
             vfs_write(feedback, buffer, offset, written);
             offset += written;
 #endif

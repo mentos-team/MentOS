@@ -5,9 +5,9 @@
 
 #pragma once
 
-#include "sys/types.h"
 #include "stddef.h"
 #include "sys/ipc.h"
+#include "sys/types.h"
 #include "time.h"
 
 /// Data type for storing the number of attaches.
@@ -36,12 +36,12 @@ struct shmid_ds {
 #if 0
 
 #include "debug.h"
-#include "time.h"
 #include "kheap.h"
-#include "stddef.h"
 #include "paging.h"
-#include "syscall.h"
 #include "scheduler.h"
+#include "stddef.h"
+#include "syscall.h"
+#include "time.h"
 
 //======== Permission flag for shmget ==========================================
 // or S_IRUGO from <linux/stat.h>.

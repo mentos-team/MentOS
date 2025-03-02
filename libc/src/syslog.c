@@ -5,11 +5,11 @@
 
 #include "syslog.h"
 
+#include "errno.h"
+#include "stddef.h"
+#include "stdio.h"
 #include "system/syscall_types.h"
 #include "unistd.h"
-#include "stddef.h"
-#include "errno.h"
-#include "stdio.h"
 
 // #include "io/ansi_colors.h"
 // #include "io/port_io.h"

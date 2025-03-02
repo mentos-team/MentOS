@@ -31,7 +31,7 @@ int main(int argc, char **argv)
     // Prepare the buffer for reading.
     ssize_t bytes_read = 0;
     char buffer[BUFSIZ];
-    char *src = argv[1];
+    char *src  = argv[1];
     char *dest = argv[2];
 
     int srcfd = open(src, O_RDONLY, 0);

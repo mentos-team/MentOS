@@ -5,9 +5,9 @@
 
 #include "string.h"
 #include "ctype.h"
-#include "sys/stat.h"
 #include "stdio.h"
 #include "stdlib.h"
+#include "sys/stat.h"
 
 #ifdef __KERNEL__
 #include "mem/kheap.h"
@@ -89,9 +89,11 @@ char *strrchr(const char *s, int ch)
 {
     char *start = (char *)s;
 
-    while (*s++) {}
+    while (*s++) {
+    }
 
-    while (--s != start && *s != (char)ch) {}
+    while (--s != start && *s != (char)ch) {
+    }
 
     if (*s == (char)ch) {
         return (char *)s;
@@ -324,7 +326,8 @@ char *strcat(char *dst, const char *src)
         cp++;
     }
 
-    while ((*cp++ = *src++) != '\0') {}
+    while ((*cp++ = *src++) != '\0') {
+    }
 
     return dst;
 }
@@ -333,7 +336,8 @@ char *strncat(char *s1, const char *s2, size_t n)
 {
     char *start = s1;
 
-    while (*s1++) {}
+    while (*s1++) {
+    }
     s1--;
 
     while (n--) {
@@ -353,7 +357,8 @@ char *strrev(char *s)
     char *left  = s;
     char ch;
 
-    while (*s++) {}
+    while (*s++) {
+    }
     s -= 2;
 
     while (left < s) {
@@ -444,7 +449,8 @@ void *memset(void *ptr, int value, size_t num)
     // pointer.
     unsigned char volatile *dst = (unsigned char volatile *)ptr;
     // Initialize the content of the memory.
-    while (num--) *dst++ = (unsigned char)value;
+    while (num--)
+        *dst++ = (unsigned char)value;
     // Return the pointer.
     return ptr;
 }
@@ -471,15 +477,15 @@ void *memcpy(void *dst, const void *src, size_t num)
     unsigned char volatile *_dst       = (unsigned char volatile *)dst;
     const unsigned char volatile *_src = (const unsigned char volatile *)src;
     // Initialize the content of the memory.
-    while (num--) *_dst++ = *_src++;
+    while (num--)
+        *_dst++ = *_src++;
     // Return the pointer.
     return (void *)dst;
 }
 
 void *memccpy(void *dst, const void *src, int c, size_t n)
 {
-    while (n && (*((char *)(dst = (char *)dst + 1) - 1) =
-                     *((char *)(src = (char *)src + 1) - 1)) != (char)c) {
+    while (n && (*((char *)(dst = (char *)dst + 1) - 1) = *((char *)(src = (char *)src + 1) - 1)) != (char)c) {
         n--;
     }
 
@@ -489,14 +495,16 @@ void *memccpy(void *dst, const void *src, int c, size_t n)
 char *strcpy(char *dst, const char *src)
 {
     char *save = dst;
-    while ((*dst++ = *src++) != '\0') {}
+    while ((*dst++ = *src++) != '\0') {
+    }
     return save;
 }
 
 size_t strlen(const char *s)
 {
     const char *it = s;
-    for (; *it; it++);
+    for (; *it; it++)
+        ;
     return (size_t)(it - s);
 }
 
@@ -509,8 +517,10 @@ size_t strnlen(const char *s, size_t count)
 int strcmp(const char *s1, const char *s2)
 {
     while (*s1 && *s2) {
-        if (*s1 < *s2) break;
-        if (*s1 > *s2) break;
+        if (*s1 < *s2)
+            break;
+        if (*s1 > *s2)
+            break;
         s1++, s2++;
     }
     return *s1 - *s2;
@@ -601,7 +611,8 @@ char *trim(char *str)
         ++frontp;
     }
     if (endp != frontp) {
-        while (isspace((unsigned char)*(--endp)) && endp != frontp) {}
+        while (isspace((unsigned char)*(--endp)) && endp != frontp) {
+        }
     }
     if (str + len - 1 != endp) {
         *(endp + 1) = '\0';

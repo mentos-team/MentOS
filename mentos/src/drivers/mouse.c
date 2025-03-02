@@ -17,9 +17,9 @@
 #include "io/port_io.h"
 
 /// The mouse starts sending automatic packets.
-#define MOUSE_ENABLE_PACKET 0xF4
+#define MOUSE_ENABLE_PACKET        0xF4
 /// The mouse stops sending automatic packets.
-#define MOUSE_DISABLE_PACKET 0xF5
+#define MOUSE_DISABLE_PACKET       0xF5
 /// Disables streaming, sets the packet rate to 100 per second, and resolution to 4 pixels per mm.
 #define MOUSE_USE_DEFAULT_SETTINGS 0xF6
 
@@ -40,12 +40,16 @@ static void __mouse_waitcmd(unsigned char type)
     if (type == 0) {
         // DATA
         while (_time_out--) {
-            if ((inportb(0x64) & 1) == 1) { break; }
+            if ((inportb(0x64) & 1) == 1) {
+                break;
+            }
         }
     } else {
         // SIGNALS
         while (_time_out--) {
-            if ((inportb(0x64) & 2) == 0) { break; }
+            if ((inportb(0x64) & 2) == 0) {
+                break;
+            }
         }
     }
 }

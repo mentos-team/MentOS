@@ -1,10 +1,10 @@
 /// @file compiler.h
 /// @brief Definition of memory barriers.
-/// @details 
+/// @details
 /// Generally speaking, memory barriers prevent the compiler from merging or
 /// refetching reads or writes. Ensuring that the compiler does not fold, spindle,
-/// or otherwise mutilate accesses that either do not require ordering or that 
-/// interact with an explicit memory barrier or atomic instruction that provides 
+/// or otherwise mutilate accesses that either do not require ordering or that
+/// interact with an explicit memory barrier or atomic instruction that provides
 /// the required ordering.
 ///
 /// Follows an extract from `LINUX KERNEL MEMORY BARRIERS` by: David Howells,

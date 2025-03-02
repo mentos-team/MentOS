@@ -9,8 +9,8 @@
 #define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
 #include "io/debug.h"                    // Include debugging functions.
 
-#include "io/port_io.h"
 #include "ctype.h"
+#include "io/port_io.h"
 #include "io/vga/vga.h"
 #include "io/video.h"
 #include "stdbool.h"
@@ -32,74 +32,38 @@ struct ansi_color_map_t {
     uint8_t video_color;
 }
 /// @brief The mapping.
-ansi_color_map[] = {
-    { 0, 7 },
+ansi_color_map[] = {{0, 7},
 
-    { 30, 0 },
-    { 31, 4 },
-    { 32, 2 },
-    { 33, 6 },
-    { 34, 1 },
-    { 35, 5 },
-    { 36, 3 },
-    { 37, 7 },
+                    {30, 0},  {31, 4},   {32, 2},   {33, 6},   {34, 1},  {35, 5},   {36, 3},   {37, 7},
 
-    { 90, 8 },
-    { 91, 12 },
-    { 92, 10 },
-    { 93, 14 },
-    { 94, 9 },
-    { 95, 13 },
-    { 96, 11 },
-    { 97, 15 },
+                    {90, 8},  {91, 12},  {92, 10},  {93, 14},  {94, 9},  {95, 13},  {96, 11},  {97, 15},
 
-    { 40, 0 },
-    { 41, 4 },
-    { 42, 2 },
-    { 43, 6 },
-    { 44, 1 },
-    { 45, 5 },
-    { 46, 3 },
-    { 47, 7 },
+                    {40, 0},  {41, 4},   {42, 2},   {43, 6},   {44, 1},  {45, 5},   {46, 3},   {47, 7},
 
-    { 100, 8 },
-    { 101, 12 },
-    { 102, 10 },
-    { 103, 14 },
-    { 104, 9 },
-    { 105, 13 },
-    { 106, 11 },
-    { 107, 15 }
-};
+                    {100, 8}, {101, 12}, {102, 10}, {103, 14}, {104, 9}, {105, 13}, {106, 11}, {107, 15}};
 
 /// Pointer to a position of the screen writer.
-char *pointer = ADDR;
+char *pointer       = ADDR;
 /// The current color.
 unsigned char color = 7;
 /// Used to write on the escape_buffer. If -1, we are not parsing an escape sequence.
-int escape_index = -1;
+int escape_index    = -1;
 /// Used to store an escape sequence.
 char escape_buffer[256];
 /// Buffer where we store the upper scroll history.
-char upper_buffer[STORED_PAGES * TOTAL_SIZE] = { 0 };
+char upper_buffer[STORED_PAGES * TOTAL_SIZE] = {0};
 /// Buffer where we store the lower scroll history.
-char original_page[TOTAL_SIZE] = { 0 };
+char original_page[TOTAL_SIZE]               = {0};
 /// Determines the screen is currently scrolled, and by how many lines.
-int scrolled_lines = 0;
+int scrolled_lines                           = 0;
 
 /// @brief Get the current column number.
 /// @return The column number.
-static inline unsigned __get_x(void)
-{
-    return ((pointer - ADDR) % (WIDTH * 2)) / 2;
-}
+static inline unsigned __get_x(void) { return ((pointer - ADDR) % (WIDTH * 2)) / 2; }
 
 /// @brief Get the current row number.
 /// @return The row number.
-static inline unsigned __get_y(void)
-{
-    return (pointer - ADDR) / (WIDTH * 2);
-}
+static inline unsigned __get_y(void) { return (pointer - ADDR) / (WIDTH * 2); }
 
 /// @brief Draws the given character.
 /// @param c The character to draw.
@@ -129,7 +93,8 @@ void __video_show_cursor(void)
 {
     outportb(0x3D4, 0x0A);
     unsigned char cursor_start = inportb(0x3D5);
-    outportb(0x3D5, cursor_start & 0xDF); // Clear the most significant bit to enable the cursor.
+    outportb(0x3D5,
+             cursor_start & 0xDF); // Clear the most significant bit to enable the cursor.
 }
 
 /// @brief Sets the VGA cursor shape by specifying the start and end scan lines.
@@ -176,8 +141,10 @@ static inline void __video_get_cursor_position(unsigned int *x, unsigned int *y)
     outportb(0x3D4, 0x0E);
     position |= ((uint16_t)inportb(0x3D5)) << 8;
     // Calculate x and y.
-    if (x) *x = position % WIDTH;
-    if (y) *y = position / WIDTH;
+    if (x)
+        *x = position % WIDTH;
+    if (y)
+        *y = position / WIDTH;
 }
 
 /// @brief Sets the provided ansi code.
@@ -186,9 +153,7 @@ static inline void __set_color(uint8_t ansi_code)
 {
     for (size_t i = 0; i < count_of(ansi_color_map); ++i) {
         if (ansi_code == ansi_color_map[i].ansi_color) {
-            if (
-                (ansi_code == 0) ||
-                ((ansi_code >= 30) && (ansi_code <= 37)) ||
+            if ((ansi_code == 0) || ((ansi_code >= 30) && (ansi_code <= 37)) ||
                 ((ansi_code >= 90) && (ansi_code <= 97))) {
                 color = (color & 0xF0U) | ansi_color_map[i].video_color;
             } else {
@@ -389,9 +354,7 @@ void video_update_cursor_position(void)
     if (vga_is_enabled())
         return;
 #endif
-    __video_set_cursor_position(
-        ((pointer - ADDR) / 2U) % WIDTH,
-        ((pointer - ADDR) / 2U) / WIDTH);
+    __video_set_cursor_position(((pointer - ADDR) / 2U) % WIDTH, ((pointer - ADDR) / 2U) / WIDTH);
 }
 
 void video_move_cursor(unsigned int x, unsigned int y)

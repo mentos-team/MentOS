@@ -32,10 +32,7 @@ inline static uint8_t irq_disable(void)
     // We are pushing the entire contents of the EFLAGS register onto the stack,
     // clearing the interrupt line, and with the pop, getting the current status
     // of the flags.
-    __asm__ __volatile__("pushf; cli; pop %0;"
-                         : "=r"(flags)
-                         :
-                         : "memory");
+    __asm__ __volatile__("pushf; cli; pop %0;" : "=r"(flags) : : "memory");
     return flags & (1 << 9);
 }
 
@@ -44,9 +41,6 @@ inline static uint8_t irq_disable(void)
 inline static uint8_t is_irq_enabled(void)
 {
     size_t flags;
-    __asm__ __volatile__("pushf; pop %0;"
-                         : "=r"(flags)
-                         :
-                         : "memory");
+    __asm__ __volatile__("pushf; pop %0;" : "=r"(flags) : : "memory");
     return flags & (1 << 9);
 }

@@ -120,15 +120,13 @@ void print_resource_usage(int resource_id, const char *(*printer)(void *ptr))
     for (unsigned i = 0; i < MAX_TRACKED_RESOURCES; ++i) {
         if (resource_tracker[i].ptr && (resource_id == -1 || (resource_tracker[i].resource_id == resource_id))) {
             if (printer) {
-                pr_notice("    %s:%d, %s\n",
-                          resource_tracker[i].file,
-                          resource_tracker[i].line,
-                          printer(resource_tracker[i].ptr));
+                pr_notice(
+                    "    %s:%d, %s\n", resource_tracker[i].file, resource_tracker[i].line,
+                    printer(resource_tracker[i].ptr));
             } else {
-                pr_notice("    ptr=0x%p, consumed at %s:%d\n",
-                          resource_tracker[i].ptr,
-                          resource_tracker[i].file,
-                          resource_tracker[i].line);
+                pr_notice(
+                    "    ptr=0x%p, consumed at %s:%d\n", resource_tracker[i].ptr, resource_tracker[i].file,
+                    resource_tracker[i].line);
             }
         }
     }

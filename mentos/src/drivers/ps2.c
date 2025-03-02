@@ -129,34 +129,19 @@ static inline void __ps2_set_controller_status(unsigned char status)
 
 /// @brief Checks if the PS2 controller is dual channel.
 /// @return 1 if dual channel, 0 otherwise.
-static inline int __ps2_is_dual_channel(void)
-{
-    return bit_check(__ps2_get_controller_status(), 6) != 0;
-}
+static inline int __ps2_is_dual_channel(void) { return bit_check(__ps2_get_controller_status(), 6) != 0; }
 
 /// @brief Enables the first PS2 port.
-static inline void __ps2_enable_first_port(void)
-{
-    ps2_write_command(PS2_CTRL_P1_ENABLE);
-}
+static inline void __ps2_enable_first_port(void) { ps2_write_command(PS2_CTRL_P1_ENABLE); }
 
 /// @brief Enables the second PS2 port.
-static inline void __ps2_enable_second_port(void)
-{
-    ps2_write_command(PS2_CTRL_P2_ENABLE);
-}
+static inline void __ps2_enable_second_port(void) { ps2_write_command(PS2_CTRL_P2_ENABLE); }
 
 /// @brief Disables the first PS2 port.
-static inline void __ps2_disable_first_port(void)
-{
-    ps2_write_command(PS2_CTRL_P1_DISABLE);
-}
+static inline void __ps2_disable_first_port(void) { ps2_write_command(PS2_CTRL_P1_DISABLE); }
 
 /// @brief Disables the second PS2 port.
-static inline void __ps2_disable_second_port(void)
-{
-    ps2_write_command(PS2_CTRL_P2_DISABLE);
-}
+static inline void __ps2_disable_second_port(void) { ps2_write_command(PS2_CTRL_P2_DISABLE); }
 
 /// @brief Writes a byte of data to the first PS/2 port (typically for a keyboard).
 /// @param byte The value to write to the first PS/2 port.
@@ -286,7 +271,7 @@ int ps2_initialize(void)
     // Read the status.
     status = __ps2_get_controller_status();
     // Check if it is a dual channel PS/2 device.
-    dual = !bit_check(status, 5);
+    dual   = !bit_check(status, 5);
     if (dual) {
         pr_debug("Recognized a `dual channel` PS/2 controller...\n");
         __ps2_disable_second_port();

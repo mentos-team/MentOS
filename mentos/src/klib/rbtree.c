@@ -41,10 +41,7 @@ struct rbtree_iter_t {
     unsigned int top;
 };
 
-rbtree_node_t *rbtree_node_alloc(void)
-{
-    return kmalloc(sizeof(rbtree_node_t));
-}
+rbtree_node_t *rbtree_node_alloc(void) { return kmalloc(sizeof(rbtree_node_t)); }
 
 rbtree_node_t *rbtree_node_init(rbtree_node_t *node, void *value)
 {
@@ -56,10 +53,7 @@ rbtree_node_t *rbtree_node_init(rbtree_node_t *node, void *value)
     return node;
 }
 
-rbtree_node_t *rbtree_node_create(void *value)
-{
-    return rbtree_node_init(rbtree_node_alloc(), value);
-}
+rbtree_node_t *rbtree_node_create(void *value) { return rbtree_node_init(rbtree_node_alloc(), value); }
 
 void *rbtree_node_get_value(rbtree_node_t *node)
 {
@@ -79,10 +73,7 @@ void rbtree_node_dealloc(rbtree_node_t *node)
 /// @brief Checks if the node is red.
 /// @param node the node to check.
 /// @return 1 if the node is red, 0 otherwise.
-static int rbtree_node_is_red(const rbtree_node_t *node)
-{
-    return node ? node->red : 0;
-}
+static int rbtree_node_is_red(const rbtree_node_t *node) { return node ? node->red : 0; }
 
 /// @brief Performs a node rotation.
 /// @param node the node.
@@ -124,10 +115,7 @@ static rbtree_node_t *rbtree_node_rotate2(rbtree_node_t *node, int dir)
 /// @param a the first element.
 /// @param b the second element.
 /// @return result of the comparison.
-static int rbtree_tree_node_cmp_ptr_cb(
-    rbtree_t *tree,
-    rbtree_node_t *a,
-    rbtree_node_t *b)
+static int rbtree_tree_node_cmp_ptr_cb(rbtree_t *tree, rbtree_node_t *a, rbtree_node_t *b)
 {
     (void)tree;
     return (a->value > b->value) - (a->value < b->value);
@@ -145,10 +133,7 @@ static void rbtree_tree_node_dealloc_cb(rbtree_t *tree, rbtree_node_t *node)
 
 // rbtree_t
 
-rbtree_t *rbtree_tree_alloc(void)
-{
-    return kmalloc(sizeof(rbtree_t));
-}
+rbtree_t *rbtree_tree_alloc(void) { return kmalloc(sizeof(rbtree_t)); }
 
 rbtree_t *rbtree_tree_init(rbtree_t *tree, rbtree_tree_node_cmp_f node_cmp_cb)
 {
@@ -160,10 +145,7 @@ rbtree_t *rbtree_tree_init(rbtree_t *tree, rbtree_tree_node_cmp_f node_cmp_cb)
     return tree;
 }
 
-rbtree_t *rbtree_tree_create(rbtree_tree_node_cmp_f node_cb)
-{
-    return rbtree_tree_init(rbtree_tree_alloc(), node_cb);
-}
+rbtree_t *rbtree_tree_create(rbtree_tree_node_cmp_f node_cb) { return rbtree_tree_init(rbtree_tree_alloc(), node_cb); }
 
 void rbtree_tree_dealloc(rbtree_t *tree, rbtree_tree_node_f node_cb)
 {
@@ -198,7 +180,7 @@ void *rbtree_tree_find(rbtree_t *tree, void *value)
 {
     void *result = NULL;
     if (tree) {
-        rbtree_node_t node = { .value = value };
+        rbtree_node_t node = {.value = value};
         rbtree_node_t *it  = tree->root;
         int cmp            = 0;
         while (it) {
@@ -215,9 +197,7 @@ void *rbtree_tree_find(rbtree_t *tree, void *value)
     return result;
 }
 
-void *rbtree_tree_find_by_value(rbtree_t *tree,
-                                rbtree_tree_cmp_f cmp_fun,
-                                void *value)
+void *rbtree_tree_find_by_value(rbtree_t *tree, rbtree_tree_cmp_f cmp_fun, void *value)
 {
     void *result = NULL;
     if (tree) {
@@ -238,10 +218,7 @@ void *rbtree_tree_find_by_value(rbtree_t *tree,
 }
 
 // Creates (kmalloc'ates)
-int rbtree_tree_insert(rbtree_t *tree, void *value)
-{
-    return rbtree_tree_insert_node(tree, rbtree_node_create(value));
-}
+int rbtree_tree_insert(rbtree_t *tree, void *value) { return rbtree_tree_insert_node(tree, rbtree_node_create(value)); }
 
 // Returns 1 on success, 0 otherwise.
 int rbtree_tree_insert_node(rbtree_t *tree, rbtree_node_t *node)
@@ -250,9 +227,9 @@ int rbtree_tree_insert_node(rbtree_t *tree, rbtree_node_t *node)
         if (tree->root == NULL) {
             tree->root = node;
         } else {
-            rbtree_node_t head = { 0 }; // False tree root
-            rbtree_node_t *g, *t;       // Grandparent & parent
-            rbtree_node_t *p, *q;       // Iterator & parent
+            rbtree_node_t head = {0}; // False tree root
+            rbtree_node_t *g, *t;     // Grandparent & parent
+            rbtree_node_t *p, *q;     // Iterator & parent
             int dir = 0, last = 0;
 
             // Set up our helpers
@@ -265,8 +242,7 @@ int rbtree_tree_insert_node(rbtree_t *tree, rbtree_node_t *node)
                 if (q == NULL) {
                     // Insert node at the first null link.
                     p->link[dir] = q = node;
-                } else if (rbtree_node_is_red(q->link[0]) &&
-                           rbtree_node_is_red(q->link[1])) {
+                } else if (rbtree_node_is_red(q->link[0]) && rbtree_node_is_red(q->link[1])) {
                     // Simple red violation: color flip
                     q->red          = 1;
                     q->link[0]->red = 0;
@@ -316,15 +292,13 @@ int rbtree_tree_insert_node(rbtree_t *tree, rbtree_node_t *node)
 // Returns 1 if the value was removed, 0 otherwise. Optional node callback
 // can be provided to dealloc node and/or user data. Use rbtree_tree_node_dealloc
 // default callback to deallocate node created by rbtree_tree_insert(...).
-int rbtree_tree_remove_with_cb(rbtree_t *tree,
-                               void *value,
-                               rbtree_tree_node_f node_cb)
+int rbtree_tree_remove_with_cb(rbtree_t *tree, void *value, rbtree_tree_node_f node_cb)
 {
     if (tree->root != NULL) {
-        rbtree_node_t head = { 0 };              // False tree root
-        rbtree_node_t node = { .value = value }; // Value wrapper node
-        rbtree_node_t *q, *p, *g;                // Helpers
-        rbtree_node_t *f = NULL;                 // Found item
+        rbtree_node_t head = {0};              // False tree root
+        rbtree_node_t node = {.value = value}; // Value wrapper node
+        rbtree_node_t *q, *p, *g;              // Helpers
+        rbtree_node_t *f = NULL;               // Found item
         int dir          = 1;
 
         // Set up our helpers
@@ -355,8 +329,7 @@ int rbtree_tree_remove_with_cb(rbtree_t *tree,
                 } else if (!rbtree_node_is_red(q->link[!dir])) {
                     rbtree_node_t *s = p->link[!last];
                     if (s) {
-                        if (!rbtree_node_is_red(s->link[!last]) &&
-                            !rbtree_node_is_red(s->link[last])) {
+                        if (!rbtree_node_is_red(s->link[!last]) && !rbtree_node_is_red(s->link[last])) {
                             // Color flip
                             p->red = 0;
                             s->red = 1;
@@ -410,8 +383,7 @@ int rbtree_tree_remove(rbtree_t *tree, void *value)
 {
     int result = 0;
     if (tree) {
-        result = rbtree_tree_remove_with_cb(
-            tree, value, rbtree_tree_node_dealloc_cb);
+        result = rbtree_tree_remove_with_cb(tree, value, rbtree_tree_node_dealloc_cb);
     }
     return result;
 }
@@ -427,10 +399,7 @@ unsigned int rbtree_tree_size(rbtree_t *tree)
 
 // rbtree_iter_t
 
-rbtree_iter_t *rbtree_iter_alloc(void)
-{
-    return kmalloc(sizeof(rbtree_iter_t));
-}
+rbtree_iter_t *rbtree_iter_alloc(void) { return kmalloc(sizeof(rbtree_iter_t)); }
 
 rbtree_iter_t *rbtree_iter_init(rbtree_iter_t *iter)
 {
@@ -442,10 +411,7 @@ rbtree_iter_t *rbtree_iter_init(rbtree_iter_t *iter)
     return iter;
 }
 
-rbtree_iter_t *rbtree_iter_create(void)
-{
-    return rbtree_iter_init(rbtree_iter_alloc());
-}
+rbtree_iter_t *rbtree_iter_create(void) { return rbtree_iter_init(rbtree_iter_alloc()); }
 
 void rbtree_iter_dealloc(rbtree_iter_t *iter)
 {
@@ -484,7 +450,7 @@ static void *rbtree_iter_start(rbtree_iter_t *iter, rbtree_t *tree, int dir)
 /// @brief Traverse a red black tree in the user-specified direction (0 asc, 1 desc)
 /// @param iter the iterator.
 /// @param dir the direction.
-/// @return result of the iteration. 
+/// @return result of the iteration.
 static void *rbtree_iter_move(rbtree_iter_t *iter, int dir)
 {
     if (iter->node->link[dir] != NULL) {
@@ -510,25 +476,13 @@ static void *rbtree_iter_move(rbtree_iter_t *iter, int dir)
     return iter->node == NULL ? NULL : iter->node->value;
 }
 
-void *rbtree_iter_first(rbtree_iter_t *iter, rbtree_t *tree)
-{
-    return rbtree_iter_start(iter, tree, 0);
-}
+void *rbtree_iter_first(rbtree_iter_t *iter, rbtree_t *tree) { return rbtree_iter_start(iter, tree, 0); }
 
-void *rbtree_iter_last(rbtree_iter_t *iter, rbtree_t *tree)
-{
-    return rbtree_iter_start(iter, tree, 1);
-}
+void *rbtree_iter_last(rbtree_iter_t *iter, rbtree_t *tree) { return rbtree_iter_start(iter, tree, 1); }
 
-void *rbtree_iter_next(rbtree_iter_t *iter)
-{
-    return rbtree_iter_move(iter, 1);
-}
+void *rbtree_iter_next(rbtree_iter_t *iter) { return rbtree_iter_move(iter, 1); }
 
-void *rbtree_iter_prev(rbtree_iter_t *iter)
-{
-    return rbtree_iter_move(iter, 0);
-}
+void *rbtree_iter_prev(rbtree_iter_t *iter) { return rbtree_iter_move(iter, 0); }
 
 int rbtree_tree_test(rbtree_t *tree, rbtree_node_t *root)
 {
@@ -574,9 +528,7 @@ int rbtree_tree_test(rbtree_t *tree, rbtree_node_t *root)
 /// @param tree the tree.
 /// @param node the current node.
 /// @param fun the print function.
-static void rbtree_tree_print_iter(rbtree_t *tree,
-                                   rbtree_node_t *node,
-                                   rbtree_tree_node_f fun)
+static void rbtree_tree_print_iter(rbtree_t *tree, rbtree_node_t *node, rbtree_tree_node_f fun)
 {
     assert(tree);
     assert(node);

@@ -34,7 +34,7 @@ struct spwd {
 ///
 /// @param name The login name of the user to search for.
 /// @return Pointer to the `spwd` structure with the user's shadow password entry, or NULL if not found.
-struct spwd *getspnam(const char * name);
+struct spwd *getspnam(const char *name);
 
 /// @brief Retrieves a shadow password record by username (reentrant version).
 ///

@@ -3,23 +3,20 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "io/debug.h"
+#include "time.h"
 #include "drivers/rtc.h"
 #include "hardware/timer.h"
+#include "io/debug.h"
 #include "io/port_io.h"
 #include "stddef.h"
 #include "stdio.h"
-#include "time.h"
 
 /// @brief List of week days.
-static const char *str_weekdays[] = {
-    "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"
-};
+static const char *str_weekdays[] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
 
 /// @brief List of months.
-static const char *str_months[] = {
-    "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"
-};
+static const char *str_months[] = {"January", "February", "March",     "April",   "May",      "June",
+                                   "July",    "August",   "September", "October", "November", "December"};
 
 time_t sys_time(time_t *time)
 {
@@ -32,8 +29,7 @@ time_t sys_time(time_t *time)
     }
     time_t t;
     // Convert years to days
-    t = (365 * curr_time.tm_year) + (curr_time.tm_year / 4) - (curr_time.tm_year / 100) +
-        (curr_time.tm_year / 400);
+    t = (365 * curr_time.tm_year) + (curr_time.tm_year / 4) - (curr_time.tm_year / 100) + (curr_time.tm_year / 400);
     // Convert months to days
     t += (30 * curr_time.tm_mon) + (3 * (curr_time.tm_mon + 1) / 5) + curr_time.tm_mday;
     // Unix time starts on January 1st, 1970
@@ -48,10 +44,7 @@ time_t sys_time(time_t *time)
     return t;
 }
 
-time_t difftime(time_t time1, time_t time2)
-{
-    return time1 - time2;
-}
+time_t difftime(time_t time1, time_t time2) { return time1 - time2; }
 
 /// @brief Computes day of week
 /// @param y Year

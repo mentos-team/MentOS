@@ -12,25 +12,16 @@
 #define BITMAP_SIZE (MAX_PROCESSES / 32)
 
 /// Bitmap for tracking used PIDs.
-static uint32_t pid_bitmap[BITMAP_SIZE] = { 0 };
+static uint32_t pid_bitmap[BITMAP_SIZE] = {0};
 
 /// Keeps track of the last allocated PID.
 static pid_t last_pid = 1;
 
-void pid_manager_init(void)
-{
-    memset(pid_bitmap, 0, sizeof(pid_bitmap));
-}
+void pid_manager_init(void) { memset(pid_bitmap, 0, sizeof(pid_bitmap)); }
 
-void pid_manager_mark_used(pid_t pid)
-{
-    pid_bitmap[pid / 32] |= (1 << (pid % 32));
-}
+void pid_manager_mark_used(pid_t pid) { pid_bitmap[pid / 32] |= (1 << (pid % 32)); }
 
-void pid_manager_mark_free(pid_t pid)
-{
-    pid_bitmap[pid / 32] &= ~(1 << (pid % 32));
-}
+void pid_manager_mark_free(pid_t pid) { pid_bitmap[pid / 32] &= ~(1 << (pid % 32)); }
 
 pid_t pid_manager_get_free_pid(void)
 {
@@ -40,7 +31,9 @@ pid_t pid_manager_get_free_pid(void)
         pid_t current_pid = (last_pid + offset) % (BITMAP_SIZE * 32);
 
         // Ensure PID 0 is skipped.
-        if (current_pid == 0) { continue; }
+        if (current_pid == 0) {
+            continue;
+        }
 
         // Check the bitmap for availability.
         size_t i = current_pid / 32; // Index in the bitmap array.

@@ -23,7 +23,7 @@ static inline void list_head_sort(list_head *list, list_head_compare compare)
         // Current will point to head
         for (current = list->next; current->next != list;) {
             // Save pointer to next.
-            next = current->next;
+            next    = current->next;
             // Reset restart flag.
             restart = 0;
             // Index will point to node next to current

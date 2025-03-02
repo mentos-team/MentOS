@@ -20,7 +20,8 @@
 /// @param buffer The buffer where the resulting path will be stored.
 /// @param buffer_size The size of the buffer in bytes.
 /// @return EXIT_SUCCESS on success, EXIT_FAILURE on error.
-static inline int __build_path(const char *parent_directory, const char *directory_name, char *buffer, size_t buffer_size)
+static inline int
+__build_path(const char *parent_directory, const char *directory_name, char *buffer, size_t buffer_size)
 {
     // Ensure the buffer is cleared before use
     if (!buffer || buffer_size == 0) {

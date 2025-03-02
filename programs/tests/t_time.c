@@ -4,8 +4,8 @@
 /// See LICENSE.md for details.
 
 #include <stdio.h>
-#include <time.h>
 #include <stdlib.h>
+#include <time.h>
 
 int main(void)
 {

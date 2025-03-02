@@ -4,9 +4,9 @@
 /// See LICENSE.md for details.
 
 #include <stdio.h>
+#include <strerror.h>
 #include <string.h>
 #include <sys/stat.h>
-#include <strerror.h>
 
 int main(int argc, char *argv[])
 {

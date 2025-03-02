@@ -3,9 +3,9 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "unistd.h"
 #include "errno.h"
 #include "system/syscall_types.h"
+#include "unistd.h"
 
 // _syscall1(pid_t, getsid, pid_t, pid)
 pid_t getsid(pid_t pid)
@@ -14,4 +14,3 @@ pid_t getsid(pid_t pid)
     __inline_syscall_1(__res, getsid, pid);
     __syscall_return(pid_t, __res);
 }
-

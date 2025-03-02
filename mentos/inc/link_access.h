@@ -19,9 +19,9 @@
 
 /// @brief Define variables pointing to external symbols, specifically
 ///        to the .data section of a linked object file.
-#define EXTLD(NAME)                                     \
-    extern const unsigned char binary_##NAME##_start[]; \
-    extern const unsigned char binary_##NAME##_end[];   \
+#define EXTLD(NAME)                                                                                                    \
+    extern const unsigned char binary_##NAME##_start[];                                                                \
+    extern const unsigned char binary_##NAME##_end[];                                                                  \
     extern const unsigned char binary_##NAME##_size[];
 /// Provide access to the .data of the linked object.
 #define LDVAR(NAME) binary_##NAME##_start
@@ -32,9 +32,9 @@
 
 /// @brief Define variables pointing to external symbols, specifically
 ///        to the .data section of a linked object file.
-#define EXTLD(NAME)                                      \
-    extern const unsigned char _binary_##NAME##_start[]; \
-    extern const unsigned char _binary_##NAME##_end[];   \
+#define EXTLD(NAME)                                                                                                    \
+    extern const unsigned char _binary_##NAME##_start[];                                                               \
+    extern const unsigned char _binary_##NAME##_end[];                                                                 \
     extern const unsigned char _binary_##NAME##_size[];
 /// Provides access to the .data of the linked object.
 #define LDVAR(NAME) _binary_##NAME##_start

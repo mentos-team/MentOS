@@ -9,18 +9,18 @@
 #define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
 #include "io/debug.h"                    // Include debugging functions.
 
-#include "mem/buddy_system.h"
-#include "system/panic.h"
-#include "mem/paging.h"
 #include "assert.h"
+#include "mem/buddy_system.h"
+#include "mem/paging.h"
 #include "stdio.h"
+#include "system/panic.h"
 
 /// @brief Cache level low limit after which allocation starts.
-#define LOW_WATERMARK_LEVEL 10
+#define LOW_WATERMARK_LEVEL  10
 /// @brief Cache level high limit, above it deallocation happens.
 #define HIGH_WATERMARK_LEVEL 70
 /// @brief Cache level midway limit.
-#define MID_WATERMARK_LEVEL ((LOW_WATERMARK_LEVEL + HIGH_WATERMARK_LEVEL) / 2)
+#define MID_WATERMARK_LEVEL  ((LOW_WATERMARK_LEVEL + HIGH_WATERMARK_LEVEL) / 2)
 
 /// @brief Bitwise flags for identifying page types and statuses.
 enum bb_flag {
@@ -31,27 +31,18 @@ enum bb_flag {
 /// @brief Sets the given flag in the page.
 /// @param page The page of which we want to modify the flag.
 /// @param flag The flag we want to set.
-static inline void __bb_set_flag(bb_page_t *page, int flag)
-{
-    set_bit(flag, &page->flags);
-}
+static inline void __bb_set_flag(bb_page_t *page, int flag) { set_bit(flag, &page->flags); }
 
 /// @brief Clears the given flag from the page.
 /// @param page The page of which we want to modify the flag.
 /// @param flag The flag we want to clear.
-static inline void __bb_clear_flag(bb_page_t *page, int flag)
-{
-    clear_bit(flag, &page->flags);
-}
+static inline void __bb_clear_flag(bb_page_t *page, int flag) { clear_bit(flag, &page->flags); }
 
 /// @brief Gets the given flag from the page.
 /// @param page The page of which we want to modify the flag.
 /// @param flag The flag we want to test.
 /// @return 1 if the bit is set, 0 otherwise.
-static inline int __bb_test_flag(bb_page_t *page, int flag)
-{
-    return test_bit(flag, &page->flags);
-}
+static inline int __bb_test_flag(bb_page_t *page, int flag) { return test_bit(flag, &page->flags); }
 
 /// @brief Returns the page at the given index, starting from the given base.
 /// @param instance The buddy system instance we are working with.
@@ -125,8 +116,7 @@ bb_page_t *bb_alloc_pages(bb_instance_t *instance, unsigned int order)
 
     // Validate the input order
     if (order >= MAX_BUDDYSYSTEM_GFP_ORDER) {
-        pr_crit("Requested order %u exceeds maximum allowed order %u.\n",
-                order, MAX_BUDDYSYSTEM_GFP_ORDER - 1);
+        pr_crit("Requested order %u exceeds maximum allowed order %u.\n", order, MAX_BUDDYSYSTEM_GFP_ORDER - 1);
         return NULL;
     }
 
@@ -262,7 +252,10 @@ void bb_free_pages(bb_instance_t *instance, bb_page_t *page)
 
     // Check that the page is not already free and that it is a root page.
     if (__bb_test_flag(page, FREE_PAGE)) {
-        pr_crit("Attempted to free a page that is already free (index: %lu, order: %u).\n", page_idx, order);
+        pr_crit(
+            "Attempted to free a page that is already free (index: %lu, order: "
+            "%u).\n",
+            page_idx, order);
         return;
     }
     if (!__bb_test_flag(page, ROOT_PAGE)) {
@@ -290,14 +283,20 @@ void bb_free_pages(bb_instance_t *instance, bb_page_t *page)
         // Return the page descriptor of the buddy.
         bb_page_t *buddy = __get_page_from_base(instance, base, buddy_idx);
         if (!buddy) {
-            pr_crit("Failed to retrieve buddy page (buddy index: %lu, order: %u).\n", buddy_idx, order);
+            pr_crit(
+                "Failed to retrieve buddy page (buddy index: %lu, order: "
+                "%u).\n",
+                buddy_idx, order);
             return;
         }
 
         // If the page is not a buddy, stop the loop. So it should not be free
         // and having the same size.
         if (!__page_is_buddy(buddy, order)) {
-            pr_info("Buddy not suitable for merge (index: %lu, buddy index: %lu, order: %u).\n", page_idx, buddy_idx, order);
+            pr_info(
+                "Buddy not suitable for merge (index: %lu, buddy index: %lu, "
+                "order: %u).\n",
+                page_idx, buddy_idx, order);
             break;
         }
 
@@ -349,12 +348,13 @@ void bb_free_pages(bb_instance_t *instance, bb_page_t *page)
 #endif
 }
 
-int buddy_system_init(bb_instance_t *instance,
-                      const char *name,
-                      void *pages_start,
-                      uint32_t bbpage_offset,
-                      uint32_t pages_stride,
-                      uint32_t pages_count)
+int buddy_system_init(
+    bb_instance_t *instance,
+    const char *name,
+    void *pages_start,
+    uint32_t bbpage_offset,
+    uint32_t pages_stride,
+    uint32_t pages_count)
 {
     // Validate input parameters.
     if (!instance) {
@@ -375,7 +375,7 @@ int buddy_system_init(bb_instance_t *instance,
     }
 
     // Compute the base base page of the buddysystem instance.
-    instance->base_page = ((bb_page_t *)(((uint32_t)pages_start) + bbpage_offset));
+    instance->base_page   = ((bb_page_t *)(((uint32_t)pages_start) + bbpage_offset));
     // Save all needed page info.
     instance->bbpg_offset = bbpage_offset;
     instance->pgs_size    = pages_stride;
@@ -387,7 +387,7 @@ int buddy_system_init(bb_instance_t *instance,
         // Get the page at the given index.
         bb_page_t *page = __get_page_at_index(instance, index);
         // Initialize the flags of the page.
-        page->flags = 0;
+        page->flags     = 0;
         // Mark page as free.
         __bb_set_flag(page, FREE_PAGE);
         // Initialize siblings list.
@@ -400,21 +400,21 @@ int buddy_system_init(bb_instance_t *instance,
         // Get the area that manages the given order.
         bb_free_area_t *area = __get_area_of_order(instance, order);
         // Initialize the number of free pages.
-        area->nr_free = 0;
+        area->nr_free        = 0;
         // Initialize linked list of free pages.
         list_head_init(&area->free_list);
     }
 
     // Current base page descriptor of the zone.
-    bb_page_t *page = instance->base_page;
+    bb_page_t *page              = instance->base_page;
     // Address of the last page descriptor of the zone.
-    bb_page_t *last_page = __get_page_from_base(instance, page, instance->total_pages);
+    bb_page_t *last_page         = __get_page_from_base(instance, page, instance->total_pages);
     // Initially, all the memory is divided into blocks of the higher order.
     const unsigned int max_order = MAX_BUDDYSYSTEM_GFP_ORDER - 1;
     // Get the free area collecting the larges block of page frames.
-    bb_free_area_t *area = __get_area_of_order(instance, max_order);
+    bb_free_area_t *area         = __get_area_of_order(instance, max_order);
     // Compute the block size.
-    uint32_t block_size = 1UL << max_order;
+    uint32_t block_size          = 1UL << max_order;
     // Add all zone's pages to the largest free area block.
     while ((page + block_size) <= last_page) {
         // Save the order of the page.
@@ -431,7 +431,8 @@ int buddy_system_init(bb_instance_t *instance,
 
     // Validate alignment of memory to MAX_ORDER size.
     if (page != last_page) {
-        pr_crit("Memory size is not aligned to MAX_ORDER size! Remaining memory is not accounted for.\n");
+        pr_crit("Memory size is not aligned to MAX_ORDER size! Remaining "
+                "memory is not accounted for.\n");
         return 0;
     }
     return 1;
@@ -463,8 +464,8 @@ int buddy_system_to_string(const bb_instance_t *instance, char *buffer, size_t b
     }
 
     // Add the total free space in human-readable format.
-    int written = snprintf(buffer + offset, bufsize - offset, ": %s",
-                           to_human_size(buddy_system_get_free_space(instance)));
+    int written =
+        snprintf(buffer + offset, bufsize - offset, ": %s", to_human_size(buddy_system_get_free_space(instance)));
     if (written < 0 || (size_t)(offset + written) >= bufsize) {
         return snprintf(buffer, bufsize, "String formatting error.\n");
     }
@@ -472,10 +473,7 @@ int buddy_system_to_string(const bb_instance_t *instance, char *buffer, size_t b
     return offset + written;
 }
 
-unsigned long buddy_system_get_total_space(const bb_instance_t *instance)
-{
-    return instance->total_pages * PAGE_SIZE;
-}
+unsigned long buddy_system_get_total_space(const bb_instance_t *instance) { return instance->total_pages * PAGE_SIZE; }
 
 unsigned long buddy_system_get_free_space(const bb_instance_t *instance)
 {
@@ -547,12 +545,6 @@ static void __cached_free(bb_instance_t *instance, bb_page_t *page)
     }
 }
 
-bb_page_t *bb_alloc_page_cached(bb_instance_t *instance)
-{
-    return __cached_alloc(instance);
-}
+bb_page_t *bb_alloc_page_cached(bb_instance_t *instance) { return __cached_alloc(instance); }
 
-void bb_free_page_cached(bb_instance_t *instance, bb_page_t *page)
-{
-    __cached_free(instance, page);
-}
+void bb_free_page_cached(bb_instance_t *instance, bb_page_t *page) { __cached_free(instance, page); }

@@ -33,7 +33,8 @@ static int __vsscanf(const char *buf, const char *s, va_list ap)
                 if (*s == '*') {
                     noassign = 1;
                 } else if (isdigit(*s)) {
-                    for (tc = s; isdigit(*s); ++s) {}
+                    for (tc = s; isdigit(*s); ++s) {
+                    }
                     strncpy(tmp, tc, s - tc);
                     tmp[s - tc] = '\0';
                     width       = strtol(tmp, NULL, 10);

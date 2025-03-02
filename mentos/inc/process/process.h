@@ -5,12 +5,12 @@
 
 #pragma once
 
-#include "drivers/keyboard/keyboard.h"
 #include "bits/termios-struct.h"
-#include "system/signal.h"
 #include "devices/fpu.h"
+#include "drivers/keyboard/keyboard.h"
 #include "mem/paging.h"
 #include "stdbool.h"
+#include "system/signal.h"
 
 /// The maximum length of a name for a task_struct.
 #define TASK_NAME_MAX_LENGTH 100

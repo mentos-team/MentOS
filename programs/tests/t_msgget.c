@@ -9,15 +9,15 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include <unistd.h>
 #include <errno.h>
-#include <sys/stat.h>
-#include <sys/msg.h>
-#include <sys/ipc.h>
-#include <string.h>
-#include <stdlib.h>
 #include <fcntl.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/ipc.h>
+#include <sys/msg.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 #define MESSAGE_LEN 100
 
@@ -58,7 +58,9 @@ static inline void __receive_message(int msqid, long mtype, message_t *message)
     if (msgrcv(msqid, message, sizeof(message->mesg_text), mtype, 0) < 0) {
         perror("Failed to receive the message");
     } else {
-        printf("[%2d] Message received (%2ld) `%s` (Query: %2ld)\n", getpid(), message->mesg_type, message->mesg_text, mtype);
+        printf(
+            "[%2d] Message received (%2ld) `%s` (Query: %2ld)\n", getpid(), message->mesg_type, message->mesg_text,
+            mtype);
     }
 }
 
@@ -70,7 +72,7 @@ int main(int argc, char *argv[])
     int msqid;
 
     // Request to sleep for 200 ms.
-    struct timespec req = { 0, 200000000 };
+    struct timespec req = {0, 200000000};
 
     // ========================================================================
     // Generating a key using ftok

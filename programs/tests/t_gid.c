@@ -9,8 +9,8 @@
 #include <grp.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <strerror.h>
+#include <string.h>
 #include <unistd.h>
 
 /// @brief List all groups and their members.

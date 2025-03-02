@@ -3,16 +3,16 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include <unistd.h>
-#include <sys/stat.h>
-#include <strerror.h>
-#include <termios.h>
-#include <stdbool.h>
-#include <string.h>
-#include <stdio.h>
 #include <ctype.h>
 #include <fcntl.h>
+#include <stdbool.h>
+#include <stdio.h>
 #include <stdlib.h>
+#include <strerror.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <termios.h>
+#include <unistd.h>
 
 #define MAX_LINE_LENGTH 160
 #define MAX_LINES       512
@@ -50,9 +50,9 @@ int load_file(const char *filename, char *buffer, size_t bufsize, int *file_leng
     // Ensure null termination of the buffer.
     buffer[bytes_read] = '\0';
     // Initialize the number of lines and set the file length.
-    int num_lines = 0;
+    int num_lines      = 0;
     // Set file_length to the number of bytes read.
-    *file_length = bytes_read;
+    *file_length       = bytes_read;
     // Count the number of lines by counting '\n'.
     for (char *p = buffer; *p != '\0'; p++) {
         if (*p == '\n') {
@@ -165,7 +165,7 @@ void shift_lines_up(char *lines, int cy, int cx, int num_lines, int *file_length
         return;
     }
     // Get the position of cx within the current line.
-    int line_len = strchr(line_start, '\n') - line_start;
+    int line_len         = strchr(line_start, '\n') - line_start;
     // Calculate the current position in the file.
     int current_position = line_start - lines;
     // Append the next line's content after cx in the current line.
@@ -207,7 +207,7 @@ void shift_lines_down(char *lines, int cy, int cx, int num_lines, int *file_leng
         return;
     }
     // Get the length of the current line and calculate the remaining part after cx
-    int line_len = strchr(line_start, '\n') - line_start;
+    int line_len         = strchr(line_start, '\n') - line_start;
     // Calculate the current position in the file
     int current_position = line_start - lines;
     // Shift the next lines down to create space for the new part
@@ -287,12 +287,20 @@ int get_line_length(char *lines, int cy, const int file_length)
 /// @param num_lines The total number of lines in the file.
 /// @param file_length Pointer to the current length of the file in bytes.
 /// @param insert_active The flag indicating if insert mode is active.
-void update_status_message(char *buffer, size_t bufsize, int cy, int cx, char *lines, int num_lines, int *file_length, int insert_active)
+void update_status_message(
+    char *buffer,
+    size_t bufsize,
+    int cy,
+    int cx,
+    char *lines,
+    int num_lines,
+    int *file_length,
+    int insert_active)
 {
     // Prepare the status message
-    snprintf(buffer, bufsize, "(y:%3d, x:%3d, line_len:%3d, lines:%3d, file_length:%3d %s)\n",
-             cy, cx, get_line_length(lines, cy, *file_length), num_lines, *file_length,
-             insert_active ? "INS" : "   ");
+    snprintf(
+        buffer, bufsize, "(y:%3d, x:%3d, line_len:%3d, lines:%3d, file_length:%3d %s)\n", cy, cx,
+        get_line_length(lines, cy, *file_length), num_lines, *file_length, insert_active ? "INS" : "   ");
 }
 
 /// @brief Edits the file buffer interactively, allowing navigation and editing.
@@ -311,7 +319,7 @@ void edit_file(char *lines, size_t bufsize, int num_lines, const char *filename,
     char *line_start = lines, *line_end;
     int line_len     = get_line_start_end(lines, cy, &line_start, &line_end, *file_length);
 
-    char message[MAX_LINE_LENGTH] = { 0 };
+    char message[MAX_LINE_LENGTH] = {0};
 
     update_status_message(message, MAX_LINE_LENGTH, cy, cx, lines, num_lines, file_length, insert_active);
 
@@ -322,7 +330,8 @@ void edit_file(char *lines, size_t bufsize, int num_lines, const char *filename,
         // Print the initial file content.
         puts(lines);
         putchar('\n');
-        puts("================================================================================");
+        puts("================================================================="
+             "===============");
         puts("[ \033[1;32m^W Save \033[1;31m^C Quit\033[0m ]\n");
         puts(message);
         message[0] = '\0';
@@ -554,10 +563,7 @@ void enable_raw_mode(void)
     tcsetattr(STDIN_FILENO, 0, &raw);
 }
 
-void disable_raw_mode(void)
-{
-    tcsetattr(STDIN_FILENO, 0, &orig_termios);
-}
+void disable_raw_mode(void) { tcsetattr(STDIN_FILENO, 0, &orig_termios); }
 
 // Main function remains the same as before...
 int main(int argc, char *argv[])

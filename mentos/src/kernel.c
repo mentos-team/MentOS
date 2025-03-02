@@ -16,9 +16,9 @@
 #include "drivers/ata/ata.h"
 #include "drivers/keyboard/keyboard.h"
 #include "drivers/keyboard/keymap.h"
+#include "drivers/mem.h"
 #include "drivers/ps2.h"
 #include "drivers/rtc.h"
-#include "drivers/mem.h"
 #include "fs/ext2.h"
 #include "fs/procfs.h"
 #include "fs/vfs.h"
@@ -27,20 +27,20 @@
 #include "io/proc_modules.h"
 #include "io/vga/vga.h"
 #include "io/video.h"
+#include "ipc/ipc.h"
 #include "mem/vmem_map.h"
 #include "mem/zone_allocator.h"
 #include "process/scheduler.h"
 #include "process/scheduler_feedback.h"
+#include "resource_tracing.h"
 #include "stdio.h"
 #include "string.h"
 #include "sys/module.h"
 #include "sys/msg.h"
 #include "sys/sem.h"
 #include "sys/shm.h"
-#include "ipc/ipc.h"
 #include "system/syscall.h"
 #include "version.h"
-#include "resource_tracing.h"
 
 /// Describe start address of grub multiboot modules.
 char *module_start[MAX_MODULES];
@@ -471,7 +471,8 @@ int kmain(boot_info_t *boot_informations)
         init_process->thread.regs.useresp);
     // Enable interrupt requests.
     sti();
-    for (;;) {}
+    for (;;) {
+    }
     // We should not be here.
     pr_emerg("Dear developer, we have to talk...\n");
     return 1;

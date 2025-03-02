@@ -7,9 +7,9 @@
 /// See LICENSE.md for details.
 
 #include <stdio.h>
-#include <string.h>
 #include <stdlib.h>
 #include <strerror.h>
+#include <string.h>
 #include <unistd.h>
 
 int main(int argc, char *argv[])

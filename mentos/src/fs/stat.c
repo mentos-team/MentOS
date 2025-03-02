@@ -3,18 +3,15 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "io/debug.h"
+#include "errno.h"
 #include "fs/vfs.h"
+#include "io/debug.h"
 #include "limits.h"
 #include "mem/kheap.h"
 #include "stdio.h"
 #include "string.h"
-#include "errno.h"
 
-int sys_stat(const char *path, stat_t *buf)
-{
-    return vfs_stat(path, buf);
-}
+int sys_stat(const char *path, stat_t *buf) { return vfs_stat(path, buf); }
 
 int sys_fstat(int fd, stat_t *buf)
 {

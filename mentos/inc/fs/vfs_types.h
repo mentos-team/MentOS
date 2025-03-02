@@ -5,10 +5,10 @@
 
 #pragma once
 
-#include "list_head.h"
 #include "bits/stat.h"
-#include "stdint.h"
 #include "dirent.h"
+#include "list_head.h"
+#include "stdint.h"
 
 #define PATH_SEPARATOR        '/'  ///< The character used as path separator.
 #define PATH_SEPARATOR_STRING "/"  ///< The string used as path separator.
@@ -163,16 +163,7 @@ typedef struct vfs_file_descriptor {
 #define ATTR_CTIME (1 << 5) ///< Flag set to specify the validity of CTIME.
 
 /// Used to initialize an iattr inside the chown function.
-#define IATTR_CHOWN(user, group)         \
-    {                                    \
-        .ia_valid = ATTR_UID | ATTR_GID, \
-        .ia_uid   = (user),              \
-        .ia_gid   = (group)              \
-    }
+#define IATTR_CHOWN(user, group) {.ia_valid = ATTR_UID | ATTR_GID, .ia_uid = (user), .ia_gid = (group)}
 
 /// Used to initialize an iattr inside the chmod function.
-#define IATTR_CHMOD(mode)      \
-    {                          \
-        .ia_valid = ATTR_MODE, \
-        .ia_mode  = (mode)     \
-    }
+#define IATTR_CHMOD(mode) {.ia_valid = ATTR_MODE, .ia_mode = (mode)}

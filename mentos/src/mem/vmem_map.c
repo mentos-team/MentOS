@@ -168,8 +168,10 @@ uint32_t virt_map_physical_pages(page_t *page, int pfn_count)
     uint32_t vaddr = VIRT_PAGE_TO_ADDRESS(vpage);
 
     if (!is_valid_virtual_address(vaddr)) {
-        pr_crit("The virtual address 0x%p associated with the virtual page 0x%p is not valid.\n",
-                vaddr, vpage);
+        pr_crit(
+            "The virtual address 0x%p associated with the virtual page 0x%p is "
+            "not valid.\n",
+            vaddr, vpage);
         return 0;
     }
 
@@ -185,11 +187,7 @@ uint32_t virt_map_physical_pages(page_t *page, int pfn_count)
     }
 
     // Update the virtual memory area with the new mapping.
-    mem_upd_vm_area(
-        main_pgd, vaddr,
-        phy_address,
-        pfn_count * PAGE_SIZE,
-        MM_PRESENT | MM_RW | MM_GLOBAL | MM_UPDADDR);
+    mem_upd_vm_area(main_pgd, vaddr, phy_address, pfn_count * PAGE_SIZE, MM_PRESENT | MM_RW | MM_GLOBAL | MM_UPDADDR);
 
     return vaddr;
 }
@@ -224,7 +222,10 @@ uint32_t virt_map_vaddress(mm_struct_t *mm, virt_map_page_t *vpage, uint32_t vad
 
     // Validate the start address of the virtual map.
     if (!is_valid_virtual_address(start_map_virt_address)) {
-        pr_crit("Invalid start virtual address for mapping 0x%08x, associated virtual page: 0x%p\n", start_map_virt_address, vpage);
+        pr_crit(
+            "Invalid start virtual address for mapping 0x%08x, associated "
+            "virtual page: 0x%p\n",
+            start_map_virt_address, vpage);
         return 0;
     }
 
@@ -238,12 +239,7 @@ uint32_t virt_map_vaddress(mm_struct_t *mm, virt_map_page_t *vpage, uint32_t vad
 
     // Clone the source vaddr the the requested virtual memory portion.
     mem_clone_vm_area(
-        mm->pgd,
-        main_pgd,
-        vaddr,
-        start_map_virt_address,
-        size,
-        MM_PRESENT | MM_RW | MM_GLOBAL | MM_UPDADDR);
+        mm->pgd, main_pgd, vaddr, start_map_virt_address, size, MM_PRESENT | MM_RW | MM_GLOBAL | MM_UPDADDR);
 
     // Return the starting virtual address of the mapped area.
     return start_map_virt_address;

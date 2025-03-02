@@ -3,9 +3,9 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "unistd.h"
 #include "errno.h"
 #include "system/syscall_types.h"
+#include "unistd.h"
 
 #include "signal.h"
 #include "sys/bitops.h"
@@ -35,38 +35,9 @@ int sigprocmask(int how, const sigset_t *set, sigset_t *oldset)
 
 /// @brief List of signals names.
 static const char *sys_siglist[] = {
-    "HUP",
-    "INT",
-    "QUIT",
-    "ILL",
-    "TRAP",
-    "ABRT",
-    "EMT",
-    "FPE",
-    "KILL",
-    "BUS",
-    "SEGV",
-    "SYS",
-    "PIPE",
-    "ALRM",
-    "TERM",
-    "USR1",
-    "USR2",
-    "CHLD",
-    "PWR",
-    "WINCH",
-    "URG",
-    "POLL",
-    "STOP",
-    "TSTP",
-    "CONT",
-    "TTIN",
-    "TTOU",
-    "VTALRM",
-    "PROF",
-    "XCPU",
-    "XFSZ",
-    NULL,
+    "HUP",  "INT",  "QUIT", "ILL",  "TRAP", "ABRT",   "EMT",  "FPE",  "KILL",  "BUS", "SEGV",
+    "SYS",  "PIPE", "ALRM", "TERM", "USR1", "USR2",   "CHLD", "PWR",  "WINCH", "URG", "POLL",
+    "STOP", "TSTP", "CONT", "TTIN", "TTOU", "VTALRM", "PROF", "XCPU", "XFSZ",  NULL,
 };
 
 sighandler_t signal(int signum, sighandler_t handler)

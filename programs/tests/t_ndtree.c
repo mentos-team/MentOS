@@ -5,9 +5,9 @@
 
 #include "ndtree.h"
 
-#include <unistd.h>
-#include <stdlib.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
 
 // Custom allocator for tree nodes
 ndtree_node_t *custom_alloc_node(void *value)
@@ -20,22 +20,13 @@ ndtree_node_t *custom_alloc_node(void *value)
 }
 
 // Custom deallocator for tree nodes
-void custom_free_node(ndtree_node_t *node)
-{
-    free(node);
-}
+void custom_free_node(ndtree_node_t *node) { free(node); }
 
 // Comparison function for integer values
-int compare_node(void *lhs, void *rhs)
-{
-    return (*(int *)lhs) - (*(int *)rhs);
-}
+int compare_node(void *lhs, void *rhs) { return (*(int *)lhs) - (*(int *)rhs); }
 
 // Function to print node values (assuming integer values for simplicity)
-void print_node(ndtree_node_t *node)
-{
-    printf("Node value: %d\n", *(int *)(node->value));
-}
+void print_node(ndtree_node_t *node) { printf("Node value: %d\n", *(int *)(node->value)); }
 
 int main(void)
 {

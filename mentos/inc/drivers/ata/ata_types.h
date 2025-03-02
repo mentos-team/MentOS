@@ -35,8 +35,10 @@ typedef enum {
 typedef enum {
     ata_control_zero = 0x00, ///< Always set to zero.
     ata_control_nien = 0x02, ///< Set this to stop the current device from sending interrupts.
-    ata_control_srst = 0x04, ///< Set, then clear (after 5us), this to do a "Software Reset" on all ATA drives on a bus, if one is misbehaving.
-    ata_control_hob  = 0x80, ///< Set this to read back the High Order Byte (HOB) of the last LBA48 value sent to an IO port.
+    ata_control_srst =
+        0x04, ///< Set, then clear (after 5us), this to do a "Software Reset" on all ATA drives on a bus, if one is misbehaving.
+    ata_control_hob =
+        0x80, ///< Set this to read back the High Order Byte (HOB) of the last LBA48 value sent to an IO port.
 } ata_control_t;
 
 /// @brief Types of ATA devices.

@@ -8,5 +8,7 @@
 /// @brief Extracts the relative file path by removing the `MENTOS_ROOT` prefix.
 /// @note If `MENTOS_ROOT` does not match the start of `__FILE__`, the full file path is returned.
 #ifndef __RELATIVE_PATH__
-#define __RELATIVE_PATH__ (__builtin_strncmp(__FILE__, MENTOS_ROOT, sizeof(MENTOS_ROOT) - 1) == 0 ? (&__FILE__[sizeof(MENTOS_ROOT)]) : __FILE__)
+#define __RELATIVE_PATH__                                                                                              \
+    (__builtin_strncmp(__FILE__, MENTOS_ROOT, sizeof(MENTOS_ROOT) - 1) == 0 ? (&__FILE__[sizeof(MENTOS_ROOT)])         \
+                                                                            : __FILE__)
 #endif

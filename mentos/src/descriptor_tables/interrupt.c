@@ -9,13 +9,13 @@
 #define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
 #include "io/debug.h"                    // Include debugging functions.
 
-#include "descriptor_tables/isr.h"
-#include "process/scheduler.h"
-#include "hardware/pic8259.h"
-#include "system/printk.h"
 #include "assert.h"
-#include "stdio.h"
 #include "descriptor_tables/idt.h"
+#include "descriptor_tables/isr.h"
+#include "hardware/pic8259.h"
+#include "process/scheduler.h"
+#include "stdio.h"
+#include "system/printk.h"
 
 /// @brief Shared interrupt handlers, stored into a double-linked list.
 typedef struct irq_struct_t {
@@ -95,8 +95,7 @@ int irq_uninstall_handler(unsigned i, interrupt_handler_t handler)
         pr_err("There are no handler for IRQ `%d`\n", i);
         return -1;
     }
-    list_for_each_decl(it, &shared_interrupt_handlers[i])
-    {
+    list_for_each_decl (it, &shared_interrupt_handlers[i]) {
         // Get the interrupt structure.
         irq_struct_t *irq_struct = list_entry(it, irq_struct_t, siblings);
         assert(irq_struct && "Something went wrong.");
@@ -121,8 +120,7 @@ void irq_handler(pt_regs *f)
     if (list_head_empty(&shared_interrupt_handlers[irq_line])) {
         pr_err("Thre are no handler for IRQ `%d`\n", irq_line);
     } else {
-        list_for_each_decl(it, &shared_interrupt_handlers[irq_line])
-        {
+        list_for_each_decl (it, &shared_interrupt_handlers[irq_line]) {
             // Get the interrupt structure.
             irq_struct_t *irq_struct = list_entry(it, irq_struct_t, siblings);
             assert(irq_struct && "Something went wrong.");

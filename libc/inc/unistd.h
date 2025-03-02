@@ -5,9 +5,9 @@
 
 #pragma once
 
-#include "sys/types.h"
-#include "stddef.h"
 #include "dirent.h"
+#include "stddef.h"
+#include "sys/types.h"
 
 #define STDIN_FILENO  0 ///< Standard input file descriptor.
 #define STDOUT_FILENO 1 ///< Standard output file descriptor.

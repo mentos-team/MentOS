@@ -5,8 +5,8 @@
 
 #pragma once
 
-#include "sys/types.h"
 #include "stddef.h"
+#include "sys/types.h"
 
 #define IPC_CREAT  01000 ///< Create key if key does not exist.
 #define IPC_EXCL   02000 ///< Fail if key exists.

@@ -4,15 +4,15 @@
 /// This file is based on the code from libmusl.
 
 #include "shadow.h"
+#include "ctype.h"
+#include "errno.h"
 #include "fcntl.h"
+#include "limits.h"
 #include "stdio.h"
 #include "stdlib.h"
 #include "string.h"
-#include "errno.h"
-#include "unistd.h"
 #include "sys/stat.h"
-#include "ctype.h"
-#include "limits.h"
+#include "unistd.h"
 
 /// @brief Converts a string to a long integer.
 ///
@@ -24,8 +24,10 @@
 static long xatol(char **s)
 {
     long x;
-    if (**s == ':' || **s == '\n') return -1;
-    for (x = 0; **s - '0' < 10U; ++*s) x = 10 * x + (**s - '0');
+    if (**s == ':' || **s == '\n')
+        return -1;
+    for (x = 0; **s - '0' < 10U; ++*s)
+        x = 10 * x + (**s - '0');
     return x;
 }
 
@@ -40,40 +42,49 @@ static long xatol(char **s)
 int __parsespent(char *s, struct spwd *sp)
 {
     sp->sp_namp = s;
-    if (!(s = strchr(s, ':'))) return -1;
+    if (!(s = strchr(s, ':')))
+        return -1;
     *s = 0;
 
     sp->sp_pwdp = ++s;
-    if (!(s = strchr(s, ':'))) return -1;
+    if (!(s = strchr(s, ':')))
+        return -1;
     *s = 0;
 
     s++;
     sp->sp_lstchg = xatol(&s);
-    if (*s != ':') return -1;
+    if (*s != ':')
+        return -1;
 
     s++;
     sp->sp_min = xatol(&s);
-    if (*s != ':') return -1;
+    if (*s != ':')
+        return -1;
 
     s++;
     sp->sp_max = xatol(&s);
-    if (*s != ':') return -1;
+    if (*s != ':')
+        return -1;
 
     s++;
     sp->sp_warn = xatol(&s);
-    if (*s != ':') return -1;
+    if (*s != ':')
+        return -1;
 
     s++;
     sp->sp_inact = xatol(&s);
-    if (*s != ':') return -1;
+    if (*s != ':')
+        return -1;
 
     s++;
     sp->sp_expire = xatol(&s);
-    if (*s != ':') return -1;
+    if (*s != ':')
+        return -1;
 
     s++;
     sp->sp_flag = xatol(&s);
-    if (*s != '\n') return -1;
+    if (*s != '\n')
+        return -1;
     return 0;
 }
 

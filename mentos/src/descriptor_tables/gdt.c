@@ -61,44 +61,24 @@ void init_gdt(void)
     // ------------------------------------------------------------------------
     // The base address is 0, the limit is 4GBytes, it uses 4KByte
     // granularity, uses 32-bit opcodes, and is a Code Segment descriptor.
-    gdt_set_gate(
-        1,
-        0,
-        0xFFFFFFFF,
-        GDT_PRESENT | GDT_KERNEL | GDT_CODE | GDT_RW,
-        GDT_GRANULARITY | GDT_OPERAND_SIZE);
+    gdt_set_gate(1, 0, 0xFFFFFFFF, GDT_PRESENT | GDT_KERNEL | GDT_CODE | GDT_RW, GDT_GRANULARITY | GDT_OPERAND_SIZE);
 
     // ------------------------------------------------------------------------
     // DATA
     // ------------------------------------------------------------------------
     // It's EXACTLY the same as our code segment, but the descriptor type in
     // this entry's access byte says it's a Data Segment.
-    gdt_set_gate(
-        2,
-        0,
-        0xFFFFFFFF,
-        GDT_PRESENT | GDT_KERNEL | GDT_DATA,
-        GDT_GRANULARITY | GDT_OPERAND_SIZE);
+    gdt_set_gate(2, 0, 0xFFFFFFFF, GDT_PRESENT | GDT_KERNEL | GDT_DATA, GDT_GRANULARITY | GDT_OPERAND_SIZE);
 
     // ------------------------------------------------------------------------
     // USER MODE CODE
     // ------------------------------------------------------------------------
-    gdt_set_gate(
-        3,
-        0,
-        0xFFFFFFFF,
-        GDT_PRESENT | GDT_USER | GDT_CODE | GDT_RW,
-        GDT_GRANULARITY | GDT_OPERAND_SIZE);
+    gdt_set_gate(3, 0, 0xFFFFFFFF, GDT_PRESENT | GDT_USER | GDT_CODE | GDT_RW, GDT_GRANULARITY | GDT_OPERAND_SIZE);
 
     // ------------------------------------------------------------------------
     // USER MODE DATA
     // ------------------------------------------------------------------------
-    gdt_set_gate(
-        4,
-        0,
-        0xFFFFFFFF,
-        GDT_PRESENT | GDT_USER | GDT_DATA,
-        GDT_GRANULARITY | GDT_OPERAND_SIZE);
+    gdt_set_gate(4, 0, 0xFFFFFFFF, GDT_PRESENT | GDT_USER | GDT_DATA, GDT_GRANULARITY | GDT_OPERAND_SIZE);
 
     // Initialize the TSS
     tss_init(5, 0x10);
@@ -125,9 +105,10 @@ void gdt_set_gate(uint8_t index, uint32_t base, uint32_t limit, uint8_t access, 
     gdt[index].granularity |= granul & 0xF0U;
     gdt[index].access = access;
     pr_debug(
-        "gdt[%2d] = {.low=0x%x, .mid=0x%x, .high=0x%x, .access=0x%x, .granul=0x%x}\n",
-        index, gdt[index].base_low, gdt[index].base_middle,
-        gdt[index].base_high, gdt[index].access, gdt[index].granularity);
+        "gdt[%2d] = {.low=0x%x, .mid=0x%x, .high=0x%x, .access=0x%x, "
+        ".granul=0x%x}\n",
+        index, gdt[index].base_low, gdt[index].base_middle, gdt[index].base_high, gdt[index].access,
+        gdt[index].granularity);
 }
 
 //

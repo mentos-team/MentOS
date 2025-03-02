@@ -5,8 +5,8 @@
 
 #pragma once
 
-#include "stddef.h"
 #include "assert.h"
+#include "stddef.h"
 
 /// @brief Structure used to implement the list_head data structure.
 typedef struct list_head {
@@ -23,42 +23,37 @@ typedef struct list_head {
 /// @brief Iterates over a list.
 /// @param pos the name of the iterator used to visit the list.
 /// @param head the head for your list.
-#define list_for_each(pos, head) \
-    for ((pos) = (head)->next; (pos) != (head); (pos) = (pos)->next)
+#define list_for_each(pos, head) for ((pos) = (head)->next; (pos) != (head); (pos) = (pos)->next)
 
 /// @brief Iterates over a list safe against removal of list entry.
 /// @param pos the name of the iterator used to visit the list.
 /// @param store another list iterator to use as temporary storage.
 /// @param head the head for your list.
-#define list_for_each_safe(pos, store, head)                           \
-    for ((pos) = (head)->next, (store) = (pos)->next; (pos) != (head); \
-         (pos) = (store), (store) = (pos)->next)
+#define list_for_each_safe(pos, store, head)                                                                           \
+    for ((pos) = (head)->next, (store) = (pos)->next; (pos) != (head); (pos) = (store), (store) = (pos)->next)
 
 /// @brief Iterates over a list, but declares the iterator.
 /// @param pos the name of the iterator used to visit the list.
 /// @param head the head for your list.
-#define list_for_each_decl(pos, head) \
-    for (list_head * (pos) = (head)->next; (pos) != (head); (pos) = (pos)->next)
+#define list_for_each_decl(pos, head) for (list_head * (pos) = (head)->next; (pos) != (head); (pos) = (pos)->next)
 
 /// @brief Iterates over a list safe against removal of list entry.
 /// @param pos the name of the iterator used to visit the list.
 /// @param store another list iterator to use as temporary storage.
 /// @param head the head for your list.
-#define list_for_each_safe_decl(pos, store, head)                                   \
-    for (list_head * (pos) = (head)->next, *(store) = (pos)->next; (pos) != (head); \
+#define list_for_each_safe_decl(pos, store, head)                                                                      \
+    for (list_head * (pos) = (head)->next, *(store) = (pos)->next; (pos) != (head);                                    \
          (pos) = (store), (store) = (pos)->next)
 
 /// @brief Iterates over a list backwards.
 /// @param pos the name of the iterator used to visit the list.
 /// @param head the head for your list.
-#define list_for_each_prev(pos, head) \
-    for ((pos) = (head)->prev; (pos) != (head); (pos) = (pos)->prev)
+#define list_for_each_prev(pos, head) for ((pos) = (head)->prev; (pos) != (head); (pos) = (pos)->prev)
 
 /// @brief Iterates over a list backwards, but declares the iterator.
 /// @param pos the name of the iterator used to visit the list.
 /// @param head the head for your list.
-#define list_for_each_prev_decl(pos, head) \
-    for (list_head * (pos) = (head)->prev; (pos) != (head); (pos) = (pos)->prev)
+#define list_for_each_prev_decl(pos, head) for (list_head * (pos) = (head)->prev; (pos) != (head); (pos) = (pos)->prev)
 
 /// @brief Initializes the list_head.
 /// @param head The head of your list.
@@ -86,7 +81,8 @@ static inline unsigned list_head_size(const list_head *head)
 
     unsigned size = 0;
     if (!list_head_empty(head)) {
-        list_for_each_decl(it, head) size += 1;
+        list_for_each_decl (it, head)
+            size += 1;
     }
     return size;
 }
@@ -104,13 +100,13 @@ static inline void list_head_insert_after(list_head *new_entry, list_head *locat
     // We store the old `next` element.
     list_head *old_next = location->next;
     // We insert our element.
-    location->next = new_entry;
+    location->next      = new_entry;
     // We update the `previous` link of our new entry.
-    new_entry->prev = location;
+    new_entry->prev     = location;
     // We update the `next` link of our new entry.
-    new_entry->next = old_next;
+    new_entry->next     = old_next;
     // We link the previously `next` element to our new entry.
-    old_next->prev = new_entry;
+    old_next->prev      = new_entry;
 }
 
 /// @brief Insert the new entry before the given location.
@@ -123,13 +119,13 @@ static inline void list_head_insert_before(list_head *new_entry, list_head *loca
     // We store the old `previous` element.
     list_head *old_prev = location->prev;
     // We link the old `previous` element to our new entry.
-    old_prev->next = new_entry;
+    old_prev->next      = new_entry;
     // We update the `previous` link of our new entry.
-    new_entry->prev = old_prev;
+    new_entry->prev     = old_prev;
     // We update the `next` link of our new entry.
-    new_entry->next = location;
+    new_entry->next     = location;
     // Finally, we close the link with the old insertion location element.
-    location->prev = new_entry;
+    location->prev      = new_entry;
 }
 
 /// @brief Removes the given entry from the list it is contained in.
@@ -185,13 +181,13 @@ static inline void list_head_append(list_head *main, list_head *secondary)
         assert(secondary->next && "Attribute secondary->next is NULL."); // Check secondary's next pointer
         assert(secondary->prev && "Attribute secondary->prev is NULL."); // Check secondary's previous pointer
         // Connect the last element of the main list to the first one of the secondary list.
-        main->prev->next = secondary->next;
+        main->prev->next      = secondary->next;
         // Connect the first element of the secondary list to the last one of the main list.
         secondary->next->prev = main->prev;
         // Connect the last element of the secondary list to our main.
         secondary->prev->next = main;
         // Connect our main to the last element of the secondary list.
-        main->prev = secondary->prev;
+        main->prev            = secondary->prev;
         // Re-initialize the secondary list.
         list_head_init(secondary);
     }

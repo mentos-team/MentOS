@@ -3,19 +3,19 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include <stdio.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <string.h>
 #include <errno.h>
+#include <fcntl.h>
+#include <stdio.h>
+#include <string.h>
 #include <sys/wait.h>
 #include <time.h>
+#include <unistd.h>
 
 int main(void)
 {
     int fds[2];
     char write_msg[]                 = "Blocking test message";
-    char read_msg[sizeof(write_msg)] = { 0 };
+    char read_msg[sizeof(write_msg)] = {0};
     ssize_t bytes_written, bytes_read;
     int error_code = 0;
 
@@ -46,7 +46,7 @@ int main(void)
         close(fds[1]); // Close unused write end
 
         // Request to sleep for 100 ms.
-        struct timespec req = { 0, 100000000 };
+        struct timespec req = {0, 100000000};
 
         printf("Child waiting to read from pipe...\n");
         do {
@@ -73,7 +73,7 @@ int main(void)
         close(fds[0]); // Close unused read end.
 
         // Request to sleep for 500 ms.
-        struct timespec req = { 0, 500000000 };
+        struct timespec req = {0, 500000000};
 
         // Sleep for 500 ms.
         nanosleep(&req, NULL);

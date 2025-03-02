@@ -13,6 +13,7 @@
 
 #include "descriptor_tables/isr.h"
 #include "devices/fpu.h"
+#include "errno.h"
 #include "fs/attr.h"
 #include "fs/vfs.h"
 #include "hardware/timer.h"
@@ -20,14 +21,13 @@
 #include "mem/kheap.h"
 #include "process/process.h"
 #include "process/scheduler.h"
-#include "errno.h"
 #include "sys/mman.h"
 #include "sys/msg.h"
 #include "sys/sem.h"
 #include "sys/shm.h"
 #include "sys/utsname.h"
-#include "system/syscall.h"
 #include "system/printk.h"
+#include "system/syscall.h"
 
 /// The signature of a function call.
 typedef int (*SystemCall)(void);
@@ -44,10 +44,7 @@ SystemCall sys_call_table[SYSCALL_NUMBER];
 /// nothing except return ENOSYS, the error corresponding to an invalid
 /// system call. This function is used to "plug the hole" in the rare event that
 /// a syscall is removed or otherwise made unavailable.
-static inline int sys_ni_syscall(void)
-{
-    return -ENOSYS;
-}
+static inline int sys_ni_syscall(void) { return -ENOSYS; }
 
 void syscall_init(void)
 {
@@ -144,7 +141,7 @@ void syscall_handler(pt_regs *f)
         SystemCall5 fun = (SystemCall5)sys_call_table[f->eax];
 
         // Initialize an array to hold up to 5 arguments for the system call.
-        unsigned args[5] = { 0 };
+        unsigned args[5] = {0};
 
         // Special handling for specific system calls that do not follow the standard argument convention.
         if ((f->eax == __NR_fork) || (f->eax == __NR_clone) || (f->eax == __NR_execve) || (f->eax == __NR_sigreturn)) {
@@ -165,7 +162,7 @@ void syscall_handler(pt_regs *f)
 
     // Schedule next process.
     scheduler_run(f);
-    
+
     // Restore fpu state.
     unswitch_fpu();
 }

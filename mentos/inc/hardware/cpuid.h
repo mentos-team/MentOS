@@ -9,8 +9,8 @@
 
 #pragma once
 
-#include "stdint.h"
 #include "kernel.h"
+#include "stdint.h"
 
 /// Dimension of the exc flags.
 #define ECX_FLAGS_SIZE 24

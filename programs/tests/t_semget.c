@@ -6,16 +6,16 @@
 /// @copyright (c) 2014-2024
 /// This file is distributed under the MIT License. See LICENSE.md for details.
 
-#include <unistd.h>
 #include <errno.h>
-#include <sys/stat.h>
-#include <strerror.h>
-#include <sys/wait.h>
-#include <sys/sem.h>
-#include <sys/ipc.h>
-#include <stdlib.h>
 #include <fcntl.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <strerror.h>
+#include <sys/ipc.h>
+#include <sys/sem.h>
+#include <sys/stat.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 int main(int argc, char *argv[])
 {
@@ -71,7 +71,7 @@ int main(int argc, char *argv[])
         op_child.sem_flg = 0; // No special flags.
 
         // Simulate some work before modifying the semaphore.
-        timespec_t req = { 0, 200000000 };
+        timespec_t req = {0, 200000000};
         nanosleep(&req, NULL);
 
         // Increment the semaphore, unblocking the parent.

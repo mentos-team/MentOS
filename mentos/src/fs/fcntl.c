@@ -3,10 +3,10 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "process/scheduler.h"
-#include "system/syscall.h"
 #include "errno.h"
 #include "fs/vfs.h"
+#include "process/scheduler.h"
+#include "system/syscall.h"
 
 long sys_fcntl(int fd, unsigned int request, unsigned long data)
 {

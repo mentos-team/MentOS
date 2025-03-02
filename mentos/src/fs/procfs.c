@@ -10,20 +10,20 @@
 #include "io/debug.h"                    // Include debugging functions.
 
 #include "assert.h"
+#include "errno.h"
 #include "fcntl.h"
-#include "sys/stat.h"
 #include "fs/procfs.h"
 #include "fs/vfs.h"
 #include "libgen.h"
 #include "stdio.h"
 #include "string.h"
-#include "errno.h"
+#include "sys/stat.h"
 #include "time.h"
 
 /// Maximum length of name in PROCFS.
-#define PROCFS_NAME_MAX 255U
+#define PROCFS_NAME_MAX     255U
 /// Maximum number of files in PROCFS.
-#define PROCFS_MAX_FILES 1024U
+#define PROCFS_MAX_FILES    1024U
 /// The magic number used to check if the procfs file is valid.
 #define PROCFS_MAGIC_NUMBER 0xBF
 
@@ -156,8 +156,7 @@ static inline procfs_file_t *procfs_find_entry_path(const char *path)
 {
     procfs_file_t *procfs_file;
     if (!list_head_empty(&fs.files)) {
-        list_for_each_decl(it, &fs.files)
-        {
+        list_for_each_decl (it, &fs.files) {
             // Get the file structure.
             procfs_file = procfs_get_file(it);
             // Check its name.
@@ -176,8 +175,7 @@ static inline procfs_file_t *procfs_find_entry_inode(uint32_t inode)
 {
     procfs_file_t *procfs_file;
     if (!list_head_empty(&fs.files)) {
-        list_for_each_decl(it, &fs.files)
-        {
+        list_for_each_decl (it, &fs.files) {
             // Get the file structure.
             procfs_file = procfs_get_file(it);
             // Check its inode.
@@ -221,8 +219,7 @@ static inline int procfs_check_if_empty(const char *path)
     procfs_file_t *procfs_file;
     if (!list_head_empty(&fs.files)) {
         char filedir[PATH_MAX];
-        list_for_each_decl(it, &fs.files)
-        {
+        list_for_each_decl (it, &fs.files) {
             // Get the file structure.
             procfs_file = procfs_get_file(it);
             // Check if it a valid pointer.
@@ -273,11 +270,11 @@ static inline procfs_file_t *procfs_create_file(const char *path, unsigned flags
     // Add the file to the list of opened files.
     list_head_insert_before(&procfs_file->siblings, &fs.files);
     // Time of last access.
-    procfs_file->atime = sys_time(NULL);
+    procfs_file->atime                    = sys_time(NULL);
     // Time of last data modification.
-    procfs_file->mtime = procfs_file->atime;
+    procfs_file->mtime                    = procfs_file->atime;
     // Time of last status change.
-    procfs_file->ctime = procfs_file->atime;
+    procfs_file->ctime                    = procfs_file->atime;
     // Initialize the dir_entry.
     procfs_file->dir_entry.name           = basename(procfs_file->name);
     procfs_file->dir_entry.data           = NULL;
@@ -319,7 +316,10 @@ static inline vfs_file_t *procfs_create_file_struct(procfs_file_t *procfs_file)
     }
     vfs_file_t *vfs_file = vfs_alloc_file();
     if (!vfs_file) {
-        pr_err("procfs_create_file_struct(%p): Failed to allocate memory for VFS file!\n", procfs_file);
+        pr_err(
+            "procfs_create_file_struct(%p): Failed to allocate memory for VFS "
+            "file!\n",
+            procfs_file);
         return NULL;
     }
     memset(vfs_file, 0, sizeof(vfs_file_t));
@@ -343,8 +343,7 @@ static void dump_procfs(void)
 {
     procfs_file_t *file;
     if (!list_head_empty(&fs.files)) {
-        list_for_each_decl(it, &fs.files)
-        {
+        list_for_each_decl (it, &fs.files) {
             // Get the file structure.
             file = procfs_get_file(it);
             // Check if it a valid procfs file.
@@ -471,14 +470,20 @@ static vfs_file_t *procfs_open(const char *path, int flags, mode_t mode)
         if (bitmask_check(flags, O_DIRECTORY)) {
             // Check if the file is a directory.
             if (!bitmask_check(procfs_file->flags, DT_DIR)) {
-                pr_err("Is not a directory `%s` but access requested involved a directory.\n", path);
+                pr_err(
+                    "Is not a directory `%s` but access requested involved a "
+                    "directory.\n",
+                    path);
                 errno = ENOTDIR;
                 return NULL;
             }
             // Check if pathname refers to a directory and the access requested
             // involved writing.
             if (bitmask_check(flags, O_RDWR) || bitmask_check(flags, O_WRONLY)) {
-                pr_err("Is a directory `%s` but access requested involved writing.\n", path);
+                pr_err(
+                    "Is a directory `%s` but access requested involved "
+                    "writing.\n",
+                    path);
                 errno = EISDIR;
                 return NULL;
             }
@@ -790,8 +795,7 @@ static inline ssize_t procfs_getdents(vfs_file_t *file, dirent_t *dirp, off_t do
     off_t iterated_size  = 0;
     char parent_path[PATH_MAX];
     // Iterate the filesystem files.
-    list_for_each_decl(it, &fs.files)
-    {
+    list_for_each_decl (it, &fs.files) {
         // Get the file structure.
         procfs_file_t *entry = procfs_get_file(it);
         // Check if it a valid procfs file.
@@ -841,10 +845,7 @@ static inline ssize_t procfs_getdents(vfs_file_t *file, dirent_t *dirp, off_t do
 /// @param block_device the block device formatted as procfs.
 /// @param path location where we mount the filesystem.
 /// @return the VFS root node of the procfs filesystem.
-static vfs_file_t *procfs_mount(vfs_file_t *block_device, const char *path)
-{
-    return NULL;
-}
+static vfs_file_t *procfs_mount(vfs_file_t *block_device, const char *path) { return NULL; }
 
 // ============================================================================
 // Initialization Functions
@@ -870,11 +871,7 @@ static vfs_file_t *procfs_mount_callback(const char *path, const char *device)
 }
 
 /// Filesystem information.
-static file_system_type_t procfs_file_system_type = {
-    .name     = "procfs",
-    .fs_flags = 0,
-    .mount    = procfs_mount_callback
-};
+static file_system_type_t procfs_file_system_type = {.name = "procfs", .fs_flags = 0, .mount = procfs_mount_callback};
 
 int procfs_module_init(void)
 {

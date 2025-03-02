@@ -3,17 +3,17 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "libgen.h"
-#include "process/scheduler.h"
+#include "errno.h"
 #include "fcntl.h"
 #include "fs/namei.h"
 #include "fs/vfs.h"
 #include "io/debug.h"
+#include "libgen.h"
 #include "limits.h"
 #include "process/process.h"
+#include "process/scheduler.h"
 #include "stdio.h"
 #include "string.h"
-#include "errno.h"
 #include "system/printk.h"
 #include "system/syscall.h"
 
@@ -75,14 +75,14 @@ static inline void __iattr_set_owner_or_group(struct iattr *attr, uid_t owner, g
 
 int sys_chown(const char *path, uid_t owner, gid_t group)
 {
-    struct iattr attr = { 0 };
+    struct iattr attr = {0};
     __iattr_set_owner_or_group(&attr, owner, group);
     return __setattr(path, &attr, true);
 }
 
 int sys_lchown(const char *path, uid_t owner, gid_t group)
 {
-    struct iattr attr = { 0 };
+    struct iattr attr = {0};
     __iattr_set_owner_or_group(&attr, owner, group);
     return __setattr(path, &attr, false);
 }
@@ -118,7 +118,7 @@ int sys_fchown(int fd, uid_t owner, gid_t group)
         pr_err("No setattr function found for the current filesystem.\n");
         return -ENOSYS;
     }
-    struct iattr attr = { 0 };
+    struct iattr attr = {0};
     __iattr_set_owner_or_group(&attr, owner, group);
     return file->fs_operations->setattr_f(file, &attr);
 }

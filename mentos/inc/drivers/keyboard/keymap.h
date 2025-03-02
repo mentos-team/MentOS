@@ -41,7 +41,6 @@ keymap_type_t get_keymap_type(void);
 /// @param type The type to set.
 void set_keymap_type(keymap_type_t type);
 
-
 /// @brief Returns the current keymap for the given scancode.
 /// @param scancode the scancode we want.
 /// @return Pointer to the keymap.

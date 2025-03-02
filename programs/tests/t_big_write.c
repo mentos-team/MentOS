@@ -8,8 +8,8 @@
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <strerror.h>
+#include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -20,8 +20,8 @@
 int main(int argc, char *argv[])
 {
     mode_t mode                    = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP;
-    char write_buffer[BUFFER_SIZE] = { 0 };
-    char read_buffer[BUFFER_SIZE]  = { 0 };
+    char write_buffer[BUFFER_SIZE] = {0};
+    char read_buffer[BUFFER_SIZE]  = {0};
 
     // Open the file with specified flags and mode.
     int fd = open(FILENAME, O_WRONLY | O_CREAT | O_TRUNC, mode);

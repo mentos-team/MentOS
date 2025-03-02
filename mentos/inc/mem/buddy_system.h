@@ -5,21 +5,19 @@
 
 #pragma once
 
-#include "list_head.h"
 #include "klib/stdatomic.h"
+#include "list_head.h"
 #include "stdint.h"
 
 /// @brief Max gfp pages order of buddysystem blocks.
 #define MAX_BUDDYSYSTEM_GFP_ORDER 14
 
 /// @brief Provide the offset of the element inside the given type of page.
-#define BBSTRUCT_OFFSET(page, element) \
-    ((uint32_t) & (((page *)NULL)->element))
+#define BBSTRUCT_OFFSET(page, element) ((uint32_t)&(((page *)NULL)->element))
 
 /// @brief Returns the address of the given element of a given type of page,
 ///        based on the provided bbstruct.
-#define PG_FROM_BBSTRUCT(bbstruct, page, element) \
-    ((page *)(((uint32_t)(bbstruct)) - BBSTRUCT_OFFSET(page, element)))
+#define PG_FROM_BBSTRUCT(bbstruct, page, element) ((page *)(((uint32_t)(bbstruct)) - BBSTRUCT_OFFSET(page, element)))
 
 /// The base structure representing a bb page
 typedef struct bb_page_t {

@@ -5,8 +5,8 @@
 
 #pragma once
 
-#include "stdint.h"
 #include "io/ansi_colors.h"
+#include "stdint.h"
 
 /// @brief Initialize the video.
 void video_init(void);
@@ -33,12 +33,12 @@ void video_move_cursor(unsigned int x, unsigned int y);
 /// @brief Returns cursor's position on the screen.
 /// @param x The output x coordinate.
 /// @param y The output y coordinate.
-void video_get_cursor_position(unsigned int * x, unsigned int * y);
+void video_get_cursor_position(unsigned int *x, unsigned int *y);
 
 /// @brief Returns screen size.
 /// @param width The screen width.
 /// @param height The screen height.
-void video_get_screen_size(unsigned int * width, unsigned int * height);
+void video_get_screen_size(unsigned int *width, unsigned int *height);
 
 /// @brief Clears the screen.
 void video_clear(void);
