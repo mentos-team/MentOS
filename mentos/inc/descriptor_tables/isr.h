@@ -89,9 +89,9 @@ extern void irq_handler(pt_regs *f);
 // Reserved [21-29].
 #define SECURITY_EXC        30 ///< Security Exception.
 #define TRIPLE_FAULT        31 ///< Triple Fault
-#define SYSTEM_CALL                                                                                                    \
-    80 ///< System call interrupt.                                             \
-        //==============================================================================
+#define SYSTEM_CALL         80 ///< System call interrupt.
+
+//==============================================================================
 
 /// @}
 /// @}
