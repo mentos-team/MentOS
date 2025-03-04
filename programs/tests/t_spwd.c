@@ -25,7 +25,7 @@ int test_generate(void)
     const char input[] = "Knowledge is power, but enthusiasm pulls the switch.";
 
     // Buffer to hold the hexadecimal representation of the hash.
-    char output[SHA256_BLOCK_SIZE * 2 + 1] = {0};
+    char output[(SHA256_BLOCK_SIZE * 2) + 1] = {0};
 
     // Input string to be hashed.
     const char expected[] = "6a1399bdcf1fa1ced3d7148a3f5472a5105ff30f730069fc8bdb73bdc018cb42";
@@ -45,10 +45,10 @@ int test_generate(void)
     sha256_final(&ctx, buffer);
 
     // Convert the hash bytes to a hexadecimal string.
-    sha256_bytes_to_hex(buffer, SHA256_BLOCK_SIZE, output, SHA256_BLOCK_SIZE * 2 + 1);
+    sha256_bytes_to_hex(buffer, SHA256_BLOCK_SIZE, output, (SHA256_BLOCK_SIZE * 2) + 1);
 
     // Check if both hashes match.
-    if (strncmp(output, expected, strlen(expected))) {
+    if (strncmp(output, expected, strlen(expected)) != 0) {
         fprintf(stderr, "Hashes do not match:\n");
         fprintf(stderr, "Input    : `%s`\n", input);
         fprintf(stderr, "Output   : `%s`\n", output);

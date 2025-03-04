@@ -87,7 +87,7 @@ void timer_phase(const uint32_t hz)
     // Set low byte of divisor.
     outportb(PIT_DATAREG0, divisor & PIT_MASK);
     // Set high byte of divisor.
-    outportb(PIT_DATAREG0, (divisor >> 8u) & PIT_MASK);
+    outportb(PIT_DATAREG0, (divisor >> 8U) & PIT_MASK);
 }
 
 void timer_handler(pt_regs *reg)

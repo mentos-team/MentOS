@@ -128,8 +128,8 @@ double ln(double x)
 double logx(double x, double y)
 {
     // Base may not equal 1 or be negative.
-    if (y == 1.f || y < 0.f || ln(y) == 0.f) {
-        return 0.f;
+    if (y == 1.F || y < 0.F || ln(y) == 0.F) {
+        return 0.F;
     }
     return ln(x) / ln(y);
 }

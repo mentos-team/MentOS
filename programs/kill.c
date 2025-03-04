@@ -13,9 +13,11 @@
 static inline int is_number(char *s)
 {
     size_t len = strlen(s);
-    for (size_t i = 0; i < len; ++i)
-        if (!isdigit(s[i]))
+    for (size_t i = 0; i < len; ++i) {
+        if (!isdigit(s[i])) {
             return 0;
+        }
+    }
     return 1;
 }
 
@@ -23,17 +25,18 @@ static inline void print_signal_list(void)
 {
     for (int it = 1; it < (NSIG - 1); ++it) {
         printf("%6s ", strsignal(it));
-        if ((it % 8) == 0)
+        if ((it % 8) == 0) {
             putchar('\n');
+        }
     }
 }
 
 static inline int get_signal(char *s)
 {
     int signr = 0;
-    if (is_number(s))
+    if (is_number(s)) {
         signr = atoi(s);
-    else {
+    } else {
         ++s;
         for (int it = 1; it < (NSIG - 1); ++it) {
             if (strcmp(s, strsignal(it)) == 0) {
@@ -42,8 +45,9 @@ static inline int get_signal(char *s)
             }
         }
     }
-    if ((signr <= 0) || (signr >= NSIG))
+    if ((signr <= 0) || (signr >= NSIG)) {
         signr = 0;
+    }
     return signr;
 }
 
@@ -66,7 +70,8 @@ static inline int send_signal(int pid, int signr)
 
 int main(int argc, char **argv)
 {
-    int pid, signr;
+    int pid;
+    int signr;
 
     if (argc == 1) {
         printf("%s: not enough arguments.\n", argv[0]);
@@ -94,9 +99,11 @@ int main(int argc, char **argv)
             return 1;
         }
 
-        for (int i = 2; i < argc; ++i)
-            if ((pid = get_pid(argv[i])))
+        for (int i = 2; i < argc; ++i) {
+            if ((pid = get_pid(argv[i]))) {
                 send_signal(pid, signr);
+            }
+        }
     }
     putchar('\n');
     return 0;

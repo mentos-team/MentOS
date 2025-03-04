@@ -95,26 +95,26 @@ wait_queue_entry_t *wait_queue_entry_alloc(void);
 void wait_queue_entry_dealloc(wait_queue_entry_t *wait_queue_entry);
 
 /// @brief Initialize the waiting queue entry.
-/// @param wq   The entry we initialize.
+/// @param entry The entry we initialize.
 /// @param task The task associated with the entry.
-void wait_queue_entry_init(wait_queue_entry_t *wq, struct task_struct *task);
+void wait_queue_entry_init(wait_queue_entry_t *entry, struct task_struct *task);
 
 /// @brief Adds the element to the waiting queue.
 /// @param head The head of the waiting queue.
-/// @param wq   The entry we insert inside the waiting queue.
-void add_wait_queue(wait_queue_head_t *head, wait_queue_entry_t *wq);
+/// @param entry The entry we insert inside the waiting queue.
+void add_wait_queue(wait_queue_head_t *head, wait_queue_entry_t *entry);
 
 /// @brief Removes the element from the waiting queue.
 /// @param head The head of the waiting queue.
-/// @param wq   The entry we remove from the waiting queue.
-void remove_wait_queue(wait_queue_head_t *head, wait_queue_entry_t *wq);
+/// @param entry The entry we remove from the waiting queue.
+void remove_wait_queue(wait_queue_head_t *head, wait_queue_entry_t *entry);
 
 /// @brief The default wake function, a wrapper for try_to_wake_up.
-/// @param wait The pointer to the wait queue.
+/// @param entry The pointer to the wait queue.
 /// @param mode The type of wait (TASK_INTERRUPTIBLE or TASK_UNINTERRUPTIBLE).
 /// @param sync Specifies if the wakeup should be synchronous.
 /// @return 1 on success, 0 on failure.
-int default_wake_function(wait_queue_entry_t *wait, unsigned mode, int sync);
+int default_wake_function(wait_queue_entry_t *entry, unsigned mode, int sync);
 
 /// @brief Sets the state of the current process to TASK_UNINTERRUPTIBLE
 ///        and inserts it into the specified wait queue.

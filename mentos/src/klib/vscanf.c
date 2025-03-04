@@ -10,18 +10,21 @@
 #include "string.h"
 
 /// @brief Read formatted data from string.
-/// @param buf String processed as source to retrieve the data.
+/// @param str String processed as source to retrieve the data.
 /// @param s  Format string, following the same specifications as printf.
 /// @param ap The list of arguments where the values are stored.
 /// @return On success, the function returns the number of items of the
 ///         argument list successfully filled. EOF otherwise.
-static int vsscanf(const char *buf, const char *s, va_list ap)
+static int vsscanf(const char *str, const char *s, va_list ap)
 {
-    int count = 0, noassign = 0, width = 0, base = 0;
+    int count    = 0;
+    int noassign = 0;
+    int width    = 0;
+    int base     = 0;
     const char *tc;
     char tmp[BUFSIZ];
 
-    while (*s && *buf) {
+    while (*s && *str) {
         while (isspace(*s)) {
             ++s;
         }
@@ -48,32 +51,32 @@ static int vsscanf(const char *buf, const char *s, va_list ap)
                 }
             }
             if (*s == 's') {
-                while (isspace(*buf)) {
-                    ++buf;
+                while (isspace(*str)) {
+                    ++str;
                 }
                 if (!width) {
-                    width = strcspn(buf, " \t\n\r\f\v");
+                    width = strcspn(str, " \t\n\r\f\v");
                 }
                 if (!noassign) {
                     char *string = va_arg(ap, char *);
-                    strncpy(string, buf, width);
+                    strncpy(string, str, width);
                     string[width] = '\0';
                 }
-                buf += width;
+                str += width;
             } else if (*s == 'c') {
-                while (isspace(*buf)) {
-                    ++buf;
+                while (isspace(*str)) {
+                    ++str;
                 }
                 if (!width) {
                     width = 1;
                 }
                 if (!noassign) {
-                    strncpy(va_arg(ap, char *), buf, width);
+                    strncpy(va_arg(ap, char *), str, width);
                 }
-                buf += width;
+                str += width;
             } else if (strchr("duxob", *s)) {
-                while (isspace(*buf)) {
-                    ++buf;
+                while (isspace(*str)) {
+                    ++str;
                 }
                 if (*s == 'd' || *s == 'u') {
                     base = 10;
@@ -86,14 +89,14 @@ static int vsscanf(const char *buf, const char *s, va_list ap)
                 }
                 if (!width) {
                     if (isspace(*(s + 1)) || *(s + 1) == 0) {
-                        width = strcspn(buf, " \t\n\r\f\v");
+                        width = strcspn(str, " \t\n\r\f\v");
                     } else {
-                        width = strchr(buf, *(s + 1)) - buf;
+                        width = strchr(str, *(s + 1)) - str;
                     }
                 }
-                strncpy(tmp, buf, width);
+                strncpy(tmp, str, width);
                 tmp[width] = '\0';
-                buf += width;
+                str += width;
                 if (!noassign) {
                     *va_arg(ap, unsigned int *) = strtol(tmp, NULL, base);
                 }
@@ -104,24 +107,24 @@ static int vsscanf(const char *buf, const char *s, va_list ap)
             width = noassign = 0;
             ++s;
         } else {
-            while (isspace(*buf)) {
-                ++buf;
+            while (isspace(*str)) {
+                ++str;
             }
-            if (*s != *buf) {
+            if (*s != *str) {
                 break;
             }
-            ++s, ++buf;
+            ++s, ++str;
         }
     }
     return (count);
 }
 
-int sscanf(const char *buf, const char *fmt, ...)
+int sscanf(const char *str, const char *format, ...)
 {
     va_list ap;
 
-    va_start(ap, fmt);
-    int count = vsscanf(buf, fmt, ap);
+    va_start(ap, format);
+    int count = vsscanf(str, format, ap);
     va_end(ap);
     return count;
 }

@@ -24,10 +24,12 @@
 static long xatol(char **s)
 {
     long x;
-    if (**s == ':' || **s == '\n')
+    if (**s == ':' || **s == '\n') {
         return -1;
-    for (x = 0; **s - '0' < 10U; ++*s)
+    }
+    for (x = 0; **s - '0' < 10U; ++*s) {
         x = 10 * x + (**s - '0');
+    }
     return x;
 }
 
@@ -42,49 +44,58 @@ static long xatol(char **s)
 int __parsespent(char *s, struct spwd *sp)
 {
     sp->sp_namp = s;
-    if (!(s = strchr(s, ':')))
+    if (!(s = strchr(s, ':'))) {
         return -1;
+    }
     *s = 0;
 
     sp->sp_pwdp = ++s;
-    if (!(s = strchr(s, ':')))
+    if (!(s = strchr(s, ':'))) {
         return -1;
+    }
     *s = 0;
 
     s++;
     sp->sp_lstchg = xatol(&s);
-    if (*s != ':')
+    if (*s != ':') {
         return -1;
+    }
 
     s++;
     sp->sp_min = xatol(&s);
-    if (*s != ':')
+    if (*s != ':') {
         return -1;
+    }
 
     s++;
     sp->sp_max = xatol(&s);
-    if (*s != ':')
+    if (*s != ':') {
         return -1;
+    }
 
     s++;
     sp->sp_warn = xatol(&s);
-    if (*s != ':')
+    if (*s != ':') {
         return -1;
+    }
 
     s++;
     sp->sp_inact = xatol(&s);
-    if (*s != ':')
+    if (*s != ':') {
         return -1;
+    }
 
     s++;
     sp->sp_expire = xatol(&s);
-    if (*s != ':')
+    if (*s != ':') {
         return -1;
+    }
 
     s++;
     sp->sp_flag = xatol(&s);
-    if (*s != '\n')
+    if (*s != '\n') {
         return -1;
+    }
     return 0;
 }
 
@@ -147,7 +158,7 @@ int getspnam_r(const char *name, struct spwd *spwd_buf, char *buf, size_t buflen
     // Read lines from the shadow file.
     while (fgets(buf, buflen, fd) && (k = strlen(buf)) > 0) {
         // If skipping the line (due to being too long), or if the line does not match the user name:
-        if (skip || strncmp(name, buf, l) || buf[l] != ':') {
+        if (skip || strncmp(name, buf, l) != 0 || buf[l] != ':') {
             // Set skip if the line does not end with a newline.
             skip = buf[k - 1] != '\n';
             continue;

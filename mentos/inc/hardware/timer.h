@@ -32,14 +32,14 @@
 /// Number of ticks per seconds.
 #define TICKS_PER_SECOND 1193
 
-/// @brief   Handles the timer.
-/// @param f The interrupt stack frame.
+/// @brief Handles the timer.
+/// @param reg The interrupt stack frame.
 /// @details
 /// In this case, it's very simple: We increment the 'timer_ticks' variable
 /// every time the timer fires. By default, the timer fires 18.222 times
 /// per second. Why 18.222Hz? Some engineer at IBM must've been smoking
 /// something funky.
-void timer_handler(pt_regs *f);
+void timer_handler(pt_regs *reg);
 
 /// @brief Sets up the system clock by installing the timer handler into IRQ0.
 void timer_install(void);
@@ -54,7 +54,7 @@ unsigned long timer_get_ticks(void);
 
 /// @brief Allows to set the timer phase to the given frequency.
 /// @param hz The frequency to set.
-void timer_phase(const uint32_t hz);
+void timer_phase(uint32_t hz);
 
 // ===============================================================================
 // Per-CPU timer vectors

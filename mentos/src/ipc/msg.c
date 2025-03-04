@@ -85,7 +85,8 @@ static inline void __msq_info_dealloc(msq_info_t *msq_info)
 {
     assert(msq_info && "Received a NULL pointer.");
     // Free the memory of all the messages.
-    struct msg *message = msq_info->msg_first, *next = NULL;
+    struct msg *message = msq_info->msg_first;
+    struct msg *next    = NULL;
     while (message) {
         next = message->msg_next;
         // Free the memory of the message.
@@ -551,7 +552,9 @@ ssize_t procipc_msg_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyte
         pr_err("Received a NULL file.\n");
         return -ENOENT;
     }
-    size_t buffer_len = 0, read_pos = 0, ret = 0;
+    size_t buffer_len    = 0;
+    size_t read_pos      = 0;
+    size_t ret           = 0;
     ssize_t write_count  = 0;
     msq_info_t *msq_info = NULL;
     char buffer[BUFSIZ];

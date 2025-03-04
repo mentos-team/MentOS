@@ -22,8 +22,9 @@ int main(int argc, char *argv[])
     struct sembuf op_child;     // Semaphore operation for the child.
     struct sembuf op_father[3]; // Semaphore operations for the father.
     union semun arg;            // Union for semctl operations.
-    long ret, semid;            // Return values and semaphore ID.
-    key_t key;                  // Key for semaphore.
+    long ret;
+    long semid; // Return values and semaphore ID.
+    key_t key;  // Key for semaphore.
 
     // ========================================================================
     // Generate a unique key using ftok.

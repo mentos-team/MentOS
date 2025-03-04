@@ -77,11 +77,12 @@ static inline void print_dir_entry(dirent_t *dirent, const char *path, unsigned 
     }
 
     // Prepare the relative path.
-    strcpy(relative_path, path);
+    strncpy(relative_path, path, PATH_MAX - 1);
+    relative_path[PATH_MAX - 1] = '\0';
     if (path[strnlen(path, PATH_MAX) - 1] != '/') {
-        strcat(relative_path, "/");
+        strncat(relative_path, "/", PATH_MAX);
     }
-    strcat(relative_path, dirent->d_name);
+    strncat(relative_path, dirent->d_name, PATH_MAX);
 
     // Stat the file.
     if (stat(relative_path, &dstat) < 0) {
@@ -182,7 +183,8 @@ int main(int argc, char *argv[])
             printf("Usage:\n");
             printf("    ls [options] [directory]\n");
             return 0;
-        } else if (argv[i][0] == '-') {
+        }
+        if (argv[i][0] == '-') {
             for (int j = 1; j < strlen(argv[i]); ++j) {
                 if (argv[i][j] == 'l') {
                     bitmask_set_assign(flags, FLAG_L);

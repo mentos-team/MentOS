@@ -15,7 +15,9 @@ typedef int (*list_head_compare)(const list_head *, const list_head *);
 /// @param compare
 static inline void list_head_sort(list_head *list, list_head_compare compare)
 {
-    list_head *current = NULL, *index = NULL, *next = NULL;
+    list_head *current = NULL;
+    list_head *index   = NULL;
+    list_head *next    = NULL;
     // Check whether list is empty
     if (!list_head_empty(list)) {
         // Keeps track if we need to restart the outer loop.

@@ -23,7 +23,8 @@ int main(int argc, char *argv[])
 {
     struct sembuf op[1]; // Operation structure for semaphore operations.
     union semun arg;     // Union to store semaphore values.
-    long ret, semid;     // Return values and semaphore ID.
+    long ret;
+    long semid; // Return values and semaphore ID.
 
     // ========================================================================
     // Create a semaphore set with one semaphore.

@@ -14,7 +14,6 @@
 #include "errno.h"
 #include "fcntl.h"
 #include "fs/vfs.h"
-#include "io/debug.h"
 #include "process/scheduler.h"
 #include "string.h"
 #include "sys/stat.h"
@@ -42,8 +41,8 @@ static int add_device(struct memdev *device)
     }
     struct memdev *dit = devices;
     // Traverse to the end of the list.
-    for (; dit && dit->next; dit = dit->next)
-        ;
+    for (; dit && dit->next; dit = dit->next) {
+    }
     // Add the device to the list.
     if (dit == NULL) {
         devices = device;

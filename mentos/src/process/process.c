@@ -55,7 +55,7 @@ static inline int __count_args_bytes(char **args)
     for (int i = 0; i < argc; i++) {
         nchar += strlen(args[i]) + 1;
     }
-    return nchar + (argc + 1 /* The NULL terminator */) * sizeof(char *);
+    return nchar + ((argc + 1 /* The NULL terminator */) * sizeof(char *));
 }
 
 /// @brief Pushes the arguments on the stack.
@@ -387,7 +387,8 @@ int process_create_init(const char *path)
     paging_switch_directory_va(init_process->mm->pgd);
 
     // Prepare argv and envp for the init process.
-    char **argv_ptr, **envp_ptr;
+    char **argv_ptr;
+    char **envp_ptr;
     int argc                    = 1;
     static char *argv[]         = {"/bin/init", (char *)NULL};
     static char *envp[]         = {(char *)NULL};
@@ -538,8 +539,12 @@ int sys_execve(pt_regs *f)
         kernel_panic("There is no current process!");
     }
 
-    char **origin_argv, **saved_argv, **final_argv;
-    char **origin_envp, **saved_envp, **final_envp;
+    char **origin_argv;
+    char **saved_argv;
+    char **final_argv;
+    char **origin_envp;
+    char **saved_envp;
+    char **final_envp;
     char name_buffer[NAME_MAX];
     char saved_filename[PATH_MAX];
 
@@ -608,7 +613,8 @@ int sys_execve(pt_regs *f)
         // Free the temporary args memory.
         kfree(args_mem);
         return ret;
-    } else if (ret == 2) { // An interpreter was loaded.
+    }
+    if (ret == 2) { // An interpreter was loaded.
         // We need to modify the argv array passed to the interpreter process.
         // The original file name must be passed as second argument and the rest
         // is shifted to the right.

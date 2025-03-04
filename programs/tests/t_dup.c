@@ -17,7 +17,8 @@
 int main(int argc, char *argv[])
 {
     char *filename = "/home/user/t_dup.txt";
-    int fd1, fd2;
+    int fd1;
+    int fd2;
     int flags   = O_WRONLY | O_CREAT | O_TRUNC;
     mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP;
 

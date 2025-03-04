@@ -87,7 +87,8 @@ int runtests = 0;
 /// @brief Prints [OK] at the current row and column 60.
 static inline void print_ok(void)
 {
-    unsigned y, width;
+    unsigned y;
+    unsigned width;
     video_get_cursor_position(NULL, &y);
     video_get_screen_size(&width, NULL);
     video_move_cursor(width - 5, y);
@@ -97,7 +98,8 @@ static inline void print_ok(void)
 /// @brief Prints [FAIL] at the current row and column 60.
 static inline void print_fail(void)
 {
-    unsigned y, width;
+    unsigned y;
+    unsigned width;
     video_get_cursor_position(NULL, &y);
     video_get_screen_size(&width, NULL);
     video_move_cursor(width - 7, y);

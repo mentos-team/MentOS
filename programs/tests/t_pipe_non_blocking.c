@@ -16,7 +16,8 @@ int main(void)
     int fds[2];
     char write_msg[]                 = "Blocking test message";
     char read_msg[sizeof(write_msg)] = {0};
-    ssize_t bytes_written, bytes_read;
+    ssize_t bytes_written;
+    ssize_t bytes_read;
     int error_code = 0;
 
     // Create a pipe.
@@ -41,7 +42,8 @@ int main(void)
         close(fds[0]);
         close(fds[1]);
         return 1;
-    } else if (pid == 0) {
+    }
+    if (pid == 0) {
         // Child process: reads from the pipe.
         close(fds[1]); // Close unused write end
 
@@ -58,41 +60,38 @@ int main(void)
                     fprintf(stderr, "Error occurred during read in child process\n");
                     error_code = 1;
                     break;
-                } else {
-                    printf("Child has nothing to read...\n");
-                    nanosleep(&req, NULL);
                 }
+                printf("Child has nothing to read...\n");
+                nanosleep(&req, NULL);
             }
         } while (bytes_read != 0);
 
         close(fds[0]); // Close read end
         return error_code;
 
-    } else {
-        // Parent process: writes to the pipe.
-        close(fds[0]); // Close unused read end.
+    } // Parent process: writes to the pipe.
+    close(fds[0]); // Close unused read end.
 
-        // Request to sleep for 500 ms.
-        struct timespec req = {0, 500000000};
+    // Request to sleep for 500 ms.
+    struct timespec req = {0, 500000000};
 
-        // Sleep for 500 ms.
-        nanosleep(&req, NULL);
+    // Sleep for 500 ms.
+    nanosleep(&req, NULL);
 
-        printf("Parent writing to pipe...\n");
-        bytes_written = write(fds[1], write_msg, sizeof(write_msg));
+    printf("Parent writing to pipe...\n");
+    bytes_written = write(fds[1], write_msg, sizeof(write_msg));
 
-        if (bytes_written > 0) {
-            printf("Parent wrote message: '%s' (%ld bytes)\n", write_msg, bytes_written);
-        } else if (bytes_written == -1) {
-            fprintf(stderr, "Error occurred during write in parent process\n");
-            error_code = 1;
-        }
-
-        // Sleep for 500 ms.
-        nanosleep(&req, NULL);
-
-        close(fds[1]); // Close write end.
-        wait(NULL);    // Wait for child to finish
-        return error_code;
+    if (bytes_written > 0) {
+        printf("Parent wrote message: '%s' (%ld bytes)\n", write_msg, bytes_written);
+    } else if (bytes_written == -1) {
+        fprintf(stderr, "Error occurred during write in parent process\n");
+        error_code = 1;
     }
+
+    // Sleep for 500 ms.
+    nanosleep(&req, NULL);
+
+    close(fds[1]); // Close write end.
+    wait(NULL);    // Wait for child to finish
+    return error_code;
 }

@@ -416,7 +416,7 @@ static inline ssize_t __procr_read(vfs_file_t *file, char *buffer, off_t offset,
     ssize_t bytes_to_read = max(0, min(strlen(support) - offset, nbyte));
     // Perform the read.
     if (bytes_to_read > 0) {
-        memcpy(buffer, support + offset, bytes_to_read);
+        strcpy(buffer, support + offset);
     }
     return bytes_to_read;
 }

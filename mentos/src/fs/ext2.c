@@ -354,9 +354,9 @@ typedef struct ext2_direntry_search_t {
 // Forward Declaration of Functions
 // ============================================================================
 
-static int ext2_bitmap_check(uint8_t *buffer, uint32_t index);
-static void ext2_bitmap_set(uint8_t *buffer, uint32_t index);
-static void ext2_bitmap_clear(uint8_t *buffer, uint32_t index);
+static int ext2_bitmap_check(uint8_t *buffer, uint32_t offset);
+static void ext2_bitmap_set(uint8_t *buffer, uint32_t offset);
+static void ext2_bitmap_clear(uint8_t *buffer, uint32_t offset);
 
 static int ext2_read_superblock(ext2_filesystem_t *fs);
 static int ext2_write_superblock(ext2_filesystem_t *fs);
@@ -383,7 +383,7 @@ static int ext2_mkdir(const char *path, mode_t mode);
 static int ext2_rmdir(const char *path);
 static int ext2_stat(const char *path, stat_t *stat);
 static int ext2_setattr(const char *path, struct iattr *attr);
-static vfs_file_t *ext2_creat(const char *path, mode_t permission);
+static vfs_file_t *ext2_creat(const char *path, mode_t mode);
 static vfs_file_t *ext2_mount(vfs_file_t *block_device, const char *path);
 
 static uint32_t ext2_get_real_block_index(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t block_index);
@@ -863,11 +863,13 @@ static int __valid_x_permission(task_struct *task, ext2_inode_t *inode)
         return 1;
     }
 
-    // Check the owners permission
+    // Check the owners permission.
     if (task->uid == inode->uid) {
         return inode->mode & S_IXUSR;
-        // Check the groups permission
-    } else if (task->gid == inode->gid) {
+    }
+
+    // Check the groups permission.
+    if (task->gid == inode->gid) {
         return inode->mode & S_IXGRP;
     }
 
@@ -1439,7 +1441,13 @@ static int ext2_set_real_block_index(
     // Get the number of pointers per block.
     unsigned int p = fs->pointers_per_block;
     // Help compute the indices.
-    int a, b, c, d, e, f, g;
+    int a;
+    int b;
+    int c;
+    int d;
+    int e;
+    int f;
+    int g;
     // We save intermediate indices here.
     uint32_t index_save;
     // Result of the operation.
@@ -1551,7 +1559,13 @@ static uint32_t ext2_get_real_block_index(ext2_filesystem_t *fs, ext2_inode_t *i
     // Get the number of pointers per block.
     unsigned int p = fs->pointers_per_block;
     // Help compute the indices.
-    int a, b, c, d, e, f, g;
+    int a;
+    int b;
+    int c;
+    int d;
+    int e;
+    int f;
+    int g;
     // The real index.
     uint32_t real_index = 0;
 
@@ -2766,7 +2780,8 @@ static int ext2_create_inode(ext2_filesystem_t *fs, ext2_inode_t *inode, mode_t 
         return -1;
     }
     // Get the UID and GID.
-    uid_t uid = 0, gid = 0;
+    uid_t uid         = 0;
+    uid_t gid         = 0;
     task_struct *task = scheduler_get_current_process();
     if (task == NULL) {
         pr_warning("Failed to get the current running process, assuming we are "
@@ -3482,11 +3497,11 @@ static ssize_t ext2_readlink(const char *path, char *buffer, size_t bufsize)
 
 /// @brief Creates a new directory at the given path.
 /// @param path The path of the new directory.
-/// @param permission The permission of the new directory.
+/// @param mode The mode with which we create the directory.
 /// @return Returns a negative value on failure.
-static int ext2_mkdir(const char *path, mode_t permission)
+static int ext2_mkdir(const char *path, mode_t mode)
 {
-    pr_debug("ext2_mkdir(path: %s, permission: %u)\n", path, permission);
+    pr_debug("ext2_mkdir(path: %s, mode: %u)\n", path, mode);
     // Get the parent directory.
     char parent_path[PATH_MAX];
     if (!dirname(path, parent_path, sizeof(parent_path))) {
@@ -3514,8 +3529,8 @@ static int ext2_mkdir(const char *path, mode_t permission)
         return -EEXIST;
     }
     // Set the inode mode.
-    uint32_t mode = S_IFDIR;
-    mode |= 0xFFF & permission;
+    mode = S_IFDIR | (0xFFF & mode);
+
     // Get the group index of the parent.
     uint32_t group_index = ext2_inode_index_to_group_index(fs, search.parent_inode);
     // Prepare an inode, it will come in handy either way.

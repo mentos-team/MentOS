@@ -193,7 +193,8 @@ static char *eaddr(char *str, char *end, unsigned char *addr, int size, int prec
 
     char tmp[24];        // Temporary buffer to hold the formatted MAC address.
     char *dig = _digits; // Default digits for hex conversion (lowercase by default).
-    int i, len = 0;
+    int i;
+    int len = 0;
 
     // Use uppercase hex digits if the FLAGS_UPPERCASE flag is set.
     if (bitmask_check(flags, FLAGS_UPPERCASE)) {
@@ -251,7 +252,9 @@ static char *iaddr(char *str, char *end, unsigned char *addr, int size, int prec
 
     // Temporary buffer to hold the formatted IP address.
     char tmp[24];
-    int i, n, len = 0;
+    int i;
+    int n;
+    int len = 0;
 
     // Convert each byte of the IP address to decimal format.
     for (i = 0; i < 4; i++) {
@@ -313,12 +316,15 @@ static char *iaddr(char *str, char *end, unsigned char *addr, int size, int prec
 /// @param value The floating-point value to be converted.
 /// @param buffer The output buffer to store the resulting string.
 /// @param bufsize The size of the output buffer.
-/// @param fmt The format specifier ('e', 'f', or 'g').
+/// @param format The format specifier ('e', 'f', or 'g').
 /// @param precision The number of digits to be displayed after the decimal
 /// point.
-static void cfltcvt(double value, char *buffer, size_t bufsize, char fmt, int precision)
+static void cfltcvt(double value, char *buffer, size_t bufsize, char format, int precision)
 {
-    int decpt, sign, exp, pos;
+    int decpt;
+    int sign;
+    int exp;
+    int pos;
     char cvtbuf[CVTBUFSIZE]; // Temporary buffer to store the digits.
     char *digits = cvtbuf;   // Pointer to the digit buffer.
     int capexp   = 0;        // Flag to check for uppercase exponent.
@@ -328,28 +334,28 @@ static void cfltcvt(double value, char *buffer, size_t bufsize, char fmt, int pr
 
     // Handle uppercase 'G' or 'E' format specifier.
     // Convert them to lowercase 'g' or 'e' for uniform processing.
-    if (fmt == 'G' || fmt == 'E') {
+    if (format == 'G' || format == 'E') {
         capexp = 1;       // Set capexp to handle uppercase exponent.
-        fmt += 'a' - 'A'; // Convert to lowercase.
+        format += 'a' - 'A'; // Convert to lowercase.
     }
 
     // Handle 'g' format: choose between 'e' or 'f' based on magnitude.
-    if (fmt == 'g') {
+    if (format == 'g') {
         ecvtbuf(value, precision, &decpt, &sign, cvtbuf, CVTBUFSIZE);
         magnitude = decpt - 1; // Calculate magnitude of the number.
 
         // If magnitude is out of range for 'f', use scientific notation 'e'.
         if (magnitude < -4 || magnitude > precision - 1) {
-            fmt = 'e';
+            format = 'e';
             precision -= 1; // Adjust precision for 'e' format.
         } else {
-            fmt = 'f';
+            format = 'f';
             precision -= decpt; // Adjust precision for 'f' format.
         }
     }
 
     // Handle scientific notation ('e' format).
-    if (fmt == 'e') {
+    if (format == 'e') {
         // Convert the number to scientific format.
         ecvtbuf(value, precision + 1, &decpt, &sign, cvtbuf, CVTBUFSIZE);
 
@@ -401,7 +407,7 @@ static void cfltcvt(double value, char *buffer, size_t bufsize, char fmt, int pr
         buffer += 3;
     }
     // Handle fixed-point notation ('f' format).
-    else if (fmt == 'f') {
+    else if (format == 'f') {
         // Convert the number to fixed-point format.
         fcvtbuf(value, precision, &decpt, &sign, cvtbuf, CVTBUFSIZE);
 
@@ -570,15 +576,17 @@ static void cropzeros(char *buffer, size_t bufsize)
 /// @param num The floating-point number to format.
 /// @param size The total size of the output string, including padding.
 /// @param precision The number of digits to display after the decimal point.
-/// @param fmt The format specifier for the output ('f', 'g', 'e', etc.).
+/// @param format The format specifier for the output ('f', 'g', 'e', etc.).
 /// @param flags Control flags that modify the output format (e.g., left alignment, zero padding).
 ///
 /// @return Pointer to the next position in the output string after the formatted number.
-static char *flt(char *str, char *end, double num, int size, int precision, char fmt, unsigned flags)
+static char *flt(char *str, char *end, double num, int size, int precision, char format, unsigned flags)
 {
     char workbuf[80];
-    char c, sign;
-    int n, i;
+    char c;
+    char sign;
+    int n;
+    int i;
 
     /// If the `FLAGS_LEFT` is set, clear the `FLAGS_ZEROPAD` flag.
     /// Left alignment implies no zero padding.
@@ -614,13 +622,13 @@ static char *flt(char *str, char *end, double num, int size, int precision, char
     /// Set the default precision if no precision is provided.
     if (precision < 0) {
         precision = 6; // Default precision is 6 decimal places.
-    } else if (precision == 0 && fmt == 'g') {
+    } else if (precision == 0 && format == 'g') {
         precision = 1; // For format 'g', default precision is 1.
     }
 
     /// Convert the floating-point number `num` into a string `workbuf` using the
-    /// given format `fmt`.
-    cfltcvt(num, workbuf, sizeof(workbuf), fmt, precision);
+    /// given format `format`.
+    cfltcvt(num, workbuf, sizeof(workbuf), format, precision);
 
     /// If the `FLAGS_HASH` is set and precision is 0, force a decimal point in
     /// the output.
@@ -629,7 +637,7 @@ static char *flt(char *str, char *end, double num, int size, int precision, char
     }
 
     /// For format 'g', remove trailing zeros unless `FLAGS_HASH` is set.
-    if ((fmt == 'g') && !bitmask_check(flags, FLAGS_HASH)) {
+    if ((format == 'g') && !bitmask_check(flags, FLAGS_HASH)) {
         cropzeros(workbuf, sizeof(workbuf));
     }
 
@@ -671,7 +679,7 @@ static char *flt(char *str, char *end, double num, int size, int precision, char
     return str; /// Return the resulting string after formatting the number.
 }
 
-int vsprintf(char *str, const char *fmt, va_list args)
+int vsprintf(char *str, const char *format, va_list args)
 {
     int base;       // Base for number formatting.
     char *tmp;      // Pointer to current position in the output buffer.
@@ -680,13 +688,13 @@ int vsprintf(char *str, const char *fmt, va_list args)
     char qualifier; // Character qualifier for integer fields ('h', 'l', or 'L').
 
     // Check for null input buffer or format string.
-    if (str == NULL || fmt == NULL) {
+    if (str == NULL || format == NULL) {
         return -1; // Error: null pointer provided.
     }
 
-    for (tmp = str; *fmt; fmt++) {
-        if (*fmt != '%') {
-            *tmp++ = *fmt; // Directly copy non-format characters.
+    for (tmp = str; *format; format++) {
+        if (*format != '%') {
+            *tmp++ = *format; // Directly copy non-format characters.
             continue;
         }
 
@@ -696,9 +704,9 @@ int vsprintf(char *str, const char *fmt, va_list args)
     repeat:
 
         // Process format flags (skips first '%').
-        fmt++;
+        format++;
 
-        switch (*fmt) {
+        switch (*format) {
         case '-':
             bitmask_set_assign(flags, FLAGS_LEFT);
             goto repeat;
@@ -719,10 +727,10 @@ int vsprintf(char *str, const char *fmt, va_list args)
         // Get the width of the output field.
         int32_t field_width = -1;
 
-        if (isdigit(*fmt)) {
-            field_width = skip_atoi(&fmt);
-        } else if (*fmt == '*') {
-            fmt++;
+        if (isdigit(*format)) {
+            field_width = skip_atoi(&format);
+        } else if (*format == '*') {
+            format++;
             field_width = va_arg(args, int32_t);
             if (field_width < 0) {
                 field_width = -field_width;
@@ -733,12 +741,12 @@ int vsprintf(char *str, const char *fmt, va_list args)
         // Get the precision, thus the minimum number of digits for integers;
         // max number of chars for from string.
         int32_t precision = -1;
-        if (*fmt == '.') {
-            ++fmt;
-            if (isdigit(*fmt)) {
-                precision = skip_atoi(&fmt);
-            } else if (*fmt == '*') {
-                ++fmt;
+        if (*format == '.') {
+            ++format;
+            if (isdigit(*format)) {
+                precision = skip_atoi(&format);
+            } else if (*format == '*') {
+                ++format;
                 precision = va_arg(args, int);
             }
             if (precision < 0) {
@@ -748,15 +756,15 @@ int vsprintf(char *str, const char *fmt, va_list args)
 
         // Get the conversion qualifier.
         qualifier = -1;
-        if (*fmt == 'h' || *fmt == 'l' || *fmt == 'L') {
-            qualifier = *fmt;
-            fmt++;
+        if (*format == 'h' || *format == 'l' || *format == 'L') {
+            qualifier = *format;
+            format++;
         }
 
         // Default base for integer conversion.
         base = 10;
 
-        switch (*fmt) {
+        switch (*format) {
         case 'c':
             // Handle left padding.
             if (!bitmask_check(flags, FLAGS_LEFT)) {
@@ -862,17 +870,17 @@ int vsprintf(char *str, const char *fmt, va_list args)
         case 'f':
         case 'g':
             // Handle floating-point formatting.
-            tmp = flt(tmp, NULL, va_arg(args, double), field_width, precision, *fmt, bitmask_set(flags, FLAGS_SIGN));
+            tmp = flt(tmp, NULL, va_arg(args, double), field_width, precision, *format, bitmask_set(flags, FLAGS_SIGN));
             continue;
 
         default:
-            if (*fmt != '%') {
+            if (*format != '%') {
                 *tmp++ = '%'; // Output '%' if not a format specifier.
             }
-            if (*fmt) {
-                *tmp++ = *fmt; // Output the current character.
+            if (*format) {
+                *tmp++ = *format; // Output the current character.
             } else {
-                --fmt; // Handle the case of trailing '%'.
+                --format; // Handle the case of trailing '%'.
             }
             continue;
         }
@@ -897,7 +905,7 @@ int vsprintf(char *str, const char *fmt, va_list args)
     return (int)(tmp - str); // Return the number of characters written.
 }
 
-int vsnprintf(char *str, size_t bufsize, const char *fmt, va_list args)
+int vsnprintf(char *str, size_t bufsize, const char *format, va_list args)
 {
     int base;       // Base for number formatting.
     char *tmp;      // Pointer to current position in the output buffer.
@@ -906,16 +914,16 @@ int vsnprintf(char *str, size_t bufsize, const char *fmt, va_list args)
     char qualifier; // Character qualifier for integer fields ('h', 'l', or 'L').
 
     // Check for null input buffer or format string.
-    if (str == NULL || fmt == NULL) {
+    if (str == NULL || format == NULL) {
         return -1; // Error: null pointer provided.
     }
 
     char *end = str + bufsize - 1; // Reserve space for null-terminator.
 
-    for (tmp = str; *fmt && tmp < end; fmt++) {
-        if (*fmt != '%') {
+    for (tmp = str; *format && tmp < end; format++) {
+        if (*format != '%') {
             if (tmp < end) {
-                *tmp++ = *fmt; // Directly copy non-format characters.
+                *tmp++ = *format; // Directly copy non-format characters.
             }
             continue;
         }
@@ -926,9 +934,9 @@ int vsnprintf(char *str, size_t bufsize, const char *fmt, va_list args)
     repeat:
 
         // Process format flags (skips first '%').
-        fmt++;
+        format++;
 
-        switch (*fmt) {
+        switch (*format) {
         case '-':
             bitmask_set_assign(flags, FLAGS_LEFT);
             goto repeat;
@@ -949,10 +957,10 @@ int vsnprintf(char *str, size_t bufsize, const char *fmt, va_list args)
         // Get the width of the output field.
         int32_t field_width = -1;
 
-        if (isdigit(*fmt)) {
-            field_width = skip_atoi(&fmt);
-        } else if (*fmt == '*') {
-            fmt++;
+        if (isdigit(*format)) {
+            field_width = skip_atoi(&format);
+        } else if (*format == '*') {
+            format++;
             field_width = va_arg(args, int32_t);
             if (field_width < 0) {
                 field_width = -field_width;
@@ -963,12 +971,12 @@ int vsnprintf(char *str, size_t bufsize, const char *fmt, va_list args)
         // Get the precision, thus the minimum number of digits for integers;
         // max number of chars for from string.
         int32_t precision = -1;
-        if (*fmt == '.') {
-            ++fmt;
-            if (isdigit(*fmt)) {
-                precision = skip_atoi(&fmt);
-            } else if (*fmt == '*') {
-                ++fmt;
+        if (*format == '.') {
+            ++format;
+            if (isdigit(*format)) {
+                precision = skip_atoi(&format);
+            } else if (*format == '*') {
+                ++format;
                 precision = va_arg(args, int);
             }
             if (precision < 0) {
@@ -978,15 +986,15 @@ int vsnprintf(char *str, size_t bufsize, const char *fmt, va_list args)
 
         // Get the conversion qualifier.
         qualifier = -1;
-        if (*fmt == 'h' || *fmt == 'l' || *fmt == 'L') {
-            qualifier = *fmt;
-            fmt++;
+        if (*format == 'h' || *format == 'l' || *format == 'L') {
+            qualifier = *format;
+            format++;
         }
 
         // Default base for integer conversion.
         base = 10;
 
-        switch (*fmt) {
+        switch (*format) {
         case 'c':
             // Handle left padding.
             if (!bitmask_check(flags, FLAGS_LEFT)) {
@@ -1092,19 +1100,19 @@ int vsnprintf(char *str, size_t bufsize, const char *fmt, va_list args)
         case 'f':
         case 'g':
             // Handle floating-point formatting.
-            tmp = flt(tmp, end, va_arg(args, double), field_width, precision, *fmt, bitmask_set(flags, FLAGS_SIGN));
+            tmp = flt(tmp, end, va_arg(args, double), field_width, precision, *format, bitmask_set(flags, FLAGS_SIGN));
             continue;
 
         default:
-            if (*fmt != '%') {
+            if (*format != '%') {
                 if (tmp < end) {
                     *tmp++ = '%'; // Output '%' if not a format specifier.
                 }
             }
-            if (*fmt && tmp < end) {
-                *tmp++ = *fmt; // Output the current character.
+            if (*format && tmp < end) {
+                *tmp++ = *format; // Output the current character.
             } else {
-                --fmt; // Handle the case of trailing '%'.
+                --format; // Handle the case of trailing '%'.
             }
             continue;
         }
@@ -1146,33 +1154,33 @@ int printf(const char *format, ...)
     return len;
 }
 
-int sprintf(char *str, const char *fmt, ...)
+int sprintf(char *str, const char *format, ...)
 {
     va_list ap;
 
-    va_start(ap, fmt);
-    int len = vsprintf(str, fmt, ap);
+    va_start(ap, format);
+    int len = vsprintf(str, format, ap);
     va_end(ap);
 
     return len;
 }
 
-int snprintf(char *str, size_t size, const char *fmt, ...)
+int snprintf(char *str, size_t size, const char *format, ...)
 {
     va_list args;
     int len;
 
-    va_start(args, fmt);
-    len = vsnprintf(str, size, fmt, args);
+    va_start(args, format);
+    len = vsnprintf(str, size, format, args);
     va_end(args);
 
     return len;
 }
 
-int vfprintf(int fd, const char *fmt, va_list args)
+int vfprintf(int fd, const char *format, va_list args)
 {
     char buffer[4096];
-    int len = vsprintf(buffer, fmt, args);
+    int len = vsprintf(buffer, format, args);
 
     if (len > 0) {
         if (write(fd, buffer, len) <= 0) {
@@ -1183,11 +1191,11 @@ int vfprintf(int fd, const char *fmt, va_list args)
     return -1;
 }
 
-int fprintf(int fd, const char *fmt, ...)
+int fprintf(int fd, const char *format, ...)
 {
     va_list ap;
-    va_start(ap, fmt);
-    int ret = vfprintf(fd, fmt, ap);
+    va_start(ap, format);
+    int ret = vfprintf(fd, format, ap);
     va_end(ap);
 
     return ret;

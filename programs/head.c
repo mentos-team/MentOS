@@ -32,8 +32,9 @@ static int head(int fd, const char *fname, size_t n)
             i++;
         }
 
-        if (i >= n)
+        if (i >= n) {
             break;
+        }
 
         leftover = (leftover + bytes_read) - (line - buffer); // Bytes left in the buffer
         memmove(buffer, line, leftover);                      // Move the leftover to the front of buffer

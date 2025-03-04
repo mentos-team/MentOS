@@ -400,6 +400,11 @@ static void __rm_from_queue(sigset_t *mask, sigpending_t *q)
     }
 }
 
+/// @brief Wakes up a task that is waiting for a signal.
+/// @param entry the entry to wake up.
+/// @param mode the mode to set.
+/// @param sync the sync flag.
+/// @return 1 on success, 0 on failure.
 int stop_wake_function(wait_queue_entry_t *entry, unsigned mode, int sync)
 {
     // Validate the input.
@@ -470,7 +475,8 @@ int do_signal(struct pt_regs *f)
     // Create a siginfo.
     siginfo_t info;
     // The return code of __dequeue_signal( ) is stored in signr.
-    int signr, exit_code;
+    int signr;
+    int exit_code;
 
     // Lock the signal handling for the given task.
     __lock_task_sighand(current_process);

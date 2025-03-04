@@ -61,8 +61,9 @@ static void page_content(int fd)
                 break;
             } while (1);
             erase_backwards(prompt);
-            if (quit)
+            if (quit) {
                 exit(EXIT_SUCCESS);
+            }
         }
     }
 }

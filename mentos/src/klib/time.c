@@ -53,7 +53,9 @@ time_t difftime(time_t time1, time_t time2) { return time1 - time2; }
 /// @return Day of week (in range 1 to 7)
 static inline int day_of_week(unsigned int y, unsigned int m, unsigned int d)
 {
-    int h, j, k;
+    int h;
+    int j;
+    int k;
     // January and February are counted as months 13 and 14 of the previous year
     if (m <= 2) {
         m += 12;
@@ -72,7 +74,12 @@ static inline int day_of_week(unsigned int y, unsigned int m, unsigned int d)
 tm_t *localtime(const time_t *time)
 {
     static tm_t date;
-    unsigned int a, b, c, d, e, f;
+    unsigned int a;
+    unsigned int b;
+    unsigned int c;
+    unsigned int d;
+    unsigned int e;
+    unsigned int f;
     time_t t = *time;
     // Negative Unix time values are not supported
     if (t < 1) {
@@ -86,7 +93,7 @@ tm_t *localtime(const time_t *time)
     date.tm_hour = (int)(t % 24);
     t /= 24;
     // Convert Unix time to date
-    a = (unsigned int)((4 * t + 102032) / 146097 + 15);
+    a = (unsigned int)(((4 * t + 102032) / 146097) + 15);
     b = (t + 2442113 + a - (a / 4));
     c = (20 * b - 2442) / 7305;
     d = b - 365 * c - (c / 4);

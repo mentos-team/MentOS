@@ -38,7 +38,8 @@ static inline void __debug_print_header(const char *file, const char *fun, int l
         FG_MAGENTA,         // "DEBUG  "
         FG_RESET            // "DEFAULT"
     };
-    static char tmp_prefix[BUFSIZ], final_prefix[BUFSIZ];
+    static char tmp_prefix[BUFSIZ];
+    static char final_prefix[BUFSIZ];
     // Check the log level.
     if ((log_level < LOGLEVEL_EMERG) || (log_level > LOGLEVEL_DEBUG)) {
         // Set it to default.

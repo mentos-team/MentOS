@@ -37,8 +37,8 @@ int main(int argc, char *argv[])
         char *pager = "more";
         char filepath[PATH_MAX];
         strcpy(filepath, "/usr/share/man/");
-        strcat(filepath, argv[1]);
-        strcat(filepath, ".man");
+        strncat(filepath, argv[1], PATH_MAX);
+        strncat(filepath, ".man", PATH_MAX);
         int fd = open(filepath, O_RDONLY, 42);
         if (fd < 0) {
             printf("%s: No manual entry for %s\n", argv[0], argv[1]);

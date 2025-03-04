@@ -74,7 +74,12 @@ int check_content(const char *filename, const char *content, int length)
 int write_content(const char *filename, const char *content, int length, int truncate, int append)
 {
     // Set write options.
-    int flags = O_WRONLY | (truncate ? O_TRUNC : append ? O_APPEND : 0);
+    int flags = O_WRONLY;
+    if (truncate) {
+        flags |= O_TRUNC;
+    } else if (append) {
+        flags |= O_APPEND;
+    }
 
     // Open the file with the specified flags.
     int fd = open(filename, flags, 0);

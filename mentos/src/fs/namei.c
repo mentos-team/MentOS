@@ -23,7 +23,7 @@
 /// Appends the path with a "/" as separator.
 #define APPEND_PATH_SEPARATOR(buffer, buflen)                                                                          \
     {                                                                                                                  \
-        if (buffer[strnlen(buffer, buflen) - 1] != '/') {                                                              \
+        if ((buffer)[strnlen(buffer, buflen) - 1] != '/') {                                                            \
             strncat(buffer, "/", buflen);                                                                              \
         }                                                                                                              \
     }
@@ -47,8 +47,9 @@ int sys_creat(const char *path, mode_t mode)
 
     // Search for an unused fd.
     int fd = get_unused_fd();
-    if (fd < 0)
+    if (fd < 0) {
         return fd;
+    }
 
     // Try to open the file.
     vfs_file_t *file = vfs_creat(path, mode);
@@ -132,8 +133,10 @@ int __resolve_path(const char *path, char *abspath, size_t buflen, int flags, in
     char token[NAME_MAX]    = {0};
     char buffer[PATH_MAX]   = {0};
     char linkpath[PATH_MAX] = {0};
-    size_t offset = 0, linklen = 0, tokenlen = 0;
-    int contains_links = 0;
+    size_t offset           = 0;
+    size_t linklen          = 0;
+    size_t tokenlen         = 0;
+    int contains_links      = 0;
     stat_t statbuf;
 
     if (path[0] != '/') {

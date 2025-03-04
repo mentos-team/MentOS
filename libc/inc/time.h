@@ -89,12 +89,12 @@ tm_t *localtime(const time_t *timep);
 
 /// @brief Formats the time tm according to the format specification format
 ///        and places the result in the character array s of size max.
-/// @param s      The destination buffer.
-/// @param max    The maximum length of the buffer.
+/// @param str The destination buffer.
+/// @param maxsize The maximum length of the buffer.
 /// @param format The buffer used to generate the time.
-/// @param tm     The broken-down time.
+/// @param timeptr The broken-down time.
 /// @return The number of bytes (excluding the terminating null) placed in s.
-size_t strftime(char *s, size_t max, const char *format, const tm_t *tm);
+size_t strftime(char *str, size_t maxsize, const char *format, const tm_t *timeptr);
 
 /// @brief Suspends the execution of the calling thread.
 /// @param req The amount of time we want to sleep.

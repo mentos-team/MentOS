@@ -10,7 +10,8 @@ extern char **environ;
 
 int main(int argc, char *argv[])
 {
-    for (char **ep = environ; *ep; ++ep)
+    for (char **ep = environ; *ep; ++ep) {
         printf("%s\n", *ep);
+    }
     return 0;
 }

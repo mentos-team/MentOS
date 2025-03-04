@@ -234,8 +234,9 @@ void video_init(void)
 void video_update(void)
 {
 #ifndef VGA_TEXT_MODE
-    if (vga_is_enabled())
+    if (vga_is_enabled()) {
         vga_update();
+    }
 #endif
 }
 
@@ -351,8 +352,9 @@ void video_puts(const char *str)
 void video_update_cursor_position(void)
 {
 #ifndef VGA_TEXT_MODE
-    if (vga_is_enabled())
+    if (vga_is_enabled()) {
         return;
+    }
 #endif
     __video_set_cursor_position(((pointer - ADDR) / 2U) % WIDTH, ((pointer - ADDR) / 2U) / WIDTH);
 }
@@ -449,13 +451,13 @@ static inline void __shift_buffer(char *buffer, int lines, int direction)
     // Shift up: Move each line to the previous slot.
     if (direction == 1) {
         for (int row = 0; row < lines - 1; ++row) {
-            memcpy(buffer + W2 * row, buffer + W2 * (row + 1), W2);
+            memcpy(buffer + (W2 * row), buffer + (W2 * (row + 1)), W2);
         }
     }
     // Shift down: Move each line to the next slot.
     else if (direction == -1) {
         for (int row = lines - 1; row > 0; --row) {
-            memcpy(buffer + W2 * row, buffer + W2 * (row - 1), W2);
+            memcpy(buffer + (W2 * row), buffer + (W2 * (row - 1)), W2);
         }
     }
 }
@@ -481,7 +483,7 @@ static void __shift_screen_down(void)
     // Move the screen content down by one line.
     __shift_buffer(ADDR, HEIGHT, -1);
     // Restore from the `upper_buffer`.
-    memcpy(ADDR, upper_buffer + W2 * (STORED_PAGES * HEIGHT - scrolled_lines), W2);
+    memcpy(ADDR, upper_buffer + (W2 * (STORED_PAGES * HEIGHT - scrolled_lines)), W2);
 }
 
 void video_shift_one_line_up(void)
@@ -498,7 +500,7 @@ void video_shift_one_line_up(void)
         // Shift the upper buffer up.
         __shift_screen_up();
         // Restore or clear the bottom line.
-        memcpy(ADDR + W2 * (HEIGHT - 1), original_page + W2 * (TOTAL_SIZE / W2 - scrolled_lines), W2);
+        memcpy(ADDR + (W2 * (HEIGHT - 1)), original_page + (W2 * (TOTAL_SIZE / W2 - scrolled_lines)), W2);
         // Decrement scrolled_lines since we're restoring content.
         --scrolled_lines;
     }
@@ -516,7 +518,7 @@ void video_shift_one_line_down(void)
         // Shift the screen content down.
         __shift_screen_down();
         // Restore the top line from the scrollback buffer or original content.
-        memcpy(ADDR, upper_buffer + W2 * (STORED_PAGES * HEIGHT - scrolled_lines), W2);
+        memcpy(ADDR, upper_buffer + (W2 * (STORED_PAGES * HEIGHT - scrolled_lines)), W2);
     }
 }
 

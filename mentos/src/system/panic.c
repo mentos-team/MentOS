@@ -19,6 +19,8 @@ void kernel_panic(const char *msg)
     if (runtests) {
         outports(SHUTDOWN_PORT, 0x2000);
     } // Terminate qemu running the tests
-    for (;;)
-        __asm__ __volatile__("hlt"); // Decrease power consumption with hlt
+    for (;;) {
+        // Decrease power consumption with hlt.
+        __asm__ __volatile__("hlt");
+    }
 }

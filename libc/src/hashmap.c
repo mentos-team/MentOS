@@ -11,7 +11,7 @@ size_t hash(const char *key)
 {
     size_t hash = 5381;
     int c;
-    while ((c = *key++)) {
+    while ((c = (int)*key++)) {
         hash = ((hash << 5) + hash) + c; // hash * 33 + c
     }
     return hash % HASHMAP_SIZE;
@@ -20,7 +20,7 @@ size_t hash(const char *key)
 void hashmap_init(hashmap_t *map, hashmap_entry_t *(*alloc_fn)(void), void (*dealloc_fn)(hashmap_entry_t *))
 {
     assert(map && "Hashmap is NULL.");
-    memset(map->buckets, 0, sizeof(map->buckets));
+    memset((void *)map->buckets, 0, sizeof(map->buckets));
     map->alloc_entry   = alloc_fn;
     map->dealloc_entry = dealloc_fn;
 }

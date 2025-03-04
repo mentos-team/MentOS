@@ -7,11 +7,11 @@
 #include "system/syscall_types.h"
 #include "unistd.h"
 
-// _syscall1(int, setuid, uid_t, pid)
-int setuid(uid_t pid)
+// _syscall1(int, setuid, uid_t, uid)
+int setuid(uid_t uid)
 {
     long __res;
-    __inline_syscall_1(__res, setuid, pid);
+    __inline_syscall_1(__res, setuid, uid);
     __syscall_return(int, __res);
 }
 

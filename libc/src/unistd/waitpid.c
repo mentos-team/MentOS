@@ -8,11 +8,8 @@
 #include "system/syscall_types.h"
 #include "unistd.h"
 
-#include "errno.h"
 #include "strerror.h"
 #include "syslog.h"
-#include "system/syscall_types.h"
-#include "unistd.h"
 
 pid_t waitpid(pid_t pid, int *status, int options)
 {

@@ -14,7 +14,7 @@ unsigned rand(void) { return rseed = (rseed * 1103515245U + 12345U) & RAND_MAX; 
 
 float randf(void) { return ((float)rand() / (float)(RAND_MAX)); }
 
-int randint(int lb, int ub) { return lb + ((int)rand() % (ub - lb + 1)); }
+int randint(int lb, int ub) { return lb + (rand() % (ub - lb + 1)); }
 
 unsigned randuint(unsigned lb, unsigned ub) { return lb + (rand() % (ub - lb + 1)); }
 

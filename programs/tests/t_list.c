@@ -28,7 +28,8 @@ void node_dealloc(listnode_t *node)
 int main(void)
 {
     // Initialize lists with custom alloc/dealloc functions
-    list_t list1, list2;
+    list_t list1;
+    list_t list2;
     list_init(&list1, node_alloc, node_dealloc);
     list_init(&list2, node_alloc, node_dealloc);
 

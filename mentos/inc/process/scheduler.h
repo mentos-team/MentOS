@@ -116,5 +116,5 @@ int sys_waitperiod(void);
 int is_orphaned_pgrp(pid_t gid);
 
 /// @brief Exit the current process with status
-/// @param status The exit status of the current process
-void do_exit(int status);
+/// @param exit_code The exit status of the current process
+void do_exit(int exit_code);

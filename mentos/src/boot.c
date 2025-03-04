@@ -172,7 +172,9 @@ static inline void __relocate_kernel_image(elf_header_t *elf_hdr)
 {
     // Support variables.
     elf_program_header_t *program_header;
-    char *kernel_start, *virtual_address, *physical_address;
+    char *kernel_start;
+    char *virtual_address;
+    char *physical_address;
     uint32_t offset, valid_size;
 
     // Get the elf file starting address.

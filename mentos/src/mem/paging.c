@@ -126,7 +126,9 @@ vm_area_struct_t *create_vm_area(mm_struct_t *mm, uint32_t vm_start, size_t size
         return NULL;
     }
 
-    uint32_t vm_end, phy_start, order;
+    uint32_t vm_end;
+    uint32_t phy_start;
+    uint32_t order;
     vm_area_struct_t *segment;
 
     // Compute the end of the virtual memory area.
@@ -287,8 +289,11 @@ uint32_t clone_vm_area(mm_struct_t *mm, vm_area_struct_t *area, int cow, uint32_
 
 int destroy_vm_area(mm_struct_t *mm, vm_area_struct_t *area)
 {
-    size_t area_total_size, area_size, area_start;
-    uint32_t order, block_size;
+    size_t area_total_size;
+    size_t area_size;
+    size_t area_start;
+    uint32_t order;
+    uint32_t block_size;
     page_t *phy_page;
 
     // Get the total size of the virtual memory area.
@@ -789,7 +794,7 @@ static inline int __set_pg_entry_frame(page_dir_entry_t *entry, page_table_t *ta
 
     // Set the frame attribute in the page directory entry (shifted by 12 bits
     // to represent the frame number).
-    entry->frame = phy_addr >> 12u;
+    entry->frame = phy_addr >> 12U;
 
     return 0;
 }
@@ -1158,7 +1163,8 @@ int mem_clone_vm_area(
     }
 
     // Initialize iterators for both source and destination page directories.
-    page_iterator_t src_iter, dst_iter;
+    page_iterator_t src_iter;
+    page_iterator_t dst_iter;
 
     // Initialize the source iterator to iterate through the source page directory.
     if (__pg_iter_init(&src_iter, src_pgd, src_start, size, flags) < 0) {

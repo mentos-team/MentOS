@@ -156,6 +156,9 @@ int pmmngr_init(boot_info_t *boot_info);
 
 /// @brief Find the first free 2^order amount of page frames, set it allocated
 /// and return the memory address of the first page frame allocated.
+/// @param file     The file name where the allocation is done.
+/// @param func     The function name where the allocation is done.
+/// @param line     The line number where the allocation is done.
 /// @param gfp_mask GFP_FLAGS to decide the zone allocation.
 /// @param order    The logarithm of the size of the page frame.
 /// @return Memory address of the first free page frame allocated, or NULL if
@@ -164,6 +167,9 @@ page_t *pr_alloc_pages(const char *file, const char *func, int line, gfp_t gfp_m
 
 /// @brief Frees from the given page frame address up to 2^order amount of page
 /// frames.
+/// @param file The file name where the free is done.
+/// @param func The function name where the free is done.
+/// @param line The line number where the free is done.
 /// @param page The page.
 /// @return Returns 0 on success, or -1 if an error occurs.
 int pr_free_pages(const char *file, const char *func, int line, page_t *page);

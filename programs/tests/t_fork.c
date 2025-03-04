@@ -48,9 +48,8 @@ int main(int argc, char *argv[])
         if (WIFEXITED(status)) {
             printf("Parent process: Child exited with status %d.\n", WEXITSTATUS(status));
             return EXIT_SUCCESS;
-        } else {
-            printf("Parent process: Child did not exit normally.\n");
-            return EXIT_FAILURE;
         }
+        printf("Parent process: Child did not exit normally.\n");
+        return EXIT_FAILURE;
     }
 }

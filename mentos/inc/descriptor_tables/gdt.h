@@ -25,7 +25,6 @@
 
 /// @brief Bitmasks used to access to specific bits of the GDT.
 /// @details
-/// @image html gdt_bits.png
 /// #### PRIV (Privilege bits)
 /// Contains the ring level, specifically:
 ///   - `00 (0)` = highest (kernel),

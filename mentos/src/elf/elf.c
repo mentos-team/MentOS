@@ -420,66 +420,89 @@ int elf_check_magic_number(elf_header_t *header)
 
 const char *elf_type_to_string(int type)
 {
-    if (type == PT_LOAD)
+    if (type == PT_LOAD) {
         return "LOAD";
-    if (type == PT_DYNAMIC)
+    }
+    if (type == PT_DYNAMIC) {
         return "DYNAMIC";
-    if (type == PT_INTERP)
+    }
+    if (type == PT_INTERP) {
         return "INTERP";
-    if (type == PT_NOTE)
+    }
+    if (type == PT_NOTE) {
         return "NOTE";
-    if (type == PT_SHLIB)
+    }
+    if (type == PT_SHLIB) {
         return "SHLIB";
-    if (type == PT_PHDR)
+    }
+    if (type == PT_PHDR) {
         return "PHDR";
-    if (type == PT_EH_FRAME)
+    }
+    if (type == PT_EH_FRAME) {
         return "EH_FRAME";
-    if (type == PT_GNU_STACK)
+    }
+    if (type == PT_GNU_STACK) {
         return "GNU_STACK";
-    if (type == PT_GNU_RELRO)
+    }
+    if (type == PT_GNU_RELRO) {
         return "GNU_RELRO";
-    if (type == PT_LOPROC)
+    }
+    if (type == PT_LOPROC) {
         return "LOPROC";
-    if (type == PT_HIPROC)
+    }
+    if (type == PT_HIPROC) {
         return "HIPROC";
+    }
     return "NULL";
 }
 
 const char *elf_section_header_type_to_string(int type)
 {
-    if (type == SHT_PROGBITS)
+    if (type == SHT_PROGBITS) {
         return "PROGBITS";
-    if (type == SHT_SYMTAB)
+    }
+    if (type == SHT_SYMTAB) {
         return "SYMTAB";
-    if (type == SHT_STRTAB)
+    }
+    if (type == SHT_STRTAB) {
         return "STRTAB";
-    if (type == SHT_RELA)
+    }
+    if (type == SHT_RELA) {
         return "RELA";
-    if (type == SHT_NOBITS)
+    }
+    if (type == SHT_NOBITS) {
         return "NOBITS";
-    if (type == SHT_REL)
+    }
+    if (type == SHT_REL) {
         return "REL";
+    }
     return "NULL";
 }
 
 const char *elf_symbol_type_to_string(int type)
 {
-    if (type == STT_NOTYPE)
+    if (type == STT_NOTYPE) {
         return "NOTYPE";
-    if (type == STT_OBJECT)
+    }
+    if (type == STT_OBJECT) {
         return "OBJECT";
-    if (type == STT_FUNC)
+    }
+    if (type == STT_FUNC) {
         return "FUNC";
+    }
     return "-1";
 }
 
 const char *elf_symbol_bind_to_string(int bind)
 {
-    if (bind == STB_LOCAL)
+    if (bind == STB_LOCAL) {
         return "LOCAL";
-    if (bind == STB_GLOBAL)
+    }
+    if (bind == STB_GLOBAL) {
         return "GLOBAL";
-    if (bind == STB_WEAK)
+    }
+    if (bind == STB_WEAK) {
         return "WEAK";
+    }
     return "-1";
 }

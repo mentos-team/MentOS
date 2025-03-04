@@ -366,7 +366,7 @@ gid_t sys_getegid(void) { RETURN_PROCESS_ATTR_OR_EPERM(gid); }
 
 /// Checks the given ID.
 #define FAIL_ON_INV_ID(id)                                                                                             \
-    if (id < 0) {                                                                                                      \
+    if ((id) < 0) {                                                                                                    \
         return -EINVAL;                                                                                                \
     }
 
@@ -386,7 +386,7 @@ gid_t sys_getegid(void) { RETURN_PROCESS_ATTR_OR_EPERM(gid); }
 
 /// Checks the attributes, resets them, and returns 0.
 #define IF_RESET_SET_AND_RETURN(attr)                                                                                  \
-    if (runqueue.curr->r##attr == attr) {                                                                              \
+    if (runqueue.curr->r##attr == (attr)) {                                                                            \
         runqueue.curr->attr = attr;                                                                                    \
         return 0;                                                                                                      \
     }

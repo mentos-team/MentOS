@@ -383,9 +383,12 @@ static void __expand_env(char *str, char *buf, size_t buf_len) { ___expand_env(s
 /// @return Returns 0 on success, 1 on failure.
 static int __export(int argc, char *argv[])
 {
-    char name[BUFSIZ] = {0}, value[BUFSIZ] = {0};
-    char *first, *last;
-    size_t name_len, value_start;
+    char name[BUFSIZ]  = {0};
+    char value[BUFSIZ] = {0};
+    char *first;
+    char *last;
+    size_t name_len;
+    size_t value_start;
     // Loop through each argument, starting from argv[1].
     for (int i = 1; i < argc; ++i) {
         // Get a pointer to the first and last occurrence of `=` inside the argument.
@@ -641,7 +644,8 @@ __command_suggest(const char *filename, int filetype, int offset, rb_history_ent
             if (entry->buffer[(*index)]) {
                 if (entry->buffer[(*index)] != filename[i]) {
                     return;
-                } else if (entry->buffer[(*index)] != ' ') {
+                }
+                if (entry->buffer[(*index)] != ' ') {
                     // Move the cursor right by 1.
                     puts("\033[1C");
                     // Increment the index.
@@ -791,7 +795,10 @@ static int __command_complete(rb_history_entry_t *entry, int *index, int *length
 /// detected.
 static inline int __read_command(rb_history_entry_t *entry)
 {
-    int index = 0, c, length = 0, insert_active = 0;
+    int index = 0;
+    int c;
+    int length        = 0;
+    int insert_active = 0;
 
     // Clear the buffer at the start
     memset(entry->buffer, 0, entry->size);

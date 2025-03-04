@@ -85,7 +85,7 @@ BitFieldColonSpacing: Both
 BraceWrapping:
   AfterCaseLabel: false
   AfterClass: false
-  AfterControlStatement: Never
+  AfterControlStatement: Always
   AfterEnum: false
   AfterExternBlock: false
   AfterFunction: false
@@ -115,7 +115,7 @@ BreakConstructorInitializers: BeforeColon
 BreakFunctionDefinitionParameters: false
 BreakInheritanceList: BeforeColon
 BreakStringLiterals: true
-BreakTemplateDeclarations: MultiLine
+BreakTemplateDeclarations: true
 BreakConstructorInitializersBeforeComma: true
 ColumnLimit: 120
 CommentPragmas: '^ IWYU pragma:'

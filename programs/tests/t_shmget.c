@@ -13,7 +13,7 @@
 #include <unistd.h>
 
 /// Define the size of shared memory to hold two integers.
-#define MEM_SIZE sizeof(int) * 2
+#define MEM_SIZE (sizeof(int) * 2)
 
 int main(void)
 {
@@ -51,8 +51,8 @@ int main(void)
     }
 
     // Wait for the child to finish.
-    while (wait(NULL) != -1)
-        continue;
+    while (wait(NULL) != -1) {
+    }
 
     printf("F: %p\n", array);
     array[1] = 2;

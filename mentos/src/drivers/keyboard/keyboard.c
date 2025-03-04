@@ -208,12 +208,12 @@ void keyboard_isr(pt_regs *f)
     } else if (scancode == KEY_LEFT_ALT) {
         pr_debug("Press(KBD_LEFT_ALT)\n");
         bitmask_set_assign(kflags, KBD_LEFT_ALT);
-        keyboard_push_front(scancode << 16u);
+        keyboard_push_front(scancode << 16U);
 
     } else if (scancode == KEY_RIGHT_ALT) {
         pr_debug("Press(KBD_RIGHT_ALT)\n");
         bitmask_set_assign(kflags, KBD_RIGHT_ALT);
-        keyboard_push_front(scancode << 16u);
+        keyboard_push_front(scancode << 16U);
 
     } else if (scancode == (KEY_LEFT_SHIFT | CODE_BREAK)) {
         pr_debug("Release(KBD_LEFT_SHIFT)\n");

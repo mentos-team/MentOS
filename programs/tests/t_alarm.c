@@ -22,7 +22,7 @@ void alarm_handler(int sig)
         alarm(1);
 
         // Set another alarm to go off after 1 seconds and get the remaining time of the previous alarm.
-        int rest = alarm(1);
+        unsigned int rest = alarm(1);
 
         // Expected value:  1 (since the previous alarm was just set to 1 seconds).
         printf("handler(%d) : alarm(1) result: %d.\n", sig, rest);

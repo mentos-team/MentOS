@@ -18,7 +18,8 @@
 static inline void __parse_line(passwd_t *pwd, char *buf)
 {
     assert(pwd && "Received null pwd!");
-    char *token, *ch;
+    char *token;
+    char *ch;
     // Parse the username.
     if ((token = strtok(buf, ":")) != NULL) {
         pwd->pw_name = token;
