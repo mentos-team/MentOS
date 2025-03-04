@@ -1,0 +1,52 @@
+name: Documentation
+
+# Trigger the workflow on push or pull requests for main and develop branches
+on:
+  push:
+    branches:
+    - main
+    - develop
+    paths:
+    - '**/*.c'
+    - '**/*.cpp'
+    - '**/*.h'
+    - '**/*.hpp'
+    - '**/CMakeLists.txt'
+    - '**/Makefile'
+    - '**/cmake/**'
+    - '.github/workflows/documentation.yml'
+  pull_request:
+    branches:
+    - main
+    - develop
+    paths:
+    - '**/*.c'
+    - '**/*.cpp'
+    - '**/*.h'
+    - '**/*.hpp'
+    - '**/CMakeLists.txt'
+    - '**/Makefile'
+    - '**/cmake/**'
+    - '.github/workflows/documentation.yml'
+
+jobs:
+  doxygen:
+    name: Generate Doxygen Documentation
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Checkout repository
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # Step 2: Install Doxygen (and optional dependencies)
+      - name: Install Doxygen
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y doxygen graphviz
+
+      # Step 3: Configure and Build Documentation
+      - name: Generate Documentation
+        run: |
+          cmake -B build -DDOXYGEN_WARN_AS_ERROR=YES
+          cmake --build build --target mentos_documentation
