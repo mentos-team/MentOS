@@ -5,6 +5,7 @@
 [![forthebadge](https://forthebadge.com/images/badges/for-you.svg)](https://forthebadge.com)
 
 [![Ubuntu](https://github.com/mentos-team/MentOS/actions/workflows/ubuntu.yml/badge.svg)](https://github.com/mentos-team/MentOS/actions/workflows/ubuntu.yml)
+[![Documentation](https://github.com/mentos-team/MentOS/actions/workflows/documentation.yml/badge.svg)](https://github.com/mentos-team/MentOS/actions/workflows/documentation.yml)
 
 ## Table of Contents
 
