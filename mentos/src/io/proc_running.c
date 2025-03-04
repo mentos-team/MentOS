@@ -447,7 +447,7 @@ static vfs_file_operations_t procr_fs_operations = {
 int procr_create_entry_pid(task_struct *entry)
 {
     char path[PATH_MAX];
-    proc_dir_entry_t *proc_dir = NULL;
+    proc_dir_entry_t *proc_dir   = NULL;
     proc_dir_entry_t *proc_entry = NULL;
     {
         // Create `/proc/[PID]`.

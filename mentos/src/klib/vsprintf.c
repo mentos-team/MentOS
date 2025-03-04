@@ -325,7 +325,7 @@ static void cfltcvt(double value, char *buffer, size_t bufsize, char format, int
     // Handle uppercase 'G' or 'E' format specifier.
     // Convert them to lowercase 'g' or 'e' for uniform processing.
     if (format == 'G' || format == 'E') {
-        capexp = 1;       // Set capexp to handle uppercase exponent.
+        capexp = 1;          // Set capexp to handle uppercase exponent.
         format += 'a' - 'A'; // Convert to lowercase.
     }
 

@@ -130,7 +130,7 @@ unsigned long timer_get_ticks(void) { return timer_ticks; }
 
 /// @brief Prints the addresses of all the timers inside a vector.
 /// @param vector the vector for which we print the details.
-static inline void __print_vector(list_head *vector)
+static inline void __print_vector(list_head_t *vector)
 {
 #if defined(ENABLE_REAL_TIMER_SYSTEM_DUMP) && (__DEBUG_LEVEL__ == LOGLEVEL_DEBUG)
     if (!list_head_empty(vector)) {
@@ -193,7 +193,7 @@ static inline void __tvec_base_init(tvec_base_t *base)
 /// @param base the vector base we use to search the vector.
 /// @param timer the timer we use to determine the target vector.
 /// @return a pointer to the target vector.
-static inline list_head *__timer_get_target_vector(tvec_base_t *base, struct timer_list *timer)
+static inline list_head_t *__timer_get_target_vector(tvec_base_t *base, struct timer_list *timer)
 {
     time_t expires = timer->expires;
     long ticks     = expires - base->timer_ticks;
@@ -219,9 +219,9 @@ static inline list_head *__timer_get_target_vector(tvec_base_t *base, struct tim
 /// @brief Move all timers from tv up one level.
 /// @param base the base that contains the vector we want to cascate.
 /// @param current_vector the vector we want to cascate.
-static inline void __timer_cascate_vector(tvec_base_t *base, list_head *current_vector)
+static inline void __timer_cascate_vector(tvec_base_t *base, list_head_t *current_vector)
 {
-    list_head *target_vector;
+    list_head_t *target_vector;
     struct timer_list *timer;
     // Migrate only if the vector actually has a timer in it.
     if (!list_head_empty(current_vector)) {
@@ -317,7 +317,7 @@ void add_timer(struct timer_list *timer)
 {
 #ifdef ENABLE_REAL_TIMER_SYSTEM
     // Get the vector.
-    list_head *vector = __timer_get_target_vector(&cpu_base, timer);
+    list_head_t *vector = __timer_get_target_vector(&cpu_base, timer);
     // Insert the timer inside the vector.
     list_head_insert_before(&timer->entry, vector);
     // Debug on the output.
@@ -521,7 +521,7 @@ void run_timer_softirq(void)
         ++base->timer_ticks;
     }
 #else
-    struct list_head *it, *tmp;
+    struct list_head_t *it, *tmp;
     list_for_each_safe (it, tmp, &base->list) {
         struct timer_list *timer = list_entry(it, struct timer_list, entry);
         if (timer->expires <= timer_get_ticks()) {

@@ -28,7 +28,7 @@ static int resource_id = -1;
 /// the slab. It contains a linked list to connect objects in the cache.
 typedef struct kmem_obj {
     /// @brief Linked list node for tracking objects in the slab.
-    list_head objlist;
+    list_head_t objlist;
 } kmem_obj_t;
 
 /// @brief Maximum order of kmalloc cache allocations.
@@ -61,7 +61,7 @@ typedef struct kmem_obj {
 #define ADDR_FROM_KMEM_OBJ(object) ((void *)(object))
 
 /// @brief List of all active memory caches in the system.
-static list_head kmem_caches_list;
+static list_head_t kmem_caches_list;
 
 /// @brief Cache used for managing metadata about the memory caches themselves.
 static kmem_cache_t kmem_cache;
@@ -363,7 +363,7 @@ static inline void *__kmem_cache_alloc_slab(kmem_cache_t *cachep, page_t *slab_p
     }
 
     // Retrieve and remove the first element from the slab's free list.
-    list_head *elem_listp = list_head_pop(&slab_page->slab_freelist);
+    list_head_t *elem_listp = list_head_pop(&slab_page->slab_freelist);
 
     // Check if the free list is empty.
     if (!elem_listp) {
@@ -562,7 +562,7 @@ int kmem_cache_destroy(kmem_cache_t *cachep)
 
     // Free all slabs in the free list.
     while (!list_head_empty(&cachep->slabs_free)) {
-        list_head *slab_list = list_head_pop(&cachep->slabs_free);
+        list_head_t *slab_list = list_head_pop(&cachep->slabs_free);
         if (!slab_list) {
             pr_crit("Failed to retrieve a slab from free list.\n");
             return -1;
@@ -572,7 +572,7 @@ int kmem_cache_destroy(kmem_cache_t *cachep)
 
     // Free all slabs in the partial list.
     while (!list_head_empty(&cachep->slabs_partial)) {
-        list_head *slab_list = list_head_pop(&cachep->slabs_partial);
+        list_head_t *slab_list = list_head_pop(&cachep->slabs_partial);
         if (!slab_list) {
             pr_crit("Failed to retrieve a slab from partial list.\n");
             return -1;
@@ -582,7 +582,7 @@ int kmem_cache_destroy(kmem_cache_t *cachep)
 
     // Free all slabs in the full list.
     while (!list_head_empty(&cachep->slabs_full)) {
-        list_head *slab_list = list_head_pop(&cachep->slabs_full);
+        list_head_t *slab_list = list_head_pop(&cachep->slabs_full);
         if (!slab_list) {
             pr_crit("Failed to retrieve a slab from full list.\n");
             return -1;
@@ -635,7 +635,7 @@ void *pr_kmem_cache_alloc(const char *file, const char *fun, int line, kmem_cach
         }
 
         // Move a free slab to the partial list since we're about to allocate from it.
-        list_head *free_slab = list_head_pop(&cachep->slabs_free);
+        list_head_t *free_slab = list_head_pop(&cachep->slabs_free);
         if (!free_slab) {
             pr_crit("Retrieved invalid slab from free list.\n");
             return NULL;
@@ -659,7 +659,7 @@ void *pr_kmem_cache_alloc(const char *file, const char *fun, int line, kmem_cach
 
     // If the slab is now full, move it to the full slabs list.
     if (slab_page->slab_objfree == 0) {
-        list_head *slab_full_elem = list_head_pop(&cachep->slabs_partial);
+        list_head_t *slab_full_elem = list_head_pop(&cachep->slabs_partial);
         if (!slab_full_elem) {
             pr_crit("Retrieved invalid slab from partial list while moving to "
                     "full list.\n");

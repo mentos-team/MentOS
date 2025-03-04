@@ -38,11 +38,11 @@ typedef struct {
     /// Pointer to the last message in the queue.
     struct msg *msg_last;
     /// Reference inside the list of message queue management structures.
-    list_head list;
+    list_head_t list;
 } msq_info_t;
 
 /// @brief List of all current active Message queues.
-list_head msq_list;
+list_head_t msq_list;
 
 // ============================================================================
 // MEMORY MANAGEMENT (Private)

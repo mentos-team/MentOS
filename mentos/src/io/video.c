@@ -143,10 +143,10 @@ static inline void __video_get_cursor_position(unsigned int *x, unsigned int *y)
     // Calculate x and y.
     if (x) {
         *x = position % WIDTH;
-}
+    }
     if (y) {
         *y = position / WIDTH;
-}
+    }
 }
 
 /// @brief Sets the provided ansi code.

@@ -294,7 +294,7 @@ int main(int argc, char **argv)
             continue; // Retry if unable to get shadow password
         }
 
-        unsigned char hash[SHA256_BLOCK_SIZE]       = {0};
+        unsigned char hash[SHA256_BLOCK_SIZE]         = {0};
         char hash_string[(SHA256_BLOCK_SIZE * 2) + 1] = {0};
         SHA256_ctx_t ctx;
         sha256_init(&ctx);

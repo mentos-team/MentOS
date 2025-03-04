@@ -12,7 +12,7 @@
 typedef struct list_head {
     struct list_head *prev; ///< The previous element.
     struct list_head *next; ///< The subsequent element.
-} list_head;
+} list_head_t;
 
 /// @brief Get the struct for this entry.
 /// @param ptr    The &list_head pointer.
@@ -35,14 +35,14 @@ typedef struct list_head {
 /// @brief Iterates over a list, but declares the iterator.
 /// @param pos the name of the iterator used to visit the list.
 /// @param head the head for your list.
-#define list_for_each_decl(pos, head) for (list_head * (pos) = (head)->next; (pos) != (head); (pos) = (pos)->next)
+#define list_for_each_decl(pos, head) for (list_head_t * (pos) = (head)->next; (pos) != (head); (pos) = (pos)->next)
 
 /// @brief Iterates over a list safe against removal of list entry.
 /// @param pos the name of the iterator used to visit the list.
 /// @param store another list iterator to use as temporary storage.
 /// @param head the head for your list.
 #define list_for_each_safe_decl(pos, store, head)                                                                      \
-    for (list_head * (pos) = (head)->next, *(store) = (pos)->next; (pos) != (head);                                    \
+    for (list_head_t * (pos) = (head)->next, *(store) = (pos)->next; (pos) != (head);                                  \
          (pos) = (store), (store) = (pos)->next)
 
 /// @brief Iterates over a list backwards.
@@ -53,20 +53,21 @@ typedef struct list_head {
 /// @brief Iterates over a list backwards, but declares the iterator.
 /// @param pos the name of the iterator used to visit the list.
 /// @param head the head for your list.
-#define list_for_each_prev_decl(pos, head) for (list_head * (pos) = (head)->prev; (pos) != (head); (pos) = (pos)->prev)
+#define list_for_each_prev_decl(pos, head)                                                                             \
+    for (list_head_t * (pos) = (head)->prev; (pos) != (head); (pos) = (pos)->prev)
 
 /// @brief Ensures that the given list is valid.
 /// @param list the list to validate.
-static inline void list_head_validate(const list_head *list)
+static inline void list_head_validate(const list_head_t *list)
 {
     assert(list && "List is NULL.");
     assert(list->prev && "List->prev is NULL.");
     assert(list->next && "List->next is NULL.");
 }
 
-/// @brief Initializes the list_head.
+/// @brief Initializes the list_head_t.
 /// @param head The head of your list.
-static inline void list_head_init(list_head *head)
+static inline void list_head_init(list_head_t *head)
 {
     assert(head && "Variable head is NULL.");
     head->next = head->prev = head;
@@ -75,7 +76,7 @@ static inline void list_head_init(list_head *head)
 /// @brief Tests whether the given list is empty.
 /// @param head The list to check.
 /// @return 1 if empty, 0 otherwise.
-static inline int list_head_empty(const list_head *head)
+static inline int list_head_empty(const list_head_t *head)
 {
     list_head_validate(head);
     return head->next == head;
@@ -84,7 +85,7 @@ static inline int list_head_empty(const list_head *head)
 /// @brief Computes the size of the list.
 /// @param head The head of the list.
 /// @return the size of the list.
-static inline unsigned list_head_size(const list_head *head)
+static inline unsigned list_head_size(const list_head_t *head)
 {
     list_head_validate(head);
 
@@ -99,46 +100,46 @@ static inline unsigned list_head_size(const list_head *head)
 /// @brief Insert the new entry after the given location.
 /// @param entry The new element we want to insert.
 /// @param location The element after which we insert.
-static inline void list_head_insert_after(list_head *entry, list_head *location)
+static inline void list_head_insert_after(list_head_t *entry, list_head_t *location)
 {
     assert(entry && "Variable entry is NULL.");
     list_head_validate(location);
 
     // We store the old `next` element.
-    list_head *old_next = location->next;
+    list_head_t *old_next = location->next;
     // We insert our element.
-    location->next      = entry;
+    location->next        = entry;
     // We update the `previous` link of our new entry.
-    entry->prev         = location;
+    entry->prev           = location;
     // We update the `next` link of our new entry.
-    entry->next         = old_next;
+    entry->next           = old_next;
     // We link the previously `next` element to our new entry.
-    old_next->prev      = entry;
+    old_next->prev        = entry;
 }
 
 /// @brief Insert the new entry before the given location.
 /// @param entry the new element we want to insert.
 /// @param location the element after which we insert.
-static inline void list_head_insert_before(list_head *entry, list_head *location)
+static inline void list_head_insert_before(list_head_t *entry, list_head_t *location)
 {
     assert(entry && "Variable entry is NULL.");
     list_head_validate(location);
 
     // We store the old `previous` element.
-    list_head *old_prev = location->prev;
+    list_head_t *old_prev = location->prev;
     // We link the old `previous` element to our new entry.
-    old_prev->next      = entry;
+    old_prev->next        = entry;
     // We update the `previous` link of our new entry.
-    entry->prev         = old_prev;
+    entry->prev           = old_prev;
     // We update the `next` link of our new entry.
-    entry->next         = location;
+    entry->next           = location;
     // Finally, we close the link with the old insertion location element.
-    location->prev      = entry;
+    location->prev        = entry;
 }
 
 /// @brief Removes the given entry from the list it is contained in.
 /// @param entry the entry we want to remove.
-static inline void list_head_remove(list_head *entry)
+static inline void list_head_remove(list_head_t *entry)
 {
     list_head_validate(entry);
 
@@ -156,15 +157,15 @@ static inline void list_head_remove(list_head *entry)
 /// @brief Removes an element from the list, it's used when we have a possibly
 /// null list pointer and want to pop an element from it.
 /// @param head the head of the list.
-/// @return a list_head pointing to the element we removed, NULL on failure.
-static inline list_head *list_head_pop(list_head *head)
+/// @return a list_head_t pointing to the element we removed, NULL on failure.
+static inline list_head_t *list_head_pop(list_head_t *head)
 {
     list_head_validate(head);
 
     // Check if the list is not empty.
     if (!list_head_empty(head)) {
         // Store the pointer.
-        list_head *value = head->next;
+        list_head_t *value = head->next;
         // Remove the element from the list.
         list_head_remove(head->next);
         // Return the pointer to the element.
@@ -176,7 +177,7 @@ static inline list_head *list_head_pop(list_head *head)
 /// @brief Append the `secondary` list at the end of the `main` list.
 /// @param main the main list where we append the secondary list.
 /// @param secondary the secondary list, which gets appended, and re-initialized as empty.
-static inline void list_head_append(list_head *main, list_head *secondary)
+static inline void list_head_append(list_head_t *main, list_head_t *secondary)
 {
     list_head_validate(main);
     list_head_validate(secondary);
@@ -199,7 +200,7 @@ static inline void list_head_append(list_head *main, list_head *secondary)
 /// @brief Replaces entry1 with entry2, entry1 will be removed from the list.
 /// @param entry1 the first entry to remove.
 /// @param entry2 the second entry which will take the place of the first entry.
-static inline void list_head_replace(list_head *entry1, list_head *entry2)
+static inline void list_head_replace(list_head_t *entry1, list_head_t *entry2)
 {
     list_head_validate(entry1);
     list_head_validate(entry2);
@@ -219,12 +220,12 @@ static inline void list_head_replace(list_head *entry1, list_head *entry2)
 /// @brief Swaps entry1 and entry2 inside the list.
 /// @param entry1 the first entry.
 /// @param entry2 the second entry.
-static inline void list_head_swap(list_head *entry1, list_head *entry2)
+static inline void list_head_swap(list_head_t *entry1, list_head_t *entry2)
 {
     list_head_validate(entry1);
     list_head_validate(entry2);
 
-    list_head *pos = entry2->prev;
+    list_head_t *pos = entry2->prev;
     list_head_replace(entry1, entry2);
     if (pos == entry1) {
         pos = entry2;

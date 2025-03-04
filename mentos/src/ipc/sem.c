@@ -62,11 +62,11 @@ typedef struct {
     /// @brief List of all the semaphores.
     struct sem *sem_base;
     /// Reference inside the list of semaphore management structures.
-    list_head list;
+    list_head_t list;
 } sem_info_t;
 
 /// @brief List of all current active semaphores.
-list_head semaphores_list;
+list_head_t semaphores_list;
 
 // ============================================================================
 // MEMORY MANAGEMENT (Private)

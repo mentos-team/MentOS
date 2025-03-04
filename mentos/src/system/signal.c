@@ -388,9 +388,8 @@ static int __notify_parent(struct task_struct *current, int signr)
 static void __rm_from_queue(sigset_t *mask, sigpending_t *q)
 {
     struct sigqueue_t *entry;
-    list_head *it;
-    list_head *tmp;
-    list_for_each_safe (it, tmp, &q->list) {
+    list_for_each_safe_decl(it, tmp, &q->list)
+    {
         // Get the entry.
         entry = list_entry(it, struct sigqueue_t, list);
         // Remove the signal.

@@ -83,7 +83,7 @@ typedef struct pipe_inode_info {
 
     /// @brief List node for tracking this pipe in a process’s list of opened
     /// pipes.
-    list_head list_node;
+    list_head_t list_node;
 } pipe_inode_info_t;
 
 /// @brief Structure defining operations for managing pipe buffers.

@@ -303,7 +303,7 @@ typedef struct ext2_filesystem_t {
     /// Root FS node (attached to mountpoint).
     vfs_file_t *root;
     /// List of opened files.
-    list_head opened_files;
+    list_head_t opened_files;
 
     /// Size of one block.
     uint32_t block_size;
@@ -1174,9 +1174,9 @@ static int ext2_write_inode(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t
 ///  - inodes are allocated equally between groups.
 static int ext2_allocate_inode(ext2_filesystem_t *fs, unsigned preferred_group)
 {
-    uint32_t group_index = 0;
+    uint32_t group_index  = 0;
     uint32_t group_offset = 0;
-    uint32_t inode_index = 0;
+    uint32_t inode_index  = 0;
     // Lock the filesystem.
     spinlock_lock(&fs->spinlock);
     // Allocate the cache.
@@ -1227,9 +1227,9 @@ static int ext2_allocate_inode(ext2_filesystem_t *fs, unsigned preferred_group)
 /// @return 0 on failure, or the index of the new block on success.
 static uint32_t ext2_allocate_block(ext2_filesystem_t *fs)
 {
-    uint32_t group_index = 0;
+    uint32_t group_index  = 0;
     uint32_t group_offset = 0;
-    uint32_t block_index = 0;
+    uint32_t block_index  = 0;
     // Lock the filesystem.
     spinlock_lock(&fs->spinlock);
     // Allocate the cache.
@@ -2218,7 +2218,7 @@ static inline int ext2_append_new_direntry(
         return 0;
     }
     // Get the rec_len;
-    uint32_t rec_len            = ext2_get_rec_len_from_name(name);
+    uint32_t rec_len = ext2_get_rec_len_from_name(name);
     uint32_t real_rec_len;
     // Prepare iterator.
     ext2_direntry_iterator_t it = ext2_direntry_iterator_begin(fs, cache, &parent_inode);

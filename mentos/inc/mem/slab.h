@@ -26,7 +26,7 @@ typedef void (*kmem_fun_t)(void *);
 /// @brief Stores the information of a cache.
 typedef struct kmem_cache_t {
     /// Link to place this cache in a global list of caches.
-    list_head cache_list;
+    list_head_t cache_list;
     /// Name of the cache.
     const char *name;
     /// Total size of each object in the cache, including alignment and padding.
@@ -48,11 +48,11 @@ typedef struct kmem_cache_t {
     /// Destructor function for cleaning up objects.
     kmem_fun_t dtor;
     /// List of fully occupied slabs.
-    list_head slabs_full;
+    list_head_t slabs_full;
     /// List of partially occupied slabs.
-    list_head slabs_partial;
+    list_head_t slabs_partial;
     /// List of completely free slabs.
-    list_head slabs_free;
+    list_head_t slabs_free;
 } kmem_cache_t;
 
 /// @brief Initializes the kernel memory cache system.

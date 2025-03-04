@@ -32,9 +32,9 @@ static int resource_id = -1;
 #endif
 
 /// The list of superblocks.
-static list_head vfs_super_blocks;
+static list_head_t vfs_super_blocks;
 /// The list of filesystems.
-static list_head vfs_filesystems;
+static list_head_t vfs_filesystems;
 /// Lock for refcount field.
 static spinlock_t vfs_spinlock_refcount;
 /// Spinlock for the entire virtual filesystem.
@@ -247,8 +247,7 @@ super_block_t *vfs_get_superblock(const char *path)
     size_t len;
     super_block_t *last_sb = NULL;
     super_block_t *sb      = NULL;
-    list_head *it;
-    list_for_each (it, &vfs_super_blocks) {
+    list_for_each_decl (it, &vfs_super_blocks) {
         sb  = list_entry(it, super_block_t, mounts);
         len = strlen(sb->path);
         if (!strncmp(path, sb->path, len)) {

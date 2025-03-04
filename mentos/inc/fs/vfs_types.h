@@ -128,7 +128,7 @@ typedef struct vfs_file {
     /// The number of links.
     uint32_t nlink;
     /// List to hold all active files associated with a specific entry in a filesystem.
-    list_head siblings;
+    list_head_t siblings;
     /// Reference count for this file.
     int32_t refcount;
 } vfs_file_t;
@@ -144,7 +144,7 @@ typedef struct super_block {
     /// Pointer to the information regarding the filesystem.
     file_system_type_t *type;
     /// List to hold all active mounting points.
-    list_head mounts;
+    list_head_t mounts;
 } super_block_t;
 
 /// @brief Data structure containing information about an open file.

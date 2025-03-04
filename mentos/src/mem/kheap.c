@@ -60,20 +60,20 @@ typedef struct block_t {
     unsigned int size : 31;
 
     /// @brief Entry in the list of all blocks in the heap.
-    list_head list;
+    list_head_t list;
 
     /// @brief Entry in the list of free blocks.
-    list_head free;
+    list_head_t free;
 } block_t;
 
 /// @brief Maps the heap memory to easily accessible values.
 /// This structure contains pointers to the list of all blocks and the list of free blocks.
 typedef struct {
     /// @brief List of all memory blocks, both free and allocated.
-    list_head list;
+    list_head_t list;
 
     /// @brief List of free blocks available for allocation.
-    list_head free;
+    list_head_t free;
 } heap_header_t;
 
 /// @brief Returns the given size, rounded to the nearest multiple of 16. This
@@ -143,13 +143,13 @@ static inline void __blkmngr_dump(int log_level, heap_header_t *header)
             pr_log(log_level, "0x%p", list_entry(it->prev, block_t, list));
         } else {
             pr_log(log_level, "   HEAD   ");
-}
+        }
         pr_log(log_level, ", ");
         if (it->next != &header->list) {
             pr_log(log_level, "0x%p", list_entry(it->next, block_t, list));
         } else {
             pr_log(log_level, "   HEAD   ");
-}
+        }
         pr_log(log_level, "}\n");
     }
     pr_log(log_level, "[%s] FREE (0x%p):\n", task->name, &header->free);
@@ -160,13 +160,13 @@ static inline void __blkmngr_dump(int log_level, heap_header_t *header)
             pr_log(log_level, "0x%p", list_entry(it->prev, block_t, free));
         } else {
             pr_log(log_level, "   HEAD   ");
-}
+        }
         pr_log(log_level, ", ");
         if (it->next != &header->free) {
             pr_log(log_level, "0x%p", list_entry(it->next, block_t, free));
         } else {
             pr_log(log_level, "   HEAD   ");
-}
+        }
         pr_log(log_level, "}\n");
     }
     pr_log(log_level, "\n");

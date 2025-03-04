@@ -1315,8 +1315,7 @@ mm_struct_t *clone_process_image(mm_struct_t *mmp)
     mm->total_vm  = 0;
 
     // Clone each memory area from the source process to the new process.
-    list_head *it;
-    list_for_each (it, &mmp->mmap_list) {
+    list_for_each_decl (it, &mmp->mmap_list) {
         vm_area = list_entry(it, vm_area_struct_t, vm_list);
 
         if (clone_vm_area(mm, vm_area, 0, GFP_HIGHUSER) < 0) {
@@ -1382,8 +1381,8 @@ int destroy_process_image(mm_struct_t *mm)
     // Free each segment inside mm.
     vm_area_struct_t *segment = NULL;
     // Iterate through the list of memory areas.
-    list_head *it             = mm->mmap_list.next;
-    list_head *next;
+    list_head_t *it           = mm->mmap_list.next;
+    list_head_t *next;
 
     while (!list_head_empty(it)) {
         segment = list_entry(it, vm_area_struct_t, vm_list);
