@@ -148,6 +148,9 @@ int vfs_register_filesystem(file_system_type_t *fs)
 {
     assert(__vfs_find_filesystem(fs->name) == NULL && "Filesytem already registered.");
     pr_debug("vfs_register_filesystem(name: %s)\n", fs->name);
+    // Initialize the list head for the fs.
+    list_head_init(&fs->list);
+    // Insert the file system.
     list_head_insert_before(&fs->list, &vfs_filesystems);
     return 1;
 }
@@ -217,6 +220,9 @@ int vfs_register_superblock(const char *name, const char *path, file_system_type
     sb->root = root;
     sb->type = type;
 
+    // Initialize the list head for the superblock.
+    list_head_init(&sb->mounts);
+
     // Insert the superblock into the global list of superblocks.
     list_head_insert_after(&sb->mounts, &vfs_super_blocks);
 
@@ -240,7 +246,7 @@ super_block_t *vfs_get_superblock(const char *path)
     size_t last_sb_len = 0;
     size_t len;
     super_block_t *last_sb = NULL;
-    super_block_t *sb = NULL;
+    super_block_t *sb      = NULL;
     list_head *it;
     list_for_each (it, &vfs_super_blocks) {
         sb  = list_entry(it, super_block_t, mounts);

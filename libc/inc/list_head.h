@@ -55,11 +55,20 @@ typedef struct list_head {
 /// @param head the head for your list.
 #define list_for_each_prev_decl(pos, head) for (list_head * (pos) = (head)->prev; (pos) != (head); (pos) = (pos)->prev)
 
+/// @brief Ensures that the given list is valid.
+/// @param list the list to validate.
+static inline void list_head_validate(const list_head *list)
+{
+    assert(list && "List is NULL.");
+    assert(list->prev && "List->prev is NULL.");
+    assert(list->next && "List->next is NULL.");
+}
+
 /// @brief Initializes the list_head.
 /// @param head The head of your list.
 static inline void list_head_init(list_head *head)
 {
-    assert(head && "Variable head is NULL."); // Ensure head is not NULL
+    assert(head && "Variable head is NULL.");
     head->next = head->prev = head;
 }
 
@@ -68,7 +77,7 @@ static inline void list_head_init(list_head *head)
 /// @return 1 if empty, 0 otherwise.
 static inline int list_head_empty(const list_head *head)
 {
-    assert(head && "Variable head is NULL."); // Ensure head is not NULL
+    list_head_validate(head);
     return head->next == head;
 }
 
@@ -77,7 +86,7 @@ static inline int list_head_empty(const list_head *head)
 /// @return the size of the list.
 static inline unsigned list_head_size(const list_head *head)
 {
-    assert(head && "Variable head is NULL."); // Ensure head is not NULL
+    list_head_validate(head);
 
     unsigned size = 0;
     if (!list_head_empty(head)) {
@@ -88,53 +97,50 @@ static inline unsigned list_head_size(const list_head *head)
 }
 
 /// @brief Insert the new entry after the given location.
-/// @param new_entry The new element we want to insert.
+/// @param entry The new element we want to insert.
 /// @param location The element after which we insert.
-static inline void list_head_insert_after(list_head *new_entry, list_head *location)
+static inline void list_head_insert_after(list_head *entry, list_head *location)
 {
-    assert(new_entry && "Variable new_entry is NULL.");           // Check for NULL new_entry
-    assert(location && "Variable location is NULL.");             // Check for NULL location
-    assert(location->prev && "Variable location->prev is NULL."); // Check location is valid
-    assert(location->next && "Variable location->next is NULL."); // Check location is valid
+    assert(entry && "Variable entry is NULL.");
+    list_head_validate(location);
 
     // We store the old `next` element.
     list_head *old_next = location->next;
     // We insert our element.
-    location->next      = new_entry;
+    location->next      = entry;
     // We update the `previous` link of our new entry.
-    new_entry->prev     = location;
+    entry->prev         = location;
     // We update the `next` link of our new entry.
-    new_entry->next     = old_next;
+    entry->next         = old_next;
     // We link the previously `next` element to our new entry.
-    old_next->prev      = new_entry;
+    old_next->prev      = entry;
 }
 
 /// @brief Insert the new entry before the given location.
-/// @param new_entry the new element we want to insert.
+/// @param entry the new element we want to insert.
 /// @param location the element after which we insert.
-static inline void list_head_insert_before(list_head *new_entry, list_head *location)
+static inline void list_head_insert_before(list_head *entry, list_head *location)
 {
-    assert(new_entry && "Variable new_entry is NULL.");
-    assert(location && "Variable location is NULL.");
+    assert(entry && "Variable entry is NULL.");
+    list_head_validate(location);
+
     // We store the old `previous` element.
     list_head *old_prev = location->prev;
     // We link the old `previous` element to our new entry.
-    old_prev->next      = new_entry;
+    old_prev->next      = entry;
     // We update the `previous` link of our new entry.
-    new_entry->prev     = old_prev;
+    entry->prev         = old_prev;
     // We update the `next` link of our new entry.
-    new_entry->next     = location;
+    entry->next         = location;
     // Finally, we close the link with the old insertion location element.
-    location->prev      = new_entry;
+    location->prev      = entry;
 }
 
 /// @brief Removes the given entry from the list it is contained in.
 /// @param entry the entry we want to remove.
 static inline void list_head_remove(list_head *entry)
 {
-    assert(entry && "Variable entry is NULL.");              // Check for NULL entry
-    assert(entry->prev && "Attribute entry->prev is NULL."); // Check previous pointer
-    assert(entry->next && "Attribute entry->next is NULL."); // Check next pointer
+    list_head_validate(entry);
 
     // Check if the element is actually in a list.
     if (!list_head_empty(entry)) {
@@ -153,7 +159,7 @@ static inline void list_head_remove(list_head *entry)
 /// @return a list_head pointing to the element we removed, NULL on failure.
 static inline list_head *list_head_pop(list_head *head)
 {
-    assert(head && "Variable head is NULL."); // Check for NULL head
+    list_head_validate(head);
 
     // Check if the list is not empty.
     if (!list_head_empty(head)) {
@@ -172,14 +178,11 @@ static inline list_head *list_head_pop(list_head *head)
 /// @param secondary the secondary list, which gets appended, and re-initialized as empty.
 static inline void list_head_append(list_head *main, list_head *secondary)
 {
-    assert(main && "Variable main is NULL.");           // Check for NULL main
-    assert(secondary && "Variable secondary is NULL."); // Check for NULL secondary
+    list_head_validate(main);
+    list_head_validate(secondary);
 
     // Check that both lists are actually filled with entries.
     if (!list_head_empty(main) && !list_head_empty(secondary)) {
-        assert(main->prev && "Attribute main->prev is NULL.");           // Check main's previous pointer
-        assert(secondary->next && "Attribute secondary->next is NULL."); // Check secondary's next pointer
-        assert(secondary->prev && "Attribute secondary->prev is NULL."); // Check secondary's previous pointer
         // Connect the last element of the main list to the first one of the secondary list.
         main->prev->next      = secondary->next;
         // Connect the first element of the secondary list to the last one of the main list.
@@ -198,13 +201,11 @@ static inline void list_head_append(list_head *main, list_head *secondary)
 /// @param entry2 the second entry which will take the place of the first entry.
 static inline void list_head_replace(list_head *entry1, list_head *entry2)
 {
-    assert(entry1 && "Variable entry1 is NULL."); // Check for NULL entry1
-    assert(entry2 && "Variable entry2 is NULL."); // Check for NULL entry2
+    list_head_validate(entry1);
+    list_head_validate(entry2);
 
     // First we need to remove the second entry.
     list_head_remove(entry2);
-    assert(entry2->next && "Attribute entry2->next is NULL."); // Check entry2's next pointer
-    assert(entry2->prev && "Attribute entry2->prev is NULL."); // Check entry2's previous pointer
 
     // Then, we can place the second entry where the first entry is.
     entry2->next       = entry1->next;
@@ -220,8 +221,8 @@ static inline void list_head_replace(list_head *entry1, list_head *entry2)
 /// @param entry2 the second entry.
 static inline void list_head_swap(list_head *entry1, list_head *entry2)
 {
-    assert(entry1 && "Variable entry1 is NULL."); // Check for NULL entry1
-    assert(entry2 && "Variable entry2 is NULL."); // Check for NULL entry2
+    list_head_validate(entry1);
+    list_head_validate(entry2);
 
     list_head *pos = entry2->prev;
     list_head_replace(entry1, entry2);
