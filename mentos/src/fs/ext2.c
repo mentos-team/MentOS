@@ -1079,7 +1079,9 @@ static int ext2_write_bgdt(ext2_filesystem_t *fs)
 /// @return 0 on success, -1 on failure.
 static int ext2_read_inode(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t inode_index)
 {
-    uint32_t group_index, block_index, group_offset;
+    uint32_t group_index;
+    uint32_t block_index;
+    uint32_t group_offset;
     if (inode_index == 0) {
         pr_err("You are trying to read an invalid inode index (%d).\n", inode_index);
         return -1;
@@ -1122,7 +1124,9 @@ static int ext2_read_inode(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t 
 /// @return 0 on success, -1 on failure.
 static int ext2_write_inode(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t inode_index)
 {
-    uint32_t group_index, block_index, group_offset;
+    uint32_t group_index;
+    uint32_t block_index;
+    uint32_t group_offset;
     if (inode_index == 0) {
         pr_err("You are trying to read an invalid inode index (%d).\n", inode_index);
         return -1;
@@ -1170,7 +1174,9 @@ static int ext2_write_inode(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t
 ///  - inodes are allocated equally between groups.
 static int ext2_allocate_inode(ext2_filesystem_t *fs, unsigned preferred_group)
 {
-    uint32_t group_index = 0, group_offset = 0, inode_index = 0;
+    uint32_t group_index = 0;
+    uint32_t group_offset = 0;
+    uint32_t inode_index = 0;
     // Lock the filesystem.
     spinlock_lock(&fs->spinlock);
     // Allocate the cache.
@@ -1221,7 +1227,9 @@ static int ext2_allocate_inode(ext2_filesystem_t *fs, unsigned preferred_group)
 /// @return 0 on failure, or the index of the new block on success.
 static uint32_t ext2_allocate_block(ext2_filesystem_t *fs)
 {
-    uint32_t group_index = 0, group_offset = 0, block_index = 0;
+    uint32_t group_index = 0;
+    uint32_t group_offset = 0;
+    uint32_t block_index = 0;
     // Lock the filesystem.
     spinlock_lock(&fs->spinlock);
     // Allocate the cache.
@@ -1714,7 +1722,10 @@ static ssize_t ext2_write_inode_block(
     uint32_t block_index,
     uint8_t *buffer)
 {
-    uint32_t total_blocks_needed, allocated_blocks, blocks_to_allocate, real_index;
+    uint32_t total_blocks_needed;
+    uint32_t allocated_blocks;
+    uint32_t blocks_to_allocate;
+    uint32_t real_index;
 
     // Calculate total blocks needed.
     total_blocks_needed = block_index + 1;
@@ -1776,7 +1787,7 @@ static ssize_t ext2_read_inode_data(
     // What's the offset into the start block.
     uint32_t start_off   = offset % fs->block_size;
     // How much bytes to read for the end block.
-    uint32_t end_size    = end_offset - end_block * fs->block_size;
+    uint32_t end_size    = end_offset - (end_block * fs->block_size);
 
 #ifdef EXT2_FULL_DEBUG
     pr_debug("ext2_read_inode_data(inode: %4u, offset: %4u, nbyte: %4u)\n", inode_index, offset, nbyte);
@@ -1785,7 +1796,10 @@ static ssize_t ext2_read_inode_data(
     // Allocate the cache.
     uint8_t *cache = ext2_alloc_cache(fs);
 
-    uint32_t curr_off = 0, left, right, ret = end_offset - offset;
+    uint32_t curr_off = 0;
+    uint32_t left;
+    uint32_t right;
+    uint32_t ret = end_offset - offset;
     for (uint32_t block_index = start_block; block_index <= end_block; ++block_index) {
         left = 0, right = fs->block_size - 1;
         // Read the real block.
@@ -1842,7 +1856,7 @@ static ssize_t ext2_write_inode_data(
     // What's the offset into the start block.
     uint32_t start_off   = offset % fs->block_size;
     // How much bytes to read for the end block.
-    uint32_t end_size    = end_offset - end_block * fs->block_size;
+    uint32_t end_size    = end_offset - (end_block * fs->block_size);
 
 #ifdef EXT2_FULL_DEBUG
     pr_debug("ext2_write_inode_data(inode: %4u, offset: %4u, nbyte: %4u)\n", inode_index, offset, nbyte);
@@ -1851,7 +1865,10 @@ static ssize_t ext2_write_inode_data(
     // Allocate the cache.
     uint8_t *cache = ext2_alloc_cache(fs);
 
-    uint32_t curr_off = 0, left, right, ret = end_offset - offset;
+    uint32_t curr_off = 0;
+    uint32_t left;
+    uint32_t right;
+    uint32_t ret = end_offset - offset;
     for (uint32_t block_index = start_block; block_index <= end_block; ++block_index) {
         left = 0, right = fs->block_size;
         // Read the real block. Do not check for
@@ -2201,7 +2218,8 @@ static inline int ext2_append_new_direntry(
         return 0;
     }
     // Get the rec_len;
-    uint32_t rec_len            = ext2_get_rec_len_from_name(name), real_rec_len;
+    uint32_t rec_len            = ext2_get_rec_len_from_name(name);
+    uint32_t real_rec_len;
     // Prepare iterator.
     ext2_direntry_iterator_t it = ext2_direntry_iterator_begin(fs, cache, &parent_inode);
     // Iterate the directory entries.

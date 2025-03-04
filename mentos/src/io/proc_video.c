@@ -62,7 +62,7 @@ static ssize_t procv_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyt
     if (!rb_keybuffer_is_empty(rb) && (!flg_icanon || (rb_keybuffer_peek_front(rb) == '\n'))) {
         // Return the newline character.
         rb_keybuffer_print(rb);
-        *((char *)buf) = rb_keybuffer_pop_back(rb) & 0x00FF;
+        *(buf) = rb_keybuffer_pop_back(rb) & 0x00FF;
         // Indicate a character has been returned.
         return 1;
     }
@@ -112,7 +112,7 @@ static ssize_t procv_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyt
             return 0; // No character returned for backspace.
         } // Non-canonical mode: Add backspace to the buffer and return it.
         rb_keybuffer_push_front(rb, c);
-        *((char *)buf) = rb_keybuffer_pop_back(rb) & 0x00FF;
+        *(buf) = rb_keybuffer_pop_back(rb) & 0x00FF;
         return 1;
 
     case 127: // Delete key.
@@ -154,7 +154,7 @@ static ssize_t procv_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyt
 
     // If not in canonical mode, return the character immediately.
     if (!flg_icanon) {
-        *((char *)buf) = rb_keybuffer_pop_back(rb) & 0x00FF;
+        *(buf) = rb_keybuffer_pop_back(rb) & 0x00FF;
         return 1;
     }
 

@@ -239,7 +239,8 @@ super_block_t *vfs_get_superblock(const char *path)
     pr_debug("vfs_get_superblock(path: %s)\n", path);
     size_t last_sb_len = 0;
     size_t len;
-    super_block_t *last_sb = NULL, *sb = NULL;
+    super_block_t *last_sb = NULL;
+    super_block_t *sb = NULL;
     list_head *it;
     list_for_each (it, &vfs_super_blocks) {
         sb  = list_entry(it, super_block_t, mounts);
@@ -716,7 +717,7 @@ int vfs_extend_task_fd_list(struct task_struct *task)
         return 0;
     }
     // Set the max number of file descriptors.
-    int new_max_fd    = (task->fd_list) ? task->max_fd * 2 + 1 : MAX_OPEN_FD;
+    int new_max_fd    = (task->fd_list) ? (task->max_fd * 2) + 1 : MAX_OPEN_FD;
     // Allocate the memory for the list.
     void *new_fd_list = kmalloc(new_max_fd * sizeof(vfs_file_descriptor_t));
     // Check the new list.

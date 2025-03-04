@@ -556,7 +556,8 @@ static inline int ata_status_wait_for(ata_device_t *dev, long mask, long timeout
 /// @param dev the device for which we print the information.
 static inline void ata_print_status_error(ata_device_t *dev)
 {
-    uint8_t error = inportb(dev->io_reg.error), status = inportb(dev->io_reg.status);
+    uint8_t error = inportb(dev->io_reg.error);
+    uint8_t status = inportb(dev->io_reg.status);
     if (error) {
         pr_err(
             "[%s] Device error [%s] status [%s]\n", ata_get_device_settings_str(dev), ata_get_device_error_str(error),
@@ -1364,7 +1365,8 @@ static ssize_t ata_read(vfs_file_t *file, char *buffer, off_t offset, size_t siz
         pr_warning("The offset is exceeding the disk size (%d > %d)\n", offset, max_offset);
         ata_dump_device(dev);
         // Get the error and status information of the device.
-        uint8_t error = inportb(dev->io_reg.error), status = inportb(dev->io_reg.status);
+        uint8_t error = inportb(dev->io_reg.error);
+        uint8_t status = inportb(dev->io_reg.status);
         pr_err("Device error  : %s\n", ata_get_device_error_str(error));
         pr_err("Device status : %s\n", ata_get_device_status_str(status));
         return -1; // Return error on invalid offset.

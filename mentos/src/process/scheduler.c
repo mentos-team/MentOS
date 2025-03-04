@@ -677,8 +677,10 @@ int sys_sched_getparam(pid_t pid, sched_param_t *param)
 /// @return 1 if scheduling periodic processes is feasible, 0 otherwise.
 static int __response_time_analysis(void)
 {
-    task_struct *entry, *previous;
-    time_t r, previous_r = 0;
+    task_struct *entry;
+    task_struct *previous;
+    time_t r;
+    time_t previous_r = 0;
     list_for_each_decl (it, &runqueue.queue) {
         // Get the curent entry in the list.
         entry = list_entry(it, task_struct, run_list);

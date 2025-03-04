@@ -51,7 +51,7 @@ static inline int __bb_test_flag(bb_page_t *page, int flag) { return test_bit(fl
 /// @return The page we found.
 static inline bb_page_t *__get_page_from_base(bb_instance_t *instance, bb_page_t *base, unsigned int index)
 {
-    return (bb_page_t *)(((uint32_t)base) + instance->pgs_size * index);
+    return (bb_page_t *)(((uint32_t)base) + (instance->pgs_size * index));
 }
 
 /// @brief Returns the page at the given index, starting from the first page of the BB system.
@@ -478,16 +478,18 @@ unsigned long buddy_system_get_total_space(const bb_instance_t *instance) { retu
 unsigned long buddy_system_get_free_space(const bb_instance_t *instance)
 {
     unsigned int size = 0;
-    for (int order = 0; order < MAX_BUDDYSYSTEM_GFP_ORDER; ++order)
+    for (int order = 0; order < MAX_BUDDYSYSTEM_GFP_ORDER; ++order) {
         size += instance->free_area[order].nr_free * (1UL << order) * PAGE_SIZE;
+}
     return size;
 }
 
 unsigned long buddy_system_get_cached_space(const bb_instance_t *instance)
 {
     unsigned int size = 0;
-    for (int order = 0; order < MAX_BUDDYSYSTEM_GFP_ORDER; ++order)
+    for (int order = 0; order < MAX_BUDDYSYSTEM_GFP_ORDER; ++order) {
         size += instance->free_pages_cache_size * PAGE_SIZE;
+}
     return size;
 }
 

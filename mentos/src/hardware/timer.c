@@ -441,7 +441,8 @@ static inline unsigned long __timeval_to_ticks(const timeval_t *tv)
 /// @param timer the timer to update.
 static void __update_task_itimerval(int which, const struct itimerval *timer)
 {
-    time_t interval, value;
+    time_t interval;
+    time_t value;
     // Get the current task.
     struct task_struct *task = scheduler_get_current_process();
     // Transform the timer to separate interval and value.

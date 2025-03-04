@@ -103,7 +103,7 @@ static void __setup_pages(uint32_t pfn_virt_start, uint32_t pfn_phys_start, uint
         boot_pgdir.entries[i].rw        = 1;
         boot_pgdir.entries[i].present   = 1;
         boot_pgdir.entries[i].available = 1;
-        boot_pgdir.entries[i].frame     = ((uint32_t)table) >> 12u;
+        boot_pgdir.entries[i].frame     = ((uint32_t)table) >> 12U;
     }
 }
 
@@ -135,10 +135,11 @@ static void __get_kernel_low_high(elf_header_t *elf_hdr, uint32_t *virt_low, uin
     // Compute the offset for accessing the program headers.
     uint32_t offset = (uint32_t)elf_hdr + elf_hdr->phoff;
     // In this two variables we will store the start and end addresses of the segment.
-    uint32_t segment_start, segment_end;
+    uint32_t segment_start;
+    uint32_t segment_end;
     // Iterate for each program header.
     for (int i = 0; i < elf_hdr->phnum; i++) {
-        program_header = (elf_program_header_t *)(offset + elf_hdr->phentsize * i);
+        program_header = (elf_program_header_t *)(offset + (elf_hdr->phentsize * i));
         if (program_header->type == PT_LOAD) {
             // Take the start and end addresses of the segment from the program header.
             segment_start = program_header->vaddr;
@@ -175,7 +176,8 @@ static inline void __relocate_kernel_image(elf_header_t *elf_hdr)
     char *kernel_start;
     char *virtual_address;
     char *physical_address;
-    uint32_t offset, valid_size;
+    uint32_t offset;
+    uint32_t valid_size;
 
     // Get the elf file starting address.
     kernel_start = (char *)elf_hdr;
@@ -184,7 +186,7 @@ static inline void __relocate_kernel_image(elf_header_t *elf_hdr)
     // Iterate over the program headers.
     for (int i = 0; i < elf_hdr->phnum; i++) {
         // Get the program header.
-        program_header   = (elf_program_header_t *)(offset + elf_hdr->phentsize * i);
+        program_header   = (elf_program_header_t *)(offset + (elf_hdr->phentsize * i));
         // Get the virtual address of the program header.
         virtual_address  = (char *)program_header->vaddr;
         // Get the physical address of the program header.

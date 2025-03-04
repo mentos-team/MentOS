@@ -430,7 +430,8 @@ int find_free_vm_area(mm_struct_t *mm, size_t length, uintptr_t *vm_start)
         return -1;
     }
 
-    vm_area_struct_t *area, *prev_area;
+    vm_area_struct_t *area;
+    vm_area_struct_t *prev_area;
 
     // Iterate through the list of memory areas in reverse order.
     list_for_each_prev_decl(it, &mm->mmap_list)
@@ -1381,7 +1382,8 @@ int destroy_process_image(mm_struct_t *mm)
     // Free each segment inside mm.
     vm_area_struct_t *segment = NULL;
     // Iterate through the list of memory areas.
-    list_head *it             = mm->mmap_list.next, *next;
+    list_head *it             = mm->mmap_list.next;
+    list_head *next;
 
     while (!list_head_empty(it)) {
         segment = list_entry(it, vm_area_struct_t, vm_list);

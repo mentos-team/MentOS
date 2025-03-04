@@ -250,7 +250,8 @@ static inline int elf_load_exec(elf_header_t *header, task_struct *task)
     elf_program_header_t *program_header;
     vm_area_struct_t *segment;
     virt_map_page_t *vpage;
-    uint32_t dst_addr, zmem_sz;
+    uint32_t dst_addr;
+    uint32_t zmem_sz;
 
     pr_debug(" Type      | Mem. Size | File Size | VADDR\n");
     for (unsigned i = 0; i < header->phnum; ++i) {

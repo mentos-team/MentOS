@@ -295,14 +295,14 @@ int main(int argc, char **argv)
         }
 
         unsigned char hash[SHA256_BLOCK_SIZE]       = {0};
-        char hash_string[SHA256_BLOCK_SIZE * 2 + 1] = {0};
+        char hash_string[(SHA256_BLOCK_SIZE * 2) + 1] = {0};
         SHA256_ctx_t ctx;
         sha256_init(&ctx);
         for (unsigned i = 0; i < 100000; ++i) {
             sha256_update(&ctx, (unsigned char *)password, strlen(password));
         }
         sha256_final(&ctx, hash);
-        sha256_bytes_to_hex(hash, SHA256_BLOCK_SIZE, hash_string, SHA256_BLOCK_SIZE * 2 + 1);
+        sha256_bytes_to_hex(hash, SHA256_BLOCK_SIZE, hash_string, (SHA256_BLOCK_SIZE * 2) + 1);
 
         // Verify the password against the stored hash
         if (strcmp(shadow->sp_pwdp, hash_string) != 0) {

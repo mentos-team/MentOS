@@ -117,7 +117,7 @@ void __video_set_cursor_shape(unsigned char start, unsigned char end)
 /// @param y The y coordinate.
 static inline void __video_set_cursor_position(unsigned int x, unsigned int y)
 {
-    uint32_t position = y * WIDTH + x;
+    uint32_t position = (y * WIDTH) + x;
     // Cursor LOW port to VGA index register.
     outportb(0x3D4, 0x0F);
     outportb(0x3D5, (uint8_t)(position & 0xFFU));
@@ -141,10 +141,12 @@ static inline void __video_get_cursor_position(unsigned int *x, unsigned int *y)
     outportb(0x3D4, 0x0E);
     position |= ((uint16_t)inportb(0x3D5)) << 8;
     // Calculate x and y.
-    if (x)
+    if (x) {
         *x = position % WIDTH;
-    if (y)
+}
+    if (y) {
         *y = position / WIDTH;
+}
 }
 
 /// @brief Sets the provided ansi code.

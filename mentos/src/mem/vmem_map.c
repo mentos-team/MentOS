@@ -121,7 +121,7 @@ int virt_init(void)
         uint32_t phy_addr = get_physical_address_from_page(table_page);
 
         // Set the physical frame address in the page directory entry.
-        entry->frame = phy_addr >> 12u;
+        entry->frame = phy_addr >> 12U;
     }
 
     return 0;

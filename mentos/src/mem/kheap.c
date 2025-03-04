@@ -139,30 +139,34 @@ static inline void __blkmngr_dump(int log_level, heap_header_t *header)
     list_for_each_decl (it, &header->list) {
         block = list_entry(it, block_t, list);
         pr_log(log_level, "[%s]     %s{", task->name, __block_to_string(block));
-        if (it->prev != &header->list)
+        if (it->prev != &header->list) {
             pr_log(log_level, "0x%p", list_entry(it->prev, block_t, list));
-        else
+        } else {
             pr_log(log_level, "   HEAD   ");
+}
         pr_log(log_level, ", ");
-        if (it->next != &header->list)
+        if (it->next != &header->list) {
             pr_log(log_level, "0x%p", list_entry(it->next, block_t, list));
-        else
+        } else {
             pr_log(log_level, "   HEAD   ");
+}
         pr_log(log_level, "}\n");
     }
     pr_log(log_level, "[%s] FREE (0x%p):\n", task->name, &header->free);
     list_for_each_decl (it, &header->free) {
         block = list_entry(it, block_t, free);
         pr_log(log_level, "[%s]     %s{", task->name, __block_to_string(block));
-        if (it->prev != &header->free)
+        if (it->prev != &header->free) {
             pr_log(log_level, "0x%p", list_entry(it->prev, block_t, free));
-        else
+        } else {
             pr_log(log_level, "   HEAD   ");
+}
         pr_log(log_level, ", ");
-        if (it->next != &header->free)
+        if (it->next != &header->free) {
             pr_log(log_level, "0x%p", list_entry(it->next, block_t, free));
-        else
+        } else {
             pr_log(log_level, "   HEAD   ");
+}
         pr_log(log_level, "}\n");
     }
     pr_log(log_level, "\n");

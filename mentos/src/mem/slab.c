@@ -462,8 +462,8 @@ int kmem_cache_init(void)
     for (unsigned i = 0; i < MAX_KMALLOC_CACHE_ORDER; i++) {
         malloc_blocks[i] = kmem_cache_create(
             "kmalloc",
-            1u << i, // Size of the allocation (2^i).
-            1u << i, // Alignment of the allocation.
+            1U << i, // Size of the allocation (2^i).
+            1U << i, // Alignment of the allocation.
             GFP_KERNEL,
             NULL,  // Constructor (none).
             NULL); // Destructor (none).
