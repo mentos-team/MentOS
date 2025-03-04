@@ -8,22 +8,23 @@
 /// @copyright (c) 2014-2024
 /// This file is distributed under the MIT License. See LICENSE.md for details.
 
-#include <sys/unistd.h>
-#include <sys/errno.h>
-#include <sys/stat.h>
-#include <sys/sem.h>
-#include <sys/ipc.h>
-#include <stdlib.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
-#include <string.h>
+#include <stdlib.h>
 #include <strerror.h>
+#include <string.h>
+#include <sys/ipc.h>
+#include <sys/sem.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 int main(int argc, char *argv[])
 {
     struct sembuf op[1]; // Operation structure for semaphore operations.
     union semun arg;     // Union to store semaphore values.
-    long ret, semid;     // Return values and semaphore ID.
+    long ret;
+    long semid; // Return values and semaphore ID.
 
     // ========================================================================
     // Create a semaphore set with one semaphore.
@@ -62,7 +63,9 @@ int main(int argc, char *argv[])
         op_child.sem_op  = 1; // Increment by 1.
         op_child.sem_flg = 0; // No special flags.
 
-        sleep(3); // Simulate delay before child performs the operation.
+        // Sleep for 200 ms.
+        timespec_t req = {0, 200000000};
+        nanosleep(&req, NULL);
 
         // Perform the increment operation on the semaphore.
         if (semop(semid, &op_child, 1) < 0) {

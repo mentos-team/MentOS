@@ -81,10 +81,10 @@ void vga_draw_circle(int xc, int yc, int r, unsigned char color);
 /// @brief Draws a triangle.
 /// @param x1 1st point x-axis position.
 /// @param y1 1st point y-axis position.
-/// @param x2 2nd point x-axis position. 
-/// @param y2 2nd point y-axis position. 
-/// @param x3 3rd point x-axis position. 
-/// @param y3 3rd point y-axis position. 
+/// @param x2 2nd point x-axis position.
+/// @param y2 2nd point y-axis position.
+/// @param x3 3rd point x-axis position.
+/// @param y3 3rd point y-axis position.
 /// @param color used to draw the triangle.
 void vga_draw_triangle(int x1, int y1, int x2, int y2, int x3, int y3, unsigned char color);
 
@@ -104,12 +104,12 @@ void vga_move_cursor(unsigned int x, unsigned int y);
 /// @brief Returns cursor's position on the screen.
 /// @param x The output x coordinate.
 /// @param y The output y coordinate.
-void vga_get_cursor_position(unsigned int * x, unsigned int * y);
+void vga_get_cursor_position(unsigned int *x, unsigned int *y);
 
 /// @brief Returns screen size.
 /// @param width The screen width.
 /// @param height The screen height.
-void vga_get_screen_size(unsigned int * width, unsigned int * height);
+void vga_get_screen_size(unsigned int *width, unsigned int *height);
 
 /// @brief Move to the following line (the effect of \n character).
 void vga_new_line(void);

@@ -3,14 +3,14 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include <sys/unistd.h>
 #include <signal.h>
-#include <stdlib.h>
 #include <stdio.h>
-#include <string.h>
+#include <stdlib.h>
 #include <strerror.h>
+#include <string.h>
 #include <sys/wait.h>
 #include <time.h>
+#include <unistd.h>
 
 void sig_handler(int sig)
 {

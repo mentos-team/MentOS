@@ -4,14 +4,14 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include <sys/unistd.h>
 #include <signal.h>
-#include <stdlib.h>
 #include <stdio.h>
-#include <string.h>
+#include <stdlib.h>
 #include <strerror.h>
+#include <string.h>
 #include <sys/wait.h>
 #include <time.h>
+#include <unistd.h>
 
 /// @brief Signal handler for SIGFPE that uses siginfo_t to get more information
 /// about the signal.
@@ -54,7 +54,7 @@ int main(int argc, char *argv[])
     // Attempt to set the signal handler for SIGFPE.
     if (sigaction(SIGFPE, &action, NULL) == -1) {
         // Print error message if sigaction fails.
-        printf("Failed to set signal handler (%s).\n", SIGFPE, strerror(errno));
+        printf("Failed to set signal handler (%s).\n", strerror(errno));
         return 1;
     }
 
@@ -62,7 +62,8 @@ int main(int argc, char *argv[])
 
     // Perform a division that will eventually cause a divide-by-zero error to
     // trigger SIGFPE.
-    int d = 1, e = 1;
+    int d = 1;
+    int e = 1;
 
     // Enter an infinite loop to progressively decrement e and eventually
     // trigger SIGFPE.

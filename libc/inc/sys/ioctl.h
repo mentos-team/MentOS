@@ -5,10 +5,9 @@
 
 #pragma once
 
-/// @brief Perform the I/O control operation specified by REQUEST on FD.
-///   One argument may follow; its presence and type depend on REQUEST.
-/// @param fd      Must be an open file descriptor.
-/// @param request The device-dependent request code
-/// @param data    An untyped pointer to memory.
-/// @return Return value depends on REQUEST. Usually -1 indicates error.
-int ioctl(int fd, unsigned long int request, void *data);
+/// @brief Executes a device-specific control operation on a file descriptor.
+/// @param fd The file descriptor for the device or file being operated on.
+/// @param request The `ioctl` command, defining the action or configuration.
+/// @param data Additional data needed for the `ioctl` command, often a pointer to user-provided data.
+/// @return Returns 0 on success; on error, returns a negative error code.
+long ioctl(int fd, unsigned int request, unsigned long data);

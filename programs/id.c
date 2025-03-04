@@ -7,15 +7,15 @@
 #include <pwd.h>
 #include <stdio.h>
 #include <string.h>
-#include <sys/unistd.h>
+#include <unistd.h>
 
 int main(int argc, char **argv)
 {
     if (argc == 1) {
-        uid_t uid = geteuid();
+        uid_t uid      = geteuid();
         passwd_t *user = getpwuid(uid);
-        gid_t gid = getegid();
-        group_t *grp = getgrgid(gid);
+        gid_t gid      = getegid();
+        group_t *grp   = getgrgid(gid);
 
         printf("uid=%d(%s) gid=%d(%s)\n", uid, user->pw_name, gid, grp->gr_name);
     } else if (strncmp(argv[1], "--help", 6) == 0) {

@@ -7,12 +7,10 @@
 
 #include "fs/vfs_types.h"
 #include "mem/slab.h"
+#include "os_root_path.h"
 
 /// Maximum number of opened file.
 #define MAX_OPEN_FD 16
-
-/// Cache for file structures in the VFS.
-extern kmem_cache_t *vfs_file_cache;
 
 /// @brief Forward declaration of task_struct.
 /// Used for task management in the VFS.
@@ -23,15 +21,35 @@ struct task_struct;
 /// must be called before any other VFS functions.
 void vfs_init(void);
 
+/// @brief Allocates a VFS file structure from the cache.
+/// @param file Source file where the allocation is requested (for logging).
+/// @param fun Function name where the allocation is requested (for logging).
+/// @param line Line number where the allocation is requested (for logging).
+/// @return Pointer to the allocated VFS file structure, or NULL if allocation fails.
+vfs_file_t *pr_vfs_alloc_file(const char *file, const char *fun, int line);
+
+/// @brief Frees a VFS file structure back to the cache.
+/// @param file Source file where the deallocation is requested (for logging).
+/// @param fun Function name where the deallocation is requested (for logging).
+/// @param line Line number where the deallocation is requested (for logging).
+/// @param vfs_file Pointer to the VFS file structure to free.
+void pr_vfs_dealloc_file(const char *file, const char *fun, int line, vfs_file_t *vfs_file);
+
+/// Wrapper that provides the filename, the function and line where the alloc is happening.
+#define vfs_alloc_file(...) pr_vfs_alloc_file(__RELATIVE_PATH__, __func__, __LINE__)
+
+/// Wrapper that provides the filename, the function and line where the free is happening.
+#define vfs_dealloc_file(...) pr_vfs_dealloc_file(__RELATIVE_PATH__, __func__, __LINE__, __VA_ARGS__)
+
 /// @brief Register a new filesystem.
 /// @param fs A pointer to the information concerning the new filesystem.
 /// @return The outcome of the operation, 0 if fails.
-int vfs_register_filesystem(file_system_type *fs);
+int vfs_register_filesystem(file_system_type_t *fs);
 
 /// @brief Unregister a new filesystem.
 /// @param fs A pointer to the information concerning the filesystem.
 /// @return The outcome of the operation, 0 if fails.
-int vfs_unregister_filesystem(file_system_type *fs);
+int vfs_unregister_filesystem(file_system_type_t *fs);
 
 /// @brief Register a superblock for the filesystem.
 /// @param name The name of the superblock.
@@ -39,7 +57,7 @@ int vfs_unregister_filesystem(file_system_type *fs);
 /// @param type A pointer to the filesystem type.
 /// @param root A pointer to the root file of the filesystem.
 /// @return 1 on success, 0 on failure.
-int vfs_register_superblock(const char *name, const char *path, file_system_type *type, vfs_file_t *root);
+int vfs_register_superblock(const char *name, const char *path, file_system_type_t *type, vfs_file_t *root);
 
 /// @brief Unregister a superblock.
 /// @param sb A pointer to the superblock to unregister.
@@ -50,6 +68,10 @@ int vfs_unregister_superblock(super_block_t *sb);
 /// @param absolute_path Path for which we want to search the mountpoint.
 /// @return Pointer to the super_block_t of the mountpoint, or NULL if not found.
 super_block_t *vfs_get_superblock(const char *absolute_path);
+
+/// @brief Dumps the list of all superblocks to the log.
+/// @param log_level Logging level to use for the output.
+void vfs_dump_superblocks(int log_level);
 
 /// @brief Open a file given its absolute path.
 /// @param absolute_path An absolute path to the file.
@@ -107,13 +129,19 @@ off_t vfs_lseek(vfs_file_t *file, off_t offset, int whence);
 ///         appropriately.
 ssize_t vfs_getdents(vfs_file_t *file, dirent_t *dirp, off_t off, size_t count);
 
-/// @brief Perform the I/O control operation specified by REQUEST on FD.
-///   One argument may follow; its presence and type depend on REQUEST.
-/// @param file     The file for which we are executing the operations.
-/// @param request The device-dependent request code
-/// @param data    An untyped pointer to memory.
-/// @return Return value depends on REQUEST. Usually -1 indicates error.
-int vfs_ioctl(vfs_file_t *file, int request, void *data);
+/// @brief Perform the I/O control operation specified by `request` on `file`.
+/// @param file The file for which the operation is executed.
+/// @param request The device-dependent request code.
+/// @param data An untyped value or pointer, depending on the request.
+/// @return A request-specific return value, or a negative error code on failure.
+long vfs_ioctl(vfs_file_t *file, unsigned int request, unsigned long data);
+
+/// @brief Provides control operations on an open file descriptor.
+/// @param file The file for which the operation is executed.
+/// @param request The `fcntl` command, defining the operation (e.g., `F_GETFL`, `F_SETFL`).
+/// @param data Additional data required by certain `fcntl` commands (e.g., flags or pointer).
+/// @return Returns 0 on success; on error, returns a negative error code.
+long vfs_fcntl(vfs_file_t *file, unsigned int request, unsigned long data);
 
 /// @brief Delete a name and possibly the file it refers to.
 /// @param path The path to the file.

@@ -9,12 +9,12 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include <stdio.h>
 #include <sched.h>
-#include <sys/unistd.h>
-#include <string.h>
-#include <strerror.h>
+#include <stdio.h>
 #include <stdlib.h>
+#include <strerror.h>
+#include <string.h>
+#include <unistd.h>
 
 int main(int argc, char *argv[])
 {
@@ -45,8 +45,9 @@ int main(int argc, char *argv[])
     // Enter a loop that runs for 10 iterations
     while (1) {
         // Increment the counter and break out of the loop after 10 iterations
-        if (++counter == 10)
+        if (++counter == 10) {
             break;
+        }
 
         // Print the current counter value
         printf("[periodic3] counter: %d\n", counter);

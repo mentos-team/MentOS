@@ -16,9 +16,9 @@
 #include "drivers/ata/ata.h"
 #include "drivers/keyboard/keyboard.h"
 #include "drivers/keyboard/keymap.h"
+#include "drivers/mem.h"
 #include "drivers/ps2.h"
 #include "drivers/rtc.h"
-#include "drivers/mem.h"
 #include "fs/ext2.h"
 #include "fs/procfs.h"
 #include "fs/vfs.h"
@@ -27,10 +27,12 @@
 #include "io/proc_modules.h"
 #include "io/vga/vga.h"
 #include "io/video.h"
+#include "ipc/ipc.h"
 #include "mem/vmem_map.h"
 #include "mem/zone_allocator.h"
 #include "process/scheduler.h"
 #include "process/scheduler_feedback.h"
+#include "resource_tracing.h"
 #include "stdio.h"
 #include "string.h"
 #include "sys/module.h"
@@ -85,7 +87,8 @@ int runtests = 0;
 /// @brief Prints [OK] at the current row and column 60.
 static inline void print_ok(void)
 {
-    unsigned y, width;
+    unsigned y;
+    unsigned width;
     video_get_cursor_position(NULL, &y);
     video_get_screen_size(&width, NULL);
     video_move_cursor(width - 5, y);
@@ -95,7 +98,8 @@ static inline void print_ok(void)
 /// @brief Prints [FAIL] at the current row and column 60.
 static inline void print_fail(void)
 {
-    unsigned y, width;
+    unsigned y;
+    unsigned width;
     video_get_cursor_position(NULL, &y);
     video_get_screen_size(&width, NULL);
     video_move_cursor(width - 7, y);
@@ -119,6 +123,10 @@ int kmain(boot_info_t *boot_informations)
     initial_esp = boot_info.stack_base;
     // Dump the multiboot structure.
     dump_multiboot(boot_info.multiboot_header);
+
+    //==========================================================================
+    pr_notice("Initialize resource registry...\n");
+    resource_register_init();
 
     //==========================================================================
     pr_notice("Initialize the video...\n");
@@ -418,19 +426,20 @@ int kmain(boot_info_t *boot_informations)
                bitmask_check(boot_info.multiboot_header->flags, MULTIBOOT_FLAG_CMDLINE) &&
                strcmp((char *)boot_info.multiboot_header->cmdline, "runtests") == 0;
 
-    task_struct *init_p;
     if (runtests) {
         pr_notice("Creating runtests process...\n");
         printf("Creating runtests process...");
-        init_p = process_create_init("/bin/runtests");
+        if (process_create_init("/bin/runtests")) {
+            print_fail();
+            return 1;
+        }
     } else {
         pr_notice("Creating init process...\n");
         printf("Creating init process...");
-        init_p = process_create_init("/bin/init");
-    }
-    if (!init_p) {
-        print_fail();
-        return 1;
+        if (process_create_init("/bin/init")) {
+            print_fail();
+            return 1;
+        }
     }
     print_ok();
 
@@ -455,16 +464,17 @@ int kmain(boot_info_t *boot_informations)
     // We have completed the booting procedure.
     pr_notice("Booting done, jumping into init process.\n");
     // Switch to the page directory of init.
-    paging_switch_directory_va(init_p->mm->pgd);
+    paging_switch_directory_va(init_process->mm->pgd);
     // Jump into init process.
     scheduler_enter_user_jmp(
         // Entry point.
-        init_p->thread.regs.eip,
+        init_process->thread.regs.eip,
         // Stack pointer.
-        init_p->thread.regs.useresp);
+        init_process->thread.regs.useresp);
     // Enable interrupt requests.
     sti();
-    for (;;) {}
+    for (;;) {
+    }
     // We should not be here.
     pr_emerg("Dear developer, we have to talk...\n");
     return 1;

@@ -13,6 +13,7 @@
 #include "descriptor_tables/isr.h"
 #include "devices/fpu.h"
 #include "drivers/rtc.h"
+#include "errno.h"
 #include "hardware/pic8259.h"
 #include "hardware/timer.h"
 #include "io/port_io.h"
@@ -22,10 +23,9 @@
 #include "process/scheduler.h"
 #include "process/wait.h"
 #include "stdint.h"
-#include "sys/errno.h"
-#include "system/signal.h"
-#include "system/panic.h"
 #include "string.h"
+#include "system/panic.h"
+#include "system/signal.h"
 
 /// @defgroup picregs Programmable Interval Timer Registers
 /// @brief The list of registers used to set the PIT.
@@ -37,7 +37,7 @@
 /// @}
 
 /// @brief Frequency divider value (1.193182 MHz).
-#define PIT_DIVISOR 1193182
+#define PIT_DIVISOR       1193182
 /// @brief   Command used to configure the PIT.
 /// @details
 /// Bits         Usage
@@ -69,12 +69,12 @@
 ///     0x34 = 00|11|010|0
 #define PIT_CONFIGURATION 0x34u
 /// Mask used to set the divisor.
-#define PIT_MASK 0xFFu
+#define PIT_MASK          0xFFu
 
 /// The number of ticks since the system started its execution.
 static __volatile__ unsigned long timer_ticks = 0;
 /// Contains timer for each CPU (for now only one)
-static tvec_base_t cpu_base = { 0 };
+static tvec_base_t cpu_base                   = {0};
 /// Contains all process waiting for a sleep.
 static wait_queue_head_t sleep_queue;
 
@@ -87,7 +87,7 @@ void timer_phase(const uint32_t hz)
     // Set low byte of divisor.
     outportb(PIT_DATAREG0, divisor & PIT_MASK);
     // Set high byte of divisor.
-    outportb(PIT_DATAREG0, (divisor >> 8u) & PIT_MASK);
+    outportb(PIT_DATAREG0, (divisor >> 8U) & PIT_MASK);
 }
 
 void timer_handler(pt_regs *reg)
@@ -120,15 +120,9 @@ void timer_install(void)
     pic8259_irq_enable(IRQ_TIMER);
 }
 
-uint64_t timer_get_seconds(void)
-{
-    return timer_ticks / TICKS_PER_SECOND;
-}
+uint64_t timer_get_seconds(void) { return timer_ticks / TICKS_PER_SECOND; }
 
-unsigned long timer_get_ticks(void)
-{
-    return timer_ticks;
-}
+unsigned long timer_get_ticks(void) { return timer_ticks; }
 
 // ============================================================================
 // SUPPORT FUNCTIONS (tvec_base_t)
@@ -141,8 +135,7 @@ static inline void __print_vector(list_head *vector)
 #if defined(ENABLE_REAL_TIMER_SYSTEM_DUMP) && (__DEBUG_LEVEL__ == LOGLEVEL_DEBUG)
     if (!list_head_empty(vector)) {
         pr_debug("0x%p = [ ", vector);
-        list_for_each_decl(it, vector)
-        {
+        list_for_each_decl (it, vector) {
             pr_debug("0x%p ", it);
         }
         pr_debug("]\n");
@@ -237,7 +230,7 @@ static inline void __timer_cascate_vector(tvec_base_t *base, list_head *current_
         list_for_each_safe_decl(it, save, current_vector)
         {
             // Get the timer.
-            timer = list_entry(it, struct timer_list, entry);
+            timer         = list_entry(it, struct timer_list, entry);
             // Get the new vector.
             target_vector = __timer_get_target_vector(base, timer);
             // If the new vector is different than the current one, move the timer.
@@ -267,9 +260,7 @@ static inline void __timer_cascate_base(tvec_base_t *base)
 {
     for (int i = 3; i >= 0; i--) {
         // Cascate the vector.
-        __timer_cascate_vector(
-            base,
-            base->tvn[i] + ((base->timer_ticks >> TIMER_TICKS_BITS((size_t)i)) & TVN_MASK));
+        __timer_cascate_vector(base, base->tvn[i] + ((base->timer_ticks >> TIMER_TICKS_BITS((size_t)i)) & TVN_MASK));
     }
 }
 
@@ -399,10 +390,12 @@ static inline void __sleep_data_dealloc(sleep_data_t *sleep_data)
 /// @param timer where the final values should be stored.
 static inline void __values_to_itimerval(time_t interval, time_t value, struct itimerval *timer)
 {
+    // Validate input.
+    assert(timer && "__timespec_to_ticks: Input timer is NULL.");
     timer->it_interval.tv_sec  = interval / TICKS_PER_SECOND;
-    timer->it_interval.tv_usec = (interval * 1000) / TICKS_PER_SECOND;
+    timer->it_interval.tv_usec = (interval % TICKS_PER_SECOND) * 1000000 / TICKS_PER_SECOND;
     timer->it_value.tv_sec     = value / TICKS_PER_SECOND;
-    timer->it_value.tv_usec    = (value * 1000) / TICKS_PER_SECOND;
+    timer->it_value.tv_usec    = (value % TICKS_PER_SECOND) * 1000000 / TICKS_PER_SECOND;
 }
 
 /// @brief Transforms an interval timer to values.
@@ -411,10 +404,36 @@ static inline void __values_to_itimerval(time_t interval, time_t value, struct i
 /// @param timer the timer used to initialize the values.
 static inline void __itimerval_to_values(time_t *interval, time_t *value, const struct itimerval *timer)
 {
-    *interval = (timer->it_interval.tv_sec * TICKS_PER_SECOND) +
-                (timer->it_interval.tv_usec * TICKS_PER_SECOND) / 1000;
-    *value = (timer->it_value.tv_sec * TICKS_PER_SECOND) +
-             (timer->it_value.tv_usec * TICKS_PER_SECOND) / 1000;
+    // Validate input.
+    assert(interval && "__timespec_to_ticks: Input interval is NULL.");
+    assert(value && "__timespec_to_ticks: Input value is NULL.");
+    assert(timer && "__timespec_to_ticks: Input timer is NULL.");
+    *interval =
+        (timer->it_interval.tv_sec * TICKS_PER_SECOND) + (timer->it_interval.tv_usec * TICKS_PER_SECOND) / 1000000;
+    *value = (timer->it_value.tv_sec * TICKS_PER_SECOND) + (timer->it_value.tv_usec * TICKS_PER_SECOND) / 1000000;
+}
+
+/// @brief Convert timespec to ticks.
+/// @param ts Pointer to the timespec structure to be converted.
+/// @return The equivalent number of ticks.
+static inline unsigned long __timespec_to_ticks(const timespec_t *ts)
+{
+    // Validate input.
+    assert(ts && "__timespec_to_ticks: Input ts is NULL.");
+    // Convert seconds to ticks and add the conversion for nanoseconds.
+    return (unsigned long)(ts->tv_sec * TICKS_PER_SECOND) +
+           (unsigned long)(ts->tv_nsec / (1000000000 / TICKS_PER_SECOND));
+}
+
+/// @brief Convert timeval to ticks.
+/// @param tv Pointer to the timeval structure to be converted.
+/// @return The equivalent number of ticks.
+static inline unsigned long __timeval_to_ticks(const timeval_t *tv)
+{
+    // Validate input.
+    assert(tv && "__timeval_to_ticks: Input ts is NULL.");
+    // Convert seconds to ticks and add the conversion for microseconds.
+    return (unsigned long)(tv->tv_sec * TICKS_PER_SECOND) + (unsigned long)(tv->tv_usec / (1000000 / TICKS_PER_SECOND));
 }
 
 /// @brief Updates the timer for the given task.
@@ -452,10 +471,8 @@ void dynamic_timers_install(void)
 {
     // Initialize the timer structure for each CPU.
     __tvec_base_init(&cpu_base);
-    // Initialize sleeping process list
-    list_head_init(&sleep_queue.task_list);
-    // Initialize the sleep queue lock.
-    spinlock_init(&sleep_queue.lock);
+    // Initialize wait queue.
+    wait_queue_head_init(&sleep_queue);
 }
 
 void run_timer_softirq(void)
@@ -535,7 +552,10 @@ void run_timer_softirq(void)
 /// @param data The data.
 static inline void debug_timeout(unsigned long data)
 {
-    pr_debug("The timer has been successfully deactivated: %d, ticks: %d, seconds: %d\n", data, timer_ticks, timer_get_seconds());
+    pr_debug(
+        "The timer has been successfully deactivated: %d, ticks: %d, seconds: "
+        "%d\n",
+        data, timer_ticks, timer_get_seconds());
 }
 
 /// @brief Callback for when a sleep timer expires.
@@ -543,11 +563,11 @@ static inline void debug_timeout(unsigned long data)
 static inline void sleep_timeout(unsigned long data)
 {
     // Get the sleep data.
-    sleep_data_t *sleep_data = (sleep_data_t *)data;
+    sleep_data_t *sleep_data             = (sleep_data_t *)data;
     // Get the wait_queue_entry.
     wait_queue_entry_t *wait_queue_entry = sleep_data->wait_queue_entry;
     // Executed entry's wakeup test function
-    if (wait_queue_entry->func(wait_queue_entry, 0, 0) == 1) {
+    if (wait_queue_entry->func(wait_queue_entry, TASK_RUNNING, 0) == 1) {
         pr_debug("Process (pid: %d) restored from sleep\n", wait_queue_entry->task->pid);
         // Removes entry from list and memory.
         remove_wait_queue(&sleep_queue, wait_queue_entry);
@@ -583,7 +603,7 @@ static inline void real_timer_timeout(unsigned long task_ptr)
     // If the real incr is not 0 then restart.
     if (task->it_real_incr != 0) {
         // Create new timer for process, the old one is going to be deleted.
-        task->real_timer = __timer_list_alloc();
+        task->real_timer           = __timer_list_alloc();
         // Setup the timer.
         task->real_timer->expires  = timer_get_ticks() + task->it_real_incr;
         task->real_timer->function = &real_timer_timeout;
@@ -611,23 +631,23 @@ int sys_nanosleep(const struct timespec *req, struct timespec *rem)
     // from runqueue and stores it in the waiting queue, this must be done at
     // the end, because it changes the current active page and invalidates the
     // req and rem pointers (?)
-    sleep_data_t *sleep_data     = __sleep_data_alloc();
-    sleep_data->remaining        = rem;
-    sleep_data->wait_queue_entry = sleep_on(&sleep_queue);
+    sleep_data_t *sleep_data       = __sleep_data_alloc();
+    sleep_data->remaining          = rem;
+    sleep_data->wait_queue_entry   = sleep_on(&sleep_queue);
     // Setup the timer.
-    sleep_timer->expires  = timer_get_ticks() + TICKS_PER_SECOND * req->tv_sec;
-    sleep_timer->function = &sleep_timeout;
-    sleep_timer->data     = (unsigned long)sleep_data;
+    sleep_timer->expires           = timer_get_ticks() + __timespec_to_ticks(req);
+    sleep_timer->function          = &sleep_timeout;
+    sleep_timer->data              = (unsigned long)sleep_data;
     // Add the timer.
     add_timer(sleep_timer);
-    return -1;
+    return 0;
 }
 
 unsigned sys_alarm(int seconds)
 {
     struct task_struct *task = scheduler_get_current_process();
     // If there is already a timer running.
-    unsigned remaining_time = 0;
+    unsigned remaining_time  = 0;
     if (task->real_timer) {
         // First, we remove the timer.
         remove_timer(task->real_timer);
@@ -688,11 +708,10 @@ int sys_setitimer(int which, const struct itimerval *new_value, struct itimerval
         sys_getitimer(which, old_value);
     }
     // Get ticks of interval.
-    time_t new_interval = (new_value->it_interval.tv_sec * TICKS_PER_SECOND) +
-                          (new_value->it_interval.tv_usec * TICKS_PER_SECOND) / 1000;
+    time_t new_interval_ticks = __timeval_to_ticks(&new_value->it_interval);
     // If interval is 0 removes timer
-    struct task_struct *task = scheduler_get_current_process();
-    if (new_interval == 0) {
+    struct task_struct *task  = scheduler_get_current_process();
+    if (new_interval_ticks == 0) {
         // Removes real_timer.
         if ((which == ITIMER_REAL) && (task->real_timer != NULL)) {
             __timer_list_dealloc(task->real_timer);
@@ -714,7 +733,7 @@ int sys_setitimer(int which, const struct itimerval *new_value, struct itimerval
         // Initialize the timer.
         init_timer(task->real_timer);
         // Setup the timer.
-        task->real_timer->expires  = timer_get_ticks() + new_interval;
+        task->real_timer->expires  = timer_get_ticks() + new_interval_ticks;
         task->real_timer->function = &real_timer_timeout;
         task->real_timer->data     = (unsigned long)task;
         // Add the timer.

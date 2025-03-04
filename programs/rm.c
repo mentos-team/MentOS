@@ -3,25 +3,27 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include <stdio.h>
-#include <string.h>
-#include <sys/unistd.h>
 #include <fcntl.h>
-#include <strerror.h>
-#include <stdbool.h>
 #include <libgen.h>
+#include <stdbool.h>
+#include <stdio.h>
+#include <strerror.h>
+#include <string.h>
+#include <unistd.h>
 
 bool_t has_option(int argc, char **argv, const char *first, ...)
 {
     va_list ap;
     const char *opt;
     for (int i = 1; i < argc; ++i) {
-        if (strcmp(argv[i], first) == 0)
+        if (strcmp(argv[i], first) == 0) {
             return true;
+        }
         va_start(ap, first);
         while ((opt = va_arg(ap, const char *)) != NULL) {
-            if (strcmp(argv[i], opt) == 0)
+            if (strcmp(argv[i], opt) == 0) {
                 return true;
+            }
         }
         va_end(ap);
     }
@@ -42,7 +44,8 @@ int main(int argc, char **argv)
         return 0;
     }
     if (strcmp(basename(argv[argc - 1]), "*") == 0) {
-        char directory[PATH_MAX], fullpath[PATH_MAX];
+        char directory[PATH_MAX];
+        char fullpath[PATH_MAX];
         int fd;
 
         if (strcmp(argv[argc - 1], "*") == 0) {
@@ -54,11 +57,12 @@ int main(int argc, char **argv)
             }
         }
 
-        if ((fd = open(directory, O_RDONLY | O_DIRECTORY, 0)) != -1) {
+        fd = open(directory, O_RDONLY | O_DIRECTORY, 0);
+        if (fd != -1) {
             dirent_t dent;
             while (getdents(fd, &dent, sizeof(dirent_t)) == sizeof(dirent_t)) {
-                strcpy(fullpath, directory);
-                strcat(fullpath, dent.d_name);
+                strncpy(fullpath, directory, PATH_MAX);
+                strncat(fullpath, dent.d_name, PATH_MAX);
                 if (dent.d_type == DT_REG) {
                     if (unlink(fullpath) == 0) {
                         if (lseek(fd, -1, SEEK_CUR) != -1) {

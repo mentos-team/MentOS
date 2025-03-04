@@ -2,41 +2,44 @@
 /// @brief Contains err functions
 /// @copyright (c) 2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
+
 #include <err.h>
-#include <stdio.h>
 #include <stdarg.h>
 #include <stdio.h>
-#include <sys/unistd.h>
+#include <stdlib.h>
+#include <unistd.h>
 
-void verr(int status, const char *fmt, va_list ap)
+void verr(int status, const char *format, va_list args)
 {
-	if (fmt) {
-		vfprintf(STDERR_FILENO, fmt, ap);
-		fprintf(STDERR_FILENO, ": ");
-	}
-	perror(0);
-	exit(status);
+    if (format) {
+        vfprintf(STDERR_FILENO, format, args);
+        fprintf(STDERR_FILENO, ": ");
+    }
+    perror(0);
+    exit(status);
 }
 
-void verrx(int status, const char *fmt, va_list ap)
+void verrx(int status, const char *format, va_list args)
 {
-	if (fmt) vfprintf(STDERR_FILENO, fmt, ap);
-	fprintf(STDERR_FILENO, "\n");
-	exit(status);
+    if (format) {
+        vfprintf(STDERR_FILENO, format, args);
+    }
+    fprintf(STDERR_FILENO, "\n");
+    exit(status);
 }
 
-void err(int status, const char *fmt, ...)
+void err(int status, const char *format, ...)
 {
-	va_list ap;
-	va_start(ap, fmt);
-	verr(status, fmt, ap);
-	va_end(ap);
+    va_list ap;
+    va_start(ap, format);
+    verr(status, format, ap);
+    va_end(ap);
 }
 
-void errx(int status, const char *fmt, ...)
+void errx(int status, const char *format, ...)
 {
-	va_list ap;
-	va_start(ap, fmt);
-	verrx(status, fmt, ap);
-	va_end(ap);
+    va_list ap;
+    va_start(ap, format);
+    verrx(status, format, ap);
+    va_end(ap);
 }

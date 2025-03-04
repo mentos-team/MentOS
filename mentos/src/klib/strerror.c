@@ -14,467 +14,270 @@ char *strerror(int errnum)
     case 0:
         strcpy(error, "Success");
         break;
-#ifdef EPERM
     case EPERM:
         strcpy(error, "Operation not permitted");
         break;
-#endif
-#ifdef ENOENT
     case ENOENT:
         strcpy(error, "No such file or directory");
         break;
-#endif
-#ifdef ESRCH
     case ESRCH:
         strcpy(error, "No such process");
         break;
-#endif
-#ifdef EINTR
     case EINTR:
         strcpy(error, "Interrupted system call");
         break;
-#endif
-#ifdef EIO
     case EIO:
         strcpy(error, "I/O error");
         break;
-#endif
-#if defined(ENXIO) && (!defined(ENODEV) || (ENXIO != ENODEV))
     case ENXIO:
         strcpy(error, "No such device or address");
         break;
-#endif
-#ifdef E2BIG
     case E2BIG:
-        strcpy(error, "Arg list too long");
+        strcpy(error, "Argument list too long");
         break;
-#endif
-#ifdef ENOEXEC
     case ENOEXEC:
         strcpy(error, "Exec format error");
         break;
-#endif
-#ifdef EALREADY
-    case EALREADY:
-        strcpy(error, "Socket already connected");
-        break;
-#endif
-#ifdef EBADF
     case EBADF:
-        strcpy(error, "Bad file number");
+        strcpy(error, "Bad file descriptor");
         break;
-#endif
-#ifdef ECHILD
     case ECHILD:
-        strcpy(error, "No children");
+        strcpy(error, "No child processes");
         break;
-#endif
-#ifdef EDESTADDRREQ
-    case EDESTADDRREQ:
-        strcpy(error, "Destination address required");
-        break;
-#endif
-#ifdef EAGAIN
     case EAGAIN:
-        strcpy(error, "No more processes");
+        strcpy(error, "Resource temporarily unavailable");
         break;
-#endif
-#ifdef ENOMEM
     case ENOMEM:
-        strcpy(error, "Not enough space");
+        strcpy(error, "Not enough memory");
         break;
-#endif
-#ifdef EACCES
     case EACCES:
         strcpy(error, "Permission denied");
         break;
-#endif
-#ifdef EFAULT
     case EFAULT:
         strcpy(error, "Bad address");
         break;
-#endif
-#ifdef ENOTBLK
     case ENOTBLK:
         strcpy(error, "Block device required");
         break;
-#endif
-#ifdef EBUSY
     case EBUSY:
         strcpy(error, "Device or resource busy");
         break;
-#endif
-#ifdef EEXIST
     case EEXIST:
         strcpy(error, "File exists");
         break;
-#endif
-#ifdef EXDEV
     case EXDEV:
         strcpy(error, "Cross-device link");
         break;
-#endif
-#ifdef ENODEV
     case ENODEV:
         strcpy(error, "No such device");
         break;
-#endif
-#ifdef ENOTDIR
     case ENOTDIR:
         strcpy(error, "Not a directory");
         break;
-#endif
-#ifdef EHOSTDOWN
-    case EHOSTDOWN:
-        strcpy(error, "Host is down");
-        break;
-#endif
-#ifdef EINPROGRESS
-    case EINPROGRESS:
-        strcpy(error, "Connection already in progress");
-        break;
-#endif
-#ifdef EISDIR
     case EISDIR:
         strcpy(error, "Is a directory");
         break;
-#endif
-#ifdef EINVAL
     case EINVAL:
         strcpy(error, "Invalid argument");
         break;
-#endif
-#ifdef EISNAM
-    case EISNAM:
-        strcpy(error, "Is a named type file");
-        break;
-#endif
-#ifdef ENETDOWN
-    case ENETDOWN:
-        strcpy(error, "Network interface is not configured");
-        break;
-#endif
-#ifdef ENFILE
     case ENFILE:
         strcpy(error, "Too many open files in system");
         break;
-#endif
-#ifdef EMFILE
     case EMFILE:
         strcpy(error, "Too many open files");
         break;
-#endif
-#ifdef ENOTTY
     case ENOTTY:
-        strcpy(error, "Not a character device");
+        strcpy(error, "Inappropriate I/O control operation");
         break;
-#endif
-#ifdef ETXTBSY
     case ETXTBSY:
         strcpy(error, "Text file busy");
         break;
-#endif
-#ifdef EFBIG
     case EFBIG:
         strcpy(error, "File too large");
         break;
-#endif
-#ifdef EHOSTUNREACH
-    case EHOSTUNREACH:
-        strcpy(error, "Host is unreachable");
-        break;
-#endif
-#ifdef ENOSPC
     case ENOSPC:
         strcpy(error, "No space left on device");
         break;
-#endif
-#ifdef ENOTSUP
-    case ENOTSUP:
-        strcpy(error, "Not supported");
-        break;
-#endif
-#ifdef ESPIPE
     case ESPIPE:
         strcpy(error, "Illegal seek");
         break;
-#endif
-#ifdef EROFS
     case EROFS:
         strcpy(error, "Read-only file system");
         break;
-#endif
-#ifdef EMLINK
     case EMLINK:
         strcpy(error, "Too many links");
         break;
-#endif
-#ifdef EPIPE
     case EPIPE:
         strcpy(error, "Broken pipe");
         break;
-#endif
-#ifdef EDOM
     case EDOM:
-        strcpy(error, "Math argument");
+        strcpy(error, "Mathematics argument out of domain");
         break;
-#endif
-#ifdef ERANGE
     case ERANGE:
-        strcpy(error, "Result too large");
+        strcpy(error, "Result out of range");
         break;
-#endif
-#ifdef ENOMSG
-    case ENOMSG:
-        strcpy(error, "No message of desired type");
-        break;
-#endif
-#ifdef EIDRM
-    case EIDRM:
-        strcpy(error, "Identifier removed");
-        break;
-#endif
-#ifdef EDEADLK
     case EDEADLK:
-        strcpy(error, "Deadlock");
+        strcpy(error, "Resource deadlock would occur");
         break;
-#endif
-#ifdef ENETUNREACH
-    case ENETUNREACH:
-        strcpy(error, "Network is unreachable");
+    case ENAMETOOLONG:
+        strcpy(error, "File name too long");
         break;
-#endif
-#ifdef ENOLCK
     case ENOLCK:
-        strcpy(error, "No lock");
+        strcpy(error, "No locks available");
         break;
-#endif
-#ifdef ENOSTR
-    case ENOSTR:
-        strcpy(error, "Not a stream");
-        break;
-#endif
-#ifdef ETIME
-    case ETIME:
-        strcpy(error, "Stream ioctl timeout");
-        break;
-#endif
-#ifdef ENOSR
-    case ENOSR:
-        strcpy(error, "No stream resources");
-        break;
-#endif
-#ifdef ENONET
-    case ENONET:
-        strcpy(error, "Machine is not on the network");
-        break;
-#endif
-#ifdef ENOPKG
-    case ENOPKG:
-        strcpy(error, "No package");
-        break;
-#endif
-#ifdef EREMOTE
-    case EREMOTE:
-        strcpy(error, "Resource is remote");
-        break;
-#endif
-#ifdef ENOLINK
-    case ENOLINK:
-        strcpy(error, "Virtual circuit is gone");
-        break;
-#endif
-#ifdef EADV
-    case EADV:
-        strcpy(error, "Advertise error");
-        break;
-#endif
-#ifdef ESRMNT
-    case ESRMNT:
-        strcpy(error, "Srmount error");
-        break;
-#endif
-#ifdef ECOMM
-    case ECOMM:
-        strcpy(error, "Communication error");
-        break;
-#endif
-#ifdef EPROTO
-    case EPROTO:
-        strcpy(error, "Protocol error");
-        break;
-#endif
-#ifdef EPROTONOSUPPORT
-    case EPROTONOSUPPORT:
-        strcpy(error, "Unknown protocol");
-        break;
-#endif
-#ifdef EMULTIHOP
-    case EMULTIHOP:
-        strcpy(error, "Multihop attempted");
-        break;
-#endif
-#ifdef EBADMSG
-    case EBADMSG:
-        strcpy(error, "Bad message");
-        break;
-#endif
-#ifdef ELIBACC
-    case ELIBACC:
-        strcpy(error, "Cannot access a needed shared library");
-        break;
-#endif
-#ifdef ELIBBAD
-    case ELIBBAD:
-        strcpy(error, "Accessing a corrupted shared library");
-        break;
-#endif
-#ifdef ELIBSCN
-    case ELIBSCN:
-        strcpy(error, ".lib section in a.out corrupted");
-        break;
-#endif
-#ifdef ELIBMAX
-    case ELIBMAX:
-        strcpy(error,
-               "Attempting to link in more shared libraries than system limit");
-        break;
-#endif
-#ifdef ELIBEXEC
-    case ELIBEXEC:
-        strcpy(error, "Cannot exec a shared library directly");
-        break;
-#endif
-#ifdef ENOSYS
     case ENOSYS:
         strcpy(error, "Function not implemented");
         break;
-#endif
-#ifdef ENMFILE
-    case ENMFILE:
-        strcpy(error, "No more files");
-        break;
-#endif
-#ifdef ENOTEMPTY
     case ENOTEMPTY:
         strcpy(error, "Directory not empty");
         break;
-#endif
-#ifdef ENAMETOOLONG
-    case ENAMETOOLONG:
-        strcpy(error, "File or path name too long");
-        break;
-#endif
-#ifdef ELOOP
     case ELOOP:
-        strcpy(error, "Too many symbolic links");
+        strcpy(error, "Too many symbolic links encountered");
         break;
-#endif
-#ifdef ENOBUFS
-    case ENOBUFS:
-        strcpy(error, "No buffer space available");
+    case ENOMSG:
+        strcpy(error, "No message of desired type");
         break;
-#endif
-#ifdef EAFNOSUPPORT
-    case EAFNOSUPPORT:
-        strcpy(error, "Address family not supported by protocol family");
+    case EIDRM:
+        strcpy(error, "Identifier removed");
         break;
-#endif
-#ifdef EPROTOTYPE
-    case EPROTOTYPE:
-        strcpy(error, "Protocol wrong type for socket");
+    case ECHRNG:
+        strcpy(error, "Channel number out of range");
         break;
-#endif
-#ifdef ENOTSOCK
-    case ENOTSOCK:
-        strcpy(error, "Socket operation on non-socket");
+    case EL2NSYNC:
+        strcpy(error, "Level 2 not synchronized");
         break;
-#endif
-#ifdef ENOPROTOOPT
-    case ENOPROTOOPT:
-        strcpy(error, "Protocol not available");
+    case EL3HLT:
+        strcpy(error, "Level 3 halted");
         break;
-#endif
-#ifdef ESHUTDOWN
-    case ESHUTDOWN:
-        strcpy(error, "Can't send after socket shutdown");
+    case EL3RST:
+        strcpy(error, "Level 3 reset");
         break;
-#endif
-#ifdef ECONNREFUSED
-    case ECONNREFUSED:
-        strcpy(error, "Connection refused");
+    case ELNRNG:
+        strcpy(error, "Link number out of range");
         break;
-#endif
-#ifdef EADDRINUSE
-    case EADDRINUSE:
-        strcpy(error, "Address already in use");
+    case EUNATCH:
+        strcpy(error, "Protocol driver not attached");
         break;
-#endif
-#ifdef ECONNABORTED
-    case ECONNABORTED:
-        strcpy(error, "Software caused connection abort");
+    case ENOCSI:
+        strcpy(error, "No CSI structure available");
         break;
-#endif
-#if (defined(EWOULDBLOCK) && (!defined(EAGAIN) || (EWOULDBLOCK != EAGAIN)))
-    case EWOULDBLOCK:
-        strcpy(error, "Operation would block");
+    case EL2HLT:
+        strcpy(error, "Level 2 halted");
         break;
-#endif
-#ifdef ENOTCONN
-    case ENOTCONN:
-        strcpy(error, "Socket is not connected");
+    case EBADE:
+        strcpy(error, "Invalid exchange");
         break;
-#endif
-#ifdef ESOCKTNOSUPPORT
-    case ESOCKTNOSUPPORT:
-        strcpy(error, "Socket type not supported");
+    case EBADR:
+        strcpy(error, "Invalid request descriptor");
         break;
-#endif
-#ifdef EISCONN
-    case EISCONN:
-        strcpy(error, "Socket is already connected");
+    case EXFULL:
+        strcpy(error, "Exchange full");
         break;
-#endif
-#ifdef ECANCELED
-    case ECANCELED:
-        strcpy(error, "Operation canceled");
+    case ENOANO:
+        strcpy(error, "No anode");
         break;
-#endif
-#ifdef ENOTRECOVERABLE
-    case ENOTRECOVERABLE:
-        strcpy(error, "State not recoverable");
+    case EBADRQC:
+        strcpy(error, "Invalid request code");
         break;
-#endif
-#ifdef EOWNERDEAD
-    case EOWNERDEAD:
-        strcpy(error, "Previous owner died");
+    case EBADSLT:
+        strcpy(error, "Invalid slot");
         break;
-#endif
-#ifdef ESTRPIPE
-    case ESTRPIPE:
-        strcpy(error, "Streams pipe error");
+    case ENOSTR:
+        strcpy(error, "Device not a stream");
         break;
-#endif
-#if defined(EOPNOTSUPP) && (!defined(ENOTSUP) || (ENOTSUP != EOPNOTSUPP))
-    case EOPNOTSUPP:
-        strcpy(error, "Operation not supported on socket");
+    case ENODATA:
+        strcpy(error, "No data available");
         break;
-#endif
-#ifdef EMSGSIZE
-    case EMSGSIZE:
-        strcpy(error, "Message too long");
+    case ETIME:
+        strcpy(error, "Timer expired");
         break;
-#endif
-#ifdef ETIMEDOUT
-    case ETIMEDOUT:
-        strcpy(error, "Connection timed out");
+    case ENOSR:
+        strcpy(error, "Out of stream resources");
         break;
-#endif
-#ifdef ENOTSCHEDULABLE
+    case ENONET:
+        strcpy(error, "Machine not on network");
+        break;
+    case ENOPKG:
+        strcpy(error, "Package not installed");
+        break;
+    case EREMOTE:
+        strcpy(error, "Object is remote");
+        break;
+    case ENOLINK:
+        strcpy(error, "Link severed");
+        break;
+    case EADV:
+        strcpy(error, "Advertise error");
+        break;
+    case ESRMNT:
+        strcpy(error, "SR mount error");
+        break;
+    case ECOMM:
+        strcpy(error, "Communication error on send");
+        break;
+    case EPROTO:
+        strcpy(error, "Protocol error");
+        break;
+    case EMULTIHOP:
+        strcpy(error, "Multihop attempted");
+        break;
+    case EBADMSG:
+        strcpy(error, "Not a data message");
+        break;
+    case EOVERFLOW:
+        strcpy(error, "Value too large for data type");
+        break;
+    case ENOTUNIQ:
+        strcpy(error, "Name not unique on network");
+        break;
+    case EBADFD:
+        strcpy(error, "File descriptor in bad state");
+        break;
+    case EREMCHG:
+        strcpy(error, "Remote address changed");
+        break;
+    case ELIBACC:
+        strcpy(error, "Cannot access a needed shared library");
+        break;
+    case ELIBBAD:
+        strcpy(error, "Accessing a corrupted shared library");
+        break;
+    case ELIBSCN:
+        strcpy(error, "Corrupted .lib section in a.out");
+        break;
+    case ELIBMAX:
+        strcpy(error, "Exceeded shared library system limit");
+        break;
+    case ELIBEXEC:
+        strcpy(error, "Cannot execute shared library directly");
+        break;
+    case EUCLEAN:
+        strcpy(error, "Structure needs cleaning");
+        break;
+    case ENOTNAM:
+        strcpy(error, "Not a XENIX named type file");
+        break;
+    case ENAVAIL:
+        strcpy(error, "No XENIX semaphores available");
+        break;
+    case EISNAM:
+        strcpy(error, "Is a named type file");
+        break;
+    case EREMOTEIO:
+        strcpy(error, "Remote I/O error");
+        break;
+    case EDQUOT:
+        strcpy(error, "Quota exceeded");
+        break;
+    case ENOMEDIUM:
+        strcpy(error, "No medium found");
+        break;
+    case EMEDIUMTYPE:
+        strcpy(error, "Wrong medium type");
+        break;
     case ENOTSCHEDULABLE:
-        strcpy(error, "The process cannot be scheduled");
+        strcpy(error, "Process cannot be scheduled");
         break;
-#endif
     default:
         strcpy(error, "Unknown error");
         break;

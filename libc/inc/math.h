@@ -15,10 +15,10 @@
 #define min(a, b) (((a) < (b)) ? (a) : (b))
 
 /// @brief The sign the the passed value.
-#define sign(x) ((x < 0) ? -1 : ((x > 0) ? 1 : 0))
+#define sign(x) (((x) < 0) ? -1 : (((x) > 0) ? 1 : 0))
 
 /// @brief Returns a rounded up, away from zero, to the nearest multiple of b.
-#define round_up(number, base) (((number) + (base)-1) & ~((base)-1))
+#define round_up(number, base) (((number) + (base) - 1) & ~((base) - 1))
 
 /// @brief e
 #define M_E 2.7182818284590452354

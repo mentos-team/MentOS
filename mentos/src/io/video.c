@@ -3,11 +3,16 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "io/port_io.h"
+// Setup the logging for this file (do this before any other include).
+#include "sys/kernel_levels.h"           // Include kernel log levels.
+#define __DEBUG_HEADER__ "[VIDEO ]"      ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
+#include "io/debug.h"                    // Include debugging functions.
+
 #include "ctype.h"
+#include "io/port_io.h"
 #include "io/vga/vga.h"
 #include "io/video.h"
-#include "io/debug.h"
 #include "stdbool.h"
 #include "stdio.h"
 #include "string.h"
@@ -17,7 +22,7 @@
 #define W2           (WIDTH * 2)          ///< The width of the
 #define TOTAL_SIZE   (HEIGHT * WIDTH * 2) ///< The total size of the screen.
 #define ADDR         (char *)0xB8000U     ///< The address of the
-#define STORED_PAGES 3                    ///< The number of stored pages.
+#define STORED_PAGES 10                   ///< The number of stored pages.
 
 /// @brief Stores the association between ANSI colors and pure VIDEO colors.
 struct ansi_color_map_t {
@@ -27,79 +32,46 @@ struct ansi_color_map_t {
     uint8_t video_color;
 }
 /// @brief The mapping.
-ansi_color_map[] = {
-    { 0, 7 },
+ansi_color_map[] = {{0, 7},
 
-    { 30, 0 },
-    { 31, 4 },
-    { 32, 2 },
-    { 33, 6 },
-    { 34, 1 },
-    { 35, 5 },
-    { 36, 3 },
-    { 37, 7 },
+                    {30, 0},  {31, 4},   {32, 2},   {33, 6},   {34, 1},  {35, 5},   {36, 3},   {37, 7},
 
-    { 90, 8 },
-    { 91, 12 },
-    { 92, 10 },
-    { 93, 14 },
-    { 94, 9 },
-    { 95, 13 },
-    { 96, 11 },
-    { 97, 15 },
+                    {90, 8},  {91, 12},  {92, 10},  {93, 14},  {94, 9},  {95, 13},  {96, 11},  {97, 15},
 
-    { 40, 0 },
-    { 41, 4 },
-    { 42, 2 },
-    { 43, 6 },
-    { 44, 1 },
-    { 45, 5 },
-    { 46, 3 },
-    { 47, 7 },
+                    {40, 0},  {41, 4},   {42, 2},   {43, 6},   {44, 1},  {45, 5},   {46, 3},   {47, 7},
 
-    { 100, 8 },
-    { 101, 12 },
-    { 102, 10 },
-    { 103, 14 },
-    { 104, 9 },
-    { 105, 13 },
-    { 106, 11 },
-    { 107, 15 }
-};
+                    {100, 8}, {101, 12}, {102, 10}, {103, 14}, {104, 9}, {105, 13}, {106, 11}, {107, 15}};
 
 /// Pointer to a position of the screen writer.
-char *pointer = ADDR;
+char *pointer       = ADDR;
 /// The current color.
 unsigned char color = 7;
 /// Used to write on the escape_buffer. If -1, we are not parsing an escape sequence.
-int escape_index = -1;
+int escape_index    = -1;
 /// Used to store an escape sequence.
 char escape_buffer[256];
 /// Buffer where we store the upper scroll history.
-char upper_buffer[STORED_PAGES * TOTAL_SIZE] = { 0 };
+char upper_buffer[STORED_PAGES * TOTAL_SIZE] = {0};
 /// Buffer where we store the lower scroll history.
-char original_page[TOTAL_SIZE] = { 0 };
-/// Determines if the screen is currently scrolled.
-int scrolled_page = 0;
+char original_page[TOTAL_SIZE]               = {0};
+/// Determines the screen is currently scrolled, and by how many lines.
+int scrolled_lines                           = 0;
 
 /// @brief Get the current column number.
 /// @return The column number.
-static inline unsigned __get_x(void)
-{
-    return ((pointer - ADDR) % (WIDTH * 2)) / 2;
-}
+static inline unsigned __get_x(void) { return ((pointer - ADDR) % (WIDTH * 2)) / 2; }
 
 /// @brief Get the current row number.
 /// @return The row number.
-static inline unsigned __get_y(void)
-{
-    return (pointer - ADDR) / (WIDTH * 2);
-}
+static inline unsigned __get_y(void) { return (pointer - ADDR) / (WIDTH * 2); }
 
 /// @brief Draws the given character.
 /// @param c The character to draw.
 static inline void __draw_char(char c)
 {
+    if (scrolled_lines) {
+        video_scroll_up(scrolled_lines);
+    }
     for (char *ptr = (ADDR + TOTAL_SIZE + (WIDTH * 2)); ptr > pointer; ptr -= 2) {
         *(ptr)     = *(ptr - 2);
         *(ptr + 1) = *(ptr - 1);
@@ -108,15 +80,80 @@ static inline void __draw_char(char c)
     *(pointer++) = color;
 }
 
+/// @brief Hides the VGA cursor.
+void __video_hide_cursor(void)
+{
+    outportb(0x3D4, 0x0A);
+    unsigned char cursor_start = inportb(0x3D5);
+    outportb(0x3D5, cursor_start | 0x20); // Set the most significant bit to disable the cursor.
+}
+
+/// @brief Shows the VGA cursor.
+void __video_show_cursor(void)
+{
+    outportb(0x3D4, 0x0A);
+    unsigned char cursor_start = inportb(0x3D5);
+    outportb(0x3D5,
+             cursor_start & 0xDF); // Clear the most significant bit to enable the cursor.
+}
+
+/// @brief Sets the VGA cursor shape by specifying the start and end scan lines.
+///
+/// @param start The starting scan line of the cursor (0-15).
+/// @param end The ending scan line of the cursor (0-15).
+void __video_set_cursor_shape(unsigned char start, unsigned char end)
+{
+    // Set the cursor's start scan line
+    outportb(0x3D4, 0x0A);
+    outportb(0x3D5, start);
+
+    // Set the cursor's end scan line
+    outportb(0x3D4, 0x0B);
+    outportb(0x3D5, end);
+}
+
+/// @brief Issue the vide to move the cursor to the given position.
+/// @param x The x coordinate.
+/// @param y The y coordinate.
+static inline void __video_set_cursor_position(unsigned int x, unsigned int y)
+{
+    uint32_t position = y * WIDTH + x;
+    // Cursor LOW port to VGA index register.
+    outportb(0x3D4, 0x0F);
+    outportb(0x3D5, (uint8_t)(position & 0xFFU));
+    // Cursor HIGH port to VGA index register.
+    outportb(0x3D4, 0x0E);
+    outportb(0x3D5, (uint8_t)((position >> 8U) & 0xFFU));
+}
+
+/// @brief Retrieves the current VGA cursor position in terms of x and y coordinates.
+///
+/// @param x Pointer to store the x-coordinate (column).
+/// @param y Pointer to store the y-coordinate (row).
+static inline void __video_get_cursor_position(unsigned int *x, unsigned int *y)
+{
+    uint16_t position;
+
+    // Get the low byte of the cursor position.
+    outportb(0x3D4, 0x0F);
+    position = inportb(0x3D5);
+    // Get the high byte of the cursor position.
+    outportb(0x3D4, 0x0E);
+    position |= ((uint16_t)inportb(0x3D5)) << 8;
+    // Calculate x and y.
+    if (x)
+        *x = position % WIDTH;
+    if (y)
+        *y = position / WIDTH;
+}
+
 /// @brief Sets the provided ansi code.
 /// @param ansi_code The ansi code describing background and foreground color.
 static inline void __set_color(uint8_t ansi_code)
 {
     for (size_t i = 0; i < count_of(ansi_color_map); ++i) {
         if (ansi_code == ansi_color_map[i].ansi_color) {
-            if (
-                (ansi_code == 0) ||
-                ((ansi_code >= 30) && (ansi_code <= 37)) ||
+            if ((ansi_code == 0) || ((ansi_code >= 30) && (ansi_code <= 37)) ||
                 ((ansi_code >= 90) && (ansi_code <= 97))) {
                 color = (color & 0xF0U) | ansi_color_map[i].video_color;
             } else {
@@ -139,7 +176,7 @@ static inline void __move_cursor_backward(int erase, int amount)
             strcpy(pointer, pointer + 2);
         }
     }
-    video_set_cursor_auto();
+    video_update_cursor_position();
 }
 
 /// @brief Moves the cursor forward.
@@ -155,33 +192,51 @@ static inline void __move_cursor_forward(int erase, int amount)
             pointer += 2;
         }
     }
-    video_set_cursor_auto();
+    video_update_cursor_position();
 }
 
-/// @brief Issue the vide to move the cursor to the given position.
-/// @param x The x coordinate.
-/// @param y The y coordinate.
-static inline void __video_set_cursor(unsigned int x, unsigned int y)
+/// @brief Parses the cursor shape escape code and sets the cursor shape accordingly.
+/// @param shape The integer representing the cursor shape code.
+static inline void __parse_cursor_escape_code(int shape)
 {
-    uint32_t position = x * WIDTH + y;
-    // Cursor LOW port to vga INDEX register.
-    outportb(0x3D4, 0x0F);
-    outportb(0x3D5, (uint8_t)(position & 0xFFU));
-    // Cursor HIGH port to vga INDEX register.
-    outportb(0x3D4, 0x0E);
-    outportb(0x3D5, (uint8_t)((position >> 8U) & 0xFFU));
+    switch (shape) {
+    case 0: // Default blinking block cursor
+    case 2: // Blinking block cursor
+        __video_set_cursor_shape(0, 15);
+        break;
+    case 1: // Steady block cursor
+        __video_set_cursor_shape(0, 15);
+        break;
+    case 3: // Blinking underline cursor
+        __video_set_cursor_shape(13, 15);
+        break;
+    case 4: // Steady underline cursor
+        __video_set_cursor_shape(13, 15);
+        break;
+    case 5: // Blinking vertical bar cursor
+        __video_set_cursor_shape(0, 1);
+        break;
+    case 6: // Steady vertical bar cursor
+        __video_set_cursor_shape(0, 1);
+        break;
+    default:
+        // Handle any other cases if needed
+        break;
+    }
 }
 
 void video_init(void)
 {
     video_clear();
+    __parse_cursor_escape_code(0);
 }
 
 void video_update(void)
 {
 #ifndef VGA_TEXT_MODE
-    if (vga_is_enabled())
+    if (vga_is_enabled()) {
         vga_update();
+    }
 #endif
 }
 
@@ -200,14 +255,53 @@ void video_putc(int c)
         escape_buffer[escape_index]   = 0;
         if (isalpha(c)) {
             escape_buffer[--escape_index] = 0;
+
+            // Move cursor forward (e.g., ESC [ <num> C)
             if (c == 'C') {
                 __move_cursor_forward(false, atoi(escape_buffer));
-            } else if (c == 'D') {
+            }
+            // Move cursor backward (e.g., ESC [ <num> D)
+            else if (c == 'D') {
                 __move_cursor_backward(false, atoi(escape_buffer));
-            } else if (c == 'm') {
+            }
+            // Set color (e.g., ESC [ <num> m)
+            else if (c == 'm') {
                 __set_color(atoi(escape_buffer));
-            } else if (c == 'J') {
+            }
+            // Clear screen (e.g., ESC [ <num> J)
+            else if (c == 'J') {
                 video_clear();
+            }
+            // Clear screen (e.g., ESC [ <num> J)
+            else if (c == 'H') {
+                char *semicolon = strchr(escape_buffer, ';');
+                if (semicolon != NULL) {
+                    *semicolon     = '\0';
+                    unsigned int y = atoi(escape_buffer);
+                    unsigned int x = atoi(semicolon + 1);
+                    pointer        = ADDR + ((y - 1) * WIDTH * 2 + (x - 1) * 2);
+                } else {
+                    pointer = ADDR;
+                }
+                video_update_cursor_position();
+            }
+            // Handle cursor shape (e.g., ESC [ <num> q)
+            else if (c == 'q') {
+                __parse_cursor_escape_code(atoi(escape_buffer));
+            }
+            // Custom command for scrolling up.
+            else if (c == 'S') {
+                int lines_to_scroll = atoi(escape_buffer);
+                video_scroll_down(lines_to_scroll);
+                escape_index = -1;
+                return;
+            }
+            // Custom command for scrolling down.
+            else if (c == 'T') {
+                int lines_to_scroll = atoi(escape_buffer);
+                video_scroll_up(lines_to_scroll);
+                escape_index = -1;
+                return;
             }
             escape_index = -1;
         }
@@ -239,7 +333,7 @@ void video_putc(int c)
     }
 
     video_shift_one_line_up();
-    video_set_cursor_auto();
+    video_update_cursor_position();
 }
 
 void video_puts(const char *str)
@@ -255,13 +349,14 @@ void video_puts(const char *str)
     }
 }
 
-void video_set_cursor_auto(void)
+void video_update_cursor_position(void)
 {
 #ifndef VGA_TEXT_MODE
-    if (vga_is_enabled())
+    if (vga_is_enabled()) {
         return;
+    }
 #endif
-    __video_set_cursor(((pointer - ADDR) / 2U) / WIDTH, ((pointer - ADDR) / 2U) % WIDTH);
+    __video_set_cursor_position(((pointer - ADDR) / 2U) % WIDTH, ((pointer - ADDR) / 2U) / WIDTH);
 }
 
 void video_move_cursor(unsigned int x, unsigned int y)
@@ -273,7 +368,7 @@ void video_move_cursor(unsigned int x, unsigned int y)
     }
 #endif
     pointer = ADDR + ((y * WIDTH * 2) + (x * 2));
-    video_set_cursor_auto();
+    video_update_cursor_position();
 }
 
 void video_get_cursor_position(unsigned int *x, unsigned int *y)
@@ -330,7 +425,7 @@ void video_new_line(void)
 #endif
     pointer = ADDR + ((pointer - ADDR) / W2 + 1) * W2;
     video_shift_one_line_up();
-    video_set_cursor_auto();
+    video_update_cursor_position();
 }
 
 void video_cartridge_return(void)
@@ -344,96 +439,113 @@ void video_cartridge_return(void)
     pointer = ADDR + ((pointer - ADDR) / W2 - 1) * W2;
     video_new_line();
     video_shift_one_line_up();
-    video_set_cursor_auto();
+    video_update_cursor_position();
+}
+
+/// @brief Shifts the buffer up or down by one line.
+/// @param buffer Pointer to the buffer to shift.
+/// @param lines Number of lines we want to shift.
+/// @param direction 1 to shift up, -1 to shift down.
+static inline void __shift_buffer(char *buffer, int lines, int direction)
+{
+    // Shift up: Move each line to the previous slot.
+    if (direction == 1) {
+        for (int row = 0; row < lines - 1; ++row) {
+            memcpy(buffer + (W2 * row), buffer + (W2 * (row + 1)), W2);
+        }
+    }
+    // Shift down: Move each line to the next slot.
+    else if (direction == -1) {
+        for (int row = lines - 1; row > 0; --row) {
+            memcpy(buffer + (W2 * row), buffer + (W2 * (row - 1)), W2);
+        }
+    }
+}
+
+/// @brief Shifts the screen content up by one line. When not scrolled, moves
+/// the top line into the `upper_buffer`.
+static void __shift_screen_up(void)
+{
+    if (scrolled_lines == 0) {
+        // Move the upper buffer up by one line.
+        __shift_buffer(upper_buffer, STORED_PAGES * HEIGHT, +1);
+        // Copy the first line on the screen inside the last line of the upper buffer.
+        memcpy(upper_buffer + (TOTAL_SIZE * STORED_PAGES - W2), ADDR, W2);
+    }
+    // Move the screen up by one line.
+    __shift_buffer(ADDR, HEIGHT + 1, +1);
+}
+
+/// @brief Shifts the screen content down by one line. Restores the topmost line
+/// from the `upper_buffer`.
+static void __shift_screen_down(void)
+{
+    // Move the screen content down by one line.
+    __shift_buffer(ADDR, HEIGHT, -1);
+    // Restore from the `upper_buffer`.
+    memcpy(ADDR, upper_buffer + (W2 * (STORED_PAGES * HEIGHT - scrolled_lines)), W2);
 }
 
 void video_shift_one_line_up(void)
 {
+    // Push the top screen line into the upper buffer and shift the screen up.
     if (pointer >= ADDR + TOTAL_SIZE) {
-        // Move the upper buffer up by one line.
-        for (int row = 0; row < (STORED_PAGES * HEIGHT); ++row) {
-            memcpy(upper_buffer + W2 * row, upper_buffer + W2 * (row + 1), 2 * WIDTH);
-        }
-        // Copy the first line on the screen inside the last line of the upper buffer.
-        memcpy(upper_buffer + (TOTAL_SIZE * STORED_PAGES - W2), ADDR, 2 * WIDTH);
-        // Move the screen up by one line.
-        for (int row = 0; row < HEIGHT; ++row) {
-            memcpy(ADDR + (W2 * row), ADDR + (W2 * (row + 1)), 2 * WIDTH);
-        }
+        // Shift the upper buffer up.
+        __shift_screen_up();
         // Update the pointer.
         pointer = ADDR + ((pointer - ADDR) / W2 - 1) * W2;
+    }
+    // Restore the bottom line from the original content or clear it.
+    else if (scrolled_lines) {
+        // Shift the upper buffer up.
+        __shift_screen_up();
+        // Restore or clear the bottom line.
+        memcpy(ADDR + (W2 * (HEIGHT - 1)), original_page + (W2 * (TOTAL_SIZE / W2 - scrolled_lines)), W2);
+        // Decrement scrolled_lines since we're restoring content.
+        --scrolled_lines;
+    }
+}
+
+void video_shift_one_line_down(void)
+{
+    if (scrolled_lines < (STORED_PAGES * HEIGHT)) {
+        // Save the current screen into `original_page` if starting to scroll.
+        if (scrolled_lines == 0) {
+            memcpy(original_page, ADDR, TOTAL_SIZE);
+        }
+        // Increment scrolled_lines and shift the screen content down.
+        ++scrolled_lines;
+        // Shift the screen content down.
+        __shift_screen_down();
+        // Restore the top line from the scrollback buffer or original content.
+        memcpy(ADDR, upper_buffer + (W2 * (STORED_PAGES * HEIGHT - scrolled_lines)), W2);
     }
 }
 
 void video_shift_one_page_up(void)
 {
-    if (scrolled_page > 0) {
-        // Decrese the number of scrolled pages, and compute which page must be loaded.
-        int page_to_load = (STORED_PAGES - (--scrolled_page));
-        // If we have reached 0, restore the original page.
-        if (scrolled_page == 0) {
-            memcpy(ADDR, original_page, TOTAL_SIZE);
-        } else {
-            memcpy(ADDR, upper_buffer + (page_to_load * TOTAL_SIZE), TOTAL_SIZE);
-        }
+    for (int i = 0; i < HEIGHT; ++i) {
+        video_shift_one_line_up();
     }
 }
 
 void video_shift_one_page_down(void)
 {
-    if (scrolled_page < STORED_PAGES) {
-        // Increase the number of scrolled pages, and compute which page must be loaded.
-        int page_to_load = (STORED_PAGES - (++scrolled_page));
-        // If we are loading the first history page, save the original.
-        if (scrolled_page == 1) {
-            memcpy(original_page, ADDR, TOTAL_SIZE);
-        }
-        // Load the specific page.
-        memcpy(ADDR, upper_buffer + (page_to_load * TOTAL_SIZE), TOTAL_SIZE);
+    for (int i = 0; i < HEIGHT; ++i) {
+        video_shift_one_line_down();
     }
 }
 
-#if 0
-void video_scroll_up(void)
+void video_scroll_up(int lines)
 {
-    if (is_scrolled)
-        return;
-    char *ptr = memory = pointer;
-    for (unsigned int it = 0; it < TOTAL_SIZE; it++) {
-        downbuffer[y][x] = *ptr;
-        *ptr++           = upbuffer[y][x];
+    for (int i = 0; i < lines; ++i) {
+        video_shift_one_line_up();
     }
-
-    is_scrolled = true;
-
-    stored_x = video_get_column();
-
-    stored_y = video_get_line();
-
-    video_move_cursor(width, height);
 }
 
-void video_scroll_down(void)
+void video_scroll_down(int lines)
 {
-    char *ptr = memory;
-
-    // If PAGEUP hasn't been pressed, it's useless to go down, there is nothing.
-    if (!is_scrolled) {
-        return;
+    for (int i = 0; i < lines; ++i) {
+        video_shift_one_line_down();
     }
-    for (uint32_t y = 0; y < height; y++) {
-        for (uint32_t x = 0; x < width * 2; x++) {
-            *ptr++ = downbuffer[y][x];
-        }
-    }
-
-    is_scrolled = false;
-
-    video_move_cursor(stored_x, stored_y);
-
-    stored_x = 0;
-
-    stored_y = 0;
 }
-
-#endif

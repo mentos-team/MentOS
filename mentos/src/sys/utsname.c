@@ -9,10 +9,10 @@
 #define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
 #include "io/debug.h"                    // Include debugging functions.
 
+#include "errno.h"
 #include "fcntl.h"
 #include "fs/vfs.h"
 #include "string.h"
-#include "sys/errno.h"
 #include "sys/utsname.h"
 #include "version.h"
 

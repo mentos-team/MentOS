@@ -8,22 +8,24 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include <sys/unistd.h>
-#include <sys/wait.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <strerror.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 int main(int argc, char *argv[])
 {
     pid_t cpid;
 
-    printf("First test: The child processes will sleep, so they will not be scheduled immediately.\n");
+    printf("First test: The child processes will sleep, so they will not be "
+           "scheduled immediately.\n");
 
     // Fork 10 child processes to run the t_alarm test.
     for (int i = 0; i < 10; ++i) {
-        // Fork a new process
-        if ((cpid = fork()) == -1) {
+        // Fork a new process.
+        cpid = fork();
+        if (cpid == -1) {
             // Fork failed, print the error and exit.
             fprintf(stderr, "Failed to fork process: %s\n", strerror(errno));
             return EXIT_FAILURE;
@@ -46,7 +48,6 @@ int main(int argc, char *argv[])
     // Parent process waits for all child processes to terminate.
     while (wait(NULL) != -1) {
         // Continue waiting until all child processes finish.
-        continue;
     }
 
     // If wait returns -1 and errno is not ECHILD, print an error.

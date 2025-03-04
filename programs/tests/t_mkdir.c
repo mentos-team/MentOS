@@ -8,12 +8,38 @@
 #include <err.h>
 #include <fcntl.h>
 #include <stdio.h>
-#include <io/debug.h>
 #include <stdlib.h>
 #include <strerror.h>
 #include <string.h>
 #include <sys/stat.h>
-#include <sys/unistd.h>
+#include <unistd.h>
+
+/// @brief Constructs a full file path by combining a parent directory and a subdirectory name.
+/// @param parent_directory The absolute or relative path of the parent directory.
+/// @param directory_name The name of the subdirectory to append to the parent path.
+/// @param buffer The buffer where the resulting path will be stored.
+/// @param buffer_size The size of the buffer in bytes.
+/// @return EXIT_SUCCESS on success, EXIT_FAILURE on error.
+static inline int
+__build_path(const char *parent_directory, const char *directory_name, char *buffer, size_t buffer_size)
+{
+    // Ensure the buffer is cleared before use
+    if (!buffer || buffer_size == 0) {
+        return EXIT_FAILURE;
+    }
+    memset(buffer, 0, buffer_size);
+    // Get the lengths of the input strings
+    size_t parent_len = strnlen(parent_directory, buffer_size);
+    size_t dir_len    = strnlen(directory_name, buffer_size);
+    // Check if the combined length exceeds the buffer size
+    if (parent_len + dir_len + 1 > buffer_size) {
+        return EXIT_FAILURE;
+    }
+    // Safely concatenate the parent directory and subdirectory name
+    strncat(buffer, parent_directory, parent_len);
+    strncat(buffer, directory_name, dir_len);
+    return EXIT_SUCCESS;
+}
 
 /// @brief Create a directory.
 /// @param parent_directory The parent directory path.
@@ -23,11 +49,12 @@
 int create_dir(const char *parent_directory, const char *directory_name, mode_t mode)
 {
     char path[PATH_MAX];
-    memset(path, 0, PATH_MAX);
-    strcat(path, parent_directory);
-    strcat(path, directory_name);
+    if (__build_path(parent_directory, directory_name, path, sizeof(path))) {
+        fprintf(stderr, "Error: Path construction failed.\n");
+        return EXIT_FAILURE;
+    }
     if (mkdir(path, mode) < 0) {
-        fprintf(STDERR_FILENO, "Failed to create directory %s: %s\n", path, strerror(errno));
+        fprintf(stderr, "Failed to create directory %s: %s\n", path, strerror(errno));
         return EXIT_FAILURE;
     }
     return EXIT_SUCCESS;
@@ -40,11 +67,12 @@ int create_dir(const char *parent_directory, const char *directory_name, mode_t 
 int remove_dir(const char *parent_directory, const char *directory_name)
 {
     char path[PATH_MAX];
-    memset(path, 0, PATH_MAX);
-    strcat(path, parent_directory);
-    strcat(path, directory_name);
+    if (__build_path(parent_directory, directory_name, path, sizeof(path))) {
+        fprintf(stderr, "Error: Path construction failed.\n");
+        return EXIT_FAILURE;
+    }
     if (rmdir(path) < 0) {
-        fprintf(STDERR_FILENO, "Failed to remove directory %s: %s\n", path, strerror(errno));
+        fprintf(stderr, "Failed to remove directory %s: %s\n", path, strerror(errno));
         return EXIT_FAILURE;
     }
     return EXIT_SUCCESS;
@@ -57,16 +85,17 @@ int remove_dir(const char *parent_directory, const char *directory_name)
 int check_dir(const char *parent_directory, const char *directory_name)
 {
     char path[PATH_MAX];
-    memset(path, 0, PATH_MAX);
-    strcat(path, parent_directory);
-    strcat(path, directory_name);
+    if (__build_path(parent_directory, directory_name, path, sizeof(path))) {
+        fprintf(stderr, "Error: Path construction failed.\n");
+        return EXIT_FAILURE;
+    }
     struct stat buffer;
     if (stat(path, &buffer) < 0) {
-        fprintf(STDERR_FILENO, "Failed to check directory `%s`: %s\n", path, strerror(errno));
+        fprintf(stderr, "Failed to check directory `%s`: %s\n", path, strerror(errno));
         return EXIT_FAILURE;
     }
     if (!S_ISDIR(buffer.st_mode)) {
-        fprintf(STDERR_FILENO, "Path `%s` is not a directory.\n", path);
+        fprintf(stderr, "Path `%s` is not a directory.\n", path);
         return EXIT_FAILURE;
     }
     return EXIT_SUCCESS;
@@ -91,8 +120,10 @@ int test_consecutive_dirs(const char *parent_directory)
         return EXIT_FAILURE;
     }
     // Check if all directories are present.
-    if ((ret = check_dir(parent_directory, "/t_mkdir")) == EXIT_SUCCESS) {
-        if ((ret = check_dir(parent_directory, "/t_mkdir/outer")) == EXIT_SUCCESS) {
+    ret = check_dir(parent_directory, "/t_mkdir");
+    if (ret == EXIT_SUCCESS) {
+        ret = check_dir(parent_directory, "/t_mkdir/outer");
+        if (ret == EXIT_SUCCESS) {
             ret = check_dir(parent_directory, "/t_mkdir/outer/inner");
         }
     }

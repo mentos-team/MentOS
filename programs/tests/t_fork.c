@@ -10,47 +10,46 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/unistd.h>
 #include <sys/wait.h>
+#include <unistd.h>
 
 int main(int argc, char *argv[])
 {
-    // Check if the correct number of arguments is provided.
-    if (argc != 2) {
-        fprintf(STDERR_FILENO, "Usage: %s <number_of_processes>\n", argv[0]);
+    pid_t pid;
+
+    // Fork a new process
+    pid = fork();
+
+    if (pid < 0) {
+        // Error in forking
+        perror("fork");
         return EXIT_FAILURE;
     }
 
-    // Convert the argument to an integer.
-    char *ptr;
-    int N = strtol(argv[1], &ptr, 10);
-    // Check if the conversion was successful and the number is non-negative.
-    if (*ptr != '\0' || N < 0) {
-        fprintf(STDERR_FILENO, "Invalid number: %s\n", argv[1]);
-        return EXIT_FAILURE;
-    }
+    if (pid == 0) {
+        // Child process
+        printf("Child process: PID = %d, Parent PID = %d\n", getpid(), getppid());
+        // Simulate some work in the child
+        sleep(1);
+        printf("Child process exiting successfully.\n");
+        exit(EXIT_SUCCESS);
+    } else {
+        // Parent process
+        printf("Parent process: PID = %d, Child PID = %d\n", getpid(), pid);
 
-    pid_t cpid, mypid;
-
-    while (1) {
-        mypid = getpid(); // Get the current process ID.
-        if (N > 0) {
-            // Fork a new process.
-            if ((cpid = fork()) == 0) {
-                // In the child process, decrement N and continue the loop.
-                N -= 1;
-                continue;
-            }
-            // In the parent process, print a message and wait for the child to finish.
-            printf("I'm %d and I will wait for %d (N = %d)!\n", mypid, cpid, N);
-            while (wait(NULL) != -1) continue;
-            printf("I'm %d and I waited for %d (N = %d)!\n", mypid, cpid, N);
-        } else {
-            // If N is 0, print a message and exit the loop.
-            printf("I'm %d and I will not wait!\n", mypid);
+        // Wait for the child process to complete
+        int status;
+        if (waitpid(pid, &status, 0) == -1) {
+            perror("waitpid");
+            return EXIT_FAILURE;
         }
-        break;
-    }
 
-    return EXIT_SUCCESS;
+        // Check if the child exited normally
+        if (WIFEXITED(status)) {
+            printf("Parent process: Child exited with status %d.\n", WEXITSTATUS(status));
+            return EXIT_SUCCESS;
+        }
+        printf("Parent process: Child did not exit normally.\n");
+        return EXIT_FAILURE;
+    }
 }

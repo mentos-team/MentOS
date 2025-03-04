@@ -3,23 +3,20 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "io/debug.h"
+#include "time.h"
 #include "drivers/rtc.h"
 #include "hardware/timer.h"
+#include "io/debug.h"
 #include "io/port_io.h"
 #include "stddef.h"
 #include "stdio.h"
-#include "time.h"
 
 /// @brief List of week days.
-static const char *str_weekdays[] = {
-    "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"
-};
+static const char *str_weekdays[] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
 
 /// @brief List of months.
-static const char *str_months[] = {
-    "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"
-};
+static const char *str_months[] = {"January", "February", "March",     "April",   "May",      "June",
+                                   "July",    "August",   "September", "October", "November", "December"};
 
 time_t sys_time(time_t *time)
 {
@@ -32,8 +29,7 @@ time_t sys_time(time_t *time)
     }
     time_t t;
     // Convert years to days
-    t = (365 * curr_time.tm_year) + (curr_time.tm_year / 4) - (curr_time.tm_year / 100) +
-        (curr_time.tm_year / 400);
+    t = (365 * curr_time.tm_year) + (curr_time.tm_year / 4) - (curr_time.tm_year / 100) + (curr_time.tm_year / 400);
     // Convert months to days
     t += (30 * curr_time.tm_mon) + (3 * (curr_time.tm_mon + 1) / 5) + curr_time.tm_mday;
     // Unix time starts on January 1st, 1970
@@ -48,10 +44,7 @@ time_t sys_time(time_t *time)
     return t;
 }
 
-time_t difftime(time_t time1, time_t time2)
-{
-    return time1 - time2;
-}
+time_t difftime(time_t time1, time_t time2) { return time1 - time2; }
 
 /// @brief Computes day of week
 /// @param y Year
@@ -60,7 +53,9 @@ time_t difftime(time_t time1, time_t time2)
 /// @return Day of week (in range 1 to 7)
 static inline int day_of_week(unsigned int y, unsigned int m, unsigned int d)
 {
-    int h, j, k;
+    int h;
+    int j;
+    int k;
     // January and February are counted as months 13 and 14 of the previous year
     if (m <= 2) {
         m += 12;
@@ -79,7 +74,12 @@ static inline int day_of_week(unsigned int y, unsigned int m, unsigned int d)
 tm_t *localtime(const time_t *time)
 {
     static tm_t date;
-    unsigned int a, b, c, d, e, f;
+    unsigned int a;
+    unsigned int b;
+    unsigned int c;
+    unsigned int d;
+    unsigned int e;
+    unsigned int f;
     time_t t = *time;
     // Negative Unix time values are not supported
     if (t < 1) {
@@ -93,7 +93,7 @@ tm_t *localtime(const time_t *time)
     date.tm_hour = (int)(t % 24);
     t /= 24;
     // Convert Unix time to date
-    a = (unsigned int)((4 * t + 102032) / 146097 + 15);
+    a = (unsigned int)(((4 * t + 102032) / 146097) + 15);
     b = (t + 2442113 + a - (a / 4));
     c = (20 * b - 2442) / 7305;
     d = b - 365 * c - (c / 4);

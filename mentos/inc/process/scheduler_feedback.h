@@ -5,8 +5,8 @@
 
 #pragma once
 
-#include "sys/types.h"
 #include "process/process.h"
+#include "sys/types.h"
 
 /// @brief Initialize the scheduler feedback system.
 /// @details This function sets up the necessary data structures and mechanisms

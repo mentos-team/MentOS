@@ -5,15 +5,15 @@
 
 #pragma once
 
-#include "mem/gfp.h"
-#include "math.h"
-#include "stdint.h"
-#include "sys/list_head.h"
-#include "sys/bitops.h"
-#include "klib/stdatomic.h"
 #include "boot.h"
-#include "mem/buddysystem.h"
+#include "klib/stdatomic.h"
+#include "list_head.h"
+#include "math.h"
+#include "mem/buddy_system.h"
+#include "mem/gfp.h"
 #include "mem/slab.h"
+#include "stdint.h"
+#include "sys/bitops.h"
 
 #define page_count(p)        atomic_read(&(p)->count)   ///< Reads the page count.
 #define set_page_count(p, v) atomic_set(&(p)->count, v) ///< Sets the page count.
@@ -74,18 +74,20 @@ enum zone_type {
 
 /// @brief Data structure to differentiate memory zone.
 typedef struct zone_t {
-    /// Number of free pages in the zone.
-    unsigned long free_pages;
-    /// Buddy system managing this zone
-    bb_instance_t buddy_system;
+    /// Zone's name.
+    char *name;
     /// Pointer to first page descriptor of the zone.
     page_t *zone_mem_map;
     /// Index of the first page frame of the zone.
     uint32_t zone_start_pfn;
-    /// Zone's name.
-    char *name;
     /// Zone's size in number of pages.
-    unsigned long size;
+    size_t num_pages;
+    /// Number of free pages in the zone.
+    size_t free_pages;
+    /// Total size of the zone.
+    size_t total_size;
+    /// Buddy system managing this zone
+    bb_instance_t buddy_system;
 } zone_t;
 
 /// @brief Data structure to rapresent a memory node. In Uniform memory access
@@ -109,8 +111,34 @@ typedef struct pg_data_t {
     struct pg_data_t *node_next;
 } pg_data_t;
 
-extern page_t *mem_map;
-extern pg_data_t *contig_page_data;
+/// @brief Structure to represent a memory zone (LowMem or HighMem).
+typedef struct memory_zone {
+    uint32_t start_addr; ///< Start address of the zone (physical).
+    uint32_t end_addr;   ///< End address of the zone (physical).
+    uint32_t virt_start; ///< Virtual start address of the zone.
+    uint32_t virt_end;   ///< Virtual end address of the zone.
+    uint32_t size;       ///< Total size of the zone in bytes.
+} memory_zone_t;
+
+/// @brief Structure to encapsulate system memory management data.
+typedef struct memory_info {
+    page_t *mem_map;         ///< Pointer to the array of all physical memory blocks.
+    pg_data_t *page_data;    ///< Pointer to the contiguous memory node descriptor.
+    uint32_t mem_size;       ///< Total size of available physical memory (bytes).
+    uint32_t mem_map_num;    ///< Total number of memory frames (pages) available.
+    uint32_t page_index_min; ///< Minimum page index.
+    uint32_t page_index_max; ///< Maximum page index.
+    memory_zone_t low_mem;   ///< Low memory zone (normal zone).
+    memory_zone_t high_mem;  ///< High memory zone.
+} memory_info_t;
+
+/// @brief Keeps track of system memory management data.
+extern memory_info_t memory;
+
+// @brief Checks if a virtual address is valid within the low or high memory zones.
+/// @param vaddr The virtual address to be checked.
+/// @return 1 if the virtual address is valid, 0 otherwise.
+int is_valid_virtual_address(uint32_t vaddr);
 
 /// @brief Finds the nearest order of memory allocation that can accommodate a
 /// given amount of memory.
@@ -126,41 +154,44 @@ uint32_t find_nearest_order_greater(uint32_t base_addr, uint32_t amount);
 /// @return Outcome of the operation.
 int pmmngr_init(boot_info_t *boot_info);
 
-/// @brief Allocates a cached page based on the given GFP mask.
-/// @param gfp_mask The GFP mask specifying the allocation constraints.
-/// @return A pointer to the allocated page, or NULL if allocation fails.
-page_t *alloc_page_cached(gfp_t gfp_mask);
-
-/// @brief Free a page allocated with alloc_page_cached.
-/// @param page Pointer to the page to free.
-/// @return Returns 0 on success, or -1 if an error occurs.
-int free_page_cached(page_t *page);
-
-/// @brief Find the first free page frame, set it allocated and return the
-/// memory address of the page frame.
+/// @brief Find the first free 2^order amount of page frames, set it allocated
+/// and return the memory address of the first page frame allocated.
+/// @param file     The file name where the allocation is done.
+/// @param func     The function name where the allocation is done.
+/// @param line     The line number where the allocation is done.
 /// @param gfp_mask GFP_FLAGS to decide the zone allocation.
-/// @return The low memory address of the allocated page, or 0 if allocation fails.
-uint32_t __alloc_page_lowmem(gfp_t gfp_mask);
+/// @param order    The logarithm of the size of the page frame.
+/// @return Memory address of the first free page frame allocated, or NULL if
+/// allocation fails.
+page_t *pr_alloc_pages(const char *file, const char *func, int line, gfp_t gfp_mask, uint32_t order);
 
-/// @brief Frees the given page frame address.
-/// @param addr The block address.
+/// @brief Frees from the given page frame address up to 2^order amount of page
+/// frames.
+/// @param file The file name where the free is done.
+/// @param func The function name where the free is done.
+/// @param line The line number where the free is done.
+/// @param page The page.
 /// @return Returns 0 on success, or -1 if an error occurs.
-int free_page_lowmem(uint32_t addr);
+int pr_free_pages(const char *file, const char *func, int line, page_t *page);
+
+/// Wrapper that provides the filename, the function and line where the alloc is happening.
+#define alloc_pages(...) pr_alloc_pages(__RELATIVE_PATH__, __func__, __LINE__, __VA_ARGS__)
+
+/// Wrapper that provides the filename, the function and line where the free is happening.
+#define free_pages(...) pr_free_pages(__RELATIVE_PATH__, __func__, __LINE__, __VA_ARGS__)
 
 /// @brief Find the first free 2^order amount of page frames, set it allocated
 /// and return the memory address of the first page frame allocated.
 /// @param gfp_mask GFP_FLAGS to decide the zone allocation.
 /// @param order    The logarithm of the size of the page frame.
 /// @return Memory address of the first free page frame allocated.
-uint32_t __alloc_pages_lowmem(gfp_t gfp_mask, uint32_t order);
+uint32_t alloc_pages_lowmem(gfp_t gfp_mask, uint32_t order);
 
-/// @brief Find the first free 2^order amount of page frames, set it allocated
-/// and return the memory address of the first page frame allocated.
-/// @param gfp_mask GFP_FLAGS to decide the zone allocation.
-/// @param order    The logarithm of the size of the page frame.
-/// @return Memory address of the first free page frame allocated, or NULL if
-/// allocation fails.
-page_t *_alloc_pages(gfp_t gfp_mask, uint32_t order);
+/// @brief Frees from the given page frame address up to 2^order amount of page
+/// frames.
+/// @param vaddr The page frame address.
+/// @return Returns 0 on success, or -1 if an error occurs.
+int free_pages_lowmem(uint32_t vaddr);
 
 /// @brief Converts a page structure to its corresponding low memory virtual address.
 /// @param page Pointer to the page structure.
@@ -184,18 +215,6 @@ page_t *get_page_from_physical_address(uint32_t paddr);
 /// @return A pointer to the corresponding page, or NULL if the address is out of range.
 page_t *get_page_from_virtual_address(uint32_t vaddr);
 
-/// @brief Frees from the given page frame address up to 2^order amount of page
-/// frames.
-/// @param addr The page frame address.
-/// @return Returns 0 on success, or -1 if an error occurs.
-int free_pages_lowmem(uint32_t addr);
-
-/// @brief Frees from the given page frame address up to 2^order amount of page
-/// frames.
-/// @param page The page.
-/// @return Returns 0 on success, or -1 if an error occurs.
-int __free_pages(page_t *page);
-
 /// @brief Retrieves the total space of the zone corresponding to the given GFP mask.
 /// @param gfp_mask The GFP mask specifying the allocation constraints.
 /// @return The total space of the zone, or 0 if the zone cannot be retrieved.
@@ -211,14 +230,21 @@ unsigned long get_zone_free_space(gfp_t gfp_mask);
 /// @return The cached space of the zone, or 0 if the zone cannot be retrieved.
 unsigned long get_zone_cached_space(gfp_t gfp_mask);
 
+/// @brief Retrieves the buddy system status for the zone associated with the given GFP mask.
+/// @param gfp_mask The GFP mask specifying the memory zone (e.g., GFP_KERNEL, GFP_HIGHUSER).
+/// @param buffer A pointer to the buffer where the formatted status string will be written.
+/// @param bufsize The size of the provided buffer, in bytes. Must be greater than 0.
+/// @return The number of characters written to the buffer, or a negative value if an error occurs.
+int get_zone_buddy_system_status(gfp_t gfp_mask, char *buffer, size_t bufsize);
+
 /// @brief Checks if the specified address points to a page_t (or field) that
 /// belongs to lowmem.
 /// @param addr The address to check.
 /// @return 1 if it belongs to lowmem, 0 otherwise.
 static inline int is_lowmem_page_struct(void *addr)
 {
-    uint32_t start_lowm_map  = (uint32_t)contig_page_data->node_zones[ZONE_NORMAL].zone_mem_map;
-    uint32_t lowmem_map_size = sizeof(page_t) * contig_page_data->node_zones[ZONE_NORMAL].size;
+    uint32_t start_lowm_map  = (uint32_t)memory.page_data->node_zones[ZONE_NORMAL].zone_mem_map;
+    uint32_t lowmem_map_size = sizeof(page_t) * memory.page_data->node_zones[ZONE_NORMAL].num_pages;
     uint32_t map_index       = (uint32_t)addr - start_lowm_map;
     return map_index < lowmem_map_size;
 }

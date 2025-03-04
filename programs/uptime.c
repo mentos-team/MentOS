@@ -3,11 +3,11 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <fcntl.h>
-#include <sys/unistd.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 int main(int argc, char *argv[])
 {
@@ -25,7 +25,12 @@ int main(int argc, char *argv[])
         return -1;
     }
 
-    int uptime = atoi(buffer);
+    char *endptr;
+    long uptime = strtol(buffer, &endptr, 10);
+    if (*endptr != '\0' && *endptr != ' ') {
+        printf("Conversion error occurred\n");
+        return -1;
+    }
 
     // Transform uptime into hours, days, mins, and seconds
 

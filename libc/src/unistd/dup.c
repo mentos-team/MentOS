@@ -3,8 +3,14 @@
 /// @copyright (c) 2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "sys/unistd.h"
+#include "errno.h"
 #include "system/syscall_types.h"
-#include "sys/errno.h"
+#include "unistd.h"
 
-_syscall1(int, dup, int, fd)
+// _syscall1(int, dup, int, fd)
+int dup(int fd)
+{
+    long __res;
+    __inline_syscall_1(__res, dup, fd);
+    __syscall_return(int, __res);
+}

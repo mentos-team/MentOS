@@ -16,6 +16,11 @@ void kernel_panic(const char *msg)
     pr_emerg("\nPANIC:\n%s\n\nWelcome to Kernel Debugging Land...\n\n", msg);
     pr_emerg("\n");
     __asm__ __volatile__("cli"); // Disable interrupts
-    if (runtests) { outports(SHUTDOWN_PORT, 0x2000); } // Terminate qemu running the tests
-    for (;;) __asm__ __volatile__("hlt"); // Decrease power consumption with hlt
+    if (runtests) {
+        outports(SHUTDOWN_PORT, 0x2000);
+    } // Terminate qemu running the tests
+    for (;;) {
+        // Decrease power consumption with hlt.
+        __asm__ __volatile__("hlt");
+    }
 }

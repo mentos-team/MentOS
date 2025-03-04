@@ -6,10 +6,10 @@
 #pragma once
 
 #include "kernel.h"
-#include "stdint.h"
-#include "sys/list_head.h"
 #include "klib/spinlock.h"
+#include "list_head.h"
 #include "process/process.h"
+#include "stdint.h"
 #include "time.h"
 
 /// This enables the dynamic timer system use an hierarchical timing wheel,
@@ -22,24 +22,24 @@
 //#define ENABLE_REAL_TIMER_SYSTEM_DUMP
 
 /// Counts down in real (i.e., wall clock) time.
-#define ITIMER_REAL 0
+#define ITIMER_REAL    0
 /// Counts down against the user-mode CPU time consumed by the process.
 #define ITIMER_VIRTUAL 1
 /// This timer counts down against the total (i.e., both user and system) CPU
 /// time consumed by the process.
-#define ITIMER_PROF 2
+#define ITIMER_PROF    2
 
 /// Number of ticks per seconds.
 #define TICKS_PER_SECOND 1193
 
-/// @brief   Handles the timer.
-/// @param f The interrupt stack frame.
+/// @brief Handles the timer.
+/// @param reg The interrupt stack frame.
 /// @details
 /// In this case, it's very simple: We increment the 'timer_ticks' variable
 /// every time the timer fires. By default, the timer fires 18.222 times
 /// per second. Why 18.222Hz? Some engineer at IBM must've been smoking
 /// something funky.
-void timer_handler(pt_regs *f);
+void timer_handler(pt_regs *reg);
 
 /// @brief Sets up the system clock by installing the timer handler into IRQ0.
 void timer_install(void);
@@ -54,7 +54,7 @@ unsigned long timer_get_ticks(void);
 
 /// @brief Allows to set the timer phase to the given frequency.
 /// @param hz The frequency to set.
-void timer_phase(const uint32_t hz);
+void timer_phase(uint32_t hz);
 
 // ===============================================================================
 // Per-CPU timer vectors
@@ -62,23 +62,23 @@ void timer_phase(const uint32_t hz);
 #ifdef ENABLE_REAL_TIMER_SYSTEM
 
 /// Number of normal timer vectors.
-#define TVN_COUNT 4
+#define TVN_COUNT            4
 /// Number of bits for the normal timer vector.
-#define TVN_BITS 6
+#define TVN_BITS             6
 /// Number of bits for the root timer vector.
-#define TVR_BITS 8
+#define TVR_BITS             8
 /// Number of headers in a normal timer vector.
-#define TVN_SIZE (1 << TVN_BITS)
+#define TVN_SIZE             (1 << TVN_BITS)
 /// Number of headers in a root timer vector.
-#define TVR_SIZE (1 << TVR_BITS)
+#define TVR_SIZE             (1 << TVR_BITS)
 /// A mask with all 1s for the normal timer vector (0b00111111)
-#define TVN_MASK (TVN_SIZE - 1)
+#define TVN_MASK             (TVN_SIZE - 1)
 /// A mask with all 1s for the root timer vector   (0b11111111)
-#define TVR_MASK (TVR_SIZE - 1)
+#define TVR_MASK             (TVR_SIZE - 1)
 /// A shift used to calculate a timer position inside the tvec_base structure
 #define TIMER_TICKS_BITS(tv) (TVR_BITS + TVN_BITS * (tv))
 /// Expiration ticks of timer based on position inside tvec_base structure
-#define TIMER_TICKS(tv) (1 << TIMER_TICKS_BITS(tv))
+#define TIMER_TICKS(tv)      (1 << TIMER_TICKS_BITS(tv))
 
 #endif
 

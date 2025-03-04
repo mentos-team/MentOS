@@ -15,10 +15,10 @@
 // Note: MAX_RT_PRIO must not be smaller than MAX_USER_RT_PRIO.
 
 /// @brief Max niceness value.
-#define MAX_NICE +19
+#define MAX_NICE (+19)
 
 /// @brief Min niceness value.
-#define MIN_NICE -20
+#define MIN_NICE (-20)
 
 /// @brief Niceness range.
 #define NICE_WIDTH (MAX_NICE - MIN_NICE + 1)
@@ -38,12 +38,12 @@
 
 /// @brief Converts static priority [ MAX_RT_PRIO..MAX_PRIO-1 ]
 ///        to user-nice values [ -20 ... 0 ... 19 ].
-#define PRIO_TO_NICE(prio) ((prio)-DEFAULT_PRIO)
+#define PRIO_TO_NICE(prio) ((prio) - DEFAULT_PRIO)
 
 /// @brief 'User priority' is the nice value converted to something we
 ///        can work with better when scaling various scheduler parameters,
 ///        it's a [ 0 ... 39 ] range.
-#define USER_PRIO(p) ((p)-MAX_RT_PRIO)
+#define USER_PRIO(p) ((p) - MAX_RT_PRIO)
 
 /// @brief Provide easy access to the priority value of a task_struct.
 #define TASK_USER_PRIO(p) USER_PRIO((p)->static_prio)
@@ -56,13 +56,12 @@
 static const int prio_to_weight[NICE_WIDTH] = {
     /* 100 */ 88761, 71755, 56483, 46273, 36291,
     /* 105 */ 29154, 23254, 18705, 14949, 11916,
-    /* 110 */ 9548, 7620, 6100, 4904, 3906,
-    /* 115 */ 3121, 2501, 1991, 1586, 1277,
-    /* 120 */ 1024, 820, 655, 526, 423,
-    /* 125 */ 335, 272, 215, 172, 137,
-    /* 130 */ 110, 87, 70, 56, 45,
-    /* 135 */ 36, 29, 23, 18, 15
-};
+    /* 110 */ 9548,  7620,  6100,  4904,  3906,
+    /* 115 */ 3121,  2501,  1991,  1586,  1277,
+    /* 120 */ 1024,  820,   655,   526,   423,
+    /* 125 */ 335,   272,   215,   172,   137,
+    /* 130 */ 110,   87,    70,    56,    45,
+    /* 135 */ 36,    29,    23,    18,    15};
 
 /// @brief Transforms the priority to weight.
 #define GET_WEIGHT(prio) prio_to_weight[USER_PRIO((prio))]

@@ -10,10 +10,10 @@
 
 #pragma once
 
-#include "ring_buffer.h"
 #include "kernel.h"
+#include "ring_buffer.h"
 
-DECLARE_FIXED_SIZE_RING_BUFFER(int, scancode, 256, -1)
+DECLARE_FIXED_SIZE_RING_BUFFER(int, keybuffer, 256, -1)
 
 /// @brief The interrupt service routine of the keyboard.
 /// @param f The interrupt stack frame.
@@ -34,11 +34,11 @@ int keyboard_pop_back(void);
 
 /// @brief Gets a char from the back of the buffer.
 /// @return The read character.
-int keyboard_back(void);
+int keyboard_peek_back(void);
 
 /// @brief Gets a char from the front of the buffer.
 /// @return The read character.
-int keyboard_front(void);
+int keyboard_peek_front(void);
 
 /// @brief Initializes the keyboard drivers.
 /// @return 0 on success, 1 on error.

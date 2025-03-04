@@ -5,12 +5,9 @@
 
 #pragma once
 
-#include "mem/buddysystem.h"
-#include "mem/zone_allocator.h"
+#include "mem/buddy_system.h"
 #include "mem/paging.h"
-
-/// Size of the virtual memory.
-#define VIRTUAL_MEMORY_SIZE_MB 128
+#include "mem/zone_allocator.h"
 
 /// @brief Virtual mapping manager.
 typedef struct virt_map_page_manager_t {
@@ -47,11 +44,6 @@ virt_map_page_t *virt_map_alloc(uint32_t size);
 /// @return The starting virtual address of the mapped area, or 0 on failure.
 uint32_t virt_map_vaddress(mm_struct_t *mm, virt_map_page_t *vpage, uint32_t vaddr, uint32_t size);
 
-/// @brief Checks if an address belongs to the virtual memory mapping.
-/// @param addr The address to check.
-/// @return 1 if it belongs to the virtual memory mapping, 0 otherwise.
-int virtual_check_address(uint32_t addr);
-
 /// @brief Unmaps a virtual address from the virtual memory.
 /// @param addr The virtual address to unmap.
 /// @return Returns 0 on success, or -1 if an error occurs.
@@ -68,9 +60,4 @@ int virt_unmap_pg(virt_map_page_t *page);
 /// @param src_mm The source memory struct
 /// @param src_vaddr The source memory address
 /// @param size The size in bytes of the copy
-void virt_memcpy(
-    mm_struct_t *dst_mm,
-    uint32_t dst_vaddr,
-    mm_struct_t *src_mm,
-    uint32_t src_vaddr,
-    uint32_t size);
+void virt_memcpy(mm_struct_t *dst_mm, uint32_t dst_vaddr, mm_struct_t *src_mm, uint32_t src_vaddr, uint32_t size);

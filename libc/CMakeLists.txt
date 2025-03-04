@@ -27,9 +27,12 @@ add_library(
     ${CMAKE_SOURCE_DIR}/libc/src/setenv.c
     ${CMAKE_SOURCE_DIR}/libc/src/assert.c
     ${CMAKE_SOURCE_DIR}/libc/src/abort.c
+    ${CMAKE_SOURCE_DIR}/libc/src/syslog.c
+    ${CMAKE_SOURCE_DIR}/libc/src/ndtree.c
+    ${CMAKE_SOURCE_DIR}/libc/src/list.c
+    ${CMAKE_SOURCE_DIR}/libc/src/hashmap.c
     ${CMAKE_SOURCE_DIR}/libc/src/crypt/sha256.c
     ${CMAKE_SOURCE_DIR}/libc/src/io/mm_io.c
-    ${CMAKE_SOURCE_DIR}/libc/src/io/debug.c
     ${CMAKE_SOURCE_DIR}/libc/src/sys/ipc.c
     ${CMAKE_SOURCE_DIR}/libc/src/sys/unistd.c
     ${CMAKE_SOURCE_DIR}/libc/src/sys/errno.c
@@ -42,6 +45,7 @@ add_library(
     ${CMAKE_SOURCE_DIR}/libc/src/unistd/getppid.c
     ${CMAKE_SOURCE_DIR}/libc/src/unistd/getpid.c
     ${CMAKE_SOURCE_DIR}/libc/src/unistd/exit.c
+    ${CMAKE_SOURCE_DIR}/libc/src/unistd/fcntl.c
     ${CMAKE_SOURCE_DIR}/libc/src/unistd/setsid.c
     ${CMAKE_SOURCE_DIR}/libc/src/unistd/getsid.c
     ${CMAKE_SOURCE_DIR}/libc/src/unistd/setpgid.c
@@ -56,6 +60,7 @@ add_library(
     ${CMAKE_SOURCE_DIR}/libc/src/unistd/exec.c
     ${CMAKE_SOURCE_DIR}/libc/src/unistd/nice.c
     ${CMAKE_SOURCE_DIR}/libc/src/unistd/open.c
+    ${CMAKE_SOURCE_DIR}/libc/src/unistd/pipe.c
     ${CMAKE_SOURCE_DIR}/libc/src/unistd/reboot.c
     ${CMAKE_SOURCE_DIR}/libc/src/unistd/waitpid.c
     ${CMAKE_SOURCE_DIR}/libc/src/unistd/chdir.c
@@ -86,3 +91,8 @@ set_target_properties(libc PROPERTIES PREFIX "")
 if(${EMULATOR_OUTPUT_TYPE} STREQUAL OUTPUT_LOG)
     target_compile_definitions(libc PUBLIC EMULATOR_OUTPUT_LOG)
 endif()
+
+target_compile_definitions(
+    libc PUBLIC
+    MENTOS_ROOT="${CMAKE_SOURCE_DIR}"
+)

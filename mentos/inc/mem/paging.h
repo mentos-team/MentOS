@@ -5,29 +5,29 @@
 
 #pragma once
 
+#include "boot.h"
+#include "kernel.h"
 #include "mem/zone_allocator.h"
 #include "proc_access.h"
-#include "kernel.h"
 #include "stddef.h"
-#include "boot.h"
 #include "stdint.h"
 
 /// 4KB pages (2^12 = 4096 bytes)
-#define PAGE_SHIFT 12
+#define PAGE_SHIFT  12UL
 /// Size of a page (4096 bytes).
-#define PAGE_SIZE (1 << PAGE_SHIFT)
+#define PAGE_SIZE   (1UL << PAGE_SHIFT)
 /// Maximum number of physical page frame numbers (PFNs).
-#define MAX_PHY_PFN (1UL << (32 - PAGE_SHIFT))
+#define MAX_PHY_PFN (1UL << (32UL - PAGE_SHIFT))
 
 /// The start of the process area.
-#define PROCAREA_START_ADDR 0x00000000
+#define PROCAREA_START_ADDR 0x00000000UL
 /// The end of the process area (and start of the kernel area).
-#define PROCAREA_END_ADDR 0xC0000000
+#define PROCAREA_END_ADDR   0xC0000000UL
 
 /// For a single page table in a 32-bit system.
 #define MAX_PAGE_TABLE_ENTRIES 1024
 /// For a page directory with 1024 entries.
-#define MAX_PAGE_DIR_ENTRIES 1024
+#define MAX_PAGE_DIR_ENTRIES   1024
 
 /// @brief An entry of a page directory.
 typedef struct page_dir_entry_t {
@@ -173,17 +173,11 @@ page_directory_t *paging_get_main_directory(void);
 
 /// @brief Provide access to the current paging directory.
 /// @return A pointer to the current page directory.
-static inline page_directory_t *paging_get_current_directory(void)
-{
-    return (page_directory_t *)get_cr3();
-}
+static inline page_directory_t *paging_get_current_directory(void) { return (page_directory_t *)get_cr3(); }
 
 /// @brief Switches paging directory, the pointer must be a physical address.
 /// @param dir A pointer to the new page directory.
-static inline void paging_switch_directory(page_directory_t *dir)
-{
-    set_cr3((uintptr_t)dir);
-}
+static inline void paging_switch_directory(page_directory_t *dir) { set_cr3((uintptr_t)dir); }
 
 /// @brief Checks if the given page directory is the current one.
 /// @param pgd A pointer to the page directory to check.
@@ -210,10 +204,7 @@ static inline void paging_enable(void)
 
 /// @brief Returns if paging is enabled.
 /// @return 1 if paging is enables, 0 otherwise.
-static inline int paging_is_enabled(void)
-{
-    return bitmask_check(get_cr0(), CR0_PG);
-}
+static inline int paging_is_enabled(void) { return bitmask_check(get_cr0(), CR0_PG); }
 
 /// @brief Handles a page fault.
 /// @param f The interrupt stack frame.
@@ -243,25 +234,22 @@ int mem_upd_vm_area(page_directory_t *pgd, uint32_t virt_start, uint32_t phy_sta
 /// @param size      The size of the segment.
 /// @param flags     The flags for the new dst memory range.
 /// @return 0 on success, -1 on failure.
-int mem_clone_vm_area(page_directory_t *src_pgd,
-                      page_directory_t *dst_pgd,
-                      uint32_t src_start,
-                      uint32_t dst_start,
-                      size_t size,
-                      uint32_t flags);
+int mem_clone_vm_area(
+    page_directory_t *src_pgd,
+    page_directory_t *dst_pgd,
+    uint32_t src_start,
+    uint32_t dst_start,
+    size_t size,
+    uint32_t flags);
 
 /// @brief Create a virtual memory area.
-/// @param mm         The memory descriptor which will contain the new segment.
-/// @param virt_start The virtual address to map to.
-/// @param size       The size of the segment.
-/// @param pgflags    The flags for the new memory area.
-/// @param gfpflags   The Get Free Pages flags.
+/// @param mm The memory descriptor which will contain the new segment.
+/// @param vm_start The virtual address to map to.
+/// @param size The size of the segment.
+/// @param pgflags The flags for the new memory area.
+/// @param gfpflags The Get Free Pages flags.
 /// @return The newly created virtual memory area descriptor.
-vm_area_struct_t *create_vm_area(mm_struct_t *mm,
-                                 uint32_t virt_start,
-                                 size_t size,
-                                 uint32_t pgflags,
-                                 uint32_t gfpflags);
+vm_area_struct_t *create_vm_area(mm_struct_t *mm, uint32_t vm_start, size_t size, uint32_t pgflags, uint32_t gfpflags);
 
 /// @brief Clone a virtual memory area, using copy on write if specified
 /// @param mm the memory descriptor which will contain the new segment.
@@ -269,10 +257,7 @@ vm_area_struct_t *create_vm_area(mm_struct_t *mm,
 /// @param cow whether to use copy-on-write or just copy everything.
 /// @param gfpflags the Get Free Pages flags.
 /// @return Zero on success.
-uint32_t clone_vm_area(mm_struct_t *mm,
-                       vm_area_struct_t *area,
-                       int cow,
-                       uint32_t gfpflags);
+uint32_t clone_vm_area(mm_struct_t *mm, vm_area_struct_t *area, int cow, uint32_t gfpflags);
 
 /// @brief Destroys a virtual memory area.
 /// @param mm the memory descriptor from which we will destroy the area.

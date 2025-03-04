@@ -5,9 +5,9 @@
 
 #pragma once
 
-#include "sys/types.h"
 #include "stddef.h"
 #include "sys/ipc.h"
+#include "sys/types.h"
 #include "time.h"
 
 #define SEM_UNDO 0x1000 ///< Undo the operation on exit.
@@ -26,8 +26,9 @@
 #define SEM_STAT 18 ///< Return a semid_ds structure.
 #define SEM_INFO 19 ///< Return a seminfo structure.
 
-/// }@
+/// @}
 
+/// @brief Defines the maximum number of semaphores in a semaphore set.
 #define SEM_SET_MAX 256
 
 /// @brief Optional argument for semctl() function
@@ -76,38 +77,6 @@ struct sembuf {
     short sem_flg;
 };
 
-#ifdef __KERNEL__
-
-/// @brief Initializes the semaphore system.
-/// @return 0 on success, 1 on failure.
-int sem_init(void);
-
-/// @brief Get a System V semaphore set identifier.
-/// @param key can be used either to obtain the identifier of a previously
-/// created semaphore set, or to create a new set.
-/// @param nsems number of semaphores.
-/// @param semflg controls the behaviour of the function.
-/// @return the semaphore set identifier, -1 on failure, and errno is set to
-/// indicate the error.
-long sys_semget(key_t key, int nsems, int semflg);
-
-/// @brief Performs operations on selected semaphores in the set.
-/// @param semid the semaphore set identifier.
-/// @param sops specifies operations to be performed on single semaphores.
-/// @param nsops number of operations.
-/// @return 0 on success, -1 on failure and errno is set to indicate the error.
-long sys_semop(int semid, struct sembuf *sops, unsigned nsops);
-
-/// @brief Performs control operations on a semaphore set.
-/// @param semid the semaphore set identifier.
-/// @param semnum the n-th semaphore of the set on which we perform the operations.
-/// @param cmd the command to perform.
-/// @param arg
-/// @return 0 on success, -1 on failure and errno is set to indicate the error.
-long sys_semctl(int semid, int semnum, int cmd, union semun *arg);
-
-#else
-
 /// @brief Get a System V semaphore set identifier.
 /// @param key can be used either to obtain the identifier of a previously
 /// created semaphore set, or to create a new set.
@@ -131,5 +100,3 @@ long semop(int semid, struct sembuf *sops, unsigned nsops);
 /// @param arg
 /// @return 0 on success, -1 on failure and errno is set to indicate the error.
 long semctl(int semid, int semnum, int cmd, union semun *arg);
-
-#endif

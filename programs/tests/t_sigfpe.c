@@ -12,14 +12,14 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include <sys/unistd.h>
 #include <signal.h>
-#include <stdlib.h>
 #include <stdio.h>
-#include <string.h>
+#include <stdlib.h>
 #include <strerror.h>
+#include <string.h>
 #include <sys/wait.h>
 #include <time.h>
+#include <unistd.h>
 
 /// Signal handler function that catches and handles SIGFPE.
 void sig_handler(int sig)
@@ -43,14 +43,15 @@ int main(int argc, char *argv[])
 
     // Set the SIGUSR1 handler using sigaction.
     if (sigaction(SIGFPE, &action, NULL) == -1) {
-        printf("Failed to set signal handler (%s).\n", SIGFPE, strerror(errno));
+        printf("Failed to set signal handler (%s).\n", strerror(errno));
         return 1;
     }
 
     printf("Diving by zero (unrecoverable)...\n");
 
     // Should trigger ALU error, fighting the compiler...
-    int d = 1, e = 1;
+    int d = 1;
+    int e = 1;
     d /= e;
     e -= 1;
     d /= e;

@@ -15,3 +15,8 @@ idt_flush:
     mov  eax, [esp+4]   ; Get the pointer to the IDT, passed as a parameter.
     lidt [eax]          ; Load the IDT pointer.
     ret
+
+; -----------------------------------------------------------------------------
+; SECTION (note) - Inform the linker that the stack does not need to be executable
+; -----------------------------------------------------------------------------
+section .note.GNU-stack

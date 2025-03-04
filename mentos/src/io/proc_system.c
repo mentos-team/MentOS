@@ -3,13 +3,13 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
+#include "errno.h"
 #include "fs/procfs.h"
 #include "hardware/timer.h"
 #include "io/debug.h"
 #include "process/process.h"
 #include "stdio.h"
 #include "string.h"
-#include "sys/errno.h"
 #include "version.h"
 
 static ssize_t procs_do_uptime(char *buffer, size_t bufsize);
@@ -101,7 +101,7 @@ static vfs_file_operations_t procs_fs_operations = {
 int procs_module_init(void)
 {
     proc_dir_entry_t *system_entry;
-    char* entry_names[] = {"uptime", "version", "mounts", "cpuinfo", "meminfo", "stat"};
+    char *entry_names[] = {"uptime", "version", "mounts", "cpuinfo", "meminfo", "stat"};
     for (int i = 0; i < count_of(entry_names); i++) {
         char *entry_name = entry_names[i];
         if ((system_entry = proc_create_entry(entry_name, NULL)) == NULL) {
@@ -125,10 +125,7 @@ int procs_module_init(void)
 /// @param buffer the buffer.
 /// @param bufsize the buffer size.
 /// @return the amount we wrote.
-static ssize_t procs_do_uptime(char *buffer, size_t bufsize)
-{
-    return sprintf(buffer, "%d", timer_get_seconds());
-}
+static ssize_t procs_do_uptime(char *buffer, size_t bufsize) { return sprintf(buffer, "%d", timer_get_seconds()); }
 
 /// @brief Write the version inside the buffer.
 /// @param buffer the buffer.
@@ -136,31 +133,20 @@ static ssize_t procs_do_uptime(char *buffer, size_t bufsize)
 /// @return the amount we wrote.
 static ssize_t procs_do_version(char *buffer, size_t bufsize)
 {
-    return sprintf(buffer,
-                   "%s version %s (site: %s) (email: %s)",
-                   OS_NAME,
-                   OS_VERSION,
-                   OS_SITEURL,
-                   OS_REF_EMAIL);
+    return sprintf(buffer, "%s version %s (site: %s) (email: %s)", OS_NAME, OS_VERSION, OS_SITEURL, OS_REF_EMAIL);
 }
 
 /// @brief Write the list of mount points inside the buffer.
 /// @param buffer the buffer.
 /// @param bufsize the buffer size.
 /// @return the amount we wrote.
-static ssize_t procs_do_mounts(char *buffer, size_t bufsize)
-{
-    return 0;
-}
+static ssize_t procs_do_mounts(char *buffer, size_t bufsize) { return 0; }
 
 /// @brief Write the cpu information inside the buffer.
 /// @param buffer the buffer.
 /// @param bufsize the buffer size.
 /// @return the amount we wrote.
-static ssize_t procs_do_cpuinfo(char *buffer, size_t bufsize)
-{
-    return 0;
-}
+static ssize_t procs_do_cpuinfo(char *buffer, size_t bufsize) { return 0; }
 
 /// @brief Write the memory information inside the buffer.
 /// @param buffer the buffer.
@@ -168,30 +154,30 @@ static ssize_t procs_do_cpuinfo(char *buffer, size_t bufsize)
 /// @return the amount we wrote.
 static ssize_t procs_do_meminfo(char *buffer, size_t bufsize)
 {
-    double total_space = get_zone_total_space(GFP_KERNEL) +
-                         get_zone_total_space(GFP_USER),
-           free_space = get_zone_free_space(GFP_KERNEL) +
-                        get_zone_free_space(GFP_USER),
-           cached_space = get_zone_cached_space(GFP_KERNEL) +
-                          get_zone_cached_space(GFP_USER),
-           used_space = total_space - free_space;
-    return sprintf(
-        buffer,
-        "MemTotal : %12.2f Kb\n"
-        "MemFree  : %12.2f Kb\n"
-        "MemUsed  : %12.2f Kb\n"
-        "Cached   : %12.2f Kb\n",
-        total_space / (double)K,
-        free_space / (double)K,
-        used_space / (double)K,
-        cached_space / (double)K);
+    double total_space            = get_zone_total_space(GFP_KERNEL) + get_zone_total_space(GFP_HIGHUSER);
+    double free_space             = get_zone_free_space(GFP_KERNEL) + get_zone_free_space(GFP_HIGHUSER);
+    double cached_space           = get_zone_cached_space(GFP_KERNEL) + get_zone_cached_space(GFP_HIGHUSER);
+    double used_space             = total_space - free_space;
+    // Buddy system status strings.
+    char kernel_buddy_status[512] = {0};
+    char user_buddy_status[512]   = {0};
+    get_zone_buddy_system_status(GFP_KERNEL, kernel_buddy_status, sizeof(kernel_buddy_status));
+    get_zone_buddy_system_status(GFP_HIGHUSER, user_buddy_status, sizeof(user_buddy_status));
+    // Format and return the information for the buffer.
+    return snprintf(
+        buffer, bufsize,
+        "MemTotal       : %12.2f Kb\n"
+        "MemFree        : %12.2f Kb\n"
+        "MemUsed        : %12.2f Kb\n"
+        "Cached         : %12.2f Kb\n"
+        "Kernel Zone    : %s\n"
+        "User Zone      : %s\n",
+        total_space / (double)K, free_space / (double)K, used_space / (double)K, cached_space / (double)K,
+        kernel_buddy_status, user_buddy_status);
 }
 
 /// @brief Write the process statistics inside the buffer.
 /// @param buffer the buffer.
 /// @param bufsize the buffer size.
 /// @return the amount we wrote.
-static ssize_t procs_do_stat(char *buffer, size_t bufsize)
-{
-    return 0;
-}
+static ssize_t procs_do_stat(char *buffer, size_t bufsize) { return 0; }

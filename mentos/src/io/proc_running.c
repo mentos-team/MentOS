@@ -5,13 +5,13 @@
 
 #include "fs/procfs.h"
 
+#include "errno.h"
 #include "io/debug.h"
 #include "libgen.h"
 #include "process/prio.h"
 #include "process/process.h"
 #include "stdio.h"
 #include "string.h"
-#include "sys/errno.h"
 
 /// @brief Returns the character identifying the process state.
 /// @param state the process state.
@@ -26,13 +26,27 @@
 ///     X  Dead
 static inline char __procr_get_task_state_char(int state)
 {
-    if (state == 0x00) { return 'R'; }     // TASK_RUNNING
-    if (state == (1 << 0)) { return 'S'; } // TASK_INTERRUPTIBLE
-    if (state == (1 << 1)) { return 'D'; } // TASK_UNINTERRUPTIBLE
-    if (state == (1 << 2)) { return 'T'; } // TASK_STOPPED
-    if (state == (1 << 3)) { return 't'; } // TASK_TRACED
-    if (state == (1 << 4)) { return 'Z'; } // EXIT_ZOMBIE
-    if (state == (1 << 5)) { return 'X'; } // EXIT_DEAD
+    if (state == 0x00) {
+        return 'R';
+    } // TASK_RUNNING
+    if (state == (1 << 0)) {
+        return 'S';
+    } // TASK_INTERRUPTIBLE
+    if (state == (1 << 1)) {
+        return 'D';
+    } // TASK_UNINTERRUPTIBLE
+    if (state == (1 << 2)) {
+        return 'T';
+    } // TASK_STOPPED
+    if (state == (1 << 3)) {
+        return 't';
+    } // TASK_TRACED
+    if (state == (1 << 4)) {
+        return 'Z';
+    } // EXIT_ZOMBIE
+    if (state == (1 << 5)) {
+        return 'X';
+    } // EXIT_DEAD
     return '?';
 }
 
@@ -402,7 +416,7 @@ static inline ssize_t __procr_read(vfs_file_t *file, char *buffer, off_t offset,
     ssize_t bytes_to_read = max(0, min(strlen(support) - offset, nbyte));
     // Perform the read.
     if (bytes_to_read > 0) {
-        memcpy(buffer, support + offset, bytes_to_read);
+        strcpy(buffer, support + offset);
     }
     return bytes_to_read;
 }

@@ -3,27 +3,23 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-// Setup the logging for this file (do this before any other include).
-#include "sys/kernel_levels.h"           // Include kernel log levels.
-#define __DEBUG_HEADER__ "[RDLINE]"      ///< Change header.
-#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
-#include "io/debug.h"                    // Include debugging functions.
-
 #include "readline.h"
 
 #include "stdio.h"
 #include "string.h"
-#include "sys/unistd.h"
+#include "unistd.h"
 
 int readline(int fd, char *buffer, size_t buflen, ssize_t *read_len)
 {
     // Error check: Ensure the buffer is not NULL and has sufficient length.
     if (!buffer || buflen == 0) {
-        pr_err("Invalid buffer or buffer length.\n");
+        perror("Invalid buffer or buffer length.\n");
         return 0; // Invalid input, cannot proceed.
     }
 
-    ssize_t length, rollback, num_read;
+    ssize_t length;
+    ssize_t rollback;
+    ssize_t num_read;
     unsigned char found_newline = 1;
 
     // Initialize the buffer to ensure it starts empty.
@@ -34,7 +30,7 @@ int readline(int fd, char *buffer, size_t buflen, ssize_t *read_len)
 
     // Error check: If read() fails, return -1 to indicate an error.
     if (num_read < 0) {
-        pr_err("Failed to read from file descriptor.\n");
+        perror("Failed to read from file descriptor.\n");
         return -1;
     }
 
@@ -48,7 +44,7 @@ int readline(int fd, char *buffer, size_t buflen, ssize_t *read_len)
     if (newline == NULL) {
         found_newline = 0;
         // Search for EOF.
-        newline = strchr(buffer, EOF);
+        newline       = strchr(buffer, EOF);
         if (newline == NULL) {
             // Search for null terminator.
             newline = strchr(buffer, '\0');

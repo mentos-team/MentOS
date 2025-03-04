@@ -9,15 +9,15 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include <sys/unistd.h>
-#include <sys/errno.h>
-#include <sys/stat.h>
-#include <sys/msg.h>
-#include <sys/ipc.h>
-#include <string.h>
-#include <stdlib.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/ipc.h>
+#include <sys/msg.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 #define MESSAGE_LEN 100
 
@@ -42,7 +42,7 @@ static inline void __send_message(int msqid, long mtype, message_t *message, con
     if (msgsnd(msqid, message, sizeof(message->mesg_text), 0) < 0) {
         perror("Failed to send the message");
     } else {
-        printf("[%2d] Message sent (%2d) `%s`\n", getpid(), message->mesg_type, message->mesg_text);
+        printf("[%2d] Message sent (%2ld) `%s`\n", getpid(), message->mesg_type, message->mesg_text);
     }
 }
 
@@ -58,7 +58,9 @@ static inline void __receive_message(int msqid, long mtype, message_t *message)
     if (msgrcv(msqid, message, sizeof(message->mesg_text), mtype, 0) < 0) {
         perror("Failed to receive the message");
     } else {
-        printf("[%2d] Message received (%2d) `%s` (Query: %2d)\n", getpid(), message->mesg_type, message->mesg_text, mtype);
+        printf(
+            "[%2d] Message received (%2ld) `%s` (Query: %2ld)\n", getpid(), message->mesg_type, message->mesg_text,
+            mtype);
     }
 }
 
@@ -69,9 +71,12 @@ int main(int argc, char *argv[])
     key_t key;
     int msqid;
 
+    // Request to sleep for 200 ms.
+    struct timespec req = {0, 200000000};
+
     // ========================================================================
     // Generating a key using ftok
-    key = ftok("/README", 5);
+    key = ftok("/README.md", 5);
     if (key < 0) {
         perror("Failed to generate key using ftok");
         return EXIT_FAILURE;
@@ -94,14 +99,16 @@ int main(int argc, char *argv[])
     __receive_message(msqid, 1, &message);
     // Create child process.
     if (!fork()) {
-        sleep(3);
+        // Sleep for 200 ms.
+        nanosleep(&req, NULL);
         // Send the message.
         __send_message(msqid, 1, &message, "General Kenobi...");
         return EXIT_SUCCESS;
     }
     // Receive the message.
     __receive_message(msqid, 1, &message);
-    sleep(3);
+    // Sleep for 200 ms.
+    nanosleep(&req, NULL);
 
     // ========================================================================
     // Send multiple messages.

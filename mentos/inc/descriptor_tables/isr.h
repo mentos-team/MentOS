@@ -64,10 +64,6 @@ int irq_uninstall_handler(unsigned i, interrupt_handler_t handler);
 /// @param f The interrupt stack frame.
 extern void irq_handler(pt_regs *f);
 
-/// @brief Method called by CPU to handle exceptions.
-/// @param f The interrupt stack frame.
-extern void isq_handler(pt_regs *f);
-
 //==== List of exceptions generated internally by the CPU ======================
 #define DIVIDE_ERROR        0  ///< DE Divide Error.
 #define DEBUG_EXC           1  ///< DB Debug.
@@ -91,10 +87,11 @@ extern void isq_handler(pt_regs *f);
 #define SIMD_FP_EXC         19 ///< XF Streaming SIMD Exception.
 #define VIRT_EXC            20 ///< Virtualization Exception.
 // Reserved [21-29].
-#define SECURITY_EXC 30 ///< Security Exception.
-#define TRIPLE_FAULT 31 ///< Triple Fault
-#define SYSTEM_CALL  80 ///< System call interrupt.
-                        //==============================================================================
+#define SECURITY_EXC        30 ///< Security Exception.
+#define TRIPLE_FAULT        31 ///< Triple Fault
+#define SYSTEM_CALL         80 ///< System call interrupt.
+
+//==============================================================================
 
 /// @}
 /// @}

@@ -3,12 +3,12 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "sys/unistd.h"
 #include "assert.h"
+#include "errno.h"
 #include "stdlib.h"
 #include "string.h"
-#include "sys/errno.h"
 #include "system/syscall_types.h"
+#include "unistd.h"
 
 /// @brief Reference to the `environ` variable in `setenv.c`.
 extern char **environ;
@@ -28,7 +28,7 @@ int __libc_start_main(int (*main)(int, char **, char **), int argc, char *argv[]
     assert(envp && "There is no `envp` array.");
     //dbg_print("environ  : %p\n", environ);
     // Copy the environ.
-    environ = envp;
+    environ    = envp;
     // Call the main function.
     int result = main(argc, argv, envp);
     // Free the environ.

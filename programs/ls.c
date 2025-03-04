@@ -3,19 +3,18 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include <sys/dirent.h>
-#include <stdint.h>
-#include <string.h>
-#include <stdio.h>
-#include <stdbool.h>
-#include <sys/unistd.h>
+#include <dirent.h>
 #include <fcntl.h>
-#include <strerror.h>
-#include <sys/stat.h>
-#include <libgen.h>
-#include <sys/bitops.h>
-#include <io/debug.h>
 #include <io/ansi_colors.h>
+#include <libgen.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <strerror.h>
+#include <string.h>
+#include <sys/bitops.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 #define FLAG_L (1U << 0U)
 #define FLAG_A (1U << 1U)
@@ -23,6 +22,22 @@
 #define FLAG_1 (1U << 3U)
 
 #define DENTS_NUM 12
+
+static inline const char *to_human_size(unsigned long bytes)
+{
+    static char output[200];
+    const char *suffix[] = {"B", "KB", "MB", "GB", "TB"};
+    char length          = sizeof(suffix) / sizeof(suffix[0]);
+    int i                = 0;
+    double dblBytes      = bytes;
+    if (bytes > 1024) {
+        for (i = 0; (bytes / 1024) > 0 && i < length - 1; i++, bytes /= 1024) {
+            dblBytes = bytes / 1024.0;
+        }
+    }
+    sprintf(output, "%.02lf %2s", dblBytes, suffix[i]);
+    return output;
+}
 
 static inline void print_dir_entry_name(const char *name, mode_t st_mode)
 {
@@ -62,11 +77,12 @@ static inline void print_dir_entry(dirent_t *dirent, const char *path, unsigned 
     }
 
     // Prepare the relative path.
-    strcpy(relative_path, path);
+    strncpy(relative_path, path, PATH_MAX - 1);
+    relative_path[PATH_MAX - 1] = '\0';
     if (path[strnlen(path, PATH_MAX) - 1] != '/') {
-        strcat(relative_path, "/");
+        strncat(relative_path, "/", PATH_MAX);
     }
-    strcat(relative_path, dirent->d_name);
+    strncat(relative_path, dirent->d_name, PATH_MAX);
 
     // Stat the file.
     if (stat(relative_path, &dstat) < 0) {
@@ -97,14 +113,9 @@ static inline void print_dir_entry(dirent_t *dirent, const char *path, unsigned 
         // Add a space.
         putchar(' ');
         // Print the rest.
-        printf("%4d %4d %11s %02d/%02d %02d:%02d ",
-               dstat.st_uid,
-               dstat.st_gid,
-               to_human_size(dstat.st_size),
-               timeinfo->tm_mon,
-               timeinfo->tm_mday,
-               timeinfo->tm_hour,
-               timeinfo->tm_min);
+        printf(
+            "%4d %4d %11s %02d/%02d %02d:%02d ", dstat.st_uid, dstat.st_gid, to_human_size(dstat.st_size),
+            timeinfo->tm_mon, timeinfo->tm_mday, timeinfo->tm_hour, timeinfo->tm_min);
 
         print_dir_entry_name(dirent->d_name, dstat.st_mode);
 
@@ -172,7 +183,8 @@ int main(int argc, char *argv[])
             printf("Usage:\n");
             printf("    ls [options] [directory]\n");
             return 0;
-        } else if (argv[i][0] == '-') {
+        }
+        if (argv[i][0] == '-') {
             for (int j = 1; j < strlen(argv[i]); ++j) {
                 if (argv[i][j] == 'l') {
                     bitmask_set_assign(flags, FLAG_L);

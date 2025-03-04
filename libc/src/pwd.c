@@ -5,13 +5,12 @@
 
 #include "pwd.h"
 #include "assert.h"
+#include "errno.h"
 #include "fcntl.h"
-#include "io/debug.h"
 #include "readline.h"
 #include "stdio.h"
 #include "string.h"
-#include "sys/errno.h"
-#include "sys/unistd.h"
+#include "unistd.h"
 
 /// @brief Parses the input buffer and fills pwd with its details.
 /// @param pwd the structure we need to fill.
@@ -19,7 +18,8 @@
 static inline void __parse_line(passwd_t *pwd, char *buf)
 {
     assert(pwd && "Received null pwd!");
-    char *token, *ch;
+    char *token;
+    char *ch;
     // Parse the username.
     if ((token = strtok(buf, ":")) != NULL) {
         pwd->pw_name = token;
@@ -72,8 +72,7 @@ static inline char *__search_entry(int fd, char *buffer, int buflen, const char 
             char *name_end = strchr(buffer, ':');
             if (name_end) {
                 *name_end = '\0';
-                if (strlen(name) == strlen(buffer) &&
-                    strncmp(buffer, name, strlen(name)) == 0) {
+                if (strlen(name) == strlen(buffer) && strncmp(buffer, name, strlen(name)) == 0) {
                     *name_end = ':';
                     return buffer;
                 }
@@ -95,7 +94,7 @@ static inline char *__search_entry(int fd, char *buffer, int buflen, const char 
             if (ptr == NULL) {
                 continue;
             }
-            *ptr = '\0';
+            *ptr          = '\0';
             // Parse the uid.
             int found_uid = atoi(uid_start);
             // Check the uid.
@@ -140,7 +139,7 @@ int getpwnam_r(const char *name, passwd_t *pwd, char *buf, size_t buflen, passwd
     }
     int fd = open("/etc/passwd", O_RDONLY, 0);
     if (fd == -1) {
-        pr_debug("Cannot open `/etc/passwd`\n");
+        perror("Cannot open `/etc/passwd`\n");
         errno   = ENOENT;
         *result = NULL;
         return 0;
@@ -165,7 +164,6 @@ int getpwuid_r(uid_t uid, passwd_t *pwd, char *buf, size_t buflen, passwd_t **re
 {
     int fd = open("/etc/passwd", O_RDONLY, 0);
     if (fd == -1) {
-        pr_debug("Cannot open `/etc/passwd`\n");
         errno   = ENOENT;
         *result = NULL;
         return 0;

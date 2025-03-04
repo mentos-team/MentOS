@@ -9,9 +9,7 @@
 double round(double x)
 {
     double out;
-    __asm__ __volatile__("fldln2; fldl %1; frndint"
-                         : "=t"(out)
-                         : "m"(x));
+    __asm__ __volatile__("fldln2; fldl %1; frndint" : "=t"(out) : "m"(x));
     return out;
 }
 
@@ -68,44 +66,33 @@ double pow(double base, double exponent)
     return out;
 }
 
-double exp(double x)
-{
-    return pow(M_E, x);
-}
+double exp(double x) { return pow(M_E, x); }
 
 double fabs(double x)
 {
     double out;
-    __asm__ __volatile__("fldln2; fldl %1; fabs"
-                         : "=t"(out)
-                         : "m"(x));
+    __asm__ __volatile__("fldln2; fldl %1; fabs" : "=t"(out) : "m"(x));
     return out;
 }
 
 float fabsf(float x)
 {
     float out;
-    __asm__ __volatile__("fldln2; fldl %1; fabs"
-                         : "=t"(out)
-                         : "m"(x));
+    __asm__ __volatile__("fldln2; fldl %1; fabs" : "=t"(out) : "m"(x));
     return out;
 }
 
 double sqrt(double x)
 {
     double out;
-    __asm__ __volatile__("fldln2; fldl %1; fsqrt"
-                         : "=t"(out)
-                         : "m"(x));
+    __asm__ __volatile__("fldln2; fldl %1; fsqrt" : "=t"(out) : "m"(x));
     return out;
 }
 
 float sqrtf(float x)
 {
     float out;
-    __asm__ __volatile__("fldln2; fldl %1; fsqrt"
-                         : "=t"(out)
-                         : "m"(x));
+    __asm__ __volatile__("fldln2; fldl %1; fsqrt" : "=t"(out) : "m"(x));
     return out;
 }
 
@@ -116,8 +103,7 @@ int isinf(double x)
         double f;
     } ieee754;
     ieee754.f = x;
-    return ((unsigned)(ieee754.u >> 32U) & 0x7fffffffU) == 0x7ff00000U &&
-           ((unsigned)ieee754.u == 0);
+    return ((unsigned)(ieee754.u >> 32U) & 0x7fffffffU) == 0x7ff00000U && ((unsigned)ieee754.u == 0);
 }
 
 int isnan(double x)
@@ -127,30 +113,23 @@ int isnan(double x)
         double f;
     } ieee754;
     ieee754.f = x;
-    return ((unsigned)(ieee754.u >> 32) & 0x7fffffff) +
-               ((unsigned)ieee754.u != 0) >
-           0x7ff00000;
+    return ((unsigned)(ieee754.u >> 32) & 0x7fffffff) + ((unsigned)ieee754.u != 0) > 0x7ff00000;
 }
 
-double log10(double x)
-{
-    return ln(x) / ln(10);
-}
+double log10(double x) { return ln(x) / ln(10); }
 
 double ln(double x)
 {
     double out;
-    __asm__ __volatile__("fldln2; fldl %1; fyl2x"
-                         : "=t"(out)
-                         : "m"(x));
+    __asm__ __volatile__("fldln2; fldl %1; fyl2x" : "=t"(out) : "m"(x));
     return out;
 }
 
 double logx(double x, double y)
 {
     // Base may not equal 1 or be negative.
-    if (y == 1.f || y < 0.f || ln(y) == 0.f) {
-        return 0.f;
+    if (y == 1.F || y < 0.F || ln(y) == 0.F) {
+        return 0.F;
     }
     return ln(x) / ln(y);
 }

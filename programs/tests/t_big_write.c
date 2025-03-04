@@ -8,43 +8,36 @@
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <strerror.h>
+#include <string.h>
 #include <sys/stat.h>
-#include <sys/unistd.h>
+#include <unistd.h>
+
+#define FILENAME    "/home/user/test.txt"
+#define ITERATIONS  8
+#define BUFFER_SIZE BUFSIZ
 
 int main(int argc, char *argv[])
 {
-    int flags               = O_WRONLY | O_CREAT | O_TRUNC;
-    mode_t mode             = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP;
-    char *filename          = "/home/user/test.txt";
-    char buffer[4 * BUFSIZ] = { 0 };
+    mode_t mode                    = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP;
+    char write_buffer[BUFFER_SIZE] = {0};
+    char read_buffer[BUFFER_SIZE]  = {0};
 
     // Open the file with specified flags and mode.
-    int fd = open(filename, flags, mode);
+    int fd = open(FILENAME, O_WRONLY | O_CREAT | O_TRUNC, mode);
     if (fd < 0) {
-        // Error handling for file open failure.
-        fprintf(STDERR_FILENO, "Failed to open file %s: %s\n", filename, strerror(errno));
+        fprintf(stderr, "Failed to open file %s: %s\n", FILENAME, strerror(errno));
         return EXIT_FAILURE;
     }
 
-    // Write the content to the file.
-    for (unsigned times = 0; times < 128; ++times) {
+    // Write test data to the file.
+    for (unsigned times = 0; times < ITERATIONS; ++times) {
         for (unsigned i = 'A'; i < 'z'; ++i) {
-            // Fill the buffer with the character 'i'.
-            memset(buffer, i, 4 * BUFSIZ);
-            // Write the buffer to the file.
-            if (write(fd, buffer, 4 * BUFSIZ) < 0) {
-                // Error handling for write failure.
-                fprintf(STDERR_FILENO, "Writing to file %s failed: %s\n", filename, strerror(errno));
-                // Close the file descriptor.
-                if (close(fd) < 0) {
-                    fprintf(STDERR_FILENO, "Failed to close file %s: %s\n", filename, strerror(errno));
-                }
-                // Delete the file.
-                if (unlink(filename) < 0) {
-                    fprintf(STDERR_FILENO, "Failed to delete file %s: %s\n", filename, strerror(errno));
-                }
+            memset(write_buffer, i, sizeof(write_buffer));
+            if (write(fd, write_buffer, sizeof(write_buffer)) < 0) {
+                fprintf(stderr, "Writing to file %s failed: %s\n", FILENAME, strerror(errno));
+                close(fd);
+                unlink(FILENAME);
                 return EXIT_FAILURE;
             }
         }
@@ -52,12 +45,50 @@ int main(int argc, char *argv[])
 
     // Close the file descriptor.
     if (close(fd) < 0) {
-        fprintf(STDERR_FILENO, "Failed to close file %s: %s\n", filename, strerror(errno));
+        fprintf(stderr, "Failed to close file %s: %s\n", FILENAME, strerror(errno));
+        unlink(FILENAME);
         return EXIT_FAILURE;
     }
-    // Delete the file.
-    if (unlink(filename) < 0) {
-        fprintf(STDERR_FILENO, "Failed to delete file %s: %s\n", filename, strerror(errno));
+
+    // Open the file with specified flags and mode.
+    fd = open(FILENAME, O_RDONLY, mode);
+    if (fd < 0) {
+        fprintf(stderr, "Failed to open file %s: %s\n", FILENAME, strerror(errno));
+        unlink(FILENAME);
+        return EXIT_FAILURE;
+    }
+
+    // Read and verify data from the file.
+    for (unsigned times = 0; times < ITERATIONS; ++times) {
+        for (unsigned i = 'A'; i < 'z'; ++i) {
+            memset(write_buffer, i, sizeof(write_buffer));
+            if (read(fd, read_buffer, sizeof(read_buffer)) < 0) {
+                fprintf(stderr, "Reading from file %s failed: %s\n", FILENAME, strerror(errno));
+                close(fd);
+                unlink(FILENAME);
+                return EXIT_FAILURE;
+            }
+
+            // Verify read data matches what was written.
+            if (memcmp(write_buffer, read_buffer, sizeof(write_buffer)) != 0) {
+                fprintf(stderr, "Data mismatch in file %s at iteration %u, char %c\n", FILENAME, times, i);
+                close(fd);
+                unlink(FILENAME);
+                return EXIT_FAILURE;
+            }
+        }
+    }
+
+    // Close the file descriptor.
+    if (close(fd) < 0) {
+        fprintf(stderr, "Failed to close file %s: %s\n", FILENAME, strerror(errno));
+        unlink(FILENAME);
+        return EXIT_FAILURE;
+    }
+
+    // Delete the test file.
+    if (unlink(FILENAME) < 0) {
+        fprintf(stderr, "Failed to delete file %s: %s\n", FILENAME, strerror(errno));
         return EXIT_FAILURE;
     }
 

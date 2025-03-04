@@ -3,13 +3,13 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include <sys/unistd.h>
+#include <fcntl.h>
 #include <stdio.h>
-#include <sys/sem.h>
-#include <sys/ipc.h>
 #include <stdlib.h>
 #include <string.h>
-#include <fcntl.h>
+#include <sys/ipc.h>
+#include <sys/sem.h>
+#include <unistd.h>
 
 static inline void __print_file_content(const char *path)
 {
@@ -21,8 +21,9 @@ static inline void __print_file_content(const char *path)
     int fd = open(path, O_RDONLY, 42);
     if (fd >= 0) {
         // Put on the standard output the characters.
-        while (read(fd, buffer, BUFSIZ) > 0)
+        while (read(fd, buffer, BUFSIZ) > 0) {
             puts(buffer);
+        }
         // Close the file descriptor.
         close(fd);
     }
@@ -30,8 +31,9 @@ static inline void __print_file_content(const char *path)
 
 int main(int argc, char **argv)
 {
-    if (argc > 4)
+    if (argc > 4) {
         return -1;
+    }
 
     // Default operation, prints all ipcs informations.
     if (argc == 1) {
@@ -69,13 +71,15 @@ int main(int argc, char **argv)
             // Prepare the data structure.
             temp.buf = &sem;
             // Initialize the semid.
-            semid = atoi(argv[2]);
+            semid    = atoi(argv[2]);
             // Retrive the statistics.
-            ret = semctl(semid, 0, IPC_STAT, &temp);
+            ret      = semctl(semid, 0, IPC_STAT, &temp);
             // Check if we succeded.
             if (!ret) {
                 printf("key        semid      owner      perms      nsems\n");
-                printf("%10d %10d %10d %10d %d\n", sem.sem_perm.key, semid, sem.sem_perm.uid, sem.sem_perm.mode, sem.sem_nsems);
+                printf(
+                    "%10d %10d %10d %10d %d\n", sem.sem_perm.key, semid, sem.sem_perm.uid, sem.sem_perm.mode,
+                    sem.sem_nsems);
                 return 0;
             }
             return 1;
@@ -92,7 +96,10 @@ int main(int argc, char **argv)
             printf("Not Implemented!\n");
             return 0;
         }
-        printf("%s: Wrong combination, with `-i` you should provide either `-s`, `-m`, or `-q`.", argv[0]);
+        printf(
+            "%s: Wrong combination, with `-i` you should provide either `-s`, "
+            "`-m`, or `-q`.",
+            argv[0]);
         return 1;
     }
     printf("%s: Command not found.", argv[0]);

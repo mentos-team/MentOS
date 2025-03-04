@@ -9,15 +9,16 @@
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/stat.h>
-#include <sys/unistd.h>
 #include <strerror.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 int main(int argc, char *argv[])
 {
     char *filename = "/home/user/t_dup.txt";
-    int fd1, fd2;
+    int fd1;
+    int fd2;
     int flags   = O_WRONLY | O_CREAT | O_TRUNC;
     mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP;
 
@@ -106,7 +107,7 @@ int main(int argc, char *argv[])
     }
 
     // Buffer to read the file content.
-    char buf[7] = { 0 };
+    char buf[7] = {0};
 
     // Read the content of the file.
     if (read(fd1, buf, 6) < 0) {

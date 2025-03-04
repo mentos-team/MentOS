@@ -9,13 +9,13 @@
 /// See LICENSE.md for details.
 
 #include <signal.h>
-#include <stdlib.h>
 #include <stdio.h>
-#include <string.h>
-#include <time.h>
+#include <stdlib.h>
 #include <strerror.h>
+#include <string.h>
 #include <sys/wait.h>
-#include <sys/unistd.h>
+#include <time.h>
+#include <unistd.h>
 
 /// @brief Signal handler for SIGUSR1 in the child process.
 /// @param sig The signal number.
@@ -48,16 +48,25 @@ int main(int argc, char *argv[])
             return EXIT_FAILURE; // Return failure if handler setup fails
         }
 
+        // Request to sleep for 100 ms.
+        struct timespec req = {0, 100000000};
+
         // Child process loop - waiting for signals
         while (1) {
             printf("I'm the child (pid: %d): I'm waiting...\n", cpid);
-            sleep(1); // Sleep for 1 second in each loop iteration
+            // Sleep for 100 ms.
+            nanosleep(&req, NULL);
         }
 
     } else if (cpid > 0) {
         // Parent process
         printf("I'm the parent (pid: %d)!\n", getpid());
-        sleep(2); // Wait before sending the signal to the child
+
+        // Request to sleep for 500 ms.
+        struct timespec req = {0, 500000000};
+
+        // Sleep for 500 ms.
+        nanosleep(&req, NULL);
 
         // Send SIGUSR1 to the child process
         if (kill(cpid, SIGUSR1) == -1) {
@@ -65,7 +74,8 @@ int main(int argc, char *argv[])
             return EXIT_FAILURE; // Return failure if signal sending fails
         }
 
-        sleep(2); // Wait before terminating the child process
+        // Wait before terminating the child process, sleep for 500 ms.
+        nanosleep(&req, NULL);
 
         // Send SIGTERM to the child process to terminate it
         if (kill(cpid, SIGTERM) == -1) {

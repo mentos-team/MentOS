@@ -3,29 +3,41 @@
 /// @copyright (c) 2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
+#include <errno.h>
 #include <fcntl.h>
-#include <io/debug.h>
 #include <grp.h>
+#include <limits.h>
 #include <pwd.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <strerror.h>
 #include <string.h>
 #include <sys/bitops.h>
-#include <sys/errno.h>
 #include <sys/stat.h>
-#include <sys/unistd.h>
+#include <unistd.h>
+
+static inline const char *to_human_size(unsigned long bytes)
+{
+    static char output[200];
+    const char *suffix[] = {"B", "KB", "MB", "GB", "TB"};
+    char length          = sizeof(suffix) / sizeof(suffix[0]);
+    int i                = 0;
+    double dblBytes      = bytes;
+    if (bytes > 1024) {
+        for (i = 0; (bytes / 1024) > 0 && i < length - 1; i++, bytes /= 1024) {
+            dblBytes = bytes / 1024.0;
+        }
+    }
+    sprintf(output, "%.02lf %2s", dblBytes, suffix[i]);
+    return output;
+}
 
 static void __print_time(const char *prefix, time_t *time)
 {
     tm_t *timeinfo = localtime(time);
-    printf("%s%d-%d-%d %d:%d:%d\n",
-           prefix,
-           timeinfo->tm_year,
-           timeinfo->tm_mon,
-           timeinfo->tm_mday,
-           timeinfo->tm_hour,
-           timeinfo->tm_min,
-           timeinfo->tm_sec);
+    printf(
+        "%s%d-%d-%d %d:%d:%d\n", prefix, timeinfo->tm_year, timeinfo->tm_mon, timeinfo->tm_mday, timeinfo->tm_hour,
+        timeinfo->tm_min, timeinfo->tm_sec);
 }
 
 int main(int argc, char **argv)
@@ -60,14 +72,30 @@ int main(int argc, char **argv)
     printf("Inode: %d\n", dstat.st_ino);
     printf("File type: ");
     switch (dstat.st_mode & S_IFMT) {
-    case S_IFBLK : printf("block device\n"); break;
-    case S_IFCHR : printf("character device\n"); break;
-    case S_IFDIR : printf("directory\n"); break;
-    case S_IFIFO : printf("fifo/pipe\n"); break;
-    case S_IFLNK : printf("symbolic link\n"); break;
-    case S_IFREG : printf("regular file\n"); break;
-    case S_IFSOCK: printf("socket\n"); break;
-    default      : printf("unknown?\n"); break;
+    case S_IFBLK:
+        printf("block device\n");
+        break;
+    case S_IFCHR:
+        printf("character device\n");
+        break;
+    case S_IFDIR:
+        printf("directory\n");
+        break;
+    case S_IFIFO:
+        printf("fifo/pipe\n");
+        break;
+    case S_IFLNK:
+        printf("symbolic link\n");
+        break;
+    case S_IFREG:
+        printf("regular file\n");
+        break;
+    case S_IFSOCK:
+        printf("socket\n");
+        break;
+    default:
+        printf("unknown?\n");
+        break;
     }
     printf("Access: (%.4o/", dstat.st_mode & 0xFFF);
     // Print the access permissions.

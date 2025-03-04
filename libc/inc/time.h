@@ -9,14 +9,14 @@
 
 /// @brief This timer counts down in real (i.e., wall clock) time. At each
 /// expiration, a SIGALRM signal is generated.
-#define ITIMER_REAL 0
+#define ITIMER_REAL    0
 /// @brief This timer counts down against the user-mode CPU time consumed by the
 /// process. At each expiration, a SIGVTALRM signal is generated.
 #define ITIMER_VIRTUAL 1
 /// @brief This timer counts down against the total (i.e., both user and system)
 /// CPU time consumed by the process. At each expiration, a SIGPROF signal is
 /// generated.
-#define ITIMER_PROF 2
+#define ITIMER_PROF    2
 
 /// Used to store time values.
 typedef unsigned int time_t;
@@ -61,10 +61,20 @@ typedef struct timespec {
     long tv_nsec;  ///< Nanoseconds.
 } timespec_t;
 
-/// @brief Returns the current time.
-/// @param t Where the time should be stored.
-/// @return The current time.
+/// @brief Retrieves the current time.
+/// @param t Pointer to a `time_t` variable to store the current time, or NULL if not needed.
+/// @return The current time as `time_t`, or (time_t)-1 on failure.
 time_t time(time_t *t);
+
+/// @brief Converts the given time to a string representing the local time.
+/// @details Converts the value pointed to by timer, representing the time in
+/// seconds since the Unix epoch (1970-01-01 00:00:00 UTC), to a string in the
+/// format: Www Mmm dd hh:mm:ss yyyy.
+/// @param timer A pointer to a time_t object representing the time to be
+/// converted.
+/// @return A pointer to a statically allocated string containing the formatted
+/// date and time. The string is overwritten with each call to ctime().
+char *ctime(const time_t *timer);
 
 /// @brief Return the difference between the two time values.
 /// @param time1 The first time value.
@@ -79,12 +89,12 @@ tm_t *localtime(const time_t *timep);
 
 /// @brief Formats the time tm according to the format specification format
 ///        and places the result in the character array s of size max.
-/// @param s      The destination buffer.
-/// @param max    The maximum length of the buffer.
+/// @param str The destination buffer.
+/// @param maxsize The maximum length of the buffer.
 /// @param format The buffer used to generate the time.
-/// @param tm     The broken-down time.
+/// @param timeptr The broken-down time.
 /// @return The number of bytes (excluding the terminating null) placed in s.
-size_t strftime(char *s, size_t max, const char *format, const tm_t *tm);
+size_t strftime(char *str, size_t maxsize, const char *format, const tm_t *timeptr);
 
 /// @brief Suspends the execution of the calling thread.
 /// @param req The amount of time we want to sleep.
@@ -98,14 +108,6 @@ size_t strftime(char *s, size_t max, const char *format, const tm_t *tm);
 /// invocation of a handler in the calling thread or that terminates
 /// the process.
 int nanosleep(const struct timespec *req, struct timespec *rem);
-
-/// @brief Causes the calling thread to sleep either until the number of
-///        real-time seconds specified in seconds have elapsed or
-///        until a signal arrives which is not ignored.
-/// @param seconds The number of seconds we want to sleep.
-/// @return Zero if the requested time has elapsed, or the number of seconds
-///         left to sleep, if the call was interrupted by a signal handler.
-unsigned int sleep(unsigned int seconds);
 
 /// @brief Fills the structure pointed to by curr_value with the current setting
 /// for the timer specified by which.

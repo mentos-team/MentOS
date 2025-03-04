@@ -31,8 +31,7 @@ int init_modules(multiboot_info_t *header)
         return 1;
     }
     multiboot_module_t *mod = first_module(header);
-    for (int i = 0; (mod != 0) && (i < MAX_MODULES);
-         ++i, mod = next_module(header, mod)) {
+    for (int i = 0; (mod != 0) && (i < MAX_MODULES); ++i, mod = next_module(header, mod)) {
         memcpy(&modules[i], mod, sizeof(multiboot_module_t));
     }
     return 1;

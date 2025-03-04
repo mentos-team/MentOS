@@ -3,26 +3,20 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-// Setup the logging for this file (do this before any other include).
-#include "sys/kernel_levels.h"          // Include kernel log levels.
-#define __DEBUG_HEADER__ "[LOGIN ]"     ///< Change header.
-#define __DEBUG_LEVEL__  LOGLEVEL_DEBUG ///< Set log level.
-#include "io/debug.h"                   // Include debugging functions.
-
-#include <string.h>
-#include <ctype.h>
-#include <stdbool.h>
-#include <sys/unistd.h>
-#include <fcntl.h>
-#include <stdio.h>
-#include <limits.h>
-#include <termios.h>
 #include <bits/ioctls.h>
+#include <ctype.h>
+#include <fcntl.h>
+#include <io/ansi_colors.h>
+#include <limits.h>
 #include <pwd.h>
 #include <shadow.h>
-#include <strerror.h>
+#include <stdbool.h>
+#include <stdio.h>
 #include <stdlib.h>
-#include <io/ansi_colors.h>
+#include <strerror.h>
+#include <string.h>
+#include <termios.h>
+#include <unistd.h>
 
 #include <sys/mman.h>
 #include <sys/wait.h>
@@ -70,7 +64,10 @@ static inline void __print_message_file(const char *file)
 /// detected.
 static inline int __read_input(char *buffer, size_t size, int show)
 {
-    int index = 0, c, length = 0, insert_active = 0;
+    int index = 0;
+    int c;
+    int length        = 0;
+    int insert_active = 0;
 
     // Clear the buffer at the start
     memset(buffer, 0, size);
@@ -98,7 +95,9 @@ static inline int __read_input(char *buffer, size_t size, int show)
                 --index;  // Move index back
                 // Shift the buffer left to remove the character
                 memmove(buffer + index, buffer + index + 1, length - index + 1);
-                if (show) { putchar('\b'); } // Show backspace action
+                if (show) {
+                    putchar('\b');
+                } // Show backspace action
             }
             continue;
         }
@@ -109,7 +108,29 @@ static inline int __read_input(char *buffer, size_t size, int show)
             memmove(buffer + index + 1, buffer + index, length - index + 1);
             buffer[index++] = c; // Insert space
             length++;
-            if (show) { putchar(c); } // Show space
+            if (show) {
+                putchar(c);
+            } // Show space
+            continue;
+        }
+
+        // Ctrl+C
+        if (c == 0x03) {
+            memset(buffer, 0, size); // Clear buffer
+            putchar('\n');
+            return -1; // Return -1 on Ctrl+C
+        }
+
+        // CTRL+U
+        if (c == 0x15) {
+            memset(buffer, 0, size); // Clear the current command
+            if (show) {
+                // Clear the current command from display
+                while (index--) {
+                    putchar('\b'); // Move cursor back
+                }
+            }
+            index = 0; // Reset index
             continue;
         }
 
@@ -119,79 +140,103 @@ static inline int __read_input(char *buffer, size_t size, int show)
             if (c == '[') {
                 // Get the direction key (Left, Right, Home, End, Insert, Delete)
                 c = getchar();
-
-                if (c == 'D') { // LEFT Arrow
+                // LEFT Arrow
+                if (c == 'D') {
                     if (index > 0) {
-                        if (show) { puts("\033[1D"); } // Move the cursor left
-                        index--;                       // Decrease index
-                    }
-                } else if (c == 'C') { // RIGHT Arrow
-                    if (index < length) {
-                        if (show) { puts("\033[1C"); } // Move the cursor right
-                        index++;                       // Increase index
-                    }
-                } else if (c == '1') {                                // HOME
-                    if (show) { printf("\033[%dD", index); }          // Move cursor to the beginning
-                    index = 0;                                        // Set index to the start
-                } else if (c == '4') {                                // END
-                    if (show) { printf("\033[%dC", length - index); } // Move cursor to the end
-                    index = length;                                   // Set index to the end
-                } else if (c == '2') {                                // INSERT
-                    insert_active = !insert_active;                   // Toggle insert mode
-                } else if (c == '3') {                                // DELETE
-                    if (index < length) {
-                        --length;                    // Decrease length
-                        if (show) { putchar(0x7F); } // Show delete character
-                        // Shift left to remove character at index
-                        memmove(buffer + index, buffer + index + 1, length - index + 1);
+                        if (show) {
+                            puts("\033[1D");
+                        } // Move the cursor left
+                        index--; // Decrease index
                     }
                 }
-
-            } else if (c == '^') {
-                // Handle special commands (Ctrl+C, Ctrl+U)
-                c = getchar();
-                if (c == 'C') {
-                    memset(buffer, 0, size); // Clear buffer
-                    putchar('\n');
-                    return -1; // Return -1 on Ctrl+C
+                // RIGHT Arrow
+                else if (c == 'C') {
+                    if (index < length) {
+                        if (show) {
+                            puts("\033[1C");
+                        } // Move the cursor right
+                        index++; // Increase index
+                    }
                 }
-
-                if (c == 'U') {
-                    memset(buffer, 0, size); // Clear the current command
+                // HOME
+                else if (c == 'H') {
                     if (show) {
-                        // Clear the current command from display
-                        while (index--) {
-                            putchar('\b'); // Move cursor back
+                        printf("\033[%dD", index);
+                    } // Move cursor to the beginning
+                    index = 0; // Set index to the start
+                }
+                // END
+                else if (c == 'F') {
+                    if (show) {
+                        printf("\033[%dC", length - index);
+                    } // Move cursor to the end
+                    index = length; // Set index to the end
+                }
+                // INSERT
+                else if (c == '2') {
+                    if (getchar() == '~') {
+                        // Toggle insert mode.
+                        insert_active = !insert_active;
+                        if (insert_active) {
+                            // Change cursor to an underline cursor.
+                            printf("\033[3 q");
+                        } else {
+                            // Change cursor back to a block cursor (default).
+                            printf("\033[0 q");
                         }
                     }
-                    index = 0; // Reset index
+                }
+                // DELETE
+                else if (c == '3') {
+                    if (getchar() == '~') {
+                        if (index < length) {
+                            --length; // Decrease length
+                            if (show) {
+                                putchar(0x7F);
+                            } // Show delete character
+                            // Shift left to remove character at index
+                            memmove(buffer + index, buffer + index + 1, length - index + 1);
+                        }
+                    }
+                }
+                // PAGE_UP
+                else if (c == '5') {
+                    if (getchar() == '~') {
+                        printf("\033[25S");
+                    }
+                }
+                // PAGE_DOWN
+                else if (c == '6') {
+                    if (getchar() == '~') {
+                        printf("\033[25T");
+                    }
                 }
             }
             continue;
         }
 
-        // Handle alphanumeric input
-        if (isdigit(c) || isalpha(c)) {
-            // Handle insertion based on insert mode
-            if (!insert_active) {
-                // Shift buffer to the right to insert new character
-                memmove(buffer + index + 1, buffer + index, length - index + 1);
-            } else if (show && (index < length - 1)) {
-                puts("\033[1C"); // Move cursor right
-                putchar('\b');   // Prepare to delete the character
-            }
-
-            buffer[index++] = c; // Insert new character
-            length++;            // Increase length
-
-            if (show) { putchar(c); } // Show new character
-
-            // Check if we reached the buffer limit
-            if (index == (size - 1)) {
-                buffer[index] = 0; // Null-terminate the buffer
-                break;             // Exit loop if buffer is full
-            }
+        // Handle insertion based on insert mode
+        if (!insert_active) {
+            // Shift buffer to the right to insert new character
+            memmove(buffer + index + 1, buffer + index, length - index + 1);
+        } else if (show && (index < length - 1)) {
+            puts("\033[1C"); // Move cursor right
+            putchar('\b');   // Prepare to delete the character
         }
+
+        buffer[index++] = c; // Insert new character
+        length++;            // Increase length
+
+        if (show) {
+            putchar(c);
+        } // Show new character
+
+        // Check if we reached the buffer limit
+        if (index == (size - 1)) {
+            buffer[index] = 0; // Null-terminate the buffer
+            break;             // Exit loop if buffer is full
+        }
+
     } while (length < size);
 
     return length; // Return total length of input
@@ -203,7 +248,8 @@ int main(int argc, char **argv)
     __print_message_file("/etc/issue");
 
     passwd_t *pwd;
-    char username[CREDENTIALS_LENGTH], password[CREDENTIALS_LENGTH];
+    char username[CREDENTIALS_LENGTH];
+    char password[CREDENTIALS_LENGTH];
     struct termios _termios;
 
     do {
@@ -242,15 +288,14 @@ int main(int argc, char **argv)
             continue; // Retry after error
         }
 
-        struct spwd *spwd;
-        if ((spwd = getspnam(username)) == NULL) {
+        struct spwd *shadow;
+        if ((shadow = getspnam(username)) == NULL) {
             printf("Could not retrieve the secret password of %s: %s\n", username, strerror(errno));
             continue; // Retry if unable to get shadow password
         }
 
-        // Hash the input password for verification
-        unsigned char hash[SHA256_BLOCK_SIZE]       = { 0 };
-        char hash_string[SHA256_BLOCK_SIZE * 2 + 1] = { 0 };
+        unsigned char hash[SHA256_BLOCK_SIZE]       = {0};
+        char hash_string[SHA256_BLOCK_SIZE * 2 + 1] = {0};
         SHA256_ctx_t ctx;
         sha256_init(&ctx);
         for (unsigned i = 0; i < 100000; ++i) {
@@ -260,7 +305,7 @@ int main(int argc, char **argv)
         sha256_bytes_to_hex(hash, SHA256_BLOCK_SIZE, hash_string, SHA256_BLOCK_SIZE * 2 + 1);
 
         // Verify the password against the stored hash
-        if (strcmp(spwd->sp_pwdp, hash_string) != 0) {
+        if (strcmp(shadow->sp_pwdp, hash_string) != 0) {
             printf("Wrong password.\n");
             continue; // Retry on incorrect password
         }
@@ -316,7 +361,7 @@ int main(int argc, char **argv)
     puts(BG_BLACK FG_WHITE_BRIGHT);
 
     // Execute the user's shell
-    char *_argv[] = { pwd->pw_shell, (char *)NULL };
+    char *_argv[] = {pwd->pw_shell, (char *)NULL};
     if (execv(pwd->pw_shell, _argv) == -1) {
         printf("login: Failed to execute the shell.\n");
         printf("login: %s.\n", strerror(errno));

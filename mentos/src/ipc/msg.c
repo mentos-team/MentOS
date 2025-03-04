@@ -12,13 +12,13 @@
 // ============================================================================
 
 #include "assert.h"
+#include "errno.h"
 #include "fcntl.h"
 #include "process/process.h"
 #include "process/scheduler.h"
 #include "stdio.h"
 #include "stdlib.h"
 #include "string.h"
-#include "sys/errno.h"
 #include "sys/msg.h"
 #include "system/panic.h"
 
@@ -85,7 +85,8 @@ static inline void __msq_info_dealloc(msq_info_t *msq_info)
 {
     assert(msq_info && "Received a NULL pointer.");
     // Free the memory of all the messages.
-    struct msg *message = msq_info->msg_first, *next = NULL;
+    struct msg *message = msq_info->msg_first;
+    struct msg *next    = NULL;
     while (message) {
         next = message->msg_next;
         // Free the memory of the message.
@@ -110,8 +111,7 @@ static inline msq_info_t *__list_find_msq_info_by_id(int msqid)
 {
     msq_info_t *msq_info;
     // Iterate through the list of message queue set.
-    list_for_each_decl(it, &msq_list)
-    {
+    list_for_each_decl (it, &msq_list) {
         // Get the current entry.
         msq_info = list_entry(it, msq_info_t, list);
         // If message queue set is valid, check the id.
@@ -129,8 +129,7 @@ static inline msq_info_t *__list_find_msq_info_by_key(key_t key)
 {
     msq_info_t *msq_info;
     // Iterate through the list of message queue set.
-    list_for_each_decl(it, &msq_list)
-    {
+    list_for_each_decl (it, &msq_list) {
         // Get the current entry.
         msq_info = list_entry(it, msq_info_t, list);
         // If message queue set is valid, check the id.
@@ -256,7 +255,8 @@ int sys_msgget(key_t key, int msgflg)
         // process does not have permission to access the set.
         if (msq_info && !ipc_valid_permissions(msgflg, &msq_info->msqid.msg_perm)) {
             pr_err("The message queue exists for the given key, "
-                   "but the calling process does not have permission to access the set.\n");
+                   "but the calling process does not have permission to access "
+                   "the set.\n");
             return -EACCES;
         }
         // If the message queue does not exist we need to create a new one.
@@ -327,7 +327,7 @@ int sys_msgsnd(int msqid, const void *msgp, size_t msgsz, int msgflg)
     // Copy the type of message.
     message->msg_type = _msgp->mtype;
     // Allocate the memory for the content of the message.
-    message->msg_ptr = (char *)kmalloc(msgsz);
+    message->msg_ptr  = (char *)kmalloc(msgsz);
     if (message->msg_ptr == NULL) {
         pr_err("We failed to allocate the memory for the message.\n");
         kfree(message);
@@ -349,18 +349,13 @@ int sys_msgsnd(int msqid, const void *msgp, size_t msgsz, int msgflg)
     // Increment the number of messages in the message queue.
     msq_info->msqid.msg_qnum += 1;
 
-    pr_debug("[%2d] msg_lspid: %2d, msg_lrpid: %2d, msg_qnum: %2d, msg_cbytes: %4d (%s)\n",
-             msq_info->id,
-             msq_info->msqid.msg_lspid,
-             msq_info->msqid.msg_lrpid,
-             msq_info->msqid.msg_qnum,
-             msq_info->msqid.msg_cbytes,
-             message->msg_ptr);
+    pr_debug(
+        "[%2d] msg_lspid: %2d, msg_lrpid: %2d, msg_qnum: %2d, msg_cbytes: %4d "
+        "(%s)\n",
+        msq_info->id, msq_info->msqid.msg_lspid, msq_info->msqid.msg_lrpid, msq_info->msqid.msg_qnum,
+        msq_info->msqid.msg_cbytes, message->msg_ptr);
     for (struct msg *it = msq_info->msg_first; it; it = it->msg_next) {
-        pr_debug("    type: %3ld, size: %3d, msg: `%s`\n",
-                 it->msg_type,
-                 it->msg_size,
-                 it->msg_ptr);
+        pr_debug("    type: %3ld, size: %3d, msg: `%s`\n", it->msg_type, it->msg_size, it->msg_ptr);
     }
     return 0;
 }
@@ -402,7 +397,8 @@ ssize_t sys_msgrcv(int msqid, void *msgp, size_t msgsz, long msgtyp, int msgflg)
     // process does not have permission to access the set.
     if (msq_info && !ipc_valid_permissions(O_RDONLY, &msq_info->msqid.msg_perm)) {
         pr_err("The message queue exists for the given key, but the "
-               "calling process does not have read permission to access the set.\n");
+               "calling process does not have read permission to access the "
+               "set.\n");
         return -EACCES;
     }
     // Prepare a structure for the message.
@@ -470,18 +466,13 @@ ssize_t sys_msgrcv(int msqid, void *msgp, size_t msgsz, long msgtyp, int msgflg)
     // Remove the message to the queue.
     __msq_info_remove_message(msq_info, message);
 
-    pr_debug("[%2d] msg_lspid: %2d, msg_lrpid: %2d, msg_qnum: %2d, msg_cbytes: %4d (%s)\n",
-             msq_info->id,
-             msq_info->msqid.msg_lspid,
-             msq_info->msqid.msg_lrpid,
-             msq_info->msqid.msg_qnum,
-             msq_info->msqid.msg_cbytes,
-             message->msg_ptr);
+    pr_debug(
+        "[%2d] msg_lspid: %2d, msg_lrpid: %2d, msg_qnum: %2d, msg_cbytes: %4d "
+        "(%s)\n",
+        msq_info->id, msq_info->msqid.msg_lspid, msq_info->msqid.msg_lrpid, msq_info->msqid.msg_qnum,
+        msq_info->msqid.msg_cbytes, message->msg_ptr);
     for (struct msg *it = msq_info->msg_first; it; it = it->msg_next) {
-        pr_debug("    type: %3ld, size: %3d, msg: `%s`\n",
-                 it->msg_type,
-                 it->msg_size,
-                 it->msg_ptr);
+        pr_debug("    type: %3ld, size: %3d, msg: `%s`\n", it->msg_type, it->msg_size, it->msg_ptr);
     }
 
     // Free the memory of the message.
@@ -517,7 +508,8 @@ int sys_msgctl(int msqid, int cmd, struct msqid_ds *buf)
         // EIDRM); no argument required.
 
         if ((msq_info->msqid.msg_perm.uid != task->uid) && (msq_info->msqid.msg_perm.cuid != task->uid)) {
-            pr_err("The calling process is not the creator or the owner of the queue.\n");
+            pr_err("The calling process is not the creator or the owner of the "
+                   "queue.\n");
             return -EPERM;
         }
         // Remove the info from the list.
@@ -534,7 +526,8 @@ int sys_msgctl(int msqid, int cmd, struct msqid_ds *buf)
         }
         // Check permissions.
         if (!ipc_valid_permissions(O_RDONLY, &msq_info->msqid.msg_perm)) {
-            pr_err("The calling process does not have read permission to access the queue.\n");
+            pr_err("The calling process does not have read permission to "
+                   "access the queue.\n");
             return -EACCES;
         }
         // Copying all the data.
@@ -559,7 +552,9 @@ ssize_t procipc_msg_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyte
         pr_err("Received a NULL file.\n");
         return -ENOENT;
     }
-    size_t buffer_len = 0, read_pos = 0, ret = 0;
+    size_t buffer_len    = 0;
+    size_t read_pos      = 0;
+    size_t ret           = 0;
     ssize_t write_count  = 0;
     msq_info_t *msq_info = NULL;
     char buffer[BUFSIZ];
@@ -567,28 +562,20 @@ ssize_t procipc_msg_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyte
     // Prepare a buffer.
     memset(buffer, 0, BUFSIZ);
     // Prepare the header.
-    ret = sprintf(buffer, "       key      msqid perms      cbytes       qnum lspid lrpid   uid   gid  cuid  cgid      stime      rtime      ctime\n");
+    ret = sprintf(
+        buffer, "       key      msqid perms      cbytes       qnum lspid lrpid   uid  "
+                " gid  cuid  cgid      stime      rtime      ctime\n");
 
-    list_for_each_decl(it, &msq_list)
-    {
+    list_for_each_decl (it, &msq_list) {
         // Get the current entry.
         msq_info = list_entry(it, msq_info_t, list);
         // Add the line.
         ret += sprintf(
             buffer + ret, "%10d %11d %6d %12d %11d %6d %6d %6d %6d %6d %6d %11d %11d %11d\n",
-            abs(msq_info->msqid.msg_perm.key),
-            msq_info->id,
-            msq_info->msqid.msg_perm.mode,
-            msq_info->msqid.msg_cbytes,
-            msq_info->msqid.msg_qnum,
-            msq_info->msqid.msg_lspid,
-            msq_info->msqid.msg_lrpid,
-            msq_info->msqid.msg_perm.uid,
-            msq_info->msqid.msg_perm.gid,
-            msq_info->msqid.msg_perm.cuid,
-            msq_info->msqid.msg_perm.cgid,
-            msq_info->msqid.msg_stime,
-            msq_info->msqid.msg_rtime,
+            abs(msq_info->msqid.msg_perm.key), msq_info->id, msq_info->msqid.msg_perm.mode, msq_info->msqid.msg_cbytes,
+            msq_info->msqid.msg_qnum, msq_info->msqid.msg_lspid, msq_info->msqid.msg_lrpid,
+            msq_info->msqid.msg_perm.uid, msq_info->msqid.msg_perm.gid, msq_info->msqid.msg_perm.cuid,
+            msq_info->msqid.msg_perm.cgid, msq_info->msqid.msg_stime, msq_info->msqid.msg_rtime,
             msq_info->msqid.msg_ctime);
     }
     sprintf(buffer + ret, "\n");

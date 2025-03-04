@@ -3,69 +3,67 @@
 /// @copyright (c) 2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
+#include <errno.h>
 #include <fcntl.h>
 #include <io/port_io.h>
+#include <limits.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <strerror.h>
 #include <string.h>
-#include <sys/errno.h>
-#include <sys/unistd.h>
 #include <sys/wait.h>
-
-// Setup the logging for this file (do this before any other include).
-#include "sys/kernel_levels.h"         // Include kernel log levels.
-#define __DEBUG_HEADER__ "[TRUNS ]"    ///< Change header.
-#define __DEBUG_LEVEL__  LOGLEVEL_INFO ///< Set log level.
-#include "io/debug.h"                  // Include debugging functions.
+#include <syslog.h>
+#include <unistd.h>
 
 #define SHUTDOWN_PORT 0x604
 /// Second serial port for QEMU.
-#define SERIAL_COM2 0x02F8
+#define SERIAL_COM2   0x02F8
 
 static char *all_tests[] = {
     "t_abort",
     "t_alarm",
-    /* "t_big_write", */
+    // "t_big_write",
+    "t_chdir",
     "t_creat",
     "t_dup",
-    "t_exec execl",
-    "t_exec execlp",
-    "t_exec execle",
-    "t_exec execlpe",
-    "t_exec execv",
-    "t_exec execvp",
-    "t_exec execve",
-    "t_exec execvpe",
-    "t_fork 10",
+    "t_environ",
+    "t_exit",
+    "t_exec",
+    "t_fork",
     "t_gid",
     "t_grp",
     "t_groups",
+    "t_hashmap",
     "t_itimer",
     "t_kill",
-    /* "t_mem", */
+    "t_list",
+    "t_mem",
     "t_mkdir",
     "t_msgget",
-    /* "t_periodic1", */
-    /* "t_periodic2", */
-    /* "t_periodic3", */
+    "t_ndtree",
+    // "t_periodic1",
+    // "t_periodic2",
+    // "t_periodic3",
+    "t_pipe_blocking",
+    "t_pipe_non_blocking",
     "t_pwd",
     "t_schedfb",
     "t_semflg",
     "t_semget",
     "t_semop",
-    "t_setenv",
+    "t_shm",
     "t_shmget",
-    /* "t_shm_read", */
-    /* "t_shm_write", */
     "t_sigaction",
     "t_sigfpe",
     "t_siginfo",
     "t_sigmask",
     "t_sigusr",
     "t_sleep",
+    "t_spwd",
     "t_stopcont",
+    "t_syslog",
+    "t_time",
     "t_write_read",
 };
 
@@ -80,12 +78,12 @@ static int test_err_fd;
 
 static int init;
 
-#define append(...)                             \
-    do {                                        \
-        bufpos += sprintf(bufpos, __VA_ARGS__); \
-        if (bufpos >= buf + sizeof(buf)) {      \
-            return -1;                          \
-        }                                       \
+#define append(...)                                                                                                    \
+    do {                                                                                                               \
+        bufpos += sprintf(bufpos, __VA_ARGS__);                                                                        \
+        if (bufpos >= buf + sizeof(buf)) {                                                                             \
+            return -1;                                                                                                 \
+        }                                                                                                              \
     } while (0);
 
 static int test_out_flush(void)
@@ -95,8 +93,9 @@ static int test_out_flush(void)
         ret = printf("%s\n", buf);
     } else {
         char *s = buf;
-        while ((*s) != 0)
+        while ((*s) != 0) {
             outportb(SERIAL_COM2, *s++);
+        }
         outportb(SERIAL_COM2, '\n');
     }
     bufpos  = buf;
@@ -223,7 +222,7 @@ int runtests_main(int argc, char **argv)
 
     char *test_argv[32];
     for (int i = 0; i < testsc; i++) {
-        pr_info("Running test (%2d/%2d): %s\n", i + 1, testsc, tests[i]);
+        syslog(LOG_INFO, "Running test (%2d/%2d): %s\n", i + 1, testsc, tests[i]);
         run_test(i + 1, tests[i]);
     }
 
@@ -242,7 +241,9 @@ int main(int argc, char **argv)
     if (init) {
         pid_t runtests = fork();
         if (runtests) {
-            while (1) { wait(NULL); }
+            while (1) {
+                wait(NULL);
+            }
         }
     }
 

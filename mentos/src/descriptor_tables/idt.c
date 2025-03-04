@@ -9,8 +9,8 @@
 #define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
 #include "io/debug.h"                    // Include debugging functions.
 
-#include "descriptor_tables/idt.h"
 #include "descriptor_tables/gdt.h"
+#include "descriptor_tables/idt.h"
 #include "descriptor_tables/isr.h"
 
 /// @brief Interrupt Service Routine (ISR) for exception handling.
@@ -129,10 +129,10 @@ idt_pointer_t idt_pointer;
 /// @param seg_sel  GDT segment selector.
 static inline void __idt_set_gate(uint8_t index, interrupt_handler_t handler, uint16_t options, uint8_t seg_sel)
 {
-    uintptr_t base_prt = (uintptr_t)handler;
+    uintptr_t base_prt            = (uintptr_t)handler;
     // Assign the base values.
-    idt_table[index].offset_low  = (base_prt & 0xFFFFu);
-    idt_table[index].offset_high = (base_prt >> 16u) & 0xFFFFu;
+    idt_table[index].offset_low   = (base_prt & 0xFFFFu);
+    idt_table[index].offset_high  = (base_prt >> 16u) & 0xFFFFu;
     // Set the other fields.
     idt_table[index].reserved     = 0x00;
     idt_table[index].seg_selector = seg_sel;

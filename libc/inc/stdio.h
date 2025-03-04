@@ -11,7 +11,7 @@
 /// @brief The maximum number of digits of an integer.
 #define MAX_DIGITS_IN_INTEGER 11
 /// @brief The size of 'gets' buffer.
-#define GETS_BUFFERSIZE 255
+#define GETS_BUFFERSIZE       255
 
 #ifndef EOF
 /// @brief Define the End-Of-File.
@@ -68,69 +68,86 @@ int atoi(const char *str);
 long strtol(const char *str, char **endptr, int base);
 
 /// @brief Write formatted output to stdout.
-/// @param fmt The format string.
+/// @param format The format string.
 /// @param ... The list of arguments.
 /// @return On success, the total number of characters written is returned.
 ///         On failure, a negative number is returned.
-int printf(const char *fmt, ...);
+int printf(const char *format, ...);
 
 /// @brief Write formatted output to `str`.
 /// @param str The buffer where the formatted string will be placed.
-/// @param fmt  Format string, following the same specifications as printf.
+/// @param format  Format string, following the same specifications as printf.
 /// @param ... The list of arguments.
 /// @return On success, the total number of characters written is returned.
 ///         On failure, a negative number is returned.
-int sprintf(char *str, const char *fmt, ...);
+int sprintf(char *str, const char *format, ...);
+
+/// @brief Writes formatted output to `str`.
+/// @param str The buffer where the formatted string will be placed.
+/// @param size The size of the buffer.
+/// @param format The format string, following the same specifications as printf.
+/// @param ... The list of arguments.
+/// @return On success, the total number of characters written (excluding the null terminator) is returned.
+///         On failure, a negative number is returned.
+int snprintf(char *str, size_t size, const char *format, ...);
 
 #ifndef __KERNEL__
 /// @brief Write formatted output to a file.
 /// @param fd  The file descriptor associated with the file.
-/// @param fmt  Format string, following the same specifications as printf.
+/// @param format  Format string, following the same specifications as printf.
 /// @param ... The list of arguments.
 /// @return On success, the total number of characters written is returned.
 ///         On failure, a negative number is returned.
-int fprintf(int fd, const char *fmt, ...);
+int fprintf(int fd, const char *format, ...);
 
 /// @brief Write formatted data from variable argument list to a file.
 /// @param fd  The file descriptor associated with the file.
-/// @param fmt  Format string, following the same specifications as printf.
+/// @param format  Format string, following the same specifications as printf.
 /// @param args A variable arguments list.
 /// @return On success, the total number of characters written is returned.
 ///         On failure, a negative number is returned.
-int vfprintf(int fd, const char *fmt, va_list args);
+int vfprintf(int fd, const char *format, va_list args);
 #endif
+
+/// @brief Formats a string and ensures buffer boundaries are respected.
+/// @param str The output buffer where the formatted string will be stored.
+/// @param size The maximum size of the output buffer.
+/// @param format The format string.
+/// @param args The argument list for the format specifiers.
+/// @return int The number of characters written, excluding the null-terminator.
+int vsnprintf(char *str, size_t size, const char *format, va_list args);
 
 /// @brief Write formatted data from variable argument list to string.
 /// @param str  Pointer to a buffer where the resulting C-string is stored.
-/// @param fmt  Format string, following the same specifications as printf.
+/// @param format  Format string, following the same specifications as printf.
 /// @param args A variable arguments list.
 /// @return On success, the total number of characters written is returned.
 ///         On failure, a negative number is returned.
-int vsprintf(char *str, const char *fmt, va_list args);
+int vsprintf(char *str, const char *format, va_list args);
 
 #ifndef __KERNEL__
 /// @brief Read formatted input from stdin.
-/// @param fmt  Format string, following the same specifications as printf.
+/// @param format  Format string, following the same specifications as printf.
 /// @param ... The list of arguments where the values are stored.
 /// @return On success, the function returns the number of items of the
 ///         argument list successfully filled. EOF otherwise.
-int scanf(const char *fmt, ...);
+int scanf(const char *format, ...);
 
 /// @brief Read formatted data from string.
 /// @param str String processed as source to retrieve the data.
-/// @param fmt  Format string, following the same specifications as printf.
+/// @param format  Format string, following the same specifications as printf.
 /// @param ... The list of arguments where the values are stored.
 /// @return On success, the function returns the number of items of the
 ///         argument list successfully filled. EOF otherwise.
-int sscanf(const char *str, const char *fmt, ...);
+int sscanf(const char *str, const char *format, ...);
 
 /// @brief The same as sscanf but the source is a file.
 /// @param fd  The file descriptor associated with the file.
-/// @param fmt  Format string, following the same specifications as printf.
+/// @param format  Format string, following the same specifications as printf.
 /// @param ... The list of arguments where the values are stored.
 /// @return On success, the function returns the number of items of the
 ///         argument list successfully filled. EOF otherwise.
-int fscanf(int fd, const char *fmt, ...);
+int fscanf(int fd, const char *format, ...);
 #endif
 
 /// @brief Prints a system error message.

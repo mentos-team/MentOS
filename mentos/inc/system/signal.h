@@ -5,22 +5,23 @@
 
 #pragma once
 
-#include "klib/stdatomic.h"
 #include "klib/spinlock.h"
-#include "sys/list_head.h"
+#include "klib/stdatomic.h"
+#include "list_head.h"
 #include "system/syscall.h"
 
 /// @brief Signal codes.
 typedef enum {
-    SIGHUP    = 1,  ///< Hang up detected on controlling terminal or death of controlling process.
-    SIGINT    = 2,  ///< Issued if the user sends an interrupt signal (Ctrl + C).
-    SIGQUIT   = 3,  ///< Issued if the user sends a quit signal (Ctrl + D).
-    SIGILL    = 4,  ///< Illegal Instruction.
-    SIGTRAP   = 5,  ///< Trace/breakpoint trap.
-    SIGABRT   = 6,  ///< Abort signal from abort().
-    SIGEMT    = 7,  ///< Emulator trap.
-    SIGFPE    = 8,  ///< Floating-point arithmetic exception.
-    SIGKILL   = 9,  ///< If a process gets this signal it must quit immediately and will not perform any clean-up operations.
+    SIGHUP  = 1, ///< Hang up detected on controlling terminal or death of controlling process.
+    SIGINT  = 2, ///< Issued if the user sends an interrupt signal (Ctrl + C).
+    SIGQUIT = 3, ///< Issued if the user sends a quit signal (Ctrl + D).
+    SIGILL  = 4, ///< Illegal Instruction.
+    SIGTRAP = 5, ///< Trace/breakpoint trap.
+    SIGABRT = 6, ///< Abort signal from abort().
+    SIGEMT  = 7, ///< Emulator trap.
+    SIGFPE  = 8, ///< Floating-point arithmetic exception.
+    SIGKILL =
+        9, ///< If a process gets this signal it must quit immediately and will not perform any clean-up operations.
     SIGBUS    = 10, ///< Bus error (bad memory access).
     SIGSEGV   = 11, ///< Invalid memory reference.
     SIGSYS    = 12, ///< Bad system call (SVr4).
@@ -43,7 +44,7 @@ typedef enum {
     SIGPROF   = 29, ///< Profiling timer expired.
     SIGXCPU   = 30, ///< CPU time limit exceeded.
     SIGXFSZ   = 31, ///< File size limit exceeded.
-    NSIG
+    NSIG      = 32
 } signal_type_t;
 
 /// @brief Codes that indentify the sender of a signal.
@@ -153,9 +154,9 @@ typedef enum {
 /// Type of a signal handler.
 typedef void (*sighandler_t)(int);
 
-#define SIG_DFL ((sighandler_t)0)  ///< Default signal handling.
-#define SIG_IGN ((sighandler_t)1)  ///< ignore signal.
-#define SIG_ERR ((sighandler_t)-1) ///< error return from signal.
+#define SIG_DFL ((sighandler_t)0)    ///< Default signal handling.
+#define SIG_IGN ((sighandler_t)1)    ///< ignore signal.
+#define SIG_ERR ((sighandler_t) - 1) ///< error return from signal.
 
 /// @brief Structure used to mask and unmask signals.
 /// @details
@@ -244,15 +245,14 @@ typedef struct sigpending_t {
 #define SEND_SIG_NOINFO ((siginfo_t *)0)
 
 /// @brief Handle the return from a signal handler.
-/// @param f The stack frame when returning from a signal handler.
-/// @return never.
+/// @param f Pointer to the pt_regs structure.
+/// @return This function does not return (never).
 long sys_sigreturn(struct pt_regs *f);
 
 /// @brief Handles the signals of the current process.
-/// @param f The address of the stack area where the User Mode register
-///          contents of the current process are saved.
-/// @return If we are handling a signal, thus, `regs` have been modified
-///          to handle it (e.g., eip is now poiting at the handler).
+/// @param f Pointer to the pt_regs structure.
+/// @return 1 if a signal is being handled and registers have been modified;
+/// otherwise, 0.
 int do_signal(struct pt_regs *f);
 
 /// @brief Initialize the signals.

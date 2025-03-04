@@ -5,8 +5,8 @@
 
 #pragma once
 
-#include "sys/types.h"
 #include "stddef.h"
+#include "sys/types.h"
 
 #define IPC_CREAT  01000 ///< Create key if key does not exist.
 #define IPC_EXCL   02000 ///< Fail if key exists.
@@ -40,4 +40,4 @@ struct ipc_perm {
 /// @param path The file path.
 /// @param id the project id.
 /// @return the IPC key.
-key_t ftok(char *path, int id);
+key_t ftok(const char *path, int id);

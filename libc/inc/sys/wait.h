@@ -5,6 +5,8 @@
 
 #pragma once
 
+#include "types.h"
+
 /// @brief Return immediately if no child is there to be waited for.
 #define WNOHANG 0x00000001
 
@@ -19,19 +21,19 @@
 /// @brief returns true if the child process that caused the return is
 ///        currently stopped; this is only possible if the call was done using
 ///        WUNTRACED().
-#define WIFSTOPPED(status) (((status)&0xff) == 0x7f)
+#define WIFSTOPPED(status) (((status) & 0xff) == 0x7f)
 
 /// @brief evaluates to the least significant eight bits of the return code
 ///        of the child that terminated, which may have been set as the argument
 ///        to a call to exit() or as the argument for a return statement in the
 ///        main  program. This macro can only be evaluated if WIFEXITED()
 ///        returned nonzero.
-#define WEXITSTATUS(status) (((status)&0xff00) >> 8)
+#define WEXITSTATUS(status) (((status) & 0xff00) >> 8)
 
 /// @brief returns the number of the signal that caused the child process to
 ///        terminate. This macro can only be evaluated if WIFSIGNALED() returned
 ///        nonzero.
-#define WTERMSIG(status) ((status)&0x7f)
+#define WTERMSIG(status) ((status) & 0x7f)
 
 /// @brief Is nonzero if the child exited normally.
 #define WIFEXITED(status) (WTERMSIG(status) == 0)

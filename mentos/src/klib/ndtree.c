@@ -3,410 +3,301 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "io/debug.h"
+#include "ndtree.h"
+
 #include "assert.h"
-#include "klib/ndtree.h"
-#include "mem/slab.h"
-#include "sys/list_head.h"
 
 // ============================================================================
-// Tree types.
+// Init functions.
 
-/// @brief Stores data about an NDTree node.
-struct ndtree_node_t {
-    /// User provided, used indirectly via ndtree_tree_cmp_f.
-    void *value;
-    /// Pointer to the parent.
-    ndtree_node_t *parent;
-    /// List of siblings.
-    list_head siblings;
-    /// List of children.
-    list_head children;
-};
-
-/// @brief Stores data about an NDTree.
-struct ndtree_t {
-    /// Comparison function.
-    ndtree_tree_cmp_f cmp;
-    /// Size of the tree.
-    size_t size;
-    /// Pointer to the root node.
-    ndtree_node_t *root;
-    /// List of orphans.
-    list_head orphans;
-};
-
-/// @brief Stores data about an NDTree iterator.
-struct ndtree_iter_t {
-    /// Pointer to the head of the list.
-    list_head *head;
-    /// Pointer to the current element of the list.
-    list_head *current;
-};
-
-// ============================================================================
-// Default Comparison functions.
-
-/// @brief Default comparison function.
-/// @param self the ndtree.
-/// @param a the first element.
-/// @param b the second element.
-/// @return comparison between the elements.
-static inline int __ndtree_tree_node_cmp_ptr_cb(ndtree_t *self, void *a, void *b)
+void ndtree_tree_init(
+    ndtree_t *tree,
+    ndtree_tree_compare_f compare_node,
+    ndtree_alloc_node_f alloc_node,
+    ndtree_free_node_f free_node)
 {
-    return (a > b) - (a < b);
+    // Validate that the tree and function pointers are not NULL.
+    assert(tree && "ndtree_tree_init: Variable tree is NULL.");
+    assert(compare_node && "ndtree_tree_init: Function pointer compare_node is NULL.");
+    assert(alloc_node && "ndtree_tree_init: Function pointer alloc_node is NULL.");
+    assert(free_node && "ndtree_tree_init: Function pointer free_node is NULL.");
+
+    // Initialize tree properties to default values.
+    tree->size         = 0;
+    tree->root         = NULL;
+    tree->compare_node = compare_node;
+    tree->alloc_node   = alloc_node;
+    tree->free_node    = free_node;
+
+    // Initialize the orphan list head.
+    list_head_init(&tree->orphans);
+}
+
+void ndtree_node_init(ndtree_node_t *node, void *value)
+{
+    // Validate that the node and value are not NULL.
+    assert(node && "ndtree_node_init: Variable node is NULL.");
+    assert(value && "ndtree_node_init: Variable value is NULL.");
+
+    // Set the node's value and initialize relationships.
+    node->value  = value;
+    node->parent = NULL;
+
+    // Initialize sibling and children lists.
+    list_head_init(&node->siblings);
+    list_head_init(&node->children);
 }
 
 // ============================================================================
-// Node management functions.
-
-ndtree_node_t *ndtree_node_alloc(void)
-{
-    return kmalloc(sizeof(ndtree_node_t));
-}
-
-ndtree_node_t *ndtree_node_create(void *value)
-{
-    ndtree_node_t *node = ndtree_node_alloc();
-    node                = ndtree_node_init(node, value);
-    return node;
-}
-
-ndtree_node_t *ndtree_node_init(ndtree_node_t *node, void *value)
-{
-    if (node) {
-        node->value  = value;
-        node->parent = NULL;
-        list_head_init(&node->siblings);
-        list_head_init(&node->children);
-    }
-    return node;
-}
-
-void ndtree_node_set_value(ndtree_node_t *node, void *value)
-{
-    if (node && value) {
-        node->value = value;
-    }
-}
-
-void *ndtree_node_get_value(ndtree_node_t *node)
-{
-    if (node) {
-        return node->value;
-    }
-    return NULL;
-}
-
-void ndtree_set_root(ndtree_t *tree, ndtree_node_t *node)
-{
-    tree->root = node;
-    ++tree->size;
-}
+// Node Management Functions
 
 ndtree_node_t *ndtree_create_root(ndtree_t *tree, void *value)
 {
-    ndtree_node_t *node = ndtree_node_create(value);
-    ndtree_set_root(tree, node);
-    return node;
-}
+    // Ensure the tree and the allocation function are valid.
+    assert(tree && "ndtree_create_root: Variable tree is NULL.");
+    assert(value && "ndtree_create_root: Variable value is NULL.");
 
-ndtree_node_t *ndtree_get_root(ndtree_t *tree)
-{
-    return tree->root;
+    // Allocate a new node for the root using the custom allocator.
+    ndtree_node_t *node = tree->alloc_node(value);
+    if (node) {
+        // Initialize the node with the provided value.
+        ndtree_node_init(node, value);
+
+        // Set this node as the tree's root and update the tree size.
+        tree->root = node;
+        tree->size = 1;
+    }
+
+    // Return the newly created root node, or NULL if allocation failed.
+    return node;
 }
 
 void ndtree_add_child_to_node(ndtree_t *tree, ndtree_node_t *parent, ndtree_node_t *child)
 {
+    // Ensure the tree, parent, and child nodes are valid.
+    assert(tree && "ndtree_add_child_to_node: Variable tree is NULL.");
+    assert(parent && "ndtree_add_child_to_node: Variable parent is NULL.");
+    assert(child && "ndtree_add_child_to_node: Variable child is NULL.");
+
+    // Set the parent of the child node.
     child->parent = parent;
-    list_head_insert_after(&child->siblings, &parent->children);
+
+    // Insert the child into the parent's list of children.
+    list_head_insert_before(&child->siblings, &parent->children);
+
+    // Increment the tree's size to reflect the new node.
     ++tree->size;
 }
 
 ndtree_node_t *ndtree_create_child_of_node(ndtree_t *tree, ndtree_node_t *parent, void *value)
 {
-    ndtree_node_t *child = ndtree_node_create(value);
-    ndtree_add_child_to_node(tree, parent, child);
+    // Ensure the tree, allocation function, and parent node are valid.
+    assert(tree && "ndtree_create_child_of_node: Variable tree is NULL.");
+    assert(parent && "ndtree_create_child_of_node: Variable parent is NULL.");
+    assert(value && "ndtree_create_child_of_node: Variable value is NULL.");
+
+    // Allocate a new node for the child using the custom allocator.
+    ndtree_node_t *child = tree->alloc_node(value);
+    if (child) {
+        // Initialize the child node with the provided value.
+        ndtree_node_init(child, value);
+
+        // Add the child node to the parent node in the tree structure.
+        ndtree_add_child_to_node(tree, parent, child);
+    }
+
+    // Return the newly created child node, or NULL if allocation failed.
     return child;
 }
 
 unsigned int ndtree_node_count_children(ndtree_node_t *node)
 {
-    unsigned int children = 0;
-    if (node) {
-        list_for_each_decl(it, &node->children)
-        {
-            ++children;
-        }
-    }
-    return children;
-}
+    // Ensure the node is valid.
+    assert(node && "ndtree_node_count_children: Variable node is NULL.");
 
-void ndtree_node_dealloc(ndtree_node_t *node)
-{
-    if (node) {
-        kfree(node);
-    }
+    // Return the total count of children.
+    return list_head_size(&node->children);
 }
 
 // ============================================================================
-// Tree management functions.
-ndtree_t *ndtree_tree_alloc(void)
-{
-    return kmalloc(sizeof(ndtree_t));
-}
+// Tree Management Functions
 
-ndtree_t *ndtree_tree_create(ndtree_tree_cmp_f cmp)
-{
-    return ndtree_tree_init(ndtree_tree_alloc(), cmp);
-}
-
-ndtree_t *ndtree_tree_init(ndtree_t *tree, ndtree_tree_cmp_f node_cmp_cb)
-{
-    if (tree) {
-        tree->size = 0;
-        tree->cmp  = node_cmp_cb ? node_cmp_cb : __ndtree_tree_node_cmp_ptr_cb;
-        tree->root = NULL;
-    }
-    return tree;
-}
-
-/// @brief Recursive deallocation of the memory of the tree.
-/// @param tree the tree.
-/// @param node the node to deallocate.
-/// @param node_cb the callback to call before freeing the memory of the node.
+/// @brief Recursively deallocates nodes in the tree.
+/// @param tree The tree containing the nodes.
+/// @param node The current node to deallocate.
+/// @param node_cb Optional callback function to invoke before deallocating each node.
 static void __ndtree_tree_dealloc_rec(ndtree_t *tree, ndtree_node_t *node, ndtree_tree_node_f node_cb)
 {
-    if (node && node_cb) {
-        if (!list_head_empty(&node->children)) {
-            list_head *it_save;
-            list_for_each_decl(it, &node->children)
-            {
-                ndtree_node_t *entry = list_entry(it, ndtree_node_t, siblings);
-                it_save              = it->prev;
-                list_head_remove(it);
-                it = it_save;
-                __ndtree_tree_dealloc_rec(tree, entry, node_cb);
-            }
-        }
-        node_cb(tree, node);
-        kfree(node);
+    // Ensure the tree, node, and free_node function are valid.
+    assert(tree && "ndtree_tree_dealloc_rec: Variable tree is NULL.");
+    assert(node && "ndtree_tree_dealloc_rec: Variable node is NULL.");
+
+    // Iterate safely over the list of children and recursively deallocate each child.
+    list_for_each_safe_decl(it, store, &node->children)
+    {
+        ndtree_node_t *child = list_entry(it, ndtree_node_t, siblings);
+        __ndtree_tree_dealloc_rec(tree, child, node_cb);
     }
+
+    // Invoke the callback function on the current node, if provided.
+    if (node_cb) {
+        node_cb(node);
+    }
+
+    // Deallocate the current node using the custom free function.
+    tree->free_node(node);
 }
 
 void ndtree_tree_dealloc(ndtree_t *tree, ndtree_tree_node_f node_cb)
 {
-    if (tree && tree->root && node_cb) {
+    // Ensure the tree is valid.
+    assert(tree && "ndtree_tree_dealloc: Variable tree is NULL.");
+
+    // Check if the tree has a root node to begin deallocation.
+    if (tree->root) {
+        // Recursively deallocate all nodes starting from the root.
         __ndtree_tree_dealloc_rec(tree, tree->root, node_cb);
-    }
-    kfree(tree);
-}
 
-/// @brief Recursive search in the tree.
-/// @param tree the tree.
-/// @param cmp the comparison function.
-/// @param value the value to compare against.
-/// @param node the current node.
-/// @return the node we found, NULL otherwise.
-static ndtree_node_t *__ndtree_tree_find_rec(ndtree_t *tree, ndtree_tree_cmp_f cmp, void *value, ndtree_node_t *node)
-{
-    ndtree_node_t *result = NULL;
-    if (tree && cmp && node && value) {
-        if (cmp(tree, node->value, value) == 0) {
-            result = node;
-        } else if (!list_head_empty(&node->children)) {
-            list_for_each_decl(it, &node->children)
-            {
-                ndtree_node_t *child = list_entry(it, ndtree_node_t, siblings);
-                if ((result = __ndtree_tree_find_rec(tree, cmp, value, child)) != NULL) {
-                    break;
-                }
-            }
+        // Reset the tree's root and size after deallocation.
+        tree->root = NULL;
+        tree->size = 0;
+
+        // Iterate safely over the list of children and recursively deallocate
+        // each orphan.
+        list_for_each_safe_decl(it, store, &tree->orphans)
+        {
+            ndtree_node_t *orphan = list_entry(it, ndtree_node_t, siblings);
+            __ndtree_tree_dealloc_rec(tree, orphan, node_cb);
         }
     }
-    return result;
-}
-
-ndtree_node_t *ndtree_tree_find(ndtree_t *tree, ndtree_tree_cmp_f cmp, void *value)
-{
-    if (tree && tree->root && value) {
-        return __ndtree_tree_find_rec(tree, cmp, value, tree->root);
-    }
-    return NULL;
-}
-
-ndtree_node_t *ndtree_node_find(ndtree_t *tree, ndtree_node_t *node, ndtree_tree_cmp_f cmp, void *value)
-{
-    if (tree && node && value) {
-        // Check only if the node has children.
-        if (!list_head_empty(&node->children)) {
-            // Check which compare function we need to use.
-            ndtree_tree_cmp_f cmp_fun = cmp ? cmp : tree->cmp;
-            // If neither the tree nor the function argument are valid, rollback to the
-            // default comparison function.
-            if (cmp_fun == NULL) {
-                cmp_fun = __ndtree_tree_node_cmp_ptr_cb;
-            }
-            // Iterate throught the children.
-            list_for_each_decl(it, &node->children)
-            {
-                ndtree_node_t *child = list_entry(it, ndtree_node_t, siblings);
-                if (cmp_fun(tree, child->value, value) == 0) {
-                    return child;
-                }
-            }
-        }
-    }
-    return NULL;
-}
-
-unsigned int ndtree_tree_size(ndtree_t *tree)
-{
-    if (tree) {
-        return tree->size;
-    }
-    return 0;
-}
-
-int ndtree_tree_remove_node_with_cb(ndtree_t *tree, ndtree_node_t *node, ndtree_tree_node_f node_cb)
-{
-    if (tree && node) {
-        // Remove the node from the parent list.
-        list_head_remove(&node->siblings);
-        // If the node has children, we need to migrate them.
-        if (!list_head_empty(&node->children)) {
-            // The new parent, by default it is NULL.
-            ndtree_node_t *new_parent = NULL;
-            // The new list, by default it is the list of orphans of the tree.
-            list_head *new_list = &tree->orphans;
-            // If the found node has a parent, we need to set the variables
-            // so that we can migrate the children.
-            if (node->parent) {
-                new_parent = node->parent;
-                new_list   = &node->parent->children;
-            }
-            // Migrate the children.
-            list_for_each_decl(it, &node->children)
-            {
-                ndtree_node_t *child = list_entry(it, ndtree_node_t, siblings);
-                child->parent        = new_parent;
-            }
-            // Merge the lists.
-            list_head_append(new_list, &node->children);
-        }
-        if (node_cb) {
-            node_cb(tree, node);
-        } else {
-            ndtree_node_dealloc(node);
-        }
-        --tree->size;
-        return 1;
-    }
-    return 0;
-}
-
-int ndtree_tree_remove_with_cb(ndtree_t *tree, void *value, ndtree_tree_node_f node_cb)
-{
-    if (tree && value) {
-        ndtree_node_t *node = ndtree_tree_find(tree, tree->cmp, value);
-        return ndtree_tree_remove_node_with_cb(tree, node, node_cb);
-    }
-    return 0;
 }
 
 // ============================================================================
-// Iterators.
-ndtree_iter_t *ndtree_iter_alloc(void)
-{
-    ndtree_iter_t *iter = kmalloc(sizeof(ndtree_iter_t));
-    iter->head          = NULL;
-    iter->current       = NULL;
-    return iter;
-}
+// Tree Search Functions
 
-void ndtree_iter_dealloc(ndtree_iter_t *iter)
+/// @brief Recursively searches for a node with a specified value in the tree.
+/// @param tree The tree to search in.
+/// @param value The value to search for.
+/// @param node The current node in the recursion.
+/// @return Pointer to the found node if successful, NULL otherwise.
+static ndtree_node_t *__ndtree_tree_find_rec(ndtree_t *tree, void *value, ndtree_node_t *node)
 {
-    if (iter) {
-        kfree(iter);
+    // Ensure the tree, comparison function, node, and search value are valid.
+    assert(tree && "ndtree_tree_find_rec: Variable tree is NULL.");
+    assert(node && "ndtree_tree_find_rec: Variable node is NULL.");
+    assert(value && "ndtree_tree_find_rec: Variable value is NULL.");
+
+    // Check if the current node matches the search value using the comparison function.
+    if (tree->compare_node(node->value, value) == 0) {
+        return node; // Return the node if a match is found.
     }
-}
 
-ndtree_node_t *ndtree_iter_first(ndtree_node_t *node, ndtree_iter_t *iter)
-{
-    if (node && iter) {
-        if (!list_head_empty(&node->children)) {
-            iter->head    = &node->children;
-            iter->current = iter->head->next;
-            return list_entry(iter->current, ndtree_node_t, siblings);
+    // Recursively search in each child of the current node.
+    list_for_each_decl (it, &node->children) {
+        ndtree_node_t *child  = list_entry(it, ndtree_node_t, siblings);
+        ndtree_node_t *result = __ndtree_tree_find_rec(tree, value, child);
+        if (result) {
+            return result; // Return the matching node if found in recursion.
         }
     }
+
+    // Return NULL if no match is found in the subtree.
     return NULL;
 }
 
-ndtree_node_t *ndtree_iter_last(ndtree_node_t *node, ndtree_iter_t *iter)
+ndtree_node_t *ndtree_tree_find(ndtree_t *tree, void *value)
 {
-    if (node && iter) {
-        if (!list_head_empty(&node->children)) {
-            iter->head    = &node->children;
-            iter->current = iter->head->prev;
-            return list_entry(iter->current, ndtree_node_t, siblings);
-        }
-    }
-    return NULL;
-}
+    // Ensure the tree, comparison function, node, and search value are valid.
+    assert(tree && "ndtree_tree_find: Variable tree is NULL.");
+    assert(tree->root && "ndtree_tree_find: Variable tree->root is NULL.");
+    assert(value && "ndtree_tree_find: Variable value is NULL.");
 
-ndtree_node_t *ndtree_iter_next(ndtree_iter_t *iter)
-{
-    if (iter) {
-        if (iter->current->next != iter->head) {
-            iter->current = iter->current->next;
-            return list_entry(iter->current, ndtree_node_t, siblings);
-        }
-    }
-    return NULL;
-}
-
-ndtree_node_t *ndtree_iter_prev(ndtree_iter_t *iter)
-{
-    if (iter) {
-        if (iter->current->next != iter->head) {
-            iter->current = iter->current->prev;
-            return list_entry(iter->current, ndtree_node_t, siblings);
-        }
-    }
-    return NULL;
+    return __ndtree_tree_find_rec(tree, value, tree->root);
 }
 
 // ============================================================================
-// Tree debugging functions.
+// Tree Removal Functions
 
-/// @brief A visitor function.
-/// @param tree the tree.
-/// @param node the current node.
-/// @param enter_fun the enter function.
-/// @param exit_fun the exit function.
-static void __ndtree_tree_visitor_iter(ndtree_t *tree,
-                                       ndtree_node_t *node,
-                                       ndtree_tree_node_f enter_fun,
-                                       ndtree_tree_node_f exit_fun)
+int ndtree_tree_remove_node(ndtree_t *tree, ndtree_node_t *node, ndtree_tree_node_f node_cb)
 {
-    assert(tree);
-    assert(node);
-    if (enter_fun) {
-        enter_fun(tree, node);
-    }
+    // Ensure the tree and node are valid.
+    assert(tree && "ndtree_tree_remove_node: Variable tree is NULL.");
+    assert(node && "ndtree_tree_remove_node: Variable node is NULL.");
+
+    // Remove the node from its sibling list.
+    list_head_remove(&node->siblings);
+
+    // If the node has children, reassign them to a new parent or orphan them.
     if (!list_head_empty(&node->children)) {
-        list_for_each_decl(it, &node->children)
-            __ndtree_tree_visitor_iter(tree, list_entry(it, ndtree_node_t, siblings), enter_fun, exit_fun);
+        ndtree_node_t *new_parent = node->parent;
+        list_head *new_list       = new_parent ? &new_parent->children : &tree->orphans;
+
+        // Reassign each child’s parent and append children to the new list.
+        list_for_each_decl (it, &node->children) {
+            ndtree_node_t *child = list_entry(it, ndtree_node_t, siblings);
+            child->parent        = new_parent;
+        }
+        list_head_append(new_list, &node->children);
     }
+
+    // Call the callback function if provided.
+    if (node_cb) {
+        node_cb(node);
+    }
+
+    // Free the node using the custom deallocator.
+    tree->free_node(node);
+
+    // Decrement the tree size to reflect the removal.
+    --tree->size;
+
+    // Return 1 indicating successful removal.
+    return 1;
+}
+
+// ============================================================================
+// Tree Visit Functions
+
+/// @brief Recursively visits each node in the tree, calling specified enter and exit functions.
+/// @param tree The tree containing the nodes to visit.
+/// @param node The current node being visited.
+/// @param enter_fun Function to call upon entering each node, or NULL to skip.
+/// @param exit_fun Function to call upon exiting each node, or NULL to skip.
+static void __ndtree_tree_visitor_rec(
+    ndtree_t *tree,
+    ndtree_node_t *node,
+    ndtree_tree_node_f enter_fun,
+    ndtree_tree_node_f exit_fun)
+{
+    // Ensure that the tree and node are valid.
+    assert(tree && "ndtree_tree_visitor_rec: Variable tree is NULL.");
+    assert(node && "ndtree_tree_visitor_rec: Variable node is NULL.");
+
+    // Call the enter function, if provided.
+    if (enter_fun) {
+        enter_fun(node);
+    }
+
+    // Recursively visit each child node.
+    if (!list_head_empty(&node->children)) {
+        list_for_each_decl (it, &node->children) {
+            __ndtree_tree_visitor_rec(tree, list_entry(it, ndtree_node_t, siblings), enter_fun, exit_fun);
+        }
+    }
+
+    // Call the exit function, if provided, after all children are visited.
     if (exit_fun) {
-        exit_fun(tree, node);
+        exit_fun(node);
     }
 }
 
 void ndtree_tree_visitor(ndtree_t *tree, ndtree_tree_node_f enter_fun, ndtree_tree_node_f exit_fun)
 {
-    if (tree && tree->root) {
-        __ndtree_tree_visitor_iter(tree, tree->root, enter_fun, exit_fun);
+    // Ensure the tree is valid.
+    assert(tree && "ndtree_tree_visitor: Variable tree is NULL.");
+
+    // Start the recursive visitor from the root node, if it exists.
+    if (tree->root) {
+        __ndtree_tree_visitor_rec(tree, tree->root, enter_fun, exit_fun);
     }
 }

@@ -14,6 +14,28 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE "Debug" CACHE STRING "Choose the type of build." FORCE)
 endif()
 
+# -----------------------------------------------------------------------------
+# ENABLE FETCH CONTENT
+# -----------------------------------------------------------------------------
+
+# We need this in order to import external projects.
+include(FetchContent)
+# Hide fetchcontent variables.
+mark_as_advanced(FORCE
+    FETCHCONTENT_QUIET
+    FETCHCONTENT_BASE_DIR
+    FETCHCONTENT_FULLY_DISCONNECTED
+    FETCHCONTENT_UPDATES_DISCONNECTED
+)
+
+# -----------------------------------------------------------------------------
+# DEPENDENCY (SYSTEM LIBRARIES)
+# -----------------------------------------------------------------------------
+
+find_package(Doxygen)
+
+find_program(CLANG_TIDY_EXE NAMES clang-tidy)
+
 # =============================================================================
 # OS-SPECIFIC COMPILERS SETUP
 # =============================================================================
@@ -147,7 +169,6 @@ add_subdirectory(programs)
 add_subdirectory(programs/tests)
 add_subdirectory(mentos)
 add_subdirectory(libc)
-add_subdirectory(doc)
 
 # =============================================================================
 # FILESYSTEM
@@ -175,18 +196,21 @@ add_custom_target(filesystem
 
 # Set the emulator.
 set(EMULATOR qemu-system-i386)
+# Set the type of video.
+set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -vga std)
+# Set the amount of memory.
+set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -m 1096M)
+# Disables all default devices (e.g., serial ports, network cards, VGA
+# adapters). Only devices we explicitly specify will be added.
+set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -nodefaults)
 # Set the debug type.
 if(${EMULATOR_OUTPUT_TYPE} STREQUAL OUTPUT_LOG)
     set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -serial file:${CMAKE_BINARY_DIR}/serial.log)
 elseif(${EMULATOR_OUTPUT_TYPE} STREQUAL OUTPUT_STDIO)
     set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -serial stdio)
 endif(${EMULATOR_OUTPUT_TYPE} STREQUAL OUTPUT_LOG)
-# Set the type of video.
-set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -vga std)
-# Set the amount of memory.
-set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -m 1096M)
 # Set the EXT2 drive.
-set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -drive file=${CMAKE_BINARY_DIR}/rootfs.img,format=raw,index=0,media=disk)
+set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -drive file=${CMAKE_BINARY_DIR}/rootfs.img,format=raw,if=ide,index=0,media=disk)
 
 # =============================================================================
 # Booting with QEMU for fun
@@ -289,3 +313,124 @@ add_custom_target(
     COMMAND ${EMULATOR} ${EMULATOR_FLAGS} -serial file:${CMAKE_BINARY_DIR}/test.log -nographic -device isa-debug-exit -boot d -cdrom ${CMAKE_BINARY_DIR}/cdrom_test.iso
     DEPENDS cdrom_test.iso
 )
+
+# -----------------------------------------------------------------------------
+# CODE ANALYSIS
+# -----------------------------------------------------------------------------
+
+if(CLANG_TIDY_EXE)
+    file(GLOB_RECURSE ALL_PROJECT_FILES
+        "${PROJECT_SOURCE_DIR}/libc/inc/**/*.h"
+        "${PROJECT_SOURCE_DIR}/libc/inc/*.h"
+        "${PROJECT_SOURCE_DIR}/libc/src/**/*.c"
+        "${PROJECT_SOURCE_DIR}/libc/src/*.c"
+        "${PROJECT_SOURCE_DIR}/mentos/inc/**/*.h"
+        "${PROJECT_SOURCE_DIR}/mentos/inc/*.h"
+        "${PROJECT_SOURCE_DIR}/mentos/src/**/*.c"
+        "${PROJECT_SOURCE_DIR}/mentos/src/*.c"
+        "${PROJECT_SOURCE_DIR}/programs/**/*.h"
+        "${PROJECT_SOURCE_DIR}/programs/*.h"
+        "${PROJECT_SOURCE_DIR}/programs/**/*.c"
+        "${PROJECT_SOURCE_DIR}/programs/*.c"
+    )
+    add_custom_target(
+        ${PROJECT_NAME}_clang_tidy
+        COMMAND ${CLANG_TIDY_EXE}
+        --system-headers=0
+        --p=${CMAKE_BINARY_DIR}
+        ${ALL_PROJECT_FILES}
+        COMMENT "Running clang-tidy"
+        VERBATIM
+    )
+    add_custom_target(
+        ${PROJECT_NAME}_clang_tidy_fix
+        COMMAND ${CLANG_TIDY_EXE}
+        --system-headers=0
+        --fix --fix-errors
+        --p=${CMAKE_BINARY_DIR}
+        ${ALL_PROJECT_FILES}
+        COMMENT "Running clang-tidy-fix"
+        VERBATIM
+    )
+endif()
+
+# -----------------------------------------------------------------------------
+# DOCUMENTATION
+# -----------------------------------------------------------------------------
+
+if (DOXYGEN_FOUND)
+    
+    # FetchContent: Doxygen Awesome CSS
+    FetchContent_Declare(doxygenawesome
+        GIT_REPOSITORY https://github.com/jothepro/doxygen-awesome-css
+        GIT_TAG main
+    )
+    FetchContent_MakeAvailable(doxygenawesome)
+
+    # Hide FetchContent variables to avoid clutter in ccmake.
+    mark_as_advanced(FORCE
+        FETCHCONTENT_UPDATES_DISCONNECTED_DOXYGENAWESOME
+        FETCHCONTENT_SOURCE_DIR_DOXYGENAWESOME
+    )
+
+    # Read the file with the version.
+    file(READ ${PROJECT_SOURCE_DIR}/mentos/inc/version.h version_file)
+    # Extract the version.
+    string(REGEX MATCH "OS_MAJOR_VERSION ([0-9]*)" _ ${version_file})
+    set(OS_MAJOR_VERSION ${CMAKE_MATCH_1})
+    string(REGEX MATCH "OS_MINOR_VERSION ([0-9]*)" _ ${version_file})
+    set(OS_MINOR_VERSION ${CMAKE_MATCH_1})
+    string(REGEX MATCH "OS_MICRO_VERSION ([0-9]*)" _ ${version_file})
+    set(OS_MICRO_VERSION ${CMAKE_MATCH_1})
+
+    # Customization: Doxygen Configuration
+    set(DOXYGEN_WARN_FORMAT "$file:$line:1: $text")
+    set(DOXYGEN_PROJECT_NAME "MentOS")
+    set(DOXYGEN_PROJECT_BRIEF "The Mentoring Operating System")
+    set(DOXYGEN_PROJECT_NUMBER "${OS_MAJOR_VERSION}.${OS_MINOR_VERSION}.${OS_MICRO_VERSION}")
+    set(DOXYGEN_USE_MDFILE_AS_MAINPAGE ${PROJECT_SOURCE_DIR}/README.md)
+    set(DOXYGEN_SHOW_INCLUDE_FILES NO)
+    set(DOXYGEN_GENERATE_TREEVIEW YES)
+    set(DOXYGEN_GENERATE_LATEX NO)
+    set(DOXYGEN_GENERATE_MAN NO)
+    set(DOXYGEN_ENABLE_PREPROCESSING YES)
+    set(DOXYGEN_EXTRACT_STATIC YES)
+    set(DOXYGEN_MACRO_EXPANSION YES)
+    set(DOXYGEN_EXPAND_ONLY_PREDEF YES)
+    set(DOXYGEN_PREDEFINED "__attribute__((x))= _syscall0= _syscall0(x)= _syscall1(x)= _syscall2(x)= _syscall3(x)=")
+
+    # Styling and UX enhancements using Doxygen Awesome
+    set(DOXYGEN_HTML_HEADER ${doxygenawesome_SOURCE_DIR}/doxygen-custom/header.html)
+    set(DOXYGEN_HTML_EXTRA_STYLESHEET ${doxygenawesome_SOURCE_DIR}/doxygen-awesome.css)
+    set(DOXYGEN_HTML_EXTRA_FILES
+        ${doxygenawesome_SOURCE_DIR}/doxygen-awesome-fragment-copy-button.js
+        ${doxygenawesome_SOURCE_DIR}/doxygen-awesome-paragraph-link.js
+        ${doxygenawesome_SOURCE_DIR}/doxygen-awesome-darkmode-toggle.js
+    )
+
+    # Set stricter warnings for better documentation quality
+    set(DOXYGEN_WARN_IF_UNDOCUMENTED YES)
+    set(DOXYGEN_WARN_IF_DOC_ERROR YES)
+    set(DOXYGEN_WARN_NO_PARAMDOC YES)
+    set(DOXYGEN_WARN_AS_ERROR NO)
+
+    # Add Doxygen documentation target.
+    file(GLOB_RECURSE ALL_PROJECT_FILES
+        "${PROJECT_SOURCE_DIR}/libc/inc/**/*.h"
+        "${PROJECT_SOURCE_DIR}/libc/inc/*.h"
+        "${PROJECT_SOURCE_DIR}/libc/src/**/*.c"
+        "${PROJECT_SOURCE_DIR}/libc/src/*.c"
+        "${PROJECT_SOURCE_DIR}/mentos/inc/**/*.h"
+        "${PROJECT_SOURCE_DIR}/mentos/inc/*.h"
+        "${PROJECT_SOURCE_DIR}/mentos/src/**/*.c"
+        "${PROJECT_SOURCE_DIR}/mentos/src/*.c"
+    )
+
+    doxygen_add_docs(
+        ${PROJECT_NAME}_documentation
+        ${PROJECT_SOURCE_DIR}/README.md
+        ${PROJECT_SOURCE_DIR}/LICENSE.md
+        ${ALL_PROJECT_FILES}
+        COMMENT "Generating Doxygen documentation"
+    )
+endif (DOXYGEN_FOUND)

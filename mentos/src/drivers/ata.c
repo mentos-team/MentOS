@@ -16,6 +16,7 @@
 
 #include "descriptor_tables/isr.h"
 #include "devices/pci.h"
+#include "errno.h"
 #include "fcntl.h"
 #include "fs/vfs.h"
 #include "hardware/pic8259.h"
@@ -25,7 +26,6 @@
 #include "process/wait.h"
 #include "stdio.h"
 #include "string.h"
-#include "sys/errno.h"
 #include "system/panic.h"
 
 /// @brief IDENTIFY device data (response to 0xEC).
@@ -248,97 +248,97 @@ typedef struct ata_device_t {
 /// @brief Keeps track of the incremental letters for the ATA drives.
 static char ata_drive_char = 'a';
 /// @brief Keeps track of the incremental number for removable media.
-static int cdrom_number = 0;
+static int cdrom_number    = 0;
 /// @brief We store the ATA pci address here.
-static uint32_t ata_pci = 0x00000000;
+static uint32_t ata_pci    = 0x00000000;
 
 /// @brief The ATA primary master control register locations.
 static ata_device_t ata_primary_master = {
     .io_base = 0x1F0,
-    .io_reg  = {
-         .data         = 0x1F0 + 0x00,
-         .error        = 0x1F0 + 0x01,
-         .feature      = 0x1F0 + 0x01,
-         .sector_count = 0x1F0 + 0x02,
-         .lba_lo       = 0x1F0 + 0x03,
-         .lba_mid      = 0x1F0 + 0x04,
-         .lba_hi       = 0x1F0 + 0x05,
-         .hddevsel     = 0x1F0 + 0x06,
-         .status       = 0x1F0 + 0x07,
-         .command      = 0x1F0 + 0x07,
-    },
+    .io_reg =
+        {
+            .data         = 0x1F0 + 0x00,
+            .error        = 0x1F0 + 0x01,
+            .feature      = 0x1F0 + 0x01,
+            .sector_count = 0x1F0 + 0x02,
+            .lba_lo       = 0x1F0 + 0x03,
+            .lba_mid      = 0x1F0 + 0x04,
+            .lba_hi       = 0x1F0 + 0x05,
+            .hddevsel     = 0x1F0 + 0x06,
+            .status       = 0x1F0 + 0x07,
+            .command      = 0x1F0 + 0x07,
+        },
     .io_control = 0x3F6,
     .primary    = 1,
     .secondary  = 0,
     .master     = 1,
-    .slave      = 0
-};
+    .slave      = 0};
 
 /// @brief The ATA primary slave control register locations.
 static ata_device_t ata_primary_slave = {
     .io_base = 0x1F0,
-    .io_reg  = {
-         .data         = 0x1F0 + 0x00,
-         .error        = 0x1F0 + 0x01,
-         .feature      = 0x1F0 + 0x01,
-         .sector_count = 0x1F0 + 0x02,
-         .lba_lo       = 0x1F0 + 0x03,
-         .lba_mid      = 0x1F0 + 0x04,
-         .lba_hi       = 0x1F0 + 0x05,
-         .hddevsel     = 0x1F0 + 0x06,
-         .status       = 0x1F0 + 0x07,
-         .command      = 0x1F0 + 0x07,
-    },
+    .io_reg =
+        {
+            .data         = 0x1F0 + 0x00,
+            .error        = 0x1F0 + 0x01,
+            .feature      = 0x1F0 + 0x01,
+            .sector_count = 0x1F0 + 0x02,
+            .lba_lo       = 0x1F0 + 0x03,
+            .lba_mid      = 0x1F0 + 0x04,
+            .lba_hi       = 0x1F0 + 0x05,
+            .hddevsel     = 0x1F0 + 0x06,
+            .status       = 0x1F0 + 0x07,
+            .command      = 0x1F0 + 0x07,
+        },
     .io_control = 0x3F6,
     .primary    = 1,
     .secondary  = 0,
     .master     = 0,
-    .slave      = 1
-};
+    .slave      = 1};
 
 /// @brief The ATA secondary master control register locations.
 static ata_device_t ata_secondary_master = {
     .io_base = 0x170,
-    .io_reg  = {
-         .data         = 0x170 + 0x00,
-         .error        = 0x170 + 0x01,
-         .feature      = 0x170 + 0x01,
-         .sector_count = 0x170 + 0x02,
-         .lba_lo       = 0x170 + 0x03,
-         .lba_mid      = 0x170 + 0x04,
-         .lba_hi       = 0x170 + 0x05,
-         .hddevsel     = 0x170 + 0x06,
-         .status       = 0x170 + 0x07,
-         .command      = 0x170 + 0x07,
-    },
+    .io_reg =
+        {
+            .data         = 0x170 + 0x00,
+            .error        = 0x170 + 0x01,
+            .feature      = 0x170 + 0x01,
+            .sector_count = 0x170 + 0x02,
+            .lba_lo       = 0x170 + 0x03,
+            .lba_mid      = 0x170 + 0x04,
+            .lba_hi       = 0x170 + 0x05,
+            .hddevsel     = 0x170 + 0x06,
+            .status       = 0x170 + 0x07,
+            .command      = 0x170 + 0x07,
+        },
     .io_control = 0x376,
     .primary    = 0,
     .secondary  = 1,
     .master     = 1,
-    .slave      = 0
-};
+    .slave      = 0};
 
 /// @brief The ATA secondary slave control register locations.
 static ata_device_t ata_secondary_slave = {
     .io_base = 0x170,
-    .io_reg  = {
-         .data         = 0x170 + 0x00,
-         .error        = 0x170 + 0x01,
-         .feature      = 0x170 + 0x01,
-         .sector_count = 0x170 + 0x02,
-         .lba_lo       = 0x170 + 0x03,
-         .lba_mid      = 0x170 + 0x04,
-         .lba_hi       = 0x170 + 0x05,
-         .hddevsel     = 0x170 + 0x06,
-         .status       = 0x170 + 0x07,
-         .command      = 0x170 + 0x07,
-    },
+    .io_reg =
+        {
+            .data         = 0x170 + 0x00,
+            .error        = 0x170 + 0x01,
+            .feature      = 0x170 + 0x01,
+            .sector_count = 0x170 + 0x02,
+            .lba_lo       = 0x170 + 0x03,
+            .lba_mid      = 0x170 + 0x04,
+            .lba_hi       = 0x170 + 0x05,
+            .hddevsel     = 0x170 + 0x06,
+            .status       = 0x170 + 0x07,
+            .command      = 0x170 + 0x07,
+        },
     .io_control = 0x376,
     .primary    = 0,
     .secondary  = 1,
     .master     = 0,
-    .slave      = 1
-};
+    .slave      = 1};
 
 // == SUPPORT FUNCTIONS =======================================================
 
@@ -347,7 +347,7 @@ static ata_device_t ata_secondary_slave = {
 /// @return the string with the list of errors.
 static inline const char *ata_get_device_error_str(uint8_t error)
 {
-    static char str[50] = { 0 };
+    static char str[50] = {0};
     memset(str, 0, sizeof(str));
     if (error & ata_err_amnf) {
         strcat(str, "amnf,");
@@ -381,7 +381,7 @@ static inline const char *ata_get_device_error_str(uint8_t error)
 /// @return the device status as string.
 static inline const char *ata_get_device_status_str(uint8_t status)
 {
-    static char str[50] = { 0 };
+    static char str[50] = {0};
     memset(str, 0, sizeof(str));
     if (status & ata_status_err) {
         strcat(str, "err,");
@@ -415,7 +415,8 @@ static inline const char *ata_get_device_status_str(uint8_t status)
 /// @return the device configuration as string.
 static inline const char *ata_get_device_settings_str(ata_device_t *dev)
 {
-    return (dev->primary) ? ((dev->master) ? "Primary Master" : "Primary Slave") : ((dev->master) ? "Secondary Master" : "Secondary Slave");
+    return (dev->primary) ? ((dev->master) ? "Primary Master" : "Primary Slave")
+                          : ((dev->master) ? "Secondary Master" : "Secondary Slave");
 }
 
 /// @brief Returns the device type as string.
@@ -445,24 +446,29 @@ static inline const char *ata_get_device_type_str(ata_device_type_t type)
 /// @param dev the device to dump.
 static inline void ata_dump_device(ata_device_t *dev)
 {
-    pr_debug("[%s : %s] %s (%s)\n",
-             ata_get_device_settings_str(dev), ata_get_device_type_str(dev->type), dev->name, dev->path);
+    pr_debug(
+        "[%s : %s] %s (%s)\n", ata_get_device_settings_str(dev), ata_get_device_type_str(dev->type), dev->name,
+        dev->path);
     pr_debug("    io_control : %4u\n", dev->io_control);
     pr_debug("    io_reg (io_base : %4u) {\n", dev->io_base);
-    pr_debug("        data   : %4u, error   : %4u, feature : %4u, sector_count : %4u\n",
-             dev->io_reg.data, dev->io_reg.error, dev->io_reg.feature, dev->io_reg.sector_count);
-    pr_debug("        lba_lo : %4u, lba_mid : %4u, lba_hi  : %4u, hddevsel     : %4u\n",
-             dev->io_reg.lba_lo, dev->io_reg.lba_mid, dev->io_reg.lba_hi, dev->io_reg.hddevsel);
+    pr_debug(
+        "        data   : %4u, error   : %4u, feature : %4u, sector_count : "
+        "%4u\n",
+        dev->io_reg.data, dev->io_reg.error, dev->io_reg.feature, dev->io_reg.sector_count);
+    pr_debug(
+        "        lba_lo : %4u, lba_mid : %4u, lba_hi  : %4u, hddevsel     : "
+        "%4u\n",
+        dev->io_reg.lba_lo, dev->io_reg.lba_mid, dev->io_reg.lba_hi, dev->io_reg.hddevsel);
     pr_debug("        status : %4u, command : %4u\n", dev->io_reg.status, dev->io_reg.command);
     pr_debug("    }\n");
     pr_debug("    identity {\n");
     pr_debug("        general_configuration {\n");
-    pr_debug("            response_incomplete : %4u, fixed_fevice : %4u\n",
-             dev->identity.general_configuration.response_incomplete,
-             dev->identity.general_configuration.fixed_fevice);
-    pr_debug("            removable_media     : %4u, device_type  : %4u\n",
-             dev->identity.general_configuration.removable_media,
-             dev->identity.general_configuration.device_type);
+    pr_debug(
+        "            response_incomplete : %4u, fixed_fevice : %4u\n",
+        dev->identity.general_configuration.response_incomplete, dev->identity.general_configuration.fixed_fevice);
+    pr_debug(
+        "            removable_media     : %4u, device_type  : %4u\n",
+        dev->identity.general_configuration.removable_media, dev->identity.general_configuration.device_type);
     pr_debug("        }\n");
     pr_debug("        num_cylinders          : %u\n", dev->identity.num_cylinders);
     pr_debug("        num_heads              : %u\n", dev->identity.num_heads);
@@ -472,13 +478,16 @@ static inline void ata_dump_device(ata_device_t *dev)
     pr_debug("        model_number           : %s\n", dev->identity.model_number);
     pr_debug("        maximum_block_transfer : %u\n", dev->identity.maximum_block_transfer);
     pr_debug("        capabilities {\n");
-    pr_debug("            current_long_physical_sector_alignment : %u\n", dev->identity.capabilities.current_long_physical_sector_alignment);
+    pr_debug(
+        "            current_long_physical_sector_alignment : %u\n",
+        dev->identity.capabilities.current_long_physical_sector_alignment);
     pr_debug("            reserved_byte49                        : %u\n", dev->identity.capabilities.reserved_byte49);
     pr_debug("            dma_supported                          : %u\n", dev->identity.capabilities.dma_supported);
     pr_debug("            lba_supported                          : %u\n", dev->identity.capabilities.lba_supported);
     pr_debug("            io_rdy_disable                         : %u\n", dev->identity.capabilities.io_rdy_disable);
     pr_debug("            io_rdy_supported                       : %u\n", dev->identity.capabilities.io_rdy_supported);
-    pr_debug("            stand_by_timer_support                 : %u\n", dev->identity.capabilities.stand_by_timer_support);
+    pr_debug(
+        "            stand_by_timer_support                 : %u\n", dev->identity.capabilities.stand_by_timer_support);
     pr_debug("            reserved_word50                        : %u\n", dev->identity.capabilities.reserved_word50);
     pr_debug("        }\n");
     pr_debug("        valid_ext_data                        : %u\n", dev->identity.valid_ext_data);
@@ -486,7 +495,8 @@ static inline void ata_dump_device(ata_device_t *dev)
     pr_debug("        multisector_setting_valid             : %u\n", dev->identity.multisector_setting_valid);
     pr_debug("        reserved_byte59                       : %u\n", dev->identity.reserved_byte59);
     pr_debug("        sanitize_feature_supported            : %u\n", dev->identity.sanitize_feature_supported);
-    pr_debug("        crypto_scramble_ext_command_supported : %u\n", dev->identity.crypto_scramble_ext_command_supported);
+    pr_debug(
+        "        crypto_scramble_ext_command_supported : %u\n", dev->identity.crypto_scramble_ext_command_supported);
     pr_debug("        overwrite_ext_command_supported       : %u\n", dev->identity.overwrite_ext_command_supported);
     pr_debug("        block_erase_ext_command_supported     : %u\n", dev->identity.block_erase_ext_command_supported);
     pr_debug("        sectors_28                            : %u\n", dev->identity.sectors_28);
@@ -548,10 +558,9 @@ static inline void ata_print_status_error(ata_device_t *dev)
 {
     uint8_t error = inportb(dev->io_reg.error), status = inportb(dev->io_reg.status);
     if (error) {
-        pr_err("[%s] Device error [%s] status [%s]\n",
-               ata_get_device_settings_str(dev),
-               ata_get_device_error_str(error),
-               ata_get_device_status_str(status));
+        pr_err(
+            "[%s] Device error [%s] status [%s]\n", ata_get_device_settings_str(dev), ata_get_device_error_str(error),
+            ata_get_device_status_str(status));
     }
 }
 
@@ -649,10 +658,10 @@ static inline uintptr_t ata_dma_alloc(size_t size, uintptr_t *physical)
     // memory to be aligned to specific boundaries (e.g., 4KB or 64KB).
     uint32_t order = find_nearest_order_greater(0, size);
 
-    // Allocate a contiguous block of memory pages. Ensure that _alloc_pages
+    // Allocate a contiguous block of memory pages. Ensure that alloc_pages
     // returns physically contiguous pages suitable for DMA, as DMA transfers
     // usually require physically contiguous memory.
-    page_t *page = _alloc_pages(GFP_KERNEL, order);
+    page_t *page = alloc_pages(GFP_KERNEL, order);
     if (!page) {
         pr_crit("Failed to allocate pages for DMA memory (order = %d).\n", order);
         return 0;
@@ -699,18 +708,21 @@ static inline int ata_dma_free(uintptr_t logical_addr)
     // Retrieve the page structure from the logical address.
     page_t *page = get_page_from_virtual_address(logical_addr);
     if (!page) {
-        pr_debug("Failed to retrieve the page structure from logical address 0x%lx.\n", logical_addr);
+        pr_debug(
+            "Failed to retrieve the page structure from logical address "
+            "0x%lx.\n",
+            logical_addr);
         return 1;
     }
 
     // Free the allocated pages.
-    if (__free_pages(page) < 0) {
-        pr_debug("Failed to free allocated pages 0x%p with order %d.\n", page, order);
+    if (free_pages(page) < 0) {
+        pr_debug("Failed to free allocated pages 0x%p.\n", page);
         return 1;
     }
 
     // Debugging information.
-    pr_debug("Successfully freed DMA memory at logical address 0x%lx with order %d.\n", logical_addr, order);
+    pr_debug("Successfully freed DMA memory at logical address 0x%p.\n", logical_addr);
 
     return 0; // Success.
 }
@@ -724,14 +736,19 @@ static inline int ata_dma_free(uintptr_t logical_addr)
 /// @return 0 on success, 1 on failure.
 static inline int ata_dma_enable_bus_mastering(void)
 {
+    uint32_t pci_cmd;
+
     // Ensure that the ata_pci device handle is valid.
     if (!ata_pci) {
         pr_crit("Invalid PCI device handle.\n");
         return 1;
     }
 
-    // Read the PCI command register.
-    uint32_t pci_cmd = pci_read_32(ata_pci, PCI_COMMAND);
+    // Read the PCI command register
+    if (pci_read_32(ata_pci, PCI_COMMAND, &pci_cmd) != 0) {
+        pr_crit("Failed to read PCI_COMMAND from device.\n");
+        return 1;
+    }
 
     // Check if bus mastering is already enabled.
     if (bit_check(pci_cmd, pci_command_bus_master)) {
@@ -741,11 +758,20 @@ static inline int ata_dma_enable_bus_mastering(void)
 
     // Enable bus mastering by setting the corresponding bit.
     bit_set_assign(pci_cmd, pci_command_bus_master);
-    // Write the updated PCI command register back to the device.
-    pci_write_32(ata_pci, PCI_COMMAND, pci_cmd);
 
-    // Verify that bus mastering is enabled.
-    pci_cmd = pci_read_32(ata_pci, PCI_COMMAND);
+    // Write the updated PCI command register back to the device
+    if (pci_write_32(ata_pci, PCI_COMMAND, pci_cmd) != 0) {
+        pr_crit("Failed to write PCI_COMMAND to device.\n");
+        return 1;
+    }
+
+    // Read the current PCI command register
+    if (pci_read_32(ata_pci, PCI_COMMAND, &pci_cmd) != 0) {
+        pr_crit("Failed to read PCI_COMMAND from device.\n");
+        return 1;
+    }
+
+    // Verify that bus mastering is enabled
     if (!bit_check(pci_cmd, pci_command_bus_master)) {
         pr_crit("Bus mastering is not correctly set.\n");
         return 1;
@@ -762,14 +788,19 @@ static inline int ata_dma_enable_bus_mastering(void)
 /// @return 0 on success, 1 on failure.
 static inline int ata_dma_disable_bus_mastering(void)
 {
+    uint32_t pci_cmd;
+
     // Ensure that the ata_pci device handle is valid.
     if (!ata_pci) {
         pr_crit("Invalid PCI device handle.\n");
         return 1;
     }
 
-    // Read the current PCI command register.
-    uint32_t pci_cmd = pci_read_32(ata_pci, PCI_COMMAND);
+    // Read the current PCI command register
+    if (pci_read_32(ata_pci, PCI_COMMAND, &pci_cmd) != 0) {
+        pr_crit("Failed to read PCI_COMMAND from device.\n");
+        return 1;
+    }
 
     // Check if bus mastering is currently enabled.
     if (!bit_check(pci_cmd, pci_command_bus_master)) {
@@ -779,11 +810,20 @@ static inline int ata_dma_disable_bus_mastering(void)
 
     // Clear the bus mastering bit to disable it.
     bit_clear_assign(pci_cmd, pci_command_bus_master);
+
     // Write the updated PCI command register back to the device.
-    pci_write_32(ata_pci, PCI_COMMAND, pci_cmd);
+    if (pci_write_32(ata_pci, PCI_COMMAND, pci_cmd) != 0) {
+        pr_crit("Failed to write PCI_COMMAND to device.\n");
+        return 1;
+    }
+
+    // Read the current PCI command register
+    if (pci_read_32(ata_pci, PCI_COMMAND, &pci_cmd) != 0) {
+        pr_crit("Failed to read PCI_COMMAND from device.\n");
+        return 1;
+    }
 
     // Verify that bus mastering is disabled.
-    pci_cmd = pci_read_32(ata_pci, PCI_COMMAND);
     if (bit_check(pci_cmd, pci_command_bus_master)) {
         pr_crit("Bus mastering is not correctly cleared.\n");
         return 1;
@@ -805,15 +845,35 @@ static inline int ata_dma_disable_bus_mastering(void)
 /// @return 0 on success, 1 on failure.
 static inline int ata_dma_initialize_bus_mastering_address(ata_device_t *dev)
 {
-    // Read the value of the PCI Base Address Register (BAR) for bus mastering.
-    uint32_t address = pci_read_32(ata_pci, PCI_BASE_ADDRESS_4);
+    uint32_t address;
+
+    // Check if the device pointer is valid.
+    if (dev == NULL) {
+        pr_warning("Device pointer 'dev' is NULL.\n");
+        return 1;
+    }
+
+    // Ensure that the ata_pci device handle is valid
+    if (!ata_pci) {
+        pr_warning("Invalid PCI device handle.\n");
+        return 1;
+    }
+
+    // Read the value of the PCI Base Address Register (BAR) for bus mastering
+    if (pci_read_32(ata_pci, PCI_BASE_ADDRESS_4, &address) != 0) {
+        pr_warning("Failed to read PCI_BASE_ADDRESS_4 from device.\n");
+        return 1;
+    }
 
     // Check if the lowest bit is set to distinguish between memory space and
     // I/O space BARs. Memory space BARs have the lowest bit as 0, while I/O
     // space BARs have it as 1.
     if (!bit_check(address, 0)) {
         // Log a warning if the address indicates that bus mastering could not be initialized.
-        pr_warning("[%s] Failed to initialize Bus Mastering. The address is not an I/O space BAR.\n", ata_get_device_settings_str(dev));
+        pr_warning(
+            "[%s] Failed to initialize Bus Mastering. The address is not an "
+            "I/O space BAR.\n",
+            ata_get_device_settings_str(dev));
         return 1;
     }
 
@@ -933,8 +993,9 @@ static inline ata_device_type_t ata_detect_device_type(ata_device_t *dev)
 /// @return 0 on success, 1 on error.
 static bool_t ata_device_init(ata_device_t *dev)
 {
-    pr_debug("[%-16s, %-9s] Initializing ATA device...\n",
-             ata_get_device_settings_str(dev), ata_get_device_type_str(dev->type));
+    pr_debug(
+        "[%-16s, %-9s] Initializing ATA device...\n", ata_get_device_settings_str(dev),
+        ata_get_device_type_str(dev->type));
 
     // Check the status of the device to ensure it's ready for initialization.
     if (ata_status_wait_for(dev, ata_status_drq | ata_status_rdy, 100000)) {
@@ -946,16 +1007,19 @@ static bool_t ata_device_init(ata_device_t *dev)
 
     // Initialize the bus mastering addresses.
     if (ata_dma_initialize_bus_mastering_address(dev)) {
-        pr_crit("[%-16s, %-9s] Failed to initialize bus mastering address.\n",
-                ata_get_device_settings_str(dev), ata_get_device_type_str(dev->type));
+        pr_crit(
+            "[%-16s, %-9s] Failed to initialize bus mastering address.\n", ata_get_device_settings_str(dev),
+            ata_get_device_type_str(dev->type));
         ata_print_status_error(dev);
         return 1;
     }
 
     // Check the status of the device.
     if (ata_status_wait_for(dev, ata_status_drq | ata_status_rdy, 100000)) {
-        pr_crit("[%-16s, %-9s] Device not ready after bus mastering initialization.\n",
-                ata_get_device_settings_str(dev), ata_get_device_type_str(dev->type));
+        pr_crit(
+            "[%-16s, %-9s] Device not ready after bus mastering "
+            "initialization.\n",
+            ata_get_device_settings_str(dev), ata_get_device_type_str(dev->type));
         ata_print_status_error(dev);
         return 1;
     }
@@ -963,16 +1027,18 @@ static bool_t ata_device_init(ata_device_t *dev)
     // Allocate the memory for the Physical Region Descriptor Table (PRDT).
     dev->dma.prdt = (prdt_t *)ata_dma_alloc(sizeof(prdt_t), &dev->dma.prdt_phys);
     if (dev->dma.prdt == NULL) {
-        pr_crit("[%-16s, %-9s] Failed to allocate memory for PRDT.\n",
-                ata_get_device_settings_str(dev), ata_get_device_type_str(dev->type));
+        pr_crit(
+            "[%-16s, %-9s] Failed to allocate memory for PRDT.\n", ata_get_device_settings_str(dev),
+            ata_get_device_type_str(dev->type));
         return 1;
     }
 
     // Allocate the memory for the Direct Memory Access (DMA).
     dev->dma.start = (uint8_t *)ata_dma_alloc(ATA_DMA_SIZE, &dev->dma.start_phys);
     if (dev->dma.start == NULL) {
-        pr_crit("[%-16s, %-9s] Failed to allocate memory for DMA.\n",
-                ata_get_device_settings_str(dev), ata_get_device_type_str(dev->type));
+        pr_crit(
+            "[%-16s, %-9s] Failed to allocate memory for DMA.\n", ata_get_device_settings_str(dev),
+            ata_get_device_type_str(dev->type));
         // Free previously allocated PRDT.
         ata_dma_free((uintptr_t)dev->dma.prdt);
         return 1;
@@ -1224,37 +1290,40 @@ static vfs_file_t *ata_open(const char *path, int flags, mode_t mode)
 
 /// @brief Closes an ATA device.
 /// @param file the VFS file associated with the ATA device.
-/// @return 0 on success, it panics on failure.
+/// @return 0 on success, -errno on failure.
 static int ata_close(vfs_file_t *file)
 {
-    pr_debug("ata_close(%p)\n", file);
-
-    // Check if the file pointer is NULL.
+    // Validate the file pointer.
     if (file == NULL) {
-        pr_crit("Attempted to close a NULL file pointer.\n");
-        return 1;
+        pr_err("ata_close: Invalid file pointer (NULL).\n");
+        return -EINVAL;
     }
 
     // Get the device from the VFS file.
     ata_device_t *dev = (ata_device_t *)file->device;
-
-    // Check the device.
     if (dev == NULL) {
-        pr_crit("Device not set for file: %p\n", file);
-        return 1;
+        pr_crit("ata_close: Device not set for file `%s`.\n", file->name);
+        return -ENODEV;
     }
 
-    // Check if the device is one of the ATA devices.
-    if ((dev == &ata_primary_master) || (dev == &ata_primary_slave) ||
-        (dev == &ata_secondary_master) || (dev == &ata_secondary_slave)) {
-        // Decrement the reference count for the file.
-        if (--file->count == 0) {
-            // Optional: Free any resources if this is the last reference.
-            // Freeing resources can be added here if necessary.
-        }
-    } else {
-        pr_crit("Invalid device encountered: %p\n", dev);
-        return 1;
+    // Ensure the device is one of the known ATA devices.
+    if (!(dev == &ata_primary_master || dev == &ata_primary_slave || dev == &ata_secondary_master ||
+          dev == &ata_secondary_slave)) {
+        pr_crit("ata_close: Invalid device encountered for file `%s`.\n", file->name);
+        return -EINVAL;
+    }
+
+    // Decrement the reference count for the file.
+    if (--file->count == 0) {
+        pr_debug("ata_close: Closing file `%s` (ino: %d).\n", file->name, file->ino);
+
+        // Remove the file from the list of opened files.
+        list_head_remove(&file->siblings);
+        pr_debug("ata_close: Removed file `%s` from the opened file list.\n", file->name);
+
+        // Free the file from cache.
+        vfs_dealloc_file(file);
+        pr_debug("ata_close: Freed memory for file `%s`.\n", file->name);
     }
 
     return 0;
@@ -1438,10 +1507,7 @@ static int _ata_stat(const ata_device_t *dev, stat_t *stat)
 /// @param file the file.
 /// @param stat the structure where the information are stored.
 /// @return 0 if success.
-static int ata_fstat(vfs_file_t *file, stat_t *stat)
-{
-    return _ata_stat(file->device, stat);
-}
+static int ata_fstat(vfs_file_t *file, stat_t *stat) { return _ata_stat(file->device, stat); }
 
 /// @brief Retrieves information concerning the file at the given position.
 /// @param path the path where the file resides.
@@ -1470,11 +1536,7 @@ static vfs_file_t *ata_mount_callback(const char *path, const char *device)
 }
 
 /// Filesystem information.
-static file_system_type ata_file_system_type = {
-    .name     = "ata",
-    .fs_flags = 0,
-    .mount    = ata_mount_callback
-};
+static file_system_type_t ata_file_system_type = {.name = "ata", .fs_flags = 0, .mount = ata_mount_callback};
 
 /// Filesystem general operations.
 static vfs_sys_operations_t ata_sys_operations = {
@@ -1505,23 +1567,23 @@ static vfs_file_operations_t ata_fs_operations = {
 static vfs_file_t *ata_device_create(ata_device_t *dev)
 {
     // Create the file.
-    vfs_file_t *file = kmem_cache_alloc(vfs_file_cache, GFP_KERNEL);
+    vfs_file_t *file = vfs_alloc_file();
     if (file == NULL) {
         pr_err("Failed to create ATA device.\n");
         return NULL;
     }
     // Set the device name.
     memcpy(file->name, dev->name, NAME_MAX);
-    file->uid   = 0;
-    file->gid   = 0;
-    file->mask  = 0x2000 | 0600;
-    file->atime = sys_time(NULL);
-    file->mtime = sys_time(NULL);
-    file->ctime = sys_time(NULL);
+    file->uid            = 0;
+    file->gid            = 0;
+    file->mask           = 0x2000 | 0600;
+    file->atime          = sys_time(NULL);
+    file->mtime          = sys_time(NULL);
+    file->ctime          = sys_time(NULL);
     // Set the device.
-    file->device = dev;
+    file->device         = dev;
     // Re-set the flags.
-    file->flags = DT_BLK;
+    file->flags          = DT_BLK;
     // Change the operations.
     file->sys_operations = &ata_sys_operations;
     file->fs_operations  = &ata_fs_operations;
@@ -1566,13 +1628,14 @@ static ata_device_type_t ata_device_detect(ata_device_t *dev)
         if (!vfs_register_superblock(dev->fs_root->name, dev->path, &ata_file_system_type, dev->fs_root)) {
             pr_alert("Failed to mount ata device!\n");
             // Free the memory.
-            kmem_cache_free(dev->fs_root);
+            vfs_dealloc_file(dev->fs_root);
             return ata_dev_type_unknown;
         }
         // Increment the drive letter.
         ++ata_drive_char;
 
-        pr_notice("Initialized %s device on %s.\n", ata_get_device_type_str(dev->type), ata_get_device_settings_str(dev));
+        pr_notice(
+            "Initialized %s device on %s.\n", ata_get_device_type_str(dev->type), ata_get_device_settings_str(dev));
 
     } else if ((type == ata_dev_type_patapi) || (type == ata_dev_type_satapi)) {
         pr_debug("[%s] ATAPI and SATAPI drives are not currently supported...\n", ata_get_device_settings_str(dev));
@@ -1606,18 +1669,28 @@ static void ata_irq_handler_slave(pt_regs *f)
 
 // == PCI FUNCTIONS ===========================================================
 
-/// @brief Used while scanning the PCI interface.
-/// @param device the device we want to find.
-/// @param vendorid its vendor ID.
-/// @param deviceid its device ID.
-/// @param extra the devoce once we find it.
-static void pci_find_ata(uint32_t device, uint16_t vendorid, uint16_t deviceid, void *extra)
+/// @brief Callback function used while scanning the PCI interface to find ATA devices.
+/// @param device The PCI device identifier.
+/// @param vendor_id The vendor ID of the device.
+/// @param device_id The device ID of the device.
+/// @param extra Pointer to store the device identifier once found.
+/// @return 1 if a matching device is found, 0 if not, -1 on error.
+static int pci_find_ata(uint32_t device, uint16_t vendor_id, uint16_t device_id, void *extra)
 {
-    // Intel Corporation AND (IDE Interface OR PIIX4 IDE)
-    if ((vendorid == 0x8086) && (deviceid == 0x7010 || deviceid == 0x7111)) {
-        *((uint32_t *)extra) = device;
-        pci_dump_device_data(device, vendorid, deviceid);
+    // Check if the output pointer 'extra' is valid.
+    if (extra == NULL) {
+        pr_err("Output parameter 'extra' is NULL.\n");
+        return 1;
     }
+    // Intel Corporation AND (IDE Interface OR PIIX4 IDE).
+    if ((vendor_id == 0x8086) && (device_id == 0x7010 || device_id == 0x7111)) {
+        // Store the device identifier in the location pointed to by 'extra'.
+        *((uint32_t *)extra) = device;
+        // Call pci_dump_device_data to display device information
+        pci_dump_device_data(device, vendor_id, device_id);
+        return 0; // Matching device found.
+    }
+    return 1; // No matching device found.
 }
 
 // == INITIALIZE/FINALIZE ATA =================================================
@@ -1625,7 +1698,10 @@ static void pci_find_ata(uint32_t device, uint16_t vendorid, uint16_t deviceid, 
 int ata_initialize(void)
 {
     // Search for ATA devices.
-    pci_scan(&pci_find_ata, -1, &ata_pci);
+    if (pci_scan(pci_find_ata, -1, &ata_pci) != 0) {
+        pr_err("Failed to scan for ATA devices.\n");
+        return 1;
+    }
 
     // Register the filesystem.
     vfs_register_filesystem(&ata_file_system_type);
@@ -1645,9 +1721,6 @@ int ata_initialize(void)
     return 0;
 }
 
-int ata_finalize(void)
-{
-    return 0;
-}
+int ata_finalize(void) { return 0; }
 
 /// @}

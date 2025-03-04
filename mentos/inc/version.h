@@ -18,7 +18,7 @@
 #define OS_MAJOR_VERSION 0
 
 /// Minor version of the operating system.
-#define OS_MINOR_VERSION 8
+#define OS_MINOR_VERSION 9
 
 /// Micro version of the operating system.
 #define OS_MICRO_VERSION 0
@@ -30,6 +30,6 @@
 #define OS_STR(x) OS_STR_HELPER(x)
 
 /// Complete version of the operating system.
-#define OS_VERSION           \
-    OS_STR(OS_MAJOR_VERSION) \
+#define OS_VERSION                                                                                                     \
+    OS_STR(OS_MAJOR_VERSION)                                                                                           \
     "." OS_STR(OS_MINOR_VERSION) "." OS_STR(OS_MICRO_VERSION)

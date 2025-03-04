@@ -6,13 +6,13 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include <pwd.h>
 #include <err.h>
-#include <sys/unistd.h>
-#include <stdlib.h>
+#include <pwd.h>
 #include <stdio.h>
-#include <string.h>
+#include <stdlib.h>
 #include <strerror.h>
+#include <string.h>
+#include <unistd.h>
 
 /// @brief Test `getpwnam` for valid and invalid user names.
 /// @details This function checks if `getpwnam` correctly handles non-existent users

@@ -3,15 +3,15 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "sys/unistd.h"
+#include "errno.h"
 #include "fcntl.h"
-#include "io/debug.h"
+#include "limits.h"
 #include "stdarg.h"
 #include "stdlib.h"
 #include "string.h"
-#include "sys/errno.h"
 #include "sys/stat.h"
 #include "system/syscall_types.h"
+#include "unistd.h"
 
 extern char **environ;
 
@@ -34,7 +34,7 @@ static inline int __find_in_path(const char *file, char *buf, size_t buf_len)
     // Prepare a stat object for later.
     stat_t stat_buf;
     // Copy the path.
-    char *path = strdup(PATH_VAR);
+    char *path  = strdup(PATH_VAR);
     // Iterate through the path entries.
     char *token = strtok(path, ":");
     while (token != NULL) {
@@ -61,19 +61,13 @@ static inline int __find_in_path(const char *file, char *buf, size_t buf_len)
 int execve(const char *path, char *const argv[], char *const envp[])
 {
     long __res;
-    __inline_syscall3(__res, execve, path, argv, envp);
+    __inline_syscall_3(__res, execve, path, argv, envp);
     __syscall_return(int, __res);
 }
 
-int execv(const char *path, char *const argv[])
-{
-    return execve(path, argv, environ);
-}
+int execv(const char *path, char *const argv[]) { return execve(path, argv, environ); }
 
-int execvp(const char *file, char *const argv[])
-{
-    return execvpe(file, argv, environ);
-}
+int execvp(const char *file, char *const argv[]) { return execvpe(file, argv, environ); }
 
 int execvpe(const char *file, char *const argv[], char *const envp[])
 {

@@ -42,14 +42,13 @@
 #include "sys/sem.h"
 
 #include "assert.h"
+#include "errno.h"
 #include "fcntl.h"
-#include "klib/list.h"
 #include "process/process.h"
 #include "process/scheduler.h"
 #include "stdio.h"
 #include "stdlib.h"
 #include "string.h"
-#include "sys/errno.h"
 
 ///@brief A value to compute the semid value.
 int __sem_id = 0;
@@ -130,8 +129,7 @@ static inline sem_info_t *__list_find_sem_info_by_id(int semid)
 {
     sem_info_t *sem_info;
     // Iterate through the list of semaphore set.
-    list_for_each_decl(it, &semaphores_list)
-    {
+    list_for_each_decl (it, &semaphores_list) {
         // Get the current entry.
         sem_info = list_entry(it, sem_info_t, list);
         // If semaphore set is valid, check the id.
@@ -149,8 +147,7 @@ static inline sem_info_t *__list_find_sem_info_by_key(key_t key)
 {
     sem_info_t *sem_info;
     // Iterate through the list of semaphore set.
-    list_for_each_decl(it, &semaphores_list)
-    {
+    list_for_each_decl (it, &semaphores_list) {
         // Get the current entry.
         sem_info = list_entry(it, sem_info_t, list);
         // If semaphore set is valid, check the id.
@@ -204,7 +201,7 @@ long sys_semget(key_t key, int nsems, int semflg)
     if (key == IPC_PRIVATE) {
         // Exit when i find a unique key.
         do {
-            key = (int)-rand();
+            key = (-rand());
         } while (__list_find_sem_info_by_key(key));
         // We have a unique key, create the semaphore set.
         sem_info = __sem_info_alloc(key, nsems, semflg);
@@ -224,21 +221,24 @@ long sys_semget(key_t key, int nsems, int semflg)
         // Check if no semaphore set exists for the given key and semflg did not
         // specify IPC_CREAT.
         if (!sem_info && !(semflg & IPC_CREAT)) {
-            pr_err("No semaphore set exists for the given key and semflg did not specify IPC_CREAT.\n");
+            pr_err("No semaphore set exists for the given key and semflg did "
+                   "not specify IPC_CREAT.\n");
             return -ENOENT;
         }
 
         // Check if IPC_CREAT and IPC_EXCL were specified in semflg, but a semaphore
         // set already exists for key.
         if (sem_info && (semflg & IPC_CREAT) && (semflg & IPC_EXCL)) {
-            pr_err("IPC_CREAT and IPC_EXCL were specified in semflg, but a semaphore set already exists for key.\n");
+            pr_err("IPC_CREAT and IPC_EXCL were specified in semflg, but a "
+                   "semaphore set already exists for key.\n");
             return -EEXIST;
         }
 
         // Check if the semaphore set exists for the given key, but the calling
         // process does not have permission to access the set.
         if (sem_info && !ipc_valid_permissions(semflg, &sem_info->semid.sem_perm)) {
-            pr_err("The semaphore set exists for the given key, but the calling process does not have permission to access the set.\n");
+            pr_err("The semaphore set exists for the given key, but the calling "
+                   "process does not have permission to access the set.\n");
             return -EACCES;
         }
         // If the semaphore set does not exist we need to create a new one.
@@ -280,13 +280,15 @@ long sys_semop(int semid, struct sembuf *sops, unsigned nsops)
     }
     // The value of sem_num is less than 0 or greater than or equal to the number of semaphores in the set.
     if ((sops->sem_num < 0) || (sops->sem_num >= sem_info->semid.sem_nsems)) {
-        pr_err("The value of sem_num is less than 0 or greater than or equal to the number of semaphores in the set.\n");
+        pr_err("The value of sem_num is less than 0 or greater than or equal "
+               "to the number of semaphores in the set.\n");
         return -EFBIG;
     }
     // Check if the semaphore set exists for the given key, but the calling
     // process does not have permission to access the set.
     if (sem_info && !ipc_valid_permissions(O_RDWR, &sem_info->semid.sem_perm)) {
-        pr_err("The semaphore set exists for the given key, but the calling process does not have permission to access the set.\n");
+        pr_err("The semaphore set exists for the given key, but the calling "
+               "process does not have permission to access the set.\n");
         return -EACCES;
     }
     // Update semop time.
@@ -303,7 +305,7 @@ long sys_semop(int semid, struct sembuf *sops, unsigned nsops)
     // Update the pid of the process that did last op.
     sem_info->sem_base[sops->sem_num].sem_pid = sys_getpid();
     // Update the time.
-    sem_info->semid.sem_ctime = sys_time(NULL);
+    sem_info->semid.sem_ctime                 = sys_time(NULL);
     return 0;
 }
 
@@ -312,7 +314,7 @@ long sys_semctl(int semid, int semnum, int cmd, union semun *arg)
     sem_info_t *sem_info = NULL;
     task_struct *task    = NULL;
     // Search for the semaphore.
-    sem_info = __list_find_sem_info_by_id(semid);
+    sem_info             = __list_find_sem_info_by_id(semid);
     // The semaphore set doesn't exist.
     if (!sem_info) {
         pr_err("The semaphore set doesn't exist.\n");
@@ -327,7 +329,8 @@ long sys_semctl(int semid, int semnum, int cmd, union semun *arg)
         // EIDRM); no argument required.
 
         if ((sem_info->semid.sem_perm.uid != task->uid) && (sem_info->semid.sem_perm.cuid != task->uid)) {
-            pr_err("The calling process is not the creator or the owner of the semaphore set.\n");
+            pr_err("The calling process is not the creator or the owner of the "
+                   "semaphore set.\n");
             return -EPERM;
         }
         // Remove the set from the list.
@@ -355,13 +358,14 @@ long sys_semctl(int semid, int semnum, int cmd, union semun *arg)
         }
         // Check permissions.
         if (!ipc_valid_permissions(O_WRONLY, &sem_info->semid.sem_perm)) {
-            pr_err("The calling process does not have read permission to access the set.\n");
+            pr_err("The calling process does not have read permission to "
+                   "access the set.\n");
             return -EACCES;
         }
         // Setting the value.
         sem_info->sem_base[semnum].sem_val = arg->val;
         // Update the last change time.
-        sem_info->semid.sem_ctime = sys_time(NULL);
+        sem_info->semid.sem_ctime          = sys_time(NULL);
     } else if (cmd == SETALL) {
         // Initialize all semaphore in the set referred to by semid, using the
         // values supplied in the array pointed to by arg.array.
@@ -378,7 +382,8 @@ long sys_semctl(int semid, int semnum, int cmd, union semun *arg)
         }
         // Check permissions.
         if (!ipc_valid_permissions(O_WRONLY, &sem_info->semid.sem_perm)) {
-            pr_err("The calling process does not have read permission to access the set.\n");
+            pr_err("The calling process does not have read permission to "
+                   "access the set.\n");
             return -EACCES;
         }
         // Setting the values.
@@ -403,7 +408,8 @@ long sys_semctl(int semid, int semnum, int cmd, union semun *arg)
         }
         // Check permissions.
         if (!ipc_valid_permissions(O_RDONLY, &sem_info->semid.sem_perm)) {
-            pr_err("The calling process does not have read permission to access the set.\n");
+            pr_err("The calling process does not have read permission to "
+                   "access the set.\n");
             return -EACCES;
         }
         // Copying all the data.
@@ -436,7 +442,8 @@ long sys_semctl(int semid, int semnum, int cmd, union semun *arg)
         }
         // Check permissions.
         if (!ipc_valid_permissions(O_RDONLY, &sem_info->semid.sem_perm)) {
-            pr_err("The calling process does not have read permission to access the set.\n");
+            pr_err("The calling process does not have read permission to "
+                   "access the set.\n");
             return -EACCES;
         }
         return sem_info->sem_base[semnum].sem_val;
@@ -451,7 +458,8 @@ long sys_semctl(int semid, int semnum, int cmd, union semun *arg)
         }
         // Check permissions.
         if (!ipc_valid_permissions(O_RDONLY, &sem_info->semid.sem_perm)) {
-            pr_err("The calling process does not have read permission to access the set.\n");
+            pr_err("The calling process does not have read permission to "
+                   "access the set.\n");
             return -EACCES;
         }
         return sem_info->sem_base[semnum].sem_pid;
@@ -466,7 +474,8 @@ long sys_semctl(int semid, int semnum, int cmd, union semun *arg)
         }
         // Check permissions.
         if (!ipc_valid_permissions(O_RDONLY, &sem_info->semid.sem_perm)) {
-            pr_err("The calling process does not have read permission to access the set.\n");
+            pr_err("The calling process does not have read permission to "
+                   "access the set.\n");
             return -EACCES;
         }
         return sem_info->sem_base[semnum].sem_ncnt;
@@ -481,7 +490,8 @@ long sys_semctl(int semid, int semnum, int cmd, union semun *arg)
         }
         // Check permissions.
         if (!ipc_valid_permissions(O_RDONLY, &sem_info->semid.sem_perm)) {
-            pr_err("The calling process does not have read permission to access the set.\n");
+            pr_err("The calling process does not have read permission to "
+                   "access the set.\n");
             return -EACCES;
         }
         return sem_info->sem_base[semnum].sem_zcnt;
@@ -513,7 +523,9 @@ ssize_t procipc_sem_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyte
         pr_err("Received a NULL file.\n");
         return -ENOENT;
     }
-    size_t buffer_len = 0, read_pos = 0, ret = 0;
+    size_t buffer_len    = 0;
+    size_t read_pos      = 0;
+    size_t ret           = 0;
     ssize_t write_count  = 0;
     sem_info_t *sem_info = NULL;
     char buffer[BUFSIZ];
@@ -521,26 +533,20 @@ ssize_t procipc_sem_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyte
     // Prepare a buffer.
     memset(buffer, 0, BUFSIZ);
     // Prepare the header.
-    ret = sprintf(buffer, "key      semid perms      nsems   uid   gid  cuid  cgid      otime      ctime\n");
+    ret = sprintf(
+        buffer, "key      semid perms      nsems   uid   gid  cuid  cgid      "
+                "otime      ctime\n");
 
     // Iterate through the list of semaphore set.
-    list_for_each_decl(it, &semaphores_list)
-    {
+    list_for_each_decl (it, &semaphores_list) {
         // Get the current entry.
         sem_info = list_entry(it, sem_info_t, list);
         // Add the line.
         ret += sprintf(
-            buffer + ret, "%8d %5d %10d %7d %5d %4d %5d %9d %10d %d\n",
-            abs(sem_info->semid.sem_perm.key),
-            sem_info->id,
-            sem_info->semid.sem_perm.mode,
-            sem_info->semid.sem_nsems,
-            sem_info->semid.sem_perm.uid,
-            sem_info->semid.sem_perm.gid,
-            sem_info->semid.sem_perm.cuid,
-            sem_info->semid.sem_perm.cgid,
-            sem_info->semid.sem_otime,
-            sem_info->semid.sem_ctime);
+            buffer + ret, "%8d %5d %10d %7d %5d %4d %5d %9d %10d %d\n", abs(sem_info->semid.sem_perm.key), sem_info->id,
+            sem_info->semid.sem_perm.mode, sem_info->semid.sem_nsems, sem_info->semid.sem_perm.uid,
+            sem_info->semid.sem_perm.gid, sem_info->semid.sem_perm.cuid, sem_info->semid.sem_perm.cgid,
+            sem_info->semid.sem_otime, sem_info->semid.sem_ctime);
     }
     sprintf(buffer + ret, "\n");
 

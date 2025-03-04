@@ -3,15 +3,15 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "process/scheduler.h"
+#include "errno.h"
 #include "fcntl.h"
 #include "fs/vfs.h"
 #include "io/debug.h"
 #include "limits.h"
 #include "process/process.h"
+#include "process/scheduler.h"
 #include "stdio.h"
 #include "string.h"
-#include "sys/errno.h"
 #include "system/printk.h"
 #include "system/syscall.h"
 
@@ -22,8 +22,9 @@ int sys_open(const char *pathname, int flags, mode_t mode)
 
     // Search for an unused fd.
     int fd = get_unused_fd();
-    if (fd < 0)
+    if (fd < 0) {
         return fd;
+    }
 
     // Try to open the file.
     vfs_file_t *file = vfs_open(pathname, flags, mode);

@@ -4,79 +4,83 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
+#include <math.h>
 #include <shadow.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdio.h>
-#include <math.h>
 #include <time.h>
+#include <unistd.h>
 
 #include <crypt/sha256.h>
 
-int main(int argc, char *argv[])
+/// @brief Generates a SHA-256 hash for a predefined input string.
+/// @return int EXIT_SUCCESS on success, EXIT_FAILURE on error.
+int test_generate(void)
 {
-    // Check if the correct number of arguments is provided.
-    if (argc != 3) {
-        printf("You can either:\n");
-        printf("    -g, --generate <key> : prints the hashed key.\n");
-        printf("    -l, --load <user>    : prints the hashed key stored for the given user.\n");
+    // Buffer to hold the hashed output.
+    unsigned char buffer[SHA256_BLOCK_SIZE] = {0};
+
+    // Input string to be hashed.
+    const char input[] = "Knowledge is power, but enthusiasm pulls the switch.";
+
+    // Buffer to hold the hexadecimal representation of the hash.
+    char output[(SHA256_BLOCK_SIZE * 2) + 1] = {0};
+
+    // Input string to be hashed.
+    const char expected[] = "6a1399bdcf1fa1ced3d7148a3f5472a5105ff30f730069fc8bdb73bdc018cb42";
+
+    // SHA-256 context.
+    SHA256_ctx_t ctx;
+
+    // Initialize the SHA-256 context.
+    sha256_init(&ctx);
+
+    // Perform the hashing operation 100 times for security.
+    for (unsigned i = 0; i < 100; ++i) {
+        sha256_update(&ctx, (unsigned char *)input, strlen(input));
+    }
+
+    // Finalize the hashing.
+    sha256_final(&ctx, buffer);
+
+    // Convert the hash bytes to a hexadecimal string.
+    sha256_bytes_to_hex(buffer, SHA256_BLOCK_SIZE, output, (SHA256_BLOCK_SIZE * 2) + 1);
+
+    // Check if both hashes match.
+    if (strncmp(output, expected, strlen(expected)) != 0) {
+        fprintf(stderr, "Hashes do not match:\n");
+        fprintf(stderr, "Input    : `%s`\n", input);
+        fprintf(stderr, "Output   : `%s`\n", output);
+        fprintf(stderr, "Expected : `%s`\n", expected);
         return EXIT_FAILURE;
     }
 
-    // Generate SHA-256 hash for the provided key.
-    if (!strcmp(argv[1], "--generate") || !strcmp(argv[1], "-g")) {
-        // Buffer to hold the hashed output.
-        unsigned char buffer[SHA256_BLOCK_SIZE] = { 0 };
-        // Buffer to hold the hexadecimal representation of the hash.
-        char output[SHA256_BLOCK_SIZE * 2 + 1] = { 0 };
-        // SHA-256 context.
-        SHA256_ctx_t ctx;
+    return EXIT_SUCCESS;
+}
 
-        // Initialize the SHA-256 context.
-        sha256_init(&ctx);
+int test_getspnam(void)
+{
+    const char *username = "root";
 
-        // Perform the hashing operation 100,000 times for security.
-        for (unsigned i = 0; i < 100000; ++i) {
-            sha256_update(&ctx, (unsigned char *)argv[2], strlen(argv[2]));
-        }
+    // Retrieve the shadow password entry for the user.
+    struct spwd *spbuf = getspnam(username);
 
-        // Finalize the hashing.
-        sha256_final(&ctx, buffer);
-
-        // Convert the hash bytes to a hexadecimal string.
-        sha256_bytes_to_hex(buffer, SHA256_BLOCK_SIZE, output, SHA256_BLOCK_SIZE * 2 + 1);
-
-        // Print the hashed key.
-        printf("%s\n", output);
-
+    // Check if the user exists in the shadow password database.
+    if (!spbuf) {
+        fprintf(stderr, "Failed to find user '%s' in the shadow password database.\n", username);
+        return EXIT_FAILURE;
     }
-    // Load and display information for the specified user from the shadow password database.
-    else if (!strcmp(argv[1], "--load") || !strcmp(argv[1], "-l")) {
-        // Retrieve the shadow password entry for the user.
-        struct spwd *spbuf = getspnam(argv[2]);
 
-        // Check if the user exists in the shadow password database.
-        if (spbuf) {
-            // Retrieve the last change time.
-            time_t lstchg = (time_t)spbuf->sp_lstchg;
-            // Convert to local time structure.
-            tm_t *tm = localtime(&lstchg);
+    return EXIT_SUCCESS;
+}
 
-            // Print the user information (month is zero-based).
-            printf("name         : %s\n", spbuf->sp_namp);
-            printf("password     :\n%s\n", spbuf->sp_pwdp);
-            printf("lastchange   : %02d/%02d %02d:%02d\n", tm->tm_mon + 1, tm->tm_mday, tm->tm_hour, tm->tm_min);
-            printf("days allowed : %d\n", spbuf->sp_min);
-            printf("days req.    : %d\n", spbuf->sp_max);
-            printf("days warning : %d\n", spbuf->sp_warn);
-            printf("days inact   : %d\n", spbuf->sp_inact);
-            printf("days expire  : %d\n", spbuf->sp_expire);
-        } else {
-            printf("User '%s' not found in the shadow password database.\n", argv[2]);
-            return EXIT_FAILURE;
-        }
-    } else {
-        printf("Invalid option. Use -g/--generate or -l/--load.\n");
+int main(int argc, char *argv[])
+{
+    if (test_generate() == EXIT_FAILURE) {
+        return EXIT_FAILURE;
+    }
+    if (test_getspnam() == EXIT_FAILURE) {
         return EXIT_FAILURE;
     }
 

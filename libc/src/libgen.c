@@ -4,12 +4,11 @@
 /// See LICENSE.md for details.
 
 #include "libgen.h"
-#include "io/debug.h"
 #include "limits.h"
 #include "string.h"
 #include <assert.h>
 #include <stdlib.h>
-#include <sys/unistd.h>
+#include <unistd.h>
 
 int dirname(const char *path, char *buffer, size_t buflen)
 {
@@ -88,7 +87,8 @@ char *realpath(const char *path, char *buffer, size_t buflen)
     // Add the separator to the end (se strncat for safety).
     strncat(abspath, "/", remaining);
 
-    int absidx = 0, pathidx = 0;
+    int absidx  = 0;
+    int pathidx = 0;
 
     while (abspath[absidx]) {
         // Skip multiple consecutive / characters

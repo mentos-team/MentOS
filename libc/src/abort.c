@@ -3,10 +3,12 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "sys/unistd.h"
+#include "grp.h"
 #include "signal.h"
 #include "stdio.h"
+#include "stdlib.h"
 #include "string.h"
+#include "unistd.h"
 
 /// @brief Since there could be signal handlers listening for the abort, we need
 /// to keep track at which stage of the abort we are.
@@ -14,7 +16,7 @@ static int stage = 0;
 
 void abort(void)
 {
-    sigaction_t action;
+    struct sigaction action;
     sigset_t sigset;
 
     /* Unblock SIGABRT.  */
@@ -74,6 +76,8 @@ void abort(void)
     //  or otherwise make sure we never return.
 #pragma clang diagnostic push
 #pragma ide diagnostic ignored "EndlessLoop"
-    while (1) __asm__ __volatile__("hlt");
+    while (1) {
+        __asm__ __volatile__("hlt");
+    };
 #pragma clang diagnostic pop
 }

@@ -5,12 +5,12 @@
 
 #pragma once
 
-#include "drivers/keyboard/keyboard.h"
 #include "bits/termios-struct.h"
-#include "system/signal.h"
 #include "devices/fpu.h"
+#include "drivers/keyboard/keyboard.h"
 #include "mem/paging.h"
 #include "stdbool.h"
+#include "system/signal.h"
 
 /// The maximum length of a name for a task_struct.
 #define TASK_NAME_MAX_LENGTH 100
@@ -156,7 +156,7 @@ typedef struct task_struct {
     /// Process-wise terminal options.
     termios_t termios;
     /// Buffer for managing inputs from keyboard.
-    fs_rb_scancode_t keyboard_rb;
+    rb_keybuffer_t keyboard_rb;
 
     //==== Future work =========================================================
     // - task's attributes:
@@ -173,5 +173,12 @@ int init_tasking(void);
 
 /// @brief Create and spawn the init process.
 /// @param path Path of the `init` program.
-/// @return Pointer to init process.
-task_struct *process_create_init(const char *path);
+/// @return 0 on success, 1 on failure.
+int process_create_init(const char *path);
+
+/// @brief Get a file structure from a file descriptor.
+/// @param fd the file descriptor.
+/// @return Returns the file structure corresponding to the given file
+/// descriptor or NULL if the file descriptor is invalid or the file has been
+/// closed.
+vfs_file_descriptor_t *fget(int fd);

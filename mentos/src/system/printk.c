@@ -4,18 +4,9 @@
 /// See LICENSE.md for details.
 
 #include "system/printk.h"
-#include "io/video.h"
-#include "stdarg.h"
-#include "stdio.h"
+#include "io/debug.h"
 
-int sys_syslog(const char *format, ...)
+void sys_syslog(const char *file, const char *fun, int line, short log_level, const char *format)
 {
-    char buffer[4096];
-    va_list ap;
-    // Start variabile argument's list.
-    va_start(ap, format);
-    int len = vsprintf(buffer, format, ap);
-    va_end(ap);
-    video_puts(buffer);
-    return len;
+    dbg_printf(file, fun, line, "[SYSLOG]", log_level, format);
 }

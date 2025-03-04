@@ -13,7 +13,7 @@
 /// @{
 
 /// @brief Unused.
-#define PT_NULL 0
+#define PT_NULL      0
 /// @brief Specifies a loadable segment, described by p_filesz and p_memsz.
 /// The bytes from the file are mapped to the beginning of the memory segment.
 /// If the segment's memory size (p_memsz) is larger than the file
@@ -21,32 +21,32 @@
 /// and to follow the segment's initialized area. The file size can not
 /// be larger than the memory size. Loadable segment entries in the program
 /// header table appear in ascending order, sorted on the p_vaddr member.
-#define PT_LOAD 1
+#define PT_LOAD      1
 /// @brief Specifies dynamic linking information.
-#define PT_DYNAMIC 2
+#define PT_DYNAMIC   2
 /// @brief Specifies the location and size of a null-terminated path name
 /// to invoke as an interpreter. This segment type is mandatory for dynamic
 /// executable files and can occur in shared objects. It cannot occur more
 /// than once in a file. This type, if present, it must precede any loadable
 /// segment entry.
-#define PT_INTERP 3
+#define PT_INTERP    3
 /// @brief Specifies the location and size of auxiliary information.
-#define PT_NOTE 4
+#define PT_NOTE      4
 /// @brief Reserved but has unspecified semantics.
-#define PT_SHLIB 5
+#define PT_SHLIB     5
 /// @brief Specifies the location and size of the program header table
 /// itself, both in the file and in the memory image of the program.
 /// This segment type cannot occur more than once in a file. Moreover,
 /// it can occur only if the program header table is part of the memory
 /// image of the program. This type, if present, must precede any loadable
 /// segment entry.
-#define PT_PHDR 6
+#define PT_PHDR      6
 /// @brief Section for supporting exception handling routines.
 /// @details
 /// The .eh_frame section has the same structure with .debug_frame,
 /// which follows DWARF format. It represents the table that describes
 /// how to set registers to restore the previous call frame at runtime.
-#define PT_EH_FRAME 0x6474E550
+#define PT_EH_FRAME  0x6474E550
 /// @brief Is a program header which tells the system how to control
 /// the stack when the ELF is loaded into memory.
 #define PT_GNU_STACK 0x6474E551
@@ -56,9 +56,9 @@
 /// ections. See paragraph below.
 #define PT_GNU_RELRO 0x6474E552
 /// @brief TODO: Document.
-#define PT_LOPROC 0x70000000
+#define PT_LOPROC    0x70000000
 /// @brief TODO: Document.
-#define PT_HIPROC 0x7FFFFFFF
+#define PT_HIPROC    0x7FFFFFFF
 
 /// @}
 
@@ -192,9 +192,9 @@ enum Elf_Ident {
 };
 
 #define ELFMAG0 0x7F ///< e_ident[EI_MAG0]
-#define ELFMAG1 'E' ///< e_ident[EI_MAG1]
-#define ELFMAG2 'L' ///< e_ident[EI_MAG2]
-#define ELFMAG3 'F' ///< e_ident[EI_MAG3]
+#define ELFMAG1 'E'  ///< e_ident[EI_MAG1]
+#define ELFMAG2 'L'  ///< e_ident[EI_MAG2]
+#define ELFMAG3 'F'  ///< e_ident[EI_MAG3]
 
 #define ELFDATA2LSB 1 ///< Little Endian
 #define ELFCLASS32  1 ///< 32-bit Architecture
@@ -231,7 +231,7 @@ enum ShT_Attributes {
 /// @brief Provide access to teh symbol biding.
 #define ELF32_ST_BIND(INFO) ((INFO) >> 4)
 /// @brief Provide access to teh symbol type.
-#define ELF32_ST_TYPE(INFO) ((INFO)&0x0F)
+#define ELF32_ST_TYPE(INFO) ((INFO) & 0x0F)
 
 /// @brief Provides possible symbol bindings.
 enum StT_Bindings {
@@ -261,14 +261,14 @@ int elf_load_file(task_struct *task, vfs_file_t *file, uint32_t *entry);
 int elf_check_file_type(vfs_file_t *file, Elf_Type type);
 
 /// @brief Checks the correctness of the ELF header.
-/// @param hdr The header to check.
+/// @param header The header to check.
 /// @return 0 if fails, 1 if succeed.
-int elf_check_file_header(elf_header_t *hdr);
+int elf_check_file_header(elf_header_t *header);
 
 /// @brief Checks the correctness of the ELF header magic number.
-/// @param hdr The header to check.
+/// @param header The header to check.
 /// @return 0 if fails, 1 if succeed.
-int elf_check_magic_number(elf_header_t *hdr);
+int elf_check_magic_number(elf_header_t *header);
 
 /// @brief Transforms the passed ELF type to string.
 /// @param type The integer representing the ELF type.

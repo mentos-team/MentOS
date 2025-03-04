@@ -1,277 +1,100 @@
 /// @file hashmap.c
-/// @brief
-/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
-/// See LICENSE.md for details.
+/// @brief Source file for a hashmap implementation with `char *` keys.
 
-#include "klib/hashmap.h"
-#include "assert.h"
-#include "mem/slab.h"
-#include "string.h"
+#include "hashmap.h"
 
-/// @brief Stores information of an entry of the hashmap.
-struct hashmap_entry_t {
-    /// Key of the entry.
-    char *key;
-    /// Value of the entry.
-    void *value;
-    /// Pointer to the next entry.
-    struct hashmap_entry_t *next;
-};
+#include <assert.h>
+#include <stdlib.h>
+#include <string.h>
 
-/// @brief Stores information of a hashmap.
-struct hashmap_t {
-    /// Hashing function, used to generate hash keys.
-    hashmap_hash_t hash_func;
-    /// Comparison function, used to compare hash keys.
-    hashmap_comp_t hash_comp;
-    /// Key duplication function, used to duplicate hash keys.
-    hashmap_dupe_t hash_key_dup;
-    /// Key deallocation function, used to free the memory occupied by hash keys.
-    hashmap_free_t hash_key_free;
-    /// Size of the hashmap.
-    unsigned int size;
-    /// List of entries.
-    hashmap_entry_t **entries;
-};
-
-/// @brief Allocates the memory for an hasmap.
-/// @return the newly allocated hashmap.
-static inline hashmap_t *__alloc_hashmap(void)
+size_t hash(const char *key)
 {
-    hashmap_t *hashmap = kmalloc(sizeof(hashmap_t));
-    memset(hashmap, 0, sizeof(hashmap_t));
-    return hashmap;
-}
-
-/// @brief Allocates the memory for an entry of the hasmap.
-/// @return the newly allocated entry of the hashmap.
-static inline hashmap_entry_t *__alloc_entry(void)
-{
-    hashmap_entry_t *entry = kmalloc(sizeof(hashmap_entry_t));
-    memset(entry, 0, sizeof(hashmap_entry_t));
-    return entry;
-}
-
-/// @brief Frees the memory of an entry of the hasmap.
-/// @param entry the entry we destroy.
-static inline void __dealloc_entry(hashmap_entry_t *entry)
-{
-    assert(entry && "Invalid pointer to an entry.");
-    kfree(entry);
-}
-
-/// @brief Allocates the memory for a number of entries in the hasmap.
-/// @param size the number of entries.
-/// @return the newly allocated vector of entries in the hashmap.
-static inline hashmap_entry_t **__alloc_entries(unsigned int size)
-{
-    hashmap_entry_t **entries = kmalloc(sizeof(hashmap_entry_t *) * size);
-    memset(entries, 0, sizeof(hashmap_entry_t *) * size);
-    return entries;
-}
-
-/// @brief Frees the memory of a vector of entries.
-/// @param entries the vector of entries.
-static inline void __dealloc_entries(hashmap_entry_t **entries)
-{
-    assert(entries && "Invalid pointer to entries.");
-    kfree(entries);
-}
-
-unsigned int hashmap_int_hash(const void *key)
-{
-    return (unsigned int)key;
-}
-
-int hashmap_int_comp(const void *a, const void *b)
-{
-    return (int)a == (int)b;
-}
-
-unsigned int hashmap_str_hash(const void *_key)
-{
-    unsigned int hash = 0;
-    const char *key   = (const char *)_key;
-    char c;
-    // This is the so-called "sdbm" hash. It comes from a piece of public
-    // domain code from a clone of ndbm.
+    size_t hash = 5381;
+    int c;
     while ((c = *key++)) {
-        hash = c + (hash << 6) + (hash << 16) - hash;
+        hash = ((hash << 5) + hash) + c; // hash * 33 + c
     }
-    return hash;
+    return hash % HASHMAP_SIZE;
 }
 
-int hashmap_str_comp(const void *a, const void *b)
+void hashmap_init(hashmap_t *map, hashmap_entry_t *(*alloc_fn)(void), void (*dealloc_fn)(hashmap_entry_t *))
 {
-    return !strcmp(a, b);
+    assert(map && "Hashmap is NULL.");
+    memset(map->buckets, 0, sizeof(map->buckets));
+    map->alloc_entry   = alloc_fn;
+    map->dealloc_entry = dealloc_fn;
 }
 
-void *hashmap_do_not_duplicate(const void *value)
+void hashmap_insert(hashmap_t *map, const char *key, void *value)
 {
-    return (void *)value;
+    assert(map && "Hashmap is NULL.");
+    assert(key && "Key is NULL.");
+
+    size_t hashed_key          = hash(key);
+    size_t index               = hashed_key % HASHMAP_SIZE;
+    hashmap_entry_t *new_entry = map->alloc_entry();
+    assert(new_entry && "Failed to allocate memory for hashmap entry.");
+
+    new_entry->hash     = hashed_key;
+    new_entry->value    = value;
+    new_entry->next     = map->buckets[index];
+    map->buckets[index] = new_entry;
 }
 
-void hashmap_do_not_free(void *value)
+void *hashmap_get(hashmap_t *map, const char *key)
 {
-    (void)value;
-}
+    assert(map && "Hashmap is NULL.");
+    assert(key && "Key is NULL.");
 
-hashmap_t *hashmap_create(
-    unsigned int size,
-    hashmap_hash_t hash_fun,
-    hashmap_comp_t comp_fun,
-    hashmap_dupe_t dupe_fun,
-    hashmap_free_t key_free_fun)
-{
-    // Allocate the map.
-    hashmap_t *map = __alloc_hashmap();
-    // Initialize the entries.
-    map->size    = size;
-    map->entries = __alloc_entries(size);
-    // Initialize its functions.
-    map->hash_func     = hash_fun;
-    map->hash_comp     = comp_fun;
-    map->hash_key_dup  = dupe_fun;
-    map->hash_key_free = key_free_fun;
-    return map;
-}
+    size_t hashed_key      = hash(key);
+    size_t index           = hashed_key % HASHMAP_SIZE;
+    hashmap_entry_t *entry = map->buckets[index];
 
-void hashmap_free(hashmap_t *map)
-{
-    for (unsigned int i = 0; i < map->size; ++i) {
-        hashmap_entry_t *x = map->entries[i], *p;
-        while (x) {
-            p = x;
-            x = x->next;
-            map->hash_key_free(p->key);
-            __dealloc_entry(p);
+    while (entry != NULL) {
+        if (entry->hash == hashed_key) {
+            return entry->value;
         }
+        entry = entry->next;
     }
-    __dealloc_entries(map->entries);
+    return NULL; // Key not found
 }
 
-void *hashmap_set(hashmap_t *map, const void *key, void *value)
+void hashmap_remove(hashmap_t *map, const char *key)
 {
-    unsigned int hash  = map->hash_func(key) % map->size;
-    hashmap_entry_t *x = map->entries[hash];
+    assert(map && "Hashmap is NULL.");
+    assert(key && "Key is NULL.");
 
-    if (x == NULL) {
-        hashmap_entry_t *e = __alloc_entry();
-        e->key             = map->hash_key_dup(key);
-        e->value           = value;
-        e->next            = NULL;
-        map->entries[hash] = e;
+    size_t hashed_key      = hash(key);
+    size_t index           = hashed_key % HASHMAP_SIZE;
+    hashmap_entry_t *entry = map->buckets[index];
+    hashmap_entry_t *prev  = NULL;
 
-        return NULL;
-    }
-
-    hashmap_entry_t *p = NULL;
-
-    do {
-        if (map->hash_comp(x->key, key)) {
-            void *out = x->value;
-            x->value  = value;
-
-            return out;
-        }
-        p = x;
-        x = x->next;
-    } while (x);
-
-    hashmap_entry_t *e = __alloc_entry();
-    e->key             = map->hash_key_dup(key);
-    e->value           = value;
-    e->next            = NULL;
-    p->next            = e;
-
-    return NULL;
-}
-
-void *hashmap_get(hashmap_t *map, const void *key)
-{
-    unsigned int hash = map->hash_func(key) % map->size;
-    for (hashmap_entry_t *x = map->entries[hash]; x; x = x->next) {
-        if (map->hash_comp(x->key, key)) {
-            {
-                return x->value;
+    while (entry != NULL) {
+        if (entry->hash == hashed_key) {
+            if (prev == NULL) {
+                map->buckets[index] = entry->next;
+            } else {
+                prev->next = entry->next;
             }
+            map->dealloc_entry(entry);
+            return;
         }
+        prev  = entry;
+        entry = entry->next;
     }
-    return NULL;
 }
 
-void *hashmap_remove(hashmap_t *map, const void *key)
+void hashmap_destroy(hashmap_t *map)
 {
-    unsigned int hash  = map->hash_func(key) % map->size;
-    hashmap_entry_t *x = map->entries[hash];
+    assert(map && "Hashmap is NULL.");
 
-    if (x == NULL) {
-        return NULL;
-    }
-    if (map->hash_comp(x->key, key)) {
-        void *out          = x->value;
-        map->entries[hash] = x->next;
-        map->hash_key_free(x->key);
-        __dealloc_entry(x);
-        return out;
-    }
-
-    hashmap_entry_t *p = x;
-    x                  = x->next;
-    do {
-        if (map->hash_comp(x->key, key)) {
-            void *out = x->value;
-            p->next   = x->next;
-            map->hash_key_free(x->key);
-            __dealloc_entry(x);
-            return out;
+    for (int i = 0; i < HASHMAP_SIZE; i++) {
+        hashmap_entry_t *entry = map->buckets[i];
+        while (entry != NULL) {
+            hashmap_entry_t *next_entry = entry->next;
+            map->dealloc_entry(entry);
+            entry = next_entry;
         }
-        p = x;
-        x = x->next;
-    } while (x);
-
-    return NULL;
-}
-
-int hashmap_is_empty(hashmap_t *map)
-{
-    for (unsigned int i = 0; i < map->size; ++i) {
-        if (map->entries[i]) {
-            return 0;
-        }
+        map->buckets[i] = NULL;
     }
-    return 1;
-}
-
-int hashmap_has(hashmap_t *map, const void *key)
-{
-    unsigned int hash = map->hash_func(key) % map->size;
-    for (hashmap_entry_t *x = map->entries[hash]; x; x = x->next) {
-        if (map->hash_comp(x->key, key)) {
-            return 1;
-        }
-    }
-    return 0;
-}
-
-list_t *hashmap_keys(hashmap_t *map)
-{
-    list_t *l = list_create();
-    for (unsigned int i = 0; i < map->size; ++i) {
-        for (hashmap_entry_t *x = map->entries[i]; x; x = x->next) {
-            list_insert_back(l, x->key);
-        }
-    }
-    return l;
-}
-
-list_t *hashmap_values(hashmap_t *map)
-{
-    list_t *l = list_create();
-    for (unsigned int i = 0; i < map->size; ++i) {
-        for (hashmap_entry_t *x = map->entries[i]; x; x = x->next) {
-            list_insert_back(l, x->value);
-        }
-    }
-    return l;
 }

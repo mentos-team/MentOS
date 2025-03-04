@@ -5,36 +5,36 @@
 
 #pragma once
 
-#include "sys/list_head.h"
 #include "klib/spinlock.h"
+#include "list_head.h"
 
 /// @brief Return immediately if no child is there to be waited for.
-#define WNOHANG 0x00000001
+#define WNOHANG             0x00000001
 /// @brief Return for children that are stopped, and whose status has not
 ///        been reported.
-#define WUNTRACED 0x00000002
+#define WUNTRACED           0x00000002
 /// @brief returns true if the child process exited because of a signal that
 ///        was not caught.
 #define WIFSIGNALED(status) (!WIFSTOPPED(status) && !WIFEXITED(status))
 /// @brief returns true if the child process that caused the return is
 ///        currently stopped; this is only possible if the call was done using
 ///        WUNTRACED().
-#define WIFSTOPPED(status) (((status)&0xff) == 0x7f)
+#define WIFSTOPPED(status)  (((status) & 0xff) == 0x7f)
 /// @brief evaluates to the least significant eight bits of the return code
 ///        of the child that terminated, which may have been set as the argument
 ///        to a call to exit() or as the argument for a return statement in the
 ///        main  program. This macro can only be evaluated if WIFEXITED()
 ///        returned nonzero.
-#define WEXITSTATUS(status) (((status)&0xff00) >> 8)
+#define WEXITSTATUS(status) (((status) & 0xff00) >> 8)
 /// @brief returns the number of the signal that caused the child process to
 ///        terminate. This macro can only be evaluated if WIFSIGNALED() returned
 ///        nonzero.
-#define WTERMSIG(status) ((status)&0x7f)
+#define WTERMSIG(status)    ((status) & 0x7f)
 /// @brief Is nonzero if the child exited normally.
-#define WIFEXITED(status) (WTERMSIG(status) == 0)
+#define WIFEXITED(status)   (WTERMSIG(status) == 0)
 /// @brief returns the number of the signal that caused the child to stop.
 ///        This macro can only be evaluated if WIFSTOPPED() returned nonzero.
-#define WSTOPSIG(status) (WEXITSTATUS(status))
+#define WSTOPSIG(status)    (WEXITSTATUS(status))
 
 //==== Task States ============================================================
 #define TASK_RUNNING         0x00     ///< The process is either: 1) running on CPU or 2) waiting in a run queue.
@@ -60,7 +60,7 @@
 /// @}
 
 /// @brief Head of the waiting queue.
-typedef struct wait_queue_head_t {
+typedef struct wait_queue_head {
     /// Locking element for the waiting queque.
     spinlock_t lock;
     /// Head of the waiting queue, it contains wait_queue_entry_t elements.
@@ -68,52 +68,58 @@ typedef struct wait_queue_head_t {
 } wait_queue_head_t;
 
 /// @brief Entry of the waiting queue.
-typedef struct wait_queue_entry_t {
+typedef struct wait_queue_entry {
     /// Flags of the type WaitQueueFlags.
     unsigned int flags;
     /// Task associated with the wait queue entry.
     struct task_struct *task;
     /// Function associated with the wait queue entry.
-    int (*func)(struct wait_queue_entry_t *wait, unsigned mode, int sync);
+    int (*func)(struct wait_queue_entry *, unsigned, int);
     /// Handler for placing the entry inside a waiting queue double linked-list.
     struct list_head task_list;
+    /// Additional context or data, typically a pointer to relevant information
+    /// for the wake function.
+    void *private;
 } wait_queue_entry_t;
 
+/// @brief Initializes a wait queue head.
+/// @param head Pointer to the wait queue head to initialize.
+void wait_queue_head_init(wait_queue_head_t *head);
 
 /// @brief Allocates the memory for a wait_queue_entry.
 /// @return a pointer to the allocated wait_queue_entry.
-wait_queue_entry_t * wait_queue_entry_alloc(void);
+wait_queue_entry_t *wait_queue_entry_alloc(void);
 
 /// @brief Frees the memory of a wait_queue_entry.
 /// @param wait_queue_entry pointer to the wait_queue_entry.
-void wait_queue_entry_dealloc(wait_queue_entry_t * wait_queue_entry);
+void wait_queue_entry_dealloc(wait_queue_entry_t *wait_queue_entry);
 
 /// @brief Initialize the waiting queue entry.
-/// @param wq   The entry we initialize.
+/// @param entry The entry we initialize.
 /// @param task The task associated with the entry.
-void init_waitqueue_entry(wait_queue_entry_t *wq, struct task_struct *task);
+void wait_queue_entry_init(wait_queue_entry_t *entry, struct task_struct *task);
 
 /// @brief Adds the element to the waiting queue.
 /// @param head The head of the waiting queue.
-/// @param wq   The entry we insert inside the waiting queue.
-void add_wait_queue(wait_queue_head_t *head, wait_queue_entry_t *wq);
+/// @param entry The entry we insert inside the waiting queue.
+void add_wait_queue(wait_queue_head_t *head, wait_queue_entry_t *entry);
 
 /// @brief Removes the element from the waiting queue.
 /// @param head The head of the waiting queue.
-/// @param wq   The entry we remove from the waiting queue.
-void remove_wait_queue(wait_queue_head_t *head, wait_queue_entry_t *wq);
+/// @param entry The entry we remove from the waiting queue.
+void remove_wait_queue(wait_queue_head_t *head, wait_queue_entry_t *entry);
 
 /// @brief The default wake function, a wrapper for try_to_wake_up.
-/// @param wait The pointer to the wait queue.
+/// @param entry The pointer to the wait queue.
 /// @param mode The type of wait (TASK_INTERRUPTIBLE or TASK_UNINTERRUPTIBLE).
 /// @param sync Specifies if the wakeup should be synchronous.
 /// @return 1 on success, 0 on failure.
-int default_wake_function(wait_queue_entry_t *wait, unsigned mode, int sync);
+int default_wake_function(wait_queue_entry_t *entry, unsigned mode, int sync);
 
-/// @brief Sets the state of the current process to TASK_UNINTERRUPTIBLE 
+/// @brief Sets the state of the current process to TASK_UNINTERRUPTIBLE
 ///        and inserts it into the specified wait queue.
-/// 
-/// @param wq Waitqueue where to sleep.
-/// @return Pointer to the entry inside the wq representing the 
+///
+/// @param head Waitqueue where to sleep.
+/// @return Pointer to the entry inside the wq representing the
 ///         sleeping process.
-wait_queue_entry_t *sleep_on(wait_queue_head_t *wq);
+wait_queue_entry_t *sleep_on(wait_queue_head_t *head);

@@ -3,29 +3,23 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "sys/errno.h"
-#include "ctype.h"
-#include "stdbool.h"
 #include "stdio.h"
+#include "ctype.h"
+#include "errno.h"
+#include "limits.h"
+#include "stdbool.h"
 #include "strerror.h"
 #include "string.h"
-#include "sys/unistd.h"
+#include "unistd.h"
 
-void putchar(int character)
-{
-    write(STDOUT_FILENO, &character, 1U);
-}
+void putchar(int character) { write(STDOUT_FILENO, &character, 1U); }
 
-void puts(const char *str)
-{
-    write(STDOUT_FILENO, str, strlen(str));
-}
+void puts(const char *str) { write(STDOUT_FILENO, str, strlen(str)); }
 
 int getchar(void)
 {
-    char c;
+    char c = 0;
     while (read(STDIN_FILENO, &c, 1) == 0) {
-        continue;
     }
     return c;
 }
@@ -42,7 +36,8 @@ char *gets(char *str)
     // Char pointer to the buffer.
     char *cptr = buffer;
     // Character storage and counter to prevent overflow.
-    int ch, counter = 0;
+    int ch;
+    int counter = 0;
     // Read until we find a newline or we exceed the buffer size.
     while (((ch = getchar()) != '\n') && (counter++ < GETS_BUFFERSIZE)) {
         // If we encounter EOF, stop.
@@ -80,7 +75,9 @@ int atoi(const char *str)
         return 0;
     }
     // Initialize sign, the result variable, and two indices.
-    int sign = (str[0] == '-') ? -1 : +1, result = 0, i;
+    int sign   = (str[0] == '-') ? -1 : +1;
+    int result = 0;
+    int i;
     // Find where the number ends.
     for (i = (sign == -1) ? 1 : 0; (str[i] != '\0') && isdigit(str[i]); ++i) {
         result = (result * 10) + str[i] - '0';
@@ -91,9 +88,12 @@ int atoi(const char *str)
 long strtol(const char *str, char **endptr, int base)
 {
     const char *s;
-    long acc, cutoff;
+    long acc;
+    long cutoff;
     int c;
-    int neg, any, cutlim;
+    int neg;
+    int any;
+    int cutlim;
     // Skip white space and pick up leading +/- sign if any.
     // If base is 0, allow 0x for hex and 0 for octal, else
     // assume decimal; if base is already 16, allow 0x.
@@ -110,8 +110,7 @@ long strtol(const char *str, char **endptr, int base)
             c = (int)*s++;
         }
     }
-    if ((base == 0 || base == 16) &&
-        c == '0' && (*s == 'x' || *s == 'X')) {
+    if ((base == 0 || base == 16) && c == '0' && (*s == 'x' || *s == 'X')) {
         c = (int)s[1];
         s += 2;
         base = 16;
@@ -198,7 +197,8 @@ int fgetc(int fd)
     if (bytes_read == -1) {
         perror("Error reading from file descriptor");
         return EOF; // Return EOF on error.
-    } else if (bytes_read == 0) {
+    }
+    if (bytes_read == 0) {
         return EOF; // Return EOF if no bytes were read (end of file).
     }
 
@@ -209,7 +209,7 @@ int fgetc(int fd)
 char *fgets(char *buf, int n, int fd)
 {
     int c;
-    char *p = buf;
+    char *p   = buf;
     int count = n - 1; // Leave space for null terminator
 
     // Read characters until reaching the limit or newline
@@ -219,7 +219,8 @@ char *fgets(char *buf, int n, int fd)
         if (bytes_read < 0) {
             perror("Error reading from file descriptor");
             return NULL; // Return NULL on error
-        } else if (bytes_read == 0) {
+        }
+        if (bytes_read == 0) {
             // End of file
             break;
         }

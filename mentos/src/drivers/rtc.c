@@ -34,13 +34,27 @@ int is_bcd;
 /// @return 1 if they are different, 0 otherwise.
 static inline unsigned int rtc_are_different(tm_t *t0, tm_t *t1)
 {
-    if (t0->tm_sec != t1->tm_sec) { return 1; }
-    if (t0->tm_min != t1->tm_min) { return 1; }
-    if (t0->tm_hour != t1->tm_hour) { return 1; }
-    if (t0->tm_mon != t1->tm_mon) { return 1; }
-    if (t0->tm_year != t1->tm_year) { return 1; }
-    if (t0->tm_wday != t1->tm_wday) { return 1; }
-    if (t0->tm_mday != t1->tm_mday) { return 1; }
+    if (t0->tm_sec != t1->tm_sec) {
+        return 1;
+    }
+    if (t0->tm_min != t1->tm_min) {
+        return 1;
+    }
+    if (t0->tm_hour != t1->tm_hour) {
+        return 1;
+    }
+    if (t0->tm_mon != t1->tm_mon) {
+        return 1;
+    }
+    if (t0->tm_year != t1->tm_year) {
+        return 1;
+    }
+    if (t0->tm_wday != t1->tm_wday) {
+        return 1;
+    }
+    if (t0->tm_mday != t1->tm_mday) {
+        return 1;
+    }
     return 0;
 }
 
@@ -74,15 +88,12 @@ static inline void write_register(unsigned char reg, unsigned char value)
 /// @brief Transforms a Binary-Coded Decimal (BCD) to decimal.
 /// @param bcd the BCD value.
 /// @return the decimal value.
-static inline unsigned char bcd2bin(unsigned char bcd)
-{
-    return ((bcd >> 4u) * 10) + (bcd & 0x0Fu);
-}
+static inline unsigned char bcd2bin(unsigned char bcd) { return ((bcd >> 4U) * 10) + (bcd & 0x0FU); }
 
 /// @brief Reads the current datetime value from a real-time clock.
 static inline void rtc_read_datetime(void)
 {
-    if (read_register(0x0Cu) & 0x10u) {
+    if (read_register(0x0CU) & 0x10U) {
         if (is_bcd) {
             global_time.tm_sec  = bcd2bin(read_register(0x00));
             global_time.tm_min  = bcd2bin(read_register(0x02));
@@ -108,7 +119,8 @@ static inline void rtc_update_datetime(void)
 {
     static unsigned int first_update = 1;
     // Wait until rtc is not updating.
-    while (is_updating_rtc()) {}
+    while (is_updating_rtc()) {
+    }
     // Read the values.
     rtc_read_datetime();
     if (first_update) {
@@ -116,7 +128,8 @@ static inline void rtc_update_datetime(void)
             // Save the previous global time.
             previous_global_time = global_time;
             // Wait until rtc is not updating.
-            while (is_updating_rtc()) {}
+            while (is_updating_rtc()) {
+            }
             // Read the values.
             rtc_read_datetime();
         } while (!rtc_are_different(&previous_global_time, &global_time));
@@ -126,10 +139,7 @@ static inline void rtc_update_datetime(void)
 
 /// @brief Callback for RTC.
 /// @param f the current registers.
-static inline void rtc_handler_isr(pt_regs *f)
-{
-    rtc_update_datetime();
-}
+static inline void rtc_handler_isr(pt_regs *f) { rtc_update_datetime(); }
 
 void gettime(tm_t *time)
 {
@@ -142,11 +152,11 @@ int rtc_initialize(void)
     unsigned char status;
 
     status = read_register(0x0B);
-    status |= 0x02u;            // 24 hour clock
-    status |= 0x10u;            // update ended interrupts
-    status &= ~0x20u;           // no alarm interrupts
-    status &= ~0x40u;           // no periodic interrupt
-    is_bcd = !(status & 0x04u); // check if data type is BCD
+    status |= 0x02U;            // 24 hour clock
+    status |= 0x10U;            // update ended interrupts
+    status &= ~0x20U;           // no alarm interrupts
+    status &= ~0x40U;           // no periodic interrupt
+    is_bcd = !(status & 0x04U); // check if data type is BCD
     write_register(0x0B, status);
 
     read_register(0x0C);

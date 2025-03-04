@@ -8,78 +8,75 @@
 /// See LICENSE.md for details.
 
 #include <signal.h>
-#include <stdlib.h>
 #include <stdio.h>
-#include <string.h>
-#include <time.h>
+#include <stdlib.h>
 #include <strerror.h>
+#include <string.h>
 #include <sys/wait.h>
-#include <sys/unistd.h>
+#include <time.h>
+#include <unistd.h>
 
-/// @brief Signal handler for SIGALRM.
-/// @param sig The signal number.
-void alarm_handler(int sig)
+// Global variables to track timer events
+volatile int timer_fired = 0;
+int timer_count          = 0;
+
+// Signal handler for the timer
+void timer_handler(int signum)
 {
-    printf("handler(%d) : Starting handler.\n", sig);
-    if (sig == SIGALRM) {
-        struct itimerval val = { 0 };
-        // Get the current value of the interval timer.
-        if (getitimer(ITIMER_REAL, &val) == -1) {
-            perror("getitimer failed");
-            exit(EXIT_FAILURE);
-        }
-        printf("(sec: %ld, usec: %ld)\n", val.it_interval.tv_sec, val.it_interval.tv_usec);
-
-        static int counter = 0;
-        counter += 1;
-
-        printf("handler(%d) : Correct signal x%d\n", sig, counter);
-        if (counter == 4) {
-            struct itimerval interval = { 0 }, prev = { 0 };
-            // Stop the interval timer.
-            if (setitimer(ITIMER_REAL, &interval, &prev) == -1) {
-                perror("setitimer failed");
-                exit(EXIT_FAILURE);
-            }
-            printf("prev: (sec: %ld, usec: %ld)\n", prev.it_interval.tv_sec, prev.it_interval.tv_usec);
-            exit(EXIT_SUCCESS);
-        }
-    } else {
-        printf("handler(%d) : Wrong signal.\n", sig);
-    }
-    printf("handler(%d) : Ending handler.\n", sig);
+    timer_fired = 1;
+    timer_count++;
 }
 
-int main(int argc, char *argv[])
+int main(void)
 {
-    struct sigaction action;
     struct itimerval timer;
+    time_t start_time;
+    time_t current_time;
 
-    memset(&action, 0, sizeof(action));
-    memset(&timer, 0, sizeof(timer));
+    // Set up the signal handler for SIGALRM
+    signal(SIGALRM, timer_handler);
 
-    action.sa_handler = alarm_handler;
+    // Configure the timer to expire after 250 ms
+    timer.it_value.tv_sec  = 0;      // Initial expiration (seconds)
+    timer.it_value.tv_usec = 250000; // Initial expiration (microseconds)
 
-    // Set up the signal handler for SIGALRM.
-    if (sigaction(SIGALRM, &action, NULL) == -1) {
-        fprintf(STDERR_FILENO, "Failed to set signal handler: %s\n", strerror(errno));
-        return EXIT_FAILURE;
-    }
+    // Configure periodicity: 250 ms interval
+    timer.it_interval.tv_sec  = 0;      // Periodic interval (seconds)
+    timer.it_interval.tv_usec = 250000; // Periodic interval (microseconds)
 
-    // Configure the timer to expire after 1 second and then every 1 second.
-    timer.it_value.tv_sec     = 1; // Initial delay.
-    timer.it_value.tv_usec    = 0;
-    timer.it_interval.tv_sec  = 1; // Interval for periodic timer.
-    timer.it_interval.tv_usec = 0;
-
-    // Start the interval timer.
+    // Start the timer
     if (setitimer(ITIMER_REAL, &timer, NULL) == -1) {
-        perror("setitimer failed");
+        perror("setitimer");
         return EXIT_FAILURE;
     }
 
-    // Infinite loop to keep the program running until the timer stops.
-    while (1) {}
+    // Record the start time
+    start_time = time(NULL);
+
+    // Test periodicity: wait for 5 timer events
+    while (timer_count < 5) {
+        if (timer_fired) {
+            timer_fired = 0; // Reset the flag
+
+            // Record the current time
+            current_time = time(NULL);
+
+            // Print the elapsed time since the start
+            printf("Timer event %d fired at %u seconds since start\n", timer_count, current_time - start_time);
+        }
+    }
+
+    // Stop the timer
+    timer.it_value.tv_sec     = 0;
+    timer.it_value.tv_usec    = 0;
+    timer.it_interval.tv_sec  = 0;
+    timer.it_interval.tv_usec = 0;
+    if (setitimer(ITIMER_REAL, &timer, NULL) == -1) {
+        perror("setitimer (stop)");
+        return EXIT_FAILURE;
+    }
+
+    printf("Test completed: Timer fired %d times\n", timer_count);
 
     return EXIT_SUCCESS;
 }

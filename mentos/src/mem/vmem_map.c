@@ -16,11 +16,14 @@
 /// Virtual addresses manager.
 static virt_map_page_manager_t virt_default_mapping;
 
+/// Size of the virtual memory.
+#define VIRTUAL_MEMORY_SIZE (128 * M)
+
 /// Number of virtual memory pages.
-#define VIRTUAL_MEMORY_PAGES_COUNT (VIRTUAL_MEMORY_SIZE_MB * 256)
+#define VIRTUAL_MEMORY_PAGES_COUNT (VIRTUAL_MEMORY_SIZE / PAGE_SIZE)
 
 /// Base address for virtual memory mapping.
-#define VIRTUAL_MAPPING_BASE (PROCAREA_END_ADDR + 0x38000000)
+#define VIRTUAL_MAPPING_BASE (PROCAREA_END_ADDR + 0x28000000UL)
 
 /// Converts a virtual page to its address.
 #define VIRT_PAGE_TO_ADDRESS(page) ((((page) - virt_pages) * PAGE_SIZE) + VIRTUAL_MAPPING_BASE)
@@ -34,27 +37,39 @@ virt_map_page_t virt_pages[VIRTUAL_MEMORY_PAGES_COUNT];
 int virt_init(void)
 {
     // Initialize the buddy system for virtual memory management.
+    // This system manages free pages in the virtual memory area.
     buddy_system_init(
-        &virt_default_mapping.bb_instance,
-        "virt_manager",
-        virt_pages,
-        BBSTRUCT_OFFSET(virt_map_page_t, bbpage),
-        sizeof(virt_map_page_t),
-        VIRTUAL_MEMORY_PAGES_COUNT);
+        &virt_default_mapping.bb_instance,        // Buddy system instance for virtual memory.
+        "virt_manager",                           // Name for the buddy system.
+        virt_pages,                               // Number of pages managed by the buddy system.
+        BBSTRUCT_OFFSET(virt_map_page_t, bbpage), // Offset of the buddy system structure.
+        sizeof(virt_map_page_t),                  // Size of each memory page.
+        VIRTUAL_MEMORY_PAGES_COUNT);              // Total number of virtual memory pages.
 
-    // Get the main page directory.
+    // Get the main page directory for the system.
     page_directory_t *main_pgd = paging_get_main_directory();
-    // Error handling: Failed to get the main page directory.
+
+    // Error handling: If the main page directory could not be retrieved, return failure.
     if (!main_pgd) {
         pr_crit("Failed to get the main page directory\n");
-        return -1; // Return -1 to indicate failure.
+        return -1;
     }
 
-    // Calculate the starting page frame number, page table, and table index.
-    uint32_t start_virt_pfn     = VIRTUAL_MAPPING_BASE / PAGE_SIZE;
-    uint32_t start_virt_pgt     = start_virt_pfn / 1024;
+    // Calculate the starting Page Frame Number (PFN), page table index, and
+    // table index.
+    // VIRTUAL_MAPPING_BASE is the base address of the virtual memory area.
+    // Divide by PAGE_SIZE to calculate the starting page frame number.
+    uint32_t start_virt_pfn = VIRTUAL_MAPPING_BASE / PAGE_SIZE;
+
+    // Calculate the page table index (1024 entries per page table in a 32-bit
+    // system).
+    uint32_t start_virt_pgt = start_virt_pfn / 1024;
+
+    // Calculate the table index for the specific page inside the page table.
     uint32_t start_virt_tbl_idx = start_virt_pfn % 1024;
 
+    // Initialize the number of pages to allocate based on
+    // VIRTUAL_MEMORY_PAGES_COUNT.
     uint32_t pfn_num = VIRTUAL_MEMORY_PAGES_COUNT;
 
     // Allocate all page tables inside the main directory, so they will be
@@ -62,10 +77,10 @@ int virt_init(void)
     page_dir_entry_t *entry;
     page_table_t *table;
     for (uint32_t i = start_virt_pgt; i < 1024 && (pfn_num > 0); i++) {
-        // Get the page directory entry.
+        // Get the page directory entry for the current page table index.
         entry = main_pgd->entries + i;
 
-        // Alloc virtual page table.
+        // Set up the page directory entry.
         entry->present   = 1; // Mark the entry as present
         entry->rw        = 0; // Read-only
         entry->global    = 1; // Global page
@@ -81,10 +96,11 @@ int virt_init(void)
             return -1;
         }
 
-        // Determine the starting page index.
+        // Determine the starting page index for the current page table. If this
+        // is the first table, start from the previously calculated index.
         uint32_t start_page = (i == start_virt_pgt) ? start_virt_tbl_idx : 0;
 
-        // Initialize the pages in the table.
+        // Initialize the pages within the page table.
         for (uint32_t j = start_page; j < 1024 && (pfn_num > 0); j++, pfn_num--) {
             table->pages[j].frame   = 0; // No frame allocated
             table->pages[j].rw      = 0; // Read-only
@@ -104,11 +120,11 @@ int virt_init(void)
         // Get the physical address.
         uint32_t phy_addr = get_physical_address_from_page(table_page);
 
-        // Set the frame address in the page directory entry.
+        // Set the physical frame address in the page directory entry.
         entry->frame = phy_addr >> 12u;
     }
 
-    return 0; // Return success.
+    return 0;
 }
 
 /// @brief Allocates a virtual page, given the page frame count.
@@ -124,7 +140,7 @@ static virt_map_page_t *_alloc_virt_pages(uint32_t pfn_count)
     // Error handling: failed to allocate pages from the buddy system.
     if (!bbpage) {
         pr_crit("Failed to allocate pages from the buddy system\n");
-        return NULL; // Return NULL to indicate failure.
+        return NULL;
     }
 
     // Convert the buddy system page to a virtual map page.
@@ -132,10 +148,10 @@ static virt_map_page_t *_alloc_virt_pages(uint32_t pfn_count)
     // Error handling: failed to convert from buddy system page to virtual map page.
     if (!vpage) {
         pr_emerg("Failed to convert from buddy system page to virtual map page.\n");
-        return NULL; // Return NULL to indicate failure.
+        return NULL;
     }
 
-    return vpage; // Return the allocated virtual page.
+    return vpage;
 }
 
 uint32_t virt_map_physical_pages(page_t *page, int pfn_count)
@@ -145,11 +161,19 @@ uint32_t virt_map_physical_pages(page_t *page, int pfn_count)
     // Error handling: failed to allocate virtual pages.
     if (!vpage) {
         pr_crit("Failed to allocate virtual pages\n");
-        return 0; // Return 0 to indicate failure.
+        return 0;
     }
 
     // Convert the virtual page to its corresponding virtual address.
-    uint32_t virt_address = VIRT_PAGE_TO_ADDRESS(vpage);
+    uint32_t vaddr = VIRT_PAGE_TO_ADDRESS(vpage);
+
+    if (!is_valid_virtual_address(vaddr)) {
+        pr_crit(
+            "The virtual address 0x%p associated with the virtual page 0x%p is "
+            "not valid.\n",
+            vaddr, vpage);
+        return 0;
+    }
 
     // Get the physical address of the given page.
     uint32_t phy_address = get_physical_address_from_page(page);
@@ -159,17 +183,13 @@ uint32_t virt_map_physical_pages(page_t *page, int pfn_count)
     // Error handling: Failed to get the main page directory.
     if (!main_pgd) {
         pr_crit("Failed to get the main page directory\n");
-        return -1; // Return -1 to indicate failure.
+        return 0;
     }
 
     // Update the virtual memory area with the new mapping.
-    mem_upd_vm_area(
-        main_pgd, virt_address,
-        phy_address,
-        pfn_count * PAGE_SIZE,
-        MM_PRESENT | MM_RW | MM_GLOBAL | MM_UPDADDR);
+    mem_upd_vm_area(main_pgd, vaddr, phy_address, pfn_count * PAGE_SIZE, MM_PRESENT | MM_RW | MM_GLOBAL | MM_UPDADDR);
 
-    return virt_address; // Return the virtual address of the mapped pages.
+    return vaddr;
 }
 
 virt_map_page_t *virt_map_alloc(uint32_t size)
@@ -182,62 +202,70 @@ virt_map_page_t *virt_map_alloc(uint32_t size)
     // Error handling: failed to allocate virtual pages.
     if (!vpages) {
         pr_crit("Failed to allocate virtual pages for size %u\n", size);
-        return NULL; // Return NULL to indicate failure.
+        return NULL;
     }
 
-    return vpages; // Return the pointer to the allocated virtual pages.
+    // Return the pointer to the allocated virtual pages.
+    return vpages;
 }
 
 uint32_t virt_map_vaddress(mm_struct_t *mm, virt_map_page_t *vpage, uint32_t vaddr, uint32_t size)
 {
-    // Error handling: ensure the memory management structure and page directory are valid.
+    // Ensure the memory management structure and page directory are valid.
     if (!mm || !mm->pgd) {
         pr_crit("Invalid memory management structure or page directory\n");
-        return 0; // Return 0 to indicate failure.
+        return 0;
     }
 
     // Convert the virtual map page to its corresponding virtual address.
     uint32_t start_map_virt_address = VIRT_PAGE_TO_ADDRESS(vpage);
+
+    // Validate the start address of the virtual map.
+    if (!is_valid_virtual_address(start_map_virt_address)) {
+        pr_crit(
+            "Invalid start virtual address for mapping 0x%08x, associated "
+            "virtual page: 0x%p\n",
+            start_map_virt_address, vpage);
+        return 0;
+    }
 
     // Get the main page directory.
     page_directory_t *main_pgd = paging_get_main_directory();
     // Error handling: Failed to get the main page directory.
     if (!main_pgd) {
         pr_crit("Failed to get the main page directory\n");
-        return -1; // Return -1 to indicate failure.
+        return 0;
     }
 
     // Clone the source vaddr the the requested virtual memory portion.
     mem_clone_vm_area(
-        mm->pgd,
-        main_pgd,
-        vaddr,
-        start_map_virt_address,
-        size,
-        MM_PRESENT | MM_RW | MM_GLOBAL | MM_UPDADDR);
+        mm->pgd, main_pgd, vaddr, start_map_virt_address, size, MM_PRESENT | MM_RW | MM_GLOBAL | MM_UPDADDR);
 
-    return start_map_virt_address; // Return the starting virtual address of the mapped area.
-}
-
-int virtual_check_address(uint32_t addr)
-{
-    return addr >= VIRTUAL_MAPPING_BASE; // && addr < VIRTUAL_MAPPING_BASE + VIRTUAL_MEMORY_PAGES_COUNT * PAGE_SIZE;
+    // Return the starting virtual address of the mapped area.
+    return start_map_virt_address;
 }
 
 int virt_unmap(uint32_t addr)
 {
+    // Ensure it is a valid virtual address.
+    if (!is_valid_virtual_address(addr)) {
+        pr_crit("The provided address 0x%p is not a valid virtual address.\n", addr);
+        return -1;
+    }
+
     // Convert the virtual address to its corresponding virtual map page.
     virt_map_page_t *page = VIRT_ADDRESS_TO_PAGE(addr);
+
     // Error handling: ensure the page is valid.
     if (!page) {
         pr_crit("Failed to convert address %u to virtual map page\n", addr);
-        return -1; // Return -1 to indicate failure.
+        return -1;
     }
 
     // Unmap the virtual map page.
     virt_unmap_pg(page);
 
-    return 0; // Return success.
+    return 0;
 }
 
 int virt_unmap_pg(virt_map_page_t *page)
@@ -245,7 +273,7 @@ int virt_unmap_pg(virt_map_page_t *page)
     // Error handling: ensure the page is valid.
     if (!page) {
         pr_crit("Invalid virtual map page\n");
-        return -1; // Return -1 to indicate failure.
+        return -1;
     }
 
     // Convert the virtual map page to its corresponding virtual address.
@@ -256,7 +284,7 @@ int virt_unmap_pg(virt_map_page_t *page)
     // Error handling: Failed to get the main page directory.
     if (!main_pgd) {
         pr_crit("Failed to get the main page directory\n");
-        return -1; // Return -1 to indicate failure.
+        return -1;
     }
 
     // Set all virtual pages as not present to avoid unwanted memory accesses by the kernel.
@@ -265,7 +293,7 @@ int virt_unmap_pg(virt_map_page_t *page)
     // Free the pages in the buddy system.
     bb_free_pages(&virt_default_mapping.bb_instance, &page->bbpage);
 
-    return 0; // Return success.
+    return 0;
 }
 
 // FIXME: Check if this function should support unaligned page-boundaries copy

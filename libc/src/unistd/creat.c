@@ -3,8 +3,14 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "sys/unistd.h"
-#include "sys/errno.h"
+#include "errno.h"
 #include "system/syscall_types.h"
+#include "unistd.h"
 
-_syscall2(int, creat, const char *, pathname, mode_t, mode)
+// _syscall2(int, creat, const char *, pathname, mode_t, mode)
+int creat(const char *pathname, mode_t mode)
+{
+    long __res;
+    __inline_syscall_2(__res, creat, pathname, mode);
+    __syscall_return(int, __res);
+}

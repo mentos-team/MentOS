@@ -7,11 +7,11 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include <stdio.h>
 #include <sched.h>
-#include <sys/unistd.h>
-#include <strerror.h>
+#include <stdio.h>
 #include <stdlib.h>
+#include <strerror.h>
+#include <unistd.h>
 
 int main(int argc, char *argv[])
 {
@@ -40,7 +40,7 @@ int main(int argc, char *argv[])
 
     // Fork the first child process.
     if (fork() == 0) {
-        char *_argv[] = { "/bin/tests/t_periodic2", NULL };
+        char *_argv[] = {"/bin/tests/t_periodic2", NULL};
         execv(_argv[0], _argv);
         fprintf(STDERR_FILENO, "Failed to execute %s: %s\n", _argv[0], strerror(errno));
         return EXIT_FAILURE;
@@ -48,7 +48,7 @@ int main(int argc, char *argv[])
 
     // Fork the second child process.
     if (fork() == 0) {
-        char *_argv[] = { "/bin/tests/t_periodic3", NULL };
+        char *_argv[] = {"/bin/tests/t_periodic3", NULL};
         execv(_argv[0], _argv);
         fprintf(STDERR_FILENO, "Failed to execute %s: %s\n", _argv[0], strerror(errno));
         return EXIT_FAILURE;

@@ -3,21 +3,34 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
+#include "errno.h"
 #include "fs/procfs.h"
 #include "io/debug.h"
 #include "process/process.h"
 #include "string.h"
-#include "sys/errno.h"
 
+/// @brief Reads data from the /proc/feedback file.
+///
+/// @param file A pointer to the vfs_file_t structure representing the file to read from.
+/// @param buf A buffer to store the read data (unused in this example).
+/// @param offset The offset from where the read operation should begin (unused in this example).
+/// @param nbyte The number of bytes to read (unused in this example).
+/// @return Always returns 0 on success, or -ENOENT if the file is NULL.
 static ssize_t procfb_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyte)
 {
+    // Check if the file pointer is NULL.
     if (!file) {
-        pr_err("Received a NULL file.\n");
-        return -ENOENT;
+        pr_err("procfb_read: Received a NULL file.\n");
+        return -ENOENT; // Return an error if the file is NULL.
     }
+
+    // Check if the file name matches "/proc/feedback".
     if (!strcmp(file->name, "/proc/feedback")) {
-        pr_alert("Return scheduling feedback information.\n");
+        pr_alert("procfb_read: Returning scheduling feedback information.\n");
+        // TODO: Add logic to return actual feedback information here.
     }
+
+    // Return 0 to indicate success.
     return 0;
 }
 

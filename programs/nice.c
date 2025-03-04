@@ -3,11 +3,11 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include <sys/unistd.h>
-#include <string.h>
 #include <stdio.h>
+#include <string.h>
+#include <unistd.h>
 
-int main(int argc, char** argv)
+int main(int argc, char **argv)
 {
     if (argc == 1) {
         int current = nice(0);
@@ -23,9 +23,10 @@ int main(int argc, char** argv)
         printf("Usage: %s <increment>\n", argv[0]);
         return 0;
     }
-    int increment = atoi(argv[1]);
-    if ((increment < -40) || (increment > 40)) {
-        printf("Error: You must provide a value between (-40,+40).\n", increment);
+    char *endptr;
+    long increment = strtol(argv[1], &endptr, 10);
+    if (*endptr != '\0' || increment < -40 || increment > 40) {
+        printf("Error: You must provide a value between (-40,+40).\n");
         return 1;
     }
     int newNice = nice(increment);
