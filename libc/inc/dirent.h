@@ -41,7 +41,7 @@ static const char dt_char_array[] = {
 };
 
 /// Directory entry.
-typedef struct dirent_t {
+typedef struct dirent {
     ino_t d_ino;             ///< Inode number.
     off_t d_off;             ///< Offset to next linux_dirent.
     unsigned short d_reclen; ///< Length of this linux_dirent.

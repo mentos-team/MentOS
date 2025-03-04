@@ -14,7 +14,7 @@
 /// @param type The data type of the array elements.
 /// @param name The base name for the generated structure and functions.
 #define DECLARE_ARRAY(type, name)                                                                                      \
-    typedef struct arr_##name##_t {                                                                                    \
+    typedef struct arr_##name##{                                                                                       \
         const unsigned size;                                                                                           \
         type *buffer;                                                                                                  \
     } arr_##name##_t;                                                                                                  \

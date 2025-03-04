@@ -13,7 +13,7 @@
 #define MAX_PROCESSES 256
 
 /// @brief Structure that contains information about live processes.
-typedef struct runqueue_t {
+typedef struct runqueue {
     /// Number of queued processes.
     size_t num_active;
     /// Number of queued periodic processes.
@@ -25,7 +25,7 @@ typedef struct runqueue_t {
 } runqueue_t;
 
 /// @brief Structure that describes scheduling parameters.
-typedef struct sched_param_t {
+typedef struct sched_param {
     /// Static execution priority.
     int sched_priority;
     /// Expected period of the task

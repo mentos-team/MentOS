@@ -22,7 +22,7 @@
 
 /// @brief Page descriptor. Use as a bitmap to understand the order of the block
 /// and if it is free or allocated.
-typedef struct page_t {
+typedef struct page {
     /// @brief Array of flags encoding also the zone number to which the page
     /// frame belongs.
     unsigned long flags;
@@ -44,7 +44,7 @@ typedef struct page_t {
     union {
         /// @brief Holds the slab page used to handle this memory region (root
         /// page).
-        struct page_t *slab_main_page;
+        struct page *slab_main_page;
         /// @brief Holds the slab cache pointer on the main page.
         kmem_cache_t *slab_cache;
     } container;
@@ -73,7 +73,7 @@ enum zone_type {
 };
 
 /// @brief Data structure to differentiate memory zone.
-typedef struct zone_t {
+typedef struct zone {
     /// Zone's name.
     char *name;
     /// Pointer to first page descriptor of the zone.
@@ -92,7 +92,7 @@ typedef struct zone_t {
 
 /// @brief Data structure to rapresent a memory node. In Uniform memory access
 /// (UMA) architectures there is only one node called contig_page_data.
-typedef struct pg_data_t {
+typedef struct pg_data {
     /// Zones of the node.
     zone_t node_zones[__MAX_NR_ZONES];
     /// Number of zones in the node.

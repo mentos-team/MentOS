@@ -387,11 +387,11 @@ static int __notify_parent(struct task_struct *current, int signr)
 /// @param q pensing signals.
 static void __rm_from_queue(sigset_t *mask, sigpending_t *q)
 {
-    struct sigqueue_t *entry;
+    sigqueue_t *entry;
     list_for_each_safe_decl(it, tmp, &q->list)
     {
         // Get the entry.
-        entry = list_entry(it, struct sigqueue_t, list);
+        entry = list_entry(it, sigqueue_t, list);
         // Remove the signal.
         if (sigismember(mask, entry->info.si_signo)) {
             list_head_remove(it);

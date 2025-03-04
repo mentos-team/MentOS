@@ -25,7 +25,7 @@
 #define STORED_PAGES 10                   ///< The number of stored pages.
 
 /// @brief Stores the association between ANSI colors and pure VIDEO colors.
-struct ansi_color_map_t {
+struct ansi_color_map {
     /// The ANSI color number.
     uint8_t ansi_color;
     /// The VIDEO color number.

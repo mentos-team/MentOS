@@ -8,7 +8,7 @@
 #include "stdint.h"
 
 /// @brief Structure of a mutex.
-typedef struct mutex_t {
+typedef struct mutex {
     /// The state of the mutex.
     uint8_t state;
     /// The owner of the mutex.

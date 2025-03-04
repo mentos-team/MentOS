@@ -10,13 +10,13 @@
 #include "mem/zone_allocator.h"
 
 /// @brief Virtual mapping manager.
-typedef struct virt_map_page_manager_t {
+typedef struct virt_map_page_manager {
     /// The buddy system used to manage the pages.
     bb_instance_t bb_instance;
 } virt_map_page_manager_t;
 
 /// @brief Virtual mapping.
-typedef struct virt_map_page_t {
+typedef struct virt_map_page {
     /// A buddy system page.
     bb_page_t bbpage;
 } virt_map_page_t;

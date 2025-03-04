@@ -32,7 +32,7 @@
 // ============================================================================
 
 /// @brief Information concerning a file.
-typedef struct procfs_file_t {
+typedef struct procfs_file {
     /// Number used as delimiter, it must be set to 0xBF.
     int magic;
     /// The file inode.
@@ -63,7 +63,7 @@ typedef struct procfs_file_t {
 
 /// @brief The details regarding the filesystem.
 /// @brief Contains the number of files inside the procfs filesystem.
-typedef struct procfs_t {
+typedef struct procfs {
     /// Number of files.
     unsigned int nfiles;
     /// List of headers.
@@ -876,7 +876,7 @@ static file_system_type_t procfs_file_system_type = {.name = "procfs", .fs_flags
 int procfs_module_init(void)
 {
     // Initialize the procfs.
-    memset(&fs, 0, sizeof(struct procfs_t));
+    memset(&fs, 0, sizeof(procfs_t));
     // Initialize the cache.
     fs.procfs_file_cache = KMEM_CREATE(procfs_file_t);
     // Initialize the list of procfs files.

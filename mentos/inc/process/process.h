@@ -29,7 +29,7 @@
 /// in which 0 to 99 for real time and 100 to 139 for users.
 /// The nice value range is -20 to +19 where -20 is highest, 0 default and +19
 /// is lowest. relation between nice value and priority is : PR = 20 + NI.
-typedef struct sched_entity_t {
+typedef struct sched_entity {
     /// Static execution priority.
     int prio;
 
@@ -65,7 +65,7 @@ typedef struct sched_entity_t {
 } sched_entity_t;
 
 /// @brief Stores the status of CPU and FPU registers.
-typedef struct thread_struct_t {
+typedef struct thread_struct {
     /// Stored status of registers.
     pt_regs regs;
     /// Stored status of registers befor jumping into a signal handler.

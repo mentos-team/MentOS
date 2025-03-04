@@ -24,7 +24,7 @@ typedef void (*kmem_fun_t)(void *);
     kmem_cache_create(#objtype, sizeof(objtype), alignof(objtype), GFP_KERNEL, (kmem_fun_t)(ctor), NULL)
 
 /// @brief Stores the information of a cache.
-typedef struct kmem_cache_t {
+typedef struct kmem_cache {
     /// Link to place this cache in a global list of caches.
     list_head_t cache_list;
     /// Name of the cache.

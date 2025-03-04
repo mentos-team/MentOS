@@ -29,7 +29,7 @@
 #include "system/panic.h"
 
 /// @brief IDENTIFY device data (response to 0xEC).
-typedef struct ata_identity_t {
+typedef struct ata_identity {
     /// Word      0 : General configuration.
     struct {
         /// Reserved.
@@ -135,7 +135,7 @@ typedef struct ata_identity_t {
 ///         |    byte 3  |  byte 2  |  byte 1  |  byte 0    |
 /// Dword 0 |  Memory Region Physical Base Address [31:1] |0|
 /// Dword 1 |  EOT | reserved       | Byte Count   [15:1] |0|
-typedef struct prdt_t {
+typedef struct prdt {
     /// The first 4 bytes specify the byte address of a physical memory region.
     unsigned int physical_address;
     /// The next two bytes specify the count of the region in bytes (64K byte limit per region).
@@ -145,7 +145,7 @@ typedef struct prdt_t {
 } prdt_t;
 
 /// @brief Stores information about an ATA device.
-typedef struct ata_device_t {
+typedef struct ata_device {
     /// Name of the device.
     char name[NAME_MAX];
     /// Name of the device.

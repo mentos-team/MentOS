@@ -6,7 +6,7 @@
 #pragma once
 
 /// @brief Define boolean value.
-typedef enum bool_t {
+typedef enum bool {
     false, ///< [0] False.
     true   ///< [1] True.
 } __attribute__((__packed__)) bool_t;

@@ -12,6 +12,8 @@
         "span": "cpp",
         "format": "cpp",
         "cstdio": "c",
-        "algorithm": "c"
+        "algorithm": "c",
+        "fdc.h": "c",
+        "rbtree.h": "c"
     }
 }

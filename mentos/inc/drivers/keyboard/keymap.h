@@ -20,7 +20,7 @@ typedef enum {
 } keymap_type_t;
 
 /// @brief Defines the mapping of a single scancode towards a set of characters.
-typedef struct keymap_t {
+typedef struct keymap {
     /// The basic mapping.
     int normal;
     /// The mapping when shifted.

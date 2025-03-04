@@ -30,7 +30,7 @@
 #define MAX_PAGE_DIR_ENTRIES   1024
 
 /// @brief An entry of a page directory.
-typedef struct page_dir_entry_t {
+typedef struct page_dir_entry {
     unsigned int present : 1;   ///< Page is present in memory.
     unsigned int rw : 1;        ///< Read/write permission (0 = read-only, 1 = read/write).
     unsigned int user : 1;      ///< User/supervisor (0 = supervisor, 1 = user).
@@ -45,7 +45,7 @@ typedef struct page_dir_entry_t {
 } page_dir_entry_t;
 
 /// @brief An entry of a page table.
-typedef struct page_table_entry_t {
+typedef struct page_table_entry {
     unsigned int present : 1;    ///< Page is present in memory.
     unsigned int rw : 1;         ///< Read/write permission (0 = read-only, 1 = read/write).
     unsigned int user : 1;       ///< User/supervisor (0 = supervisor, 1 = user).
@@ -74,14 +74,14 @@ enum MEMMAP_FLAGS {
 /// @brief A page table.
 /// @details
 /// It contains 1024 entries which can be addressed by 10 bits (log_2(1024)).
-typedef struct page_table_t {
+typedef struct page_table {
     /// @brief Array of page table entries.
     page_table_entry_t pages[MAX_PAGE_TABLE_ENTRIES];
 } __attribute__((aligned(PAGE_SIZE))) page_table_t;
 
 /// @brief A page directory.
 /// @details In the two-level paging, this is the first level.
-typedef struct page_directory_t {
+typedef struct page_directory {
     /// @brief Array of page directory entries.
     /// @details
     /// We need a table that contains virtual addresses, so that we can actually
@@ -90,9 +90,9 @@ typedef struct page_directory_t {
 } __attribute__((aligned(PAGE_SIZE))) page_directory_t;
 
 /// @brief Virtual Memory Area, used to store details of a process segment.
-typedef struct vm_area_struct_t {
+typedef struct vm_area_struct {
     /// Pointer to the memory descriptor associated with this area.
-    struct mm_struct_t *vm_mm;
+    struct mm_struct *vm_mm;
     /// Start address of the segment, inclusive.
     uint32_t vm_start;
     /// End address of the segment, exclusive.
@@ -106,7 +106,7 @@ typedef struct vm_area_struct_t {
 } vm_area_struct_t;
 
 /// @brief Memory Descriptor, used to store details about the memory of a user process.
-typedef struct mm_struct_t {
+typedef struct mm_struct {
     /// List of memory areas (vm_area_struct references).
     list_head_t mmap_list;
     /// Pointer to the last used memory area.

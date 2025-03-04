@@ -59,7 +59,7 @@ static int resource_id = -1;
 // ============================================================================
 
 /// @brief Types of file in an EXT2 filesystem.
-typedef enum ext2_file_type_t {
+typedef enum ext2_file_type {
     ext2_file_type_unknown,          ///< Unknown type.
     ext2_file_type_regular_file,     ///< Regular file.
     ext2_file_type_directory,        ///< Directory.
@@ -76,7 +76,7 @@ typedef enum ext2_file_type_t {
 /// bytes from the start of the device, and it is essential to mounting the
 /// filesystem. Since it is so important, backup copies of the superblock are
 /// stored in block groups throughout the filesystem.
-typedef struct ext2_superblock_t {
+typedef struct ext2_superblock {
     /// @brief Total number of inodes in file system.
     uint32_t inodes_count;
     /// @brief Total number of blocks in file system
@@ -203,7 +203,7 @@ typedef struct ext2_superblock_t {
 } ext2_superblock_t;
 
 /// @brief Entry of the Block Group Descriptor Table (BGDT).
-typedef struct ext2_group_descriptor_t {
+typedef struct ext2_group_descriptor {
     /// @brief The block number of the block bitmap for this Block Group
     uint32_t block_bitmap;
     /// @brief The block number of the inode allocation bitmap for this Block Group.
@@ -223,7 +223,7 @@ typedef struct ext2_group_descriptor_t {
 } ext2_group_descriptor_t;
 
 /// @brief The ext2 inode.
-typedef struct ext2_inode_t {
+typedef struct ext2_inode {
     /// @brief File mode
     uint16_t mode;
     /// @brief The user identifiers of the owners.
@@ -277,7 +277,7 @@ typedef struct ext2_inode_t {
 } ext2_inode_t;
 
 /// @brief The header of an ext2 directory entry.
-typedef struct ext2_dirent_t {
+typedef struct ext2_dirent {
     /// Number of the inode that this directory entry points to.
     uint32_t inode;
     /// Length of this directory entry. Must be a multiple of 4.
@@ -291,7 +291,7 @@ typedef struct ext2_dirent_t {
 } ext2_dirent_t;
 
 /// @brief The details regarding the filesystem.
-typedef struct ext2_filesystem_t {
+typedef struct ext2_filesystem {
     /// Pointer to the block device.
     vfs_file_t *block_device;
     /// Device superblock, contains important information.
@@ -328,7 +328,7 @@ typedef struct ext2_filesystem_t {
 } ext2_filesystem_t;
 
 /// @brief Structure used when searching for a directory entry.
-typedef struct ext2_direntry_search_t {
+typedef struct ext2_direntry_search {
     /// The inode of the parent directory.
     ino_t parent_inode;
     /// The index of the block where the direntry resides.
@@ -1902,7 +1902,7 @@ static ssize_t ext2_write_inode_data(
 // ============================================================================
 
 /// @brief Iterator for visiting the directory entries.
-typedef struct ext2_direntry_iterator_t {
+typedef struct ext2_direntry_iterator {
     ext2_filesystem_t *fs;   ///< A pointer to the filesystem.
     uint8_t *cache;          ///< Cache used for reading.
     ext2_inode_t *inode;     ///< A pointer to the directory inode.

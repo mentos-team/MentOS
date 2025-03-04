@@ -160,7 +160,7 @@ typedef struct elf_symbol {
 } elf_symbol_t;
 
 /// @brief Holds information about relocation object (that do not need an addend).
-typedef struct elf_rel_t {
+typedef struct elf_rel {
     /// TODO: Comment.
     uint32_t r_offset;
     /// TODO: Comment.
@@ -168,7 +168,7 @@ typedef struct elf_rel_t {
 } elf_rel_t;
 
 /// @brief Holds information about relocation object (that need an addend).
-typedef struct elf_rela_t {
+typedef struct elf_rela {
     /// TODO: Comment.
     uint32_t r_offset;
     /// TODO: Comment.

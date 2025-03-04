@@ -14,11 +14,11 @@
 // Opaque types.
 
 /// @brief Node of the tree.
-typedef struct rbtree_node_t rbtree_node_t;
+typedef struct rbtree_node rbtree_node_t;
 /// @brief The tree itself.
-typedef struct rbtree_t rbtree_t;
+typedef struct rbtree rbtree_t;
 /// @brief Iterator for traversing the tree.
-typedef struct rbtree_iter_t rbtree_iter_t;
+typedef struct rbtree_iter rbtree_iter_t;
 
 // ============================================================================
 // Comparison functions.

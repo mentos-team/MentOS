@@ -8,7 +8,7 @@
 #include "stddef.h"
 
 /// @brief Stores user account information.
-typedef struct passwd_t {
+typedef struct passwd {
     char *pw_name;   ///< User's login name.
     char *pw_passwd; ///< Encrypted password (not currently).
     uid_t pw_uid;    ///< User ID.
