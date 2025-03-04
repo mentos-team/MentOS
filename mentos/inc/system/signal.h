@@ -224,7 +224,7 @@ typedef struct siginfo_t {
 /// @brief An entry of the signal queue.
 typedef struct sigqueue_t {
     /// Links for the pending signal queue’s list.
-    list_head list;
+    list_head_t list;
     /// Flags associated with the queued signal.
     int flags;
     /// Describes the event that raised the signal.
@@ -236,7 +236,7 @@ typedef struct sigqueue_t {
 /// @brief Keeps information of pending signals.
 typedef struct sigpending_t {
     /// Head of the list of pending signals.
-    list_head list;
+    list_head_t list;
     /// The mask which can be queried to know which signals are pending.
     sigset_t signal;
 } sigpending_t;

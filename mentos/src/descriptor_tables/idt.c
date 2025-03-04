@@ -131,8 +131,8 @@ static inline void __idt_set_gate(uint8_t index, interrupt_handler_t handler, ui
 {
     uintptr_t base_prt            = (uintptr_t)handler;
     // Assign the base values.
-    idt_table[index].offset_low   = (base_prt & 0xFFFFu);
-    idt_table[index].offset_high  = (base_prt >> 16u) & 0xFFFFu;
+    idt_table[index].offset_low   = (base_prt & 0xFFFFU);
+    idt_table[index].offset_high  = (base_prt >> 16U) & 0xFFFFU;
     // Set the other fields.
     idt_table[index].reserved     = 0x00;
     idt_table[index].seg_selector = seg_sel;

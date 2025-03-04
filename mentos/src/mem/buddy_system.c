@@ -51,7 +51,7 @@ static inline int __bb_test_flag(bb_page_t *page, int flag) { return test_bit(fl
 /// @return The page we found.
 static inline bb_page_t *__get_page_from_base(bb_instance_t *instance, bb_page_t *base, unsigned int index)
 {
-    return (bb_page_t *)(((uint32_t)base) + instance->pgs_size * index);
+    return (bb_page_t *)(((uint32_t)base) + (instance->pgs_size * index));
 }
 
 /// @brief Returns the page at the given index, starting from the first page of the BB system.
@@ -478,16 +478,18 @@ unsigned long buddy_system_get_total_space(const bb_instance_t *instance) { retu
 unsigned long buddy_system_get_free_space(const bb_instance_t *instance)
 {
     unsigned int size = 0;
-    for (int order = 0; order < MAX_BUDDYSYSTEM_GFP_ORDER; ++order)
+    for (int order = 0; order < MAX_BUDDYSYSTEM_GFP_ORDER; ++order) {
         size += instance->free_area[order].nr_free * (1UL << order) * PAGE_SIZE;
+    }
     return size;
 }
 
 unsigned long buddy_system_get_cached_space(const bb_instance_t *instance)
 {
     unsigned int size = 0;
-    for (int order = 0; order < MAX_BUDDYSYSTEM_GFP_ORDER; ++order)
+    for (int order = 0; order < MAX_BUDDYSYSTEM_GFP_ORDER; ++order) {
         size += instance->free_pages_cache_size * PAGE_SIZE;
+    }
     return size;
 }
 
@@ -509,8 +511,8 @@ static void __cache_extend(bb_instance_t *instance, int count)
 static void __cache_shrink(bb_instance_t *instance, int count)
 {
     for (int i = 0; i < count; i++) {
-        list_head *page_list = list_head_pop(&instance->free_pages_cache_list);
-        bb_page_t *page      = list_entry(page_list, bb_page_t, location.cache);
+        list_head_t *page_list = list_head_pop(&instance->free_pages_cache_list);
+        bb_page_t *page        = list_entry(page_list, bb_page_t, location.cache);
         bb_free_pages(instance, page);
         instance->free_pages_cache_size--;
     }
@@ -526,8 +528,8 @@ static bb_page_t *__cached_alloc(bb_instance_t *instance)
         uint32_t pages_to_request = MID_WATERMARK_LEVEL - instance->free_pages_cache_size;
         __cache_extend(instance, pages_to_request);
     }
-    list_head *page_list = list_head_pop(&instance->free_pages_cache_list);
-    bb_page_t *page      = list_entry(page_list, bb_page_t, location.cache);
+    list_head_t *page_list = list_head_pop(&instance->free_pages_cache_list);
+    bb_page_t *page        = list_entry(page_list, bb_page_t, location.cache);
     return page;
 }
 

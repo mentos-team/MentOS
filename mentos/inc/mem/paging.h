@@ -98,7 +98,7 @@ typedef struct vm_area_struct_t {
     /// End address of the segment, exclusive.
     uint32_t vm_end;
     /// Linked list of memory areas.
-    list_head vm_list;
+    list_head_t vm_list;
     /// Page protection flags (permissions).
     pgprot_t vm_page_prot;
     /// Flags indicating attributes of the memory area.
@@ -108,7 +108,7 @@ typedef struct vm_area_struct_t {
 /// @brief Memory Descriptor, used to store details about the memory of a user process.
 typedef struct mm_struct_t {
     /// List of memory areas (vm_area_struct references).
-    list_head mmap_list;
+    list_head_t mmap_list;
     /// Pointer to the last used memory area.
     vm_area_struct_t *mmap_cache;
     /// Pointer to the process's page directory.
@@ -116,7 +116,7 @@ typedef struct mm_struct_t {
     /// Number of memory areas.
     int map_count;
     /// List of mm_structs.
-    list_head mm_list;
+    list_head_t mm_list;
     /// Start address of the code segment.
     uint32_t start_code;
     /// End address of the code segment.
@@ -147,14 +147,14 @@ typedef struct mm_struct_t {
 extern kmem_cache_t *pgtbl_cache;
 
 /// @brief Comparison function between virtual memory areas.
-/// @param vma0 Pointer to the first vm_area_struct's list_head.
-/// @param vma1 Pointer to the second vm_area_struct's list_head.
+/// @param vma0 Pointer to the first vm_area_struct's list_head_t.
+/// @param vma1 Pointer to the second vm_area_struct's list_head_t.
 /// @return 1 if vma0 starts after vma1 ends, 0 otherwise.
-static inline int vm_area_compare(const list_head *vma0, const list_head *vma1)
+static inline int vm_area_compare(const list_head_t *vma0, const list_head_t *vma1)
 {
-    // Retrieve the vm_area_struct from the list_head for vma0.
+    // Retrieve the vm_area_struct from the list_head_t for vma0.
     vm_area_struct_t *_vma0 = list_entry(vma0, vm_area_struct_t, vm_list);
-    // Retrieve the vm_area_struct from the list_head for vma1.
+    // Retrieve the vm_area_struct from the list_head_t for vma1.
     vm_area_struct_t *_vma1 = list_entry(vma1, vm_area_struct_t, vm_list);
     // Compare the start address of vma0 with the end address of vma1.
     return _vma0->vm_start > _vma1->vm_end;

@@ -183,7 +183,8 @@ static char *eaddr(char *str, char *end, unsigned char *addr, int size, int prec
 
     char tmp[24];        // Temporary buffer to hold the formatted MAC address.
     char *dig = _digits; // Default digits for hex conversion (lowercase by default).
-    int i, len = 0;
+    int i;
+    int len = 0;
 
     // Use uppercase hex digits if the FLAGS_UPPERCASE flag is set.
     if (bitmask_check(flags, FLAGS_UPPERCASE)) {
@@ -241,7 +242,9 @@ static char *iaddr(char *str, char *end, unsigned char *addr, int size, int prec
 
     // Temporary buffer to hold the formatted IP address.
     char tmp[24];
-    int i, n, len = 0;
+    int i;
+    int n;
+    int len = 0;
 
     // Convert each byte of the IP address to decimal format.
     for (i = 0; i < 4; i++) {
@@ -308,7 +311,10 @@ static char *iaddr(char *str, char *end, unsigned char *addr, int size, int prec
 /// point.
 static void cfltcvt(double value, char *buffer, size_t bufsize, char format, int precision)
 {
-    int decpt, sign, exp, pos;
+    int decpt;
+    int sign;
+    int exp;
+    int pos;
     char cvtbuf[CVTBUFSIZE]; // Temporary buffer to store the digits.
     char *digits = cvtbuf;   // Pointer to the digit buffer.
     int capexp   = 0;        // Flag to check for uppercase exponent.
@@ -319,7 +325,7 @@ static void cfltcvt(double value, char *buffer, size_t bufsize, char format, int
     // Handle uppercase 'G' or 'E' format specifier.
     // Convert them to lowercase 'g' or 'e' for uniform processing.
     if (format == 'G' || format == 'E') {
-        capexp = 1;       // Set capexp to handle uppercase exponent.
+        capexp = 1;          // Set capexp to handle uppercase exponent.
         format += 'a' - 'A'; // Convert to lowercase.
     }
 
@@ -567,8 +573,10 @@ static void cropzeros(char *buffer, size_t bufsize)
 static char *flt(char *str, char *end, double num, int size, int precision, char format, unsigned flags)
 {
     char workbuf[80];
-    char c, sign;
-    int n, i;
+    char c;
+    char sign;
+    int n;
+    int i;
 
     /// If the `FLAGS_LEFT` is set, clear the `FLAGS_ZEROPAD` flag.
     /// Left alignment implies no zero padding.

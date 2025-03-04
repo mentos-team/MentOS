@@ -31,14 +31,14 @@ typedef struct page_t {
     /// @brief Buddy system page definition
     bb_page_t bbpage;
     /// @brief Contains pointers to the slabs doubly linked list of pages.
-    list_head slabs;
+    list_head_t slabs;
     /// @brief Slab allocator variables / Contains the total number of objects
     /// in this page, 0 if not managed by the slub.
     unsigned int slab_objcnt;
     /// @brief Tracks the number of free objects in the current page
     unsigned int slab_objfree;
     /// @brief Holds the first free object (if slab_objfree is > 0)
-    list_head slab_freelist;
+    list_head_t slab_freelist;
     /// @brief This union can either contain the pointer to the slab main page
     /// that handles this page, or the cache that contains it.
     union {

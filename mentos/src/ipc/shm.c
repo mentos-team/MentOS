@@ -37,11 +37,11 @@ typedef struct {
     /// @brief Location where shared memory is stored.
     page_t *shm_location;
     /// @brief List reference for shared memory structures.
-    list_head list;
+    list_head_t list;
 } shm_info_t;
 
 /// @brief List of all current active shared memorys.
-list_head shm_list;
+list_head_t shm_list;
 
 // ============================================================================
 // MEMORY MANAGEMENT (Private)
@@ -243,7 +243,8 @@ void *sys_shmat(int shmid, const void *shmaddr, int shmflg)
 {
     shm_info_t *shm_info = NULL;
     task_struct *task    = NULL;
-    uint32_t vm_start, phy_start;
+    uint32_t vm_start;
+    uint32_t phy_start;
     uint32_t flags = MM_RW | MM_PRESENT | MM_USER | MM_UPDADDR;
 
     // The id is less than zero.

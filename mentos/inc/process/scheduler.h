@@ -19,7 +19,7 @@ typedef struct runqueue_t {
     /// Number of queued periodic processes.
     size_t num_periodic;
     /// Queue of processes.
-    list_head queue;
+    list_head_t queue;
     /// The current running process.
     task_struct *curr;
 } runqueue_t;

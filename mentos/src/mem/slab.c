@@ -28,7 +28,7 @@ static int resource_id = -1;
 /// the slab. It contains a linked list to connect objects in the cache.
 typedef struct kmem_obj {
     /// @brief Linked list node for tracking objects in the slab.
-    list_head objlist;
+    list_head_t objlist;
 } kmem_obj_t;
 
 /// @brief Maximum order of kmalloc cache allocations.
@@ -61,7 +61,7 @@ typedef struct kmem_obj {
 #define ADDR_FROM_KMEM_OBJ(object) ((void *)(object))
 
 /// @brief List of all active memory caches in the system.
-static list_head kmem_caches_list;
+static list_head_t kmem_caches_list;
 
 /// @brief Cache used for managing metadata about the memory caches themselves.
 static kmem_cache_t kmem_cache;
@@ -130,10 +130,13 @@ static inline int __alloc_slab_page(kmem_cache_t *cachep, gfp_t flags)
     // Initialize each object in the slab and insert it into the free list.
     for (unsigned i = 0; i < page->slab_objcnt; i++) {
         // Calculate the object's address.
-        kmem_obj_t *obj = KMEM_OBJ_FROM_ADDR(pg_addr + cachep->aligned_object_size * i);
+        kmem_obj_t *object = KMEM_OBJ_FROM_ADDR(pg_addr + cachep->aligned_object_size * i);
+
+        // Initialize the list head.
+        list_head_init(&object->objlist);
 
         // Insert the object into the slab's free list.
-        list_head_insert_after(&obj->objlist, &page->slab_freelist);
+        list_head_insert_after(&object->objlist, &page->slab_freelist);
     }
 
     // Insert the page into the cache's list of free slab pages.
@@ -297,18 +300,27 @@ static int __kmem_cache_create(
 
     // Set up the basic properties of the cache.
     *cachep = (kmem_cache_t){
-        // .cache_list          = 0,
-        .name = name,  .aligned_object_size = 0, .raw_object_size = size, .align = align, .total_num = 0,
-        .free_num = 0, .flags = flags,           .gfp_order = 0,          .ctor = ctor,   .dtor = dtor,
-        // .slabs_full          = 0,
-        // .slabs_partial       = 0,
-        // .slabs_free          = 0,
+        .cache_list          = {NULL, NULL},
+        .name                = name,
+        .aligned_object_size = 0,
+        .raw_object_size     = size,
+        .align               = align,
+        .total_num           = 0,
+        .free_num            = 0,
+        .flags               = flags,
+        .gfp_order           = 0,
+        .ctor                = ctor,
+        .dtor                = dtor,
+        .slabs_full          = {NULL, NULL},
+        .slabs_partial       = {NULL, NULL},
+        .slabs_free          = {NULL, NULL},
     };
 
     // Initialize the list heads for free, partial, and full slabs.
     list_head_init(&cachep->slabs_free);
     list_head_init(&cachep->slabs_partial);
     list_head_init(&cachep->slabs_full);
+    list_head_init(&cachep->cache_list);
 
     // Compute the object size and gfp_order for slab allocations.
     // Validate that size and order are computed successfully.
@@ -351,7 +363,7 @@ static inline void *__kmem_cache_alloc_slab(kmem_cache_t *cachep, page_t *slab_p
     }
 
     // Retrieve and remove the first element from the slab's free list.
-    list_head *elem_listp = list_head_pop(&slab_page->slab_freelist);
+    list_head_t *elem_listp = list_head_pop(&slab_page->slab_freelist);
 
     // Check if the free list is empty.
     if (!elem_listp) {
@@ -462,8 +474,8 @@ int kmem_cache_init(void)
     for (unsigned i = 0; i < MAX_KMALLOC_CACHE_ORDER; i++) {
         malloc_blocks[i] = kmem_cache_create(
             "kmalloc",
-            1u << i, // Size of the allocation (2^i).
-            1u << i, // Alignment of the allocation.
+            1U << i, // Size of the allocation (2^i).
+            1U << i, // Alignment of the allocation.
             GFP_KERNEL,
             NULL,  // Constructor (none).
             NULL); // Destructor (none).
@@ -550,7 +562,7 @@ int kmem_cache_destroy(kmem_cache_t *cachep)
 
     // Free all slabs in the free list.
     while (!list_head_empty(&cachep->slabs_free)) {
-        list_head *slab_list = list_head_pop(&cachep->slabs_free);
+        list_head_t *slab_list = list_head_pop(&cachep->slabs_free);
         if (!slab_list) {
             pr_crit("Failed to retrieve a slab from free list.\n");
             return -1;
@@ -560,7 +572,7 @@ int kmem_cache_destroy(kmem_cache_t *cachep)
 
     // Free all slabs in the partial list.
     while (!list_head_empty(&cachep->slabs_partial)) {
-        list_head *slab_list = list_head_pop(&cachep->slabs_partial);
+        list_head_t *slab_list = list_head_pop(&cachep->slabs_partial);
         if (!slab_list) {
             pr_crit("Failed to retrieve a slab from partial list.\n");
             return -1;
@@ -570,7 +582,7 @@ int kmem_cache_destroy(kmem_cache_t *cachep)
 
     // Free all slabs in the full list.
     while (!list_head_empty(&cachep->slabs_full)) {
-        list_head *slab_list = list_head_pop(&cachep->slabs_full);
+        list_head_t *slab_list = list_head_pop(&cachep->slabs_full);
         if (!slab_list) {
             pr_crit("Failed to retrieve a slab from full list.\n");
             return -1;
@@ -623,7 +635,7 @@ void *pr_kmem_cache_alloc(const char *file, const char *fun, int line, kmem_cach
         }
 
         // Move a free slab to the partial list since we're about to allocate from it.
-        list_head *free_slab = list_head_pop(&cachep->slabs_free);
+        list_head_t *free_slab = list_head_pop(&cachep->slabs_free);
         if (!free_slab) {
             pr_crit("Retrieved invalid slab from free list.\n");
             return NULL;
@@ -647,7 +659,7 @@ void *pr_kmem_cache_alloc(const char *file, const char *fun, int line, kmem_cach
 
     // If the slab is now full, move it to the full slabs list.
     if (slab_page->slab_objfree == 0) {
-        list_head *slab_full_elem = list_head_pop(&cachep->slabs_partial);
+        list_head_t *slab_full_elem = list_head_pop(&cachep->slabs_partial);
         if (!slab_full_elem) {
             pr_crit("Retrieved invalid slab from partial list while moving to "
                     "full list.\n");
@@ -704,16 +716,16 @@ int pr_kmem_cache_free(const char *file, const char *fun, int line, void *addr)
     }
 
     // Get the kmem_obj from the pointer.
-    kmem_obj_t *obj = KMEM_OBJ_FROM_ADDR(addr);
+    kmem_obj_t *object = KMEM_OBJ_FROM_ADDR(addr);
 
-    // Check if obj retrieval was successful
-    if (!obj) {
+    // Check if object retrieval was successful
+    if (!object) {
         pr_crit("Failed to retrieve kmem object for pointer 0x%p.\n", addr);
         return 1;
     }
 
     // Add object to the free list of the slab.
-    list_head_insert_after(&obj->objlist, &slab_page->slab_freelist);
+    list_head_insert_after(&object->objlist, &slab_page->slab_freelist);
     slab_page->slab_objfree++;
     cachep->free_num++;
 

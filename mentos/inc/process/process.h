@@ -104,11 +104,11 @@ typedef struct task_struct {
     /// Pointer to process's parent.
     struct task_struct *parent;
     /// List head for scheduling purposes.
-    list_head run_list;
+    list_head_t run_list;
     /// List of children traced by the process.
-    list_head children;
+    list_head_t children;
     /// List of siblings, namely processes created by parent process.
-    list_head sibling;
+    list_head_t sibling;
     /// The context of the processors.
     thread_struct_t thread;
     /// For scheduling algorithms.

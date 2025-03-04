@@ -94,7 +94,18 @@ static inline void __sha256_transform(SHA256_ctx_t *ctx, const uint8_t data[])
         return;
     }
 
-    uint32_t a, b, c, d, e, f, g, h, i, j, t1, t2;
+    uint32_t a;
+    uint32_t b;
+    uint32_t c;
+    uint32_t d;
+    uint32_t e;
+    uint32_t f;
+    uint32_t g;
+    uint32_t h;
+    uint32_t i;
+    uint32_t j;
+    uint32_t t1;
+    uint32_t t2;
     uint32_t m[SHA256_MAX_DATA_LENGTH]; // Message schedule array.
 
     // Step 1: Prepare the message schedule (first 16 words are directly from

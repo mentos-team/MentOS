@@ -28,9 +28,9 @@ typedef struct bb_page_t {
     /// Keep track of where the page is located.
     union {
         /// The page siblings when not allocated.
-        list_head siblings;
+        list_head_t siblings;
         /// The cache list pointer when allocated but on cache.
-        list_head cache;
+        list_head_t cache;
     } location;
 } bb_page_t;
 
@@ -38,7 +38,7 @@ typedef struct bb_page_t {
 /// Each block represents 2^k free contiguous page.
 typedef struct bb_free_area_t {
     /// free_list collectes the first page descriptors of a blocks of 2^k frames
-    list_head free_list;
+    list_head_t free_list;
     /// nr_free specifies the number of blocks of free pages.
     int nr_free;
 } bb_free_area_t;
@@ -51,7 +51,7 @@ typedef struct bb_instance_t {
     /// List of buddy system pages grouped by level.
     bb_free_area_t free_area[MAX_BUDDYSYSTEM_GFP_ORDER];
     /// Pointer to start of free pages cache
-    list_head free_pages_cache_list;
+    list_head_t free_pages_cache_list;
     /// Size of the current cache
     unsigned long free_pages_cache_size;
     /// Buddysystem instance size in number of pages.

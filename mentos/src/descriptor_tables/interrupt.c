@@ -24,11 +24,11 @@ typedef struct irq_struct_t {
     /// Pointer to the description of the handler.
     char *description;
     /// List handler.
-    list_head siblings;
+    list_head_t siblings;
 } irq_struct_t;
 
 /// For each IRQ, a chain of handlers.
-static list_head shared_interrupt_handlers[IRQ_NUM];
+static list_head_t shared_interrupt_handlers[IRQ_NUM];
 /// Cache where we will store the data regarding an irq service.
 static kmem_cache_t *irq_cache;
 
