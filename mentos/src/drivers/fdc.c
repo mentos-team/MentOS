@@ -16,7 +16,7 @@
 #include "io/video.h"
 
 /// @brief Floppy Disk Controller (FDC) registers.
-typedef enum fdc_registers_t {
+typedef enum fdc_registers {
     STATUS_REGISTER_A              = 0x3F0,
     ///< This register is read-only and monitors the state of the
     ///< interrupt pin and several disk interface pins.

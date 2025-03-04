@@ -20,7 +20,7 @@
 #define PG_FROM_BBSTRUCT(bbstruct, page, element) ((page *)(((uint32_t)(bbstruct)) - BBSTRUCT_OFFSET(page, element)))
 
 /// The base structure representing a bb page
-typedef struct bb_page_t {
+typedef struct bb_page {
     /// The flags of the page.
     volatile unsigned long flags;
     /// The current page order.
@@ -36,7 +36,7 @@ typedef struct bb_page_t {
 
 /// @brief Buddy system descriptor: collection of free page blocks.
 /// Each block represents 2^k free contiguous page.
-typedef struct bb_free_area_t {
+typedef struct bb_free_area {
     /// free_list collectes the first page descriptors of a blocks of 2^k frames
     list_head_t free_list;
     /// nr_free specifies the number of blocks of free pages.
@@ -45,7 +45,7 @@ typedef struct bb_free_area_t {
 
 /// @brief Buddy system instance,
 /// that represents a memory area managed by the buddy system
-typedef struct bb_instance_t {
+typedef struct bb_instance {
     /// Name of this bb instance
     const char *name;
     /// List of buddy system pages grouped by level.

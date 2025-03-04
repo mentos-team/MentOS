@@ -19,7 +19,7 @@
 #define EDX_FLAGS_SIZE 32
 
 /// @brief Contains the information concerning the CPU.
-typedef struct cpuinfo_t {
+typedef struct cpuinfo {
     /// The name of the vendor.
     char cpu_vendor[13];
     /// The type of the CPU.

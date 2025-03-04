@@ -18,7 +18,7 @@
 /// @param stack_pointer The stack base pointer, usually at the end of the lowmem.
 /// @param entry
 /// @param boot_info
-extern void boot_kernel(uint32_t stack_pointer, uint32_t entry, struct boot_info_t *boot_info);
+extern void boot_kernel(uint32_t stack_pointer, uint32_t entry, boot_info_t *boot_info);
 
 /// @brief Size of the kernel's stack.
 #define KERNEL_STACK_SIZE 0x100000

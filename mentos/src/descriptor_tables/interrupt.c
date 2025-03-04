@@ -18,7 +18,7 @@
 #include "system/printk.h"
 
 /// @brief Shared interrupt handlers, stored into a double-linked list.
-typedef struct irq_struct_t {
+typedef struct irq_struct {
     /// Pointer to the IRQ handler.
     interrupt_handler_t handler;
     /// Pointer to the description of the handler.
