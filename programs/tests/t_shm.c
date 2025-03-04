@@ -90,7 +90,7 @@ int shm_read(void)
     }
 
     // Check if both hashes match.
-    if (strncmp(str, message, strlen(message))) {
+    if (strncmp(str, message, strlen(message)) != 0) {
         syslog(LOG_ERR, "Data does not match.");
         syslog(LOG_ERR, "Expected : `%s`", message);
         syslog(LOG_ERR, "Found    : `%s`", str);

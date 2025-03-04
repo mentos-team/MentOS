@@ -14,43 +14,43 @@
 /// @return destination is returned.
 char *strncpy(char *destination, const char *source, size_t num);
 
-/// @brief Compares up to n characters of s1 to those of s2.
-/// @param s1 First string to be compared.
-/// @param s2 Second string to be compared.
+/// @brief Compares up to n characters of str1 to those of str2.
+/// @param str1 First string to be compared.
+/// @param str2 Second string to be compared.
 /// @param n  Maximum number of characters to compare.
 /// @return
 /// Returns an integral value indicating the relationship between the strings:
 ///     <0 the first character that does not match has a lower
-///        value in s1 than in s2
+///        value in str1 than in str2
 ///      0 the contents of both strings are equal
 ///     >0 the first character that does not match has a greater
-///        value in s1 than in s2
-int strncmp(const char *s1, const char *s2, size_t n);
+///        value in str1 than in str2
+int strncmp(const char *str1, const char *str2, size_t n);
 
 /// @brief Case insensitive string compare.
-/// @param s1 First string to be compared.
-/// @param s2 Second string to be compared.
+/// @param str1 First string to be compared.
+/// @param str2 Second string to be compared.
 /// @return
 /// Returns an integral value indicating the relationship between the strings:
 ///     <0 the first character that does not match has a lower
-///        value in s1 than in s2
+///        value in str1 than in str2
 ///      0 the contents of both strings are equal
 ///     >0 the first character that does not match has a greater
-///        value in s1 than in s2
-int stricmp(const char *s1, const char *s2);
+///        value in str1 than in str2
+int stricmp(const char *str1, const char *str2);
 
-/// @brief Case-insensitively compare up to n characters of s1 to those of s2.
-/// @param s1 First string to be compared.
-/// @param s2 Second string to be compared.
+/// @brief Case-insensitively compare up to n characters of str1 to those of str2.
+/// @param str1 First string to be compared.
+/// @param str2 Second string to be compared.
 /// @param n  Maximum number of characters to compare.
 /// @return
 /// Returns an integral value indicating the relationship between the strings:
 ///     <0 the first character that does not match has a lower
-///        value in s1 than in s2
+///        value in str1 than in str2
 ///      0 the contents of both strings are equal
 ///     >0 the first character that does not match has a greater
-///        value in s1 than in s2
-int strnicmp(const char *s1, const char *s2, size_t n);
+///        value in str1 than in str2
+int strnicmp(const char *str1, const char *str2, size_t n);
 
 /// @brief Returns a pointer to the first occurrence of ch in str.
 /// @param s  The string where the search is performed.
@@ -64,14 +64,14 @@ char *strchr(const char *s, int ch);
 /// @return A pointer to the last occurrence of character in str.
 char *strrchr(const char *s, int ch);
 
-/// @brief Returns a pointer to the first occurrence of s2 in s1,
-///        or NULL if s2 is not part of s1.
-/// @param s1 String to be scanned
-/// @param s2 String containing the sequence of characters to match.
-/// @return A pointer to the first occurrence in s1 of the entire
-///         sequence of characters specified in s2, or a null pointer
-///         if the sequence is not present in s1.
-char *strstr(const char *s1, const char *s2);
+/// @brief Returns a pointer to the first occurrence of str2 in str1,
+///        or NULL if str2 is not part of str1.
+/// @param str1 String to be scanned
+/// @param str2 String containing the sequence of characters to match.
+/// @return A pointer to the first occurrence in str1 of the entire
+///         sequence of characters specified in str2, or a null pointer
+///         if the sequence is not present in str1.
+char *strstr(const char *str1, const char *str2);
 
 /// @brief Returns the length of the initial portion of string which consists
 ///        only of characters that are part of control.
@@ -227,18 +227,19 @@ void *memccpy(void *dst, const void *src, int c, size_t n);
 /// @return Pointer to the destination.
 void *memcpy(void *dst, const void *src, size_t num);
 
-/// @brief Compares the first n bytes of str1 and str2.
-/// @param ptr1 First pointer to block of memory.
-/// @param ptr2 Second pointer to block of memory.
+/// @brief Compares the first n bytes of two memory blocks.
+///
+/// @details Compares the first n bytes of the memory blocks pointed to by ptr1 and ptr2.
+/// The comparison is done byte by byte.
+///
+/// @param ptr1 Pointer to the first memory block.
+/// @param ptr2 Pointer to the second memory block.
 /// @param n    Number of bytes to compare.
-/// @return
-/// Returns an integral value indicating the relationship between
-/// the memory blocks:
-///     <0 the first byte that does not match has a lower
-///        value in ptr1 than in ptr2
-///      0 the contents of both memory blocks are equal
-///     >0 the first byte that does not match has a greater
-///        value in ptr1 than in ptr2
+///
+/// @return An integral value indicating the relationship between the memory blocks:
+///         - `< 0` if the first non-matching byte in ptr1 has a lower value than in ptr2.
+///         - `  0` if the contents of both memory blocks are equal.
+///         - `> 0` if the first non-matching byte in ptr1 has a greater value than in ptr2.
 int memcmp(const void *ptr1, const void *ptr2, size_t n);
 
 /// @brief Sets the first num bytes of the block of memory pointed by ptr
@@ -256,16 +257,16 @@ void *memset(void *ptr, int value, size_t num);
 char *strcpy(char *dst, const char *src);
 
 /// @brief Checks if the two strings are equal.
-/// @param s1 First string to be compared.
-/// @param s2 Second string to be compared.
+/// @param str1 First string to be compared.
+/// @param str2 Second string to be compared.
 /// @return
 /// Returns an integral value indicating the relationship between the strings:
 ///     <0 the first character that does not match has a lower
-///        value in s1 than in s2
+///        value in str1 than in str2
 ///      0 the contents of both strings are equal
 ///     >0 the first character that does not match has a greater
-///        value in s1 than in s2
-int strcmp(const char *s1, const char *s2);
+///        value in str1 than in str2
+int strcmp(const char *str1, const char *str2);
 
 /// @brief Returns the length of the string s.
 /// @param s Pointer to the null-terminated byte string to be examined.
@@ -274,12 +275,12 @@ size_t strlen(const char *s);
 
 /// @brief Returns the number of characters inside s, excluding the
 ///        terminating null byte ('\0'), but at most count.
-/// @param s Pointer to the null-terminated byte string to be examined.
+/// @param str Pointer to the null-terminated byte string to be examined.
 /// @param maxlen The upperbound on the length.
 /// @return Returns strlen(s), if that is less than maxlen, or maxlen
 ///         if there is no null terminating ('\0') among the first maxlen
 ///         characters pointed to by s.
-size_t strnlen(const char *s, size_t maxlen);
+size_t strnlen(const char *str, size_t maxlen);
 
 /// @brief Removes any whitespace characters from the beginning and end of str.
 /// @param str The string to trim.

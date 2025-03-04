@@ -43,7 +43,9 @@ int main(void)
     }
 
     // Add child nodes to the root (level 2)
-    int child1_value = 2, child2_value = 3, child3_value = 4;
+    int child1_value      = 2;
+    int child2_value      = 3;
+    int child3_value      = 4;
     ndtree_node_t *child1 = ndtree_create_child_of_node(&tree, root, &child1_value);
     ndtree_node_t *child2 = ndtree_create_child_of_node(&tree, root, &child2_value);
     ndtree_node_t *child3 = ndtree_create_child_of_node(&tree, root, &child3_value);
@@ -53,7 +55,8 @@ int main(void)
     }
 
     // Add child nodes to child1 (level 3)
-    int child1_1_value = 5, child1_2_value = 6;
+    int child1_1_value = 5;
+    int child1_2_value = 6;
     if (!ndtree_create_child_of_node(&tree, child1, &child1_1_value) ||
         !ndtree_create_child_of_node(&tree, child1, &child1_2_value)) {
         fprintf(stderr, "Error: Failed to create one or more child nodes for child1\n");
@@ -61,7 +64,8 @@ int main(void)
     }
 
     // Add child nodes to child2 (level 3)
-    int child2_1_value = 7, child2_2_value = 8;
+    int child2_1_value = 7;
+    int child2_2_value = 8;
     if (!ndtree_create_child_of_node(&tree, child2, &child2_1_value) ||
         !ndtree_create_child_of_node(&tree, child2, &child2_2_value)) {
         fprintf(stderr, "Error: Failed to create one or more child nodes for child2\n");
@@ -69,7 +73,8 @@ int main(void)
     }
 
     // Add child nodes to child3 (level 3)
-    int child3_1_value = 9, child3_2_value = 10;
+    int child3_1_value = 9;
+    int child3_2_value = 10;
     if (!ndtree_create_child_of_node(&tree, child3, &child3_1_value) ||
         !ndtree_create_child_of_node(&tree, child3, &child3_2_value)) {
         fprintf(stderr, "Error: Failed to create one or more child nodes for child3\n");

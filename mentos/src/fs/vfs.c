@@ -91,6 +91,9 @@ vfs_file_t *pr_vfs_alloc_file(const char *file, const char *fun, int line)
     return vfs_file;
 }
 
+/// @brief Prints the details of a VFS file.
+/// @param ptr Pointer to the VFS file.
+/// @return A string representation of the file details.
 static const char *__vfs_print_file_details(void *ptr)
 {
     vfs_file_t *file = (vfs_file_t *)ptr;
@@ -234,7 +237,8 @@ int vfs_unregister_superblock(super_block_t *sb)
 super_block_t *vfs_get_superblock(const char *path)
 {
     pr_debug("vfs_get_superblock(path: %s)\n", path);
-    size_t last_sb_len     = 0, len;
+    size_t last_sb_len = 0;
+    size_t len;
     super_block_t *last_sb = NULL, *sb = NULL;
     list_head *it;
     list_for_each (it, &vfs_super_blocks) {
@@ -865,8 +869,9 @@ int sys_dup(int fd)
     }
 
     fd = get_unused_fd();
-    if (fd < 0)
+    if (fd < 0) {
         return fd;
+    }
 
     // Increment file reference counter.
     file->count += 1;
@@ -915,7 +920,8 @@ int vfs_valid_open_permissions(int flags, mode_t mask, uid_t uid, gid_t gid)
     if (task->uid == uid) {
         return __valid_open_permissions(mask, flags, S_IRUSR, S_IWUSR);
         // Check the groups permission
-    } else if (task->gid == gid) {
+    }
+    if (task->gid == gid) {
         return __valid_open_permissions(mask, flags, S_IRGRP, S_IWGRP);
     }
 
@@ -934,7 +940,8 @@ int vfs_valid_exec_permission(task_struct *task, vfs_file_t *file)
     if (task->uid == file->uid) {
         return file->mask & S_IXUSR;
         // Check the groups permission
-    } else if (task->gid == file->gid) {
+    }
+    if (task->gid == file->gid) {
         return file->mask & S_IXGRP;
     }
 

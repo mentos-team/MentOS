@@ -12,7 +12,14 @@ int main(int argc, char **argv)
     // Check if an argument is provided
     if (argc == 2) {
         // Convert the argument to an integer
-        int amount = atoi(argv[1]);
+        char *endptr;
+        long amount = strtol(argv[1], &endptr, 10);
+
+        // Check for conversion errors
+        if (*endptr != '\0' || amount <= 0 || amount > INT_MAX) {
+            fprintf(stderr, "Error: Please enter a valid positive integer for sleep duration.\n");
+            return 1;
+        }
 
         // Ensure the amount is positive
         if (amount > 0) {

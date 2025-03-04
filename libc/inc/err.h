@@ -14,9 +14,9 @@
 /// applicable. It then terminates the program with the specified exit value.
 /// This is typically used when a system call fails.
 ///
-/// @param eval The exit value to use when terminating the program.
-/// @param fmt The format string for the error message.
-void err(int eval, const char *fmt, ...);
+/// @param status The exit value to use when terminating the program.
+/// @param format The format string for the error message.
+void err(int status, const char *format, ...);
 
 /// @brief Print a formatted error message on stderr using a va_list and exit
 /// the program.
@@ -26,10 +26,10 @@ void err(int eval, const char *fmt, ...);
 /// can be formatted into the error message. The program exits with the
 /// specified exit value.
 ///
-/// @param eval The exit value to use when terminating the program.
-/// @param fmt The format string for the error message.
+/// @param status The exit value to use when terminating the program.
+/// @param format The format string for the error message.
 /// @param args The variable argument list.
-void verr(int eval, const char *fmt, va_list args);
+void verr(int status, const char *format, va_list args);
 
 /// @brief Print a formatted message on stderr without appending an error
 /// message and exit.
@@ -40,9 +40,9 @@ void verr(int eval, const char *fmt, va_list args);
 /// the error isn't related to a system call failure but requires exiting the
 /// program.
 ///
-/// @param eval The exit value to use when terminating the program.
-/// @param fmt The format string for the message.
-void errx(int eval, const char *fmt, ...);
+/// @param status The exit value to use when terminating the program.
+/// @param format The format string for the message.
+void errx(int status, const char *format, ...);
 
 /// @brief Print a formatted message on stderr using a va_list and exit without
 /// appending an error message.
@@ -51,7 +51,7 @@ void errx(int eval, const char *fmt, ...);
 /// handle variable arguments. It prints the formatted message and exits the
 /// program without appending a system error message.
 ///
-/// @param eval The exit value to use when terminating the program.
-/// @param fmt The format string for the message.
+/// @param status The exit value to use when terminating the program.
+/// @param format The format string for the message.
 /// @param args The variable argument list.
-void verrx(int eval, const char *fmt, va_list args);
+void verrx(int status, const char *format, va_list args);

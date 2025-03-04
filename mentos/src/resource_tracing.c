@@ -11,20 +11,24 @@
 #define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
 #include "io/debug.h"                    // Include debugging functions.
 
-#define MAX_TRACKED_RESOURCES    1024
-#define MAX_REGISTERED_RESOURCES 128
+#define MAX_TRACKED_RESOURCES    1024 ///< Maximum number of tracked resources.
+#define MAX_REGISTERED_RESOURCES 128  ///< Maximum number of registered resources.
 
 static struct {
-    int id;
-    const char *name;
-} resource_registry[MAX_REGISTERED_RESOURCES];
+    int id;           ///< The id of the resource.
+    const char *name; ///< The name of the resource.
+}
+/// @brief The resource registry.
+resource_registry[MAX_REGISTERED_RESOURCES];
 
 static struct {
-    int resource_id;
-    const char *file;
-    int line;
-    void *ptr;
-} resource_tracker[MAX_TRACKED_RESOURCES];
+    int resource_id;  ///< The id of the resource.
+    const char *file; ///< The file where the resource was registered.
+    int line;         ///< The line where the resource was registered.
+    void *ptr;        ///< The pointer to the resource.
+}
+/// @brief The resource tracker.
+resource_tracker[MAX_TRACKED_RESOURCES];
 
 void resource_register_init(void)
 {

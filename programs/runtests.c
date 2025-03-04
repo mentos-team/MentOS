@@ -93,8 +93,9 @@ static int test_out_flush(void)
         ret = printf("%s\n", buf);
     } else {
         char *s = buf;
-        while ((*s) != 0)
+        while ((*s) != 0) {
             outportb(SERIAL_COM2, *s++);
+        }
         outportb(SERIAL_COM2, '\n');
     }
     bufpos  = buf;

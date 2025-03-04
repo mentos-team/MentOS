@@ -64,7 +64,10 @@ static inline void __print_message_file(const char *file)
 /// detected.
 static inline int __read_input(char *buffer, size_t size, int show)
 {
-    int index = 0, c, length = 0, insert_active = 0;
+    int index = 0;
+    int c;
+    int length        = 0;
+    int insert_active = 0;
 
     // Clear the buffer at the start
     memset(buffer, 0, size);
@@ -245,7 +248,8 @@ int main(int argc, char **argv)
     __print_message_file("/etc/issue");
 
     passwd_t *pwd;
-    char username[CREDENTIALS_LENGTH], password[CREDENTIALS_LENGTH];
+    char username[CREDENTIALS_LENGTH];
+    char password[CREDENTIALS_LENGTH];
     struct termios _termios;
 
     do {

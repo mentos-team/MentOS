@@ -21,11 +21,11 @@ void *shmat(int shmid, const void *shmaddr, int shmflg)
     __syscall_return(void *, __res);
 }
 
-// _syscall3(long, shmget, key_t, key, size_t, size, int, flag)
-long shmget(key_t key, size_t size, int flag)
+// _syscall3(long, shmget, key_t, key, size_t, size, int, shmflg)
+long shmget(key_t key, size_t size, int shmflg)
 {
     long __res;
-    __inline_syscall_3(__res, shmget, key, size, flag);
+    __inline_syscall_3(__res, shmget, key, size, shmflg);
     __syscall_return(long, __res);
 }
 
@@ -165,5 +165,5 @@ key_t ftok(const char *path, int id)
     // bits from the lower 8 bits of the device number of the provided pathname,
     // and the lower 16 bits from the lower 16 bits of the inode number of the
     // provided pathname.
-    return (st.st_ino & 0xffff) | ((st.st_dev & 0xff) << 16) | ((id & 0xffu) << 24);
+    return (st.st_ino & 0xffff) | ((st.st_dev & 0xff) << 16) | ((id & 0xffU) << 24);
 }

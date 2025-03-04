@@ -193,7 +193,7 @@ long sys_shmget(key_t key, size_t size, int shmflg)
     if (key == IPC_PRIVATE) {
         // Exit when i find a unique key.
         do {
-            key = (int)-rand();
+            key = (-rand());
         } while (__list_find_shm_info_by_key(key));
         // We have a unique key, create the shared memory.
         shm_info = __shm_info_alloc(key, size, shmflg);
@@ -369,7 +369,9 @@ ssize_t procipc_shm_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyte
         return -ENOENT;
     }
 
-    size_t buffer_len = 0, read_pos = 0, ret = 0;
+    size_t buffer_len    = 0;
+    size_t read_pos      = 0;
+    size_t ret           = 0;
     ssize_t write_count  = 0;
     shm_info_t *shm_info = NULL;
     char buffer[BUFSIZ];

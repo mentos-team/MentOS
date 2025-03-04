@@ -266,7 +266,8 @@ int get_line_start_end(char *lines, int cy, char **line_start, char **line_end, 
 /// @return int The length of the current line, or 0 if no valid line is found.
 int get_line_length(char *lines, int cy, const int file_length)
 {
-    char *line_start, *line_end;
+    char *line_start;
+    char *line_end;
     // Compute the start and end of the current line.
     int line_length = get_line_start_end(lines, cy, &line_start, &line_end, file_length);
     // If line_end is NULL, there is no valid line, so return 0.
@@ -313,11 +314,14 @@ void update_status_message(
 /// @return void
 void edit_file(char *lines, size_t bufsize, int num_lines, const char *filename, int *file_length)
 {
-    int cx = 0, cy       = 0; // Cursor position (cx: column, cy: row)
-    int c, insert_active = 0; // Insert mode flag
+    int cx = 0;
+    int cy = 0; // Cursor position (cx: column, cy: row)
+    int c;
+    int insert_active = 0; // Insert mode flag
 
-    char *line_start = lines, *line_end;
-    int line_len     = get_line_start_end(lines, cy, &line_start, &line_end, *file_length);
+    char *line_start = lines;
+    char *line_end;
+    int line_len = get_line_start_end(lines, cy, &line_start, &line_end, *file_length);
 
     char message[MAX_LINE_LENGTH] = {0};
 

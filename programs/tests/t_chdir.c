@@ -21,12 +21,12 @@ int main(int argc, char *argv[])
             if (strcmp(cwd, directory) == 0) {
                 printf("Successfully changed to the directory.\n");
                 return EXIT_SUCCESS;
-            } else {
-                printf(
-                    "Directory change failed or directory differs: expected %s "
-                    "but got %s\n",
-                    directory, cwd);
             }
+            printf(
+                "Directory change failed or directory differs: expected %s "
+                "but got %s\n",
+                directory, cwd);
+
         } else {
             perror("getcwd failed");
         }

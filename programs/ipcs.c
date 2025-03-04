@@ -21,8 +21,9 @@ static inline void __print_file_content(const char *path)
     int fd = open(path, O_RDONLY, 42);
     if (fd >= 0) {
         // Put on the standard output the characters.
-        while (read(fd, buffer, BUFSIZ) > 0)
+        while (read(fd, buffer, BUFSIZ) > 0) {
             puts(buffer);
+        }
         // Close the file descriptor.
         close(fd);
     }
@@ -30,8 +31,9 @@ static inline void __print_file_content(const char *path)
 
 int main(int argc, char **argv)
 {
-    if (argc > 4)
+    if (argc > 4) {
         return -1;
+    }
 
     // Default operation, prints all ipcs informations.
     if (argc == 1) {

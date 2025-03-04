@@ -23,8 +23,9 @@ int main(int argc, char *argv[])
 
     // Fork 10 child processes to run the t_alarm test.
     for (int i = 0; i < 10; ++i) {
-        // Fork a new process
-        if ((cpid = fork()) == -1) {
+        // Fork a new process.
+        cpid = fork();
+        if (cpid == -1) {
             // Fork failed, print the error and exit.
             fprintf(stderr, "Failed to fork process: %s\n", strerror(errno));
             return EXIT_FAILURE;
@@ -47,7 +48,6 @@ int main(int argc, char *argv[])
     // Parent process waits for all child processes to terminate.
     while (wait(NULL) != -1) {
         // Continue waiting until all child processes finish.
-        continue;
     }
 
     // If wait returns -1 and errno is not ECHILD, print an error.

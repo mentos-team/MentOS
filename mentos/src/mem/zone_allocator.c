@@ -191,16 +191,16 @@ page_t *get_page_from_virtual_address(uint32_t vaddr)
     return memory.mem_map + page_index;
 }
 
-page_t *get_page_from_physical_address(uint32_t phy_addr)
+page_t *get_page_from_physical_address(uint32_t paddr)
 {
     // Ensure the physical address is valid and aligned to page boundaries.
-    if (phy_addr % PAGE_SIZE != 0) {
-        pr_crit("Address must be page-aligned. Received address: 0x%08x\n", phy_addr);
+    if (paddr % PAGE_SIZE != 0) {
+        pr_crit("Address must be page-aligned. Received address: 0x%08x\n", paddr);
         return NULL;
     }
 
     // Calculate the index of the page in the memory map.
-    uint32_t page_index = phy_addr / PAGE_SIZE;
+    uint32_t page_index = paddr / PAGE_SIZE;
 
     // Check if the calculated page index is within valid bounds.
     if ((page_index < memory.page_index_min) || (page_index > memory.page_index_max)) {

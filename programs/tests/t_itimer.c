@@ -30,7 +30,8 @@ void timer_handler(int signum)
 int main(void)
 {
     struct itimerval timer;
-    time_t start_time, current_time;
+    time_t start_time;
+    time_t current_time;
 
     // Set up the signal handler for SIGALRM
     signal(SIGALRM, timer_handler);

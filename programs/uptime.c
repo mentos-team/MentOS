@@ -25,7 +25,12 @@ int main(int argc, char *argv[])
         return -1;
     }
 
-    int uptime = atoi(buffer);
+    char *endptr;
+    long uptime = strtol(buffer, &endptr, 10);
+    if (*endptr != '\0' && *endptr != ' ') {
+        printf("Conversion error occurred\n");
+        return -1;
+    }
 
     // Transform uptime into hours, days, mins, and seconds
 

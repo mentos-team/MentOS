@@ -201,7 +201,7 @@ long sys_semget(key_t key, int nsems, int semflg)
     if (key == IPC_PRIVATE) {
         // Exit when i find a unique key.
         do {
-            key = (int)-rand();
+            key = (-rand());
         } while (__list_find_sem_info_by_key(key));
         // We have a unique key, create the semaphore set.
         sem_info = __sem_info_alloc(key, nsems, semflg);
@@ -523,7 +523,9 @@ ssize_t procipc_sem_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyte
         pr_err("Received a NULL file.\n");
         return -ENOENT;
     }
-    size_t buffer_len = 0, read_pos = 0, ret = 0;
+    size_t buffer_len    = 0;
+    size_t read_pos      = 0;
+    size_t ret           = 0;
     ssize_t write_count  = 0;
     sem_info_t *sem_info = NULL;
     char buffer[BUFSIZ];

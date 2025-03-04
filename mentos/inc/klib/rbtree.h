@@ -64,15 +64,15 @@ void rbtree_node_dealloc(rbtree_node_t *node);
 rbtree_t *rbtree_tree_alloc(void);
 
 /// @brief Allocate memory for a tree and sets the function used to compare nodes.
-/// @param cmp Function used to compare elements of the tree.
+/// @param node_cb Function used to compare elements of the tree.
 /// @return Pointer to the allocated tree.
-rbtree_t *rbtree_tree_create(rbtree_tree_node_cmp_f cmp);
+rbtree_t *rbtree_tree_create(rbtree_tree_node_cmp_f node_cb);
 
 /// @brief Initializes the tree.
 /// @param tree The tree to initialize.
-/// @param cmp  The compare function to associate to the tree.
+/// @param node_cb  The compare function to associate to the tree.
 /// @return Pointer to tree itself.
-rbtree_t *rbtree_tree_init(rbtree_t *tree, rbtree_tree_node_cmp_f cmp);
+rbtree_t *rbtree_tree_init(rbtree_t *tree, rbtree_tree_node_cmp_f node_cb);
 
 /// @brief Deallocate a node.
 /// @param tree    The tree to destroy.

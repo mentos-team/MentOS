@@ -120,8 +120,10 @@ int test_consecutive_dirs(const char *parent_directory)
         return EXIT_FAILURE;
     }
     // Check if all directories are present.
-    if ((ret = check_dir(parent_directory, "/t_mkdir")) == EXIT_SUCCESS) {
-        if ((ret = check_dir(parent_directory, "/t_mkdir/outer")) == EXIT_SUCCESS) {
+    ret = check_dir(parent_directory, "/t_mkdir");
+    if (ret == EXIT_SUCCESS) {
+        ret = check_dir(parent_directory, "/t_mkdir/outer");
+        if (ret == EXIT_SUCCESS) {
             ret = check_dir(parent_directory, "/t_mkdir/outer/inner");
         }
     }

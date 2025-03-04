@@ -9,7 +9,7 @@
 int main(int argc, char **argv)
 {
     time_t rawtime = time(NULL);
-    printf("Seconds since 01/01/1970 : %u\n", rawtime);
+    printf("Seconds since 01/01/1970 : %ld\n", rawtime);
     tm_t *timeinfo = localtime(&rawtime);
     printf(
         "It's %2d:%2d:%2d, %d weekday, %02d/%02d/%4d\n", timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec,

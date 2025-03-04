@@ -18,10 +18,10 @@ typedef char *va_list;
 #define va_size(t) (((sizeof(t) + sizeof(va_item) - 1) / sizeof(va_item)) * sizeof(va_item))
 
 /// @brief The start of a variadic list.
-#define va_start(ap, last_arg) (ap = ((va_list)(&last_arg) + va_size(last_arg)))
+#define va_start(ap, last_arg) ((ap) = ((va_list)(&(last_arg)) + va_size(last_arg)))
 
 /// @brief The end of a variadic list.
 #define va_end(ap) ((void)0)
 
 /// @brief The argument of a variadic list.
-#define va_arg(ap, t) (ap += va_size(t), *((t *)(ap - va_size(t))))
+#define va_arg(ap, t) ((ap) += va_size(t), *((t *)((ap) - va_size(t))))

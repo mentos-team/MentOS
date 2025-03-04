@@ -9,10 +9,10 @@
 #define CHAR_BIT 8
 
 /// Minimum value a `signed char' can hold.
-#define SCHAR_MIN -128
+#define SCHAR_MIN (-128)
 
 /// Maximum value a `signed char' can hold.
-#define SCHAR_MAX +127
+#define SCHAR_MAX (+127)
 
 /// Minimum value a `signed char' can hold.
 #define CHAR_MIN SCHAR_MIN

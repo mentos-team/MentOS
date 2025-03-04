@@ -18,7 +18,9 @@ int atoi(const char *str)
         return 0;
     }
     // Initialize sign, the result variable, and two indices.
-    int sign = (str[0] == '-') ? -1 : +1, result = 0, i;
+    int sign   = (str[0] == '-') ? -1 : +1;
+    int result = 0;
+    int i;
     // Find where the number ends.
     for (i = (sign == -1) ? 1 : 0; (str[i] != '\0') && isdigit(str[i]); ++i) {
         result = (result * 10) + str[i] - '0';
@@ -29,9 +31,12 @@ int atoi(const char *str)
 long strtol(const char *str, char **endptr, int base)
 {
     const char *s;
-    long acc, cutoff;
+    long acc;
+    long cutoff;
     int c;
-    int neg, any, cutlim;
+    int neg;
+    int any;
+    int cutlim;
     /*
      * Skip white space and pick up leading +/- sign if any.
      * If base is 0, allow 0x for hex and 0 for octal, else

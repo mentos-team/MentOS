@@ -15,10 +15,10 @@
 // Note: MAX_RT_PRIO must not be smaller than MAX_USER_RT_PRIO.
 
 /// @brief Max niceness value.
-#define MAX_NICE +19
+#define MAX_NICE (+19)
 
 /// @brief Min niceness value.
-#define MIN_NICE -20
+#define MIN_NICE (-20)
 
 /// @brief Niceness range.
 #define NICE_WIDTH (MAX_NICE - MIN_NICE + 1)

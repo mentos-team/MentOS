@@ -17,6 +17,6 @@
 /// @brief First, it access the value at the given memory location, and then it moves the pointer up.
 #define POP_VALUE_FROM_STACK(value, ptr)                                                                               \
     ({                                                                                                                 \
-        value = __ACCESS_PTR(__typeof__(value), ptr);                                                                  \
+        (value) = __ACCESS_PTR(__typeof__(value), ptr);                                                                \
         __MOVE_PTR_UP(__typeof__(value), ptr);                                                                         \
     })

@@ -29,8 +29,10 @@ static void cvt(double arg, int ndigits, int *decpt, int *sign, char *buf, unsig
     }
 
     int r2;
-    double fi, fj;
-    char *p, *p1;
+    double fi;
+    double fj;
+    char *p;
+    char *p1;
 
     char *buf_end = (buf + buf_size);
 

@@ -261,14 +261,14 @@ int elf_load_file(task_struct *task, vfs_file_t *file, uint32_t *entry);
 int elf_check_file_type(vfs_file_t *file, Elf_Type type);
 
 /// @brief Checks the correctness of the ELF header.
-/// @param hdr The header to check.
+/// @param header The header to check.
 /// @return 0 if fails, 1 if succeed.
-int elf_check_file_header(elf_header_t *hdr);
+int elf_check_file_header(elf_header_t *header);
 
 /// @brief Checks the correctness of the ELF header magic number.
-/// @param hdr The header to check.
+/// @param header The header to check.
 /// @return 0 if fails, 1 if succeed.
-int elf_check_magic_number(elf_header_t *hdr);
+int elf_check_magic_number(elf_header_t *header);
 
 /// @brief Transforms the passed ELF type to string.
 /// @param type The integer representing the ELF type.

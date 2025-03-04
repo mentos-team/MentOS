@@ -255,5 +255,5 @@ multiboot_module_t *first_module(multiboot_info_t *info);
 multiboot_module_t *next_module(multiboot_info_t *info, multiboot_module_t *mod);
 
 /// @brief Prints as debugging output the info regarding the multiboot.
-/// @param mboot_ptr The pointer to the multiboot information.
-void dump_multiboot(multiboot_info_t *mboot_ptr);
+/// @param mbi The pointer to the multiboot information.
+void dump_multiboot(multiboot_info_t *mbi);

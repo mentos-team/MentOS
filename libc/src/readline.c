@@ -17,7 +17,9 @@ int readline(int fd, char *buffer, size_t buflen, ssize_t *read_len)
         return 0; // Invalid input, cannot proceed.
     }
 
-    ssize_t length, rollback, num_read;
+    ssize_t length;
+    ssize_t rollback;
+    ssize_t num_read;
     unsigned char found_newline = 1;
 
     // Initialize the buffer to ensure it starts empty.

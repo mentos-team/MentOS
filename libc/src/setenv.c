@@ -56,7 +56,7 @@ static void __clone_environ(void)
     }
 }
 
-int setenv(const char *name, const char *value, int replace)
+int setenv(const char *name, const char *value, int overwrite)
 {
     // There must be always an environ variable set.
     assert(environ && "There is no `environ` set.");
@@ -79,7 +79,7 @@ int setenv(const char *name, const char *value, int replace)
     // Find the entry.
     int index = __find_entry(name, name_len);
     if (index >= 0) {
-        if (!replace) {
+        if (!overwrite) {
             //UNLOCK;
             return -1;
         }

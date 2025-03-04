@@ -22,8 +22,8 @@ int main(int argc, char *argv[], char *envp[])
             printf("This is bad, I should not be here! EXEC NOT WORKING\n");
         }
 
-        while (wait(&status) != login)
-            ;
+        while (wait(&status) != login) {
+        }
     }
 #pragma clang diagnostic pop
     return 0;

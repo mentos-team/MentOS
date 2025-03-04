@@ -77,7 +77,8 @@ static inline int __search_entry(int fd, char *buf, size_t buflen, const char *n
                     return 1;
                 }
             } else {
-                int gid_start = -1, col_count = 0;
+                int gid_start = -1;
+                int col_count = 0;
                 for (int i = 0; i < pos; ++i) {
                     if (buf[i] == ':') {
                         if (++col_count == 2) {

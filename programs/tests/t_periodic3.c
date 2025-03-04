@@ -45,8 +45,9 @@ int main(int argc, char *argv[])
     // Enter a loop that runs for 10 iterations
     while (1) {
         // Increment the counter and break out of the loop after 10 iterations
-        if (++counter == 10)
+        if (++counter == 10) {
             break;
+        }
 
         // Print the current counter value
         printf("[periodic3] counter: %d\n", counter);

@@ -22,8 +22,9 @@ int sys_open(const char *pathname, int flags, mode_t mode)
 
     // Search for an unused fd.
     int fd = get_unused_fd();
-    if (fd < 0)
+    if (fd < 0) {
         return fd;
+    }
 
     // Try to open the file.
     vfs_file_t *file = vfs_open(pathname, flags, mode);

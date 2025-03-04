@@ -62,7 +62,8 @@ int main(int argc, char *argv[])
 
     // Perform a division that will eventually cause a divide-by-zero error to
     // trigger SIGFPE.
-    int d = 1, e = 1;
+    int d = 1;
+    int e = 1;
 
     // Enter an infinite loop to progressively decrement e and eventually
     // trigger SIGFPE.

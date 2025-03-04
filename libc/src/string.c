@@ -34,37 +34,38 @@ char *strncpy(char *destination, const char *source, size_t num)
     return destination;
 }
 
-int strncmp(const char *s1, const char *s2, size_t n)
+int strncmp(const char *str1, const char *str2, size_t n)
 {
     if (!n) {
         return 0;
     }
-    while ((--n > 0) && (*s1) && (*s2) && (*s1 == *s2)) {
-        s1++;
-        s2++;
+    while ((--n > 0) && (*str1) && (*str2) && (*str1 == *str2)) {
+        str1++;
+        str2++;
     }
 
-    return *(unsigned char *)s1 - *(unsigned char *)s2;
+    return *(unsigned char *)str1 - *(unsigned char *)str2;
 }
 
-int stricmp(const char *s1, const char *s2)
+int stricmp(const char *str1, const char *str2)
 {
-    while (*s2 != 0 && toupper(*s1) == toupper(*s2)) {
-        s1++, s2++;
+    while (*str2 != 0 && toupper(*str1) == toupper(*str2)) {
+        str1++, str2++;
     }
 
-    return (toupper(*s1) - toupper(*s2));
+    return (toupper(*str1) - toupper(*str2));
 }
 
-int strnicmp(const char *s1, const char *s2, size_t n)
+int strnicmp(const char *str1, const char *str2, size_t n)
 {
-    int f, l;
+    int f;
+    int l;
 
     do {
-        if (((f = (unsigned char)(*(s1++))) >= 'A') && (f <= 'Z')) {
+        if (((f = (unsigned char)(*(str1++))) >= 'A') && (f <= 'Z')) {
             f -= 'A' - 'a';
         }
-        if (((l = (unsigned char)(*(s2++))) >= 'A') && (l <= 'Z')) {
+        if (((l = (unsigned char)(*(str2++))) >= 'A') && (l <= 'Z')) {
             l -= 'A' - 'a';
         }
     } while (--n && f && (f == l));
@@ -105,20 +106,21 @@ char *strrchr(const char *s, int ch)
 char *strstr(const char *str1, const char *str2)
 {
     char *cp = (char *)str1;
-    char *s1, *s2;
+    char *tmp1;
+    char *tmp2;
 
     if (!*str2) {
         return (char *)str1;
     }
 
     while (*cp) {
-        s1 = cp;
-        s2 = (char *)str2;
+        tmp1 = cp;
+        tmp2 = (char *)str2;
 
-        while (*s1 && *s2 && !(*s1 - *s2)) {
-            s1++, s2++;
+        while (*tmp1 && *tmp2 && !(*tmp1 - *tmp2)) {
+            tmp1++, tmp2++;
         }
-        if (!*s2) {
+        if (!*tmp2) {
             return cp;
         }
         cp++;
@@ -332,21 +334,21 @@ char *strcat(char *dst, const char *src)
     return dst;
 }
 
-char *strncat(char *s1, const char *s2, size_t n)
+char *strncat(char *dst, const char *src, size_t n)
 {
-    char *start = s1;
+    char *start = dst;
 
-    while (*s1++) {
+    while (*dst++) {
     }
-    s1--;
+    dst--;
 
     while (n--) {
-        if (!(*s1++ = *s2++)) {
+        if (!(*dst++ = *src++)) {
             return start;
         }
     }
 
-    *s1 = '\0';
+    *dst = '\0';
 
     return start;
 }
@@ -449,24 +451,25 @@ void *memset(void *ptr, int value, size_t num)
     // pointer.
     unsigned char volatile *dst = (unsigned char volatile *)ptr;
     // Initialize the content of the memory.
-    while (num--)
+    while (num--) {
         *dst++ = (unsigned char)value;
+    }
     // Return the pointer.
     return ptr;
 }
 
-int memcmp(const void *dst, const void *src, size_t n)
+int memcmp(const void *ptr1, const void *ptr2, size_t n)
 {
     if (!n) {
         return 0;
     }
 
-    while (--n && *(char *)dst == *(char *)src) {
-        dst = (char *)dst + 1;
-        src = (char *)src + 1;
+    while (--n && *(char *)ptr1 == *(char *)ptr2) {
+        ptr1 = (char *)ptr1 + 1;
+        ptr2 = (char *)ptr2 + 1;
     }
 
-    return *((unsigned char *)dst) - *((unsigned char *)src);
+    return *((unsigned char *)ptr1) - *((unsigned char *)ptr2);
 }
 
 void *memcpy(void *dst, const void *src, size_t num)
@@ -477,10 +480,11 @@ void *memcpy(void *dst, const void *src, size_t num)
     unsigned char volatile *_dst       = (unsigned char volatile *)dst;
     const unsigned char volatile *_src = (const unsigned char volatile *)src;
     // Initialize the content of the memory.
-    while (num--)
+    while (num--) {
         *_dst++ = *_src++;
+    }
     // Return the pointer.
-    return (void *)dst;
+    return dst;
 }
 
 void *memccpy(void *dst, const void *src, int c, size_t n)
@@ -503,27 +507,30 @@ char *strcpy(char *dst, const char *src)
 size_t strlen(const char *s)
 {
     const char *it = s;
-    for (; *it; it++)
+    for (; *it; it++) {
         ;
+    }
     return (size_t)(it - s);
 }
 
-size_t strnlen(const char *s, size_t count)
+size_t strnlen(const char *str, size_t maxlen)
 {
-    const char *p = memchr(s, 0, count);
-    return p ? (size_t)(p - s) : count;
+    const char *p = memchr(str, 0, maxlen);
+    return p ? (size_t)(p - str) : maxlen;
 }
 
-int strcmp(const char *s1, const char *s2)
+int strcmp(const char *str1, const char *str2)
 {
-    while (*s1 && *s2) {
-        if (*s1 < *s2)
+    while (*str1 && *str2) {
+        if (*str1 < *str2) {
             break;
-        if (*s1 > *s2)
+        }
+        if (*str1 > *str2) {
             break;
-        s1++, s2++;
+        }
+        str1++, str2++;
     }
-    return *s1 - *s2;
+    return *str1 - *str2;
 }
 
 char *strset(char *s, int c)
@@ -547,7 +554,8 @@ char *strnset(char *s, int c, size_t n)
 char *strtok(char *str, const char *delim)
 {
     const char *spanp;
-    int c, sc;
+    int c;
+    int sc;
     char *tok;
     static char *last;
 
@@ -668,7 +676,8 @@ char *strsep(char **stringp, const char *delim)
 {
     char *s;
     const char *spanp;
-    int c, sc;
+    int c;
+    int sc;
     char *tok;
     if ((s = *stringp) == NULL) {
         return (NULL);
@@ -694,7 +703,8 @@ char *strsep(char **stringp, const char *delim)
 char *itoa(char *buffer, unsigned int num, unsigned int base)
 {
     // int numval;
-    char *p, *pbase;
+    char *p;
+    char *pbase;
 
     p = pbase = buffer;
 

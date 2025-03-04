@@ -56,11 +56,7 @@ typedef unsigned int pgprot_t;
 #define offsetof(type, member) ((size_t)&(((type *)0)->member))
 
 /// Retrieve an enclosing structure from a pointer to a nested element.
-#if 1
-#define container_of(ptr, type, member) ((type *)((char *)(1 ? (ptr) : &((type *)0)->member) - offsetof(type, member)))
-#else
 #define container_of(ptr, type, member) ((type *)((char *)ptr - offsetof(type, member)))
-#endif
 
 /// Returns the alignment, in bytes, of the specified type.
 #define alignof(type)                                                                                                  \

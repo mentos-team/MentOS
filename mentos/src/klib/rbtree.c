@@ -135,12 +135,12 @@ static void rbtree_tree_node_dealloc_cb(rbtree_t *tree, rbtree_node_t *node)
 
 rbtree_t *rbtree_tree_alloc(void) { return kmalloc(sizeof(rbtree_t)); }
 
-rbtree_t *rbtree_tree_init(rbtree_t *tree, rbtree_tree_node_cmp_f node_cmp_cb)
+rbtree_t *rbtree_tree_init(rbtree_t *tree, rbtree_tree_node_cmp_f node_cb)
 {
     if (tree) {
         tree->root = NULL;
         tree->size = 0;
-        tree->cmp  = node_cmp_cb ? node_cmp_cb : rbtree_tree_node_cmp_ptr_cb;
+        tree->cmp  = node_cb ? node_cb : rbtree_tree_node_cmp_ptr_cb;
     }
     return tree;
 }
@@ -228,9 +228,12 @@ int rbtree_tree_insert_node(rbtree_t *tree, rbtree_node_t *node)
             tree->root = node;
         } else {
             rbtree_node_t head = {0}; // False tree root
-            rbtree_node_t *g, *t;     // Grandparent & parent
-            rbtree_node_t *p, *q;     // Iterator & parent
-            int dir = 0, last = 0;
+            rbtree_node_t *g;
+            rbtree_node_t *t; // Grandparent & parent
+            rbtree_node_t *p;
+            rbtree_node_t *q; // Iterator & parent
+            int dir  = 0;
+            int last = 0;
 
             // Set up our helpers
             t = &head;
@@ -297,8 +300,10 @@ int rbtree_tree_remove_with_cb(rbtree_t *tree, void *value, rbtree_tree_node_f n
     if (tree->root != NULL) {
         rbtree_node_t head = {0};              // False tree root
         rbtree_node_t node = {.value = value}; // Value wrapper node
-        rbtree_node_t *q, *p, *g;              // Helpers
-        rbtree_node_t *f = NULL;               // Found item
+        rbtree_node_t *q;
+        rbtree_node_t *p;
+        rbtree_node_t *g;        // Helpers
+        rbtree_node_t *f = NULL; // Found item
         int dir          = 1;
 
         // Set up our helpers
@@ -486,7 +491,8 @@ void *rbtree_iter_prev(rbtree_iter_t *iter) { return rbtree_iter_move(iter, 0); 
 
 int rbtree_tree_test(rbtree_t *tree, rbtree_node_t *root)
 {
-    int lh, rh;
+    int lh;
+    int rh;
 
     if (root == NULL) {
         return 1;

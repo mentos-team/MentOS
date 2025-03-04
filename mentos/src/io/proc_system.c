@@ -154,10 +154,10 @@ static ssize_t procs_do_cpuinfo(char *buffer, size_t bufsize) { return 0; }
 /// @return the amount we wrote.
 static ssize_t procs_do_meminfo(char *buffer, size_t bufsize)
 {
-    double total_space            = get_zone_total_space(GFP_KERNEL) + get_zone_total_space(GFP_HIGHUSER),
-           free_space             = get_zone_free_space(GFP_KERNEL) + get_zone_free_space(GFP_HIGHUSER),
-           cached_space           = get_zone_cached_space(GFP_KERNEL) + get_zone_cached_space(GFP_HIGHUSER),
-           used_space             = total_space - free_space;
+    double total_space            = get_zone_total_space(GFP_KERNEL) + get_zone_total_space(GFP_HIGHUSER);
+    double free_space             = get_zone_free_space(GFP_KERNEL) + get_zone_free_space(GFP_HIGHUSER);
+    double cached_space           = get_zone_cached_space(GFP_KERNEL) + get_zone_cached_space(GFP_HIGHUSER);
+    double used_space             = total_space - free_space;
     // Buddy system status strings.
     char kernel_buddy_status[512] = {0};
     char user_buddy_status[512]   = {0};

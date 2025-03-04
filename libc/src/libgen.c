@@ -87,7 +87,8 @@ char *realpath(const char *path, char *buffer, size_t buflen)
     // Add the separator to the end (se strncat for safety).
     strncat(abspath, "/", remaining);
 
-    int absidx = 0, pathidx = 0;
+    int absidx  = 0;
+    int pathidx = 0;
 
     while (abspath[absidx]) {
         // Skip multiple consecutive / characters

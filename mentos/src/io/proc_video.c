@@ -78,10 +78,11 @@ static ssize_t procv_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyt
     // Keep only the character, not the scancode.
     c &= 0x00FF;
 
-    if (iscntrl(c))
+    if (iscntrl(c)) {
         pr_debug("[ ](%d)\n", c);
-    else
+    } else {
         pr_debug("[%c](%d)\n", c, c);
+    }
 
     // Handle special characters.
     switch (c) {
@@ -92,7 +93,7 @@ static ssize_t procv_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyt
             video_putc(c);
         }
         // Return the character.
-        *((char *)buf) = c;
+        *(buf) = c;
         return 1;
 
     case '\b':
@@ -109,12 +110,10 @@ static ssize_t procv_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyt
                 }
             }
             return 0; // No character returned for backspace.
-        } else {
-            // Non-canonical mode: Add backspace to the buffer and return it.
-            rb_keybuffer_push_front(rb, c);
-            *((char *)buf) = rb_keybuffer_pop_back(rb) & 0x00FF;
-            return 1;
-        }
+        } // Non-canonical mode: Add backspace to the buffer and return it.
+        rb_keybuffer_push_front(rb, c);
+        *((char *)buf) = rb_keybuffer_pop_back(rb) & 0x00FF;
+        return 1;
 
     case 127: // Delete key.
         // Optionally display the character if echo is enabled.
@@ -122,7 +121,7 @@ static ssize_t procv_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyt
             video_putc(c);
         }
         // Return the character.
-        *((char *)buf) = c;
+        *(buf) = c;
         return 1;
 
     default:
@@ -133,7 +132,8 @@ static ssize_t procv_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyt
                     // Send SIGTERM on Ctrl+C.
                     sys_kill(process->pid, SIGTERM);
                     return 0;
-                } else if (c == 0x1A) {
+                }
+                if (c == 0x1A) {
                     // Send SIGSTOP on Ctrl+Z.
                     sys_kill(process->pid, SIGSTOP);
                     return 0;

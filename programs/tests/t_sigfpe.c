@@ -50,7 +50,8 @@ int main(int argc, char *argv[])
     printf("Diving by zero (unrecoverable)...\n");
 
     // Should trigger ALU error, fighting the compiler...
-    int d = 1, e = 1;
+    int d = 1;
+    int e = 1;
     d /= e;
     e -= 1;
     d /= e;

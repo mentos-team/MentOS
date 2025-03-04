@@ -243,14 +243,13 @@ int mem_clone_vm_area(
     uint32_t flags);
 
 /// @brief Create a virtual memory area.
-/// @param mm         The memory descriptor which will contain the new segment.
-/// @param virt_start The virtual address to map to.
-/// @param size       The size of the segment.
-/// @param pgflags    The flags for the new memory area.
-/// @param gfpflags   The Get Free Pages flags.
+/// @param mm The memory descriptor which will contain the new segment.
+/// @param vm_start The virtual address to map to.
+/// @param size The size of the segment.
+/// @param pgflags The flags for the new memory area.
+/// @param gfpflags The Get Free Pages flags.
 /// @return The newly created virtual memory area descriptor.
-vm_area_struct_t *
-create_vm_area(mm_struct_t *mm, uint32_t virt_start, size_t size, uint32_t pgflags, uint32_t gfpflags);
+vm_area_struct_t *create_vm_area(mm_struct_t *mm, uint32_t vm_start, size_t size, uint32_t pgflags, uint32_t gfpflags);
 
 /// @brief Clone a virtual memory area, using copy on write if specified
 /// @param mm the memory descriptor which will contain the new segment.

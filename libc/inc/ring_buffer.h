@@ -87,7 +87,7 @@
         rb->tail  = 0;                                                                                                 \
         rb->count = 0;                                                                                                 \
         rb->size  = length;                                                                                            \
-        for (unsigned i = 0; i < length; i++) {                                                                        \
+        for (unsigned i = 0; i < (length); i++) {                                                                      \
             rb->buffer[i] = init;                                                                                      \
         }                                                                                                              \
     }                                                                                                                  \
@@ -319,7 +319,7 @@
     static inline void rb_##name##_init_entry(rb_##name##_entry_t *entry)                                              \
     {                                                                                                                  \
         entry->size = size2;                                                                                           \
-        for (unsigned i = 0; i < size2; i++) {                                                                         \
+        for (unsigned i = 0; i < (size2); i++) {                                                                       \
             entry->buffer[i] = init;                                                                                   \
         }                                                                                                              \
     }                                                                                                                  \
@@ -335,34 +335,34 @@
         } else {                                                                                                       \
             rb->copy = rb_##name##_entry_default_copy_fun;                                                             \
         }                                                                                                              \
-        for (unsigned i = 0; i < size1; i++) {                                                                         \
+        for (unsigned i = 0; i < (size1); i++) {                                                                       \
             rb_##name##_init_entry(rb->buffer + i);                                                                    \
         }                                                                                                              \
     }                                                                                                                  \
                                                                                                                        \
     static inline unsigned rb_##name##_is_empty(rb_##name##_t *rb) { return rb->count == 0; }                          \
                                                                                                                        \
-    static inline unsigned rb_##name##_is_full(rb_##name##_t *rb) { return rb->count == size1; }                       \
+    static inline unsigned rb_##name##_is_full(rb_##name##_t *rb) { return rb->count == (size1); }                     \
                                                                                                                        \
     static inline void rb_##name##_push_back(rb_##name##_t *rb, rb_##name##_entry_t *item)                             \
     {                                                                                                                  \
         rb->copy(rb->buffer[rb->head].buffer, item->buffer, size2);                                                    \
         if (rb_##name##_is_full(rb)) {                                                                                 \
-            rb->tail = (rb->tail + 1) % size1;                                                                         \
+            rb->tail = (rb->tail + 1) % (size1);                                                                       \
         } else {                                                                                                       \
             rb->count++;                                                                                               \
         }                                                                                                              \
-        rb->head = (rb->head + 1) % size1;                                                                             \
+        rb->head = (rb->head + 1) % (size1);                                                                           \
     }                                                                                                                  \
                                                                                                                        \
     static inline void rb_##name##_push_front(rb_##name##_t *rb, rb_##name##_entry_t *item)                            \
     {                                                                                                                  \
         if (rb_##name##_is_full(rb)) {                                                                                 \
-            rb->head = (rb->head == 0) ? size1 - 1 : rb->head - 1;                                                     \
+            rb->head = (rb->head == 0) ? (size1) - 1 : rb->head - 1;                                                   \
         } else {                                                                                                       \
             rb->count++;                                                                                               \
         }                                                                                                              \
-        rb->tail = (rb->tail == 0) ? size1 - 1 : rb->tail - 1;                                                         \
+        rb->tail = (rb->tail == 0) ? (size1) - 1 : rb->tail - 1;                                                       \
         rb->copy(rb->buffer[rb->tail].buffer, item->buffer, size2);                                                    \
     }                                                                                                                  \
                                                                                                                        \
@@ -371,7 +371,7 @@
         if (rb_##name##_is_empty(rb)) {                                                                                \
             return 1;                                                                                                  \
         }                                                                                                              \
-        rb->head = (rb->head == 0) ? size1 - 1 : rb->head - 1;                                                         \
+        rb->head = (rb->head == 0) ? (size1) - 1 : rb->head - 1;                                                       \
         rb->copy(item->buffer, rb->buffer[rb->head].buffer, size2);                                                    \
         rb->count--;                                                                                                   \
         return 0;                                                                                                      \
@@ -383,7 +383,7 @@
             return 1;                                                                                                  \
         }                                                                                                              \
         rb->copy(item->buffer, rb->buffer[rb->tail].buffer, size2);                                                    \
-        rb->tail = (rb->tail + 1) % size1;                                                                             \
+        rb->tail = (rb->tail + 1) % (size1);                                                                           \
         rb->count--;                                                                                                   \
         return 0;                                                                                                      \
     }                                                                                                                  \
@@ -393,7 +393,7 @@
         if (rb_##name##_is_empty(rb)) {                                                                                \
             return 1;                                                                                                  \
         }                                                                                                              \
-        unsigned index = ((rb->head == 0) ? size1 - 1 : rb->head - 1);                                                 \
+        unsigned index = ((rb->head == 0) ? (size1) - 1 : rb->head - 1);                                               \
         rb->copy(item->buffer, rb->buffer[index].buffer, size2);                                                       \
         return 0;                                                                                                      \
     }                                                                                                                  \
@@ -410,7 +410,7 @@
     static inline int rb_##name##_get(rb_##name##_t *rb, unsigned position, rb_##name##_entry_t *item)                 \
     {                                                                                                                  \
         if (!rb_##name##_is_empty(rb) && (position < rb->count)) {                                                     \
-            unsigned index = (rb->tail + position) % size1;                                                            \
+            unsigned index = (rb->tail + position) % (size1);                                                          \
             rb->copy(item->buffer, rb->buffer[index].buffer, size2);                                                   \
             return 1;                                                                                                  \
         }                                                                                                              \

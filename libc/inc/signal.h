@@ -42,7 +42,7 @@ typedef enum {
     SIGPROF   = 29, ///< Profiling timer expired.
     SIGXCPU   = 30, ///< CPU time limit exceeded.
     SIGXFSZ   = 31, ///< File size limit exceeded.
-    NSIG
+    NSIG      = 32
 } signal_type_t;
 
 /// @brief Codes that indentify the sender of a signal.

@@ -28,7 +28,7 @@ int main(int argc, char *argv[])
 
         // Program to execute: /bin/echo
         // Arguments: /bin/echo "Exec test successful"
-        execl("/bin/echo", "echo", "Exec test successful", (char *)NULL);
+        execl("/bin/echo", "echo", "Exec test successful", NULL);
 
         // If exec fails, print an error and exit
         perror("execl");
@@ -44,9 +44,7 @@ int main(int argc, char *argv[])
         if (WIFEXITED(status) && WEXITSTATUS(status) == 0) {
             // exec worked
             return EXIT_SUCCESS;
-        } else {
-            // exec failed or child terminated abnormally
-            return EXIT_FAILURE;
-        }
+        } // exec failed or child terminated abnormally
+        return EXIT_FAILURE;
     }
 }

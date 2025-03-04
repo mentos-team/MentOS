@@ -16,7 +16,7 @@ static int stage = 0;
 
 void abort(void)
 {
-    sigaction_t action;
+    struct sigaction action;
     sigset_t sigset;
 
     /* Unblock SIGABRT.  */
@@ -76,7 +76,8 @@ void abort(void)
     //  or otherwise make sure we never return.
 #pragma clang diagnostic push
 #pragma ide diagnostic ignored "EndlessLoop"
-    while (1)
+    while (1) {
         __asm__ __volatile__("hlt");
+    };
 #pragma clang diagnostic pop
 }

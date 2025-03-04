@@ -184,7 +184,8 @@ static const char *__ps2_get_response_error_message(unsigned response)
 
 int ps2_initialize(void)
 {
-    unsigned char status, response;
+    unsigned char status;
+    unsigned char response;
     bool_t dual;
 
     status = __ps2_get_controller_status();

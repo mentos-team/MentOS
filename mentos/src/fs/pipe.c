@@ -504,9 +504,9 @@ int pipe_read_wake_function(wait_queue_entry_t *wait, unsigned mode, int sync)
             // Signal that the task has been woken up.
             pr_debug("Data available or no more writers, waking up reader %d.\n", wait->task->pid);
             return 1;
-        } else {
-            pr_debug("Reader %d not in the correct state for wake-up.\n", wait->task->pid);
         }
+        pr_debug("Reader %d not in the correct state for wake-up.\n", wait->task->pid);
+
     } else {
         pr_debug("No data available, reader %d should continue waiting.\n", wait->task->pid);
     }
@@ -541,9 +541,9 @@ int pipe_write_wake_function(wait_queue_entry_t *wait, unsigned mode, int sync)
             // Signal that the task has been woken up.
             pr_debug("Space available, waking up writer %d.\n", wait->task->pid);
             return 1;
-        } else {
-            pr_debug("Writer %d not in the correct state for wake-up.\n", wait->task->pid);
         }
+        pr_debug("Writer %d not in the correct state for wake-up.\n", wait->task->pid);
+
     } else {
         pr_debug("No space available, writer %d should continue waiting.\n", wait->task->pid);
     }
