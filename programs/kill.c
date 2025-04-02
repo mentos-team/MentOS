@@ -53,7 +53,8 @@ static inline int get_signal(char *s)
 
 static inline int get_pid(char *s)
 {
-    int pid = atoi(s);
+    char *endptr;
+    int pid = strtol(s, &endptr, 10);
     return ((pid > 0) && (pid < PID_MAX_LIMIT)) ? pid : 0;
 }
 

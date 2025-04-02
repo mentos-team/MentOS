@@ -14,6 +14,14 @@
         "cstdio": "c",
         "algorithm": "c",
         "fdc.h": "c",
-        "rbtree.h": "c"
+        "rbtree.h": "c",
+        "limits.h": "c",
+        "climits": "c",
+        "deque": "c",
+        "string": "c",
+        "unordered_map": "c",
+        "vector": "c",
+        "text_encoding": "c",
+        "*.tcc": "c"
     }
 }
