@@ -71,7 +71,6 @@ add_library(
     ${CMAKE_SOURCE_DIR}/mentos/src/klib/libgen.c
     ${CMAKE_SOURCE_DIR}/mentos/src/klib/strerror.c
     ${CMAKE_SOURCE_DIR}/mentos/src/klib/math.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/klib/fcvt.c
     ${CMAKE_SOURCE_DIR}/mentos/src/klib/spinlock.c
     ${CMAKE_SOURCE_DIR}/mentos/src/klib/stdlib.c
     ${CMAKE_SOURCE_DIR}/mentos/src/klib/rbtree.c
