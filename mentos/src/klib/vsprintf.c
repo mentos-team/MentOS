@@ -62,8 +62,10 @@ static int __emit_number(char *buffer, size_t buflen, unsigned long num, int bas
         num /= base;
     } while ((num > 0) && (len < buflen));
     // Apply precision (zero padding).
-    while ((len < precision) && (len < buflen)) {
-        buffer[len++] = '0';
+    if (precision > 0) {
+        while ((len < precision) && (len < buflen)) {
+            buffer[len++] = '0';
+        }
     }
     // Handle sign/prefix.
     if (flags & FLAGS_NEGATIVE) {
