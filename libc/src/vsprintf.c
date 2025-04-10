@@ -345,6 +345,9 @@ int vsnprintf(char *buffer, size_t size, const char *format, va_list args)
                 else {
                     length = 3;
                 }
+            } else if (*format == 'z') {
+                length = 'z';
+                format++;
             }
 
             // Enable uppercase flag if necessary.
@@ -369,6 +372,8 @@ int vsnprintf(char *buffer, size_t size, const char *format, va_list args)
                     num = (short)va_arg(args, int);
                 } else if (length == 2) {
                     num = (char)va_arg(args, int);
+                } else if (length == 'z') {
+                    num = (short)va_arg(args, ssize_t);
                 } else {
                     num = va_arg(args, long);
                 }
@@ -386,6 +391,8 @@ int vsnprintf(char *buffer, size_t size, const char *format, va_list args)
                     num = (unsigned short)va_arg(args, unsigned int);
                 } else if (length == 2) {
                     num = (unsigned char)va_arg(args, unsigned int);
+                } else if (length == 'z') {
+                    num = (short)va_arg(args, size_t);
                 } else {
                     num = va_arg(args, unsigned long);
                 }
