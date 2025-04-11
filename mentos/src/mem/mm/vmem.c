@@ -47,7 +47,7 @@ int vmem_init(void)
         VIRTUAL_MEMORY_PAGES_COUNT);              // Total number of virtual memory pages.
 
     // Get the main page directory for the system.
-    page_directory_t *main_pgd = paging_get_main_directory();
+    page_directory_t *main_pgd = paging_get_main_pgd();
 
     // Error handling: If the main page directory could not be retrieved, return failure.
     if (!main_pgd) {
@@ -179,7 +179,7 @@ uint32_t vmem_map_physical_pages(page_t *page, int pfn_count)
     uint32_t phy_address = get_physical_address_from_page(page);
 
     // Get the main page directory.
-    page_directory_t *main_pgd = paging_get_main_directory();
+    page_directory_t *main_pgd = paging_get_main_pgd();
     // Error handling: Failed to get the main page directory.
     if (!main_pgd) {
         pr_crit("Failed to get the main page directory\n");
@@ -230,7 +230,7 @@ uint32_t vmem_map_virtual_address(mm_struct_t *mm, virt_map_page_t *vpage, uint3
     }
 
     // Get the main page directory.
-    page_directory_t *main_pgd = paging_get_main_directory();
+    page_directory_t *main_pgd = paging_get_main_pgd();
     // Error handling: Failed to get the main page directory.
     if (!main_pgd) {
         pr_crit("Failed to get the main page directory\n");
@@ -280,7 +280,7 @@ int vmem_unmap_virtual_address_page(virt_map_page_t *page)
     uint32_t addr = VIRT_PAGE_TO_ADDRESS(page);
 
     // Get the main page directory.
-    page_directory_t *main_pgd = paging_get_main_directory();
+    page_directory_t *main_pgd = paging_get_main_pgd();
     // Error handling: Failed to get the main page directory.
     if (!main_pgd) {
         pr_crit("Failed to get the main page directory\n");

@@ -97,9 +97,9 @@ static int __reset_process(task_struct *task)
     }
 
     // Save the current page directory.
-    page_directory_t *crtdir = paging_get_current_directory();
+    page_directory_t *crtdir = paging_get_current_pgd();
     // FIXME: Now to clear the stack a pgdir switch is made, it should be a kernel mmapping.
-    paging_switch_directory_va(task->mm->pgd);
+    paging_switch_pgd(task->mm->pgd);
 
     // Clean stack space.
     memset((char *)task->mm->start_stack, 0, DEFAULT_STACK_SIZE);
@@ -111,7 +111,7 @@ static int __reset_process(task_struct *task)
     task->thread.regs.eflags  = task->thread.regs.eflags | EFLAG_IF;
 
     // Restore previous pgdir
-    paging_switch_directory(crtdir);
+    paging_switch_pgd(crtdir);
 
     return 1;
 }
@@ -382,9 +382,9 @@ int process_create_init(const char *path)
 
     // == INITIALIZE PROGRAM ARGUMENTS ========================================
     // Save the current page directory.
-    page_directory_t *crtdir = paging_get_current_directory();
+    page_directory_t *crtdir = paging_get_current_pgd();
     // Switch to init page directory.
-    paging_switch_directory_va(init_process->mm->pgd);
+    paging_switch_pgd(init_process->mm->pgd);
 
     // Prepare argv and envp for the init process.
     char **argv_ptr;
@@ -410,7 +410,7 @@ int process_create_init(const char *path)
     PUSH_VALUE_ON_STACK(init_process->thread.regs.useresp, argc);
 
     // Restore previous pgdir
-    paging_switch_directory(crtdir);
+    paging_switch_pgd(crtdir);
     // ------------------------------------------------------------------------
 
     pr_debug("Executing '%s' (pid: %d)...\n", init_process->name, init_process->pid);
@@ -655,10 +655,10 @@ int sys_execve(pt_regs_t *f)
 
     // == INITIALIZE PROGRAM ARGUMENTS ========================================
     // Save the current page directory.
-    page_directory_t *crtdir = paging_get_current_directory();
+    page_directory_t *crtdir = paging_get_current_pgd();
 
     // Change the page directory to point to the newly created process
-    paging_switch_directory_va(current->mm->pgd);
+    paging_switch_pgd(current->mm->pgd);
 
     // Save where the arguments start.
     current->mm->arg_start = current->thread.regs.useresp;
@@ -676,7 +676,7 @@ int sys_execve(pt_regs_t *f)
     PUSH_VALUE_ON_STACK(current->thread.regs.useresp, argc);
 
     // Restore previous pgdir
-    paging_switch_directory(crtdir);
+    paging_switch_pgd(crtdir);
     // ------------------------------------------------------------------------
 
     // Change the name of the process.

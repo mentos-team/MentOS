@@ -7,7 +7,6 @@
 
 #include "elf/elf.h"
 #include "link_access.h"
-#include "mem/paging.h"
 #include "sys/module.h"
 
 /// @defgroup bootloader Bootloader
@@ -208,6 +207,22 @@ static inline void __relocate_kernel_image(elf_header_t *elf_hdr)
     }
 }
 
+void paging_enable(void)
+{
+    // Clear the PSE bit from cr4.
+    set_cr4(bitmask_clear(get_cr4(), CR4_PSE));
+    // Set the PG bit in cr0.
+    set_cr0(bitmask_set(get_cr0(), CR0_PG));
+}
+
+int paging_is_enabled(void) { return bitmask_check(get_cr0(), CR0_PG); }
+
+int paging_switch_pgd(page_directory_t *dir)
+{
+    set_cr3((uintptr_t)dir);
+    return 0;
+}
+
 /// @brief Entry point of the bootloader.
 /// @param magic  The magic number coming from the multiboot assembly code.
 /// @param header Multiboot header provided by the bootloader.
@@ -272,7 +287,7 @@ void boot_main(uint32_t magic, multiboot_info_t *header, uint32_t esp)
 
     // Switch to the newly created page directory.
     __debug_puts("[bootloader] Switching page directory...\n");
-    paging_switch_directory(&boot_pgdir);
+    paging_switch_pgd(&boot_pgdir);
 
     // Enable paging.
     __debug_puts("[bootloader] Enabling paging...\n");

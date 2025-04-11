@@ -94,48 +94,34 @@ extern kmem_cache_t *pgtbl_cache;
 /// @return 0 on success, -1 on error.
 int paging_init(boot_info_t *info);
 
+/// @brief Enables paging.
+void paging_enable(void);
+
+/// @brief Returns if paging is enabled.
+/// @return 1 if paging is enables, 0 otherwise.
+int paging_is_enabled(void);
+
 /// @brief Provide access to the main page directory.
 /// @return A pointer to the main page directory, or NULL if main_mm is not initialized.
-page_directory_t *paging_get_main_directory(void);
+page_directory_t *paging_get_main_pgd(void);
 
 /// @brief Provide access to the current paging directory.
 /// @return A pointer to the current page directory.
-static inline page_directory_t *paging_get_current_directory(void) { return (page_directory_t *)get_cr3(); }
+page_directory_t *paging_get_current_pgd(void);
 
-/// @brief Switches paging directory, the pointer must be a physical address.
+/// @brief Switches paging directory.
 /// @param dir A pointer to the new page directory.
-static inline void paging_switch_directory(page_directory_t *dir) { set_cr3((uintptr_t)dir); }
+/// @return Returns 0 on success, or -1 if an error occurs.
+int paging_switch_pgd(page_directory_t *dir);
 
 /// @brief Checks if the given page directory is the current one.
 /// @param pgd A pointer to the page directory to check.
 /// @return 1 if the given page directory is the current one, 0 otherwise.
 int is_current_pgd(page_directory_t *pgd);
 
-/// @brief Switches paging directory, the pointer can be a lowmem address.
-/// @param dir A pointer to the new page directory.
-/// @return Returns 0 on success, or -1 if an error occurs.
-int paging_switch_directory_va(page_directory_t *dir);
-
 /// @brief Invalidate a single tlb page (the one that maps the specified virtual address)
 /// @param addr The address of the page table.
 void paging_flush_tlb_single(unsigned long addr);
-
-/// @brief Enables paging.
-static inline void paging_enable(void)
-{
-    // Clear the PSE bit from cr4.
-    set_cr4(bitmask_clear(get_cr4(), CR4_PSE));
-    // Set the PG bit in cr0.
-    set_cr0(bitmask_set(get_cr0(), CR0_PG));
-}
-
-/// @brief Returns if paging is enabled.
-/// @return 1 if paging is enables, 0 otherwise.
-static inline int paging_is_enabled(void) { return bitmask_check(get_cr0(), CR0_PG); }
-
-/// @brief Handles a page fault.
-/// @param f The interrupt stack frame.
-void page_fault_handler(pt_regs_t *f);
 
 /// @brief Maps a virtual address to a corresponding physical page.
 /// @param pgdir The page directory.

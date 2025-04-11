@@ -357,7 +357,7 @@ long sys_sigreturn(struct pt_regs *f)
     // Restore the previous signal mask.
     __copy_sigset(&current_process->blocked, &current_process->saved_sigmask);
     // Switch to process page directory
-    paging_switch_directory_va(current_process->mm->pgd);
+    paging_switch_pgd(current_process->mm->pgd);
     pr_debug("sys_sigreturn(%p) : done!\n", f);
     return 0;
 }
