@@ -16,7 +16,7 @@
 #include "list_head_algorithm.h"
 #include "mem/alloc/zone_allocator.h"
 #include "mem/paging.h"
-#include "mem/vmem_map.h"
+#include "mem/mm/vmem.h"
 #include "process/scheduler.h"
 #include "stddef.h"
 #include "stdint.h"
@@ -286,7 +286,7 @@ static int __page_handle_cow(page_table_entry_t *entry)
             }
 
             // Map the allocated physical page to a virtual address.
-            uint32_t vaddr = virt_map_physical_pages(page, 1);
+            uint32_t vaddr = vmem_map_physical_pages(page, 1);
             if (!vaddr) {
                 pr_crit("Failed to map the physical page to virtual address.\n");
                 return 1;
@@ -296,7 +296,7 @@ static int __page_handle_cow(page_table_entry_t *entry)
             memset((void *)vaddr, 0, PAGE_SIZE);
 
             // Unmap the virtual address after clearing the page.
-            virt_unmap(vaddr);
+            vmem_unmap_virtual_address(vaddr);
 
             // Set the physical frame address of the allocated page into the entry.
             entry->frame = get_physical_address_from_page(page) >> 12U; // Shift to get page frame number.

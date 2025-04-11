@@ -1,4 +1,4 @@
-/// @file vmem_map.h
+/// @file vmem.h
 /// @brief Virtual memory mapping routines.
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
@@ -23,18 +23,18 @@ typedef struct virt_map_page {
 
 /// @brief Initialize the virtual memory mapper.
 /// @return Returns 0 on success, or -1 if an error occurs.
-int virt_init(void);
+int vmem_init(void);
 
 /// @brief Maps physical pages to virtual memory.
 /// @param page Pointer to the physical page.
 /// @param pfn_count The number of page frames to map.
 /// @return The virtual address of the mapped pages, or 0 on failure.
-uint32_t virt_map_physical_pages(page_t *page, int pfn_count);
+uint32_t vmem_map_physical_pages(page_t *page, int pfn_count);
 
 /// @brief Allocates virtual pages for a given size.
 /// @param size The size in bytes to allocate.
 /// @return Pointer to the allocated virtual pages, or NULL on failure.
-virt_map_page_t *virt_map_alloc(uint32_t size);
+virt_map_page_t *vmem_map_alloc_virtual(uint32_t size);
 
 /// @brief Maps a virtual address to a virtual memory area.
 /// @param mm Pointer to the memory management structure.
@@ -42,17 +42,17 @@ virt_map_page_t *virt_map_alloc(uint32_t size);
 /// @param vaddr The virtual address to map.
 /// @param size The size of the memory area to map.
 /// @return The starting virtual address of the mapped area, or 0 on failure.
-uint32_t virt_map_vaddress(mm_struct_t *mm, virt_map_page_t *vpage, uint32_t vaddr, uint32_t size);
+uint32_t vmem_map_virtual_address(mm_struct_t *mm, virt_map_page_t *vpage, uint32_t vaddr, uint32_t size);
 
 /// @brief Unmaps a virtual address from the virtual memory.
 /// @param addr The virtual address to unmap.
 /// @return Returns 0 on success, or -1 if an error occurs.
-int virt_unmap(uint32_t addr);
+int vmem_unmap_virtual_address(uint32_t addr);
 
 /// @brief Unmap a page.
 /// @param page Pointer to the page to unmap.
 /// @return Returns 0 on success, or -1 if an error occurs.
-int virt_unmap_pg(virt_map_page_t *page);
+int vmem_unmap_virtual_address_page(virt_map_page_t *page);
 
 /// @brief Memcpy from different processes virtual addresses
 /// @param dst_mm The destination memory struct
@@ -60,4 +60,4 @@ int virt_unmap_pg(virt_map_page_t *page);
 /// @param src_mm The source memory struct
 /// @param src_vaddr The source memory address
 /// @param size The size in bytes of the copy
-void virt_memcpy(mm_struct_t *dst_mm, uint32_t dst_vaddr, mm_struct_t *src_mm, uint32_t src_vaddr, uint32_t size);
+void vmem_memcpy(mm_struct_t *dst_mm, uint32_t dst_vaddr, mm_struct_t *src_mm, uint32_t src_vaddr, uint32_t size);

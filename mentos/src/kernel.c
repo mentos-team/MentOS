@@ -28,8 +28,8 @@
 #include "io/vga/vga.h"
 #include "io/video.h"
 #include "ipc/ipc.h"
-#include "mem/vmem_map.h"
 #include "mem/alloc/zone_allocator.h"
+#include "mem/mm/vmem.h"
 #include "process/scheduler.h"
 #include "process/scheduler_feedback.h"
 #include "resource_tracing.h"
@@ -205,7 +205,7 @@ int kmain(boot_info_t *boot_informations)
     //==========================================================================
     pr_notice("Initialize virtual memory mapping.\n");
     printf("Initialize virtual memory mapping...");
-    if (virt_init() < 0) {
+    if (vmem_init() < 0) {
         print_fail();
         return 1;
     }
