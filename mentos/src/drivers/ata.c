@@ -22,11 +22,13 @@
 #include "hardware/pic8259.h"
 #include "io/port_io.h"
 #include "klib/spinlock.h"
-#include "mem/kheap.h"
+#include "mem/alloc/zone_allocator.h"
 #include "process/wait.h"
+#include "stdbool.h"
 #include "stdio.h"
 #include "string.h"
 #include "system/panic.h"
+#include "system/syscall.h"
 
 /// @brief IDENTIFY device data (response to 0xEC).
 typedef struct ata_identity {

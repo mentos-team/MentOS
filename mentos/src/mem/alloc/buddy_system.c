@@ -10,7 +10,7 @@
 #include "io/debug.h"                    // Include debugging functions.
 
 #include "assert.h"
-#include "mem/buddy_system.h"
+#include "mem/alloc/buddy_system.h"
 #include "mem/paging.h"
 #include "stdio.h"
 #include "system/panic.h"

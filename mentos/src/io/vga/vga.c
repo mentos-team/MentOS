@@ -413,20 +413,6 @@ static inline void __write_pixel_1(int x, int y, unsigned char c)
     __write_byte(off, (__read_byte(off) & ~mask) | (c & mask));
 }
 
-/// @brief Reads a pixel.
-/// @param x x coordinates.
-/// @param y y coordinates.
-/// @return the pixel value.
-static inline unsigned __read_pixel_1(unsigned x, unsigned y)
-{
-    unsigned off;
-    unsigned mask;
-    off  = (driver->width / 8) * y + x / 8;
-    x    = (x & 7) * 1;
-    mask = 0x80 >> x;
-    return __read_byte(off) & mask;
-}
-
 /// @brief Writes a pixel.
 /// @param x x coordinates.
 /// @param y y coordinates.
@@ -440,20 +426,6 @@ static inline void __write_pixel_2(int x, int y, unsigned char c)
     x    = (x & 3) * 2;
     mask = 0xC0 >> x;
     __write_byte(off, (__read_byte(off) & ~mask) | (c & mask));
-}
-
-/// @brief Reads a pixel.
-/// @param x x coordinates.
-/// @param y y coordinates.
-/// @return the pixel value.
-static inline unsigned __read_pixel_2(unsigned x, unsigned y)
-{
-    unsigned off;
-    unsigned mask;
-    off  = (driver->width / 4) * y + x / 4;
-    x    = (x & 3) * 2;
-    mask = 0xC0 >> x;
-    return __read_byte(off) & mask;
 }
 
 /// @brief Writes a pixel.
@@ -479,6 +451,34 @@ static inline void __write_pixel_4(int x, int y, unsigned char color)
         }
         pmask <<= 1;
     }
+}
+
+/// @brief Reads a pixel.
+/// @param x x coordinates.
+/// @param y y coordinates.
+/// @return the pixel value.
+static inline unsigned __read_pixel_1(int x, int y)
+{
+    unsigned off;
+    unsigned mask;
+    off  = (driver->width / 8) * y + x / 8;
+    x    = (x & 7) * 1;
+    mask = 0x80 >> x;
+    return __read_byte(off) & mask;
+}
+
+/// @brief Reads a pixel.
+/// @param x x coordinates.
+/// @param y y coordinates.
+/// @return the pixel value.
+static inline unsigned __read_pixel_2(int x, int y)
+{
+    unsigned off;
+    unsigned mask;
+    off  = (driver->width / 4) * y + x / 4;
+    x    = (x & 3) * 2;
+    mask = 0xC0 >> x;
+    return __read_byte(off) & mask;
 }
 
 /// @brief Reads a pixel.
@@ -754,12 +754,10 @@ static vga_driver_t driver_320_200_256 = {
 
 void vga_initialize(void)
 {
+    // Initialize the desired mode.
+#if defined(VGA_MODE_320_200_256) // 40x25
     // Save the current palette.
     __save_palette(stored_palette, 256);
-
-    // Initialize the desired mode.
-
-#if defined(VGA_MODE_320_200_256) // 40x25
     // Write the registers.
     __set_mode(&_mode_320_200_256);
     // Initialize the mode.
@@ -769,6 +767,8 @@ void vga_initialize(void)
     // Set the font.
     driver->font = &font_5x6;
 #elif defined(VGA_MODE_640_480_16) // 80x60
+    // Save the current palette.
+    __save_palette(stored_palette, 256);
     // Write the registers.
     __set_mode(&_mode_640_480_16);
     // Initialize the mode.
@@ -778,6 +778,8 @@ void vga_initialize(void)
     // Set the font.
     driver->font = &font_8x14;
 #elif defined(VGA_MODE_720_480_16) // 90x60
+    // Save the current palette.
+    __save_palette(stored_palette, 256);
     // Write the registers.
     __set_mode(&_mode_720_480_16);
     // Initialize the mode.

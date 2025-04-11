@@ -12,9 +12,9 @@
 #include "assert.h"
 #include "kernel.h"
 #include "list_head.h"
-#include "mem/buddy_system.h"
+#include "mem/alloc/buddy_system.h"
 #include "mem/paging.h"
-#include "mem/zone_allocator.h"
+#include "mem/alloc/zone_allocator.h"
 #include "string.h"
 
 /// @brief Aligns the given address down to the nearest page boundary.

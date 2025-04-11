@@ -18,7 +18,6 @@
 #include "fs/vfs.h"
 #include "hardware/timer.h"
 #include "kernel.h"
-#include "mem/kheap.h"
 #include "process/process.h"
 #include "process/scheduler.h"
 #include "sys/mman.h"

@@ -6,7 +6,7 @@
 #pragma once
 
 #include "fs/vfs_types.h"
-#include "mem/slab.h"
+#include "mem/alloc/slab.h"
 #include "os_root_path.h"
 
 /// Maximum number of opened file.

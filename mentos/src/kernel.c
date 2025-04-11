@@ -29,7 +29,7 @@
 #include "io/video.h"
 #include "ipc/ipc.h"
 #include "mem/vmem_map.h"
-#include "mem/zone_allocator.h"
+#include "mem/alloc/zone_allocator.h"
 #include "process/scheduler.h"
 #include "process/scheduler_feedback.h"
 #include "resource_tracing.h"

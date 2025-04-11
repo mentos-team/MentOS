@@ -1,4 +1,4 @@
-/// @file kheap.c
+/// @file heap.c
 /// @brief
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
@@ -13,8 +13,8 @@
 #include "kernel.h"
 #include "list_head.h"
 #include "math.h"
-#include "mem/kheap.h"
 #include "mem/paging.h"
+#include "process/scheduler.h"
 #include "stdbool.h"
 #include "stddef.h"
 #include "stdint.h"
