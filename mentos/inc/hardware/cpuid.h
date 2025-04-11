@@ -50,12 +50,12 @@ void get_cpuid(cpuinfo_t *cpuinfo);
 
 /// @brief Actual CPUID call.
 /// @param registers The registers to fill with the result of the call.
-void call_cpuid(pt_regs *registers);
+void call_cpuid(pt_regs_t *registers);
 
 /// @brief Extract vendor string.
 /// @param cpuinfo   The struct containing the CPUID infos.
 /// @param registers The registers.
-void cpuid_write_vendor(cpuinfo_t *cpuinfo, pt_regs *registers);
+void cpuid_write_vendor(cpuinfo_t *cpuinfo, pt_regs_t *registers);
 
 // TODO: doxygen documentation.
 /// @brief
@@ -66,7 +66,7 @@ void cpuid_write_vendor(cpuinfo_t *cpuinfo, pt_regs *registers);
 /// EAX contains Type, Family, Model and Stepping ID
 /// EBX contains the Brand Index if supported, and the APIC ID
 /// ECX/EDX contains feature information
-void cpuid_write_proctype(cpuinfo_t *cpuinfo, pt_regs *registers);
+void cpuid_write_proctype(cpuinfo_t *cpuinfo, pt_regs_t *registers);
 
 // TODO: doxygen documentation.
 /// @brief EAX=1, ECX contains a list of supported features.
@@ -91,9 +91,9 @@ uint32_t cpuid_get_byte(uint32_t reg, uint32_t position, uint32_t value);
 /// @brief Index of brand strings. TODO: Document
 /// @param f Stack frame.
 /// @return The brand string.
-char *cpuid_brand_index(pt_regs *f);
+char *cpuid_brand_index(pt_regs_t *f);
 
 /// @brief Brand string is contained in EAX, EBX, ECX and EDX.
 /// @param f Stack frame.
 /// @return The brand string.
-char *cpuid_brand_string(pt_regs *f);
+char *cpuid_brand_string(pt_regs_t *f);

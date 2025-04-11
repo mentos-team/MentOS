@@ -74,7 +74,7 @@ static unsigned char __mouse_read(void)
 
 /// @brief The interrupt service routine of the mouse.
 /// @param f The interrupt stack frame.
-static void __mouse_isr(pt_regs *f)
+static void __mouse_isr(pt_regs_t *f)
 {
     (void)f;
     // Get the input bytes.

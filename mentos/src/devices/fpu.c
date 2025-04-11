@@ -80,7 +80,7 @@ static inline void __init_fpu(void) { __asm__ __volatile__("fninit"); }
 
 /// Kernel trap for FPU usage when FPU is disabled.
 /// @param f The interrupt stack frame.
-static inline void __invalid_op(pt_regs *f)
+static inline void __invalid_op(pt_regs_t *f)
 {
     pr_debug("__invalid_op(%p)\n", f);
     // First, turn the FPU on.
@@ -109,7 +109,7 @@ static inline void __invalid_op(pt_regs *f)
 
 /// Kernel trap for various integer and floating-point errors
 /// @param f The interrupt stack frame.
-static inline void __sigfpe_handler(pt_regs *f)
+static inline void __sigfpe_handler(pt_regs_t *f)
 {
     pr_debug("__sigfpe_handler(%p)\n", f);
 

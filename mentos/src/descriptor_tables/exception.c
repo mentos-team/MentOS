@@ -57,7 +57,7 @@ static char *isr_routines_description[IDT_SIZE];
 
 /// @brief Default handler for exceptions.
 /// @param f CPU registers when calling this function.
-static inline void default_isr_handler(pt_regs *f)
+static inline void default_isr_handler(pt_regs_t *f)
 {
     uint32_t irq_line = f->int_no;
     PRINT_REGS(pr_emerg, f);
@@ -69,7 +69,7 @@ static inline void default_isr_handler(pt_regs *f)
 
 /// @brief Handles a General Protection Fault (exception 13).
 /// @param frame The CPU registers at the time of the exception.
-void handle_gp_fault(pt_regs *frame)
+void handle_gp_fault(pt_regs_t *frame)
 {
     // Log the general protection fault details
     pr_info("General Protection Fault (Exception 13) occurred!\n");
@@ -100,7 +100,7 @@ void handle_gp_fault(pt_regs *frame)
 
 /// @brief Interrupt Service Routines handler called from the assembly.
 /// @param f CPU registers when calling this function.
-void isr_handler(pt_regs *f)
+void isr_handler(pt_regs_t *f)
 {
     uint32_t isr_number = f->int_no;
     if (isr_number != 80) {

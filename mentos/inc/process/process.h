@@ -67,9 +67,9 @@ typedef struct sched_entity {
 /// @brief Stores the status of CPU and FPU registers.
 typedef struct thread_struct {
     /// Stored status of registers.
-    pt_regs regs;
+    pt_regs_t regs;
     /// Stored status of registers befor jumping into a signal handler.
-    pt_regs signal_regs;
+    pt_regs_t signal_regs;
     /// Determines if the FPU is enabled.
     bool_t fpu_enabled;
     /// Data structure used to save FPU registers.

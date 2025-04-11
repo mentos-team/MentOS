@@ -14,103 +14,103 @@
 #include "descriptor_tables/isr.h"
 
 /// @brief Interrupt Service Routine (ISR) for exception handling.
-extern void INT_0(pt_regs *);
+extern void INT_0(pt_regs_t *);
 /// @brief Interrupt Service Routine (ISR) for exception handling.
-extern void INT_1(pt_regs *);
+extern void INT_1(pt_regs_t *);
 /// @brief Interrupt Service Routine (ISR) for exception handling.
-extern void INT_2(pt_regs *);
+extern void INT_2(pt_regs_t *);
 /// @brief Interrupt Service Routine (ISR) for exception handling.
-extern void INT_3(pt_regs *);
+extern void INT_3(pt_regs_t *);
 /// @brief Interrupt Service Routine (ISR) for exception handling.
-extern void INT_4(pt_regs *);
+extern void INT_4(pt_regs_t *);
 /// @brief Interrupt Service Routine (ISR) for exception handling.
-extern void INT_5(pt_regs *);
+extern void INT_5(pt_regs_t *);
 /// @brief Interrupt Service Routine (ISR) for exception handling.
-extern void INT_6(pt_regs *);
+extern void INT_6(pt_regs_t *);
 /// @brief Interrupt Service Routine (ISR) for exception handling.
-extern void INT_7(pt_regs *);
+extern void INT_7(pt_regs_t *);
 /// @brief Interrupt Service Routine (ISR) for exception handling.
-extern void INT_8(pt_regs *);
+extern void INT_8(pt_regs_t *);
 /// @brief Interrupt Service Routine (ISR) for exception handling.
-extern void INT_9(pt_regs *);
+extern void INT_9(pt_regs_t *);
 /// @brief Interrupt Service Routine (ISR) for exception handling.
-extern void INT_10(pt_regs *);
+extern void INT_10(pt_regs_t *);
 /// @brief Interrupt Service Routine (ISR) for exception handling.
-extern void INT_11(pt_regs *);
+extern void INT_11(pt_regs_t *);
 /// @brief Interrupt Service Routine (ISR) for exception handling.
-extern void INT_12(pt_regs *);
+extern void INT_12(pt_regs_t *);
 /// @brief Interrupt Service Routine (ISR) for exception handling.
-extern void INT_13(pt_regs *);
+extern void INT_13(pt_regs_t *);
 /// @brief Interrupt Service Routine (ISR) for exception handling.
-extern void INT_14(pt_regs *);
+extern void INT_14(pt_regs_t *);
 /// @brief Interrupt Service Routine (ISR) for exception handling.
-extern void INT_15(pt_regs *);
+extern void INT_15(pt_regs_t *);
 /// @brief Interrupt Service Routine (ISR) for exception handling.
-extern void INT_16(pt_regs *);
+extern void INT_16(pt_regs_t *);
 /// @brief Interrupt Service Routine (ISR) for exception handling.
-extern void INT_17(pt_regs *);
+extern void INT_17(pt_regs_t *);
 /// @brief Interrupt Service Routine (ISR) for exception handling.
-extern void INT_18(pt_regs *);
+extern void INT_18(pt_regs_t *);
 /// @brief Interrupt Service Routine (ISR) for exception handling.
-extern void INT_19(pt_regs *);
+extern void INT_19(pt_regs_t *);
 /// @brief Interrupt Service Routine (ISR) for exception handling.
-extern void INT_20(pt_regs *);
+extern void INT_20(pt_regs_t *);
 /// @brief Interrupt Service Routine (ISR) for exception handling.
-extern void INT_21(pt_regs *);
+extern void INT_21(pt_regs_t *);
 /// @brief Interrupt Service Routine (ISR) for exception handling.
-extern void INT_22(pt_regs *);
+extern void INT_22(pt_regs_t *);
 /// @brief Interrupt Service Routine (ISR) for exception handling.
-extern void INT_23(pt_regs *);
+extern void INT_23(pt_regs_t *);
 /// @brief Interrupt Service Routine (ISR) for exception handling.
-extern void INT_24(pt_regs *);
+extern void INT_24(pt_regs_t *);
 /// @brief Interrupt Service Routine (ISR) for exception handling.
-extern void INT_25(pt_regs *);
+extern void INT_25(pt_regs_t *);
 /// @brief Interrupt Service Routine (ISR) for exception handling.
-extern void INT_26(pt_regs *);
+extern void INT_26(pt_regs_t *);
 /// @brief Interrupt Service Routine (ISR) for exception handling.
-extern void INT_27(pt_regs *);
+extern void INT_27(pt_regs_t *);
 /// @brief Interrupt Service Routine (ISR) for exception handling.
-extern void INT_28(pt_regs *);
+extern void INT_28(pt_regs_t *);
 /// @brief Interrupt Service Routine (ISR) for exception handling.
-extern void INT_29(pt_regs *);
+extern void INT_29(pt_regs_t *);
 /// @brief Interrupt Service Routine (ISR) for exception handling.
-extern void INT_30(pt_regs *);
+extern void INT_30(pt_regs_t *);
 /// @brief Interrupt Service Routine (ISR) for exception handling.
-extern void INT_31(pt_regs *);
+extern void INT_31(pt_regs_t *);
 /// @brief Interrupt Service Routine (ISR) for exception handling.
-extern void INT_80(pt_regs *);
+extern void INT_80(pt_regs_t *);
 /// @brief Interrupt Request (IRQ) coming from the PIC.
-extern void IRQ_0(pt_regs *);
+extern void IRQ_0(pt_regs_t *);
 /// @brief Interrupt Request (IRQ) coming from the PIC.
-extern void IRQ_1(pt_regs *);
+extern void IRQ_1(pt_regs_t *);
 /// @brief Interrupt Request (IRQ) coming from the PIC.
-extern void IRQ_2(pt_regs *);
+extern void IRQ_2(pt_regs_t *);
 /// @brief Interrupt Request (IRQ) coming from the PIC.
-extern void IRQ_3(pt_regs *);
+extern void IRQ_3(pt_regs_t *);
 /// @brief Interrupt Request (IRQ) coming from the PIC.
-extern void IRQ_4(pt_regs *);
+extern void IRQ_4(pt_regs_t *);
 /// @brief Interrupt Request (IRQ) coming from the PIC.
-extern void IRQ_5(pt_regs *);
+extern void IRQ_5(pt_regs_t *);
 /// @brief Interrupt Request (IRQ) coming from the PIC.
-extern void IRQ_6(pt_regs *);
+extern void IRQ_6(pt_regs_t *);
 /// @brief Interrupt Request (IRQ) coming from the PIC.
-extern void IRQ_7(pt_regs *);
+extern void IRQ_7(pt_regs_t *);
 /// @brief Interrupt Request (IRQ) coming from the PIC.
-extern void IRQ_8(pt_regs *);
+extern void IRQ_8(pt_regs_t *);
 /// @brief Interrupt Request (IRQ) coming from the PIC.
-extern void IRQ_9(pt_regs *);
+extern void IRQ_9(pt_regs_t *);
 /// @brief Interrupt Request (IRQ) coming from the PIC.
-extern void IRQ_10(pt_regs *);
+extern void IRQ_10(pt_regs_t *);
 /// @brief Interrupt Request (IRQ) coming from the PIC.
-extern void IRQ_11(pt_regs *);
+extern void IRQ_11(pt_regs_t *);
 /// @brief Interrupt Request (IRQ) coming from the PIC.
-extern void IRQ_12(pt_regs *);
+extern void IRQ_12(pt_regs_t *);
 /// @brief Interrupt Request (IRQ) coming from the PIC.
-extern void IRQ_13(pt_regs *);
+extern void IRQ_13(pt_regs_t *);
 /// @brief Interrupt Request (IRQ) coming from the PIC.
-extern void IRQ_14(pt_regs *);
+extern void IRQ_14(pt_regs_t *);
 /// @brief Interrupt Request (IRQ) coming from the PIC.
-extern void IRQ_15(pt_regs *);
+extern void IRQ_15(pt_regs_t *);
 
 /// @brief This function is in idt.asm.
 /// @param idt_pointer Address of the idt.

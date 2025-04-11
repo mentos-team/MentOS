@@ -8,7 +8,7 @@
 
 void get_cpuid(cpuinfo_t *cpuinfo)
 {
-    pt_regs ereg;
+    pt_regs_t ereg;
 
     ereg.eax = ereg.ebx = ereg.ecx = ereg.edx = 0;
     cpuid_write_vendor(cpuinfo, &ereg);
@@ -18,14 +18,14 @@ void get_cpuid(cpuinfo_t *cpuinfo)
     cpuid_write_proctype(cpuinfo, &ereg);
 }
 
-void call_cpuid(pt_regs *registers)
+void call_cpuid(pt_regs_t *registers)
 {
     __asm__("cpuid\n\t"
             : "=a"(registers->eax), "=b"(registers->ebx), "=c"(registers->ecx), "=d"(registers->edx)
             : "a"(registers->eax));
 }
 
-void cpuid_write_vendor(cpuinfo_t *cpuinfo, pt_regs *registers)
+void cpuid_write_vendor(cpuinfo_t *cpuinfo, pt_regs_t *registers)
 {
     call_cpuid(registers);
 
@@ -44,7 +44,7 @@ void cpuid_write_vendor(cpuinfo_t *cpuinfo, pt_regs *registers)
     cpuinfo->cpu_vendor[12] = '\0';
 }
 
-void cpuid_write_proctype(cpuinfo_t *cpuinfo, pt_regs *registers)
+void cpuid_write_proctype(cpuinfo_t *cpuinfo, pt_regs_t *registers)
 {
     call_cpuid(registers);
 
@@ -118,7 +118,7 @@ void cpuid_feature_edx(cpuinfo_t *cpuinfo, uint32_t edx)
 
 inline uint32_t cpuid_get_byte(uint32_t reg, uint32_t position, uint32_t value) { return ((reg >> position) & value); }
 
-char *cpuid_brand_index(pt_regs *f)
+char *cpuid_brand_index(pt_regs_t *f)
 {
     char *indexes[21] = {
         "Reserved",
@@ -153,7 +153,7 @@ char *cpuid_brand_index(pt_regs *f)
     return indexes[bx];
 }
 
-char *cpuid_brand_string(pt_regs *f)
+char *cpuid_brand_string(pt_regs_t *f)
 {
     char *temp = "";
 
