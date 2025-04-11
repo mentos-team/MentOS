@@ -85,10 +85,9 @@ add_library(
     ${CMAKE_SOURCE_DIR}/mentos/src/mem/mm/mm.c
     ${CMAKE_SOURCE_DIR}/mentos/src/mem/mm/page.c
     ${CMAKE_SOURCE_DIR}/mentos/src/mem/mm/vm_area.c
-    # ${CMAKE_SOURCE_DIR}/mentos/src/mem/mm/vmem.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/mem/mm/vmem.c
     # ${CMAKE_SOURCE_DIR}/mentos/src/mem/pgtable_map.c
-    # ${CMAKE_SOURCE_DIR}/mentos/src/mem/page_fault.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/mem/vmem_map.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/mem/page_fault.c
     ${CMAKE_SOURCE_DIR}/mentos/src/mem/paging.c
     # 
     ${CMAKE_SOURCE_DIR}/mentos/src/elf/elf.c

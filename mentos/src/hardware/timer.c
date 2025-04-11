@@ -89,7 +89,7 @@ void timer_phase(const uint32_t hz)
     outportb(PIT_DATAREG0, (divisor >> 8U) & PIT_MASK);
 }
 
-void timer_handler(pt_regs *reg)
+void timer_handler(pt_regs_t *reg)
 {
     // Save current process fpu state.
     switch_fpu();

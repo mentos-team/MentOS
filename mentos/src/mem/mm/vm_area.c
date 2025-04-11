@@ -15,7 +15,7 @@
 #include "mem/alloc/slab.h"
 #include "mem/mm/mm.h"
 #include "mem/paging.h"
-#include "mem/vmem_map.h"
+#include "mem/mm/vmem.h"
 #include "string.h"
 
 /// Cache for storing vm_area_struct.
@@ -177,7 +177,7 @@ uint32_t vm_area_clone(mm_struct_t *mm, vm_area_struct_t *area, int cow, uint32_
         }
 
         // Copy virtual memory from source area into destination area using a virtual mapping.
-        virt_memcpy(mm, area->vm_start, area->vm_mm, area->vm_start, size);
+        vmem_memcpy(mm, area->vm_start, area->vm_mm, area->vm_start, size);
     } else {
         // If copy-on-write, set the original pages as read-only.
         if (mem_upd_vm_area(area->vm_mm->pgd, area->vm_start, 0, size, MM_COW | MM_PRESENT | MM_USER) < 0) {

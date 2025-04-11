@@ -165,7 +165,7 @@ int keyboard_peek_front(void)
     return c;
 }
 
-void keyboard_isr(pt_regs *f)
+void keyboard_isr(pt_regs_t *f)
 {
     unsigned int scancode;
     (void)f;

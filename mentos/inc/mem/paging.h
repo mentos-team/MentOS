@@ -135,7 +135,7 @@ static inline int paging_is_enabled(void) { return bitmask_check(get_cr0(), CR0_
 
 /// @brief Handles a page fault.
 /// @param f The interrupt stack frame.
-void page_fault_handler(pt_regs *f);
+void page_fault_handler(pt_regs_t *f);
 
 /// @brief Maps a virtual address to a corresponding physical page.
 /// @param pgdir The page directory.

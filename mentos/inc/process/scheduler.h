@@ -71,17 +71,17 @@ void scheduler_dequeue_task(task_struct *process);
 
 /// @brief The RR implementation of the scheduler.
 /// @param f The context of the process.
-void scheduler_run(pt_regs *f);
+void scheduler_run(pt_regs_t *f);
 
 /// @brief Values from pt_regs to task_struct process.
 /// @param f       The set of registers we are saving.
 /// @param process The process for which we are saving the CPU registers status.
-void scheduler_store_context(pt_regs *f, task_struct *process);
+void scheduler_store_context(pt_regs_t *f, task_struct *process);
 
 /// @brief Values from task_struct process to pt_regs.
 /// @param process The process for which we are restoring the registers in CPU .
 /// @param f       The set of registers we are restoring.
-void scheduler_restore_context(task_struct *process, pt_regs *f);
+void scheduler_restore_context(task_struct *process, pt_regs_t *f);
 
 /// @brief Switch CPU to user mode and start running that given process.
 /// @param location The instruction pointer of the process we are starting.

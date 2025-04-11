@@ -491,7 +491,7 @@ int sys_fchdir(int fd)
     return 0;
 }
 
-pid_t sys_fork(pt_regs *f)
+pid_t sys_fork(pt_regs_t *f)
 {
     task_struct *current = scheduler_get_current_process();
     if (current == NULL) {
@@ -531,7 +531,7 @@ pid_t sys_fork(pt_regs *f)
     return proc->pid;
 }
 
-int sys_execve(pt_regs *f)
+int sys_execve(pt_regs_t *f)
 {
     // Check the current process.
     task_struct *current = scheduler_get_current_process();

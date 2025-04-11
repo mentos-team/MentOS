@@ -20,7 +20,7 @@ void syscall_init(void);
 
 /// @brief Handler for the system calls.
 /// @param f The interrupt stack frame.
-void syscall_handler(pt_regs *f);
+void syscall_handler(pt_regs_t *f);
 
 /// The exit() function causes normal process termination.
 /// @param exit_code The exit code.
@@ -84,7 +84,7 @@ pid_t sys_waitpid(pid_t pid, int *status, int options);
 /// @brief Replaces the current process image with a new process image.
 /// @param f CPU registers whe calling this function.
 /// @return 0 on success, -1 on error.
-int sys_execve(pt_regs *f);
+int sys_execve(pt_regs_t *f);
 
 /// @brief Changes the working directory.
 /// @param path The new working directory.
@@ -206,7 +206,7 @@ char *sys_getcwd(char *buf, size_t size);
 /// @param f CPU registers whe calling this function.
 /// @return Return -1 for errors, 0 to the new process, and the process ID of
 ///         the new process to the old process.
-pid_t sys_fork(pt_regs *f);
+pid_t sys_fork(pt_regs_t *f);
 
 /// @brief Stat the file at the given path.
 /// @param path Path to the file for which we are retrieving the statistics.

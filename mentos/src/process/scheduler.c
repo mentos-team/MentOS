@@ -119,7 +119,7 @@ void scheduler_dequeue_task(task_struct *process)
 #endif
 }
 
-void scheduler_run(pt_regs *f)
+void scheduler_run(pt_regs_t *f)
 {
     // Check if there is a running process.
     if (runqueue.curr == NULL) {
@@ -173,13 +173,13 @@ void scheduler_run(pt_regs *f)
     //==========================================================================
 }
 
-void scheduler_store_context(pt_regs *f, task_struct *process)
+void scheduler_store_context(pt_regs_t *f, task_struct *process)
 {
     // Store the registers.
     process->thread.regs = *f;
 }
 
-void scheduler_restore_context(task_struct *process, pt_regs *f)
+void scheduler_restore_context(task_struct *process, pt_regs_t *f)
 {
     // Switch to the next process.
     runqueue.curr = process;

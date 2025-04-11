@@ -1655,7 +1655,7 @@ static ata_device_type_t ata_device_detect(ata_device_t *dev)
 
 // == IRQ HANDLERS ============================================================
 /// @param f The interrupt stack frame.
-static void ata_irq_handler_master(pt_regs *f)
+static void ata_irq_handler_master(pt_regs_t *f)
 {
     pr_warning("ata_irq_handler_master\n");
     inportb(ata_primary_master.io_reg.status);
@@ -1665,7 +1665,7 @@ static void ata_irq_handler_master(pt_regs *f)
 }
 
 /// @param f The interrupt stack frame.
-static void ata_irq_handler_slave(pt_regs *f)
+static void ata_irq_handler_slave(pt_regs_t *f)
 {
     pr_warning("ata_irq_handler_slave\n");
     inportb(ata_secondary_master.io_reg.status);

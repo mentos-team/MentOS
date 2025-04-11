@@ -10,13 +10,17 @@
 
 /// @brief Flags associated with virtual memory areas.
 enum MEMMAP_FLAGS {
-    MM_USER    = 0x1, ///< Area belongs to user mode (accessible by user-level processes).
-    MM_GLOBAL  = 0x2, ///< Area is global (not flushed from TLB on context switch).
-    MM_RW      = 0x4, ///< Area has read/write permissions.
-    MM_PRESENT = 0x8, ///< Area is present in memory.
-    // Kernel flags
-    MM_COW     = 0x10, ///< Area is copy-on-write (used for forked processes).
-    MM_UPDADDR = 0x20, ///< Update address (used for special memory mappings).
+    MM_USER    = 0x01, ///< Area belongs to user mode.
+    MM_GLOBAL  = 0x02, ///< Global mapping.
+    MM_RW      = 0x04, ///< Read/write enabled.
+    MM_PRESENT = 0x08, ///< Page is present.
+
+    // Kernel-specific flags
+    MM_COW           = 0x10, ///< Copy-on-write.
+    MM_UPDADDR       = 0x20, ///< Allocate and assign physical page.
+    MM_USER_ACCESS   = 0x40, ///< User-accessible (user = 1).
+    MM_CACHE_DISABLE = 0x80, ///< Disable CPU caching.
+    MM_WRITE_THROUGH = 0x100 ///< Enable write-through caching.
 };
 
 /// @brief Virtual Memory Area, used to store details of a process segment.

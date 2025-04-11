@@ -60,4 +60,4 @@ typedef struct pt_regs {
     uint32_t useresp;
     /// Stack Segment.
     uint32_t ss;
-} pt_regs;
+} pt_regs_t;

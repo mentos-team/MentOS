@@ -107,7 +107,7 @@ int irq_uninstall_handler(unsigned i, interrupt_handler_t handler)
     return 0;
 }
 
-void irq_handler(pt_regs *f)
+void irq_handler(pt_regs_t *f)
 {
     // Keep in mind,
     // because of irq mapping, the first PIC's irq line is shifted by 32.
