@@ -24,17 +24,10 @@
 #include "sys/mman.h"
 #include "system/panic.h"
 
-/// Cache for storing mm_struct.
-kmem_cache_t *mm_cache;
-/// Cache for storing vm_area_struct.
-kmem_cache_t *vm_area_cache;
 /// Cache for storing page directories.
 kmem_cache_t *pgdir_cache;
 /// Cache for storing page tables.
 kmem_cache_t *pgtbl_cache;
-
-/// The mm_struct of the kernel.
-static mm_struct_t *main_mm;
 
 /// @brief Structure for iterating page directory entries.
 typedef struct page_iterator_s {
@@ -61,13 +54,13 @@ typedef struct pg_iter_entry_s {
 page_directory_t *paging_get_main_directory(void)
 {
     // Ensure the main_mm structure is initialized.
-    if (!main_mm) {
+    if (!mm_get_main()) {
         pr_crit("main_mm is not initialized\n");
         return NULL;
     }
 
     // Return the pointer to the main page directory.
-    return main_mm->pgd;
+    return mm_get_main()->pgd;
 }
 
 int is_current_pgd(page_directory_t *pgd)
@@ -110,367 +103,6 @@ int paging_switch_directory_va(page_directory_t *dir)
 
 void paging_flush_tlb_single(unsigned long addr) { __asm__ __volatile__("invlpg (%0)" ::"r"(addr) : "memory"); }
 
-vm_area_struct_t *create_vm_area(mm_struct_t *mm, uint32_t vm_start, size_t size, uint32_t pgflags, uint32_t gfpflags)
-{
-    // Validate inputs.
-    if (!mm) {
-        pr_crit("Invalid arguments: mm is NULL.");
-        return NULL;
-    }
-    if (!vm_start) {
-        pr_crit("Invalid arguments: vm_start is 0.");
-        return NULL;
-    }
-    if (!size) {
-        pr_crit("Invalid arguments: size is 0.");
-        return NULL;
-    }
-
-    uint32_t vm_end;
-    uint32_t phy_start;
-    uint32_t order;
-    vm_area_struct_t *segment;
-
-    // Compute the end of the virtual memory area.
-    vm_end = vm_start + size;
-
-    // Check if the range is already occupied.
-    if (is_valid_vm_area(mm, vm_start, vm_end) <= 0) {
-        pr_crit("The virtual memory area range [%p, %p] is already in use.\n", vm_start, vm_end);
-        return NULL;
-    }
-
-    // Allocate on kernel space the structure for the segment.
-    segment = kmem_cache_alloc(vm_area_cache, GFP_KERNEL);
-    if (!segment) {
-        pr_crit("Failed to allocate memory for vm_area_struct\n");
-        return NULL;
-    }
-
-    // Find the nearest order for the given memory size.
-    order = find_nearest_order_greater(vm_start, size);
-
-    if (pgflags & MM_COW) {
-        // If the area is copy-on-write, clear the present and update address
-        // flags.
-        pgflags   = pgflags & ~(MM_PRESENT | MM_UPDADDR);
-        phy_start = 0;
-    } else {
-        // Otherwise, set the update address flag and allocate physical pages.
-        pgflags = pgflags | MM_UPDADDR;
-
-        page_t *page = alloc_pages(gfpflags, order);
-        if (!page) {
-            pr_crit("Failed to allocate physical pages for vm_area at [%p, %p].\n", vm_start, vm_end);
-            kmem_cache_free(segment);
-            return NULL;
-        }
-
-        // Retrieve the physical address from the allocated page.
-        phy_start = get_physical_address_from_page(page);
-        if (!phy_start) {
-            pr_crit("Failed to retrieve physical address for allocated page.\n");
-            kmem_cache_free(segment);
-            return NULL;
-        }
-    }
-
-    // Update the virtual memory area in the page directory.
-    if (mem_upd_vm_area(mm->pgd, vm_start, phy_start, size, pgflags) != 0) {
-        pr_crit("Failed to update vm_area in page directory\n");
-        kmem_cache_free(segment);
-        return NULL;
-    }
-
-    // Update vm_area_struct info.
-    segment->vm_start = vm_start;
-    segment->vm_end   = vm_end;
-    segment->vm_mm    = mm;
-
-    // Insert the new segment into the memory descriptor's list of vm_area_structs.
-    list_head_insert_after(&segment->vm_list, &mm->mmap_list);
-    mm->mmap_cache = segment;
-
-    // Sort the mmap_list to maintain order.
-    list_head_sort(&mm->mmap_list, vm_area_compare);
-
-    // Update memory descriptor info.
-    mm->map_count++;
-    mm->total_vm += (1U << order);
-
-    // Return the created vm_area_struct.
-    return segment;
-}
-
-uint32_t clone_vm_area(mm_struct_t *mm, vm_area_struct_t *area, int cow, uint32_t gfpflags)
-{
-    // Validate inputs.
-    if (!mm) {
-        pr_crit("Invalid arguments: mm is NULL.");
-        return -1;
-    }
-    if (!area) {
-        pr_crit("Invalid arguments: area is NULL.");
-        return -1;
-    }
-
-    // Allocate a new vm_area_struct for the cloned area.
-    vm_area_struct_t *new_segment = kmem_cache_alloc(vm_area_cache, GFP_KERNEL);
-    if (!new_segment) {
-        pr_crit("Failed to allocate memory for new vm_area_struct\n");
-        return -1;
-    }
-
-    // Copy the content of the existing vm_area_struct to the new segment.
-    memcpy(new_segment, area, sizeof(vm_area_struct_t));
-
-    // Update the memory descriptor for the new segment.
-    new_segment->vm_mm = mm;
-
-    // Calculate the size and the nearest order for the new segment's memory allocation.
-    uint32_t size  = new_segment->vm_end - new_segment->vm_start;
-    uint32_t order = find_nearest_order_greater(area->vm_start, size);
-
-    if (!cow) {
-        // If not copy-on-write, allocate directly the physical pages
-        page_t *dst_page = alloc_pages(gfpflags, order);
-        if (!dst_page) {
-            pr_crit("Failed to allocate physical pages for the new vm_area\n");
-            // Free the newly allocated segment on failure.
-            kmem_cache_free(new_segment);
-            return -1;
-        }
-
-        uint32_t phy_vm_start = get_physical_address_from_page(dst_page);
-
-        // Update the virtual memory map in the page directory.
-        if (mem_upd_vm_area(
-                mm->pgd, new_segment->vm_start, phy_vm_start, size, MM_RW | MM_PRESENT | MM_UPDADDR | MM_USER) < 0) {
-            pr_crit("Failed to update virtual memory area in page directory\n");
-            // Free the allocated pages on failure.
-            free_pages(dst_page);
-            // Free the newly allocated segment.
-            kmem_cache_free(new_segment);
-            return -1;
-        }
-
-        // Copy virtual memory from source area into destination area using a virtual mapping.
-        virt_memcpy(mm, area->vm_start, area->vm_mm, area->vm_start, size);
-    } else {
-        // If copy-on-write, set the original pages as read-only.
-        if (mem_upd_vm_area(area->vm_mm->pgd, area->vm_start, 0, size, MM_COW | MM_PRESENT | MM_USER) < 0) {
-            pr_crit("Failed to mark original pages as copy-on-write\n");
-            // Free the newly allocated segment.
-            kmem_cache_free(new_segment);
-            return -1;
-        }
-
-        // Perform a COW of the whole virtual memory area, handling fragmented physical memory.
-        if (mem_clone_vm_area(
-                area->vm_mm->pgd, mm->pgd, area->vm_start, new_segment->vm_start, size,
-                MM_COW | MM_PRESENT | MM_UPDADDR | MM_USER) < 0) {
-            pr_crit("Failed to clone virtual memory area\n");
-            // Free the newly allocated segment.
-            kmem_cache_free(new_segment);
-            return -1;
-        }
-    }
-
-    // Update memory descriptor list of vm_area_struct.
-    list_head_insert_after(&new_segment->vm_list, &mm->mmap_list);
-    mm->mmap_cache = new_segment;
-
-    // Update memory descriptor info.
-    mm->map_count++;
-    mm->total_vm += (1U << order);
-
-    return 0;
-}
-
-int destroy_vm_area(mm_struct_t *mm, vm_area_struct_t *area)
-{
-    size_t area_total_size;
-    size_t area_size;
-    size_t area_start;
-    uint32_t order;
-    uint32_t block_size;
-    page_t *phy_page;
-
-    // Get the total size of the virtual memory area.
-    area_total_size = area->vm_end - area->vm_start;
-
-    // Get the starting address of the area.
-    area_start = area->vm_start;
-
-    // Free all the memory associated with the virtual memory area.
-    while (area_total_size > 0) {
-        area_size = area_total_size;
-
-        // Translate the virtual address to the physical page.
-        phy_page = mem_virtual_to_page(mm->pgd, area_start, &area_size);
-
-        // Check if the page was successfully retrieved.
-        if (!phy_page) {
-            pr_crit("Failed to retrieve physical page for virtual address %p\n", (void *)area_start);
-            return -1;
-        }
-
-        // If the pages are marked as copy-on-write, do not deallocate them.
-        if (page_count(phy_page) > 1) {
-            order      = phy_page->bbpage.order;
-            block_size = 1UL << order;
-
-            // Decrement the reference count for each page in the block.
-            for (int i = 0; i < block_size; i++) {
-                page_dec(phy_page + i);
-            }
-        } else {
-            // If not copy-on-write, free the allocated pages.
-            free_pages(phy_page);
-        }
-
-        // Update the remaining size and starting address for the next iteration.
-        area_total_size -= area_size;
-        area_start += area_size;
-    }
-
-    // Remove the segment from the memory map list.
-    list_head_remove(&area->vm_list);
-
-    // Free the memory allocated for the vm_area_struct.
-    kmem_cache_free(area);
-
-    // Decrement the counter for the number of memory-mapped areas.
-    --mm->map_count;
-
-    return 0;
-}
-
-vm_area_struct_t *find_vm_area(mm_struct_t *mm, uint32_t vm_start)
-{
-    vm_area_struct_t *segment;
-
-    // Iterate through the memory map list in reverse order to find the area.
-    list_for_each_prev_decl(it, &mm->mmap_list)
-    {
-        // Get the current segment from the list entry.
-        segment = list_entry(it, vm_area_struct_t, vm_list);
-
-        // Assert that the segment is not NULL.
-        assert(segment && "There is a NULL area in the list.");
-
-        // Check if the starting address matches the requested vm_start.
-        if (segment->vm_start == vm_start) {
-            // Return the found segment.
-            return segment;
-        }
-    }
-
-    // If the area is not found, return NULL.
-    return NULL;
-}
-
-int is_valid_vm_area(mm_struct_t *mm, uintptr_t vm_start, uintptr_t vm_end)
-{
-    // Check for a valid memory descriptor.
-    if (!mm) {
-        pr_crit("Invalid arguments: mm is NULL.\n");
-        return -1;
-    }
-    if (vm_start >= vm_end) {
-        pr_crit("Invalid arguments: vm_start >= vm_end (0x%p >= 0x%p).\n", vm_start, vm_end);
-        return -1;
-    }
-
-    // Iterate through the list of memory areas to check for overlaps.
-    vm_area_struct_t *area;
-    list_for_each_prev_decl(it, &mm->mmap_list)
-    {
-        // Get the current area from the list entry.
-        area = list_entry(it, vm_area_struct_t, vm_list);
-
-        // Check if the area is NULL.
-        if (!area) {
-            pr_crit("Encountered a NULL area in the list.");
-            return -1;
-        }
-
-        // Check if the new area overlaps with the current area.
-        if ((vm_start > area->vm_start) && (vm_start < area->vm_end)) {
-            pr_crit(
-                "Overlap detected at start: %p <= %p <= %p", (void *)area->vm_start, (void *)vm_start,
-                (void *)area->vm_end);
-            return 0;
-        }
-
-        if ((vm_end > area->vm_start) && (vm_end < area->vm_end)) {
-            pr_crit(
-                "Overlap detected at end: %p <= %p <= %p", (void *)area->vm_start, (void *)vm_end,
-                (void *)area->vm_end);
-            return 0;
-        }
-
-        if ((vm_start < area->vm_start) && (vm_end > area->vm_end)) {
-            pr_crit(
-                "Wrap-around detected: %p <= (%p, %p) <= %p", (void *)vm_start, (void *)area->vm_start,
-                (void *)area->vm_end, (void *)vm_end);
-            return 0;
-        }
-    }
-
-    // If no overlaps were found, return 1 to indicate the area is valid.
-    return 1;
-}
-
-int find_free_vm_area(mm_struct_t *mm, size_t length, uintptr_t *vm_start)
-{
-    // Check for a valid memory descriptor.
-    if (!mm || !length || !vm_start) {
-        pr_crit("Invalid arguments: mm or length or vm_start is NULL.");
-        return -1;
-    }
-
-    vm_area_struct_t *area;
-    vm_area_struct_t *prev_area;
-
-    // Iterate through the list of memory areas in reverse order.
-    list_for_each_prev_decl(it, &mm->mmap_list)
-    {
-        // Get the current area from the list entry.
-        area = list_entry(it, vm_area_struct_t, vm_list);
-
-        // Check if the current area is NULL.
-        if (!area) {
-            pr_crit("Encountered a NULL area in the list.");
-            return -1;
-        }
-
-        // Check the previous segment if it exists.
-        if (area->vm_list.prev != &mm->mmap_list) {
-            prev_area = list_entry(area->vm_list.prev, vm_area_struct_t, vm_list);
-
-            // Check if the previous area is NULL.
-            if (!prev_area) {
-                pr_crit("Encountered a NULL previous area in the list.");
-                return -1;
-            }
-
-            // Compute the available space between the current area and the previous area.
-            unsigned available_space = area->vm_start - prev_area->vm_end;
-
-            // If the available space is sufficient for the requested length,
-            // return the starting address.
-            if (available_space >= length) {
-                *vm_start = area->vm_start - length;
-                return 0;
-            }
-        }
-    }
-
-    // If no suitable area was found, return 1 to indicate failure.
-    return 1;
-}
-
 /// @brief Initializes the page directory.
 /// @param pdir the page directory to initialize.
 static void __init_pagedir(page_directory_t *pdir) { *pdir = (page_directory_t){{0}}; }
@@ -487,17 +119,13 @@ int paging_init(boot_info_t *info)
         return -1;
     }
 
-    // Create memory cache for managing mm_struct.
-    mm_cache = KMEM_CREATE(mm_struct_t);
-    if (!mm_cache) {
-        pr_crit("Failed to create mm_cache.\n");
+    if (mm_init() < 0) {
+        pr_crit("Failed to initialize memory management.\n");
         return -1;
     }
 
-    // Create memory cache for managing vm_area_struct.
-    vm_area_cache = KMEM_CREATE(vm_area_struct_t);
-    if (!vm_area_cache) {
-        pr_crit("Failed to create vm_area_cache.\n");
+    if (vm_area_init() < 0) {
+        pr_crit("Failed to initialize vm_area.\n");
         return -1;
     }
 
@@ -515,12 +143,8 @@ int paging_init(boot_info_t *info)
         return -1;
     }
 
-    // Allocate the main memory management structure.
-    main_mm = kmem_cache_alloc(mm_cache, GFP_KERNEL);
-    if (!main_mm) {
-        pr_crit("Failed to allocate main_mm.\n");
-        return -1;
-    }
+    // Get the main memory management structure.
+    mm_struct_t *main_mm = mm_get_main();
 
     // Allocate the page directory for the main memory management structure.
     main_mm->pgd = kmem_cache_alloc(pgdir_cache, GFP_KERNEL);
@@ -1206,235 +830,6 @@ int mem_clone_vm_area(
     return 0;
 }
 
-mm_struct_t *create_blank_process_image(size_t stack_size)
-{
-    // Allocate the mm_struct for the new process image.
-    mm_struct_t *mm = kmem_cache_alloc(mm_cache, GFP_KERNEL);
-    if (!mm) {
-        pr_crit("Failed to allocate memory for mm_struct\n");
-        return NULL;
-    }
-
-    // Initialize the allocated mm_struct to zero.
-    memset(mm, 0, sizeof(mm_struct_t));
-
-    // Initialize the list for memory management (mm) structures.
-    // TODO(enrico): Use this field for process memory management.
-    list_head_init(&mm->mm_list);
-
-    // Get the main page directory.
-    page_directory_t *main_pgd = paging_get_main_directory();
-    // Error handling: Failed to get the main page directory.
-    if (!main_pgd) {
-        pr_crit("Failed to get the main page directory\n");
-        return NULL;
-    }
-
-    // Allocate a new page directory structure and copy the main page directory.
-    page_directory_t *pdir_cpy = kmem_cache_alloc(pgdir_cache, GFP_KERNEL);
-    if (!pdir_cpy) {
-        pr_crit("Failed to allocate memory for page directory\n");
-        // Free previously allocated mm_struct.
-        kmem_cache_free(mm);
-        return NULL;
-    }
-
-    // Initialize the allocated page_directory to zero.
-    memcpy(pdir_cpy, main_pgd, sizeof(page_directory_t));
-
-    // Assign the copied page directory to the mm_struct.
-    mm->pgd = pdir_cpy;
-
-    // Initialize the virtual memory areas list for the new process.
-    list_head_init(&mm->mmap_list);
-
-    // Allocate the stack segment.
-    vm_area_struct_t *segment = create_vm_area(
-        mm, PROCAREA_END_ADDR - stack_size, stack_size, MM_PRESENT | MM_RW | MM_USER | MM_COW, GFP_HIGHUSER);
-    if (!segment) {
-        pr_crit("Failed to create stack segment for new process\n");
-        // Free page directory if allocation fails.
-        kmem_cache_free(pdir_cpy);
-        // Free mm_struct as well.
-        kmem_cache_free(mm);
-        return NULL;
-    }
-
-    // Update the start of the stack in the mm_struct.
-    mm->start_stack = segment->vm_start;
-
-    return mm;
-}
-
-mm_struct_t *clone_process_image(mm_struct_t *mmp)
-{
-    // Check if the input mm_struct pointer is valid.
-    if (!mmp) {
-        pr_crit("Invalid source mm_struct pointer.\n");
-        return NULL;
-    }
-
-    // Allocate the mm_struct for the new process image.
-    mm_struct_t *mm = kmem_cache_alloc(mm_cache, GFP_KERNEL);
-    if (!mm) {
-        pr_crit("Failed to allocate memory for mm_struct\n");
-        return NULL;
-    }
-
-    // Copy the contents of the source mm_struct to the new one.
-    memcpy(mm, mmp, sizeof(mm_struct_t));
-
-    // Get the main page directory.
-    page_directory_t *main_pgd = paging_get_main_directory();
-    // Error handling: Failed to get the main page directory.
-    if (!main_pgd) {
-        pr_crit("Failed to get the main page directory\n");
-        return NULL;
-    }
-
-    // Allocate a new page directory to avoid data races on page tables.
-    page_directory_t *pdir_cpy = kmem_cache_alloc(pgdir_cache, GFP_KERNEL);
-    if (!pdir_cpy) {
-        pr_crit("Failed to allocate page directory for new process.\n");
-        // Free the previously allocated mm_struct.
-        kmem_cache_free(mm);
-        return NULL;
-    }
-
-    // Initialize the new page directory by copying from the main directory.
-    memcpy(pdir_cpy, main_pgd, sizeof(page_directory_t));
-
-    // Assign the copied page directory to the mm_struct.
-    mm->pgd = pdir_cpy;
-
-    vm_area_struct_t *vm_area = NULL;
-
-    // Reset the memory area list to prepare for cloning.
-    list_head_init(&mm->mmap_list);
-    mm->map_count = 0;
-    mm->total_vm  = 0;
-
-    // Clone each memory area from the source process to the new process.
-    list_for_each_decl (it, &mmp->mmap_list) {
-        vm_area = list_entry(it, vm_area_struct_t, vm_list);
-
-        if (clone_vm_area(mm, vm_area, 0, GFP_HIGHUSER) < 0) {
-            pr_crit("Failed to clone vm_area from source process.\n");
-            // Free the previously allocated mm_struct.
-            kmem_cache_free(mm);
-            // Free the previously allocated page_directory.
-            kmem_cache_free(pdir_cpy);
-            return NULL;
-        }
-    }
-
-    // Return the newly cloned mm_struct.
-    return mm;
-}
-
-int destroy_process_image(mm_struct_t *mm)
-{
-    // Check if the input mm_struct pointer is valid.
-    if (!mm) {
-        pr_crit("Invalid source mm_struct pointer.\n");
-        return -1;
-    }
-
-    // Get the main page directory.
-    page_directory_t *main_pgd = paging_get_main_directory();
-    // Error handling: Failed to get the main page directory.
-    if (!main_pgd) {
-        pr_crit("Failed to get the main page directory\n");
-        return -1;
-    }
-
-    // Retrieve the current page directory.
-    uint32_t current_paging_dir = (uint32_t)paging_get_current_directory();
-    if (current_paging_dir == 0) {
-        pr_crit("Failed to retrieve the current paging directory.\n");
-        return -1;
-    }
-
-    // Get the low memory page associated with the given mm_struct.
-    page_t *lowmem_page = get_page_from_virtual_address((uint32_t)mm->pgd);
-    if (!lowmem_page) {
-        pr_crit("Failed to get low memory page from mm->pgd address: %p\n", (void *)mm->pgd);
-        return -1;
-    }
-
-    // Step 2: Get the physical address from the low memory page.
-    uint32_t mm_pgd_phys_addr = get_physical_address_from_page(lowmem_page);
-    if (mm_pgd_phys_addr == 0) {
-        pr_crit("Failed to get physical address from low memory page: %p.\n", lowmem_page);
-        return -1;
-    }
-
-    // Compare the current page directory with the one associated with the process.
-    if (current_paging_dir == mm_pgd_phys_addr) {
-        // Switch to the main directory if they are the same.
-        if (paging_switch_directory_va(main_pgd) < 0) {
-            pr_crit("Failed to switch to the main directory.\n");
-            return -1;
-        }
-    }
-
-    // Free each segment inside mm.
-    vm_area_struct_t *segment = NULL;
-    // Iterate through the list of memory areas.
-    list_head_t *it           = mm->mmap_list.next;
-    list_head_t *next;
-
-    while (!list_head_empty(it)) {
-        segment = list_entry(it, vm_area_struct_t, vm_list);
-
-        // Save the pointer to the next element in the list.
-        next = segment->vm_list.next;
-
-        // Destroy the current virtual memory area. Return -1 on failure.
-        if (destroy_vm_area(mm, segment) < 0) {
-            pr_err("We failed to destroy the virtual memory area.");
-            return -1; // Failed to destroy the virtual memory area.
-        }
-
-        // Move to the next element.
-        it = next;
-    }
-
-    // Free all the page tables.
-    for (int i = 0; i < 1024; i++) {
-        page_dir_entry_t *entry = &mm->pgd->entries[i];
-        // Check if the page table entry is present and not global.
-        if (entry->present && !entry->global) {
-            // Get the physical page for the page table.
-            page_t *pgt_page = get_page_from_physical_address(entry->frame * PAGE_SIZE);
-            if (!pgt_page) {
-                pr_crit("Failed to get physical page for entry %d.\n", i);
-                continue; // Skip to the next entry on error.
-            }
-
-            // Get the low memory address for the page table.
-            uint32_t pgt_addr = get_virtual_address_from_page(pgt_page);
-            if (pgt_addr == 0) {
-                pr_crit("Failed to get low memory address for physical page %p.\n", (void *)pgt_page);
-                continue; // Skip to the next entry on error.
-            }
-
-            // Free the page table.
-            kmem_cache_free((void *)pgt_addr);
-
-            pr_debug("Successfully freed page table for entry %d at address %p.\n", i, (void *)pgt_addr);
-        }
-    }
-
-    // Free the page directory structure.
-    kmem_cache_free((void *)mm->pgd);
-
-    // Free the memory structure representing the process image.
-    kmem_cache_free(mm);
-
-    return 0; // Success.
-}
-
 void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset)
 {
     uintptr_t vm_start;
@@ -1469,12 +864,12 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
     }
 
     // Check if a specific address was requested for the memory mapping.
-    if (addr && is_valid_vm_area(task->mm, (uintptr_t)addr, (uintptr_t)addr + length)) {
+    if (addr && vm_area_is_valid(task->mm, (uintptr_t)addr, (uintptr_t)addr + length)) {
         // If the requested address is valid, use it as the starting address.
         vm_start = (uintptr_t)addr;
     } else {
         // Find an empty spot if no specific address was provided or the provided one is invalid.
-        if (find_free_vm_area(task->mm, length, &vm_start)) {
+        if (vm_area_search_free_area(task->mm, length, &vm_start)) {
             pr_err("Failed to find a suitable spot for a new virtual memory "
                    "area.\n");
             return NULL;
@@ -1483,7 +878,7 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
 
     // Allocate the virtual memory area segment.
     vm_area_struct_t *segment =
-        create_vm_area(task->mm, vm_start, length, MM_PRESENT | MM_RW | MM_COW | MM_USER, GFP_HIGHUSER);
+        vm_area_create(task->mm, vm_start, length, MM_PRESENT | MM_RW | MM_COW | MM_USER, GFP_HIGHUSER);
     if (!segment) {
         pr_err("Failed to allocate virtual memory area segment.\n");
         return NULL;
@@ -1525,7 +920,7 @@ int sys_munmap(void *addr, size_t length)
             pr_debug("[0x%p:0x%p] Found it, destroying it.\n", (void *)segment->vm_start, (void *)segment->vm_end);
 
             // Step 6: Destroy the found virtual memory area.
-            if (destroy_vm_area(task->mm, segment) < 0) {
+            if (vm_area_destroy(task->mm, segment) < 0) {
                 pr_err(
                     "Failed to destroy the virtual memory area at "
                     "[0x%p:0x%p].\n",

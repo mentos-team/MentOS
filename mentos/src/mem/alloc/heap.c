@@ -645,7 +645,7 @@ void *sys_brk(void *addr)
     }
 
     // Get the heap associated with the current task.
-    vm_area_struct_t *heap = find_vm_area(task->mm, task->mm->start_brk);
+    vm_area_struct_t *heap = vm_area_find(task->mm, task->mm->start_brk);
 
     // If the heap does not exist, allocate it.
     if (heap == NULL) {
@@ -660,7 +660,7 @@ void *sys_brk(void *addr)
         // Create the virtual memory area, we are goin to place the area between
         // 0x40000000 and 0x50000000, which surely is below the stack. The VM
         // code will check if it is a valid area anyway.
-        heap = create_vm_area(
+        heap = vm_area_create(
             task->mm, randuint(HEAP_VM_LB, HEAP_VM_UB), segment_size, MM_RW | MM_PRESENT | MM_USER | MM_UPDADDR,
             GFP_HIGHUSER);
         if (!heap) {

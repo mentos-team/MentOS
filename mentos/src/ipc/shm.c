@@ -282,7 +282,7 @@ void *sys_shmat(int shmid, const void *shmaddr, int shmflg)
     // Get the phyisical address from the allocated pages.
     phy_start = get_physical_address_from_page(shm_info->shm_location);
     // Find the virtual address for the new area.
-    if (find_free_vm_area(task->mm, shm_info->shmid.shm_segsz, &vm_start)) {
+    if (vm_area_search_free_area(task->mm, shm_info->shmid.shm_segsz, &vm_start)) {
         pr_err("We failed to find space for the new virtual memory area.\n");
         return (void *)-EACCES;
     }
