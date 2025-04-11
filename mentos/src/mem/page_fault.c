@@ -189,7 +189,7 @@ void page_fault_handler(pt_regs_t *f)
     uint32_t faulting_addr = get_cr2();
 
     // Retrieve the current page directory's physical address.
-    uint32_t phy_dir = (uint32_t)paging_get_current_directory();
+    uint32_t phy_dir = (uint32_t)paging_get_current_pgd();
     if (!phy_dir) {
         pr_crit("Failed to retrieve current page directory.\n");
         __page_fault_panic(f, faulting_addr);

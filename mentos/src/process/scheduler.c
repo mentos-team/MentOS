@@ -187,7 +187,7 @@ void scheduler_restore_context(task_struct *process, pt_regs_t *f)
     *f            = process->thread.regs;
     // TODO(enrico): Explain paging switch (ring 0 doesn't need page switching)
     // Switch to process page directory
-    paging_switch_directory_va(process->mm->pgd);
+    paging_switch_pgd(process->mm->pgd);
 }
 
 void scheduler_enter_user_jmp(uintptr_t location, uintptr_t stack)

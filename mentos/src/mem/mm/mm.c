@@ -53,7 +53,7 @@ mm_struct_t *mm_create_blank(size_t stack_size)
     list_head_init(&mm->mm_list);
 
     // Get the main page directory.
-    page_directory_t *main_pgd = paging_get_main_directory();
+    page_directory_t *main_pgd = paging_get_main_pgd();
     // Error handling: Failed to get the main page directory.
     if (!main_pgd) {
         pr_crit("Failed to get the main page directory\n");
@@ -115,7 +115,7 @@ mm_struct_t *mm_clone(mm_struct_t *mmp)
     memcpy(mm, mmp, sizeof(mm_struct_t));
 
     // Get the main page directory.
-    page_directory_t *main_pgd = paging_get_main_directory();
+    page_directory_t *main_pgd = paging_get_main_pgd();
     // Error handling: Failed to get the main page directory.
     if (!main_pgd) {
         pr_crit("Failed to get the main page directory\n");
@@ -171,7 +171,7 @@ int mm_destroy(mm_struct_t *mm)
     }
 
     // Get the main page directory.
-    page_directory_t *main_pgd = paging_get_main_directory();
+    page_directory_t *main_pgd = paging_get_main_pgd();
     // Error handling: Failed to get the main page directory.
     if (!main_pgd) {
         pr_crit("Failed to get the main page directory\n");
@@ -179,7 +179,7 @@ int mm_destroy(mm_struct_t *mm)
     }
 
     // Retrieve the current page directory.
-    uint32_t current_paging_dir = (uint32_t)paging_get_current_directory();
+    uint32_t current_paging_dir = (uint32_t)paging_get_current_pgd();
     if (current_paging_dir == 0) {
         pr_crit("Failed to retrieve the current paging directory.\n");
         return -1;
@@ -202,7 +202,7 @@ int mm_destroy(mm_struct_t *mm)
     // Compare the current page directory with the one associated with the process.
     if (current_paging_dir == mm_pgd_phys_addr) {
         // Switch to the main directory if they are the same.
-        if (paging_switch_directory_va(main_pgd) < 0) {
+        if (paging_switch_pgd(main_pgd) < 0) {
             pr_crit("Failed to switch to the main directory.\n");
             return -1;
         }

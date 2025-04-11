@@ -464,7 +464,7 @@ int kmain(boot_info_t *boot_informations)
     // We have completed the booting procedure.
     pr_notice("Booting done, jumping into init process.\n");
     // Switch to the page directory of init.
-    paging_switch_directory_va(init_process->mm->pgd);
+    paging_switch_pgd(init_process->mm->pgd);
     // Jump into init process.
     scheduler_enter_user_jmp(
         // Entry point.

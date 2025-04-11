@@ -51,58 +51,6 @@ typedef struct pg_iter_entry_s {
     uint32_t pfn;
 } pg_iter_entry_t;
 
-page_directory_t *paging_get_main_directory(void)
-{
-    // Ensure the main_mm structure is initialized.
-    if (!mm_get_main()) {
-        pr_crit("main_mm is not initialized\n");
-        return NULL;
-    }
-
-    // Return the pointer to the main page directory.
-    return mm_get_main()->pgd;
-}
-
-int is_current_pgd(page_directory_t *pgd)
-{
-    // Check if the pgd pointer is NULL
-    if (pgd == NULL) {
-        return 0;
-    }
-    // Compare the given pgd with the current page directory
-    return pgd == paging_get_current_directory();
-}
-
-int paging_switch_directory_va(page_directory_t *dir)
-{
-    // Ensure the directory pointer is valid.
-    if (!dir) {
-        pr_crit("Invalid page directory pointer\n");
-        return -1;
-    }
-
-    // Get the low memory page corresponding to the given directory address.
-    page_t *page = get_page_from_virtual_address((uintptr_t)dir);
-    if (!page) {
-        pr_crit("Failed to get low memory page from address\n");
-        return -1;
-    }
-
-    // Get the physical address of the low memory page.
-    uintptr_t phys_addr = get_physical_address_from_page(page);
-    if (!phys_addr) {
-        pr_crit("Failed to get physical address from page\n");
-        return -1;
-    }
-
-    // Switch to the new paging directory using the physical address.
-    paging_switch_directory((page_directory_t *)phys_addr);
-
-    return 0;
-}
-
-void paging_flush_tlb_single(unsigned long addr) { __asm__ __volatile__("invlpg (%0)" ::"r"(addr) : "memory"); }
-
 /// @brief Initializes the page directory.
 /// @param pdir the page directory to initialize.
 static void __init_pagedir(page_directory_t *pdir) { *pdir = (page_directory_t){{0}}; }
@@ -176,13 +124,75 @@ int paging_init(boot_info_t *info)
     }
 
     // Switch to the newly created page directory.
-    paging_switch_directory_va(main_mm->pgd);
+    paging_switch_pgd(main_mm->pgd);
 
     // Enable paging.
     paging_enable();
 
     return 0;
 }
+
+void paging_enable(void)
+{
+    // Clear the PSE bit from cr4.
+    set_cr4(bitmask_clear(get_cr4(), CR4_PSE));
+    // Set the PG bit in cr0.
+    set_cr0(bitmask_set(get_cr0(), CR0_PG));
+}
+
+int paging_is_enabled(void) { return bitmask_check(get_cr0(), CR0_PG); }
+
+page_directory_t *paging_get_main_pgd(void)
+{
+    // Ensure the main_mm structure is initialized.
+    if (!mm_get_main()) {
+        pr_crit("main_mm is not initialized\n");
+        return NULL;
+    }
+
+    // Return the pointer to the main page directory.
+    return mm_get_main()->pgd;
+}
+
+page_directory_t *paging_get_current_pgd(void) { return (page_directory_t *)get_cr3(); }
+
+int paging_switch_pgd(page_directory_t *dir)
+{
+    if (!dir) {
+        pr_crit("Invalid page directory pointer\n");
+        return -1;
+    }
+    uintptr_t phys_addr;
+    if (is_valid_virtual_address((uintptr_t)dir)) {
+        page_t *page = get_page_from_virtual_address((uintptr_t)dir);
+        if (!page) {
+            pr_crit("Failed to get low memory page from address\n");
+            return -1;
+        }
+
+        phys_addr = get_physical_address_from_page(page);
+        if (!phys_addr) {
+            pr_crit("Failed to get physical address from page\n");
+            return -1;
+        }
+    } else {
+        phys_addr = (uintptr_t)dir;
+    }
+    set_cr3(phys_addr);
+    return 0;
+}
+
+int is_current_pgd(page_directory_t *pgd)
+{
+    // Check if the pgd pointer is NULL
+    if (pgd == NULL) {
+        return 0;
+    }
+    // Compare the given pgd with the current page directory
+    return pgd == paging_get_current_pgd();
+}
+
+void paging_flush_tlb_single(unsigned long addr) { __asm__ __volatile__("invlpg (%0)" ::"r"(addr) : "memory"); }
 
 /// @brief Sets the given page table flags.
 /// @param table the page table.
