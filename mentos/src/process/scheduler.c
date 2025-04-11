@@ -618,7 +618,7 @@ void do_exit(int exit_code)
         pr_debug("}\n");
     }
     // Free the space occupied by the stack.
-    destroy_process_image(runqueue.curr->mm);
+    mm_destroy(runqueue.curr->mm);
     // Debugging message.
     pr_debug("Process %d exited with value %d\n", runqueue.curr->pid, exit_code);
 }

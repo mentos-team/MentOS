@@ -9,6 +9,7 @@
 #include "kernel.h"
 #include "math.h"
 #include "mem/alloc/zone_allocator.h"
+#include "mem/mm/mm.h"
 #include "proc_access.h"
 #include "stddef.h"
 #include "stdint.h"
@@ -107,45 +108,13 @@ typedef struct vm_area_struct {
     unsigned short vm_flags;
 } vm_area_struct_t;
 
-/// @brief Memory Descriptor, used to store details about the memory of a user process.
-typedef struct mm_struct {
-    /// List of memory areas (vm_area_struct references).
-    list_head_t mmap_list;
-    /// Pointer to the last used memory area.
-    vm_area_struct_t *mmap_cache;
-    /// Pointer to the process's page directory.
-    page_directory_t *pgd;
-    /// Number of memory areas.
-    int map_count;
-    /// List of mm_structs.
-    list_head_t mm_list;
-    /// Start address of the code segment.
-    uint32_t start_code;
-    /// End address of the code segment.
-    uint32_t end_code;
-    /// Start address of the data segment.
-    uint32_t start_data;
-    /// End address of the data segment.
-    uint32_t end_data;
-    /// Start address of the heap.
-    uint32_t start_brk;
-    /// End address of the heap.
-    uint32_t brk;
-    /// Start address of the stack.
-    uint32_t start_stack;
-    /// Start address of the arguments.
-    uint32_t arg_start;
-    /// End address of the arguments.
-    uint32_t arg_end;
-    /// Start address of the environment variables.
-    uint32_t env_start;
-    /// End address of the environment variables.
-    uint32_t env_end;
-    /// Total number of mapped pages.
-    unsigned int total_vm;
-} mm_struct_t;
-
-/// @brief Cache used to store page tables.
+/// Cache for storing mm_struct.
+extern kmem_cache_t *mm_cache;
+/// Cache for storing vm_area_struct.
+extern kmem_cache_t *vm_area_cache;
+/// Cache for storing page directories.
+extern kmem_cache_t *pgdir_cache;
+/// Cache for storing page tables.
 extern kmem_cache_t *pgtbl_cache;
 
 /// @brief Comparison function between virtual memory areas.
@@ -286,18 +255,3 @@ int is_valid_vm_area(mm_struct_t *mm, uintptr_t vm_start, uintptr_t vm_end);
 /// @param vm_start where we save the starting address for the new area.
 /// @return 0 on success, -1 on error, or 1 if no free area is found.
 int find_free_vm_area(mm_struct_t *mm, size_t length, uintptr_t *vm_start);
-
-/// @brief Creates the main memory descriptor.
-/// @param stack_size The size of the stack in byte.
-/// @return The Memory Descriptor created.
-mm_struct_t *create_blank_process_image(size_t stack_size);
-
-/// @brief Create a Memory Descriptor.
-/// @param mmp The memory map to clone
-/// @return The Memory Descriptor created.
-mm_struct_t *clone_process_image(mm_struct_t *mmp);
-
-/// @brief Free Memory Descriptor with all the memory segment contained.
-/// @param mm The Memory Descriptor to free.
-/// @return Returns -1 on error, otherwise 0.
-int destroy_process_image(mm_struct_t *mm);

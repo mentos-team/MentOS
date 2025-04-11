@@ -82,7 +82,7 @@ add_library(
     ${CMAKE_SOURCE_DIR}/mentos/src/mem/alloc/heap.c
     ${CMAKE_SOURCE_DIR}/mentos/src/mem/alloc/slab.c
     ${CMAKE_SOURCE_DIR}/mentos/src/mem/alloc/zone_allocator.c
-    # ${CMAKE_SOURCE_DIR}/mentos/src/mem/mm/mm.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/mem/mm/mm.c
     ${CMAKE_SOURCE_DIR}/mentos/src/mem/mm/page.c
     # ${CMAKE_SOURCE_DIR}/mentos/src/mem/mm/vm_area.c
     # ${CMAKE_SOURCE_DIR}/mentos/src/mem/mm/vmem.c

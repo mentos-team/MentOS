@@ -90,7 +90,7 @@ static int __reset_process(task_struct *task)
 {
     pr_debug("__reset_process(%p `%s`)\n", task, task->name);
     // Create a new stack segment.
-    task->mm = create_blank_process_image(DEFAULT_STACK_SIZE);
+    task->mm = mm_create_blank(DEFAULT_STACK_SIZE);
     if (task->mm == NULL) {
         pr_err("Failed to initialize process mm structure.\n");
         return 0;
@@ -168,7 +168,7 @@ start:
     // only when all the threads are terminated. This can be accomplished by using
     // an internal counter on the mm.
     if (task->mm) {
-        destroy_process_image(task->mm);
+        mm_destroy(task->mm);
     }
     // Recreate the memory of the process.
     if (!__reset_process(task)) {
@@ -506,7 +506,7 @@ pid_t sys_fork(pt_regs *f)
     // Allocate the memory for the process.
     task_struct *proc        = __alloc_task(current, current, current->name);
     // Copy the father's stack, memory, heap etc... to the child process
-    proc->mm                 = clone_process_image(current->mm);
+    proc->mm                 = mm_clone(current->mm);
     // Set the eax as 0, to indicate the child process
     proc->thread.regs.eax    = 0;
     // Enable the interrupts.
