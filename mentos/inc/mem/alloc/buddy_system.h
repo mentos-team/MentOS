@@ -13,7 +13,7 @@
 #define MAX_BUDDYSYSTEM_GFP_ORDER 14
 
 /// @brief Provide the offset of the element inside the given type of page.
-#define BBSTRUCT_OFFSET(page, element) ((uint32_t)&(((page *)NULL)->element))
+#define BBSTRUCT_OFFSET(page, element) ((uint32_t) & (((page *)NULL)->element))
 
 /// @brief Returns the address of the given element of a given type of page,
 ///        based on the provided bbstruct.
