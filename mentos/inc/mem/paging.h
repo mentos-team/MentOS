@@ -7,10 +7,12 @@
 
 #include "boot.h"
 #include "kernel.h"
+#include "math.h"
 #include "mem/alloc/zone_allocator.h"
 #include "proc_access.h"
 #include "stddef.h"
 #include "stdint.h"
+#include "sys/bitops.h"
 
 /// 4KB pages (2^12 = 4096 bytes)
 #define PAGE_SHIFT  12UL
