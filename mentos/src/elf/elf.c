@@ -263,7 +263,7 @@ static inline int elf_load_exec(elf_header_t *header, task_struct *task)
             to_human_size(program_header->memsz), to_human_size(program_header->filesz), program_header->vaddr,
             program_header->vaddr + program_header->memsz);
         if (program_header->type == PT_LOAD) {
-            segment = create_vm_area(
+            segment = vm_area_create(
                 task->mm, program_header->vaddr, program_header->memsz, MM_USER | MM_RW | MM_COW, GFP_KERNEL);
             vpage    = virt_map_alloc(program_header->memsz);
             dst_addr = virt_map_vaddress(task->mm, vpage, segment->vm_start, program_header->memsz);

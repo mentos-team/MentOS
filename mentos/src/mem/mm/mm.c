@@ -9,12 +9,32 @@
 #define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
 #include "io/debug.h"                    // Include debugging functions.
 
+#include "mem/alloc/slab.h"
 #include "mem/mm/mm.h"
 #include "mem/paging.h"
-#include "mem/alloc/slab.h"
 #include "string.h"
 
-int mm_init(void) { return 0; }
+/// Cache for storing mm_struct.
+static kmem_cache_t *mm_cache;
+/// The mm_struct of the kernel.
+static mm_struct_t main_mm;
+
+int mm_init(void)
+{
+    // Create memory cache for managing mm_struct.
+    mm_cache = KMEM_CREATE(mm_struct_t);
+    if (!mm_cache) {
+        pr_crit("Failed to create mm_cache.\n");
+        return -1;
+    }
+
+    // Clean the memory management structure for the kernel.
+    memset(&main_mm, 0, sizeof(mm_struct_t));
+
+    return 0;
+}
+
+mm_struct_t *mm_get_main(void) { return &main_mm; }
 
 mm_struct_t *mm_create_blank(size_t stack_size)
 {
@@ -59,7 +79,7 @@ mm_struct_t *mm_create_blank(size_t stack_size)
     list_head_init(&mm->mmap_list);
 
     // Allocate the stack segment.
-    vm_area_struct_t *segment = create_vm_area(
+    vm_area_struct_t *segment = vm_area_create(
         mm, PROCAREA_END_ADDR - stack_size, stack_size, MM_PRESENT | MM_RW | MM_USER | MM_COW, GFP_HIGHUSER);
     if (!segment) {
         pr_crit("Failed to create stack segment for new process\n");
@@ -128,7 +148,7 @@ mm_struct_t *mm_clone(mm_struct_t *mmp)
     list_for_each_decl (it, &mmp->mmap_list) {
         vm_area = list_entry(it, vm_area_struct_t, vm_list);
 
-        if (clone_vm_area(mm, vm_area, 0, GFP_HIGHUSER) < 0) {
+        if (vm_area_clone(mm, vm_area, 0, GFP_HIGHUSER) < 0) {
             pr_crit("Failed to clone vm_area from source process.\n");
             // Free the previously allocated mm_struct.
             kmem_cache_free(mm);
@@ -201,7 +221,7 @@ int mm_destroy(mm_struct_t *mm)
         next = segment->vm_list.next;
 
         // Destroy the current virtual memory area. Return -1 on failure.
-        if (destroy_vm_area(mm, segment) < 0) {
+        if (vm_area_destroy(mm, segment) < 0) {
             pr_err("We failed to destroy the virtual memory area.");
             return -1; // Failed to destroy the virtual memory area.
         }

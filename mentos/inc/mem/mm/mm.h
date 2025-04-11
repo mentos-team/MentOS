@@ -50,6 +50,10 @@ typedef struct mm_struct {
 /// @return 0 on success, -1 on error.
 int mm_init(void);
 
+/// @brief Get the main memory descriptor.
+/// @return the main memory descriptor.
+mm_struct_t *mm_get_main(void);
+
 /// @brief Creates the main memory descriptor.
 /// @param stack_size The size of the stack in byte.
 /// @return The Memory Descriptor created.
