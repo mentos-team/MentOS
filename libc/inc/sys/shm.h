@@ -33,54 +33,6 @@ struct shmid_ds {
     shmatt_t shm_nattch;
 };
 
-#if 0
-
-#include "debug.h"
-#include "kheap.h"
-#include "paging.h"
-#include "scheduler.h"
-#include "stddef.h"
-#include "syscall.h"
-#include "time.h"
-
-//======== Permission flag for shmget ==========================================
-// or S_IRUGO from <linux/stat.h>.
-#define SHM_R      0400
-
-// or S_IWUGO from <linux/stat.h>.
-#define SHM_W      0200
-//==============================================================================
-
-//======== Commands for shmctl =================================================
-// Lock segment (root only).
-#define SHM_LOCK   11
-
-// Unlock segment (root only).
-#define SHM_UNLOCK 12
-//==============================================================================
-
-// Ipcs ctl commands.
-#define SHM_STAT   13
-
-#define SHM_INFO 14
-
-#define SHM_STAT_ANY  15
-
-//======== shm_mode upper byte flags ===========================================
-// segment will be destroyed on last detach.
-#define SHM_DEST      01000
-
-// Segment will not be swapped.
-#define SHM_LOCKED    02000
-
-// Segment is mapped via hugetlb.
-#define SHM_HUGETLB   04000
-
-// Don't check for reservations.
-#define SHM_NORESERVE 010000
-
-#endif
-
 #define SHM_RDONLY 010000  ///< Attach read-only else read-write.
 #define SHM_RND    020000  ///< Round attach address to SHMLBA.
 #define SHM_REMAP  040000  ///< Take-over region on attach.

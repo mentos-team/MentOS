@@ -5,13 +5,10 @@
 
 #include "string.h"
 #include "ctype.h"
+#include "mem/kheap.h"
 #include "stdio.h"
 #include "stdlib.h"
 #include "sys/stat.h"
-
-#ifdef __KERNEL__
-#include "mem/kheap.h"
-#endif
 
 char *strncpy(char *destination, const char *source, size_t num)
 {
@@ -645,11 +642,7 @@ char *trim(char *str)
 char *strdup(const char *s)
 {
     size_t len = strlen(s) + 1;
-#ifdef __KERNEL__
-    char *new = kmalloc(len);
-#else
-    char *new = malloc(len);
-#endif
+    char *new  = kmalloc(len);
     if (new == NULL) {
         return NULL;
     }
@@ -660,11 +653,7 @@ char *strdup(const char *s)
 char *strndup(const char *s, size_t n)
 {
     size_t len = strnlen(s, n);
-#ifdef __KERNEL__
-    char *new = kmalloc(len);
-#else
-    char *new = malloc(len);
-#endif
+    char *new  = kmalloc(len);
     if (new == NULL) {
         return NULL;
     }
