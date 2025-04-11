@@ -9,9 +9,9 @@
 #include "klib/stdatomic.h"
 #include "list_head.h"
 #include "math.h"
-#include "mem/buddy_system.h"
+#include "mem/alloc/buddy_system.h"
+#include "mem/alloc/slab.h"
 #include "mem/gfp.h"
-#include "mem/slab.h"
 #include "stdint.h"
 #include "sys/bitops.h"
 

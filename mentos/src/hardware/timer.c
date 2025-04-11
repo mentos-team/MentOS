@@ -19,7 +19,6 @@
 #include "io/port_io.h"
 #include "io/video.h"
 #include "klib/irqflags.h"
-#include "mem/kheap.h"
 #include "process/scheduler.h"
 #include "process/wait.h"
 #include "stdint.h"

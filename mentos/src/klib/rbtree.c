@@ -7,7 +7,7 @@
 
 #include "assert.h"
 #include "io/debug.h"
-#include "mem/slab.h"
+#include "mem/alloc/slab.h"
 
 /// @brief Stores information of a node.
 struct rbtree_node {

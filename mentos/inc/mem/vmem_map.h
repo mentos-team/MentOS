@@ -5,9 +5,9 @@
 
 #pragma once
 
-#include "mem/buddy_system.h"
+#include "mem/alloc/buddy_system.h"
+#include "mem/alloc/zone_allocator.h"
 #include "mem/paging.h"
-#include "mem/zone_allocator.h"
 
 /// @brief Virtual mapping manager.
 typedef struct virt_map_page_manager {

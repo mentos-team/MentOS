@@ -400,3 +400,13 @@ long sys_ioctl(int fd, unsigned int request, unsigned long data);
 /// @param data Additional data required by certain `fcntl` commands (e.g., flags or pointer).
 /// @return Returns 0 on success; on error, returns a negative error code.
 long sys_fcntl(int fd, unsigned int request, unsigned long data);
+
+/// @brief User malloc.
+/// @param addr This argument is treated as an address of a dynamically
+///             allocated memory if falls inside the process heap area.
+///             Otherwise, it is treated as an amount of memory that
+///             should be allocated.
+/// @return NULL if there is no more memory available or we were freeing
+///         a previously allocated memory area, the address of the
+///         allocated space otherwise.
+void *sys_brk(void *addr);

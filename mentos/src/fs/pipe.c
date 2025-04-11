@@ -23,7 +23,7 @@
 #include "fcntl.h"
 #include "fs/vfs.h"
 #include "list_head.h"
-#include "mem/kheap.h"
+#include "process/scheduler.h"
 #include "stdio.h"
 #include "stdlib.h"
 #include "strerror.h"

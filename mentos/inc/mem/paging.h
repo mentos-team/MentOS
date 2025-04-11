@@ -7,7 +7,7 @@
 
 #include "boot.h"
 #include "kernel.h"
-#include "mem/zone_allocator.h"
+#include "mem/alloc/zone_allocator.h"
 #include "proc_access.h"
 #include "stddef.h"
 #include "stdint.h"

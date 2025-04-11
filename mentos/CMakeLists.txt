@@ -77,12 +77,20 @@ add_library(
     ${CMAKE_SOURCE_DIR}/mentos/src/klib/ndtree.c
     ${CMAKE_SOURCE_DIR}/mentos/src/klib/hashmap.c
     ${CMAKE_SOURCE_DIR}/mentos/src/klib/list.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/mem/kheap.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/mem/paging.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/mem/slab.c
+    # Memory related files.
+    ${CMAKE_SOURCE_DIR}/mentos/src/mem/alloc/buddy_system.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/mem/alloc/heap.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/mem/alloc/slab.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/mem/alloc/zone_allocator.c
+    # ${CMAKE_SOURCE_DIR}/mentos/src/mem/mm/mm.c
+    # ${CMAKE_SOURCE_DIR}/mentos/src/mem/mm/page.c
+    # ${CMAKE_SOURCE_DIR}/mentos/src/mem/mm/vm_area.c
+    # ${CMAKE_SOURCE_DIR}/mentos/src/mem/mm/vmem.c
+    # ${CMAKE_SOURCE_DIR}/mentos/src/mem/pgtable_map.c
+    # ${CMAKE_SOURCE_DIR}/mentos/src/mem/page_fault.c
     ${CMAKE_SOURCE_DIR}/mentos/src/mem/vmem_map.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/mem/zone_allocator.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/mem/buddy_system.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/mem/paging.c
+    # 
     ${CMAKE_SOURCE_DIR}/mentos/src/elf/elf.c
     ${CMAKE_SOURCE_DIR}/mentos/src/crypt/sha256.c
     ${CMAKE_SOURCE_DIR}/mentos/src/descriptor_tables/gdt.c

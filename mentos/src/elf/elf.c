@@ -13,7 +13,7 @@
 #include "elf/elf.h"
 #include "fs/vfs.h"
 #include "mem/paging.h"
-#include "mem/slab.h"
+#include "mem/alloc/slab.h"
 #include "mem/vmem_map.h"
 #include "process/process.h"
 #include "process/scheduler.h"

@@ -12,7 +12,7 @@
 #include "process/wait.h"
 
 #include "assert.h"
-#include "mem/slab.h"
+#include "mem/alloc/slab.h"
 #include "process/scheduler.h"
 #include "string.h"
 

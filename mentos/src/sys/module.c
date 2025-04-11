@@ -9,7 +9,7 @@
 #define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
 #include "io/debug.h"                    // Include debugging functions.
 
-#include "mem/slab.h"
+#include "mem/alloc/slab.h"
 #include "string.h"
 #include "sys/bitops.h"
 #include "sys/module.h"

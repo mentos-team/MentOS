@@ -14,8 +14,8 @@
 
 #include "assert.h"
 #include "mem/paging.h"
-#include "mem/slab.h"
-#include "mem/zone_allocator.h"
+#include "mem/alloc/slab.h"
+#include "mem/alloc/zone_allocator.h"
 #include "resource_tracing.h"
 
 #ifdef ENABLE_KMEM_TRACE
