@@ -320,7 +320,11 @@ static inline task_struct *__alloc_task(task_struct *source, task_struct *parent
 
     // Set the default terminal options.
     proc->termios = (termios_t){
-        .c_cflag = 0, .c_lflag = (ICANON | ECHO | ECHOE | ECHOK | ECHONL | ISIG), .c_oflag = 0, .c_iflag = 0};
+        .c_cflag = 0,
+        .c_lflag = (ICANON | ECHO | ECHOE | ECHOK | ECHONL | ISIG),
+        .c_oflag = 0,
+        .c_iflag = 0,
+    };
     // Initialize the ringbuffer.
     rb_keybuffer_init(&proc->keyboard_rb);
 
