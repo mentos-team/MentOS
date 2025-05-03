@@ -165,13 +165,13 @@ typedef void (*sighandler_t)(int);
 /// Signals are divided into two cathegories, identified by the two unsigned longs:
 ///     [ 1, 31] corresponds to normal signals;
 ///     [32, 64] corresponds to real-time signals.
-typedef struct sigset_t {
+typedef struct sigset {
     /// Signals divided into two cathegories.
     unsigned long sig[2];
 } sigset_t;
 
 /// @brief Holds the information on how to handle a specific signal.
-typedef struct sigaction_t {
+typedef struct sigaction {
     /// This field specifies the type of action to be performed; its value can be a pointer
     /// to the signal handler, SIG_DFL (that is, the value 0) to specify that the default
     /// action is performed, or SIG_IGN (that is, the value 1) to specify that the signal is
@@ -184,7 +184,7 @@ typedef struct sigaction_t {
 } sigaction_t;
 
 /// @brief Describes how each signal must be handled.
-typedef struct sighand_t {
+typedef struct sighand {
     /// Usage counter of the signal handler descriptor.
     atomic_t count;
     /// Array of structures specifying the actions to be performed upon delivering the signals
@@ -200,7 +200,7 @@ typedef union sigval {
 } sigval_t;
 
 /// @brief Stores information about an occurrence of a specific signal.
-typedef struct siginfo_t {
+typedef struct siginfo {
     /// The signal number.
     int si_signo;
     /// A code identifying who raised the signal (see signal_sender_code_t).
@@ -222,9 +222,9 @@ typedef struct siginfo_t {
 } siginfo_t;
 
 /// @brief An entry of the signal queue.
-typedef struct sigqueue_t {
+typedef struct sigqueue {
     /// Links for the pending signal queue’s list.
-    list_head list;
+    list_head_t list;
     /// Flags associated with the queued signal.
     int flags;
     /// Describes the event that raised the signal.
@@ -234,9 +234,9 @@ typedef struct sigqueue_t {
 } sigqueue_t;
 
 /// @brief Keeps information of pending signals.
-typedef struct sigpending_t {
+typedef struct sigpending {
     /// Head of the list of pending signals.
-    list_head list;
+    list_head_t list;
     /// The mask which can be queried to know which signals are pending.
     sigset_t signal;
 } sigpending_t;

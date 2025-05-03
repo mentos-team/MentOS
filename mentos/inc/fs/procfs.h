@@ -8,7 +8,7 @@
 #include "process/process.h"
 
 /// @brief Stores information about a procfs directory entry.
-typedef struct proc_dir_entry_t {
+typedef struct proc_dir_entry {
     /// Generic system operations.
     vfs_sys_operations_t *sys_operations;
     /// Files operations.

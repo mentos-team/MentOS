@@ -8,7 +8,7 @@
 #include "multiboot.h"
 
 /// @brief Mentos structure to communicate bootloader info to the kernel
-typedef struct boot_info_t {
+typedef struct boot_info {
     /// Boot magic number.
     unsigned int magic;
 

@@ -9,7 +9,7 @@
 #define SYS_LEN 257
 
 /// @brief Holds information concerning the machine and the os.
-typedef struct utsname_t {
+typedef struct utsname {
     /// The name of the system.
     char sysname[SYS_LEN];
     /// The name of the node.

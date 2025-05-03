@@ -1,4 +1,4 @@
-/// @file vmem_map.c
+/// @file vmem.c
 /// @brief Virtual memory mapping routines.
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
@@ -9,7 +9,7 @@
 #define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
 #include "io/debug.h"                    // Include debugging functions.
 
-#include "mem/vmem_map.h"
+#include "mem/mm/vmem.h"
 #include "string.h"
 #include "system/panic.h"
 
@@ -34,7 +34,7 @@ static virt_map_page_manager_t virt_default_mapping;
 /// Array of virtual pages.
 virt_map_page_t virt_pages[VIRTUAL_MEMORY_PAGES_COUNT];
 
-int virt_init(void)
+int vmem_init(void)
 {
     // Initialize the buddy system for virtual memory management.
     // This system manages free pages in the virtual memory area.
@@ -47,7 +47,7 @@ int virt_init(void)
         VIRTUAL_MEMORY_PAGES_COUNT);              // Total number of virtual memory pages.
 
     // Get the main page directory for the system.
-    page_directory_t *main_pgd = paging_get_main_directory();
+    page_directory_t *main_pgd = paging_get_main_pgd();
 
     // Error handling: If the main page directory could not be retrieved, return failure.
     if (!main_pgd) {
@@ -121,7 +121,7 @@ int virt_init(void)
         uint32_t phy_addr = get_physical_address_from_page(table_page);
 
         // Set the physical frame address in the page directory entry.
-        entry->frame = phy_addr >> 12u;
+        entry->frame = phy_addr >> 12U;
     }
 
     return 0;
@@ -154,7 +154,7 @@ static virt_map_page_t *_alloc_virt_pages(uint32_t pfn_count)
     return vpage;
 }
 
-uint32_t virt_map_physical_pages(page_t *page, int pfn_count)
+uint32_t vmem_map_physical_pages(page_t *page, int pfn_count)
 {
     // Allocate virtual pages for the given page frame count.
     virt_map_page_t *vpage = _alloc_virt_pages(pfn_count);
@@ -179,7 +179,7 @@ uint32_t virt_map_physical_pages(page_t *page, int pfn_count)
     uint32_t phy_address = get_physical_address_from_page(page);
 
     // Get the main page directory.
-    page_directory_t *main_pgd = paging_get_main_directory();
+    page_directory_t *main_pgd = paging_get_main_pgd();
     // Error handling: Failed to get the main page directory.
     if (!main_pgd) {
         pr_crit("Failed to get the main page directory\n");
@@ -192,7 +192,7 @@ uint32_t virt_map_physical_pages(page_t *page, int pfn_count)
     return vaddr;
 }
 
-virt_map_page_t *virt_map_alloc(uint32_t size)
+virt_map_page_t *vmem_map_alloc_virtual(uint32_t size)
 {
     // Calculate the number of pages required to cover the given size.
     uint32_t pages_count = (size + PAGE_SIZE - 1) / PAGE_SIZE;
@@ -209,7 +209,7 @@ virt_map_page_t *virt_map_alloc(uint32_t size)
     return vpages;
 }
 
-uint32_t virt_map_vaddress(mm_struct_t *mm, virt_map_page_t *vpage, uint32_t vaddr, uint32_t size)
+uint32_t vmem_map_virtual_address(mm_struct_t *mm, virt_map_page_t *vpage, uint32_t vaddr, uint32_t size)
 {
     // Ensure the memory management structure and page directory are valid.
     if (!mm || !mm->pgd) {
@@ -230,7 +230,7 @@ uint32_t virt_map_vaddress(mm_struct_t *mm, virt_map_page_t *vpage, uint32_t vad
     }
 
     // Get the main page directory.
-    page_directory_t *main_pgd = paging_get_main_directory();
+    page_directory_t *main_pgd = paging_get_main_pgd();
     // Error handling: Failed to get the main page directory.
     if (!main_pgd) {
         pr_crit("Failed to get the main page directory\n");
@@ -245,7 +245,7 @@ uint32_t virt_map_vaddress(mm_struct_t *mm, virt_map_page_t *vpage, uint32_t vad
     return start_map_virt_address;
 }
 
-int virt_unmap(uint32_t addr)
+int vmem_unmap_virtual_address(uint32_t addr)
 {
     // Ensure it is a valid virtual address.
     if (!is_valid_virtual_address(addr)) {
@@ -263,12 +263,12 @@ int virt_unmap(uint32_t addr)
     }
 
     // Unmap the virtual map page.
-    virt_unmap_pg(page);
+    vmem_unmap_virtual_address_page(page);
 
     return 0;
 }
 
-int virt_unmap_pg(virt_map_page_t *page)
+int vmem_unmap_virtual_address_page(virt_map_page_t *page)
 {
     // Error handling: ensure the page is valid.
     if (!page) {
@@ -280,7 +280,7 @@ int virt_unmap_pg(virt_map_page_t *page)
     uint32_t addr = VIRT_PAGE_TO_ADDRESS(page);
 
     // Get the main page directory.
-    page_directory_t *main_pgd = paging_get_main_directory();
+    page_directory_t *main_pgd = paging_get_main_pgd();
     // Error handling: Failed to get the main page directory.
     if (!main_pgd) {
         pr_crit("Failed to get the main page directory\n");
@@ -297,7 +297,7 @@ int virt_unmap_pg(virt_map_page_t *page)
 }
 
 // FIXME: Check if this function should support unaligned page-boundaries copy
-void virt_memcpy(mm_struct_t *dst_mm, uint32_t dst_vaddr, mm_struct_t *src_mm, uint32_t src_vaddr, uint32_t size)
+void vmem_memcpy(mm_struct_t *dst_mm, uint32_t dst_vaddr, mm_struct_t *src_mm, uint32_t src_vaddr, uint32_t size)
 {
     // Buffer size for copying.
     const uint32_t VMEM_BUFFER_SIZE = 65536;
@@ -306,8 +306,8 @@ void virt_memcpy(mm_struct_t *dst_mm, uint32_t dst_vaddr, mm_struct_t *src_mm, u
     uint32_t buffer_size = min(VMEM_BUFFER_SIZE, size);
 
     // Allocate virtual pages for the source and destination.
-    virt_map_page_t *src_vpage = virt_map_alloc(size);
-    virt_map_page_t *dst_vpage = virt_map_alloc(size);
+    virt_map_page_t *src_vpage = vmem_map_alloc_virtual(size);
+    virt_map_page_t *dst_vpage = vmem_map_alloc_virtual(size);
 
     // Error handling: ensure both source and destination virtual pages are allocated.
     if (!src_vpage || !dst_vpage) {
@@ -318,8 +318,8 @@ void virt_memcpy(mm_struct_t *dst_mm, uint32_t dst_vaddr, mm_struct_t *src_mm, u
     for (;;) {
         // Map the source and destination virtual addresses to the allocated
         // virtual pages.
-        uint32_t src_map = virt_map_vaddress(src_mm, src_vpage, src_vaddr, buffer_size);
-        uint32_t dst_map = virt_map_vaddress(dst_mm, dst_vpage, dst_vaddr, buffer_size);
+        uint32_t src_map = vmem_map_virtual_address(src_mm, src_vpage, src_vaddr, buffer_size);
+        uint32_t dst_map = vmem_map_virtual_address(dst_mm, dst_vpage, dst_vaddr, buffer_size);
 
         // Determine the size to copy in this iteration.
         uint32_t cpy_size = min(buffer_size, size);
@@ -339,6 +339,6 @@ void virt_memcpy(mm_struct_t *dst_mm, uint32_t dst_vaddr, mm_struct_t *src_mm, u
     }
 
     // Unmap the allocated virtual pages.
-    virt_unmap_pg(src_vpage);
-    virt_unmap_pg(dst_vpage);
+    vmem_unmap_virtual_address_page(src_vpage);
+    vmem_unmap_virtual_address_page(dst_vpage);
 }

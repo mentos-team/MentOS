@@ -44,7 +44,7 @@
  */
 
 /// @brief This structure describes one interrupt gate.
-typedef struct idt_descriptor_t {
+typedef struct idt_descriptor {
     /// The lower 16 bits of the ISR's address.
     uint16_t offset_low;
     /// The GDT segment selector that the CPU will load into CS before calling the ISR.
@@ -58,7 +58,7 @@ typedef struct idt_descriptor_t {
 } __attribute__((packed)) idt_descriptor_t;
 
 /// @brief A pointer structure used for informing the CPU about our IDT.
-typedef struct idt_pointer_t {
+typedef struct idt_pointer {
     /// The size of the IDT (entry number).
     uint16_t limit;
     /// The start address of the IDT.

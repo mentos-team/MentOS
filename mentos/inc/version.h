@@ -21,7 +21,7 @@
 #define OS_MINOR_VERSION 9
 
 /// Micro version of the operating system.
-#define OS_MICRO_VERSION 0
+#define OS_MICRO_VERSION 1
 
 /// Helper to transform the given argument into a string.
 #define OS_STR_HELPER(x) #x

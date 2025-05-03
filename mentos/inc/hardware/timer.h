@@ -39,7 +39,7 @@
 /// every time the timer fires. By default, the timer fires 18.222 times
 /// per second. Why 18.222Hz? Some engineer at IBM must've been smoking
 /// something funky.
-void timer_handler(pt_regs *reg);
+void timer_handler(pt_regs_t *reg);
 
 /// @brief Sets up the system clock by installing the timer handler into IRQ0.
 void timer_install(void);
@@ -93,17 +93,17 @@ typedef struct tvec_base_s {
     unsigned long timer_ticks;
 
     /// Lists of root timers that will expires in the next 255 ticks.
-    list_head tvr[TVR_SIZE];
+    list_head_t tvr[TVR_SIZE];
     /// Lists of normal timers that will expires in the next:
     ///     tv[0] : 2^14 - 1 ticks
     ///     tv[1] : 2^20 - 1 ticks
     ///     tv[2] : 2^26 - 1 ticks
     ///     tv[3] : 2^32 - 1 ticks
-    list_head tvn[TVN_COUNT][TVN_SIZE];
+    list_head_t tvn[TVN_COUNT][TVN_SIZE];
 
 #else
     /// List of all the timers
-    struct list_head list;
+    struct list_head_t list;
 #endif
 
 } tvec_base_t;
@@ -113,8 +113,8 @@ typedef struct tvec_base_s {
 struct timer_list {
     /// Protects the access to the timer.
     spinlock_t lock;
-    /// Lists of timers are mantained using the list_head.
-    struct list_head entry;
+    /// Lists of timers are mantained using the list_head_t.
+    list_head_t entry;
     /// Ticks value when the timer has to expire
     unsigned long expires;
     /// Functions to be executed when the timer expires

@@ -7,7 +7,7 @@
 #include "fs/vfs.h"
 #include "io/debug.h"
 #include "limits.h"
-#include "mem/kheap.h"
+#include "process/scheduler.h"
 #include "stdio.h"
 #include "string.h"
 

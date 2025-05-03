@@ -59,7 +59,7 @@ static int resource_id = -1;
 // ============================================================================
 
 /// @brief Types of file in an EXT2 filesystem.
-typedef enum ext2_file_type_t {
+typedef enum ext2_file_type {
     ext2_file_type_unknown,          ///< Unknown type.
     ext2_file_type_regular_file,     ///< Regular file.
     ext2_file_type_directory,        ///< Directory.
@@ -76,7 +76,7 @@ typedef enum ext2_file_type_t {
 /// bytes from the start of the device, and it is essential to mounting the
 /// filesystem. Since it is so important, backup copies of the superblock are
 /// stored in block groups throughout the filesystem.
-typedef struct ext2_superblock_t {
+typedef struct ext2_superblock {
     /// @brief Total number of inodes in file system.
     uint32_t inodes_count;
     /// @brief Total number of blocks in file system
@@ -203,7 +203,7 @@ typedef struct ext2_superblock_t {
 } ext2_superblock_t;
 
 /// @brief Entry of the Block Group Descriptor Table (BGDT).
-typedef struct ext2_group_descriptor_t {
+typedef struct ext2_group_descriptor {
     /// @brief The block number of the block bitmap for this Block Group
     uint32_t block_bitmap;
     /// @brief The block number of the inode allocation bitmap for this Block Group.
@@ -223,7 +223,7 @@ typedef struct ext2_group_descriptor_t {
 } ext2_group_descriptor_t;
 
 /// @brief The ext2 inode.
-typedef struct ext2_inode_t {
+typedef struct ext2_inode {
     /// @brief File mode
     uint16_t mode;
     /// @brief The user identifiers of the owners.
@@ -277,7 +277,7 @@ typedef struct ext2_inode_t {
 } ext2_inode_t;
 
 /// @brief The header of an ext2 directory entry.
-typedef struct ext2_dirent_t {
+typedef struct ext2_dirent {
     /// Number of the inode that this directory entry points to.
     uint32_t inode;
     /// Length of this directory entry. Must be a multiple of 4.
@@ -291,7 +291,7 @@ typedef struct ext2_dirent_t {
 } ext2_dirent_t;
 
 /// @brief The details regarding the filesystem.
-typedef struct ext2_filesystem_t {
+typedef struct ext2_filesystem {
     /// Pointer to the block device.
     vfs_file_t *block_device;
     /// Device superblock, contains important information.
@@ -303,7 +303,7 @@ typedef struct ext2_filesystem_t {
     /// Root FS node (attached to mountpoint).
     vfs_file_t *root;
     /// List of opened files.
-    list_head opened_files;
+    list_head_t opened_files;
 
     /// Size of one block.
     uint32_t block_size;
@@ -328,7 +328,7 @@ typedef struct ext2_filesystem_t {
 } ext2_filesystem_t;
 
 /// @brief Structure used when searching for a directory entry.
-typedef struct ext2_direntry_search_t {
+typedef struct ext2_direntry_search {
     /// The inode of the parent directory.
     ino_t parent_inode;
     /// The index of the block where the direntry resides.
@@ -1079,7 +1079,9 @@ static int ext2_write_bgdt(ext2_filesystem_t *fs)
 /// @return 0 on success, -1 on failure.
 static int ext2_read_inode(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t inode_index)
 {
-    uint32_t group_index, block_index, group_offset;
+    uint32_t group_index;
+    uint32_t block_index;
+    uint32_t group_offset;
     if (inode_index == 0) {
         pr_err("You are trying to read an invalid inode index (%d).\n", inode_index);
         return -1;
@@ -1122,7 +1124,9 @@ static int ext2_read_inode(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t 
 /// @return 0 on success, -1 on failure.
 static int ext2_write_inode(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t inode_index)
 {
-    uint32_t group_index, block_index, group_offset;
+    uint32_t group_index;
+    uint32_t block_index;
+    uint32_t group_offset;
     if (inode_index == 0) {
         pr_err("You are trying to read an invalid inode index (%d).\n", inode_index);
         return -1;
@@ -1170,7 +1174,9 @@ static int ext2_write_inode(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t
 ///  - inodes are allocated equally between groups.
 static int ext2_allocate_inode(ext2_filesystem_t *fs, unsigned preferred_group)
 {
-    uint32_t group_index = 0, group_offset = 0, inode_index = 0;
+    uint32_t group_index  = 0;
+    uint32_t group_offset = 0;
+    uint32_t inode_index  = 0;
     // Lock the filesystem.
     spinlock_lock(&fs->spinlock);
     // Allocate the cache.
@@ -1221,7 +1227,9 @@ static int ext2_allocate_inode(ext2_filesystem_t *fs, unsigned preferred_group)
 /// @return 0 on failure, or the index of the new block on success.
 static uint32_t ext2_allocate_block(ext2_filesystem_t *fs)
 {
-    uint32_t group_index = 0, group_offset = 0, block_index = 0;
+    uint32_t group_index  = 0;
+    uint32_t group_offset = 0;
+    uint32_t block_index  = 0;
     // Lock the filesystem.
     spinlock_lock(&fs->spinlock);
     // Allocate the cache.
@@ -1714,7 +1722,10 @@ static ssize_t ext2_write_inode_block(
     uint32_t block_index,
     uint8_t *buffer)
 {
-    uint32_t total_blocks_needed, allocated_blocks, blocks_to_allocate, real_index;
+    uint32_t total_blocks_needed;
+    uint32_t allocated_blocks;
+    uint32_t blocks_to_allocate;
+    uint32_t real_index;
 
     // Calculate total blocks needed.
     total_blocks_needed = block_index + 1;
@@ -1776,7 +1787,7 @@ static ssize_t ext2_read_inode_data(
     // What's the offset into the start block.
     uint32_t start_off   = offset % fs->block_size;
     // How much bytes to read for the end block.
-    uint32_t end_size    = end_offset - end_block * fs->block_size;
+    uint32_t end_size    = end_offset - (end_block * fs->block_size);
 
 #ifdef EXT2_FULL_DEBUG
     pr_debug("ext2_read_inode_data(inode: %4u, offset: %4u, nbyte: %4u)\n", inode_index, offset, nbyte);
@@ -1785,7 +1796,10 @@ static ssize_t ext2_read_inode_data(
     // Allocate the cache.
     uint8_t *cache = ext2_alloc_cache(fs);
 
-    uint32_t curr_off = 0, left, right, ret = end_offset - offset;
+    uint32_t curr_off = 0;
+    uint32_t left;
+    uint32_t right;
+    uint32_t ret = end_offset - offset;
     for (uint32_t block_index = start_block; block_index <= end_block; ++block_index) {
         left = 0, right = fs->block_size - 1;
         // Read the real block.
@@ -1842,7 +1856,7 @@ static ssize_t ext2_write_inode_data(
     // What's the offset into the start block.
     uint32_t start_off   = offset % fs->block_size;
     // How much bytes to read for the end block.
-    uint32_t end_size    = end_offset - end_block * fs->block_size;
+    uint32_t end_size    = end_offset - (end_block * fs->block_size);
 
 #ifdef EXT2_FULL_DEBUG
     pr_debug("ext2_write_inode_data(inode: %4u, offset: %4u, nbyte: %4u)\n", inode_index, offset, nbyte);
@@ -1851,7 +1865,10 @@ static ssize_t ext2_write_inode_data(
     // Allocate the cache.
     uint8_t *cache = ext2_alloc_cache(fs);
 
-    uint32_t curr_off = 0, left, right, ret = end_offset - offset;
+    uint32_t curr_off = 0;
+    uint32_t left;
+    uint32_t right;
+    uint32_t ret = end_offset - offset;
     for (uint32_t block_index = start_block; block_index <= end_block; ++block_index) {
         left = 0, right = fs->block_size;
         // Read the real block. Do not check for
@@ -1885,7 +1902,7 @@ static ssize_t ext2_write_inode_data(
 // ============================================================================
 
 /// @brief Iterator for visiting the directory entries.
-typedef struct ext2_direntry_iterator_t {
+typedef struct ext2_direntry_iterator {
     ext2_filesystem_t *fs;   ///< A pointer to the filesystem.
     uint8_t *cache;          ///< Cache used for reading.
     ext2_inode_t *inode;     ///< A pointer to the directory inode.
@@ -2201,7 +2218,8 @@ static inline int ext2_append_new_direntry(
         return 0;
     }
     // Get the rec_len;
-    uint32_t rec_len            = ext2_get_rec_len_from_name(name), real_rec_len;
+    uint32_t rec_len = ext2_get_rec_len_from_name(name);
+    uint32_t real_rec_len;
     // Prepare iterator.
     ext2_direntry_iterator_t it = ext2_direntry_iterator_begin(fs, cache, &parent_inode);
     // Iterate the directory entries.

@@ -5,47 +5,50 @@
 
 #pragma once
 
-/// Number of bits in a `char'.
+/// Number of bits in a `char`.
 #define CHAR_BIT 8
 
-/// Minimum value a `signed char' can hold.
+/// Minimum value a `signed char` can hold.
 #define SCHAR_MIN (-128)
 
-/// Maximum value a `signed char' can hold.
-#define SCHAR_MAX (+127)
+/// Maximum value a `signed char` can hold.
+#define SCHAR_MAX 127
 
-/// Minimum value a `signed char' can hold.
+/// Minimum value a `char` can hold (assuming signed by default).
 #define CHAR_MIN SCHAR_MIN
 
-/// Maximum value a `signed char' can hold.
+/// Maximum value a `char` can hold.
 #define CHAR_MAX SCHAR_MAX
 
-/// Maximum value a `char' can hold.
+/// Maximum value an `unsigned char` can hold.
 #define UCHAR_MAX 255
 
-/// Minimum value a `signed short int' can hold.
-#define SHRT_MIN (-32768)
+/// Maximum value a `signed short int` can hold.
+#define SHRT_MAX 32767
 
-/// Maximum value a `signed short int' can hold.
-#define SHRT_MAX (+32767)
+/// Minimum value a `signed short int` can hold.
+#define SHRT_MIN (-SHRT_MAX - 1)
 
-/// Maximum value a `unsigned short int' can hold.
+/// Maximum value an `unsigned short int` can hold.
 #define USHRT_MAX 65535
 
-/// Minimum value a `signed int' can hold.
-#define INT_MIN (-2147483648)
+/// Maximum value a `signed int` can hold.
+#define INT_MAX 2147483647
 
-/// Maximum values a `signed int' can hold.
-#define INT_MAX (+2147483647)
+/// Minimum value a `signed int` can hold.
+#define INT_MIN (-INT_MAX - 1)
 
-/// Maximum value an `unsigned int' can hold.
-#define UINT_MAX (+2147483647)
+/// Maximum value an `unsigned int` can hold.
+#define UINT_MAX 4294967295U
 
-/// Maximum value a `signed long int' can hold.
-#define LONG_MIN (-2147483648L)
+/// Maximum value a `signed long int` can hold (assuming 32-bit long).
+#define LONG_MAX 2147483647L
 
-/// Minimum value a `signed long int' can hold.
-#define LONG_MAX (+2147483647L)
+/// Minimum value a `signed long int` can hold.
+#define LONG_MIN (-LONG_MAX - 1L)
+
+/// Maximum value an `unsigned long int` can hold.
+#define ULONG_MAX 4294967295UL
 
 /// Maximum number of characters in a file name.
 #define NAME_MAX 255
@@ -59,5 +62,5 @@
 /// Maximum pid number.
 #define PID_MAX_LIMIT 32768
 
-/// Maximum number of links to follow during resolving a path
+/// Maximum number of links to follow during resolving a path.
 #define SYMLOOP_MAX 8

@@ -32,7 +32,7 @@
 // ============================================================================
 
 /// @brief Information concerning a file.
-typedef struct procfs_file_t {
+typedef struct procfs_file {
     /// Number used as delimiter, it must be set to 0xBF.
     int magic;
     /// The file inode.
@@ -56,18 +56,18 @@ typedef struct procfs_file_t {
     /// Pointer to the associated proc_dir_entry_t.
     proc_dir_entry_t dir_entry;
     /// Associated files.
-    list_head files;
+    list_head_t files;
     /// List of procfs siblings.
-    list_head siblings;
+    list_head_t siblings;
 } procfs_file_t;
 
 /// @brief The details regarding the filesystem.
 /// @brief Contains the number of files inside the procfs filesystem.
-typedef struct procfs_t {
+typedef struct procfs {
     /// Number of files.
     unsigned int nfiles;
     /// List of headers.
-    list_head files;
+    list_head_t files;
     /// Cache for creating new `procfs_file_t`.
     kmem_cache_t *procfs_file_cache;
 } procfs_t;
@@ -135,7 +135,7 @@ static inline bool_t procfs_check_file(procfs_file_t *procfs_file)
 /// @brief Returns the PROCFS file associated with the given list entry.
 /// @param entry the entry to transform to PROCFS file.
 /// @return a valid pointer to a PROCFS file, NULL otherwise.
-static inline procfs_file_t *procfs_get_file(list_head *entry)
+static inline procfs_file_t *procfs_get_file(list_head_t *entry)
 {
     procfs_file_t *procfs_file;
     if (entry) {
@@ -876,7 +876,7 @@ static file_system_type_t procfs_file_system_type = {.name = "procfs", .fs_flags
 int procfs_module_init(void)
 {
     // Initialize the procfs.
-    memset(&fs, 0, sizeof(struct procfs_t));
+    memset(&fs, 0, sizeof(procfs_t));
     // Initialize the cache.
     fs.procfs_file_cache = KMEM_CREATE(procfs_file_t);
     // Initialize the list of procfs files.

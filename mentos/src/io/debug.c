@@ -136,7 +136,7 @@ void dbg_printf(const char *file, const char *fun, int line, char *header, short
     va_list ap;
     va_start(ap, format);
     // Format the message.
-    vsprintf(formatted, format, ap);
+    vsnprintf(formatted, sizeof(formatted), format, ap);
     // End the list of arguments.
     va_end(ap);
 

@@ -74,7 +74,7 @@
 //            +-------------------+
 
 /// The symbol table for a.out.
-typedef struct multiboot_aout_symbol_table_t {
+typedef struct multiboot_aout_symbol_table {
     /// TODO: Comment.
     uint32_t tabsize;
     /// TODO: Comment.
@@ -86,7 +86,7 @@ typedef struct multiboot_aout_symbol_table_t {
 } multiboot_aout_symbol_table_t;
 
 /// The section header table for ELF.
-typedef struct multiboot_elf_section_header_table_t {
+typedef struct multiboot_elf_section_header_table {
     /// TODO: Comment.
     uint32_t num;
     /// TODO: Comment.
@@ -98,7 +98,7 @@ typedef struct multiboot_elf_section_header_table_t {
 } multiboot_elf_section_header_table_t;
 
 /// @brief Stores information about a module.
-typedef struct multiboot_module_t {
+typedef struct multiboot_module {
     // The memory used goes from bytes 'mod_start' to 'mod_end-1' inclusive.
     /// The starting address of the modules.
     uint32_t mod_start;
@@ -111,7 +111,7 @@ typedef struct multiboot_module_t {
 } multiboot_module_t;
 
 /// @brief Stores information about memory mapping.
-typedef struct multiboot_memory_map_t {
+typedef struct multiboot_memory_map {
     /// Size of this entry.
     uint32_t size;
     /// Lower bytes of the base address.
@@ -127,7 +127,7 @@ typedef struct multiboot_memory_map_t {
 } multiboot_memory_map_t;
 
 /// @brief Multiboot information structure.
-typedef struct multiboot_info_t {
+typedef struct multiboot_info {
     /// Multiboot info version number.
     uint32_t flags;
     /// Lower memory available from the BIOS.

@@ -208,38 +208,31 @@ int fgetc(int fd)
 
 char *fgets(char *buf, int n, int fd)
 {
-    int c;
     char *p   = buf;
     int count = n - 1; // Leave space for null terminator
 
-    // Read characters until reaching the limit or newline
     while (count > 0) {
-        ssize_t bytes_read = read(fd, &c, 1); // Read one character
+        char ch;
+        ssize_t bytes_read = read(fd, &ch, 1);
 
         if (bytes_read < 0) {
-            perror("Error reading from file descriptor");
-            return NULL; // Return NULL on error
+            return NULL; // Read error
         }
         if (bytes_read == 0) {
-            // End of file
-            break;
+            break; // EOF
         }
 
-        *p++ = (char)c; // Store the character in the buffer
+        *p++ = ch;
 
-        if (c == '\n') {
-            break; // Stop if we reach a newline
+        if (ch == '\n') {
+            break; // Line complete
         }
+
         count--;
     }
 
-    *p = '\0'; // Null-terminate the string
-
-    if (p == buf || c == EOF) {
-        return NULL; // Return NULL if no characters were read or EOF was reached
-    }
-
-    return buf; // Return the buffer
+    *p = '\0';
+    return (p == buf) ? NULL : buf;
 }
 
 void perror(const char *s)

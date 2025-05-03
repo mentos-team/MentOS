@@ -119,7 +119,7 @@ void scheduler_dequeue_task(task_struct *process)
 #endif
 }
 
-void scheduler_run(pt_regs *f)
+void scheduler_run(pt_regs_t *f)
 {
     // Check if there is a running process.
     if (runqueue.curr == NULL) {
@@ -139,8 +139,8 @@ void scheduler_run(pt_regs *f)
             //==== Handle Zombies =================================================
             //pr_debug("Handle zombie %d\n", runqueue.curr->pid);
             // get the next process after the current one
-            list_head *nNode = runqueue.curr->run_list.next;
-            // check if we reached the head of list_head
+            list_head_t *nNode = runqueue.curr->run_list.next;
+            // check if we reached the head of list_head_t
             if (nNode == &runqueue.queue) {
                 nNode = nNode->next;
             }
@@ -173,13 +173,13 @@ void scheduler_run(pt_regs *f)
     //==========================================================================
 }
 
-void scheduler_store_context(pt_regs *f, task_struct *process)
+void scheduler_store_context(pt_regs_t *f, task_struct *process)
 {
     // Store the registers.
     process->thread.regs = *f;
 }
 
-void scheduler_restore_context(task_struct *process, pt_regs *f)
+void scheduler_restore_context(task_struct *process, pt_regs_t *f)
 {
     // Switch to the next process.
     runqueue.curr = process;
@@ -187,7 +187,7 @@ void scheduler_restore_context(task_struct *process, pt_regs *f)
     *f            = process->thread.regs;
     // TODO(enrico): Explain paging switch (ring 0 doesn't need page switching)
     // Switch to process page directory
-    paging_switch_directory_va(process->mm->pgd);
+    paging_switch_pgd(process->mm->pgd);
 }
 
 void scheduler_enter_user_jmp(uintptr_t location, uintptr_t stack)
@@ -210,8 +210,7 @@ int is_orphaned_pgrp(pid_t pgid)
     pid_t sid = 0;
 
     // Obtain SID of the group from a member
-    list_head *it;
-    list_for_each (it, &runqueue.queue) {
+    list_for_each_decl (it, &runqueue.queue) {
         task_struct *task = list_entry(it, task_struct, run_list);
         if (task->pgid == pgid) {
             sid = task->sid;
@@ -220,7 +219,7 @@ int is_orphaned_pgrp(pid_t pgid)
     }
 
     // Check if the process leader of the session is alive
-    list_for_each (it, &runqueue.queue) {
+    list_for_each_decl (it, &runqueue.queue) {
         task_struct *task = list_entry(it, task_struct, run_list);
         if (task->pid == sid) {
             return 0;
@@ -619,7 +618,7 @@ void do_exit(int exit_code)
         pr_debug("}\n");
     }
     // Free the space occupied by the stack.
-    destroy_process_image(runqueue.curr->mm);
+    mm_destroy(runqueue.curr->mm);
     // Debugging message.
     pr_debug("Process %d exited with value %d\n", runqueue.curr->pid, exit_code);
 }
@@ -628,9 +627,8 @@ void sys_exit(int exit_code) { do_exit(exit_code << 8); }
 
 int sys_sched_setparam(pid_t pid, const sched_param_t *param)
 {
-    list_head *it;
     // Iter over the runqueue to find the task
-    list_for_each (it, &runqueue.queue) {
+    list_for_each_decl (it, &runqueue.queue) {
         task_struct *entry = list_entry(it, task_struct, run_list);
         if (entry->pid == pid) {
             if (!entry->se.is_periodic && param->is_periodic) {
@@ -656,9 +654,8 @@ int sys_sched_setparam(pid_t pid, const sched_param_t *param)
 
 int sys_sched_getparam(pid_t pid, sched_param_t *param)
 {
-    list_head *it;
     // Iter over the runqueue to find the task
-    list_for_each (it, &runqueue.queue) {
+    list_for_each_decl (it, &runqueue.queue) {
         task_struct *entry = list_entry(it, task_struct, run_list);
         if (entry->pid == pid) {
             //Sets the parameters from the "se" struct to param
@@ -677,8 +674,10 @@ int sys_sched_getparam(pid_t pid, sched_param_t *param)
 /// @return 1 if scheduling periodic processes is feasible, 0 otherwise.
 static int __response_time_analysis(void)
 {
-    task_struct *entry, *previous;
-    time_t r, previous_r = 0;
+    task_struct *entry;
+    task_struct *previous;
+    time_t r;
+    time_t previous_r = 0;
     list_for_each_decl (it, &runqueue.queue) {
         // Get the curent entry in the list.
         entry = list_entry(it, task_struct, run_list);

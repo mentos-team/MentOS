@@ -13,14 +13,14 @@
 #include <string.h>
 
 /// @brief Represents the node of a list.
-typedef struct listnode_t {
-    list_head list; ///< List structure for this node.
-    void *value;    ///< Pointer to node's value.
+typedef struct listnode {
+    list_head_t list; ///< List structure for this node.
+    void *value;      ///< Pointer to node's value.
 } listnode_t;
 
 /// @brief Represents the list.
-typedef struct list_t {
-    list_head head;                ///< Head of the list.
+typedef struct list {
+    list_head_t head;              ///< Head of the list.
     unsigned int size;             ///< Size of the list.
     listnode_t *(*alloc)(void);    ///< Node allocation function.
     void (*dealloc)(listnode_t *); ///< Node deallocation function.

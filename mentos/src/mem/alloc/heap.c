@@ -1,4 +1,4 @@
-/// @file kheap.c
+/// @file heap.c
 /// @brief
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
@@ -13,8 +13,8 @@
 #include "kernel.h"
 #include "list_head.h"
 #include "math.h"
-#include "mem/kheap.h"
 #include "mem/paging.h"
+#include "process/scheduler.h"
 #include "stdbool.h"
 #include "stddef.h"
 #include "stdint.h"
@@ -34,9 +34,9 @@
 /// This address marks the endpoint of the heap, ensuring no overlap with other memory regions.
 #define HEAP_VM_UB 0x50000000
 
-/// @brief The overhead introduced by the block_t structure itself.
+/// @brief The overhead introduced by the kheap_block_t structure itself.
 /// This is used for memory management and bookkeeping.
-#define OVERHEAD sizeof(block_t)
+#define OVERHEAD sizeof(kheap_block_t)
 
 /// @brief Aligns the given address to the nearest upper page boundary.
 /// The address will be aligned to 4096 bytes (0x1000).
@@ -51,7 +51,7 @@
 
 /// @brief Represents a block of memory within the heap.
 /// This structure includes metadata for managing memory allocation and free status.
-typedef struct block_t {
+typedef struct kheap_block {
     /// @brief A single bit indicating if the block is free (1) or allocated (0).
     unsigned int is_free : 1;
 
@@ -60,20 +60,20 @@ typedef struct block_t {
     unsigned int size : 31;
 
     /// @brief Entry in the list of all blocks in the heap.
-    list_head list;
+    list_head_t list;
 
     /// @brief Entry in the list of free blocks.
-    list_head free;
-} block_t;
+    list_head_t free;
+} kheap_block_t;
 
 /// @brief Maps the heap memory to easily accessible values.
 /// This structure contains pointers to the list of all blocks and the list of free blocks.
 typedef struct {
     /// @brief List of all memory blocks, both free and allocated.
-    list_head list;
+    list_head_t list;
 
     /// @brief List of free blocks available for allocation.
-    list_head free;
+    list_head_t free;
 } heap_header_t;
 
 /// @brief Returns the given size, rounded to the nearest multiple of 16. This
@@ -88,7 +88,7 @@ static inline uint32_t __blkmngr_get_rounded_size(uint32_t size) { return round_
 /// @param block The given block to check. Must not be NULL.
 /// @param size  The size to check against the block's size.
 /// @return 1 if the size fits within the block, -1 if the block is NULL.
-static inline int __blkmngr_does_it_fit(block_t *block, uint32_t size)
+static inline int __blkmngr_does_it_fit(kheap_block_t *block, uint32_t size)
 {
     // Check for a null block pointer to avoid dereferencing a null pointer
     if (!block) {
@@ -104,7 +104,7 @@ static inline int __blkmngr_does_it_fit(block_t *block, uint32_t size)
 /// the information of the specified block into a human-readable string.
 /// @param block The block to represent. Can be NULL.
 /// @return A string containing the block's address, size, and free status.
-static inline const char *__block_to_string(block_t *block)
+static inline const char *__block_to_string(kheap_block_t *block)
 {
     // Static buffer to hold the string representation of the block.
     static char buffer[256];
@@ -134,35 +134,39 @@ static inline void __blkmngr_dump(int log_level, heap_header_t *header)
     // Get the current process.
     task_struct *task = scheduler_get_current_process();
     assert(task && "There is no current task!\n");
-    block_t *block;
+    kheap_block_t *block;
     pr_log(log_level, "[%s] LIST (0x%p):\n", task->name, &header->list);
     list_for_each_decl (it, &header->list) {
-        block = list_entry(it, block_t, list);
+        block = list_entry(it, kheap_block_t, list);
         pr_log(log_level, "[%s]     %s{", task->name, __block_to_string(block));
-        if (it->prev != &header->list)
-            pr_log(log_level, "0x%p", list_entry(it->prev, block_t, list));
-        else
+        if (it->prev != &header->list) {
+            pr_log(log_level, "0x%p", list_entry(it->prev, kheap_block_t, list));
+        } else {
             pr_log(log_level, "   HEAD   ");
+        }
         pr_log(log_level, ", ");
-        if (it->next != &header->list)
-            pr_log(log_level, "0x%p", list_entry(it->next, block_t, list));
-        else
+        if (it->next != &header->list) {
+            pr_log(log_level, "0x%p", list_entry(it->next, kheap_block_t, list));
+        } else {
             pr_log(log_level, "   HEAD   ");
+        }
         pr_log(log_level, "}\n");
     }
     pr_log(log_level, "[%s] FREE (0x%p):\n", task->name, &header->free);
     list_for_each_decl (it, &header->free) {
-        block = list_entry(it, block_t, free);
+        block = list_entry(it, kheap_block_t, free);
         pr_log(log_level, "[%s]     %s{", task->name, __block_to_string(block));
-        if (it->prev != &header->free)
-            pr_log(log_level, "0x%p", list_entry(it->prev, block_t, free));
-        else
+        if (it->prev != &header->free) {
+            pr_log(log_level, "0x%p", list_entry(it->prev, kheap_block_t, free));
+        } else {
             pr_log(log_level, "   HEAD   ");
+        }
         pr_log(log_level, ", ");
-        if (it->next != &header->free)
-            pr_log(log_level, "0x%p", list_entry(it->next, block_t, free));
-        else
+        if (it->next != &header->free) {
+            pr_log(log_level, "0x%p", list_entry(it->next, kheap_block_t, free));
+        } else {
             pr_log(log_level, "   HEAD   ");
+        }
         pr_log(log_level, "}\n");
     }
     pr_log(log_level, "\n");
@@ -172,7 +176,7 @@ static inline void __blkmngr_dump(int log_level, heap_header_t *header)
 /// @param header header describing the heap.
 /// @param size the size we want.
 /// @return a block that should fit our needs.
-static inline block_t *__blkmngr_find_best_fitting(heap_header_t *header, uint32_t size)
+static inline kheap_block_t *__blkmngr_find_best_fitting(heap_header_t *header, uint32_t size)
 {
     // Check if the header is NULL, log an error and return NULL
     if (!header) {
@@ -180,13 +184,13 @@ static inline block_t *__blkmngr_find_best_fitting(heap_header_t *header, uint32
         return NULL; // Return NULL to indicate failure.
     }
 
-    block_t *best_fitting = NULL; // Initialize the best fitting block to NULL.
-    block_t *block;               // Declare a pointer for the current block.
+    kheap_block_t *best_fitting = NULL; // Initialize the best fitting block to NULL.
+    kheap_block_t *block;               // Declare a pointer for the current block.
 
     // Iterate over the list of free blocks.
     list_for_each_decl (it, &header->free) {
         // Get the current block from the list.
-        block = list_entry(it, block_t, free);
+        block = list_entry(it, kheap_block_t, free);
 
         // Skip if the block is not free.
         if (!block->is_free) {
@@ -213,7 +217,7 @@ static inline block_t *__blkmngr_find_best_fitting(heap_header_t *header, uint32
 /// @param header the heap header.
 /// @param block the block.
 /// @return a pointer to the previous block or NULL if an error occurs.
-static inline block_t *__blkmngr_get_previous_block(heap_header_t *header, block_t *block)
+static inline kheap_block_t *__blkmngr_get_previous_block(heap_header_t *header, kheap_block_t *block)
 {
     // Check if the heap header is valid.
     if (!header) {
@@ -233,14 +237,14 @@ static inline block_t *__blkmngr_get_previous_block(heap_header_t *header, block
     }
 
     // Return the previous block by accessing the list entry.
-    return list_entry(block->list.prev, block_t, list);
+    return list_entry(block->list.prev, kheap_block_t, list);
 }
 
 /// @brief Given a block, finds its next block in the memory pool.
 /// @param header The heap header containing information about the heap.
 /// @param block The current block for which the next block is to be found.
 /// @return A pointer to the next block if it exists, or NULL if an error occurs or if the block is the last one.
-static inline block_t *__blkmngr_get_next_block(heap_header_t *header, block_t *block)
+static inline kheap_block_t *__blkmngr_get_next_block(heap_header_t *header, kheap_block_t *block)
 {
     // Check if the heap header is valid.
     if (!header) {
@@ -260,7 +264,7 @@ static inline block_t *__blkmngr_get_next_block(heap_header_t *header, block_t *
     }
 
     // Return the next block by accessing the list entry.
-    return list_entry(block->list.next, block_t, list);
+    return list_entry(block->list.next, kheap_block_t, list);
 }
 
 /// @brief Checks if the given `previous` block is actually the block that comes
@@ -269,7 +273,7 @@ static inline block_t *__blkmngr_get_next_block(heap_header_t *header, block_t *
 /// @param previous The block that is supposedly the previous block.
 /// @return 1 if `previous` is the actual previous block of `block`, 0
 /// otherwise. Returns -1 on error.
-static inline int __blkmngr_is_previous_block(block_t *block, block_t *previous)
+static inline int __blkmngr_is_previous_block(kheap_block_t *block, kheap_block_t *previous)
 {
     // Check if the current block is valid.
     if (!block) {
@@ -294,7 +298,7 @@ static inline int __blkmngr_is_previous_block(block_t *block, block_t *previous)
 /// @param next The block that is supposedly the next block.
 /// @return 1 if `next` is the actual next block of `block`, 0 otherwise.
 /// Returns -1 on error.
-static inline int __blkmngr_is_next_block(block_t *block, block_t *next)
+static inline int __blkmngr_is_next_block(kheap_block_t *block, kheap_block_t *next)
 {
     // Check if the current block is valid.
     if (!block) {
@@ -318,7 +322,7 @@ static inline int __blkmngr_is_next_block(block_t *block, block_t *next)
 /// @param block The block to be split, which must be free.
 /// @param size The size of the first of the two new blocks. Must be less than the original block's size minus overhead.
 /// @return 0 on success, -1 on error.
-static inline int __blkmngr_split_block(heap_header_t *header, block_t *block, uint32_t size)
+static inline int __blkmngr_split_block(heap_header_t *header, kheap_block_t *block, uint32_t size)
 {
     // Check if the block is valid.
     if (!block) {
@@ -342,7 +346,7 @@ static inline int __blkmngr_split_block(heap_header_t *header, block_t *block, u
     pr_debug("Splitting %s\n", __block_to_string(block));
 
     // Create the new block by calculating its address based on the original block and the specified size.
-    block_t *split = (block_t *)((char *)block + OVERHEAD + size);
+    kheap_block_t *split = (kheap_block_t *)((char *)block + OVERHEAD + size);
 
     // Insert the new block into the main list after the current block.
     list_head_insert_after(&split->list, &block->list);
@@ -371,7 +375,7 @@ static inline int __blkmngr_split_block(heap_header_t *header, block_t *block, u
 /// @param block The first block that will be expanded.
 /// @param other The second block that will be merged into the first block, becoming invalid in the process.
 /// @return 0 on success, -1 on error.
-static inline int __blkmngr_merge_blocks(heap_header_t *header, block_t *block, block_t *other)
+static inline int __blkmngr_merge_blocks(heap_header_t *header, kheap_block_t *block, kheap_block_t *other)
 {
     // Check if the first block is valid.
     if (!block) {
@@ -503,7 +507,7 @@ static void *__do_malloc(vm_area_struct_t *heap, size_t size)
     pr_debug("Searching for a block of size: %s\n", to_human_size(rounded_size));
 
     // Find the best fitting block in the heap.
-    block_t *block = __blkmngr_find_best_fitting(header, rounded_size);
+    kheap_block_t *block = __blkmngr_find_best_fitting(header, rounded_size);
 
     // If a suitable block is found, either split it or use it directly.
     if (block) {
@@ -523,7 +527,7 @@ static void *__do_malloc(vm_area_struct_t *heap, size_t size)
     } else {
         pr_debug("Failed to find a suitable block; creating a new one.\n");
 
-        // We need more space, specifically the size of the block plus the size of the block_t structure.
+        // We need more space, specifically the size of the block plus the size of the kheap_block_t structure.
         block = __do_brk(heap, actual_size);
         // Check if the block allocation was successful.
         if (!block) {
@@ -577,15 +581,15 @@ static int __do_free(vm_area_struct_t *heap, void *ptr)
     }
 
     // Calculate the block pointer from the provided pointer.
-    block_t *block = (block_t *)((char *)ptr - OVERHEAD);
+    kheap_block_t *block = (kheap_block_t *)((char *)ptr - OVERHEAD);
     if (!block) {
         pr_err("Calculated block pointer is NULL.\n");
         return -1; // Safety check; should not happen.
     }
 
     // Get the previous and next blocks for merging purposes.
-    block_t *prev = __blkmngr_get_previous_block(header, block);
-    block_t *next = __blkmngr_get_next_block(header, block);
+    kheap_block_t *prev = __blkmngr_get_previous_block(header, block);
+    kheap_block_t *next = __blkmngr_get_next_block(header, block);
 
     pr_debug("Freeing block %s\n", __block_to_string(block));
 
@@ -641,7 +645,7 @@ void *sys_brk(void *addr)
     }
 
     // Get the heap associated with the current task.
-    vm_area_struct_t *heap = find_vm_area(task->mm, task->mm->start_brk);
+    vm_area_struct_t *heap = vm_area_find(task->mm, task->mm->start_brk);
 
     // If the heap does not exist, allocate it.
     if (heap == NULL) {
@@ -651,12 +655,12 @@ void *sys_brk(void *addr)
         size_t heap_size = HEAP_SIZE;
 
         // Calculate the total segment size needed (header + initial block).
-        size_t segment_size = heap_size + sizeof(heap_header_t) + sizeof(block_t);
+        size_t segment_size = heap_size + sizeof(heap_header_t) + sizeof(kheap_block_t);
 
         // Create the virtual memory area, we are goin to place the area between
         // 0x40000000 and 0x50000000, which surely is below the stack. The VM
         // code will check if it is a valid area anyway.
-        heap = create_vm_area(
+        heap = vm_area_create(
             task->mm, randuint(HEAP_VM_LB, HEAP_VM_UB), segment_size, MM_RW | MM_PRESENT | MM_USER | MM_UPDADDR,
             GFP_HIGHUSER);
         if (!heap) {
@@ -680,8 +684,8 @@ void *sys_brk(void *addr)
         list_head_init(&header->free);
 
         // Prepare the first block of memory.
-        block_t *block = (block_t *)((char *)header + sizeof(heap_header_t));
-        block->size    = K; // Start with a block of 1 KB.
+        kheap_block_t *block = (kheap_block_t *)((char *)header + sizeof(heap_header_t));
+        block->size          = K; // Start with a block of 1 KB.
         list_head_init(&block->list);
         list_head_init(&block->free);
 
