@@ -18,7 +18,6 @@
 #include "fs/vfs.h"
 #include "hardware/timer.h"
 #include "kernel.h"
-#include "mem/kheap.h"
 #include "process/process.h"
 #include "process/scheduler.h"
 #include "sys/mman.h"
@@ -128,7 +127,7 @@ void syscall_init(void)
     isr_install_handler(SYSTEM_CALL, &syscall_handler, "syscall_handler");
 }
 
-void syscall_handler(pt_regs *f)
+void syscall_handler(pt_regs_t *f)
 {
     // Save current process fpu state.
     switch_fpu();

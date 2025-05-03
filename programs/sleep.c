@@ -23,9 +23,9 @@ int main(int argc, char **argv)
 
         // Ensure the amount is positive
         if (amount > 0) {
-            printf("Sleeping for %d seconds...\n", amount);
+            printf("Sleeping for %ld seconds...\n", amount);
             sleep(amount);
-            printf("Awake after %d seconds.\n", amount);
+            printf("Awake after %ld seconds.\n", amount);
         } else {
             fprintf(stderr, "Error: Please enter a positive integer for sleep duration.\n");
             return 1;

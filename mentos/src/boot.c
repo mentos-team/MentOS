@@ -7,7 +7,6 @@
 
 #include "elf/elf.h"
 #include "link_access.h"
-#include "mem/paging.h"
 #include "sys/module.h"
 
 /// @defgroup bootloader Bootloader
@@ -18,7 +17,7 @@
 /// @param stack_pointer The stack base pointer, usually at the end of the lowmem.
 /// @param entry
 /// @param boot_info
-extern void boot_kernel(uint32_t stack_pointer, uint32_t entry, struct boot_info_t *boot_info);
+extern void boot_kernel(uint32_t stack_pointer, uint32_t entry, boot_info_t *boot_info);
 
 /// @brief Size of the kernel's stack.
 #define KERNEL_STACK_SIZE 0x100000
@@ -103,7 +102,7 @@ static void __setup_pages(uint32_t pfn_virt_start, uint32_t pfn_phys_start, uint
         boot_pgdir.entries[i].rw        = 1;
         boot_pgdir.entries[i].present   = 1;
         boot_pgdir.entries[i].available = 1;
-        boot_pgdir.entries[i].frame     = ((uint32_t)table) >> 12u;
+        boot_pgdir.entries[i].frame     = ((uint32_t)table) >> 12U;
     }
 }
 
@@ -135,10 +134,11 @@ static void __get_kernel_low_high(elf_header_t *elf_hdr, uint32_t *virt_low, uin
     // Compute the offset for accessing the program headers.
     uint32_t offset = (uint32_t)elf_hdr + elf_hdr->phoff;
     // In this two variables we will store the start and end addresses of the segment.
-    uint32_t segment_start, segment_end;
+    uint32_t segment_start;
+    uint32_t segment_end;
     // Iterate for each program header.
     for (int i = 0; i < elf_hdr->phnum; i++) {
-        program_header = (elf_program_header_t *)(offset + elf_hdr->phentsize * i);
+        program_header = (elf_program_header_t *)(offset + (elf_hdr->phentsize * i));
         if (program_header->type == PT_LOAD) {
             // Take the start and end addresses of the segment from the program header.
             segment_start = program_header->vaddr;
@@ -175,7 +175,8 @@ static inline void __relocate_kernel_image(elf_header_t *elf_hdr)
     char *kernel_start;
     char *virtual_address;
     char *physical_address;
-    uint32_t offset, valid_size;
+    uint32_t offset;
+    uint32_t valid_size;
 
     // Get the elf file starting address.
     kernel_start = (char *)elf_hdr;
@@ -184,7 +185,7 @@ static inline void __relocate_kernel_image(elf_header_t *elf_hdr)
     // Iterate over the program headers.
     for (int i = 0; i < elf_hdr->phnum; i++) {
         // Get the program header.
-        program_header   = (elf_program_header_t *)(offset + elf_hdr->phentsize * i);
+        program_header   = (elf_program_header_t *)(offset + (elf_hdr->phentsize * i));
         // Get the virtual address of the program header.
         virtual_address  = (char *)program_header->vaddr;
         // Get the physical address of the program header.
@@ -204,6 +205,22 @@ static inline void __relocate_kernel_image(elf_header_t *elf_hdr)
             }
         }
     }
+}
+
+void paging_enable(void)
+{
+    // Clear the PSE bit from cr4.
+    set_cr4(bitmask_clear(get_cr4(), CR4_PSE));
+    // Set the PG bit in cr0.
+    set_cr0(bitmask_set(get_cr0(), CR0_PG));
+}
+
+int paging_is_enabled(void) { return bitmask_check(get_cr0(), CR0_PG); }
+
+int paging_switch_pgd(page_directory_t *dir)
+{
+    set_cr3((uintptr_t)dir);
+    return 0;
 }
 
 /// @brief Entry point of the bootloader.
@@ -270,7 +287,7 @@ void boot_main(uint32_t magic, multiboot_info_t *header, uint32_t esp)
 
     // Switch to the newly created page directory.
     __debug_puts("[bootloader] Switching page directory...\n");
-    paging_switch_directory(&boot_pgdir);
+    paging_switch_pgd(&boot_pgdir);
 
     // Enable paging.
     __debug_puts("[bootloader] Enabling paging...\n");

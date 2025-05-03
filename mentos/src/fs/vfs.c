@@ -32,9 +32,9 @@ static int resource_id = -1;
 #endif
 
 /// The list of superblocks.
-static list_head vfs_super_blocks;
+static list_head_t vfs_super_blocks;
 /// The list of filesystems.
-static list_head vfs_filesystems;
+static list_head_t vfs_filesystems;
 /// Lock for refcount field.
 static spinlock_t vfs_spinlock_refcount;
 /// Spinlock for the entire virtual filesystem.
@@ -148,6 +148,9 @@ int vfs_register_filesystem(file_system_type_t *fs)
 {
     assert(__vfs_find_filesystem(fs->name) == NULL && "Filesytem already registered.");
     pr_debug("vfs_register_filesystem(name: %s)\n", fs->name);
+    // Initialize the list head for the fs.
+    list_head_init(&fs->list);
+    // Insert the file system.
     list_head_insert_before(&fs->list, &vfs_filesystems);
     return 1;
 }
@@ -217,6 +220,9 @@ int vfs_register_superblock(const char *name, const char *path, file_system_type
     sb->root = root;
     sb->type = type;
 
+    // Initialize the list head for the superblock.
+    list_head_init(&sb->mounts);
+
     // Insert the superblock into the global list of superblocks.
     list_head_insert_after(&sb->mounts, &vfs_super_blocks);
 
@@ -239,9 +245,9 @@ super_block_t *vfs_get_superblock(const char *path)
     pr_debug("vfs_get_superblock(path: %s)\n", path);
     size_t last_sb_len = 0;
     size_t len;
-    super_block_t *last_sb = NULL, *sb = NULL;
-    list_head *it;
-    list_for_each (it, &vfs_super_blocks) {
+    super_block_t *last_sb = NULL;
+    super_block_t *sb      = NULL;
+    list_for_each_decl (it, &vfs_super_blocks) {
         sb  = list_entry(it, super_block_t, mounts);
         len = strlen(sb->path);
         if (!strncmp(path, sb->path, len)) {
@@ -716,7 +722,7 @@ int vfs_extend_task_fd_list(struct task_struct *task)
         return 0;
     }
     // Set the max number of file descriptors.
-    int new_max_fd    = (task->fd_list) ? task->max_fd * 2 + 1 : MAX_OPEN_FD;
+    int new_max_fd    = (task->fd_list) ? (task->max_fd * 2) + 1 : MAX_OPEN_FD;
     // Allocate the memory for the list.
     void *new_fd_list = kmalloc(new_max_fd * sizeof(vfs_file_descriptor_t));
     // Check the new list.

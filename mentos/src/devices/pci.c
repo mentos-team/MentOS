@@ -505,7 +505,9 @@ static inline int pci_find_type(uint32_t device, uint32_t *device_type)
         pr_err("Output parameter 'device_type' is NULL.\n");
         return 1;
     }
-    uint8_t class_code, subclass_code, prog_if;
+    uint8_t class_code;
+    uint8_t subclass_code;
+    uint8_t prog_if;
     // Read the class code.
     if (pci_read_8(device, PCI_CLASS, &class_code)) {
         pr_err("Failed to read class code from device %u.\n", device);
@@ -539,7 +541,8 @@ static inline int pci_scan_hit(pci_scan_func_t f, uint32_t device, void *extra)
         return 1;
     }
 
-    uint16_t vendor_id, device_id;
+    uint16_t vendor_id;
+    uint16_t device_id;
 
     // Read the vendor ID.
     if (pci_read_16(device, PCI_VENDOR_ID, &vendor_id)) {
@@ -572,7 +575,8 @@ int pci_scan_func(pci_scan_func_t f, int type, uint8_t bus, uint8_t slot, uint8_
         return 1;
     }
 
-    uint32_t device, device_type;
+    uint32_t device;
+    uint32_t device_type;
     uint8_t secondary_bus;
 
     // Obtain the device identifier.
@@ -908,7 +912,12 @@ int pci_dump_device_data(uint32_t device, uint16_t vendor_id, uint16_t device_id
     uint8_t func = PCI_GET_FUNC(device);
     uint16_t status;
     uint16_t command;
-    uint32_t bar0, bar1, bar2, bar3, bar4, bar5;
+    uint32_t bar0;
+    uint32_t bar1;
+    uint32_t bar2;
+    uint32_t bar3;
+    uint32_t bar4;
+    uint32_t bar5;
     uint8_t interrupt_pin;
     uint8_t interrupt_line;
     uint8_t interrupt_number;

@@ -73,7 +73,7 @@
 ///
 ///  You can have both 16 bit and 32 bit selectors at once.
 ///
-enum gdt_bits_t {
+enum gdt_bits {
     /// @brief `0b10000000U` (Present): This must be 1 for all valid selectors.
     GDT_PRESENT      = 128U,
     /// @brief `0b00000000U` (Privilege): Sets the 2 privilege bits (ring level) to 0 = highest (kernel).
@@ -104,7 +104,7 @@ enum gdt_bits_t {
 #define IDT_PADDING 14U // `0b00001110U
 
 /// @brief Data structure representing a GDT descriptor.
-typedef struct gdt_descriptor_t {
+typedef struct gdt_descriptor {
     /// The lower 16 bits of the limit.
     uint16_t limit_low;
     /// The lower 16 bits of the base.
@@ -120,7 +120,7 @@ typedef struct gdt_descriptor_t {
 } __attribute__((packed)) gdt_descriptor_t;
 
 /// @brief Data structure used to load the GDT into the GDTR.
-typedef struct gdt_pointer_t {
+typedef struct gdt_pointer {
     /// The size of the GDT (entry number).
     uint16_t limit;
     /// The starting address of the GDT.

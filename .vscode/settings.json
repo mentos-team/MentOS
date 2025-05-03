@@ -1,17 +1,7 @@
 {
     "files.associations": {
-        "type_traits": "cpp",
-        "tuple": "cpp",
-        "array": "cpp",
-        "compare": "cpp",
-        "functional": "cpp",
-        "utility": "cpp",
-        "string_view": "cpp",
-        "initializer_list": "cpp",
-        "ranges": "cpp",
-        "span": "cpp",
-        "format": "cpp",
-        "cstdio": "c",
-        "algorithm": "c"
+        "*.c": "c",
+        "*.h": "c",
+        "*.tcc": "c"
     }
 }

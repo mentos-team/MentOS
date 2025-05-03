@@ -72,7 +72,8 @@ static vfs_file_operations_t procipc_shm_fs_operations = {
 int procipc_module_init(void)
 {
     int err                  = 0;
-    proc_dir_entry_t *folder = NULL, *entry = NULL;
+    proc_dir_entry_t *folder = NULL;
+    proc_dir_entry_t *entry  = NULL;
 
     // First, we need to create the `/proc/ipc` folder.
     if ((folder = proc_mkdir("ipc", NULL)) == NULL) {

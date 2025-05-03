@@ -13,8 +13,8 @@
 #include "elf/elf.h"
 #include "fs/vfs.h"
 #include "mem/paging.h"
-#include "mem/slab.h"
-#include "mem/vmem_map.h"
+#include "mem/alloc/slab.h"
+#include "mem/mm/vmem.h"
 #include "process/process.h"
 #include "process/scheduler.h"
 #include "stddef.h"
@@ -250,7 +250,8 @@ static inline int elf_load_exec(elf_header_t *header, task_struct *task)
     elf_program_header_t *program_header;
     vm_area_struct_t *segment;
     virt_map_page_t *vpage;
-    uint32_t dst_addr, zmem_sz;
+    uint32_t dst_addr;
+    uint32_t zmem_sz;
 
     pr_debug(" Type      | Mem. Size | File Size | VADDR\n");
     for (unsigned i = 0; i < header->phnum; ++i) {
@@ -262,10 +263,10 @@ static inline int elf_load_exec(elf_header_t *header, task_struct *task)
             to_human_size(program_header->memsz), to_human_size(program_header->filesz), program_header->vaddr,
             program_header->vaddr + program_header->memsz);
         if (program_header->type == PT_LOAD) {
-            segment = create_vm_area(
+            segment = vm_area_create(
                 task->mm, program_header->vaddr, program_header->memsz, MM_USER | MM_RW | MM_COW, GFP_KERNEL);
-            vpage    = virt_map_alloc(program_header->memsz);
-            dst_addr = virt_map_vaddress(task->mm, vpage, segment->vm_start, program_header->memsz);
+            vpage    = vmem_map_alloc_virtual(program_header->memsz);
+            dst_addr = vmem_map_virtual_address(task->mm, vpage, segment->vm_start, program_header->memsz);
 
             // Load the memory area.
             memcpy((void *)dst_addr, (void *)((uintptr_t)header + program_header->offset), program_header->filesz);
@@ -274,7 +275,7 @@ static inline int elf_load_exec(elf_header_t *header, task_struct *task)
                 zmem_sz = program_header->memsz - program_header->filesz;
                 memset((void *)(dst_addr + program_header->filesz), 0, zmem_sz);
             }
-            virt_unmap_pg(vpage);
+            vmem_unmap_virtual_address_page(vpage);
         }
     }
     return true;

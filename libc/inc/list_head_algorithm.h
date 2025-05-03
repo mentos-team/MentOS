@@ -7,17 +7,17 @@
 
 #include "list_head.h"
 
-/// @brief list_head comparison function.
-typedef int (*list_head_compare)(const list_head *, const list_head *);
+/// @brief list_head_t comparison function.
+typedef int (*list_head_compare)(const list_head_t *, const list_head_t *);
 
 /// @brief -
 /// @param list
 /// @param compare
-static inline void list_head_sort(list_head *list, list_head_compare compare)
+static inline void list_head_sort(list_head_t *list, list_head_compare compare)
 {
-    list_head *current = NULL;
-    list_head *index   = NULL;
-    list_head *next    = NULL;
+    list_head_t *current = NULL;
+    list_head_t *index   = NULL;
+    list_head_t *next    = NULL;
     // Check whether list is empty
     if (!list_head_empty(list)) {
         // Keeps track if we need to restart the outer loop.

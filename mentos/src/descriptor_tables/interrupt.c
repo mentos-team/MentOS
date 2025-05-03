@@ -18,17 +18,17 @@
 #include "system/printk.h"
 
 /// @brief Shared interrupt handlers, stored into a double-linked list.
-typedef struct irq_struct_t {
+typedef struct irq_struct {
     /// Pointer to the IRQ handler.
     interrupt_handler_t handler;
     /// Pointer to the description of the handler.
     char *description;
     /// List handler.
-    list_head siblings;
+    list_head_t siblings;
 } irq_struct_t;
 
 /// For each IRQ, a chain of handlers.
-static list_head shared_interrupt_handlers[IRQ_NUM];
+static list_head_t shared_interrupt_handlers[IRQ_NUM];
 /// Cache where we will store the data regarding an irq service.
 static kmem_cache_t *irq_cache;
 
@@ -107,7 +107,7 @@ int irq_uninstall_handler(unsigned i, interrupt_handler_t handler)
     return 0;
 }
 
-void irq_handler(pt_regs *f)
+void irq_handler(pt_regs_t *f)
 {
     // Keep in mind,
     // because of irq mapping, the first PIC's irq line is shifted by 32.

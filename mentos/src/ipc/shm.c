@@ -18,7 +18,8 @@
 #include "errno.h"
 #include "fcntl.h"
 #include "list_head.h"
-#include "mem/kheap.h"
+#include "mem/paging.h"
+#include "process/scheduler.h"
 #include "stdio.h"
 #include "stdlib.h"
 #include "string.h"
@@ -37,11 +38,11 @@ typedef struct {
     /// @brief Location where shared memory is stored.
     page_t *shm_location;
     /// @brief List reference for shared memory structures.
-    list_head list;
+    list_head_t list;
 } shm_info_t;
 
 /// @brief List of all current active shared memorys.
-list_head shm_list;
+list_head_t shm_list;
 
 // ============================================================================
 // MEMORY MANAGEMENT (Private)
@@ -243,7 +244,8 @@ void *sys_shmat(int shmid, const void *shmaddr, int shmflg)
 {
     shm_info_t *shm_info = NULL;
     task_struct *task    = NULL;
-    uint32_t vm_start, phy_start;
+    uint32_t vm_start;
+    uint32_t phy_start;
     uint32_t flags = MM_RW | MM_PRESENT | MM_USER | MM_UPDADDR;
 
     // The id is less than zero.
@@ -280,7 +282,7 @@ void *sys_shmat(int shmid, const void *shmaddr, int shmflg)
     // Get the phyisical address from the allocated pages.
     phy_start = get_physical_address_from_page(shm_info->shm_location);
     // Find the virtual address for the new area.
-    if (find_free_vm_area(task->mm, shm_info->shmid.shm_segsz, &vm_start)) {
+    if (vm_area_search_free_area(task->mm, shm_info->shmid.shm_segsz, &vm_start)) {
         pr_err("We failed to find space for the new virtual memory area.\n");
         return (void *)-EACCES;
     }

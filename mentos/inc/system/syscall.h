@@ -20,7 +20,7 @@ void syscall_init(void);
 
 /// @brief Handler for the system calls.
 /// @param f The interrupt stack frame.
-void syscall_handler(pt_regs *f);
+void syscall_handler(pt_regs_t *f);
 
 /// The exit() function causes normal process termination.
 /// @param exit_code The exit code.
@@ -84,7 +84,7 @@ pid_t sys_waitpid(pid_t pid, int *status, int options);
 /// @brief Replaces the current process image with a new process image.
 /// @param f CPU registers whe calling this function.
 /// @return 0 on success, -1 on error.
-int sys_execve(pt_regs *f);
+int sys_execve(pt_regs_t *f);
 
 /// @brief Changes the working directory.
 /// @param path The new working directory.
@@ -206,7 +206,7 @@ char *sys_getcwd(char *buf, size_t size);
 /// @param f CPU registers whe calling this function.
 /// @return Return -1 for errors, 0 to the new process, and the process ID of
 ///         the new process to the old process.
-pid_t sys_fork(pt_regs *f);
+pid_t sys_fork(pt_regs_t *f);
 
 /// @brief Stat the file at the given path.
 /// @param path Path to the file for which we are retrieving the statistics.
@@ -400,3 +400,13 @@ long sys_ioctl(int fd, unsigned int request, unsigned long data);
 /// @param data Additional data required by certain `fcntl` commands (e.g., flags or pointer).
 /// @return Returns 0 on success; on error, returns a negative error code.
 long sys_fcntl(int fd, unsigned int request, unsigned long data);
+
+/// @brief User malloc.
+/// @param addr This argument is treated as an address of a dynamically
+///             allocated memory if falls inside the process heap area.
+///             Otherwise, it is treated as an amount of memory that
+///             should be allocated.
+/// @return NULL if there is no more memory available or we were freeing
+///         a previously allocated memory area, the address of the
+///         allocated space otherwise.
+void *sys_brk(void *addr);

@@ -17,7 +17,7 @@
 /// @details    An interrupt handler is an interrupt service routine called
 ///             to manage interrupt requests, or CPU execptions.
 /// @param f    An interrupt stack frame.
-typedef void (*interrupt_handler_t)(pt_regs *f);
+typedef void (*interrupt_handler_t)(pt_regs_t *f);
 
 /// @brief For each exceptions isrs_init sets a default handler which
 ///        prints the rose exceptions and stops kernel execution.
@@ -62,7 +62,7 @@ int irq_uninstall_handler(unsigned i, interrupt_handler_t handler);
 
 /// @brief Method called by CPU to handle interrupts.
 /// @param f The interrupt stack frame.
-extern void irq_handler(pt_regs *f);
+extern void irq_handler(pt_regs_t *f);
 
 //==== List of exceptions generated internally by the CPU ======================
 #define DIVIDE_ERROR        0  ///< DE Divide Error.

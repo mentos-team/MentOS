@@ -7,10 +7,10 @@
 
 #include "assert.h"
 #include "io/debug.h"
-#include "mem/slab.h"
+#include "mem/alloc/slab.h"
 
 /// @brief Stores information of a node.
-struct rbtree_node_t {
+struct rbtree_node {
     /// Color red (1), black (0)
     int red;
     /// Link left [0] and right [1]
@@ -20,7 +20,7 @@ struct rbtree_node_t {
 };
 
 /// @brief Stores information of a rbtree.
-struct rbtree_t {
+struct rbtree {
     /// Root of the tree.
     rbtree_node_t *root;
     /// Comparison function for insertion.
@@ -30,7 +30,7 @@ struct rbtree_t {
 };
 
 /// @brief Stores information for iterating a rbtree.
-struct rbtree_iter_t {
+struct rbtree_iter {
     /// Pointer to the tree itself.
     rbtree_t *tree;
     /// Current node

@@ -25,3 +25,6 @@ typedef char *va_list;
 
 /// @brief The argument of a variadic list.
 #define va_arg(ap, t) ((ap) += va_size(t), *((t *)((ap) - va_size(t))))
+
+/// @brief Copy a variadic list.
+#define va_copy(dest, src) ((dest) = (src))

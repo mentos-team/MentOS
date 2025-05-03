@@ -22,14 +22,19 @@
 #include "hardware/pic8259.h"
 #include "io/port_io.h"
 #include "klib/spinlock.h"
-#include "mem/kheap.h"
+#include "math.h"
+#include "mem/alloc/zone_allocator.h"
+#include "mem/mm/page.h"
 #include "process/wait.h"
+#include "stdbool.h"
 #include "stdio.h"
 #include "string.h"
+#include "sys/bitops.h"
 #include "system/panic.h"
+#include "system/syscall.h"
 
 /// @brief IDENTIFY device data (response to 0xEC).
-typedef struct ata_identity_t {
+typedef struct ata_identity {
     /// Word      0 : General configuration.
     struct {
         /// Reserved.
@@ -135,7 +140,7 @@ typedef struct ata_identity_t {
 ///         |    byte 3  |  byte 2  |  byte 1  |  byte 0    |
 /// Dword 0 |  Memory Region Physical Base Address [31:1] |0|
 /// Dword 1 |  EOT | reserved       | Byte Count   [15:1] |0|
-typedef struct prdt_t {
+typedef struct prdt {
     /// The first 4 bytes specify the byte address of a physical memory region.
     unsigned int physical_address;
     /// The next two bytes specify the count of the region in bytes (64K byte limit per region).
@@ -145,7 +150,7 @@ typedef struct prdt_t {
 } prdt_t;
 
 /// @brief Stores information about an ATA device.
-typedef struct ata_device_t {
+typedef struct ata_device {
     /// Name of the device.
     char name[NAME_MAX];
     /// Name of the device.
@@ -556,7 +561,8 @@ static inline int ata_status_wait_for(ata_device_t *dev, long mask, long timeout
 /// @param dev the device for which we print the information.
 static inline void ata_print_status_error(ata_device_t *dev)
 {
-    uint8_t error = inportb(dev->io_reg.error), status = inportb(dev->io_reg.status);
+    uint8_t error  = inportb(dev->io_reg.error);
+    uint8_t status = inportb(dev->io_reg.status);
     if (error) {
         pr_err(
             "[%s] Device error [%s] status [%s]\n", ata_get_device_settings_str(dev), ata_get_device_error_str(error),
@@ -1364,7 +1370,8 @@ static ssize_t ata_read(vfs_file_t *file, char *buffer, off_t offset, size_t siz
         pr_warning("The offset is exceeding the disk size (%d > %d)\n", offset, max_offset);
         ata_dump_device(dev);
         // Get the error and status information of the device.
-        uint8_t error = inportb(dev->io_reg.error), status = inportb(dev->io_reg.status);
+        uint8_t error  = inportb(dev->io_reg.error);
+        uint8_t status = inportb(dev->io_reg.status);
         pr_err("Device error  : %s\n", ata_get_device_error_str(error));
         pr_err("Device status : %s\n", ata_get_device_status_str(status));
         return -1; // Return error on invalid offset.
@@ -1648,7 +1655,7 @@ static ata_device_type_t ata_device_detect(ata_device_t *dev)
 
 // == IRQ HANDLERS ============================================================
 /// @param f The interrupt stack frame.
-static void ata_irq_handler_master(pt_regs *f)
+static void ata_irq_handler_master(pt_regs_t *f)
 {
     pr_warning("ata_irq_handler_master\n");
     inportb(ata_primary_master.io_reg.status);
@@ -1658,7 +1665,7 @@ static void ata_irq_handler_master(pt_regs *f)
 }
 
 /// @param f The interrupt stack frame.
-static void ata_irq_handler_slave(pt_regs *f)
+static void ata_irq_handler_slave(pt_regs_t *f)
 {
     pr_warning("ata_irq_handler_slave\n");
     inportb(ata_secondary_master.io_reg.status);

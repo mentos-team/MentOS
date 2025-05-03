@@ -118,6 +118,8 @@ int vfprintf(int fd, const char *format, va_list args);
 int vsnprintf(char *str, size_t size, const char *format, va_list args);
 
 /// @brief Write formatted data from variable argument list to string.
+/// @details The buffer is limited to 4096 bytes. This function does not
+/// allocate memory. If more space is needed, use vsnprintf with a custom size.
 /// @param str  Pointer to a buffer where the resulting C-string is stored.
 /// @param format  Format string, following the same specifications as printf.
 /// @param args A variable arguments list.

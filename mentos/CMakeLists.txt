@@ -71,19 +71,25 @@ add_library(
     ${CMAKE_SOURCE_DIR}/mentos/src/klib/libgen.c
     ${CMAKE_SOURCE_DIR}/mentos/src/klib/strerror.c
     ${CMAKE_SOURCE_DIR}/mentos/src/klib/math.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/klib/fcvt.c
     ${CMAKE_SOURCE_DIR}/mentos/src/klib/spinlock.c
     ${CMAKE_SOURCE_DIR}/mentos/src/klib/stdlib.c
     ${CMAKE_SOURCE_DIR}/mentos/src/klib/rbtree.c
     ${CMAKE_SOURCE_DIR}/mentos/src/klib/ndtree.c
     ${CMAKE_SOURCE_DIR}/mentos/src/klib/hashmap.c
     ${CMAKE_SOURCE_DIR}/mentos/src/klib/list.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/mem/kheap.c
+    # Memory related files.
+    ${CMAKE_SOURCE_DIR}/mentos/src/mem/alloc/buddy_system.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/mem/alloc/heap.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/mem/alloc/slab.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/mem/alloc/zone_allocator.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/mem/mm/mm.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/mem/mm/page.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/mem/mm/vm_area.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/mem/mm/vmem.c
+    # ${CMAKE_SOURCE_DIR}/mentos/src/mem/pgtable_map.c
+    ${CMAKE_SOURCE_DIR}/mentos/src/mem/page_fault.c
     ${CMAKE_SOURCE_DIR}/mentos/src/mem/paging.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/mem/slab.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/mem/vmem_map.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/mem/zone_allocator.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/mem/buddy_system.c
+    # 
     ${CMAKE_SOURCE_DIR}/mentos/src/elf/elf.c
     ${CMAKE_SOURCE_DIR}/mentos/src/crypt/sha256.c
     ${CMAKE_SOURCE_DIR}/mentos/src/descriptor_tables/gdt.c

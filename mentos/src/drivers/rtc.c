@@ -139,7 +139,7 @@ static inline void rtc_update_datetime(void)
 
 /// @brief Callback for RTC.
 /// @param f the current registers.
-static inline void rtc_handler_isr(pt_regs *f) { rtc_update_datetime(); }
+static inline void rtc_handler_isr(pt_regs_t *f) { rtc_update_datetime(); }
 
 void gettime(tm_t *time)
 {
