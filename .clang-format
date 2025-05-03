@@ -98,7 +98,7 @@ BreakInheritanceList: BeforeColon
 BreakStringLiterals: true
 # BreakTemplateDeclarations: true
 BreakConstructorInitializersBeforeComma: true
-ColumnLimit: 120
+ColumnLimit: 0
 CommentPragmas: '^ IWYU pragma:'
 CompactNamespaces: false
 ConstructorInitializerIndentWidth: 4

@@ -4,10 +4,10 @@
 /// See LICENSE.md for details.
 
 // Setup the logging for this file (do this before any other include).
-#include "sys/kernel_levels.h"          // Include kernel log levels.
-#define __DEBUG_HEADER__ "[PROCV ]"     ///< Change header.
-#define __DEBUG_LEVEL__  LOGLEVEL_DEBUG ///< Set log level.
-#include "io/debug.h"                   // Include debugging functions.
+#include "sys/kernel_levels.h"           // Include kernel log levels.
+#define __DEBUG_HEADER__ "[PROCV ]"      ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
+#include "io/debug.h"                    // Include debugging functions.
 
 #include "bits/ioctls.h"
 #include "bits/termios-struct.h"
@@ -23,11 +23,11 @@
 #include "sys/bitops.h"
 
 #define DISPLAY_CHAR(c) (iscntrl(c) ? ' ' : (c))
-#define ERASE_CHAR()                                                                                                   \
-    do {                                                                                                               \
-        video_putc('\b');                                                                                              \
-        video_putc(' ');                                                                                               \
-        video_putc('\b');                                                                                              \
+#define ERASE_CHAR()      \
+    do {                  \
+        video_putc('\b'); \
+        video_putc(' ');  \
+        video_putc('\b'); \
     } while (0)
 
 /// @brief Prints the ring-buffer.
