@@ -1,0 +1,20 @@
+define px
+  printf "edi: 0x%x\nesi: 0x%x\nebp: 0x%x\nesp: 0x%x\nebx: 0x%x\nedx: 0x%x\necx: 0x%x\neax: 0x%x\neip: 0x%x\n", \
+    $arg0->edi, $arg0->esi, $arg0->ebp, $arg0->esp, \
+    $arg0->ebx, $arg0->edx, $arg0->ecx, $arg0->eax, $arg0->eip
+end
+document px
+  Pretty-print all fields of a task_context_t in hex.
+end
+
+define stackdump
+  set $i = 0
+  set $sp = $esp
+  while $i < $arg0
+    printf "[%2d] 0x%08x\n", $i, *($sp + $i*4)
+    set $i = $i + 1
+  end
+end
+document stackdump
+  Pretty-print N dwords starting at $esp. Usage: stackdump 16
+end

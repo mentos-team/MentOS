@@ -18,6 +18,11 @@
 /// The default dimension of the stack of a process (1 MByte).
 #define DEFAULT_STACK_SIZE (1 * M)
 
+struct context {
+    uint32_t edi, esi, ebp, esp, ebx, edx, ecx, eax; // General-purpose registers
+    uint32_t eip;                                    // Instruction pointer
+};
+
 /// @brief This structure is used to track the statistics of a process.
 /// @details
 /// While the other variables also play a role in
@@ -158,6 +163,8 @@ typedef struct task_struct {
     /// Buffer for managing inputs from keyboard.
     rb_keybuffer_t keyboard_rb;
 
+    struct context ctx;
+
     //==== Future work =========================================================
     // - task's attributes:
     // struct task_struct __rcu	*real_parent;
@@ -182,3 +189,5 @@ int process_create_init(const char *path);
 /// descriptor or NULL if the file descriptor is invalid or the file has been
 /// closed.
 vfs_file_descriptor_t *fget(int fd);
+
+void test_kernel_context_switch(void);

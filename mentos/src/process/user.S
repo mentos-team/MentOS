@@ -86,6 +86,49 @@ enter_userspace:
 
     ; WE SHOULD NOT STILL BE HERE! :(
 
+global context_switch
+global resume_point
+
+context_switch:
+    ; Save the ESP before pusha
+    lea edx, [esp + 32]
+    ; Push the whole context.
+    pusha
+    ; Get the current context.
+    mov eax, [esp + 36]
+    ; Check if the context is NULL.
+    test eax, eax
+    ; If it is NULL, we do not need to save the context.
+    jz .skip_save
+    ; Save the context.
+    mov [eax +  0], edi
+    mov [eax +  4], esi
+    mov [eax +  8], ebp
+    mov [eax + 12], edx
+    mov [eax + 16], ebx
+    mov [eax + 20], edx
+    mov [eax + 24], edx
+    mov [eax + 28], eax
+    mov [eax + 32], edx
+.skip_save:
+    ; Get the pointer to the new context.
+    mov eax, [esp + 40]
+    ; Restore the context.
+    mov ecx, eax
+    mov edi, [ecx + 0]
+    mov esi, [ecx + 4]
+    mov ebp, [ecx + 8]
+    mov ebx, [ecx + 16]
+    mov edx, [ecx + 20]
+    mov eax, [ecx + 28]
+    mov esp, [ecx + 12]
+    popa
+    ret
+
+resume_point:
+    popa
+    ret
+
 ; -----------------------------------------------------------------------------
 ; SECTION (note) - Inform the linker that the stack does not need to be executable
 ; -----------------------------------------------------------------------------

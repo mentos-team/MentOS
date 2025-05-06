@@ -461,6 +461,8 @@ int kmain(boot_info_t *boot_informations)
     }
     print_ok();
 
+    test_kernel_context_switch();
+
     // We have completed the booting procedure.
     pr_notice("Booting done, jumping into init process.\n");
     // Switch to the page directory of init.
