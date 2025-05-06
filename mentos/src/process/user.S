@@ -87,7 +87,6 @@ enter_userspace:
     ; WE SHOULD NOT STILL BE HERE! :(
 
 global context_switch
-global resume_point
 
 context_switch:
     ; Save the ESP before pusha
@@ -122,10 +121,6 @@ context_switch:
     mov edx, [ecx + 20]
     mov eax, [ecx + 28]
     mov esp, [ecx + 12]
-    popa
-    ret
-
-resume_point:
     popa
     ret
 
