@@ -97,32 +97,41 @@ context_switch:
     mov eax, [esp + 36]
     ; Check if the context is NULL.
     test eax, eax
-    ; If it is NULL, we do not need to save the context.
     jz .skip_save
-    ; Save the context.
-    mov [eax +  0], edi
-    mov [eax +  4], esi
-    mov [eax +  8], ebp
-    mov [eax + 12], edx
-    mov [eax + 16], ebx
-    mov [eax + 20], edx
-    mov [eax + 24], edx
-    mov [eax + 28], eax
-    mov [eax + 32], edx
+
+    ; Store to struct in the same order as they appear on stack.
+
+    mov ecx, [esp + 32]
+    mov [eax + 32], ecx         ; old->eip = return address
+    mov ecx, [esp + 28]         ; edi
+    mov [eax + 0], ecx
+    mov ecx, [esp + 24]         ; esi
+    mov [eax + 4], ecx
+    mov ecx, [esp + 20]         ; ebp
+    mov [eax + 8], ecx
+    mov ecx, edx                ; esp (saved before pusha)
+    mov [eax + 12], ecx
+    mov ecx, [esp + 12]         ; ebx
+    mov [eax + 16], ecx
+    mov ecx, [esp + 8]          ; edx
+    mov [eax + 20], ecx
+    mov ecx, [esp + 4]          ; ecx
+    mov [eax + 24], ecx
+    mov ecx, [esp + 0]          ; eax
+    mov [eax + 28], ecx
+
 .skip_save:
     ; Get the pointer to the new context.
     mov eax, [esp + 40]
     ; Restore the context.
-    mov ecx, eax
-    mov edi, [ecx + 0]
-    mov esi, [ecx + 4]
-    mov ebp, [ecx + 8]
-    mov ebx, [ecx + 16]
-    mov edx, [ecx + 20]
-    mov eax, [ecx + 28]
-    mov esp, [ecx + 12]
+    mov esp, [eax + 12]
+    ; jump to the return address.
+    jmp resume_execution
+
+resume_execution:
     popa
-    ret
+    pop ebx
+    jmp ebx
 
 ; -----------------------------------------------------------------------------
 ; SECTION (note) - Inform the linker that the stack does not need to be executable
