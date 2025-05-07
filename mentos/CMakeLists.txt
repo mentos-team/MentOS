@@ -109,6 +109,7 @@ add_library(
     ${CMAKE_SOURCE_DIR}/mentos/src/process/process.c
     ${CMAKE_SOURCE_DIR}/mentos/src/process/wait.c
     ${CMAKE_SOURCE_DIR}/mentos/src/process/user.S
+    ${CMAKE_SOURCE_DIR}/mentos/src/process/switch.S
     ${CMAKE_SOURCE_DIR}/mentos/src/sys/utsname.c
     ${CMAKE_SOURCE_DIR}/mentos/src/sys/module.c
     ${CMAKE_SOURCE_DIR}/mentos/src/system/errno.c

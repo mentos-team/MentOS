@@ -29,7 +29,7 @@ typedef struct list_head {
 /// @param pos the name of the iterator used to visit the list.
 /// @param store another list iterator to use as temporary storage.
 /// @param head the head for your list.
-#define list_for_each_safe(pos, store, head)                                                                           \
+#define list_for_each_safe(pos, store, head) \
     for ((pos) = (head)->next, (store) = (pos)->next; (pos) != (head); (pos) = (store), (store) = (pos)->next)
 
 /// @brief Iterates over a list, but declares the iterator.
@@ -41,8 +41,8 @@ typedef struct list_head {
 /// @param pos the name of the iterator used to visit the list.
 /// @param store another list iterator to use as temporary storage.
 /// @param head the head for your list.
-#define list_for_each_safe_decl(pos, store, head)                                                                      \
-    for (list_head_t * (pos) = (head)->next, *(store) = (pos)->next; (pos) != (head);                                  \
+#define list_for_each_safe_decl(pos, store, head)                                     \
+    for (list_head_t * (pos) = (head)->next, *(store) = (pos)->next; (pos) != (head); \
          (pos) = (store), (store) = (pos)->next)
 
 /// @brief Iterates over a list backwards.
@@ -53,17 +53,71 @@ typedef struct list_head {
 /// @brief Iterates over a list backwards, but declares the iterator.
 /// @param pos the name of the iterator used to visit the list.
 /// @param head the head for your list.
-#define list_for_each_prev_decl(pos, head)                                                                             \
+#define list_for_each_prev_decl(pos, head) \
     for (list_head_t * (pos) = (head)->prev; (pos) != (head); (pos) = (pos)->prev)
+
+/// @brief Resets iteration when current node might have been removed.
+/// @param pos The current iterator.
+/// @param store The temporary storage used in the loop.
+#define list_safe_reset_next(pos, store) \
+    (store) = (pos)->next
+
+/// @brief Get the next entry in the list.
+/// @param pos the current entry.
+/// @param member the name of the list_head within the struct.
+/// @return the next entry in the list.
+#define list_next_entry(pos, member) \
+    list_entry((pos)->member.next, typeof(*(pos)), member)
+
+/// @brief Get the previous entry in the list.
+/// @param pos the current entry.
+/// @param member the name of the list_head within the struct.
+/// @return the previous entry in the list.
+#define list_prev_entry(pos, member) \
+    list_entry((pos)->member.prev, typeof(*(pos)), member)
+
+/// @brief Get the first entry in the list.
+/// @param head the head of the list.
+/// @param type the type of the struct this is embedded in.
+/// @param member the name of the list_head within the struct.
+/// @return the first entry in the list.
+#define list_first_entry(head, type, member) \
+    list_entry((head)->next, type, member)
+
+/// @brief Get the last entry in the list.
+/// @param head the head of the list.
+/// @param type the type of the struct this is embedded in.
+/// @param member the name of the list_head within the struct.
+/// @return the last entry in the list.
+#define list_last_entry(head, type, member) \
+    list_entry((head)->prev, type, member)
 
 /// @brief Ensures that the given list is valid.
 /// @param list the list to validate.
-static inline void list_head_validate(const list_head_t *list)
-{
-    assert(list && "List is NULL.");
-    assert(list->prev && "List->prev is NULL.");
-    assert(list->next && "List->next is NULL.");
-}
+#define list_head_validate(list)                   \
+    (assert((list) != NULL && "List is NULL."),    \
+     assert((list)->next && "List next is NULL."), \
+     assert((list)->prev && "List prev is NULL."))
+
+/// @brief Tests whether the given list is empty.
+/// @param head The list to check.
+/// @return 1 if empty, 0 otherwise.
+#define list_head_empty(list) \
+    (list_head_validate(list), (list)->next == (list))
+
+/// @brief Tests whether the given list is singular.
+/// @param list The list to check.
+/// @return 1 if singular, 0 otherwise.
+#define list_head_is_singular(list) \
+    (list_head_validate(list), (list)->next == (list)->prev)
+
+/// @brief Checks if an entry is the head of the list.
+/// @param pos The entry to check.
+/// @param head The list head.
+/// @param member The member name inside the struct.
+/// @return 1 if the entry is the head, 0 otherwise.
+#define list_head_entry_is_head(pos, head, member) \
+    (&(pos)->member == (head))
 
 /// @brief Initializes the list_head_t.
 /// @param head The head of your list.
@@ -71,15 +125,6 @@ static inline void list_head_init(list_head_t *head)
 {
     assert(head && "Variable head is NULL.");
     head->next = head->prev = head;
-}
-
-/// @brief Tests whether the given list is empty.
-/// @param head The list to check.
-/// @return 1 if empty, 0 otherwise.
-static inline int list_head_empty(const list_head_t *head)
-{
-    list_head_validate(head);
-    return head->next == head;
 }
 
 /// @brief Computes the size of the list.
@@ -231,4 +276,44 @@ static inline void list_head_swap(list_head_t *entry1, list_head_t *entry2)
         pos = entry2;
     }
     list_head_insert_after(entry1, pos);
+}
+
+/// @brief Moves the entry to the new head.
+/// @param entry the entry we want to move.
+/// @param new_head the new head where we want to move the entry.
+static inline void list_head_move(list_head_t *entry, list_head_t *new_head)
+{
+    list_head_remove(entry);
+    list_head_insert_after(entry, new_head);
+}
+
+/// @brief Moves the entry to the new head, but places it at the end of the list.
+/// @param entry the entry we want to move.
+/// @param new_head the new head where we want to move the entry.
+static inline void list_head_move_tail(list_head_t *entry, list_head_t *new_head)
+{
+    list_head_remove(entry);
+    list_head_insert_before(entry, new_head);
+}
+
+/// @brief Moves the entry to the new head, but places it at the end of the list.
+/// @param list the list we want to move.
+/// @param head the new head where we want to move the list.
+static inline void list_head_splice(list_head_t *list, list_head_t *head)
+{
+    if (!list_head_empty(list)) {
+        list->next->prev = head;
+        list->prev->next = head->next;
+        head->next->prev = list->prev;
+        head->next       = list->next;
+    }
+}
+
+/// @brief Moves the list to the new head.
+/// @param list the list we want to move.
+/// @param head the new head where we want to move the list.
+static inline void list_head_splice_init(list_head_t *list, list_head_t *head)
+{
+    list_head_splice(list, head);
+    list_head_init(list);
 }

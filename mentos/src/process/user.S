@@ -86,53 +86,6 @@ enter_userspace:
 
     ; WE SHOULD NOT STILL BE HERE! :(
 
-global context_switch
-
-context_switch:
-    ; Save the ESP before pusha
-    lea edx, [esp + 32]
-    ; Push the whole context.
-    pusha
-    ; Get the current context.
-    mov eax, [esp + 36]
-    ; Check if the context is NULL.
-    test eax, eax
-    jz .skip_save
-
-    ; Store to struct in the same order as they appear on stack.
-
-    mov ecx, [esp + 32]
-    mov [eax + 32], ecx         ; old->eip = return address
-    mov ecx, [esp + 28]         ; edi
-    mov [eax + 0], ecx
-    mov ecx, [esp + 24]         ; esi
-    mov [eax + 4], ecx
-    mov ecx, [esp + 20]         ; ebp
-    mov [eax + 8], ecx
-    mov ecx, edx                ; esp (saved before pusha)
-    mov [eax + 12], ecx
-    mov ecx, [esp + 12]         ; ebx
-    mov [eax + 16], ecx
-    mov ecx, [esp + 8]          ; edx
-    mov [eax + 20], ecx
-    mov ecx, [esp + 4]          ; ecx
-    mov [eax + 24], ecx
-    mov ecx, [esp + 0]          ; eax
-    mov [eax + 28], ecx
-
-.skip_save:
-    ; Get the pointer to the new context.
-    mov eax, [esp + 40]
-    ; Restore the context.
-    mov esp, [eax + 12]
-    ; jump to the return address.
-    jmp resume_execution
-
-resume_execution:
-    popa
-    pop ebx
-    jmp ebx
-
 ; -----------------------------------------------------------------------------
 ; SECTION (note) - Inform the linker that the stack does not need to be executable
 ; -----------------------------------------------------------------------------

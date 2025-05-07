@@ -4,10 +4,10 @@
 /// See LICENSE.md for details.
 
 // Setup the logging for this file (do this before any other include).
-#include "sys/kernel_levels.h"         // Include kernel log levels.
-#define __DEBUG_HEADER__ "[PROC  ]"    ///< Change header.
-#define __DEBUG_LEVEL__  LOGLEVEL_INFO ///< Set log level.
-#include "io/debug.h"                  // Include debugging functions.
+#include "sys/kernel_levels.h"           // Include kernel log levels.
+#define __DEBUG_HEADER__ "[PROC  ]"      ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
+#include "io/debug.h"                    // Include debugging functions.
 
 #include "assert.h"
 #include "elf/elf.h"
@@ -696,71 +696,79 @@ int sys_execve(pt_regs_t *f)
     return 0;
 }
 
+// === KERNEL CONTEXT SWITCH TEST ==================================================
+// This is a test for the kernel context switch. It is not used in the system.
+
+#define STACK_SIZE 4096
+
 typedef struct {
-    uint32_t edi;     //  +0
-    uint32_t esi;     //  +4
-    uint32_t ebp;     //  +8
-    uint32_t esp;     // +12
-    uint32_t ebx;     // +16
-    uint32_t edx;     // +20
-    uint32_t ecx;     // +24
-    uint32_t eax;     // +28
-    uint32_t eip;     // +32
-    const char *name; // +36
+    uint32_t edi; //  +0
+    uint32_t esi; //  +4
+    uint32_t ebp; //  +8
+    uint32_t esp; // +12
+    uint32_t ebx; // +16
+    uint32_t edx; // +20
+    uint32_t ecx; // +24
+    uint32_t eax; // +28
+    uint32_t eip; // +32
 } task_context_t;
+
+typedef struct task {
+    const char *name;
+    unsigned int pid;
+    task_context_t context;
+    uint8_t stack[STACK_SIZE];
+    list_head_t list;
+} task_t;
 
 extern void context_switch(task_context_t *old, task_context_t *new);
 
 void task_schedule(void);
 
-#define STACK_SIZE 4096
+static list_head_t task_list;
+static task_t *current_task = NULL;
 
-uint8_t stack_a[STACK_SIZE] __attribute__((aligned(16)));
-uint8_t stack_b[STACK_SIZE] __attribute__((aligned(16)));
-
-static task_context_t ctx_a;
-static task_context_t ctx_b;
-
-task_context_t *current_ctx = NULL;
-
-void full_dump_task_information(const task_context_t *ctx)
+void full_dump_task_information(const task_t *task)
 {
-    pr_info("Task (%s) context (CTX: %p):\n", ctx->name, ctx);
+    const task_context_t *ctx = &task->context;
+    pr_info("Task (%s) context (CTX: %p):\n", task->name, ctx);
     pr_info(" EAX: 0x%08x, EBX: 0x%08x, ECX: 0x%08x, EDX: 0x%08x\n", ctx->eax, ctx->ebx, ctx->ecx, ctx->edx);
     pr_info(" ESI: 0x%08x, EDI: 0x%08x, EIP: 0x%08x\n", ctx->esi, ctx->edi, ctx->eip);
     pr_info(" EBP: 0x%08x, ESP: 0x%08x\n", ctx->ebp, ctx->esp);
-    pr_info(" Stack contents (ESP: 0x%08x):\n", ctx->esp);
-    for (int i = 0; i < 10; ++i) {
-        uintptr_t address = ctx->esp + i * sizeof(uintptr_t);
-        uintptr_t value   = *(uintptr_t *)(ctx->esp + i * sizeof(uintptr_t));
+    for (unsigned i = 0; i < 10; ++i) {
+        uintptr_t address = (uintptr_t)(ctx->esp) + (i * sizeof(uintptr_t));
+        uintptr_t value   = *(uintptr_t *)address;
         pr_info("  [%2d] 0x%08x: 0x%08x\n", i, address, value);
     }
 }
 
-void task_a_body(void)
+void full_dump_task_list(void)
 {
-    pr_notice(">>> ----------------------------------\n");
-    pr_notice(">>> task A entered\n");
-    while (1) {
-        pr_notice(">>> task A entered the while loop\n");
-        task_schedule();
-        pr_notice(">>> task A came back from task_schedule and resuming\n");
-        task_schedule();
-        pr_notice(">>> task A came back from task_schedule again, and now it will loop\n");
+    pr_info("Task list (%p):\n", &task_list);
+    if (list_head_is_singular(&task_list)) {
+        pr_info("  No tasks in the system.\n");
+        return;
     }
-    __builtin_unreachable();
+    list_for_each_decl (it, &task_list) {
+        task_t *task = list_entry(it, task_t, list);
+        full_dump_task_information(task);
+    }
 }
 
-void task_b_body(void)
+void task_body(void)
 {
+    assert(current_task && "No current task set.");
+
+    int count = current_task->pid;
+
     pr_notice(">>> ----------------------------------\n");
-    pr_notice(">>> task B entered\n");
+    pr_notice(">>> Task `%s` entered (pid:%4d, count: %4d).\n", current_task->name, current_task->pid, count);
     while (1) {
-        pr_notice(">>> task B entered the while loop\n");
+        pr_notice(">>> Task `%s` entered the while loop (pid:%4d, count: %4d).\n", current_task->name, current_task->pid, count);
         task_schedule();
-        pr_notice(">>> task B came back from task_schedule and resuming\n");
+        pr_notice(">>> Task `%s` came back from task_schedule and resuming (pid:%4d, count: %4d).\n", current_task->name, current_task->pid, count);
         task_schedule();
-        pr_notice(">>> task B came back from task_schedule again, and now it will loop\n");
+        count++;
     }
     __builtin_unreachable();
 }
@@ -769,76 +777,85 @@ void task_schedule(void)
 {
     pr_info(">>> \n");
     pr_info(">>> =======================================================================================\n");
-    assert(current_ctx && "No current context to switch from.");
-    task_context_t *previous = NULL, *next = NULL;
-    if (current_ctx == &ctx_a) {
-        previous = &ctx_a;
-        next     = &ctx_b;
-        pr_info(">>> task scheduler: switching %p (task A) to %p (task B)\n", previous, next);
-        current_ctx = next;
-    } else if (current_ctx == &ctx_b) {
-        previous = &ctx_b;
-        next     = &ctx_a;
-        pr_info(">>> task scheduler: switching %p (task B) to %p (task A)\n", previous, next);
-        current_ctx = next;
-    } else {
-        pr_err(">>> task scheduler: unknown context\n");
+
+    assert(current_task && "No current task set.");
+    task_t *prev = current_task;
+    task_t *next = NULL;
+
+    if (list_head_is_singular(&task_list)) {
+        pr_warning("Only one task in system; cannot schedule.\n");
         return;
     }
-    full_dump_task_information(previous);
+
+    if (list_next_entry(prev, list) == list_entry(&task_list, task_t, list)) {
+        next = list_first_entry(&task_list, task_t, list);
+    } else {
+        next = list_next_entry(prev, list);
+    }
+
+    current_task = next;
+
+    pr_info(">>> Switching from task '%s' to '%s'\n", prev->name, next->name);
+    full_dump_task_information(prev);
     full_dump_task_information(next);
-    assert(previous != next); // Prevent self-switch.
-    // Perform the switch to the next task.
-    context_switch(previous, next);
-    pr_crit(">>> task scheduler: context switch failed\n");
-    // Should never return.
+    context_switch(&prev->context, &next->context);
+
     __builtin_unreachable();
 }
 
-void init_task_context(
-    task_context_t *ctx,
-    void (*task_entry)(void),
-    uint8_t *stack,
-    size_t stack_size,
-    const char *name)
+void init_task(task_t *task, const char *name, void (*entry)(void))
 {
-    memset(ctx, 0, sizeof(*ctx));
-    memset(stack, 0, stack_size);
-    // Get the top of the stack.
-    uintptr_t *stack_top = (uintptr_t *)(stack + stack_size);
-    // Push the registers on the stack.
-    *(--stack_top)       = (uintptr_t)task_entry; // This becomes [esp], used as EIP via jmp eax
-    *(--stack_top)       = 0;                     // EDI
-    *(--stack_top)       = 0;                     // ESI
-    *(--stack_top)       = 0;                     // EBP
-    *(--stack_top)       = 0;                     // Dummy ESP slot (ignored by popa)
-    *(--stack_top)       = 0;                     // EBX
-    *(--stack_top)       = 0;                     // EDX
-    *(--stack_top)       = 0;                     // ECX
-    *(--stack_top)       = 0;                     // EAX
-    // Save the stack pointer.
-    ctx->esp             = (uintptr_t)stack_top;
-    ctx->name            = name;
+    static unsigned int pid = 1;
+
+    memset(task, 0, sizeof(*task));
+    // Set the name of the task.
+    task->name           = name;
+    // Set the PID of the task.
+    task->pid            = pid++;
+    // Prepare the stack.
+    uintptr_t *stack_top = (uintptr_t *)(task->stack + STACK_SIZE);
+    *(--stack_top)       = (uintptr_t)entry; // EIP
+    *(--stack_top)       = 0;                // EDI
+    *(--stack_top)       = 0;                // ESI
+    *(--stack_top)       = 0;                // EBP
+    *(--stack_top)       = 0;                // Dummy ESP
+    *(--stack_top)       = 0;                // EBX
+    *(--stack_top)       = 0;                // EDX
+    *(--stack_top)       = 0;                // ECX
+    *(--stack_top)       = 0;                // EAX
+    task->context.esp    = (uintptr_t)stack_top;
+    list_head_init(&task->list);
+    list_head_insert_before(&task->list, &task_list);
 }
 
 void test_kernel_context_switch(void)
 {
     pr_notice("Setting up kernel context switch test\n");
 
-    init_task_context(&ctx_a, task_a_body, stack_a, STACK_SIZE, "Task A");
-    init_task_context(&ctx_b, task_b_body, stack_b, STACK_SIZE, "Task B");
+    list_head_init(&task_list);
 
-    pr_notice("task_a_body         = 0x%08x\n", (uintptr_t)&task_a_body);
-    pr_notice("task_b_body         = 0x%08x\n", (uintptr_t)&task_b_body);
+    task_t task_a;
+    task_t task_b;
+    task_t task_c;
 
-    full_dump_task_information(&ctx_a);
-    full_dump_task_information(&ctx_b);
+    init_task(&task_a, "task_a", task_body);
+    init_task(&task_b, "task_b", task_body);
+    init_task(&task_c, "task_c", task_body);
+
+    pr_notice("task_body         = 0x%08x\n", (uintptr_t)&task_body);
+
+    full_dump_task_information(&task_a);
+    full_dump_task_information(&task_b);
+    full_dump_task_information(&task_c);
+
+    full_dump_task_list();
 
     pr_notice("Switching from BOOT to task A...\n");
 
-    current_ctx = &ctx_a;
-
-    context_switch(NULL, &ctx_a);
+    // Set the current task to task A.
+    current_task = &task_a;
+    // Set the context of task A.
+    context_switch(NULL, &task_a.context);
 
     pr_crit("Returned from context_switch unexpectedly.\n");
 
