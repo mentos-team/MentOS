@@ -511,7 +511,7 @@ pid_t sys_fork(pt_regs_t *f)
     task_struct *proc        = __alloc_task(current, current, current->name);
     // Copy the father's stack, memory, heap etc... to the child process
     proc->mm                 = mm_clone(current->mm);
-    // Set the eax as 0, to indicate the child process
+    // Set the eax as 0, to indicate the child process.
     proc->thread.regs.eax    = 0;
     // Enable the interrupts.
     proc->thread.regs.eflags = proc->thread.regs.eflags | EFLAG_IF;
