@@ -9,6 +9,11 @@
 
 ---
 
+> 📢 **Note:** The new default branch is `main`.  
+> The old `master` branch will remain available temporarily but is no longer updated.
+
+---
+
 ## Table of Contents
 
 - [MentOS (Mentoring Operating System)](#mentos-mentoring-operating-system)
