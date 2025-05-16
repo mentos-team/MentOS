@@ -7,14 +7,22 @@
 [![Ubuntu](https://github.com/mentos-team/MentOS/actions/workflows/ubuntu.yml/badge.svg)](https://github.com/mentos-team/MentOS/actions/workflows/ubuntu.yml)
 [![Documentation](https://github.com/mentos-team/MentOS/actions/workflows/documentation.yml/badge.svg)](https://github.com/mentos-team/MentOS/actions/workflows/documentation.yml)
 
+---
+
 ## Table of Contents
 
 - [MentOS (Mentoring Operating System)](#mentos-mentoring-operating-system)
   - [Table of Contents](#table-of-contents)
   - [What is MentOS](#what-is-mentos)
   - [Implemented features](#implemented-features)
+    - [Processes and Events](#processes-and-events)
+    - [Memory](#memory)
+    - [Filesystem](#filesystem)
+    - [Input/Output](#inputoutput)
+    - [Inter-Process Communication (IPC)](#inter-process-communication-ipc)
   - [Prerequisites](#prerequisites)
-    - [Installing the prerequisites](#installing-the-prerequisites)
+    - [Compiling on Ubuntu / WSL1 / WSL2](#compiling-on-ubuntu--wsl1--wsl2)
+    - [Compiling on ARM (e.g., Ubuntu ARM / Apple Silicon in a Linux VM)](#compiling-on-arm-eg-ubuntu-arm--apple-silicon-in-a-linux-vm)
   - [Compiling MentOS](#compiling-mentos)
   - [Generating the EXT2 filesystem](#generating-the-ext2-filesystem)
   - [Running MentOS](#running-mentos)
@@ -27,6 +35,8 @@
   - [Change the scheduling algorithm](#change-the-scheduling-algorithm)
   - [Debugging the kernel](#debugging-the-kernel)
   - [Contributors](#contributors)
+
+---
 
 ## What is MentOS
 
@@ -51,6 +61,8 @@ system called [DreamOs](https://github.com/dreamos82/DreamOs) written by Ivan
 Gualandri.
 
 *[Back to the Table of Contents](#table-of-contents)*
+
+---
 
 ## Implemented features
 
@@ -107,37 +119,31 @@ I will try to keep it updated...
 
 *[Back to the Table of Contents](#table-of-contents)*
 
+---
+
 ## Prerequisites
 
-MentOS is compatible with the main **unix-based** operating systems. It has been
-tested with *Ubuntu*, and under Windows with *WSL1* and *WSL2*.
+MentOS is compatible with the main **Unix-based** operating systems. It has been tested with:
 
-For **compiling** the system we need:
+- **Ubuntu**
+- **WSL1 / WSL2**
+- **macOS** (via cross-compilation using i386 toolchains)
 
-- git
-- gcc
-- nasm
-- make
-- cmake
-- ccmake (suggested)
-- e2fsprogs (should be already installed)
+The prerequisites vary depending on your platform. Follow the section below that matches your system.
 
-Under **MacOS**, for compiling, you have additional dependencies:
+### Compiling on Ubuntu / WSL1 / WSL2
 
-- i386-elf-binutils
-- i386-elf-gcc
+To **build and run** MentOS, install:
 
-For **executing** the operating system we need:
-
-- qemu-system-i386 (or qemu-system-x86)
-
-For **debugging** we suggest using:
-
-- gdb or cgdb
-
-### Installing the prerequisites
-
-Under **Ubuntu**, you can type the following commands:
+- `git`
+- `gcc`
+- `nasm`
+- `make`
+- `cmake`
+- `ccmake` (optional, for curses-based CMake GUI)
+- `e2fsprogs`
+- `qemu-system-x86` (or `qemu-system-i386` on older versions)
+- `gdb` or `cgdb` (recommended for debugging)
 
 ```bash
 sudo apt-get update && sudo apt-get upgrade -y
@@ -146,13 +152,21 @@ sudo apt-get install -y qemu-system-x86
 sudo apt-get install -y gdb cgdb
 ```
 
-Note: Older versions might have `qemu-system-i386` instead of `qemu-system-x86`.
+On older Ubuntu systems, the QEMU package might be named qemu-system-i386.
 
-*[Back to the Table of Contents](#table-of-contents)*
+### Compiling on ARM (e.g., Ubuntu ARM / Apple Silicon in a Linux VM)
+
+To compile MentOS on **ARM-based Linux** (e.g., Ubuntu ARM or Apple Silicon using UTM/Parallels), you must install a cross-compilation toolchain for i386:
+
+```bash
+sudo apt-get install -y gcc-i686-linux-gnu libc6-dev-i386-cross
+```
+
+---
 
 ## Compiling MentOS
 
-Compile MentOS with:
+To **compile** MentOS on **Ubuntu / WSL1 / WSL2**:
 
 ```bash
 cd <clone_directory>
@@ -162,7 +176,19 @@ cmake ..
 make
 ```
 
+To **compile** MentOS on **ARM** (cross-compilation):
+
+```bash
+cd <clone_directory>
+mkdir build
+cd build
+cmake .. -DCMAKE_C_COMPILER=i686-linux-gnu-gcc -DCMAKE_LINKER=i686-linux-gnu-ld
+make
+```
+
 *[Back to the Table of Contents](#table-of-contents)*
+
+---
 
 ## Generating the EXT2 filesystem
 
@@ -176,6 +202,8 @@ you just need to generate the filesystem once. If you change a `program` you nee
 
 *[Back to the Table of Contents](#table-of-contents)*
 
+---
+
 ## Running MentOS
 
 Boot MentOS with qemu:
@@ -187,6 +215,8 @@ make qemu
 To login, use one of the usernames listed in `files/etc/passwd`.
 
 *[Back to the Table of Contents](#table-of-contents)*
+
+---
 
 ## Running MentOS from GRUB
 
@@ -211,6 +241,8 @@ make qemu-grub
 ```
 
 *[Back to the Table of Contents](#table-of-contents)*
+
+---
 
 ## Running and adding new programs to MentOS
 
@@ -278,6 +310,8 @@ However, the `/bin/tests` folder is not listed in `PATH`, so, if you want to exe
 
 *[Back to the Table of Contents](#table-of-contents)*
 
+---
+
 ## Kernel logging
 
 The kernel provides ways of printing logging messages *from* inside the kernel code *to* the bash where you executed the `make qemu`.
@@ -337,6 +371,8 @@ You can change the logging level by including the following lines at the beginni
 This example sets the `__DEBUG_LEVEL__`, so that all the messages from `INFO` and below are shown. While `__DEBUG_HEADER__` is just a string that is automatically prepended to your message, helping you identifying from which code the message is coming from.
 
 *[Back to the Table of Contents](#table-of-contents)*
+
+---
 
 ## Change the scheduling algorithm
 
@@ -406,6 +442,8 @@ make qemu
 
 *[Back to the Table of Contents](#table-of-contents)*
 
+---
+
 ## Debugging the kernel
 
 If you want to use GDB to debug MentOS, first you need to compile everything:
@@ -474,6 +512,8 @@ There is also a launch configuration for vscode in `.vscode/launch.json`, called
 to connect to the running process.
 
 *[Back to the Table of Contents](#table-of-contents)*
+
+---
 
 ## Contributors
 
