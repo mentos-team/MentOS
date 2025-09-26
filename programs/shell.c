@@ -4,6 +4,7 @@
 /// See LICENSE.md for details.
 
 #include <ctype.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <io/ansi_colors.h>
 #include <libgen.h>
@@ -804,10 +805,17 @@ static inline int __read_command(rb_history_entry_t *entry)
     memset(entry->buffer, 0, entry->size);
 
     do {
-        // Read a character from input.
-        c = getchar();
+        // Read a character from input, retrying on EINTR.
+        do {
+            c = getchar();
+        } while (c == EOF && errno == EINTR);
 
-        // Ignore EOF and null or tab characters
+        // If EOF without EINTR, it's an error.
+        if (c == EOF) {
+            return -1;
+        }
+
+        // Ignore null characters.
         if (c == EOF || c == 0) {
             continue;
         }
@@ -1247,8 +1255,11 @@ static int __execute_command(rb_history_entry_t *entry)
             }
         }
         if (blocking) {
-            // Parent process: Wait for the child process to finish.
-            waitpid(cpid, &_status, 0);
+            // Parent process: Wait for the child process to finish, retrying on EINTR.
+            int ret;
+            do {
+                ret = waitpid(cpid, &_status, 0);
+            } while (ret == -1 && errno == EINTR);
             // Handle different exit statuses of the child process.
             if (WIFSIGNALED(_status)) {
                 printf(
@@ -1343,7 +1354,12 @@ static void __interactive_mode(void)
 #pragma clang diagnostic pop
 }
 
-void wait_for_child(int signum) { wait(NULL); }
+void wait_for_child(int signum)
+{
+    // Reap all terminated children without blocking.
+    while (waitpid(-1, NULL, WNOHANG) > 0) {
+    }
+}
 
 int main(int argc, char *argv[])
 {
