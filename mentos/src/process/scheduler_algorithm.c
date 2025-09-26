@@ -411,24 +411,23 @@ static void __update_task_statistics(task_struct *task)
     // Perform timer-related checks.
     update_process_profiling_timer(task);
 
+    // Check if this is the first execution for vruntime initialization.
+    int is_first_execution = (task->se.sum_exec_runtime == 0);
+
     // Set the sum_exec_runtime.
     task->se.sum_exec_runtime += task->se.exec_runtime;
 
     // If the task is not a periodic task we have to update the virtual runtime.
     if (!task->se.is_periodic) {
-        // Get the weight of the current task.
-        time_t weight = GET_WEIGHT((task)->se.prio); /* ... */
-        ;
-        // If the weight is different from the default load, compute it.
-        if (weight != NICE_0_LOAD) {
-            // Get the multiplicative factor for its delta_exec.
-            double factor = ((double)NICE_0_LOAD / (double)weight); /* ... */
-            ;
-            // Weight the delta_exec with the multiplicative factor.
-            task->se.exec_runtime = ((int)(((double)task->se.exec_runtime) * factor)); /* ... */
+        if (is_first_execution) {
+            // For new tasks, set vruntime to the maximum to avoid starvation of existing tasks.
+            task->se.vruntime = scheduler_get_maximum_vruntime();
+        } else {
+            // Get the weight of the current task.
+            time_t weight = GET_WEIGHT(task->se.prio);
+            // Update vruntime with the weighted exec_runtime in ticks.
+            task->se.vruntime += (task->se.exec_runtime * NICE_0_LOAD) / weight;
         }
-        // Update vruntime of the current task.
-        task->se.vruntime += task->se.exec_runtime;
     }
 #endif
 }
