@@ -100,11 +100,13 @@ static inline void __scheduler_feedback_log(void)
 #endif
     for (size_t i = 0; i < PID_MAX_LIMIT; ++i) {
         if (arr_stats[i].task) {
-            float tcpu = ((float)arr_stats[i].occur * 100.0) / total_occurrences;
-            pr_info("[%3d] | %-18s | -> TCPU: %.2f%% \n", arr_stats[i].task->pid, arr_stats[i].task->name, tcpu);
+            double tcpu         = ((double)arr_stats[i].occur * 100.0) / total_occurrences;
+            double vruntime_sec = (double)arr_stats[i].task->se.vruntime / TICKS_PER_SECOND;
+            pr_info("[%3d] | %-22s | vruntime(s): %-8.2f | prio: %3d | TCPU: %.2f%%\n", arr_stats[i].task->pid, arr_stats[i].task->name, vruntime_sec, arr_stats[i].task->se.prio, tcpu);
 #ifdef WRITE_ON_FILE
             written = sprintf(
-                buffer, "[%3d] | %-18s | -> TCPU: %.2f%% \n", arr_stats[i].task->pid, arr_stats[i].task->name, tcpu);
+                buffer, "[%3d] | %-23s | vruntime(s): %-8.2f | prio: %3d | TCPU: %.2f%%\n",
+                arr_stats[i].task->pid, arr_stats[i].task->name, vruntime_sec, arr_stats[i].task->se.prio, tcpu);
             vfs_write(feedback, buffer, offset, written);
             offset += written;
 #endif
