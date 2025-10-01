@@ -60,7 +60,17 @@ typedef struct {
     X(isr_arrays_initialization)   \
     X(exception_messages)          \
     X(isr_handler_replacement)     \
-    X(isr_multiple_handlers)
+    X(isr_multiple_handlers)       \
+    X(irq_initialization)          \
+    X(irq_install_handler)         \
+    X(irq_bounds_check)            \
+    X(irq_multiple_handlers)       \
+    X(irq_uninstall_handler)       \
+    X(irq_uninstall_bounds_check)  \
+    X(irq_uninstall_nonexistent)   \
+    X(irq_all_lines)               \
+    X(irq_constants)               \
+    X(irq_null_parameters)
 
 /// @brief Create a test entry for the test registry.
 /// @param name The name of the test.
