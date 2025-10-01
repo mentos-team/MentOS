@@ -70,7 +70,10 @@ typedef struct {
     X(irq_uninstall_nonexistent)   \
     X(irq_all_lines)               \
     X(irq_constants)               \
-    X(irq_null_parameters)
+    X(irq_null_parameters)         \
+    X(tss_initialization)          \
+    X(tss_structure_size)          \
+    X(tss_unused_fields_cleared)
 
 /// @brief Create a test entry for the test registry.
 /// @param name The name of the test.
@@ -104,5 +107,6 @@ int kernel_run_tests(void)
         passed++;
     }
     pr_info("Kernel tests completed: %d/%d passed\n", passed, num_tests);
+
     return (passed == num_tests) ? 0 : -1;
 }
