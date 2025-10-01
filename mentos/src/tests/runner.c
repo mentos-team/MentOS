@@ -40,7 +40,27 @@ typedef struct {
     X(gdt_segment_flags)           \
     X(gdt_limit_boundaries)        \
     X(gdt_granularity_flags)       \
-    X(gdt_access_combinations)
+    X(gdt_access_combinations)     \
+    X(idt_initialization)          \
+    X(idt_bounds_check)            \
+    X(idt_gate_types)              \
+    X(idt_privilege_levels)        \
+    X(idt_segment_selectors)       \
+    X(idt_present_bits)            \
+    X(idt_reserved_fields)         \
+    X(idt_offset_fields)           \
+    X(idt_table_size)              \
+    X(idt_interrupt_ranges)        \
+    X(idt_options_composition)     \
+    X(isr_install_handler)         \
+    X(isr_bounds_check)            \
+    X(isr_uninstall_handler)       \
+    X(isr_uninstall_bounds_check)  \
+    X(isr_default_handlers)        \
+    X(isr_arrays_initialization)   \
+    X(exception_messages)          \
+    X(isr_handler_replacement)     \
+    X(isr_multiple_handlers)
 
 /// @brief Create a test entry for the test registry.
 /// @param name The name of the test.
