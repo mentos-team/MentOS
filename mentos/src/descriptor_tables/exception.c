@@ -103,6 +103,10 @@ void handle_gp_fault(pt_regs_t *frame)
 void isr_handler(pt_regs_t *f)
 {
     uint32_t isr_number = f->int_no;
+    if (isr_number >= IDT_SIZE) {
+        pr_emerg("Invalid ISR number %d\n", isr_number);
+        kernel_panic("Invalid ISR");
+    }
     if (isr_number != 80) {
         //		pr_default("calling ISR %d\n", isr_number);
     }
@@ -123,7 +127,7 @@ void isrs_init(void)
 int isr_install_handler(unsigned i, interrupt_handler_t handler, char *description)
 {
     // Sanity check.
-    if (i > 31 && i != 80) {
+    if (i >= IDT_SIZE) {
         return -1;
     }
     isr_routines[i]             = handler;
@@ -133,7 +137,7 @@ int isr_install_handler(unsigned i, interrupt_handler_t handler, char *descripti
 
 int isr_uninstall_handler(unsigned i)
 {
-    if (i > 31 && i != 80) {
+    if (i >= IDT_SIZE) {
         return -1;
     }
     isr_routines[i]             = default_isr_handler;

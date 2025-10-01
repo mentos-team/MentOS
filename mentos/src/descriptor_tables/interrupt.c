@@ -101,8 +101,8 @@ int irq_uninstall_handler(unsigned i, interrupt_handler_t handler)
         assert(irq_struct && "Something went wrong.");
         if (irq_struct->handler == handler) {
             list_head_remove(&irq_struct->siblings);
+            __irq_struct_dealloc(irq_struct);
         }
-        __irq_struct_dealloc(irq_struct);
     }
     return 0;
 }
