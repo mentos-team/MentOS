@@ -11,140 +11,39 @@ option(ENABLE_KMEM_TRACE "Enables kmalloc tracing." OFF)
 option(ENABLE_PAGE_TRACE "Enables page allocation tracing." OFF)
 option(ENABLE_EXT2_TRACE "Enables EXT2 allocation tracing." OFF)
 option(ENABLE_FILE_TRACE "Enables vfs_file allocation tracing." OFF)
-# Enables scheduling feedback on terminal.
+option(ENABLE_KERNEL_TESTS "Enable kernel-side unit and integration tests" OFF)
 option(ENABLE_SCHEDULER_FEEDBACK "Enables scheduling feedback on terminal." OFF)
 
 # =============================================================================
-# Add the kernel library with its sources.
-add_library(
-    kernel
-    ${CMAKE_SOURCE_DIR}/mentos/src/kernel.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/resource_tracing.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/multiboot.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/devices/pci.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/devices/fpu.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/drivers/ata.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/drivers/mem.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/drivers/rtc.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/drivers/fdc.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/drivers/mouse.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/drivers/ps2.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/drivers/keyboard/keyboard.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/drivers/keyboard/keymap.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/fs/attr.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/fs/vfs.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/fs/read_write.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/fs/open.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/fs/pipe.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/fs/stat.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/fs/readdir.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/fs/procfs.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/fs/ioctl.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/fs/fcntl.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/fs/namei.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/fs/ext2.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/hardware/timer.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/hardware/cpuid.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/hardware/pic8259.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/io/debug.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/io/mm_io.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/io/video.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/io/stdio.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/io/proc_video.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/io/proc_running.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/io/proc_feedback.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/io/proc_system.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/io/proc_ipc.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/io/vga/vga.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/ipc/ipc.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/ipc/msg.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/ipc/sem.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/ipc/shm.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/kernel/sys.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/klib/assert.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/klib/ctype.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/klib/mutex.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/klib/string.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/klib/vsprintf.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/klib/vscanf.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/klib/time.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/klib/libgen.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/klib/strerror.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/klib/math.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/klib/spinlock.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/klib/stdlib.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/klib/rbtree.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/klib/ndtree.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/klib/hashmap.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/klib/list.c
-    # Memory related files.
-    ${CMAKE_SOURCE_DIR}/mentos/src/mem/alloc/buddy_system.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/mem/alloc/heap.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/mem/alloc/slab.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/mem/alloc/zone_allocator.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/mem/mm/mm.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/mem/mm/page.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/mem/mm/vm_area.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/mem/mm/vmem.c
-    # ${CMAKE_SOURCE_DIR}/mentos/src/mem/pgtable_map.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/mem/page_fault.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/mem/paging.c
-    # 
-    ${CMAKE_SOURCE_DIR}/mentos/src/elf/elf.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/crypt/sha256.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/descriptor_tables/gdt.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/descriptor_tables/gdt.S
-    ${CMAKE_SOURCE_DIR}/mentos/src/descriptor_tables/interrupt.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/descriptor_tables/exception.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/descriptor_tables/interrupt.S
-    ${CMAKE_SOURCE_DIR}/mentos/src/descriptor_tables/exception.S
-    ${CMAKE_SOURCE_DIR}/mentos/src/descriptor_tables/idt.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/descriptor_tables/idt.S
-    ${CMAKE_SOURCE_DIR}/mentos/src/descriptor_tables/tss.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/descriptor_tables/tss.S
-    ${CMAKE_SOURCE_DIR}/mentos/src/process/scheduler_algorithm.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/process/scheduler_feedback.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/process/pid_manager.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/process/scheduler.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/process/process.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/process/wait.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/process/user.S
-    ${CMAKE_SOURCE_DIR}/mentos/src/sys/utsname.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/sys/module.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/system/errno.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/system/panic.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/system/printk.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/system/signal.c
-    ${CMAKE_SOURCE_DIR}/mentos/src/system/syscall.c
-)
-
+# Collect the kernel source files.
+file(GLOB_RECURSE KERNEL_SOURCES "${CMAKE_SOURCE_DIR}/mentos/src/*.c" "${CMAKE_SOURCE_DIR}/mentos/src/*.S")
+# Remove the tests from the kernel sources if the tests are disabled.
+if(NOT ENABLE_KERNEL_TESTS)
+    list(FILTER KERNEL_SOURCES EXCLUDE REGEX ".*/tests/.*")
+endif()
+# Collect the kernel include directories.
+set(KERNEL_INCLUDE_DIRS ${CMAKE_SOURCE_DIR}/mentos/inc ${CMAKE_SOURCE_DIR}/libc/inc)
+# Create the kernel static library.
+add_library(kernel ${KERNEL_SOURCES})
 # Add the includes.
-target_include_directories(
-    kernel PUBLIC
-    ${CMAKE_SOURCE_DIR}/mentos/inc
-    ${CMAKE_SOURCE_DIR}/libc/inc
-)
-
+target_include_directories(kernel PUBLIC ${KERNEL_INCLUDE_DIRS})
 # Define that this code is kernel code.
-target_compile_definitions(
-    kernel PUBLIC
-    __KERNEL__
-)
-
-target_compile_definitions(
-    kernel PUBLIC
-    MENTOS_ROOT="${CMAKE_SOURCE_DIR}"
-)
-
+target_compile_definitions(kernel PUBLIC __KERNEL__)
+# Define the root of MentOS for the kernel code.
+target_compile_definitions(kernel PUBLIC MENTOS_ROOT="${CMAKE_SOURCE_DIR}")
 # If the emulator is set to output on a log file, tell that to the C code.
 if(${EMULATOR_OUTPUT_TYPE} STREQUAL OUTPUT_LOG)
     target_compile_definitions(kernel PUBLIC EMULATOR_OUTPUT_LOG)
+endif()
+# If we enabled the tests, tell that to the C code.
+if(ENABLE_KERNEL_TESTS)
+    target_compile_definitions(kernel PUBLIC ENABLE_KERNEL_TESTS)
 endif()
 
 # =============================================================================
 # Enables memory allocation tracing.
 if(ENABLE_KMEM_TRACE)
-target_compile_definitions(kernel PUBLIC ENABLE_KMEM_TRACE)
+    target_compile_definitions(kernel PUBLIC ENABLE_KMEM_TRACE)
 endif(ENABLE_KMEM_TRACE)
 if(ENABLE_PAGE_TRACE)
     target_compile_definitions(kernel PUBLIC ENABLE_PAGE_TRACE)
@@ -243,7 +142,7 @@ target_compile_definitions(
 # Build the kernel.
 add_custom_target(
     bootloader.bin ALL
-    COMMAND ${CMAKE_LINKER} --output kernel.bin     -melf_i386 -static --oformat elf32-i386 -z noexecstack --script ${CMAKE_CURRENT_SOURCE_DIR}/kernel.lds $<TARGET_FILE_NAME:kernel> -u kmain
+    COMMAND ${CMAKE_LINKER} --output kernel.bin -melf_i386 -static --oformat elf32-i386 -z noexecstack --script ${CMAKE_CURRENT_SOURCE_DIR}/kernel.lds $<TARGET_FILE_NAME:kernel> -u kmain
     COMMAND ${CMAKE_OBJCOPY} -I binary -O elf32-i386 -B i386 kernel.bin kernel.bin.o
     COMMAND ${CMAKE_LINKER} --output bootloader.bin -melf_i386 -static --oformat elf32-i386 -z noexecstack --script ${CMAKE_CURRENT_SOURCE_DIR}/boot.lds $<TARGET_FILE_NAME:bootloader> kernel.bin.o
     DEPENDS kernel
