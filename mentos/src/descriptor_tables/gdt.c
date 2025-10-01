@@ -92,6 +92,11 @@ void init_gdt(void)
 
 void gdt_set_gate(uint8_t index, uint32_t base, uint32_t limit, uint8_t access, uint8_t granul)
 {
+    if (index >= GDT_SIZE) {
+        pr_err("Invalid GDT index %d\n", index);
+        return;
+    }
+
     // Setup the descriptor base address.
     gdt[index].base_low    = (base & 0xFFFFU);
     gdt[index].base_middle = (base >> 16U) & 0xFFU;
