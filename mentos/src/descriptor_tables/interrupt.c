@@ -95,12 +95,11 @@ int irq_uninstall_handler(unsigned i, interrupt_handler_t handler)
         pr_err("There are no handler for IRQ `%d`\n", i);
         return -1;
     }
-    list_for_each_decl (it, &shared_interrupt_handlers[i]) {
-        // Get the interrupt structure.
+    list_for_each_safe_decl(it, next_it, &shared_interrupt_handlers[i])
+    {
         irq_struct_t *irq_struct = list_entry(it, irq_struct_t, siblings);
-        assert(irq_struct && "Something went wrong.");
         if (irq_struct->handler == handler) {
-            list_head_remove(&irq_struct->siblings);
+            list_head_remove(it);
             __irq_struct_dealloc(irq_struct);
         }
     }
