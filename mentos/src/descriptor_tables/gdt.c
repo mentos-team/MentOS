@@ -12,9 +12,6 @@
 #include "descriptor_tables/gdt.h"
 #include "descriptor_tables/tss.h"
 
-/// The maximum dimension of the GDT.
-#define GDT_SIZE 10
-
 /// @brief This will be a function in gdt.s. We use this to properly
 ///        reload the new segment registers
 /// @param _gdt_pointer addresss of the gdt.

@@ -463,6 +463,17 @@ int kmain(boot_info_t *boot_informations)
 
     // We have completed the booting procedure.
     pr_notice("Booting done, jumping into init process.\n");
+
+#ifdef ENABLE_KERNEL_TESTS
+    extern int kernel_run_tests(void);
+    if (kernel_run_tests() != 0) {
+        pr_emerg("Kernel tests failed!\n");
+        return 1;
+    } else {
+        pr_notice("All kernel tests passed!\n");
+    }
+#endif
+
     // Switch to the page directory of init.
     paging_switch_pgd(init_process->mm->pgd);
     // Jump into init process.

@@ -23,6 +23,9 @@
 
 #include "stdint.h"
 
+/// The maximum dimension of the GDT.
+#define GDT_SIZE 10
+
 /// @brief Bitmasks used to access to specific bits of the GDT.
 /// @details
 /// #### PRIV (Privilege bits)
