@@ -91,6 +91,8 @@ char upper_buffer[STORED_PAGES * TOTAL_SIZE] = {0};
 char original_page[TOTAL_SIZE]               = {0};
 /// Determines the screen is currently scrolled, and by how many lines.
 int scrolled_lines                           = 0;
+/// Flag to batch cursor updates in video_puts.
+static int batch_cursor_updates               = 0;
 
 /// @brief Get the current column number.
 /// @return The column number.
@@ -381,14 +383,19 @@ void video_putc(int c)
     }
 
     video_shift_one_line_up();
-    video_update_cursor_position();
+    if (!batch_cursor_updates) {
+        video_update_cursor_position();
+    }
 }
 
 void video_puts(const char *str)
 {
+    batch_cursor_updates = 1;
     while ((*str) != 0) {
         video_putc((*str++));
     }
+    batch_cursor_updates = 0;
+    video_update_cursor_position();
 }
 
 void video_update_cursor_position(void)
