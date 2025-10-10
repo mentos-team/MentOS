@@ -164,22 +164,13 @@ static inline void __video_set_cursor_position(unsigned int x, unsigned int y)
 ///
 /// @param x Pointer to store the x-coordinate (column).
 /// @param y Pointer to store the y-coordinate (row).
-static inline void __video_get_cursor_position(unsigned int *x, unsigned int *y)
+static inline void video_get_cursor_position(unsigned int *x, unsigned int *y)
 {
-    uint16_t position;
-
-    // Get the low byte of the cursor position.
-    outportb(0x3D4, 0x0F);
-    position = inportb(0x3D5);
-    // Get the high byte of the cursor position.
-    outportb(0x3D4, 0x0E);
-    position |= ((uint16_t)inportb(0x3D5)) << 8;
-    // Calculate x and y.
     if (x) {
-        *x = position % WIDTH;
+        *x = __get_x();
     }
     if (y) {
-        *y = position / WIDTH;
+        *y = __get_y();
     }
 }
 
@@ -304,13 +295,15 @@ void video_putc(int c)
             // Move cursor forward (e.g., ESC [ <num> C)
             if (c == 'C') {
                 int amount = atoi(escape_buffer);
-                if (amount < 0) amount = 0;
+                if (amount < 0)
+                    amount = 0;
                 __move_cursor_forward(false, amount);
             }
             // Move cursor backward (e.g., ESC [ <num> D)
             else if (c == 'D') {
                 int amount = atoi(escape_buffer);
-                if (amount < 0) amount = 0;
+                if (amount < 0)
+                    amount = 0;
                 __move_cursor_backward(false, amount);
             }
             // Set color (e.g., ESC [ <num> m)
@@ -345,7 +338,8 @@ void video_putc(int c)
             // Custom command for scrolling up.
             else if (c == 'S') {
                 int lines_to_scroll = atoi(escape_buffer);
-                if (lines_to_scroll < 0) lines_to_scroll = 0;
+                if (lines_to_scroll < 0)
+                    lines_to_scroll = 0;
                 video_scroll_down(lines_to_scroll);
                 escape_index = -1;
                 return;
@@ -353,7 +347,8 @@ void video_putc(int c)
             // Custom command for scrolling down.
             else if (c == 'T') {
                 int lines_to_scroll = atoi(escape_buffer);
-                if (lines_to_scroll < 0) lines_to_scroll = 0;
+                if (lines_to_scroll < 0)
+                    lines_to_scroll = 0;
                 video_scroll_up(lines_to_scroll);
                 escape_index = -1;
                 return;
