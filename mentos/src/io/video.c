@@ -106,15 +106,23 @@ static inline unsigned __get_y(void) { return (pointer - ADDR) / (WIDTH * 2); }
 /// @param c The character to draw.
 static inline void __draw_char(char c)
 {
+    // If we are scrolled, unscroll first.
     if (scrolled_lines) {
         video_scroll_up(scrolled_lines);
     }
-    size_t bytes_to_shift = (ADDR + TOTAL_SIZE) - pointer;
-    if (bytes_to_shift > 0) {
-        memmove(pointer + 2, pointer, bytes_to_shift);
+
+    // Write the character and its attribute
+    *pointer = c;
+    *(pointer + 1) = color;
+
+    // Advance the pointer
+    pointer += 2;
+
+    // If pointer goes past the end of the screen, scroll up and reset pointer
+    if (pointer >= ADDR + TOTAL_SIZE) {
+        video_shift_one_line_up(); // This will handle moving content and clearing the last line
+        pointer = ADDR + TOTAL_SIZE - W2; // Move pointer to the beginning of the last line
     }
-    *(pointer++) = c;
-    *(pointer++) = color;
 }
 
 /// @brief Hides the VGA cursor.
@@ -288,10 +296,19 @@ void video_putc(int c)
         if ((escape_index == 0) && (c == '[')) {
             return;
         }
-        escape_buffer[escape_index++] = c;
-        escape_buffer[escape_index]   = 0;
+        if (escape_index < sizeof(escape_buffer) - 1) {
+            escape_buffer[escape_index++] = c;
+            escape_buffer[escape_index]   = 0;
+        } else {
+            // Handle error: sequence too long, reset
+            escape_index = -1;
+        }
         if (isalpha(c)) {
-            escape_buffer[--escape_index] = 0;
+            if (escape_index > 0) {
+                escape_buffer[--escape_index] = 0;
+            } else {
+                escape_index = -1;
+            }
 
             // Move cursor forward (e.g., ESC [ <num> C)
             if (c == 'C') {
@@ -382,7 +399,6 @@ void video_putc(int c)
         return;
     }
 
-    video_shift_one_line_up();
     if (!batch_cursor_updates) {
         video_update_cursor_position();
     }
@@ -442,7 +458,11 @@ void video_clear(void)
 void video_new_line(void)
 {
     pointer = ADDR + ((pointer - ADDR) / W2 + 1) * W2;
-    video_shift_one_line_up();
+    // If pointer goes past the end of the screen, scroll up and reset pointer
+    if (pointer >= ADDR + TOTAL_SIZE) {
+        video_shift_one_line_up(); // This will handle moving content and clearing the last line
+        pointer = ADDR + TOTAL_SIZE - W2; // Move pointer to the beginning of the last line
+    }
     video_update_cursor_position();
 }
 
@@ -488,7 +508,9 @@ static void __shift_screen_up(void)
         memcpy(upper_buffer + (TOTAL_SIZE * STORED_PAGES - W2), ADDR, W2);
     }
     // Move the screen up by one line.
-    __shift_buffer(ADDR, HEIGHT + 1, +1);
+    __shift_buffer(ADDR, HEIGHT, +1);
+    // Clear the last line of the screen.
+    memset(ADDR + (W2 * (HEIGHT - 1)), 0, W2);
 }
 
 /// @brief Shifts the screen content down by one line. Restores the topmost line
