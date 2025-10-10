@@ -25,7 +25,6 @@
 #include "hardware/pic8259.h"
 #include "hardware/timer.h"
 #include "io/proc_modules.h"
-#include "io/vga/vga.h"
 #include "io/video.h"
 #include "ipc/ipc.h"
 #include "mem/alloc/zone_allocator.h"
@@ -130,7 +129,6 @@ int kmain(boot_info_t *boot_informations)
 
     //==========================================================================
     pr_notice("Initialize the video...\n");
-    vga_initialize();
     video_init();
 
     //==========================================================================

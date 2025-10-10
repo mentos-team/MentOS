@@ -80,24 +80,6 @@ else()
 endif()
 
 # =============================================================================
-# Set the list of valid video driver options.
-set(VIDEO_TYPES VGA_TEXT_MODE VGA_MODE_320_200_256 VGA_MODE_640_480_16 VGA_MODE_720_480_16)
-# Add the video driver option.
-set(VIDEO_TYPE "VGA_TEXT_MODE" CACHE STRING "Chose the type of video driver: ${VIDEO_TYPES}")
-# List of video tpes.
-set_property(CACHE VIDEO_TYPE PROPERTY STRINGS ${VIDEO_TYPES})
-# Check which video driver is currently active and export the related macro.
-list(FIND VIDEO_TYPES ${VIDEO_TYPE} INDEX)
-if(index EQUAL -1)
-    message(FATAL_ERROR "Video type ${VIDEO_TYPE} is not valid.")
-else()
-    # Add the define stating which video driver is currently active.
-    target_compile_definitions(kernel PUBLIC ${VIDEO_TYPE})
-    # Notify the type of video driver.
-    message(STATUS "Setting vide type to ${VIDEO_TYPE}.")
-endif()
-
-# =============================================================================
 # Set the list of valid keyboard mappings.
 set(KEYMAP_TYPES KEYMAP_US KEYMAP_IT KEYMAP_DE)
 # Add the keyboard mapping.

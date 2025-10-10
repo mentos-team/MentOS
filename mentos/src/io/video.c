@@ -11,7 +11,6 @@
 
 #include "ctype.h"
 #include "io/port_io.h"
-#include "io/vga/vga.h"
 #include "io/video.h"
 #include "stdbool.h"
 #include "stdio.h"
@@ -235,11 +234,6 @@ void video_init(void)
 
 void video_update(void)
 {
-#ifndef VGA_TEXT_MODE
-    if (vga_is_enabled()) {
-        vga_update();
-    }
-#endif
 }
 
 void video_putc(int c)
@@ -310,13 +304,6 @@ void video_putc(int c)
         return;
     }
 
-#ifndef VGA_TEXT_MODE
-    if (vga_is_enabled()) {
-        vga_putc(c);
-        return;
-    }
-#endif
-
     // == NORMAL CHARACTERS =======================================================================
     // If the character is '\n' go the new line.
     if (c == '\n') {
@@ -340,12 +327,6 @@ void video_putc(int c)
 
 void video_puts(const char *str)
 {
-#ifndef VGA_TEXT_MODE
-    if (vga_is_enabled()) {
-        vga_puts(str);
-        return;
-    }
-#endif
     while ((*str) != 0) {
         video_putc((*str++));
     }
@@ -353,34 +334,17 @@ void video_puts(const char *str)
 
 void video_update_cursor_position(void)
 {
-#ifndef VGA_TEXT_MODE
-    if (vga_is_enabled()) {
-        return;
-    }
-#endif
     __video_set_cursor_position(((pointer - ADDR) / 2U) % WIDTH, ((pointer - ADDR) / 2U) / WIDTH);
 }
 
 void video_move_cursor(unsigned int x, unsigned int y)
 {
-#ifndef VGA_TEXT_MODE
-    if (vga_is_enabled()) {
-        vga_move_cursor(x, y);
-        return;
-    }
-#endif
     pointer = ADDR + ((y * WIDTH * 2) + (x * 2));
     video_update_cursor_position();
 }
 
 void video_get_cursor_position(unsigned int *x, unsigned int *y)
 {
-#ifndef VGA_TEXT_MODE
-    if (vga_is_enabled()) {
-        vga_get_cursor_position(x, y);
-        return;
-    }
-#endif
     if (x) {
         *x = __get_x();
     }
@@ -391,12 +355,6 @@ void video_get_cursor_position(unsigned int *x, unsigned int *y)
 
 void video_get_screen_size(unsigned int *width, unsigned int *height)
 {
-#ifndef VGA_TEXT_MODE
-    if (vga_is_enabled()) {
-        vga_get_screen_size(width, height);
-        return;
-    }
-#endif
     if (width) {
         *width = WIDTH;
     }
@@ -407,24 +365,12 @@ void video_get_screen_size(unsigned int *width, unsigned int *height)
 
 void video_clear(void)
 {
-#ifndef VGA_TEXT_MODE
-    if (vga_is_enabled()) {
-        vga_clear_screen();
-        return;
-    }
-#endif
     memset(upper_buffer, 0, STORED_PAGES * TOTAL_SIZE);
     memset(ADDR, 0, TOTAL_SIZE);
 }
 
 void video_new_line(void)
 {
-#ifndef VGA_TEXT_MODE
-    if (vga_is_enabled()) {
-        vga_new_line();
-        return;
-    }
-#endif
     pointer = ADDR + ((pointer - ADDR) / W2 + 1) * W2;
     video_shift_one_line_up();
     video_update_cursor_position();
@@ -432,12 +378,6 @@ void video_new_line(void)
 
 void video_cartridge_return(void)
 {
-#ifndef VGA_TEXT_MODE
-    if (vga_is_enabled()) {
-        vga_new_line();
-        return;
-    }
-#endif
     pointer = ADDR + ((pointer - ADDR) / W2 - 1) * W2;
     video_new_line();
     video_shift_one_line_up();
