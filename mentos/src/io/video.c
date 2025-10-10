@@ -16,12 +16,18 @@
 #include "stdio.h"
 #include "string.h"
 
-#define HEIGHT       25                   ///< The height of the screen (rows).
-#define WIDTH        80                   ///< The width of the screen (columns).
-#define W2           (WIDTH * 2)          ///< The width of the screen in bytes.
-#define TOTAL_SIZE   (HEIGHT * WIDTH * 2) ///< The total size of the screen in bytes.
-#define ADDR         (char *)0xB8000U     ///< The address of the video memory.
-#define STORED_PAGES 2                    ///< The number of stored pages for scrolling.
+#define HEIGHT                   25                   ///< The height of the screen (rows).
+#define WIDTH                    80                   ///< The width of the screen (columns).
+#define W2                       (WIDTH * 2)          ///< The width of the screen in bytes.
+#define TOTAL_SIZE               (HEIGHT * WIDTH * 2) ///< The total size of the screen in bytes.
+#define ADDR                     (char *)0xB8000U     ///< The address of the video memory.
+#define STORED_PAGES             2                    ///< The number of stored pages for scrolling.
+#define VGA_CRTC_INDEX           0x3D4                ///< VGA CRTC index register port.
+#define VGA_CRTC_DATA            0x3D5                ///< VGA CRTC data register port.
+#define VGA_CURSOR_START         0x0A                 ///< VGA cursor start register index.
+#define VGA_CURSOR_END           0x0B                 ///< VGA cursor end register index.
+#define VGA_CURSOR_LOCATION_LOW  0x0F                 ///< VGA cursor location low register index.
+#define VGA_CURSOR_LOCATION_HIGH 0x0E                 ///< VGA cursor location high register index.
 
 /// @brief Stores the association between ANSI colors and pure VIDEO colors.
 typedef struct {
@@ -92,7 +98,7 @@ char original_page[TOTAL_SIZE]               = {0};
 /// Determines the screen is currently scrolled, and by how many lines.
 int scrolled_lines                           = 0;
 /// Flag to batch cursor updates in video_puts.
-static int batch_cursor_updates               = 0;
+static int batch_cursor_updates              = 0;
 
 /// @brief Get the current column number.
 /// @return The column number.
@@ -112,7 +118,7 @@ static inline void __draw_char(char c)
     }
 
     // Write the character and its attribute
-    *pointer = c;
+    *pointer       = c;
     *(pointer + 1) = color;
 
     // Advance the pointer
@@ -120,7 +126,7 @@ static inline void __draw_char(char c)
 
     // If pointer goes past the end of the screen, scroll up and reset pointer
     if (pointer >= ADDR + TOTAL_SIZE) {
-        video_shift_one_line_up(); // This will handle moving content and clearing the last line
+        video_shift_one_line_up();        // This will handle moving content and clearing the last line
         pointer = ADDR + TOTAL_SIZE - W2; // Move pointer to the beginning of the last line
     }
 }
@@ -128,17 +134,17 @@ static inline void __draw_char(char c)
 /// @brief Hides the VGA cursor.
 void __video_hide_cursor(void)
 {
-    outportb(0x3D4, 0x0A);
-    unsigned char cursor_start = inportb(0x3D5);
-    outportb(0x3D5, cursor_start | 0x20); // Set the most significant bit to disable the cursor.
+    outportb(VGA_CRTC_INDEX, VGA_CURSOR_START);
+    unsigned char cursor_start = inportb(VGA_CRTC_DATA);
+    outportb(VGA_CRTC_DATA, cursor_start | 0x20); // Set the most significant bit to disable the cursor.
 }
 
 /// @brief Shows the VGA cursor.
 void __video_show_cursor(void)
 {
-    outportb(0x3D4, 0x0A);
-    unsigned char cursor_start = inportb(0x3D5);
-    outportb(0x3D5, cursor_start & 0xDF); // Clear the most significant bit to enable the cursor.
+    outportb(VGA_CRTC_INDEX, VGA_CURSOR_START);
+    unsigned char cursor_start = inportb(VGA_CRTC_DATA);
+    outportb(VGA_CRTC_DATA, cursor_start & 0xDF); // Clear the most significant bit to enable the cursor.
 }
 
 /// @brief Sets the VGA cursor shape by specifying the start and end scan lines.
@@ -148,12 +154,12 @@ void __video_show_cursor(void)
 void __video_set_cursor_shape(unsigned char start, unsigned char end)
 {
     // Set the cursor's start scan line
-    outportb(0x3D4, 0x0A);
-    outportb(0x3D5, start);
+    outportb(VGA_CRTC_INDEX, VGA_CURSOR_START);
+    outportb(VGA_CRTC_DATA, start);
 
     // Set the cursor's end scan line
-    outportb(0x3D4, 0x0B);
-    outportb(0x3D5, end);
+    outportb(VGA_CRTC_INDEX, VGA_CURSOR_END);
+    outportb(VGA_CRTC_DATA, end);
 }
 
 /// @brief Issue the vide to move the cursor to the given position.
@@ -167,11 +173,11 @@ static inline void __video_set_cursor_position(unsigned int x, unsigned int y)
         y = HEIGHT - 1;
     uint32_t position = (y * WIDTH) + x;
     // Cursor LOW port to VGA index register.
-    outportb(0x3D4, 0x0F);
-    outportb(0x3D5, (uint8_t)(position & 0xFFU));
+    outportb(VGA_CRTC_INDEX, VGA_CURSOR_LOCATION_LOW);
+    outportb(VGA_CRTC_DATA, (uint8_t)(position & 0xFFU));
     // Cursor HIGH port to VGA index register.
-    outportb(0x3D4, 0x0E);
-    outportb(0x3D5, (uint8_t)((position >> 8U) & 0xFFU));
+    outportb(VGA_CRTC_INDEX, VGA_CURSOR_LOCATION_HIGH);
+    outportb(VGA_CRTC_DATA, (uint8_t)((position >> 8U) & 0xFFU));
 }
 
 /// @brief Sets the provided ansi code.
@@ -455,7 +461,7 @@ void video_new_line(void)
     pointer = ADDR + ((pointer - ADDR) / W2 + 1) * W2;
     // If pointer goes past the end of the screen, scroll up and reset pointer
     if (pointer >= ADDR + TOTAL_SIZE) {
-        video_shift_one_line_up(); // This will handle moving content and clearing the last line
+        video_shift_one_line_up();        // This will handle moving content and clearing the last line
         pointer = ADDR + TOTAL_SIZE - W2; // Move pointer to the beginning of the last line
     }
     video_update_cursor_position();
@@ -464,7 +470,7 @@ void video_new_line(void)
 void video_cartridge_return(void)
 {
     unsigned int current_row = (pointer - ADDR) / W2;
-    pointer = ADDR + (current_row * W2); // Move to beginning of current line
+    pointer                  = ADDR + (current_row * W2); // Move to beginning of current line
     video_update_cursor_position();
 }
 
