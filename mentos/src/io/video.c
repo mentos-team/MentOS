@@ -146,6 +146,8 @@ void __video_set_cursor_shape(unsigned char start, unsigned char end)
 /// @param y The y coordinate.
 static inline void __video_set_cursor_position(unsigned int x, unsigned int y)
 {
+    if (x >= WIDTH) x = WIDTH - 1;
+    if (y >= HEIGHT) y = HEIGHT - 1;
     uint32_t position = (y * WIDTH) + x;
     // Cursor LOW port to VGA index register.
     outportb(0x3D4, 0x0F);
@@ -201,10 +203,20 @@ static inline void __set_color(uint8_t ansi_code)
 static inline void __move_cursor_backward(int erase, int amount)
 {
     for (int i = 0; i < amount; ++i) {
-        // Bring back the pointer.
-        pointer -= 2;
-        if (erase) {
-            strcpy(pointer, pointer + 2);
+        if (pointer - 2 >= ADDR) {
+            // Bring back the pointer.
+            pointer -= 2;
+            if (erase) {
+                size_t bytes_to_move = (ADDR + TOTAL_SIZE) - (pointer + 2);
+                if (bytes_to_move > 0) {
+                    memmove(pointer, pointer + 2, bytes_to_move);
+                }
+                // Clear the last two bytes.
+                *(ADDR + TOTAL_SIZE - 2) = 0;
+                *(ADDR + TOTAL_SIZE - 1) = 0;
+            }
+        } else {
+            break;
         }
     }
     video_update_cursor_position();
@@ -220,7 +232,11 @@ static inline void __move_cursor_forward(int erase, int amount)
         if (erase) {
             __draw_char(' ');
         } else {
-            pointer += 2;
+            if (pointer + 2 < ADDR + TOTAL_SIZE) {
+                pointer += 2;
+            } else {
+                break;
+            }
         }
     }
     video_update_cursor_position();
@@ -303,9 +319,11 @@ void video_putc(int c)
                 char *semicolon = strchr(escape_buffer, ';');
                 if (semicolon != NULL) {
                     *semicolon     = '\0';
-                    unsigned int y = atoi(escape_buffer);
-                    unsigned int x = atoi(semicolon + 1);
-                    pointer        = ADDR + ((y - 1) * WIDTH * 2 + (x - 1) * 2);
+                    unsigned int y = atoi(escape_buffer) - 1;
+                    unsigned int x = atoi(semicolon + 1) - 1;
+                    if (x >= WIDTH) x = WIDTH - 1;
+                    if (y >= HEIGHT) y = HEIGHT - 1;
+                    pointer        = ADDR + (y * WIDTH * 2 + x * 2);
                 } else {
                     pointer = ADDR;
                 }
@@ -344,7 +362,13 @@ void video_putc(int c)
     } else if (c == '\r') {
         video_cartridge_return();
     } else if (c == 127) {
-        strcpy(pointer, pointer + 2);
+        size_t bytes_to_move = (ADDR + TOTAL_SIZE) - (pointer + 2);
+        if (bytes_to_move > 0) {
+            memmove(pointer, pointer + 2, bytes_to_move);
+        }
+        // Clear the last two bytes.
+        *(ADDR + TOTAL_SIZE - 2) = 0;
+        *(ADDR + TOTAL_SIZE - 1) = 0;
     } else if ((c >= 0x20) && (c <= 0x7E)) {
         __draw_char(c);
     } else {
@@ -369,6 +393,8 @@ void video_update_cursor_position(void)
 
 void video_move_cursor(unsigned int x, unsigned int y)
 {
+    if (x >= WIDTH) x = WIDTH - 1;
+    if (y >= HEIGHT) y = HEIGHT - 1;
     pointer = ADDR + ((y * WIDTH * 2) + (x * 2));
     video_update_cursor_position();
 }
@@ -408,7 +434,10 @@ void video_new_line(void)
 
 void video_cartridge_return(void)
 {
-    pointer = ADDR + ((pointer - ADDR) / W2 - 1) * W2;
+    unsigned int current_row = (pointer - ADDR) / W2;
+    if (current_row > 0) {
+        pointer = ADDR + ((current_row - 1) * W2);
+    }
     video_new_line();
     video_shift_one_line_up();
     video_update_cursor_position();
