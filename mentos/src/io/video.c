@@ -123,8 +123,7 @@ void __video_show_cursor(void)
 {
     outportb(0x3D4, 0x0A);
     unsigned char cursor_start = inportb(0x3D5);
-    outportb(0x3D5,
-             cursor_start & 0xDF); // Clear the most significant bit to enable the cursor.
+    outportb(0x3D5, cursor_start & 0xDF); // Clear the most significant bit to enable the cursor.
 }
 
 /// @brief Sets the VGA cursor shape by specifying the start and end scan lines.
@@ -158,20 +157,6 @@ static inline void __video_set_cursor_position(unsigned int x, unsigned int y)
     // Cursor HIGH port to VGA index register.
     outportb(0x3D4, 0x0E);
     outportb(0x3D5, (uint8_t)((position >> 8U) & 0xFFU));
-}
-
-/// @brief Retrieves the current VGA cursor position in terms of x and y coordinates.
-///
-/// @param x Pointer to store the x-coordinate (column).
-/// @param y Pointer to store the y-coordinate (row).
-static inline void video_get_cursor_position(unsigned int *x, unsigned int *y)
-{
-    if (x) {
-        *x = __get_x();
-    }
-    if (y) {
-        *y = __get_y();
-    }
 }
 
 /// @brief Sets the provided ansi code.
