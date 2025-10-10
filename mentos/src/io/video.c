@@ -21,7 +21,7 @@
 #define W2           (WIDTH * 2)          ///< The width of the
 #define TOTAL_SIZE   (HEIGHT * WIDTH * 2) ///< The total size of the screen.
 #define ADDR         (char *)0xB8000U     ///< The address of the
-#define STORED_PAGES 10                   ///< The number of stored pages.
+#define STORED_PAGES 2                    ///< The number of stored pages.
 
 /// @brief Stores the association between ANSI colors and pure VIDEO colors.
 struct ansi_color_map {
@@ -31,15 +31,45 @@ struct ansi_color_map {
     uint8_t video_color;
 }
 /// @brief The mapping.
-ansi_color_map[] = {{0, 7},
+ansi_color_map[] = {
+    {0, 7},
 
-                    {30, 0},  {31, 4},   {32, 2},   {33, 6},   {34, 1},  {35, 5},   {36, 3},   {37, 7},
+    {30, 0},
+    {31, 4},
+    {32, 2},
+    {33, 6},
+    {34, 1},
+    {35, 5},
+    {36, 3},
+    {37, 7},
 
-                    {90, 8},  {91, 12},  {92, 10},  {93, 14},  {94, 9},  {95, 13},  {96, 11},  {97, 15},
+    {90, 8},
+    {91, 12},
+    {92, 10},
+    {93, 14},
+    {94, 9},
+    {95, 13},
+    {96, 11},
+    {97, 15},
 
-                    {40, 0},  {41, 4},   {42, 2},   {43, 6},   {44, 1},  {45, 5},   {46, 3},   {47, 7},
+    {40, 0},
+    {41, 4},
+    {42, 2},
+    {43, 6},
+    {44, 1},
+    {45, 5},
+    {46, 3},
+    {47, 7},
 
-                    {100, 8}, {101, 12}, {102, 10}, {103, 14}, {104, 9}, {105, 13}, {106, 11}, {107, 15}};
+    {100, 8},
+    {101, 12},
+    {102, 10},
+    {103, 14},
+    {104, 9},
+    {105, 13},
+    {106, 11},
+    {107, 15},
+};
 
 /// Pointer to a position of the screen writer.
 char *pointer       = ADDR;
@@ -71,7 +101,7 @@ static inline void __draw_char(char c)
     if (scrolled_lines) {
         video_scroll_up(scrolled_lines);
     }
-    for (char *ptr = (ADDR + TOTAL_SIZE + (WIDTH * 2)); ptr > pointer; ptr -= 2) {
+    for (char *ptr = (ADDR + TOTAL_SIZE); ptr > pointer; ptr -= 2) {
         *(ptr)     = *(ptr - 2);
         *(ptr + 1) = *(ptr - 1);
     }
