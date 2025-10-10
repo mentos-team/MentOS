@@ -469,11 +469,7 @@ void video_new_line(void)
 void video_cartridge_return(void)
 {
     unsigned int current_row = (pointer - ADDR) / W2;
-    if (current_row > 0) {
-        pointer = ADDR + ((current_row - 1) * W2);
-    }
-    video_new_line();
-    video_shift_one_line_up();
+    pointer = ADDR + (current_row * W2); // Move to beginning of current line
     video_update_cursor_position();
 }
 
