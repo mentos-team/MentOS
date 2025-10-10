@@ -101,9 +101,9 @@ static inline void __draw_char(char c)
     if (scrolled_lines) {
         video_scroll_up(scrolled_lines);
     }
-    for (char *ptr = (ADDR + TOTAL_SIZE); ptr > pointer; ptr -= 2) {
-        *(ptr)     = *(ptr - 2);
-        *(ptr + 1) = *(ptr - 1);
+    size_t bytes_to_shift = (ADDR + TOTAL_SIZE) - pointer;
+    if (bytes_to_shift > 0) {
+        memmove(pointer + 2, pointer, bytes_to_shift);
     }
     *(pointer++) = c;
     *(pointer++) = color;
