@@ -16,12 +16,12 @@
 #include "stdio.h"
 #include "string.h"
 
-#define HEIGHT       25                   ///< The height of the
-#define WIDTH        80                   ///< The width of the
-#define W2           (WIDTH * 2)          ///< The width of the
-#define TOTAL_SIZE   (HEIGHT * WIDTH * 2) ///< The total size of the screen.
-#define ADDR         (char *)0xB8000U     ///< The address of the
-#define STORED_PAGES 2                    ///< The number of stored pages.
+#define HEIGHT       25                   ///< The height of the screen (rows).
+#define WIDTH        80                   ///< The width of the screen (columns).
+#define W2           (WIDTH * 2)          ///< The width of the screen in bytes.
+#define TOTAL_SIZE   (HEIGHT * WIDTH * 2) ///< The total size of the screen in bytes.
+#define ADDR         (char *)0xB8000U     ///< The address of the video memory.
+#define STORED_PAGES 2                    ///< The number of stored pages for scrolling.
 
 /// @brief Stores the association between ANSI colors and pure VIDEO colors.
 struct ansi_color_map {
@@ -146,8 +146,10 @@ void __video_set_cursor_shape(unsigned char start, unsigned char end)
 /// @param y The y coordinate.
 static inline void __video_set_cursor_position(unsigned int x, unsigned int y)
 {
-    if (x >= WIDTH) x = WIDTH - 1;
-    if (y >= HEIGHT) y = HEIGHT - 1;
+    if (x >= WIDTH)
+        x = WIDTH - 1;
+    if (y >= HEIGHT)
+        y = HEIGHT - 1;
     uint32_t position = (y * WIDTH) + x;
     // Cursor LOW port to VGA index register.
     outportb(0x3D4, 0x0F);
@@ -314,16 +316,18 @@ void video_putc(int c)
             else if (c == 'J') {
                 video_clear();
             }
-            // Clear screen (e.g., ESC [ <num> J)
+            // Set cursor position (e.g., ESC [ <row>;<col> H)
             else if (c == 'H') {
                 char *semicolon = strchr(escape_buffer, ';');
                 if (semicolon != NULL) {
                     *semicolon     = '\0';
                     unsigned int y = atoi(escape_buffer) - 1;
                     unsigned int x = atoi(semicolon + 1) - 1;
-                    if (x >= WIDTH) x = WIDTH - 1;
-                    if (y >= HEIGHT) y = HEIGHT - 1;
-                    pointer        = ADDR + (y * WIDTH * 2 + x * 2);
+                    if (x >= WIDTH)
+                        x = WIDTH - 1;
+                    if (y >= HEIGHT)
+                        y = HEIGHT - 1;
+                    pointer = ADDR + (y * WIDTH * 2 + x * 2);
                 } else {
                     pointer = ADDR;
                 }
@@ -393,8 +397,10 @@ void video_update_cursor_position(void)
 
 void video_move_cursor(unsigned int x, unsigned int y)
 {
-    if (x >= WIDTH) x = WIDTH - 1;
-    if (y >= HEIGHT) y = HEIGHT - 1;
+    if (x >= WIDTH)
+        x = WIDTH - 1;
+    if (y >= HEIGHT)
+        y = HEIGHT - 1;
     pointer = ADDR + ((y * WIDTH * 2) + (x * 2));
     video_update_cursor_position();
 }
