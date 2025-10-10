@@ -302,11 +302,15 @@ void video_putc(int c)
 
             // Move cursor forward (e.g., ESC [ <num> C)
             if (c == 'C') {
-                __move_cursor_forward(false, atoi(escape_buffer));
+                int amount = atoi(escape_buffer);
+                if (amount < 0) amount = 0;
+                __move_cursor_forward(false, amount);
             }
             // Move cursor backward (e.g., ESC [ <num> D)
             else if (c == 'D') {
-                __move_cursor_backward(false, atoi(escape_buffer));
+                int amount = atoi(escape_buffer);
+                if (amount < 0) amount = 0;
+                __move_cursor_backward(false, amount);
             }
             // Set color (e.g., ESC [ <num> m)
             else if (c == 'm') {
@@ -340,6 +344,7 @@ void video_putc(int c)
             // Custom command for scrolling up.
             else if (c == 'S') {
                 int lines_to_scroll = atoi(escape_buffer);
+                if (lines_to_scroll < 0) lines_to_scroll = 0;
                 video_scroll_down(lines_to_scroll);
                 escape_index = -1;
                 return;
@@ -347,6 +352,7 @@ void video_putc(int c)
             // Custom command for scrolling down.
             else if (c == 'T') {
                 int lines_to_scroll = atoi(escape_buffer);
+                if (lines_to_scroll < 0) lines_to_scroll = 0;
                 video_scroll_up(lines_to_scroll);
                 escape_index = -1;
                 return;
