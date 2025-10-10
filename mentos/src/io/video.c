@@ -117,6 +117,18 @@ static inline void __draw_char(char c)
         video_scroll_up(scrolled_lines);
     }
 
+    // If there's space to insert, shift characters right
+    if (pointer + 2 <= ADDR + TOTAL_SIZE) {
+        size_t bytes_to_shift = (ADDR + TOTAL_SIZE) - pointer - 2;
+        if (bytes_to_shift > 0) {
+            memmove(pointer + 2, pointer, bytes_to_shift);
+        }
+    } else {
+        // No space, scroll up first
+        video_shift_one_line_up();
+        pointer = ADDR + TOTAL_SIZE - W2; // Reset to beginning of last line
+    }
+
     // Write the character and its attribute
     *pointer       = c;
     *(pointer + 1) = color;
