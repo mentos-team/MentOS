@@ -24,14 +24,15 @@
 #define STORED_PAGES 2                    ///< The number of stored pages for scrolling.
 
 /// @brief Stores the association between ANSI colors and pure VIDEO colors.
-struct ansi_color_map {
+typedef struct {
     /// The ANSI color number.
     uint8_t ansi_color;
     /// The VIDEO color number.
     uint8_t video_color;
-}
+} ansi_color_map_t;
+
 /// @brief The mapping.
-ansi_color_map[] = {
+ansi_color_map_t ansi_color_map[] = {
     {0, 7},
 
     {30, 0},
