@@ -72,6 +72,11 @@ ansi_color_map_t ansi_color_map[] = {
     {107, 15},
 };
 
+/// @brief Lookup table for foreground colors (ANSI codes 0-107).
+static uint8_t fg_color_map[108] = {0};
+/// @brief Lookup table for background colors (ANSI codes 0-107).
+static uint8_t bg_color_map[108] = {0};
+
 /// Pointer to a position of the screen writer.
 char *pointer       = ADDR;
 /// The current color.
@@ -163,15 +168,12 @@ static inline void __video_set_cursor_position(unsigned int x, unsigned int y)
 /// @param ansi_code The ansi code describing background and foreground color.
 static inline void __set_color(uint8_t ansi_code)
 {
-    for (size_t i = 0; i < count_of(ansi_color_map); ++i) {
-        if (ansi_code == ansi_color_map[i].ansi_color) {
-            if ((ansi_code == 0) || ((ansi_code >= 30) && (ansi_code <= 37)) ||
-                ((ansi_code >= 90) && (ansi_code <= 97))) {
-                color = (color & 0xF0U) | ansi_color_map[i].video_color;
-            } else {
-                color = (color & 0x0FU) | (ansi_color_map[i].video_color << 4U);
-            }
-            break;
+    if (ansi_code <= 107) {
+        if ((ansi_code == 0) || ((ansi_code >= 30) && (ansi_code <= 37)) ||
+            ((ansi_code >= 90) && (ansi_code <= 97))) {
+            color = (color & 0xF0U) | fg_color_map[ansi_code];
+        } else {
+            color = (color & 0x0FU) | (bg_color_map[ansi_code] << 4U);
         }
     }
 }
@@ -253,6 +255,18 @@ static inline void __parse_cursor_escape_code(int shape)
 
 void video_init(void)
 {
+    // Initialize color lookup tables
+    for (size_t i = 0; i < count_of(ansi_color_map); ++i) {
+        uint8_t code = ansi_color_map[i].ansi_color;
+        uint8_t vid  = ansi_color_map[i].video_color;
+        if (code <= 107) {
+            if ((code == 0) || ((code >= 30) && (code <= 37)) || ((code >= 90) && (code <= 97))) {
+                fg_color_map[code] = vid;
+            } else {
+                bg_color_map[code] = vid;
+            }
+        }
+    }
     video_clear();
     __parse_cursor_escape_code(0);
 }
