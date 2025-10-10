@@ -281,10 +281,6 @@ void video_init(void)
     __parse_cursor_escape_code(0);
 }
 
-void video_update(void)
-{
-}
-
 void video_putc(int c)
 {
     // ESCAPE SEQUENCES

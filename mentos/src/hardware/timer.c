@@ -99,8 +99,6 @@ void timer_handler(pt_regs_t *reg)
     run_timer_softirq();
     // Perform the schedule.
     scheduler_run(reg);
-    // Update graphics.
-    video_update();
     // Restore fpu state.
     unswitch_fpu();
     // The ack is sent to PIC only when all handlers terminated!
