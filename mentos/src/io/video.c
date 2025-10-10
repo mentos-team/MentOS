@@ -376,7 +376,6 @@ void video_putc(int c)
     // If the character is '\n' go the new line.
     if (c == '\n') {
         video_new_line();
-        //video_shift_one_line_down();
     } else if (c == '\b') {
         __move_cursor_backward(true, 1);
     } else if (c == '\r') {
