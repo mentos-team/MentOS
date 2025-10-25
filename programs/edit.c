@@ -572,7 +572,7 @@ static void editor_draw_screen(editor_state_t *editor)
                 printf("\033[36m%4d\033[0m ", (int)(file_row + 1));
             } else {
                 // Continuation: show spaces instead of line number
-                printf("      ");
+                printf("     ");
             }
             
             // Draw the segment of the line
