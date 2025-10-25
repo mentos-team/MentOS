@@ -91,7 +91,7 @@ static inline void print_ok(void)
     video_get_cursor_position(NULL, &y);
     video_get_screen_size(&width, NULL);
     video_move_cursor(width - 5, y);
-    video_puts("[OK]\n");
+    video_puts(FG_GREEN_BOLD "[OK]" FG_RESET "\n");
 }
 
 /// @brief Prints [FAIL] at the current row and column 60.
@@ -102,7 +102,7 @@ static inline void print_fail(void)
     video_get_cursor_position(NULL, &y);
     video_get_screen_size(&width, NULL);
     video_move_cursor(width - 7, y);
-    video_puts("[FAIL]\n");
+    video_puts(FG_RED_BOLD "[FAIL]" FG_RESET "\n");
 }
 
 /// @brief Entry point of the kernel.
