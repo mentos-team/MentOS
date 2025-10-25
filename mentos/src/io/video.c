@@ -117,16 +117,16 @@ static inline void __draw_char(char c)
         video_scroll_up(scrolled_lines);
     }
 
-    // If there's space to insert, shift characters right
-    if (pointer + 2 <= ADDR + TOTAL_SIZE) {
-        size_t bytes_to_shift = (ADDR + TOTAL_SIZE) - pointer - 2;
+    // Calculate the end of the current line
+    unsigned int current_row = (pointer - ADDR) / W2;
+    char *line_end           = ADDR + ((current_row + 1) * W2);
+
+    // Only shift characters within the current line (not the entire screen)
+    if (pointer < line_end - 2) {
+        size_t bytes_to_shift = (line_end - 2) - pointer;
         if (bytes_to_shift > 0) {
             memmove(pointer + 2, pointer, bytes_to_shift);
         }
-    } else {
-        // No space, scroll up first
-        video_shift_one_line_up();
-        pointer = ADDR + TOTAL_SIZE - W2; // Reset to beginning of last line
     }
 
     // Write the character and its attribute
@@ -136,10 +136,16 @@ static inline void __draw_char(char c)
     // Advance the pointer
     pointer += 2;
 
+    // If we've reached or passed the end of the line, wrap to next line
+    if (pointer >= line_end) {
+        // Move to the beginning of the next line
+        pointer = line_end;
+    }
+
     // If pointer goes past the end of the screen, scroll up and reset pointer
     if (pointer >= ADDR + TOTAL_SIZE) {
-        video_shift_one_line_up();        // This will handle moving content and clearing the last line
-        pointer = ADDR + TOTAL_SIZE - W2; // Move pointer to the beginning of the last line
+        video_shift_one_line_up();
+        pointer = ADDR + TOTAL_SIZE - W2;
     }
 }
 
@@ -207,7 +213,7 @@ static inline void __set_color(uint8_t ansi_code)
 }
 
 /// @brief Moves the cursor backward.
-/// @param erase  If 1 also erase the character.
+/// @param erase  If 1 also erase the character (backspace behavior).
 /// @param amount How many times we move backward.
 static inline void __move_cursor_backward(int erase, int amount)
 {
@@ -216,13 +222,18 @@ static inline void __move_cursor_backward(int erase, int amount)
             // Bring back the pointer.
             pointer -= 2;
             if (erase) {
-                size_t bytes_to_move = (ADDR + TOTAL_SIZE) - (pointer + 2);
+                // Calculate the end of the current line
+                unsigned int current_row = (pointer - ADDR) / W2;
+                char *line_end           = ADDR + ((current_row + 1) * W2);
+
+                // Shift characters left on the current line only
+                size_t bytes_to_move = line_end - (pointer + 2);
                 if (bytes_to_move > 0) {
                     memmove(pointer, pointer + 2, bytes_to_move);
                 }
-                // Clear the last two bytes.
-                *(ADDR + TOTAL_SIZE - 2) = 0;
-                *(ADDR + TOTAL_SIZE - 1) = 0;
+                // Clear the last two bytes of the line.
+                *(line_end - 2) = ' ';
+                *(line_end - 1) = color;
             }
         } else {
             break;
@@ -492,17 +503,15 @@ void video_cartridge_return(void)
 /// @param direction 1 to shift up, -1 to shift down.
 static inline void __shift_buffer(char *buffer, int lines, int direction)
 {
-    // Shift up: Move each line to the previous slot.
+    // Shift up: Move all lines in one operation.
     if (direction == 1) {
-        for (int row = 0; row < lines - 1; ++row) {
-            memcpy(buffer + (W2 * row), buffer + (W2 * (row + 1)), W2);
-        }
+        // Move (lines-1) lines from row 1 to row 0
+        memmove(buffer, buffer + W2, W2 * (lines - 1));
     }
-    // Shift down: Move each line to the next slot.
+    // Shift down: Move all lines in one operation.
     else if (direction == -1) {
-        for (int row = lines - 1; row > 0; --row) {
-            memcpy(buffer + (W2 * row), buffer + (W2 * (row - 1)), W2);
-        }
+        // Move (lines-1) lines from row 0 to row 1
+        memmove(buffer + W2, buffer, W2 * (lines - 1));
     }
 }
 
