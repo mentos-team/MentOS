@@ -387,10 +387,30 @@ void video_putc(int c)
 
     // Process escape sequence characters.
     if (escape_index >= 0) {
-        // Skip the '[' character after ESC.
-        if ((escape_index == 0) && (c == '[')) {
-            escape_index = 1;
-            return;
+        // Handle special single-character escape sequences (not CSI).
+        if (escape_index == 0) {
+            // ESC c - RIS (Reset to Initial State) - Full terminal reset.
+            if (c == 'c') {
+                // Clear the screen.
+                video_clear();
+                // Reset to default colors.
+                color = 0x07;
+                // Reset cursor shape.
+                __parse_cursor_escape_code(0);
+                // Reset scrollback buffer.
+                escape_index = -1;
+                return;
+            }
+            // ESC [ - Start CSI sequence.
+            else if (c == '[') {
+                escape_index = 1;
+                return;
+            }
+            // Unknown escape sequence, abort.
+            else {
+                escape_index = -1;
+                return;
+            }
         }
         // Check for buffer overflow.
         if (escape_index >= sizeof(escape_buffer) - 1) {
@@ -483,7 +503,7 @@ void video_putc(int c)
                 } else {
                     // Mode 2 or default: Clear entire screen (but preserve scrollback).
                     memset(ADDR, 0, TOTAL_SIZE);
-                    pointer = ADDR;
+                    pointer        = ADDR;
                     scrolled_lines = 0;
                     video_update_cursor_position();
                 }

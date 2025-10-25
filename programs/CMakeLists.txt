@@ -27,6 +27,7 @@ set(PROGRAM_LIST
     poweroff.c
     ps.c
     pwd.c
+    reset.c
     rm.c
     rmdir.c
     runtests.c
