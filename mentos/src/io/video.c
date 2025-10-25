@@ -723,8 +723,8 @@ void video_shift_one_line_up(void)
         // Adjust pointer to stay on the last line.
         pointer = ADDR + ((pointer - ADDR) / W2 - 1) * W2;
     }
-    // Handle case where we're viewing scrollback history.
-    else if (scrolled_lines) {
+    // Handle case where we're viewing scrollback history and want to scroll to newer content.
+    else if (scrolled_lines > 0) {
         // Shift screen up, moving top line into scrollback.
         __shift_screen_up();
         // Restore the bottom line from the original (unscrolled) screen content.
@@ -732,11 +732,8 @@ void video_shift_one_line_up(void)
         // We're now one line less scrolled back.
         --scrolled_lines;
     }
-    // Handle normal scrolling case (not scrolled, pointer within bounds).
-    else {
-        // Normal scroll up: save top line to scrollback and shift screen.
-        __shift_screen_up();
-    }
+    // When scrolled_lines == 0, we're at the live view. Don't scroll further forward.
+    // This prevents scrolling past the bottom of actual content.
 }
 
 void video_shift_one_line_down(void)
