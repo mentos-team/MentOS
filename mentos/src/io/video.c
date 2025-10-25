@@ -1,5 +1,5 @@
 /// @file video.c
-/// @brief Video functions and costants.
+/// @brief Video functions and constants.
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
@@ -21,7 +21,7 @@
 #define W2                       (WIDTH * 2)          ///< The width of the screen in bytes.
 #define TOTAL_SIZE               (HEIGHT * WIDTH * 2) ///< The total size of the screen in bytes.
 #define ADDR                     (char *)0xB8000U     ///< The address of the video memory.
-#define STORED_PAGES             2                    ///< The number of stored pages for scrolling.
+#define STORED_PAGES             10                   ///< The number of stored pages for scrolling.
 #define VGA_CRTC_INDEX           0x3D4                ///< VGA CRTC index register port.
 #define VGA_CRTC_DATA            0x3D5                ///< VGA CRTC data register port.
 #define VGA_CURSOR_START         0x0A                 ///< VGA cursor start register index.
@@ -115,6 +115,10 @@ static char *saved_pointer = ADDR;
 /// @return The column number.
 static inline unsigned __get_x(void)
 {
+    // Validate pointer is within screen bounds.
+    if (pointer < ADDR || pointer >= ADDR + TOTAL_SIZE) {
+        return 0;
+    }
     return ((pointer - ADDR) % (WIDTH * 2)) / 2;
 }
 
@@ -122,6 +126,10 @@ static inline unsigned __get_x(void)
 /// @return The row number.
 static inline unsigned __get_y(void)
 {
+    // Validate pointer is within screen bounds.
+    if (pointer < ADDR || pointer >= ADDR + TOTAL_SIZE) {
+        return 0;
+    }
     return (pointer - ADDR) / (WIDTH * 2);
 }
 
@@ -230,9 +238,19 @@ static inline void __set_color(uint8_t ansi_code)
     } else if (ansi_code == 1) {
         // Bold/bright - make foreground color bright by setting intensity bit.
         color = color | 0x08;
+    } else if (ansi_code == 7) {
+        // Reverse video - swap foreground and background.
+        uint8_t fg = color & 0x0F;
+        uint8_t bg = (color & 0xF0) >> 4;
+        color      = (fg << 4) | bg;
     } else if (ansi_code == 22) {
         // Normal intensity - remove bright bit from foreground.
         color = color & ~0x08;
+    } else if (ansi_code == 27) {
+        // Reverse video off - swap back (same as reverse).
+        uint8_t fg = color & 0x0F;
+        uint8_t bg = (color & 0xF0) >> 4;
+        color      = (fg << 4) | bg;
     } else if (ansi_code == 39) {
         // Default foreground color (white).
         color = (color & 0xF0U) | 0x07;
@@ -292,7 +310,7 @@ static inline void __move_cursor_backward(int erase, int amount)
 static inline void __move_cursor_forward(int erase, int amount)
 {
     for (int i = 0; i < amount; ++i) {
-        if (pointer + 2 < ADDR + TOTAL_SIZE) {
+        if (pointer + 2 <= ADDR + TOTAL_SIZE) {
             if (erase) {
                 // Overwrite with space without shifting other characters.
                 *pointer       = ' ';
@@ -452,7 +470,17 @@ void video_putc(int c)
             }
             // ESC [ <n> J - Clear screen.
             else if (c == 'J') {
-                video_clear();
+                int mode = atoi(&escape_buffer[1]);
+                if (mode == 0) {
+                    // Clear from cursor to end of screen.
+                    memset(pointer, 0, (ADDR + TOTAL_SIZE) - pointer);
+                } else if (mode == 1) {
+                    // Clear from start of screen to cursor (inclusive).
+                    memset(ADDR, 0, pointer - ADDR + 2);
+                } else {
+                    // Mode 2 or default: Clear entire screen.
+                    video_clear();
+                }
             }
             // ESC [ <row>;<col> H or f - Set cursor position.
             else if ((c == 'H') || (c == 'f')) {
@@ -548,7 +576,7 @@ void video_putc(int c)
         // Clear the last character position of the line.
         *(line_end - 2) = ' ';
         *(line_end - 1) = color;
-        
+
         // Update cursor position to reflect the deletion.
         if (!batch_cursor_updates) {
             video_update_cursor_position();
@@ -570,6 +598,10 @@ void video_putc(int c)
 
 void video_puts(const char *str)
 {
+    // Validate input string.
+    if (!str) {
+        return;
+    }
     // Batch cursor updates for efficiency.
     batch_cursor_updates = 1;
     // Output each character in the string.
@@ -631,7 +663,7 @@ void video_clear(void)
     // Clear the visible screen.
     memset(ADDR, 0, TOTAL_SIZE);
     // Reset cursor to top-left corner.
-    pointer = ADDR;
+    pointer        = ADDR;
     // Reset scrolling state.
     scrolled_lines = 0;
     video_update_cursor_position();
@@ -643,7 +675,7 @@ void video_new_line(void)
     if (scrolled_lines) {
         video_scroll_up(scrolled_lines);
     }
-    
+
     // Move pointer to the start of the next line.
     pointer = ADDR + ((pointer - ADDR) / W2 + 1) * W2;
     // Check if we've gone past the bottom of the screen.
@@ -662,7 +694,7 @@ void video_cartridge_return(void)
     if (scrolled_lines) {
         video_scroll_up(scrolled_lines);
     }
-    
+
     // Calculate which row we're on.
     unsigned int current_row = (pointer - ADDR) / W2;
     // Move pointer to the beginning of the current line.
@@ -771,6 +803,13 @@ void video_shift_one_page_down(void)
 
 void video_scroll_up(int lines)
 {
+    // Validate input: clamp to reasonable bounds.
+    if (lines < 0) {
+        lines = 0;
+    }
+    if (lines > scrolled_lines) {
+        lines = scrolled_lines;
+    }
     // Scroll up by the specified number of lines.
     for (int i = 0; i < lines; ++i) {
         video_shift_one_line_up();
@@ -779,6 +818,13 @@ void video_scroll_up(int lines)
 
 void video_scroll_down(int lines)
 {
+    // Validate input: clamp to reasonable bounds.
+    if (lines < 0) {
+        lines = 0;
+    }
+    if (lines > STORED_PAGES * HEIGHT) {
+        lines = STORED_PAGES * HEIGHT;
+    }
     // Scroll down by the specified number of lines.
     for (int i = 0; i < lines; ++i) {
         video_shift_one_line_down();
