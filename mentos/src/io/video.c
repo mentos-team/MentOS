@@ -499,7 +499,10 @@ void video_putc(int c)
             }
             // ESC [ u - Restore cursor position.
             else if (c == 'u') {
-                pointer = saved_pointer;
+                // Validate saved pointer is within screen bounds.
+                if (saved_pointer >= ADDR && saved_pointer < ADDR + TOTAL_SIZE) {
+                    pointer = saved_pointer;
+                }
                 video_update_cursor_position();
             }
             // ESC [ <n> S - Custom: scroll down (show older lines).
@@ -545,6 +548,12 @@ void video_putc(int c)
         // Clear the last character position of the line.
         *(line_end - 2) = ' ';
         *(line_end - 1) = color;
+        
+        // Update cursor position to reflect the deletion.
+        if (!batch_cursor_updates) {
+            video_update_cursor_position();
+        }
+        return;
     } else if ((c >= 0x20) && (c <= 0x7E)) {
         // Printable ASCII character.
         __draw_char(c);
@@ -623,11 +632,18 @@ void video_clear(void)
     memset(ADDR, 0, TOTAL_SIZE);
     // Reset cursor to top-left corner.
     pointer = ADDR;
+    // Reset scrolling state.
+    scrolled_lines = 0;
     video_update_cursor_position();
 }
 
 void video_new_line(void)
 {
+    // If we're viewing scrollback, unscroll first to show current content.
+    if (scrolled_lines) {
+        video_scroll_up(scrolled_lines);
+    }
+    
     // Move pointer to the start of the next line.
     pointer = ADDR + ((pointer - ADDR) / W2 + 1) * W2;
     // Check if we've gone past the bottom of the screen.
@@ -642,6 +658,11 @@ void video_new_line(void)
 
 void video_cartridge_return(void)
 {
+    // If we're viewing scrollback, unscroll first to show current content.
+    if (scrolled_lines) {
+        video_scroll_up(scrolled_lines);
+    }
+    
     // Calculate which row we're on.
     unsigned int current_row = (pointer - ADDR) / W2;
     // Move pointer to the beginning of the current line.
@@ -710,6 +731,11 @@ void video_shift_one_line_up(void)
         memcpy(ADDR + (W2 * (HEIGHT - 1)), original_page + (W2 * (TOTAL_SIZE / W2 - scrolled_lines)), W2);
         // We're now one line less scrolled back.
         --scrolled_lines;
+    }
+    // Handle normal scrolling case (not scrolled, pointer within bounds).
+    else {
+        // Normal scroll up: save top line to scrollback and shift screen.
+        __shift_screen_up();
     }
 }
 
