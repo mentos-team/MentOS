@@ -182,13 +182,15 @@ void __video_hide_cursor(void)
     outportb(VGA_CRTC_DATA, cursor_start | 0x20);
 }
 
-/// @brief Shows the VGA cursor.
+/// @brief Shows the VGA cursor by clearing the disable bit.
 void __video_show_cursor(void)
 {
+    // Read current cursor start register
     outportb(VGA_CRTC_INDEX, VGA_CURSOR_START);
     unsigned char cursor_start = inportb(VGA_CRTC_DATA);
-    // Clear the most significant bit to enable the cursor.
-    outportb(VGA_CRTC_DATA, cursor_start & 0xDF);
+    // Clear bit 5 to enable cursor, keep other bits
+    outportb(VGA_CRTC_INDEX, VGA_CURSOR_START);
+    outportb(VGA_CRTC_DATA, cursor_start & ~0x20);
 }
 
 /// @brief Sets the VGA cursor shape by specifying the start and end scan lines.
@@ -196,13 +198,22 @@ void __video_show_cursor(void)
 /// @param end The ending scan line of the cursor (0-15).
 void __video_set_cursor_shape(unsigned char start, unsigned char end)
 {
-    // Set the cursor's start scan line.
-    outportb(VGA_CRTC_INDEX, VGA_CURSOR_START);
-    outportb(VGA_CRTC_DATA, start);
+    // Ensure start is less than or equal to end for visible cursor
+    if (start > end) {
+        start = 0;
+        end   = 15;
+    }
 
-    // Set the cursor's end scan line.
+    // Set the cursor's start scan line with cursor enabled (bit 5 = 0)
+    outportb(VGA_CRTC_INDEX, VGA_CURSOR_START);
+    outportb(VGA_CRTC_DATA, start & 0x1F);
+
+    // Set the cursor's end scan line
     outportb(VGA_CRTC_INDEX, VGA_CURSOR_END);
-    outportb(VGA_CRTC_DATA, end);
+    outportb(VGA_CRTC_DATA, end & 0x1F);
+
+    // Explicitly ensure cursor is visible
+    __video_show_cursor();
 }
 
 /// @brief Issues a command to move the cursor to the given position.
@@ -373,7 +384,17 @@ void video_init(void)
     }
     // Clear the screen and set default cursor shape.
     video_clear();
-    __parse_cursor_escape_code(0);
+
+    // Set up cursor with known good values
+    // Use default blinking block cursor (scan lines 0-15)
+    outportb(VGA_CRTC_INDEX, VGA_CURSOR_START);
+    outportb(VGA_CRTC_DATA, 0x00); // Start at line 0, bit 5 clear (enabled)
+
+    outportb(VGA_CRTC_INDEX, VGA_CURSOR_END);
+    outportb(VGA_CRTC_DATA, 0x0F); // End at line 15
+
+    // Explicitly show cursor
+    __video_show_cursor();
 }
 
 void video_putc(int c)
@@ -641,6 +662,12 @@ void video_puts(const char *str)
 
 void video_update_cursor_position(void)
 {
+    // Ensure there's a character at the cursor position for VGA hardware cursor visibility.
+    // VGA cursor needs a non-null character cell to display over.
+    if (pointer[0] == 0) {
+        pointer[0] = ' ';   // Character
+        pointer[1] = color; // Attribute
+    }
     // Convert byte pointer to character coordinates (divide by 2 since each char uses 2 bytes).
     __video_set_cursor_position(((pointer - ADDR) / 2U) % WIDTH, ((pointer - ADDR) / 2U) / WIDTH);
 }
