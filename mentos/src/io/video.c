@@ -477,9 +477,15 @@ void video_putc(int c)
                 } else if (mode == 1) {
                     // Clear from start of screen to cursor (inclusive).
                     memset(ADDR, 0, pointer - ADDR + 2);
-                } else {
-                    // Mode 2 or default: Clear entire screen.
+                } else if (mode == 3) {
+                    // Clear entire screen AND scrollback buffer.
                     video_clear();
+                } else {
+                    // Mode 2 or default: Clear entire screen (but preserve scrollback).
+                    memset(ADDR, 0, TOTAL_SIZE);
+                    pointer = ADDR;
+                    scrolled_lines = 0;
+                    video_update_cursor_position();
                 }
             }
             // ESC [ <row>;<col> H or f - Set cursor position.
