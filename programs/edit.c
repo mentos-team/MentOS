@@ -37,6 +37,7 @@ typedef struct {
     size_t row_offset;    ///< Vertical scroll offset.
     int insert_mode;      ///< Insert mode (1) vs overwrite mode (0).
     int modified;         ///< Has the file been modified?
+    int needs_redraw;     ///< Flag to indicate full screen redraw needed.
     char *filename;       ///< Name of the file being edited.
     char status_msg[256]; ///< Status message to display.
 } editor_state_t;
@@ -192,6 +193,7 @@ static void editor_init(editor_state_t *editor, const char *filename)
     editor->row_offset    = 0;
     editor->insert_mode   = 1;
     editor->modified      = 0;
+    editor->needs_redraw  = 1;
     editor->filename      = strdup(filename);
     editor->status_msg[0] = '\0';
 
@@ -371,7 +373,8 @@ static void editor_insert_char(editor_state_t *editor, char c)
     }
 
     editor->cursor_x++;
-    editor->modified = 1;
+    editor->modified     = 1;
+    editor->needs_redraw = 1;
 }
 
 /// @brief Inserts a newline at the current cursor position.
@@ -400,8 +403,9 @@ static void editor_insert_newline(editor_state_t *editor)
     }
 
     editor->cursor_y++;
-    editor->cursor_x = 0;
-    editor->modified = 1;
+    editor->cursor_x     = 0;
+    editor->modified     = 1;
+    editor->needs_redraw = 1;
 }
 
 /// @brief Deletes the character before the cursor (backspace).
@@ -428,6 +432,7 @@ static void editor_delete_char(editor_state_t *editor)
         editor->cursor_x--;
         editor->modified = 1;
     }
+    editor->needs_redraw = 1;
 }
 
 /// @brief Deletes the character at the cursor (delete key).
@@ -452,6 +457,7 @@ static void editor_delete_char_forward(editor_state_t *editor)
         line_delete_char(line, editor->cursor_x);
         editor->modified = 1;
     }
+    editor->needs_redraw = 1;
 }
 
 /// @brief Moves the cursor up one line.
@@ -511,36 +517,45 @@ static void editor_move_cursor_right(editor_state_t *editor)
 /// @param editor Pointer to the editor state.
 static void editor_scroll(editor_state_t *editor)
 {
+    size_t old_row_offset = editor->row_offset;
+
     // Calculate how many screen rows are needed from row_offset to cursor_y
     size_t screen_rows_used = 0;
-    
+
     // Count screen rows for lines before cursor
     for (size_t i = editor->row_offset; i < editor->cursor_y && i < editor->line_count; i++) {
-        line_t *line = &editor->lines[i];
+        line_t *line     = &editor->lines[i];
         size_t line_rows = (line->length == 0) ? 1 : ((line->length + DISPLAY_WIDTH - 1) / DISPLAY_WIDTH);
-        if (line_rows == 0) line_rows = 1;
+        if (line_rows == 0)
+            line_rows = 1;
         screen_rows_used += line_rows;
     }
-    
+
     // Add screen rows for current line up to cursor
     if (editor->cursor_y < editor->line_count) {
         size_t cursor_row_within_line = editor->cursor_x / DISPLAY_WIDTH;
         screen_rows_used += cursor_row_within_line + 1;
     }
-    
+
     // Scroll up if cursor is above visible area
     while (editor->cursor_y < editor->row_offset && editor->row_offset > 0) {
         editor->row_offset--;
     }
-    
+
     // Scroll down if cursor is below visible area
     while (screen_rows_used > SCREEN_HEIGHT && editor->row_offset < editor->line_count) {
         // Remove the first line from the display
-        line_t *first_line = &editor->lines[editor->row_offset];
+        line_t *first_line     = &editor->lines[editor->row_offset];
         size_t first_line_rows = (first_line->length == 0) ? 1 : ((first_line->length + DISPLAY_WIDTH - 1) / DISPLAY_WIDTH);
-        if (first_line_rows == 0) first_line_rows = 1;
+        if (first_line_rows == 0)
+            first_line_rows = 1;
         screen_rows_used -= first_line_rows;
         editor->row_offset++;
+    }
+
+    // If viewport changed, need to redraw
+    if (editor->row_offset != old_row_offset) {
+        editor->needs_redraw = 1;
     }
 }
 
@@ -548,23 +563,28 @@ static void editor_scroll(editor_state_t *editor)
 // Display Functions
 // ============================================================================
 
+// Forward declaration
+static void editor_update_status_bar(editor_state_t *editor);
+
 /// @brief Draws the editor screen.
 /// @param editor Pointer to the editor state.
 static void editor_draw_screen(editor_state_t *editor)
 {
-    puts("\033[H\033[J"); // Clear screen and move cursor to home
+    // Clear screen and move cursor to home
+    puts("\033[H\033[J");
 
     // Draw lines with wrapping support
     size_t screen_row = 0;
-    size_t file_row = editor->row_offset;
-    
+    size_t file_row   = editor->row_offset;
+
     while (screen_row < SCREEN_HEIGHT && file_row < editor->line_count) {
         line_t *line = &editor->lines[file_row];
-        
+
         // Calculate how many screen rows this line needs
         size_t line_rows = (line->length == 0) ? 1 : ((line->length + DISPLAY_WIDTH - 1) / DISPLAY_WIDTH);
-        if (line_rows == 0) line_rows = 1;
-        
+        if (line_rows == 0)
+            line_rows = 1;
+
         // Draw each wrapped segment of the line
         for (size_t segment = 0; segment < line_rows && screen_row < SCREEN_HEIGHT; segment++) {
             if (segment == 0) {
@@ -574,66 +594,107 @@ static void editor_draw_screen(editor_state_t *editor)
                 // Continuation: show spaces instead of line number
                 printf("     ");
             }
-            
+
             // Draw the segment of the line
             size_t start = segment * DISPLAY_WIDTH;
-            size_t end = start + DISPLAY_WIDTH;
-            if (end > line->length) end = line->length;
-            
+            size_t end   = start + DISPLAY_WIDTH;
+            if (end > line->length)
+                end = line->length;
+
             for (size_t j = start; j < end; j++) {
                 putchar(line->data[j]);
             }
-            
+
             putchar('\n');
             screen_row++;
         }
-        
+
         file_row++;
     }
-    
+
     // Fill remaining screen with tildes
     while (screen_row < SCREEN_HEIGHT) {
         puts("\033[36m~\033[0m");
         screen_row++;
     }
 
+    // Draw status bar using shared function
+    editor_update_status_bar(editor);
+    // Move to next line for help bar
+    putchar('\n');
+
+    // Draw message/help bar
+    if (editor->status_msg[0]) {
+        puts(editor->status_msg);
+        // Clear message after displaying
+        editor->status_msg[0] = '\0';
+    } else {
+        printf("\033[1m^S\033[0m Save  \033[1m^Q\033[0m Quit  \033[1mINS\033[0m Toggle Mode");
+    }
+    // Clear to end of line
+    puts("\033[K");
+
+    // Calculate cursor position accounting for wrapping
+    screen_row = 0;
+    for (size_t i = editor->row_offset; i < editor->cursor_y && i < editor->line_count; i++) {
+        line_t *line     = &editor->lines[i];
+        size_t line_rows = (line->length == 0) ? 1 : ((line->length + DISPLAY_WIDTH - 1) / DISPLAY_WIDTH);
+        if (line_rows == 0)
+            line_rows = 1;
+        screen_row += line_rows;
+    }
+
+    // Add rows for current line up to cursor position
+    size_t cursor_row_within_line = editor->cursor_x / DISPLAY_WIDTH;
+    size_t cursor_col_within_row  = editor->cursor_x % DISPLAY_WIDTH;
+    screen_row += cursor_row_within_line;
+
+    printf("\033[%d;%dH", (int)(screen_row + 1), (int)(cursor_col_within_row + LINE_NUM_WIDTH));
+}
+
+/// @brief Updates only the status bar (position info and mode).
+/// @param editor Pointer to the editor state.
+static void editor_update_status_bar(editor_state_t *editor)
+{
+    // Move to status bar line (SCREEN_HEIGHT + 1)
+    printf("\033[%d;1H", SCREEN_HEIGHT + 1);
+
     // Draw status bar (file info and cursor position)
-    printf("\033[7m"); // Reverse video
+    // Reverse video
+    printf("\033[7m");
     printf(" %s", editor->filename);
-    printf("\033[0m"); // Reset before modified indicator
+    // Reset before modified indicator
+    printf("\033[0m");
     if (editor->modified) {
         printf("\033[7m [+]\033[0m");
     } else {
         printf("\033[7m    \033[0m");
     }
-    printf("\033[7m | Line %d/%d | Col %d | %s\033[K\033[0m\n",
-           (int)(editor->cursor_y + 1), (int)editor->line_count,
-           (int)(editor->cursor_x + 1),
-           editor->insert_mode ? "INS" : "OVR");
+    printf("\033[7m | Line %d/%d | Col %d | %s\033[K\033[0m", (int)(editor->cursor_y + 1), (int)editor->line_count, (int)(editor->cursor_x + 1), editor->insert_mode ? "INS" : "OVR");
+}
 
-    // Draw message/help bar
-    if (editor->status_msg[0]) {
-        puts(editor->status_msg);
-        editor->status_msg[0] = '\0'; // Clear message after displaying
-    } else {
-        printf("\033[1m^S\033[0m Save  \033[1m^Q\033[0m Quit  \033[1mINS\033[0m Toggle Mode");
-    }
-    puts("\033[K"); // Clear to end of line
+/// @brief Updates only the cursor position without redrawing the screen.
+/// @param editor Pointer to the editor state.
+static void editor_update_cursor_only(editor_state_t *editor)
+{
+    // Update status bar with new cursor position
+    editor_update_status_bar(editor);
 
     // Calculate cursor position accounting for wrapping
-    screen_row = 0;
+    size_t screen_row = 0;
     for (size_t i = editor->row_offset; i < editor->cursor_y && i < editor->line_count; i++) {
-        line_t *line = &editor->lines[i];
+        line_t *line     = &editor->lines[i];
         size_t line_rows = (line->length == 0) ? 1 : ((line->length + DISPLAY_WIDTH - 1) / DISPLAY_WIDTH);
-        if (line_rows == 0) line_rows = 1;
+        if (line_rows == 0)
+            line_rows = 1;
         screen_row += line_rows;
     }
-    
+
     // Add rows for current line up to cursor position
     size_t cursor_row_within_line = editor->cursor_x / DISPLAY_WIDTH;
-    size_t cursor_col_within_row = editor->cursor_x % DISPLAY_WIDTH;
+    size_t cursor_col_within_row  = editor->cursor_x % DISPLAY_WIDTH;
     screen_row += cursor_row_within_line;
-    
+
     printf("\033[%d;%dH", (int)(screen_row + 1), (int)(cursor_col_within_row + LINE_NUM_WIDTH));
 }
 
@@ -676,7 +737,9 @@ static int editor_process_keypress(editor_state_t *editor)
                 break;
             case '2': // Insert key
                 if (getchar() == '~') {
-                    editor->insert_mode = !editor->insert_mode;
+                    editor->insert_mode  = !editor->insert_mode;
+                    // Status bar needs update
+                    editor->needs_redraw = 1;
                 }
                 break;
             case '3': // Delete key
@@ -703,15 +766,23 @@ static int editor_process_keypress(editor_state_t *editor)
         return 1;
     }
 
-    // Handle control characters
-    if (c == 0x13) { // Ctrl+S (Save)
+    // Handle control characters.
+
+    // Ctrl+S (Save)
+    if (c == 0x13) {
         editor_save_file(editor);
+        // Status message changed
+        editor->needs_redraw = 1;
         return 1;
     }
-    if (c == 0x11) { // Ctrl+Q (Quit)
+    // Ctrl+Q (Quit)
+    if (c == 0x11) {
         if (editor->modified) {
             snprintf(editor->status_msg, sizeof(editor->status_msg), "Warning: Unsaved changes! Press Ctrl+Q again to quit.");
-            editor->modified = 0; // Next Ctrl+Q will quit
+            // Next Ctrl+Q will quit
+            editor->modified     = 0;
+            // Status message changed
+            editor->needs_redraw = 1;
             return 1;
         }
         return 0;
@@ -722,7 +793,8 @@ static int editor_process_keypress(editor_state_t *editor)
         editor_insert_newline(editor);
         return 1;
     }
-    if (c == '\b' || c == 127) { // Backspace or DEL
+    // Backspace or DEL.
+    if (c == '\b' || c == 127) {
         editor_delete_char(editor);
         return 1;
     }
@@ -772,7 +844,15 @@ int main(int argc, char *argv[])
     int running = 1;
     while (running) {
         editor_scroll(&editor);
-        editor_draw_screen(&editor);
+
+        if (editor.needs_redraw) {
+            editor_draw_screen(&editor);
+            editor.needs_redraw = 0;
+        } else {
+            // Just update cursor position for navigation
+            editor_update_cursor_only(&editor);
+        }
+
         running = editor_process_keypress(&editor);
     }
 
