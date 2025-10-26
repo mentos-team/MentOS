@@ -14,8 +14,7 @@
 #include "string.h"
 
 /// @brief The kernel TSS.
-/// @note Made non-static for testing purposes.
-tss_entry_t kernel_tss;
+static tss_entry_t kernel_tss;
 
 void tss_init(uint8_t idx, uint32_t ss0)
 {

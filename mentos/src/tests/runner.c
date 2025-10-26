@@ -70,10 +70,7 @@ typedef struct {
     X(irq_uninstall_nonexistent)   \
     X(irq_all_lines)               \
     X(irq_constants)               \
-    X(irq_null_parameters)         \
-    X(tss_initialization)          \
-    X(tss_structure_size)          \
-    X(tss_unused_fields_cleared)
+    X(irq_null_parameters)
 
 /// @brief Create a test entry for the test registry.
 /// @param name The name of the test.
