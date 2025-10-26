@@ -117,7 +117,7 @@ extern void IRQ_15(pt_regs_t *);
 extern void idt_flush(uint32_t idt_pointer);
 
 /// The IDT itself.
-static idt_descriptor_t idt_table[IDT_SIZE];
+idt_descriptor_t idt_table[IDT_SIZE];
 
 /// Pointer structure to give to the CPU.
 idt_pointer_t idt_pointer;

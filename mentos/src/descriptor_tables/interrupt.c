@@ -91,9 +91,9 @@ int irq_uninstall_handler(unsigned i, interrupt_handler_t handler)
         pr_err("There are no handler for IRQ `%d`\n", i);
         return -1;
     }
+    // No handlers installed, nothing to uninstall - this is success
     if (list_head_empty(&shared_interrupt_handlers[i])) {
-        pr_err("There are no handler for IRQ `%d`\n", i);
-        return -1;
+        return 0;
     }
     list_for_each_safe_decl(it, next_it, &shared_interrupt_handlers[i])
     {

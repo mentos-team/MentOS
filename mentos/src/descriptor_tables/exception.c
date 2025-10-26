@@ -16,7 +16,7 @@
 #include "system/panic.h"
 
 /// @brief Default error messages for exceptions.
-static const char *exception_messages[32] = {
+const char *exception_messages[32] = {
     "Division by zero",
     "Debug",
     "Non-maskable interrupt",
@@ -51,9 +51,9 @@ static const char *exception_messages[32] = {
     "Triple fault"};
 
 /// @brief Array of interrupt service routines for execptions and interrupts.
-static interrupt_handler_t isr_routines[IDT_SIZE];
+interrupt_handler_t isr_routines[IDT_SIZE];
 /// @brief Descriptions of routines.
-static char *isr_routines_description[IDT_SIZE];
+char *isr_routines_description[IDT_SIZE];
 
 /// @brief Default handler for exceptions.
 /// @param f CPU registers when calling this function.
