@@ -71,19 +71,76 @@ int execvp(const char *file, char *const argv[]) { return execvpe(file, argv, en
 
 int execvpe(const char *file, char *const argv[], char *const envp[])
 {
-    if (!file || !argv || !envp) {
+    if (!file || !argv) {
         errno = ENOENT;
         return -1;
     }
+
+    // Default environment if envp/environ are NULL
+    static char *default_env[] = {
+        "PATH=/bin:/usr/bin",
+        "HOME=/",
+        NULL
+    };
+
+    // Pointer to the actual environment we will be using
+    char *const *use_envp = envp ? envp : (environ ? environ : default_env);
+
+    // If the name already contains '/', we don't use PATH: we call execve directly
     if (strchr(file, '/')) {
-        return execve(file, argv, envp);
+        return execve(file, argv, (char *const *)use_envp);
     }
-    // Prepare a buffer for the absolute path.
+
+    // Look for PATH=... inside use_envp
+    const char *path = NULL;
+    for (char *const *e = use_envp; e && *e; ++e) {
+        if (strncmp(*e, "PATH=", 5) == 0) {
+            path = *e + 5;  // Skips "PATH="
+            break;
+        }
+    }
+
+    // If PATH is not present in the environment, it uses a sensible default value
+    if (path == NULL || path[0] == '\0') {
+        path = "/bin:/usr/bin";
+    }
+
     char absolute_path[PATH_MAX];
-    // Find the file inside the entries of the PATH variable.
-    if (__find_in_path(file, absolute_path, PATH_MAX) == 0) {
-        return execve(absolute_path, argv, envp);
+
+    // Iterates on the elements of PATH with the ':' separator
+    const char *p = path;
+    while (*p != '\0') {
+        // Start of the segment
+        const char *start = p;
+
+        // Finds the end of the segment or the end of the string
+        while (*p != '\0' && *p != ':') {
+            p++;
+        }
+        size_t len = (size_t)(p - start);
+
+        if (len > 0) {
+            // Constructs "segment/file" in absolute_path
+            if (len + 1 + strlen(file) + 1 < sizeof(absolute_path)) {
+                memcpy(absolute_path, start, len);
+                absolute_path[len] = '/';
+                strcpy(absolute_path + len + 1, file);
+
+                execve(absolute_path, argv, (char *const *)use_envp);
+
+                // If execve returns, it failed: if not ENOENT, we stop with error
+                if (errno != ENOENT) {
+                    return -1;
+                }
+            }
+        }
+
+        // If we are at ':', we skip to the next segment
+        if (*p == ':') {
+            p++;
+        }
     }
+
     errno = ENOENT;
     return -1;
 }
