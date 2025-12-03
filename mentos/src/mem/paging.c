@@ -236,6 +236,13 @@ static page_table_t *__mem_pg_entry_alloc(page_dir_entry_t *entry, uint32_t flag
 
     // If the page table is not present, allocate a new one.
     if (!entry->present) {
+        // Allocate the page table using a memory cache.
+        page_table_t *new_table = kmem_cache_alloc(pgtbl_cache, GFP_KERNEL);
+        if (!new_table) {
+            pr_crit("Failed to allocate memory for page table.\n");
+            return NULL;
+        }
+
         // Mark the page table as present and set read/write and global/user flags.
         entry->present   = 1;                        // Indicate that the page table has been allocated.
         entry->rw        = 1;                        // Allow read/write access by default.
@@ -243,13 +250,6 @@ static page_table_t *__mem_pg_entry_alloc(page_dir_entry_t *entry, uint32_t flag
         entry->user      = (flags & MM_USER) != 0;   // Set user-mode flag if specified.
         entry->accessed  = 0;                        // Mark as not accessed.
         entry->available = 1;                        // Available for kernel use.
-
-        // Allocate the page table using a memory cache.
-        page_table_t *new_table = kmem_cache_alloc(pgtbl_cache, GFP_KERNEL);
-        if (!new_table) {
-            pr_crit("Failed to allocate memory for page table.\n");
-            return NULL;
-        }
 
         // Return the newly allocated page table.
         return new_table;
