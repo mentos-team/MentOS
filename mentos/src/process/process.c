@@ -572,8 +572,14 @@ int sys_execve(pt_regs_t *f)
         return -1;
     }
     if (origin_envp == NULL) {
-        pr_err("sys_execve failed: must provide the environment.\n");
-        return -1;
+        // We allow a NULL environment, using a default, for macOS compatibility
+        pr_debug("sys_execve: NULL envp, using default environment.\n");
+        static char *default_env[] = {
+            "PATH=/bin:/usr/bin",
+            "HOME=/",
+            NULL
+        };
+        origin_envp = default_env;
     }
 
     // Save the name of the process.
