@@ -1,5 +1,5 @@
 /// @file tss.c
-/// @brief
+/// @brief Functions for managing the Task State Segment (TSS).
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
@@ -13,8 +13,7 @@
 #include "descriptor_tables/tss.h"
 #include "string.h"
 
-/// @brief The kernel
-///
+/// @brief The kernel TSS.
 static tss_entry_t kernel_tss;
 
 void tss_init(uint8_t idx, uint32_t ss0)

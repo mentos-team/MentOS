@@ -11,9 +11,6 @@
 /// @brief Initialize the video.
 void video_init(void);
 
-/// @brief Updates the video.
-void video_update(void);
-
 /// @brief Print the given character on the screen.
 /// @param c The character to print.
 void video_putc(int c);

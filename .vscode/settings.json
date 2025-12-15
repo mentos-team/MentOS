@@ -2,6 +2,7 @@
     "files.associations": {
         "*.c": "c",
         "*.h": "c",
-        "*.tcc": "c"
+        "*.tcc": "c",
+        "functional": "c"
     }
 }

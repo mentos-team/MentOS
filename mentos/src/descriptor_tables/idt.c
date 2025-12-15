@@ -117,7 +117,7 @@ extern void IRQ_15(pt_regs_t *);
 extern void idt_flush(uint32_t idt_pointer);
 
 /// The IDT itself.
-static idt_descriptor_t idt_table[IDT_SIZE];
+idt_descriptor_t idt_table[IDT_SIZE];
 
 /// Pointer structure to give to the CPU.
 idt_pointer_t idt_pointer;
@@ -127,8 +127,13 @@ idt_pointer_t idt_pointer;
 /// @param handler  Pointer to the entry handler.
 /// @param options  Descriptors options (PRESENT, NOTPRESENT, KERNEL, USER).
 /// @param seg_sel  GDT segment selector.
-static inline void __idt_set_gate(uint8_t index, interrupt_handler_t handler, uint16_t options, uint8_t seg_sel)
+static inline void __idt_set_gate(unsigned index, interrupt_handler_t handler, uint16_t options, uint8_t seg_sel)
 {
+    if (index >= IDT_SIZE) {
+        pr_err("Invalid IDT index %d\n", index);
+        return;
+    }
+
     uintptr_t base_prt            = (uintptr_t)handler;
     // Assign the base values.
     idt_table[index].offset_low   = (base_prt & 0xFFFFU);

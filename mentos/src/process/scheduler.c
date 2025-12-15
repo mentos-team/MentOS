@@ -351,10 +351,10 @@ int sys_setpgid(pid_t pid, pid_t pgid)
 }
 
 /// Returns the attributes of the runnign process.
-#define RETURN_PROCESS_ATTR_OR_EPERM(attr)                                                                             \
-    if (runqueue.curr) {                                                                                               \
-        return runqueue.curr->attr;                                                                                    \
-    }                                                                                                                  \
+#define RETURN_PROCESS_ATTR_OR_EPERM(attr) \
+    if (runqueue.curr) {                   \
+        return runqueue.curr->attr;        \
+    }                                      \
     return -EPERM;
 
 uid_t sys_getuid(void) { RETURN_PROCESS_ATTR_OR_EPERM(ruid); }
@@ -364,38 +364,38 @@ gid_t sys_getgid(void) { RETURN_PROCESS_ATTR_OR_EPERM(rgid); }
 gid_t sys_getegid(void) { RETURN_PROCESS_ATTR_OR_EPERM(gid); }
 
 /// Checks the given ID.
-#define FAIL_ON_INV_ID(id)                                                                                             \
-    if ((id) < 0) {                                                                                                    \
-        return -EINVAL;                                                                                                \
+#define FAIL_ON_INV_ID(id) \
+    if ((id) < 0) {        \
+        return -EINVAL;    \
     }
 
 /// Checks the ID, and if there is a running process.
-#define FAIL_ON_INV_ID_OR_PROC(id)                                                                                     \
-    FAIL_ON_INV_ID(id)                                                                                                 \
-    if (!runqueue.curr) {                                                                                              \
-        return -EPERM;                                                                                                 \
+#define FAIL_ON_INV_ID_OR_PROC(id) \
+    FAIL_ON_INV_ID(id)             \
+    if (!runqueue.curr) {          \
+        return -EPERM;             \
     }
 
 /// If the process is ROOT, set the attribute and return 0.
-#define IF_PRIVILEGED_SET_ALL_AND_RETURN(attr)                                                                         \
-    if (runqueue.curr->uid == 0) {                                                                                     \
-        runqueue.curr->r##attr = runqueue.curr->attr = attr;                                                           \
-        return 0;                                                                                                      \
+#define IF_PRIVILEGED_SET_ALL_AND_RETURN(attr)               \
+    if (runqueue.curr->uid == 0) {                           \
+        runqueue.curr->r##attr = runqueue.curr->attr = attr; \
+        return 0;                                            \
     }
 
 /// Checks the attributes, resets them, and returns 0.
-#define IF_RESET_SET_AND_RETURN(attr)                                                                                  \
-    if (runqueue.curr->r##attr == (attr)) {                                                                            \
-        runqueue.curr->attr = attr;                                                                                    \
-        return 0;                                                                                                      \
+#define IF_RESET_SET_AND_RETURN(attr)       \
+    if (runqueue.curr->r##attr == (attr)) { \
+        runqueue.curr->attr = attr;         \
+        return 0;                           \
     }
 
 /// If the process is ROOT set the attribute, otherwise return failure.
-#define SET_IF_PRIVILEGED_OR_FAIL(attr)                                                                                \
-    if (runqueue.curr->uid == 0) {                                                                                     \
-        runqueue.curr->attr = attr;                                                                                    \
-    } else {                                                                                                           \
-        return -EPERM;                                                                                                 \
+#define SET_IF_PRIVILEGED_OR_FAIL(attr) \
+    if (runqueue.curr->uid == 0) {      \
+        runqueue.curr->attr = attr;     \
+    } else {                            \
+        return -EPERM;                  \
     }
 
 int sys_setuid(uid_t uid)
@@ -521,7 +521,8 @@ pid_t sys_waitpid(pid_t pid, int *status, int options)
 
     // Validate the `options` argument.
     // Supported options are WNOHANG and WUNTRACED; any other value is invalid
-    if ((options != 0) && !bit_check(options, WNOHANG) && !bit_check(options, WUNTRACED)) {
+    if (options & ~(WNOHANG | WUNTRACED)) {
+        pr_err("Invalid options: 0x%X\n", options);
         return -EINVAL;
     }
 

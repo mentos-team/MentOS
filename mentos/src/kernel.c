@@ -25,7 +25,6 @@
 #include "hardware/pic8259.h"
 #include "hardware/timer.h"
 #include "io/proc_modules.h"
-#include "io/vga/vga.h"
 #include "io/video.h"
 #include "ipc/ipc.h"
 #include "mem/alloc/zone_allocator.h"
@@ -92,7 +91,7 @@ static inline void print_ok(void)
     video_get_cursor_position(NULL, &y);
     video_get_screen_size(&width, NULL);
     video_move_cursor(width - 5, y);
-    video_puts("[OK]\n");
+    video_puts(FG_GREEN_BOLD "[OK]" FG_RESET "\n");
 }
 
 /// @brief Prints [FAIL] at the current row and column 60.
@@ -103,7 +102,7 @@ static inline void print_fail(void)
     video_get_cursor_position(NULL, &y);
     video_get_screen_size(&width, NULL);
     video_move_cursor(width - 7, y);
-    video_puts("[FAIL]\n");
+    video_puts(FG_RED_BOLD "[FAIL]" FG_RESET "\n");
 }
 
 /// @brief Entry point of the kernel.
@@ -130,7 +129,6 @@ int kmain(boot_info_t *boot_informations)
 
     //==========================================================================
     pr_notice("Initialize the video...\n");
-    vga_initialize();
     video_init();
 
     //==========================================================================
@@ -463,6 +461,17 @@ int kmain(boot_info_t *boot_informations)
 
     // We have completed the booting procedure.
     pr_notice("Booting done, jumping into init process.\n");
+
+#ifdef ENABLE_KERNEL_TESTS
+    extern int kernel_run_tests(void);
+    if (kernel_run_tests() != 0) {
+        pr_emerg("Kernel tests failed!\n");
+        return 1;
+    } else {
+        pr_notice("All kernel tests passed!\n");
+    }
+#endif
+
     // Switch to the page directory of init.
     paging_switch_pgd(init_process->mm->pgd);
     // Jump into init process.

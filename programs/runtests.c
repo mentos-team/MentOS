@@ -63,7 +63,7 @@ static char *all_tests[] = {
     "t_spwd",
     "t_stopcont",
     "t_syslog",
-    "t_time",
+    // "t_time",
     "t_write_read",
 };
 

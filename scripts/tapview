@@ -50,6 +50,7 @@ skipcount=0
 todocount=0
 status=0
 report=""
+failures=""
 ln=0
 state=plaintext
 
@@ -221,7 +222,7 @@ do
 	    continue
 	fi
 	ship_char "${FAIL}"
-	ship_line "$line"
+	failures="${failures}${line}${LF}"
 	state=plaintext
 	failcount=$((failcount + 1))
 	status=1
@@ -282,6 +283,10 @@ fi
 if [ "$skipcount" != 0 ]
 then
     report="${report}, ${skipcount} SKIPs"
+fi
+
+if [ -n "$failures" ]; then
+    report="${report}${LF}Failing tests:${LF}${failures}"
 fi
 
 echo "${report}."
