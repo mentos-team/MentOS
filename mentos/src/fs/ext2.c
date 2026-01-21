@@ -1870,7 +1870,7 @@ static ssize_t ext2_write_inode_data(
     uint32_t right;
     uint32_t ret = end_offset - offset;
     for (uint32_t block_index = start_block; block_index <= end_block; ++block_index) {
-        left = 0, right = fs->block_size;
+        left = 0, right = fs->block_size - 1;
         // Read the real block. Do not check for
         if (ext2_read_inode_block(fs, inode, block_index, cache) < 0) {
             pr_warning("Failed to read the inode block %4u of inode %4u\n", block_index, inode_index);
