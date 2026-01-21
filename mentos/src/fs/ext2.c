@@ -1804,10 +1804,9 @@ static ssize_t ext2_read_inode_data(
         left = 0, right = fs->block_size - 1;
         // Read the real block.
         if (ext2_read_inode_block(fs, inode, block_index, cache) == -1) {
-            // TODO: Understand why sometimes it fails.
-            pr_warning("Failed to read the inode block %4u of inode %4u\n", block_index, inode_index);
-            // ret = -1;
-            // break;
+            pr_err("Failed to read the inode block %4u of inode %4u\n", block_index, inode_index);
+            ext2_dealloc_cache(cache);
+            return -1;
         }
         if (block_index == start_block) {
             left = start_off;
