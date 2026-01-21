@@ -25,7 +25,7 @@
 #include <unistd.h>
 
 /// Maximum length of commands.
-#define CMD_LEN     64
+#define CMD_LEN     256
 /// Maximum lenght of the history.
 #define HISTORY_MAX 10
 
@@ -577,7 +577,6 @@ static inline int __command_append(rb_history_entry_t *entry, int *index, int *l
     }
     // Ensure index does not exceed the buffer size limit.
     if ((*index) >= entry->size) {
-        fprintf(stderr, "Error: Index exceeds buffer size.\n");
         return 1;
     }
     // Insert the new character at the current index in the buffer, then
@@ -800,6 +799,7 @@ static inline int __read_command(rb_history_entry_t *entry)
     int c;
     int length        = 0;
     int insert_active = 0;
+    int buffer_full   = 0; // Flag to indicate buffer was full
 
     // Clear the buffer at the start
     memset(entry->buffer, 0, entry->size);
@@ -823,7 +823,7 @@ static inline int __read_command(rb_history_entry_t *entry)
         // Handle newline character to finish input
         if (c == '\n') {
             putchar('\n'); // Display a newline
-            return length; // Return length of input
+            return buffer_full ? -2 : length; // Return -2 if buffer was full
         }
 
         // Handle backspace for deletion
@@ -835,6 +835,8 @@ static inline int __read_command(rb_history_entry_t *entry)
                 memmove(entry->buffer + index, entry->buffer + index + 1, length - index + 1);
                 // Show backspace action.
                 putchar('\b');
+                // Reset buffer_full flag since we now have space
+                buffer_full = 0;
             }
             continue;
         }
@@ -941,6 +943,8 @@ static inline int __read_command(rb_history_entry_t *entry)
                             putchar(127); // Show delete character.
                             // Shift left to remove character at index
                             memmove(entry->buffer + index, entry->buffer + index + 1, length - index + 1);
+                            // Reset buffer_full flag since we now have space
+                            buffer_full = 0;
                         }
                     }
                 }
@@ -1020,7 +1024,9 @@ static inline int __read_command(rb_history_entry_t *entry)
 
         // Append the character.
         if (__command_append(entry, &index, &length, c)) {
-            break; // Exit loop if buffer is full.
+            // Buffer is full, set flag and ignore this character
+            buffer_full = 1;
+            continue;
         }
 
         // In insert mode, the length stays the same, unless we are at the end of the line.
@@ -1028,9 +1034,7 @@ static inline int __read_command(rb_history_entry_t *entry)
             --length;
         }
 
-    } while (length < entry->size);
-
-    return length; // Return total length of input
+    } while (1); // Continue until explicit exit (newline, Ctrl+C, EOF)
 }
 
 /// @brief Allocates and parses the arguments (argv) from the provided command string.
@@ -1329,7 +1333,13 @@ static void __interactive_mode(void)
         tcsetattr(STDIN_FILENO, 0, &_termios);       // Set modified attributes
 
         // Get the input command.
-        if (__read_command(&entry) < 0) {
+        int read_result = __read_command(&entry);
+        if (read_result < 0) {
+            if (read_result == -2) {
+                // Buffer was full, don't process command but show a message
+                printf("\nCommand too long (max %d characters). Use backspace to edit.\n", CMD_LEN - 1);
+                continue;
+            }
             fprintf(stderr, "Error reading command...\n");
             // Restore terminal attributes
             tcgetattr(STDIN_FILENO, &_termios);
