@@ -11,6 +11,7 @@
 /// @copyright (c) 2024 - Audit Fix Test
 /// @see EXT2_AUDIT_REPORT.md - Issue #4
 
+#include <syslog.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -18,7 +19,8 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <string.h>
+#include <errno.h>
+#include <strerror.h>
 
 #define TEST_FILE "/tmp/test_mount_cache.txt"
 #define TEST_DATA "CACHE_TEST_DATA"
@@ -28,14 +30,14 @@
 /// @return 0 on success, 1 on failure
 int test_mount_operational(void)
 {
-    printf("[TEST] Filesystem operational after mount...\n");
+    syslog(LOG_INFO, "[TEST] Filesystem operational after mount...");
     
     // If the filesystem mounted successfully and is operational,
     // the cache must have been created properly
     
     int fd = open(TEST_FILE, O_CREAT | O_WRONLY | O_TRUNC, 0644);
     if (fd < 0) {
-        perror("Failed to open file - filesystem may not be mounted");
+        syslog(LOG_ERR, "Failed to open file - filesystem may not be mounted: %s", strerror(errno));
         return 1;
     }
     
@@ -44,11 +46,11 @@ int test_mount_operational(void)
     close(fd);
     
     if (written != (ssize_t)strlen(TEST_DATA)) {
-        fprintf(stderr, "Write failed or incomplete\n");
+        syslog(LOG_ERR, "Write failed or incomplete");
         return 1;
     }
     
-    printf("  ✓ File write successful (cache operational)\n");
+    syslog(LOG_INFO, "  ✓ File write successful (cache operational)");
     return 0;
 }
 
@@ -56,7 +58,7 @@ int test_mount_operational(void)
 /// @return 0 on success, 1 on failure
 int test_cache_under_load(void)
 {
-    printf("[TEST] Cache under load...\n");
+    syslog(LOG_INFO, "[TEST] Cache under load...");
     
     // Create multiple files in quick succession
     // This stresses the cache system
@@ -67,7 +69,7 @@ int test_cache_under_load(void)
         
         int fd = open(filename, O_CREAT | O_WRONLY | O_TRUNC, 0644);
         if (fd < 0) {
-            fprintf(stderr, "Failed to create file %d\n", i);
+            syslog(LOG_ERR, "Failed to create file %d", i);
             return 1;
         }
         
@@ -80,12 +82,12 @@ int test_cache_under_load(void)
         close(fd);
         
         if (written != to_write) {
-            fprintf(stderr, "Write to file %d incomplete: %ld of %ld\n", i, written, to_write);
+            syslog(LOG_ERR, "Write to file %d incomplete: %ld of %ld", i, written, to_write);
             return 1;
         }
     }
     
-    printf("  ✓ Multiple operations successful\n");
+    syslog(LOG_INFO, "  ✓ Multiple operations successful");
     return 0;
 }
 
@@ -93,12 +95,12 @@ int test_cache_under_load(void)
 /// @return 0 on success, 1 on failure
 int test_cache_on_reads(void)
 {
-    printf("[TEST] Cache used on reads...\n");
+    syslog(LOG_INFO, "[TEST] Cache used on reads...");
     
     // Create a file with multi-block data
     int fd = open(TEST_FILE, O_CREAT | O_WRONLY | O_TRUNC, 0644);
     if (fd < 0) {
-        perror("Failed to create file");
+        syslog(LOG_ERR, "Failed to create file: %s", strerror(errno));
         return 1;
     }
     
@@ -115,17 +117,17 @@ int test_cache_on_reads(void)
     close(fd);
     
     if (bytes != sizeof(data)) {
-        fprintf(stderr, "Read failed\n");
+        syslog(LOG_ERR, "Read failed");
         return 1;
     }
     
     // Verify data (would fail if cache corrupted)
     if (memcmp(buffer, data, sizeof(data)) != 0) {
-        fprintf(stderr, "Data corruption detected\n");
+        syslog(LOG_ERR, "Data corruption detected");
         return 1;
     }
     
-    printf("  ✓ Cache functional on reads\n");
+    syslog(LOG_INFO, "  ✓ Cache functional on reads");
     return 0;
 }
 
@@ -133,13 +135,13 @@ int test_cache_on_reads(void)
 /// @return 0 on success, 1 on failure
 int test_cache_lifecycle(void)
 {
-    printf("[TEST] Cache lifecycle...\n");
+    syslog(LOG_INFO, "[TEST] Cache lifecycle...");
     
     // Cycle through write-read multiple times
     for (int cycle = 0; cycle < 5; cycle++) {
         int fd = open(TEST_FILE, O_CREAT | O_WRONLY | O_TRUNC, 0644);
         if (fd < 0) {
-            fprintf(stderr, "Failed to open for write in cycle %d\n", cycle);
+            syslog(LOG_ERR, "Failed to open for write in cycle %d", cycle);
             return 1;
         }
         
@@ -156,28 +158,29 @@ int test_cache_lifecycle(void)
         close(fd);
         
         if (bytes != sizeof(write_data)) {
-            fprintf(stderr, "Read failed in cycle %d\n", cycle);
+            syslog(LOG_ERR, "Read failed in cycle %d", cycle);
             return 1;
         }
         
         if (memcmp(write_data, read_data, sizeof(write_data)) != 0) {
-            fprintf(stderr, "Data mismatch in cycle %d\n", cycle);
+            syslog(LOG_ERR, "Data mismatch in cycle %d", cycle);
             return 1;
         }
     }
     
-    printf("  ✓ Cache lifecycle stable\n");
+    syslog(LOG_INFO, "  ✓ Cache lifecycle stable");
     return 0;
 }
 
 int main(void)
 {
-    printf("\n=== EXT2 Mount Cache Test Suite ===\n");
-    printf("Testing: Issue #4 - Missing NULL check after kmem_cache_create\n");
-    printf("Location: ext2.c:3772 in ext2_mount()\n");
-    printf("Bug: kmem_cache_create() result not checked\n");
-    printf("Note: This test verifies filesystem is fully operational\n");
-    printf("      (which proves cache was initialized)\n\n");
+    openlog("t_ext2_mount_cache", LOG_CONS | LOG_PID, LOG_USER);
+    syslog(LOG_INFO, "\n=== EXT2 Mount Cache Test Suite ===");
+    syslog(LOG_INFO, "Testing: Issue #4 - Missing NULL check after kmem_cache_create");
+    syslog(LOG_INFO, "Location: ext2.c:3772 in ext2_mount()");
+    syslog(LOG_INFO, "Bug: kmem_cache_create() result not checked");
+    syslog(LOG_INFO, "Note: This test verifies filesystem is fully operational");
+    syslog(LOG_INFO, "      (which proves cache was initialized)\n");
     
     int failures = 0;
     
@@ -186,12 +189,14 @@ int main(void)
     failures += test_cache_on_reads();
     failures += test_cache_lifecycle();
     
-    printf("\n=== Results ===\n");
+    syslog(LOG_INFO, "\n=== Results ===");
     if (failures == 0) {
-        printf("✅ ALL TESTS PASSED\n");
+        syslog(LOG_INFO, "✅ ALL TESTS PASSED");
+        closelog();
         return 0;
     } else {
-        printf("❌ %d TEST(S) FAILED\n", failures);
+        syslog(LOG_ERR, "❌ %d TEST(S) FAILED", failures);
+        closelog();
         return 1;
     }
 }

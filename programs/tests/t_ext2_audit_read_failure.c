@@ -8,6 +8,7 @@
 /// @copyright (c) 2024 - Audit Fix Test
 /// @see EXT2_AUDIT_REPORT.md - Issue #3
 
+#include <syslog.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -15,7 +16,7 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include <errno.h>
-#include <string.h>
+#include <strerror.h>
 
 #define TEST_FILE "/tmp/test_read_basic.txt"
 #define TEST_DATA_SIZE 8192
@@ -24,12 +25,12 @@
 /// @return 0 on success, 1 on failure
 int test_read_after_write(void)
 {
-    printf("[TEST] Read after write...\n");
+    syslog(LOG_INFO, "[TEST] Read after write...");
     
     // Create test file with known content
     int fd = open(TEST_FILE, O_CREAT | O_WRONLY | O_TRUNC, 0644);
     if (fd < 0) {
-        perror("Failed to create test file");
+        syslog(LOG_ERR, "Failed to create test file: %s", strerror(errno));
         return 1;
     }
     
@@ -43,7 +44,7 @@ int test_read_after_write(void)
     close(fd);
     
     if (written != TEST_DATA_SIZE) {
-        fprintf(stderr, "Failed to write all data\n");
+        syslog(LOG_ERR, "Failed to write all data");
         free(write_data);
         return 1;
     }
@@ -51,7 +52,7 @@ int test_read_after_write(void)
     // Now read it back
     fd = open(TEST_FILE, O_RDONLY, 0);
     if (fd < 0) {
-        perror("Failed to open for reading");
+        syslog(LOG_ERR, "Failed to open for reading: %s", strerror(errno));
         free(write_data);
         return 1;
     }
@@ -61,7 +62,7 @@ int test_read_after_write(void)
     close(fd);
     
     if (read_bytes != TEST_DATA_SIZE) {
-        fprintf(stderr, "Read failed or incomplete: %ld bytes\n", read_bytes);
+        syslog(LOG_ERR, "Read failed or incomplete: %ld bytes", read_bytes);
         free(write_data);
         free(read_data);
         return 1;
@@ -69,13 +70,13 @@ int test_read_after_write(void)
     
     // Verify data integrity
     if (memcmp(write_data, read_data, TEST_DATA_SIZE) != 0) {
-        fprintf(stderr, "Data mismatch after read\n");
+        syslog(LOG_ERR, "Data mismatch after read");
         free(write_data);
         free(read_data);
         return 1;
     }
     
-    printf("  ✓ Read data matches written data\n");
+    syslog(LOG_INFO, "  ✓ Read data matches written data");
     free(write_data);
     free(read_data);
     return 0;
@@ -85,11 +86,11 @@ int test_read_after_write(void)
 /// @return 0 on success, 1 on failure
 int test_read_across_blocks(void)
 {
-    printf("[TEST] Read across block boundaries...\n");
+    syslog(LOG_INFO, "[TEST] Read across block boundaries...");
     
     int fd = open(TEST_FILE, O_CREAT | O_WRONLY | O_TRUNC, 0644);
     if (fd < 0) {
-        perror("Failed to create test file");
+        syslog(LOG_ERR, "Failed to create test file: %s", strerror(errno));
         return 1;
     }
     
@@ -106,7 +107,7 @@ int test_read_across_blocks(void)
     close(fd);
     
     if (written != block_size * 3) {
-        fprintf(stderr, "Failed to write\n");
+        syslog(LOG_ERR, "Failed to write");
         free(write_data);
         return 1;
     }
@@ -118,7 +119,7 @@ int test_read_across_blocks(void)
     close(fd);
     
     if (read_bytes != block_size * 3) {
-        fprintf(stderr, "Failed to read all blocks\n");
+        syslog(LOG_ERR, "Failed to read all blocks");
         free(write_data);
         free(read_data);
         return 1;
@@ -130,7 +131,7 @@ int test_read_across_blocks(void)
         for (int i = 0; i < block_size; i++) {
             int offset = block * block_size + i;
             if (read_data[offset] != expected) {
-                fprintf(stderr, "Block %d byte %d mismatch\n", block, i);
+                syslog(LOG_ERR, "Block %d byte %d mismatch", block, i);
                 free(write_data);
                 free(read_data);
                 return 1;
@@ -138,7 +139,7 @@ int test_read_across_blocks(void)
         }
     }
     
-    printf("  ✓ All blocks read correctly\n");
+    syslog(LOG_INFO, "  ✓ All blocks read correctly");
     free(write_data);
     free(read_data);
     return 0;
@@ -148,11 +149,11 @@ int test_read_across_blocks(void)
 /// @return 0 on success, 1 on failure
 int test_partial_reads(void)
 {
-    printf("[TEST] Partial reads...\n");
+    syslog(LOG_INFO, "[TEST] Partial reads...");
     
     int fd = open(TEST_FILE, O_CREAT | O_WRONLY | O_TRUNC, 0644);
     if (fd < 0) {
-        perror("Failed to create test file");
+        syslog(LOG_ERR, "Failed to create test file: %s", strerror(errno));
         return 1;
     }
     
@@ -179,7 +180,7 @@ int test_partial_reads(void)
         for (int i = 0; i < bytes; i++) {
             char expected = (char)((total_read + i) & 0xFF);
             if (chunk[i] != expected) {
-                fprintf(stderr, "Chunk read mismatch at offset %d\n", total_read + i);
+                syslog(LOG_ERR, "Chunk read mismatch at offset %d", total_read + i);
                 close(fd);
                 free(data);
                 return 1;
@@ -192,12 +193,12 @@ int test_partial_reads(void)
     close(fd);
     
     if (total_read != TEST_DATA_SIZE) {
-        fprintf(stderr, "Did not read all data: got %d of %d\n", total_read, TEST_DATA_SIZE);
+        syslog(LOG_ERR, "Did not read all data: got %d of %d", total_read, TEST_DATA_SIZE);
         free(data);
         return 1;
     }
     
-    printf("  ✓ All partial reads consistent and correct\n");
+    syslog(LOG_INFO, "  ✓ All partial reads consistent and correct");
     free(data);
     return 0;
 }
@@ -206,11 +207,11 @@ int test_partial_reads(void)
 /// @return 0 on success, 1 on failure
 int test_read_eof_behavior(void)
 {
-    printf("[TEST] Read at EOF behavior...\n");
+    syslog(LOG_INFO, "[TEST] Read at EOF behavior...");
     
     int fd = open(TEST_FILE, O_CREAT | O_WRONLY | O_TRUNC, 0644);
     if (fd < 0) {
-        perror("Failed to create test file");
+        syslog(LOG_ERR, "Failed to create test file: %s", strerror(errno));
         return 1;
     }
     
@@ -224,7 +225,7 @@ int test_read_eof_behavior(void)
     
     ssize_t bytes = read(fd, buffer, 1024);
     if (bytes != 5) {
-        fprintf(stderr, "Read at small file returned %ld, expected 5\n", bytes);
+        syslog(LOG_ERR, "Read at small file returned %ld, expected 5", bytes);
         close(fd);
         return 1;
     }
@@ -232,22 +233,23 @@ int test_read_eof_behavior(void)
     // Try second read (should return 0 for EOF)
     bytes = read(fd, buffer, 1024);
     if (bytes != 0) {
-        fprintf(stderr, "Read at EOF returned %ld, expected 0\n", bytes);
+        syslog(LOG_ERR, "Read at EOF returned %ld, expected 0", bytes);
         close(fd);
         return 1;
     }
     
     close(fd);
-    printf("  ✓ EOF behavior correct\n");
+    syslog(LOG_INFO, "  ✓ EOF behavior correct");
     return 0;
 }
 
 int main(void)
 {
-    printf("\n=== EXT2 Read Failure Test Suite ===\n");
-    printf("Testing: Issue #3 - Silent read failures\n");
-    printf("Location: ext2.c:1809-1815 in ext2_read_inode_data()\n");
-    printf("Bug: Error on block read is ignored, stale cache returned\n\n");
+    openlog("t_ext2_read_failure", LOG_CONS | LOG_PID, LOG_USER);
+    syslog(LOG_INFO, "\n=== EXT2 Read Failure Test Suite ===");
+    syslog(LOG_INFO, "Testing: Issue #3 - Silent read failures");
+    syslog(LOG_INFO, "Location: ext2.c:1809-1815 in ext2_read_inode_data()");
+    syslog(LOG_INFO, "Bug: Error on block read is ignored, stale cache returned\n");
     
     int failures = 0;
     
@@ -256,9 +258,9 @@ int main(void)
     failures += test_partial_reads();
     failures += test_read_eof_behavior();
     
-    printf("\n=== Results ===\n");
+    syslog(LOG_INFO, "\n=== Results ===");
     if (failures == 0) {
-        printf("✅ ALL TESTS PASSED\n");
+        syslog(LOG_INFO, "✅ ALL TESTS PASSED");
         return 0;
     } else {
         printf("❌ %d TEST(S) FAILED\n", failures);
