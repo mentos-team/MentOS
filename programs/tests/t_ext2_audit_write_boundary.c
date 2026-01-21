@@ -26,19 +26,19 @@
 /// @return 0 on success, 1 on failure
 int test_unaligned_write_spanning_blocks(void)
 {
-    syslog(LOG_INFO, "[TEST] Unaligned write spanning multiple blocks");
+    syslog(LOG_INFO, "[TEST] Unaligned write spanning multiple blocks\n");
     
     // Create and open file for writing
     int fd = open(TEST_FILE, O_CREAT | O_WRONLY | O_TRUNC, 0644);
     if (fd < 0) {
-        syslog(LOG_ERR, "Failed to create test file: %s", strerror(errno));
+        syslog(LOG_ERR, "Failed to create test file: %s\n", strerror(errno));
         return 1;
     }
     
     // Allocate test data - fill with pattern
     char *write_data = malloc(TEST_DATA_SIZE);
     if (!write_data) {
-        syslog(LOG_ERR, "Failed to allocate write buffer: %s", strerror(errno));
+        syslog(LOG_ERR, "Failed to allocate write buffer: %s\n", strerror(errno));
         close(fd);
         return 1;
     }
@@ -57,7 +57,7 @@ int test_unaligned_write_spanning_blocks(void)
     
     ssize_t written = write(fd, write_data, TEST_DATA_SIZE);
     if (written != TEST_DATA_SIZE) {
-        syslog(LOG_ERR, "Failed to write all data: wrote %ld of %d", written, TEST_DATA_SIZE);
+        syslog(LOG_ERR, "Failed to write all data: wrote %ld of %d\n", written, TEST_DATA_SIZE);
         close(fd);
         free(write_data);
         return 1;
@@ -68,14 +68,14 @@ int test_unaligned_write_spanning_blocks(void)
     // Read back and verify data integrity
     fd = open(TEST_FILE, O_RDONLY, 0);
     if (fd < 0) {
-        syslog(LOG_ERR, "Failed to open test file for reading: %s", strerror(errno));
+        syslog(LOG_ERR, "Failed to open test file for reading: %s\n", strerror(errno));
         free(write_data);
         return 1;
     }
     
     char *read_data = malloc(TEST_DATA_SIZE);
     if (!read_data) {
-        syslog(LOG_ERR, "Failed to allocate read buffer: %s", strerror(errno));
+        syslog(LOG_ERR, "Failed to allocate read buffer: %s\n", strerror(errno));
         close(fd);
         free(write_data);
         return 1;
@@ -85,7 +85,7 @@ int test_unaligned_write_spanning_blocks(void)
     close(fd);
     
     if (read_bytes != TEST_DATA_SIZE) {
-        syslog(LOG_ERR, "Failed to read all data: read %ld of %d", read_bytes, TEST_DATA_SIZE);
+        syslog(LOG_ERR, "Failed to read all data: read %ld of %d\n", read_bytes, TEST_DATA_SIZE);
         free(write_data);
         free(read_data);
         return 1;
@@ -93,13 +93,13 @@ int test_unaligned_write_spanning_blocks(void)
     
     // Verify data matches
     if (memcmp(write_data, read_data, TEST_DATA_SIZE) != 0) {
-        syslog(LOG_ERR, "Data mismatch: written data differs from read data");
+        syslog(LOG_ERR, "Data mismatch: written data differs from read data\n");
         free(write_data);
         free(read_data);
         return 1;
     }
     
-    syslog(LOG_INFO, "  ✓ Data written and read back correctly");
+    syslog(LOG_INFO, "  ✓ Data written and read back correctly\n");
     free(write_data);
     free(read_data);
     return 0;
@@ -109,11 +109,11 @@ int test_unaligned_write_spanning_blocks(void)
 /// @return 0 on success, 1 on failure
 int test_exact_block_boundary_write(void)
 {
-    syslog(LOG_INFO, "[TEST] Write at exact block boundary");
+    syslog(LOG_INFO, "[TEST] Write at exact block boundary\n");
     
     int fd = open(TEST_FILE, O_CREAT | O_WRONLY | O_TRUNC, 0644);
     if (fd < 0) {
-        syslog(LOG_ERR, "Failed to create test file: %s", strerror(errno));
+        syslog(LOG_ERR, "Failed to create test file: %s\n", strerror(errno));
         return 1;
     }
     
@@ -125,7 +125,7 @@ int test_exact_block_boundary_write(void)
     close(fd);
     
     if (written != BLOCK_SIZE * 2) {
-        syslog(LOG_ERR, "Failed to write: wrote %ld of %d", written, BLOCK_SIZE * 2);
+        syslog(LOG_ERR, "Failed to write: wrote %ld of %d\n", written, BLOCK_SIZE * 2);
         free(data);
         return 1;
     }
@@ -133,18 +133,18 @@ int test_exact_block_boundary_write(void)
     // Verify file size
     struct stat st;
     if (stat(TEST_FILE, &st) < 0) {
-        syslog(LOG_ERR, "Failed to stat file: %s", strerror(errno));
+        syslog(LOG_ERR, "Failed to stat file: %s\n", strerror(errno));
         free(data);
         return 1;
     }
     
     if (st.st_size != BLOCK_SIZE * 2) {
-        syslog(LOG_ERR, "File size mismatch: expected %d, got %ld", BLOCK_SIZE * 2, st.st_size);
+        syslog(LOG_ERR, "File size mismatch: expected %d, got %ld\n", BLOCK_SIZE * 2, st.st_size);
         free(data);
         return 1;
     }
     
-    syslog(LOG_INFO, "  ✓ Boundary write successful, file size correct");
+    syslog(LOG_INFO, "  ✓ Boundary write successful, file size correct\n");
     free(data);
     return 0;
 }
@@ -153,11 +153,11 @@ int test_exact_block_boundary_write(void)
 /// @return 0 on success, 1 on failure
 int test_multiple_partial_writes(void)
 {
-    syslog(LOG_INFO, "[TEST] Multiple partial writes");
+    syslog(LOG_INFO, "[TEST] Multiple partial writes\n");
     
     int fd = open(TEST_FILE, O_CREAT | O_WRONLY | O_TRUNC, 0644);
     if (fd < 0) {
-        syslog(LOG_ERR, "Failed to create test file: %s", strerror(errno));
+        syslog(LOG_ERR, "Failed to create test file: %s\n", strerror(errno));
         return 1;
     }
     
@@ -173,7 +173,7 @@ int test_multiple_partial_writes(void)
     for (int i = 0; i < num_writes; i++) {
         ssize_t written = write(fd, data, chunk_size);
         if (written != chunk_size) {
-            syslog(LOG_ERR, "Write %d failed: wrote %ld of %d", i, written, chunk_size);
+            syslog(LOG_ERR, "Write %d failed: wrote %ld of %d\n", i, written, chunk_size);
             close(fd);
             free(data);
             return 1;
@@ -185,19 +185,19 @@ int test_multiple_partial_writes(void)
     // Verify final file size
     struct stat st;
     if (stat(TEST_FILE, &st) < 0) {
-        syslog(LOG_ERR, "Failed to stat file: %s", strerror(errno));
+        syslog(LOG_ERR, "Failed to stat file: %s\n", strerror(errno));
         free(data);
         return 1;
     }
     
     int expected_size = num_writes * chunk_size;
     if (st.st_size != expected_size) {
-        syslog(LOG_ERR, "File size mismatch: expected %d, got %ld", expected_size, st.st_size);
+        syslog(LOG_ERR, "File size mismatch: expected %d, got %ld\n", expected_size, st.st_size);
         free(data);
         return 1;
     }
     
-    syslog(LOG_INFO, "  ✓ Multiple writes successful, file size correct");
+    syslog(LOG_INFO, "  ✓ Multiple writes successful, file size correct\n");
     free(data);
     return 0;
 }
@@ -206,10 +206,10 @@ int main(void)
 {
     openlog("t_ext2_audit_write_boundary", LOG_CONS | LOG_PID, LOG_USER);
     
-    syslog(LOG_INFO, "=== EXT2 Write Boundary Test Suite ===");
-    syslog(LOG_INFO, "Testing: Issue #1 - Buffer overflow on write boundary");
-    syslog(LOG_INFO, "Location: ext2.c:1901 in ext2_write_inode_data()");
-    syslog(LOG_INFO, "Bug: right = fs->block_size (should be block_size - 1)");
+    syslog(LOG_INFO, "=== EXT2 Write Boundary Test Suite ===\n");
+    syslog(LOG_INFO, "Testing: Issue #1 - Buffer overflow on write boundary\n");
+    syslog(LOG_INFO, "Location: ext2.c:1901 in ext2_write_inode_data()\n");
+    syslog(LOG_INFO, "Bug: right = fs->block_size (should be block_size - 1)\n");
     
     int failures = 0;
     
@@ -217,13 +217,13 @@ int main(void)
     failures += test_exact_block_boundary_write();
     failures += test_multiple_partial_writes();
     
-    syslog(LOG_INFO, "=== Results ===");
+    syslog(LOG_INFO, "=== Results ===\n");
     if (failures == 0) {
-        syslog(LOG_INFO, "✅ ALL TESTS PASSED");
+        syslog(LOG_INFO, "✅ ALL TESTS PASSED\n");
         closelog();
         return 0;
     } else {
-        syslog(LOG_ERR, "❌ %d TEST(S) FAILED", failures);
+        syslog(LOG_ERR, "❌ %d TEST(S) FAILED\n", failures);
         closelog();
         return 1;
     }

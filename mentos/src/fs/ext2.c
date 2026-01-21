@@ -1655,12 +1655,13 @@ ext2_allocate_inode_block(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t i
         return -1;
     }
     pr_debug("ext2_allocate_inode_block(inode: %4u, block: %4u, real: %4u)\n", inode_index, block_index, real_index);
-    // Compute the new blocks count.
+    // Compute the new blocks count (in 512-byte sectors).
     uint32_t blocks_count = (block_index + 1) * fs->blocks_per_block_count;
     if (inode->blocks_count < blocks_count) {
         // Set the blocks count.
+        uint32_t old_count  = inode->blocks_count;
         inode->blocks_count = blocks_count;
-        pr_debug("The new block count for inode %d is %d blocks.\n", inode_index, inode->blocks_count);
+        pr_debug("Updated inode %d blocks_count: %u -> %u sectors (filesystem blocks: %u -> %u)\n", inode_index, old_count, inode->blocks_count, old_count / fs->blocks_per_block_count, inode->blocks_count / fs->blocks_per_block_count);
     }
     // Update the inode.
     if (ext2_write_inode(fs, inode, inode_index) == -1) {
@@ -1683,12 +1684,16 @@ static ssize_t ext2_read_inode_block(ext2_filesystem_t *fs, ext2_inode_t *inode,
         return 0;
     }
 
+    // Calculate allocated filesystem blocks from 512-byte sector count.
+    uint32_t allocated_fs_blocks = inode->blocks_count / fs->blocks_per_block_count;
+
     // Check if block index is out of range.
-    if (block_index >= (inode->blocks_count / fs->blocks_per_block_count)) {
+    if (block_index >= allocated_fs_blocks) {
         pr_err(
-            "Invalid block index: %u (inode blocks count: %u, blocks per block "
-            "count: %u)\n",
-            block_index, inode->blocks_count, fs->blocks_per_block_count);
+            "Invalid block index: %u >= %u allocated blocks (inode->blocks_count=%u sectors, "
+            "blocks_per_block_count=%u, file_size=%u)\n",
+            block_index, allocated_fs_blocks, inode->blocks_count,
+            fs->blocks_per_block_count, inode->size);
         return -1;
     }
 
@@ -1873,19 +1878,39 @@ static ssize_t ext2_write_inode_data(
     uint32_t left;
     uint32_t right;
     uint32_t ret = end_offset - offset;
+
     for (uint32_t block_index = start_block; block_index <= end_block; ++block_index) {
+        // Recalculate on each iteration because ext2_write_inode_block may allocate new blocks.
+        uint32_t allocated_fs_blocks = inode->blocks_count / fs->blocks_per_block_count;
+
         left = 0, right = fs->block_size - 1;
-        // Read the real block. Do not check for
-        if (ext2_read_inode_block(fs, inode, block_index, cache) < 0) {
-            pr_warning("Failed to read the inode block %4u of inode %4u\n", block_index, inode_index);
-        }
+
         if (block_index == start_block) {
             left = start_off;
         }
         if (block_index == end_block) {
             right = end_size - 1;
         }
-        // Copy the content back to the buffer.
+
+        // Only read the block if it exists AND we're doing a partial write.
+        // For full block writes or new blocks, we can skip the read.
+        int is_partial_write = (left != 0) || (right != (fs->block_size - 1));
+        int block_exists     = (block_index < allocated_fs_blocks);
+
+        if (is_partial_write && block_exists) {
+            // Read existing block for partial write (preserve unmodified portions).
+            if (ext2_read_inode_block(fs, inode, block_index, cache) < 0) {
+                pr_err("Failed to read block %u of inode %u for partial write\n", block_index, inode_index);
+                ret = -1;
+                break;
+            }
+        } else if (!block_exists) {
+            // New block - zero it out to ensure clean state.
+            memset(cache, 0, fs->block_size);
+        }
+        // else: full block overwrite of existing block - no need to read
+
+        // Copy the content into the cache buffer.
         memcpy(cache + left, buffer + curr_off, (right - left + 1));
         // Move the offset.
         curr_off += (right - left + 1);
