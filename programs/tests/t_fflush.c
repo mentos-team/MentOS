@@ -37,7 +37,12 @@ int main(int argc, char *argv[])
     }
 
     // Test 4: fflush with a file descriptor
+    // Try to create a file in /tmp (which is now created by FHS initialization)
     int fd = open("/tmp/fflush_test.txt", O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if (fd < 0) {
+        // If /tmp doesn't work, try /home
+        fd = open("/home/fflush_test.txt", O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    }
     if (fd >= 0) {
         write(fd, "test data", 9);
         printf("Testing fflush with file descriptor...");
@@ -49,6 +54,9 @@ int main(int argc, char *argv[])
             return 1;
         }
         close(fd);
+    } else {
+        // If we can't create files in either location, that's okay for this test
+        printf("Skipping file descriptor test (no writable directory found).\n");
     }
 
     printf("All fflush tests passed!\n");

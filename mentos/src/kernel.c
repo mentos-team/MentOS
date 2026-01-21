@@ -20,6 +20,7 @@
 #include "drivers/ps2.h"
 #include "drivers/rtc.h"
 #include "fs/ext2.h"
+#include "fs/fhs.h"
 #include "fs/procfs.h"
 #include "fs/vfs.h"
 #include "hardware/pic8259.h"
@@ -251,6 +252,16 @@ int kmain(boot_info_t *boot_informations)
     printf("Mount EXT2 filesystem...");
     if (vfs_mount("ext2", "/", "/dev/hda")) {
         pr_emerg("Failed to mount EXT2 filesystem...\n");
+        return 1;
+    }
+    print_ok();
+
+    //==========================================================================
+    pr_notice("Initialize Filesystem Hierarchy Standard directories...\n");
+    printf("Initialize FHS directories...");
+    if (fhs_initialize()) {
+        print_fail();
+        pr_emerg("Failed to initialize FHS directories!\n");
         return 1;
     }
     print_ok();
