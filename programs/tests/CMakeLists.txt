@@ -47,6 +47,10 @@ set(TEST_LIST
     t_scanf.c
     t_fflush.c
     t_fhs.c
+    t_ext2_audit_write_boundary.c
+    t_ext2_audit_overflow.c
+    t_ext2_audit_read_failure.c
+    t_ext2_audit_mount_cache.c
 )
 
 # Set the directory where the compiled binaries will be placed.
