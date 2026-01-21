@@ -3788,6 +3788,10 @@ static vfs_file_t *ext2_mount(vfs_file_t *block_device, const char *path)
     // Initialize the buffer cache.
     fs->ext2_buffer_cache =
         kmem_cache_create("ext2_buffer_cache", fs->block_size, fs->block_size, GFP_KERNEL, NULL, NULL);
+    if (fs->ext2_buffer_cache == NULL) {
+        pr_err("Failed to create buffer cache for ext2\n");
+        goto free_filesystem;
+    }
 
 #ifdef ENABLE_EXT2_TRACE
     resource_id = register_resource("ext2");
