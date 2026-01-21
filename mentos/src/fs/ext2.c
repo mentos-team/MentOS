@@ -1841,6 +1841,11 @@ static ssize_t ext2_write_inode_data(
     size_t nbyte,
     char *buffer)
 {
+    // Prevent integer overflow: check if offset + nbyte would exceed UINT32_MAX
+    if (offset > (UINT32_MAX - nbyte)) {
+        pr_err("Integer overflow: offset + nbyte exceeds UINT32_MAX\n");
+        return -1;
+    }
     if ((offset + nbyte) > inode->size) {
         inode->size = offset + nbyte;
         if (ext2_write_inode(fs, inode, inode_index) == -1) {
