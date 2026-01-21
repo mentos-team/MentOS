@@ -615,12 +615,12 @@ static inline void __command_clear(rb_history_entry_t *entry, int *index, int *l
         fprintf(stderr, "shell: Invalid index or length values: index=%d, length=%d.\n", *index, *length);
         return;
     }
-    // Move the cursor to the end of the current command.
-    printf("\033[%dC", (*length) - (*index));
-    // Clear the current command from the display by moving backwards.
-    while ((*length)--) {
-        putchar('\b');
+    // Move the cursor to the beginning of the command (move left by index positions).
+    if (*index > 0) {
+        printf("\033[%dD", *index);
     }
+    // Clear from cursor to the end of the line.
+    printf("\033[K");
     // Clear the current command from the buffer by setting it to zero.
     memset(entry->buffer, 0, entry->size);
     // Reset both index and length to zero, as the command is now cleared.
@@ -882,15 +882,15 @@ static inline int __read_command(rb_history_entry_t *entry)
                 c = getchar();
                 // UP/DOWN ARROW
                 if ((c == 'A') || (c == 'B')) {
-                    // Clear the current command.
-                    __command_clear(entry, &index, &length);
                     // Fetch the history element.
                     rb_history_entry_t *history_entry = __history_fetch(c);
+                    // Clear the current command.
+                    __command_clear(entry, &index, &length);
                     if (history_entry) {
                         // Sets the command.
                         rb_history_entry_copy(entry->buffer, history_entry->buffer, entry->size);
-                        // Print the old command.
-                        printf(entry->buffer);
+                        // Print the history command.
+                        printf("%s", entry->buffer);
                         // Set index to the end.
                         index = length = strnlen(entry->buffer, entry->size);
                     }
