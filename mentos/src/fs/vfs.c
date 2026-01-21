@@ -398,13 +398,193 @@ off_t vfs_lseek(vfs_file_t *file, off_t offset, int whence)
     return file->fs_operations->lseek_f(file, offset, whence);
 }
 
+/// @brief Helper function to extract the base name from a mountpoint path.
+/// @param path The full mountpoint path (e.g., "/dev/null").
+/// @param parent_path The parent path we're checking against (e.g., "/dev").
+/// @param basename_out Buffer to store the extracted basename.
+/// @param basename_len Size of the basename buffer.
+/// @return 1 if basename extracted successfully, 0 otherwise.
+static inline int __vfs_extract_mountpoint_basename(
+    const char *path,
+    const char *parent_path,
+    char *basename_out,
+    size_t basename_len)
+{
+    size_t parent_len = strlen(parent_path);
+    size_t path_len   = strlen(path);
+
+    // The mountpoint path must be longer than the parent path.
+    if (path_len <= parent_len) {
+        return 0;
+    }
+
+    // Check if path starts with parent_path.
+    if (strncmp(path, parent_path, parent_len) != 0) {
+        return 0;
+    }
+
+    // Find the start of the basename (skip the parent path and any slashes).
+    const char *basename_start = path + parent_len;
+    if (*basename_start == '/') {
+        ++basename_start;
+    }
+
+    // Find the end of the basename (stop at next slash or end of string).
+    const char *basename_end = strchr(basename_start, '/');
+    size_t basename_length;
+    if (basename_end) {
+        basename_length = basename_end - basename_start;
+    } else {
+        basename_length = strlen(basename_start);
+    }
+
+    // Check if the basename is empty or too long.
+    if ((basename_length == 0) || (basename_length >= basename_len)) {
+        return 0;
+    }
+
+    // Copy the basename.
+    strncpy(basename_out, basename_start, basename_length);
+    basename_out[basename_length] = '\0';
+
+    return 1;
+}
+
+/// @brief Checks if a mountpoint entry is already present in the directory entries.
+/// @param dirp Array of directory entries.
+/// @param num_entries Number of entries in the array.
+/// @param name Name to check for.
+/// @return 1 if name already exists, 0 otherwise.
+static inline int __vfs_is_entry_present(dirent_t *dirp, size_t num_entries, const char *name)
+{
+    for (size_t i = 0; i < num_entries; ++i) {
+        if (strcmp(dirp[i].d_name, name) == 0) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/// @brief Helper to reconstruct the full path of a file from its VFS file structure.
+/// @param file The VFS file.
+/// @param path_buffer Buffer to store the full path.
+/// @param buffer_size Size of the path buffer.
+static inline void __vfs_reconstruct_file_path(vfs_file_t *file, char *path_buffer, size_t buffer_size)
+{
+    // If already absolute, use it directly.
+    if (file->name[0] == '/') {
+        strncpy(path_buffer, file->name, buffer_size - 1);
+        path_buffer[buffer_size - 1] = '\0';
+        return;
+    }
+
+    // Find which filesystem this file belongs to.
+    spinlock_lock(&vfs_spinlock);
+    list_for_each_decl (it, &vfs_super_blocks) {
+        super_block_t *sb = list_entry(it, super_block_t, mounts);
+        if (sb->root == file || sb->root->device == file->device) {
+            if (sb->root == file) {
+                strncpy(path_buffer, sb->path, buffer_size - 1);
+            } else {
+                snprintf(path_buffer, buffer_size, "%s%s%s", sb->path, strcmp(sb->path, "/") == 0 ? "" : "/", file->name);
+            }
+            path_buffer[buffer_size - 1] = '\0';
+            spinlock_unlock(&vfs_spinlock);
+            return;
+        }
+    }
+    spinlock_unlock(&vfs_spinlock);
+
+    // Fallback: use filename as-is.
+    strncpy(path_buffer, file->name, buffer_size - 1);
+    path_buffer[buffer_size - 1] = '\0';
+}
+
 ssize_t vfs_getdents(vfs_file_t *file, dirent_t *dirp, off_t off, size_t count)
 {
     if (file->fs_operations->getdents_f == NULL) {
         pr_err("No GETDENTS function found for the current filesystem.\n");
         return -ENOSYS;
     }
-    return file->fs_operations->getdents_f(file, dirp, off, count);
+
+    // Call the underlying filesystem's getdents implementation.
+    ssize_t written = file->fs_operations->getdents_f(file, dirp, off, count);
+    if (written < 0) {
+        return written;
+    }
+
+    // Calculate how many entries were returned.
+    size_t num_entries = written / sizeof(dirent_t);
+
+    // Reconstruct the full path of the directory being listed.
+    char dir_path[PATH_MAX];
+    __vfs_reconstruct_file_path(file, dir_path, sizeof(dir_path));
+
+    // Remove trailing slash if present (except for root "/").
+    size_t dir_path_len = strlen(dir_path);
+    if (dir_path_len > 1 && dir_path[dir_path_len - 1] == '/') {
+        dir_path[dir_path_len - 1] = '\0';
+        --dir_path_len;
+    }
+
+    pr_debug("vfs_getdents: Checking for mountpoints under '%s' (off=%u, written=%d)\n", dir_path, off, written);
+
+    // Calculate offset handling for mountpoint entries.
+    size_t mountpoints_skipped = 0;
+    size_t mountpoints_to_skip = (written == 0 && off > 0) ? (off / sizeof(dirent_t)) : 0;
+    size_t max_entries         = count / sizeof(dirent_t);
+    dirent_t *current_dirent   = dirp + num_entries;
+
+    spinlock_lock(&vfs_spinlock);
+
+    list_for_each_decl (it, &vfs_super_blocks) {
+        super_block_t *sb = list_entry(it, super_block_t, mounts);
+
+        // Skip the root of the directory itself.
+        if (strcmp(sb->path, dir_path) == 0) {
+            continue;
+        }
+
+        // Extract the basename of this mountpoint if it's a direct child.
+        char basename[NAME_MAX];
+        if (!__vfs_extract_mountpoint_basename(sb->path, dir_path, basename, sizeof(basename))) {
+            continue;
+        }
+
+        // Check if this entry already exists in the directory listing.
+        if (__vfs_is_entry_present(dirp, num_entries, basename)) {
+            continue;
+        }
+
+        // This is a valid mountpoint entry. Check if we should skip it based on offset.
+        if (mountpoints_skipped < mountpoints_to_skip) {
+            ++mountpoints_skipped;
+            continue;
+        }
+
+        // Check if we've filled the buffer.
+        if (num_entries >= max_entries) {
+            break;
+        }
+
+        pr_debug("vfs_getdents: Adding mountpoint entry '%s' (from %s)\n", basename, sb->path);
+
+        // Add this mountpoint as a directory entry.
+        current_dirent->d_ino  = sb->root->ino;
+        current_dirent->d_type = sb->root->flags;
+        strncpy(current_dirent->d_name, basename, NAME_MAX - 1);
+        current_dirent->d_name[NAME_MAX - 1] = '\0';
+        current_dirent->d_off                = sizeof(dirent_t);
+        current_dirent->d_reclen             = sizeof(dirent_t);
+
+        ++num_entries;
+        ++current_dirent;
+        written += sizeof(dirent_t);
+    }
+
+    spinlock_unlock(&vfs_spinlock);
+
+    return written;
 }
 
 long vfs_ioctl(vfs_file_t *file, unsigned int request, unsigned long data)
