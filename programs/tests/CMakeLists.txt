@@ -45,6 +45,7 @@ set(TEST_LIST
     t_list.c
     t_hashmap.c
     t_scanf.c
+    t_fflush.c
 )
 
 # Set the directory where the compiled binaries will be placed.

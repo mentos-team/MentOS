@@ -235,6 +235,28 @@ char *fgets(char *buf, int n, int fd)
     return (p == buf) ? NULL : buf;
 }
 
+int fflush(int fd)
+{
+    // In MentOS, file I/O is currently unbuffered, meaning writes are
+    // immediately committed to the underlying file or device. Therefore,
+    // this function doesn't need to perform any actual flushing.
+    //
+    // However, we provide this function for compatibility with standard C
+    // programs that expect fflush to be available.
+    //
+    // If fd is negative, the standard requires flushing all open output
+    // streams, but since we don't maintain a list of open streams and
+    // writes are unbuffered, we simply return success.
+    
+    // For a valid file descriptor, we could verify it exists, but for
+    // simplicity and compatibility, we just return success.
+    // If buffering is added in the future, this function should be updated
+    // to actually flush any pending data.
+    
+    (void)fd; // Mark parameter as intentionally unused
+    return 0; // Success
+}
+
 void perror(const char *s)
 {
     if (s) {

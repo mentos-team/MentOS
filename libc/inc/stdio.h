@@ -52,6 +52,13 @@ int fgetc(int fd);
 /// @param fd  The file descriptor from which it reads.
 /// @return The read string.
 char *fgets(char *buf, int n, int fd);
+
+/// @brief Flushes the output buffer of a stream.
+/// @param fd The file descriptor. If a negative value is provided, all open output streams are flushed.
+/// @return 0 on success, EOF on error.
+/// @details In the current implementation, output is unbuffered, so this function
+///          always succeeds and is provided primarily for compatibility.
+int fflush(int fd);
 #endif
 
 /// @brief Convert the given string to an integer.
