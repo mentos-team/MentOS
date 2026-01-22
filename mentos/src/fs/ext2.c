@@ -1004,6 +1004,38 @@ static int ext2_write_superblock(ext2_filesystem_t *fs)
     return vfs_write(fs->block_device, &fs->superblock, 1024, sizeof(ext2_superblock_t));
 }
 
+/// @brief Syncs the filesystem to disk by writing the superblock and all BGDT blocks.
+/// @details This function ensures that the superblock and block group descriptor table
+/// are persisted to disk. This should be called after batch operations like FHS initialization
+/// or when an explicit sync is needed. Inode/block bitmaps and data blocks are already
+/// written during allocation, so this is safe to defer.
+/// @param fs the ext2 filesystem structure.
+/// @return 0 on success, negative value on failure.
+static int ext2_sync(ext2_filesystem_t *fs)
+{
+    pr_debug("ext2_sync(%p) - syncing superblock and BGDT to disk\n", fs);
+    
+    if (!fs) {
+        pr_err("Invalid filesystem pointer for sync.\n");
+        return -1;
+    }
+    
+    // Write the entire BGDT (all affected blocks)
+    if (ext2_write_bgdt(fs) < 0) {
+        pr_warning("Failed to sync BGDT.\n");
+        return -1;
+    }
+    
+    // Write the superblock
+    if (ext2_write_superblock(fs) < 0) {
+        pr_warning("Failed to sync superblock.\n");
+        return -1;
+    }
+    
+    pr_debug("ext2_sync() completed successfully\n");
+    return 0;
+}
+
 /// @brief Read a block from the block device associated with this filesystem.
 /// @param fs the ext2 filesystem structure.
 /// @param block_index the index of the block we want to read.

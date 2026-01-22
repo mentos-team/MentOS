@@ -401,6 +401,28 @@ long sys_ioctl(int fd, unsigned int request, unsigned long data);
 /// @return Returns 0 on success; on error, returns a negative error code.
 long sys_fcntl(int fd, unsigned int request, unsigned long data);
 
+/// @brief Synchronize all filesystems to persistent storage.
+/// @details Schedules all dirty filesystem data to be written to disk.
+/// The actual I/O may occur asynchronously after this returns.
+/// @return Always returns 0 (success).
+long sys_sync(void);
+
+/// @brief Synchronize a specific filesystem to persistent storage.
+/// @param fd File descriptor of an open file on the target filesystem.
+/// @return 0 on success, negative error code on failure.
+/// @details Synchronizes the filesystem containing the file referenced by fd.
+/// The actual I/O may occur asynchronously.
+long sys_syncfs(int fd);
+
+/// @brief Synchronize a range of bytes in a file to persistent storage.
+/// @param fd File descriptor of the file to sync.
+/// @param offset Starting byte offset in the file.
+/// @param nbytes Number of bytes to sync.
+/// @param flags Sync behavior flags (SYNC_FILE_RANGE_* constants).
+/// @return 0 on success, negative error code on failure.
+/// @details Schedules a range of bytes within a file to be written to storage.
+long sys_sync_file_range(int fd, long long offset, long long nbytes, unsigned int flags);
+
 /// @brief User malloc.
 /// @param addr This argument is treated as an address of a dynamically
 ///             allocated memory if falls inside the process heap area.
