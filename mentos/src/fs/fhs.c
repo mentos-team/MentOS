@@ -49,6 +49,8 @@ static const fhs_directory_t fhs_directories[] = {
     {"/etc",       S_IFDIR | 0755,  "System configuration"          },
     // Device files
     {"/dev",       S_IFDIR | 0755,  "Device files"                  },
+    // Process information
+    {"/proc",      S_IFDIR | 0555,  "Process information"           },
     // Mount points
     {"/mnt",       S_IFDIR | 0755,  "Temporary mount points"        },
     {"/media",     S_IFDIR | 0755,  "Removable media mount points"  },
