@@ -91,9 +91,16 @@ void ps2_write_data(unsigned char data)
 
 void ps2_write_command(unsigned char command)
 {
-    // Wait for the input buffer to be empty before sending data.
-    while (inportb(PS2_STATUS) & PS2_STATUS_INPUT_FULL) {
+    unsigned int timeout = 100000;
+    
+    // Wait for the input buffer to be empty before sending data (with timeout).
+    while ((inportb(PS2_STATUS) & PS2_STATUS_INPUT_FULL) && --timeout) {
         pause();
+    }
+    
+    if (!timeout) {
+        pr_warning("ps2_write_command: timeout waiting for input buffer\n");
+        return;
     }
 
     // Write the command to the PS/2 data register.
@@ -102,9 +109,16 @@ void ps2_write_command(unsigned char command)
 
 unsigned char ps2_read_data(void)
 {
-    // Wait until the output buffer is not full (data is available).
-    while (!(inportb(PS2_STATUS) & PS2_STATUS_OUTPUT_FULL)) {
-        pause(); // Short wait to avoid busy-waiting.
+    unsigned int timeout = 100000;
+    
+    // Wait until the output buffer is not full (data is available, with timeout).
+    while (!(inportb(PS2_STATUS) & PS2_STATUS_OUTPUT_FULL) && --timeout) {
+        pause();
+    }
+    
+    if (!timeout) {
+        pr_warning("ps2_read_data: timeout waiting for output buffer\n");
+        return 0xFF;
     }
 
     // Read and return the data from the PS/2 data register.
