@@ -1,0 +1,76 @@
+#!/bin/bash
+# Wrapper script to run QEMU tests with timeout and progress feedback for CI
+
+set -e
+
+BUILD_DIR="${1:-build}"
+TIMEOUT="${2:-600}"  # 10 minutes default
+
+echo "===================================================="
+echo "Starting QEMU test run (timeout: ${TIMEOUT}s)..."
+echo "===================================================="
+
+# Run QEMU with timeout
+timeout --foreground "${TIMEOUT}" \
+    qemu-system-i386 \
+    -vga std \
+    -m 1096M \
+    -nodefaults \
+    -serial file:"${BUILD_DIR}/serial.log" \
+    -drive file="${BUILD_DIR}/rootfs.img,format=raw,if=ide,index=0,media=disk" \
+    -serial file:"${BUILD_DIR}/test.log" \
+    -nographic \
+    -device isa-debug-exit \
+    -boot d \
+    -cdrom "${BUILD_DIR}/cdrom_test.iso" &
+
+QEMU_PID=$!
+
+echo "QEMU started with PID: ${QEMU_PID}"
+echo "Monitoring test progress..."
+echo ""
+
+# Monitor the test log and show progress
+last_size=0
+no_change_count=0
+while kill -0 "${QEMU_PID}" 2>/dev/null; do
+    sleep 2
+    
+    if [ -f "${BUILD_DIR}/test.log" ]; then
+        current_size=$(wc -c < "${BUILD_DIR}/test.log" 2>/dev/null || echo "0")
+        
+        if [ "${current_size}" -ne "${last_size}" ]; then
+            # Show new content
+            tail -c +$((last_size + 1)) "${BUILD_DIR}/test.log" 2>/dev/null || true
+            last_size="${current_size}"
+            no_change_count=0
+        else
+            no_change_count=$((no_change_count + 1))
+            # Show heartbeat every 10 seconds of no output
+            if [ $((no_change_count % 5)) -eq 0 ]; then
+                echo "[$(date +%T)] Still running... (${current_size} bytes in test.log)"
+            fi
+        fi
+    else
+        echo "[$(date +%T)] Waiting for test.log to be created..."
+    fi
+done
+
+# Wait for QEMU to finish and get exit code
+wait "${QEMU_PID}"
+EXIT_CODE=$?
+
+echo ""
+echo "===================================================="
+echo "QEMU finished with exit code: ${EXIT_CODE}"
+echo "===================================================="
+
+# QEMU with isa-debug-exit returns exit code 1 on success (exit code 0 from guest = 1 from host)
+# Any other exit code is a failure
+if [ "${EXIT_CODE}" -eq 1 ] || [ "${EXIT_CODE}" -eq 0 ]; then
+    echo "Test run completed successfully"
+    exit 0
+else
+    echo "Test run failed or timed out"
+    exit "${EXIT_CODE}"
+fi

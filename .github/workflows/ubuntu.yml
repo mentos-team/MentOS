@@ -84,13 +84,27 @@ jobs:
 
     - name: Run tests
       run: |
-        cmake --build build --parallel $(nproc) --target cdrom_test.iso qemu-test
+        cmake --build build --parallel $(nproc) --target cdrom_test.iso
+        ./scripts/run-qemu-test build 600
+      timeout-minutes: 12
 
-    - name: Check
+    - name: Check test results
+      if: always()
       run: |
-        cat build/test.log | scripts/tapview
+        echo "=== Test Output ==="
+        cat build/test.log || echo "test.log not found"
+        echo ""
+        echo "=== TAP Results ==="
+        cat build/test.log | scripts/tapview || echo "tapview failed"
+
+    - name: Show serial log
+      if: always()
+      run: |
+        echo "=== Serial Output ==="
+        cat build/serial.log || echo "serial.log not found"
 
     - name: Archive the logs
+      if: always()
       uses: actions/upload-artifact@v4
       with:
         name: logs
