@@ -10,45 +10,65 @@ echo "===================================================="
 echo "Starting QEMU test run (timeout: ${TIMEOUT}s)..."
 echo "===================================================="
 
+# Remove old logs to ensure fresh start
+rm -f "${BUILD_DIR}/test.log" "${BUILD_DIR}/serial.log"
+
 # Run QEMU with timeout
+# Note: First -serial goes to serial.log (kernel messages)
+#       Second -serial goes to test.log (test output from runtests)
 timeout --foreground "${TIMEOUT}" \
     qemu-system-i386 \
     -vga std \
     -m 1096M \
     -nodefaults \
-    -serial file:"${BUILD_DIR}/serial.log" \
-    -drive file="${BUILD_DIR}/rootfs.img,format=raw,if=ide,index=0,media=disk" \
-    -serial file:"${BUILD_DIR}/test.log" \
+    -serial file:${BUILD_DIR}/serial.log \
+    -drive file=${BUILD_DIR}/rootfs.img,format=raw,if=ide,index=0,media=disk \
+    -serial file:${BUILD_DIR}/test.log \
     -nographic \
     -device isa-debug-exit \
     -boot d \
-    -cdrom "${BUILD_DIR}/cdrom_test.iso" &
+    -cdrom ${BUILD_DIR}/cdrom_test.iso &
 
 QEMU_PID=$!
 
 echo "QEMU started with PID: ${QEMU_PID}"
 echo "Monitoring test progress..."
+echo "Build directory: ${BUILD_DIR}"
+echo "Files: serial.log (kernel) and test.log (tests)"
 echo ""
 
 # Monitor the test log and show progress
-last_size=0
+last_test_size=0
+last_serial_size=0
 no_change_count=0
 while kill -0 "${QEMU_PID}" 2>/dev/null; do
     sleep 2
     
+    # Check serial.log first (boot messages)
+    if [ -f "${BUILD_DIR}/serial.log" ]; then
+        serial_size=$(wc -c < "${BUILD_DIR}/serial.log" 2>/dev/null || echo "0")
+        if [ "${serial_size}" -ne "${last_serial_size}" ] && [ "${serial_size}" -gt 0 ]; then
+            # Show last 5 lines of serial output if it changed
+            echo "[BOOT] Serial log updated (${serial_size} bytes)"
+            tail -n 5 "${BUILD_DIR}/serial.log" 2>/dev/null | sed 's/^/  /' || true
+            last_serial_size="${serial_size}"
+        fi
+    fi
+    
+    # Check test.log (test output)
     if [ -f "${BUILD_DIR}/test.log" ]; then
         current_size=$(wc -c < "${BUILD_DIR}/test.log" 2>/dev/null || echo "0")
         
-        if [ "${current_size}" -ne "${last_size}" ]; then
+        if [ "${current_size}" -ne "${last_test_size}" ]; then
             # Show new content
-            tail -c +$((last_size + 1)) "${BUILD_DIR}/test.log" 2>/dev/null || true
-            last_size="${current_size}"
+            tail -c +$((last_test_size + 1)) "${BUILD_DIR}/test.log" 2>/dev/null || true
+            last_test_size="${current_size}"
             no_change_count=0
         else
             no_change_count=$((no_change_count + 1))
             # Show heartbeat every 10 seconds of no output
             if [ $((no_change_count % 5)) -eq 0 ]; then
-                echo "[$(date +%T)] Still running... (${current_size} bytes in test.log)"
+                echo "[$(date +%T)] Still running... (test.log: ${current_size} bytes, serial.log: ${last_serial_size} bytes)"
             fi
         fi
     else
