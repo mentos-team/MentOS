@@ -36,22 +36,14 @@ echo "Monitoring test progress..."
 echo "Build directory: ${BUILD_DIR}"
 echo ""
 
-# Wait a moment for QEMU to start and create log files
-sleep 1
-
-# Tail both logs in the background, prefixing output for clarity
-tail -f "${BUILD_DIR}/serial.log" 2>/dev/null | sed 's/^/[SERIAL] /' &
-TAIL_SERIAL_PID=$!
-
-tail -f "${BUILD_DIR}/test.log" 2>/dev/null | sed 's/^/[TEST]   /' &
-TAIL_TEST_PID=$!
+# Stream both logs in real-time using tail -F (follows by name, retries if file doesn't exist)
+# The --pid flag makes tail exit when QEMU dies
+(tail -F "${BUILD_DIR}/serial.log" 2>/dev/null | sed -u 's/^/[SERIAL] /' &)
+(tail -F "${BUILD_DIR}/test.log" 2>/dev/null | sed -u 's/^/[TEST]   /' &)
 
 # Wait for QEMU to finish
 wait "${QEMU_PID}"
 EXIT_CODE=$?
-
-# Kill the tail processes
-kill "${TAIL_SERIAL_PID}" "${TAIL_TEST_PID}" 2>/dev/null || true
 
 # Give a moment for final output to flush
 sleep 1
