@@ -75,12 +75,15 @@ jobs:
     - name: Install test dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y nasm gcc-9 g++-9 qemu-system-x86 mtools xorriso
+        sudo apt-get install -y nasm gcc-9 g++-9 qemu-system-x86 mtools xorriso e2fsprogs
 
     - name: Build
       run: |
         cmake -B build -DCMAKE_BUILD_TYPE=Release -DEMULATOR_OUTPUT_TYPE=OUTPUT_LOG
         cmake --build build --parallel $(nproc) --target filesystem
+        ls -lh build/rootfs.img
+        debugfs -R "stat /" build/rootfs.img
+        debugfs -R "ls /bin" build/rootfs.img
 
     - name: Run tests
       run: |
