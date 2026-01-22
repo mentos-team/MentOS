@@ -363,12 +363,13 @@ int kmain(boot_info_t *boot_informations)
     //==========================================================================
     pr_notice("Setting up PS/2 driver...\n");
     printf("Setting up PS/2 driver...");
-    if (ps2_initialize()) {
+    int ps2_available = (ps2_initialize() == 0);
+    if (!ps2_available) {
         print_fail();
-        pr_emerg("Failed to initialize proc system entries!\n");
-        return 1;
+        pr_warning("PS/2 not available (likely headless/QEMU). Continuing without keyboard/mouse.\n");
+    } else {
+        print_ok();
     }
-    print_ok();
 
     //==========================================================================
     pr_notice("Setting up keyboard driver...\n");
