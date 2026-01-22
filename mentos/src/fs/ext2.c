@@ -2892,10 +2892,7 @@ static int ext2_create_inode(ext2_filesystem_t *fs, ext2_inode_t *inode, mode_t 
     uid_t uid         = 0;
     uid_t gid         = 0;
     task_struct *task = scheduler_get_current_process();
-    if (task == NULL) {
-        pr_warning("Failed to get the current running process, assuming we are "
-                   "booting.\n");
-    } else {
+    if (task != NULL) {
         uid = task->uid;
         gid = task->gid;
     }
