@@ -1056,6 +1056,34 @@ static int ext2_read_bgdt(ext2_filesystem_t *fs)
     return 0;
 }
 
+/// @brief Writes a specific block group descriptor block to the block device.
+/// @details This is more efficient than writing the entire BGDT when only one
+/// block group has been modified.
+/// @param fs the ext2 filesystem structure.
+/// @param group_index the index of the block group to write.
+/// @return 0 on success, -1 on failure.
+static int ext2_write_bgdt_for_group(ext2_filesystem_t *fs, uint32_t group_index)
+{
+    if (!fs->block_groups) {
+        pr_err("The `block_groups` list is not initialized.\n");
+        return -1;
+    }
+    // Each block group descriptor is 32 bytes. Calculate which BGDT block contains this group.
+    uint32_t descriptors_per_block = fs->block_size / sizeof(ext2_group_descriptor_t);
+    uint32_t bgdt_block_index      = group_index / descriptors_per_block;
+    
+    if (bgdt_block_index >= fs->bgdt_length) {
+        pr_err("Block group %u descriptor is out of BGDT range.\n", group_index);
+        return -1;
+    }
+    
+    pr_debug("ext2_write_bgdt_for_group(group: %u, bgdt_block: %u)\n", group_index, bgdt_block_index);
+    // Write only the specific BGDT block containing this group's descriptor.
+    ext2_write_block(fs, fs->bgdt_start_block + bgdt_block_index, 
+                     (uint8_t *)((uintptr_t)fs->block_groups + (fs->block_size * bgdt_block_index)));
+    return 0;
+}
+
 /// @brief Writes the Block Group Descriptor Table (BGDT) to the block device associated with this filesystem.
 /// @param fs the ext2 filesystem structure.
 /// @return 0 on success, -1 on failure.
@@ -1208,9 +1236,9 @@ static int ext2_allocate_inode(ext2_filesystem_t *fs, unsigned preferred_group)
     fs->block_groups[group_index].free_inodes_count--;
     // Reduce the number of inodes inside the superblock.
     fs->superblock.free_inodes_count--;
-    // Update the bgdt.
-    if (ext2_write_bgdt(fs) < 0) {
-        pr_warning("Failed to write BGDT.\n");
+    // Update only the affected BGDT block (more efficient than writing all blocks).
+    if (ext2_write_bgdt_for_group(fs, group_index) < 0) {
+        pr_warning("Failed to write BGDT for group %u.\n", group_index);
     }
     // Update the superblock.
     if (ext2_write_superblock(fs) < 0) {
@@ -1260,9 +1288,9 @@ static uint32_t ext2_allocate_block(ext2_filesystem_t *fs)
     fs->block_groups[group_index].free_blocks_count--;
     // Decrease the number of free blocks inside the superblock.
     fs->superblock.free_blocks_count--;
-    // Update the BGDT.
-    if (ext2_write_bgdt(fs) < 0) {
-        pr_warning("Failed to write BGDT.\n");
+    // Update only the affected BGDT block (more efficient than writing all blocks).
+    if (ext2_write_bgdt_for_group(fs, group_index) < 0) {
+        pr_warning("Failed to write BGDT for group %u.\n", group_index);
     }
     // Update the superblock.
     if (ext2_write_superblock(fs) < 0) {
@@ -1311,9 +1339,9 @@ static void ext2_free_block(ext2_filesystem_t *fs, uint32_t block_index)
     fs->superblock.free_blocks_count++;
     // Increase the number of free blocks inside the BGDT entry.
     fs->block_groups[group_index].free_blocks_count++;
-    // Update the BGDT.
-    if (ext2_write_bgdt(fs) < 0) {
-        pr_warning("Failed to write BGDT.\n");
+    // Update only the affected BGDT block (more efficient than writing all blocks).
+    if (ext2_write_bgdt_for_group(fs, group_index) < 0) {
+        pr_warning("Failed to write BGDT for group %u.\n", group_index);
     }
     // Update the superblock.
     if (ext2_write_superblock(fs) < 0) {
@@ -1368,9 +1396,9 @@ static int ext2_free_inode(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t 
     fs->superblock.free_inodes_count++;
     // Increase the number of free inodes.
     fs->block_groups[group_index].free_inodes_count++;
-    // Update the bgdt.
-    if (ext2_write_bgdt(fs) < 0) {
-        pr_warning("Failed to write BGDT.\n");
+    // Update only the affected BGDT block (more efficient than writing all blocks).
+    if (ext2_write_bgdt_for_group(fs, group_index) < 0) {
+        pr_warning("Failed to write BGDT for group %u.\n", group_index);
     }
     // Update the superblock.
     if (ext2_write_superblock(fs) < 0) {
@@ -2124,7 +2152,9 @@ static inline int ext2_initialize_new_direntry_block(ext2_filesystem_t *fs, uint
     // Update the inode size based on the new block index
     inode.size = (block_index + 1) * fs->block_size;
 
-    // Write the updated inode back to the filesystem
+    // Write the updated inode back to the filesystem.
+    // Note: ext2_allocate_inode_block already wrote the inode, but we write it again here
+    // because we updated the size field after that call. This is necessary for correctness.
     if (ext2_write_inode(fs, &inode, inode_index) == -1) {
         pr_err("Failed to update the inode of `%u`.\n", inode_index);
         return 0;
