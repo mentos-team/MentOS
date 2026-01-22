@@ -34,51 +34,27 @@ QEMU_PID=$!
 echo "QEMU started with PID: ${QEMU_PID}"
 echo "Monitoring test progress..."
 echo "Build directory: ${BUILD_DIR}"
-echo "Files: serial.log (kernel) and test.log (tests)"
 echo ""
 
-# Monitor the test log and show progress
-last_test_size=0
-last_serial_size=0
-no_change_count=0
-while kill -0 "${QEMU_PID}" 2>/dev/null; do
-    sleep 2
-    
-    # Check serial.log first (boot messages)
-    if [ -f "${BUILD_DIR}/serial.log" ]; then
-        serial_size=$(wc -c < "${BUILD_DIR}/serial.log" 2>/dev/null || echo "0")
-        if [ "${serial_size}" -ne "${last_serial_size}" ] && [ "${serial_size}" -gt 0 ]; then
-            # Show last 5 lines of serial output if it changed
-            echo "[BOOT] Serial log updated (${serial_size} bytes)"
-            tail -n 5 "${BUILD_DIR}/serial.log" 2>/dev/null | sed 's/^/  /' || true
-            last_serial_size="${serial_size}"
-        fi
-    fi
-    
-    # Check test.log (test output)
-    if [ -f "${BUILD_DIR}/test.log" ]; then
-        current_size=$(wc -c < "${BUILD_DIR}/test.log" 2>/dev/null || echo "0")
-        
-        if [ "${current_size}" -ne "${last_test_size}" ]; then
-            # Show new content
-            tail -c +$((last_test_size + 1)) "${BUILD_DIR}/test.log" 2>/dev/null || true
-            last_test_size="${current_size}"
-            no_change_count=0
-        else
-            no_change_count=$((no_change_count + 1))
-            # Show heartbeat every 10 seconds of no output
-            if [ $((no_change_count % 5)) -eq 0 ]; then
-                echo "[$(date +%T)] Still running... (test.log: ${current_size} bytes, serial.log: ${last_serial_size} bytes)"
-            fi
-        fi
-    else
-        echo "[$(date +%T)] Waiting for test.log to be created..."
-    fi
-done
+# Wait a moment for QEMU to start and create log files
+sleep 1
 
-# Wait for QEMU to finish and get exit code
+# Tail both logs in the background, prefixing output for clarity
+tail -f "${BUILD_DIR}/serial.log" 2>/dev/null | sed 's/^/[SERIAL] /' &
+TAIL_SERIAL_PID=$!
+
+tail -f "${BUILD_DIR}/test.log" 2>/dev/null | sed 's/^/[TEST]   /' &
+TAIL_TEST_PID=$!
+
+# Wait for QEMU to finish
 wait "${QEMU_PID}"
 EXIT_CODE=$?
+
+# Kill the tail processes
+kill "${TAIL_SERIAL_PID}" "${TAIL_TEST_PID}" 2>/dev/null || true
+
+# Give a moment for final output to flush
+sleep 1
 
 echo ""
 echo "===================================================="
