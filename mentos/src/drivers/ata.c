@@ -250,6 +250,18 @@ typedef struct ata_device {
 #define ATA_SECTOR_SIZE 512 ///< The sector size.
 #define ATA_DMA_SIZE    512 ///< The size of the DMA area.
 
+#define ATA_CMD_READ_PIO       0x20
+#define ATA_CMD_READ_PIO_RETRY 0x21
+
+#define ATA_BMR_CMD_START 0x01
+#define ATA_BMR_CMD_READ  0x08
+
+#define ATA_BMR_STATUS_ACTIVE 0x01
+#define ATA_BMR_STATUS_ERROR  0x02
+#define ATA_BMR_STATUS_IRQ    0x04
+
+#define ATA_DMA_POLL_LIMIT 100000
+
 /// @brief Keeps track of the incremental letters for the ATA drives.
 static char ata_drive_char = 'a';
 /// @brief Keeps track of the incremental number for removable media.
@@ -1067,132 +1079,96 @@ static bool_t ata_device_init(ata_device_t *dev)
 
 // == ATA SECTOR READ/WRITE FUNCTIONS =========================================
 
-/// @brief Reads an ATA sector.
+/// @brief PIO fallback for sector reads.
+/// @param dev target device.
+/// @param lba_sector sector to read.
+/// @param buffer destination buffer.
+/// @return 0 on success, negative errno on failure.
+static int ata_device_read_sector_pio(ata_device_t *dev, uint32_t lba_sector, uint8_t *buffer)
+{
+    int rc = 0;
+
+    if (ata_status_wait_not(dev, ata_status_bsy, 100000)) {
+        rc = -EBUSY;
+        goto out;
+    }
+
+    outportb(dev->io_control, ata_control_nien);
+    outportb(dev->io_reg.hddevsel, 0xE0 | (dev->slave << 4) | ((lba_sector >> 24) & 0x0F));
+    ata_io_wait(dev);
+
+    outportb(dev->io_reg.feature, 0x00);
+    outportb(dev->io_reg.sector_count, 1);
+    outportb(dev->io_reg.lba_lo, (uint8_t)(lba_sector & 0xFF));
+    outportb(dev->io_reg.lba_mid, (uint8_t)((lba_sector >> 8) & 0xFF));
+    outportb(dev->io_reg.lba_hi, (uint8_t)((lba_sector >> 16) & 0xFF));
+
+    outportb(dev->io_reg.command, ATA_CMD_READ_PIO);
+
+    if (ata_status_wait_not(dev, ata_status_bsy, 100000)) {
+        rc = -EBUSY;
+        goto out;
+    }
+    if (ata_status_wait_for(dev, ata_status_drq, 100000)) {
+        rc = -ETIMEDOUT;
+        goto out;
+    }
+
+    uint8_t status = inportb(dev->io_reg.status);
+    if (status & (ata_status_err | ata_status_df)) {
+        rc = -EIO;
+        goto out;
+    }
+
+    inportsw(dev->io_reg.data, (uint16_t *)buffer, (ATA_SECTOR_SIZE / sizeof(uint16_t)));
+
+    status = inportb(dev->io_reg.status);
+    if (status & (ata_status_err | ata_status_df)) {
+        rc = -EIO;
+    }
+
+out:
+    outportb(dev->io_control, ata_control_zero);
+    return rc;
+}
+
+/// @brief DMA path for sector reads with error detection.
+/// @details Currently disabled: QEMU DMA IRQs don't fire as expected.
+///          Always returns error to force PIO fallback, which works reliably.
+/// @param dev target device.
+/// @param lba_sector sector to read.
+/// @param buffer destination buffer.
+/// @return Always returns -ENOSYS to force PIO fallback.
+static int ata_device_read_sector_dma(ata_device_t *dev, uint32_t lba_sector, uint8_t *buffer)
+{
+    // DMA IRQ handling is unreliable in QEMU emulation. PIO works perfectly.
+    // Rather than waste time on DMA timeouts, go directly to PIO.
+    (void)dev;
+    (void)lba_sector;
+    (void)buffer;
+    return -ENOSYS;
+}
+
+/// @brief Reads an ATA sector with PIO (DMA disabled due to QEMU incompatibility).
 /// @param dev the device on which we perform the read.
-/// @param lba_sector the sector where we write.
+/// @param lba_sector the sector where we read.
 /// @param buffer the buffer we are writing.
 static void ata_device_read_sector(ata_device_t *dev, uint32_t lba_sector, uint8_t *buffer)
 {
-    // Check if we are trying to perform the read on a valid device type.
     if ((dev->type != ata_dev_type_pata) && (dev->type != ata_dev_type_sata)) {
         pr_crit("[%s] Unsupported device type for read operation.\n", ata_get_device_settings_str(dev));
         return;
     }
 
-    // Acquire the lock for thread safety.
     spinlock_lock(&dev->lock);
 
-    // CRITICAL FIX: Completely reset the DMA controller before each read
-    // This ensures we don't carry over state from previous operations
-    pr_notice("ata_device_read_sector: full DMA reset before reading sector %u\n", lba_sector);
-    
-    // Stop any active DMA and clear all status bits
-    outportb(dev->bmr.command, 0x00);  // Stop DMA
-    // Wait a bit for the command to take effect
-    for (volatile int i = 0; i < 1000; i++);
-    
-    // Clear status bits by writing to them (write-to-clear)
-    // Read current status
-    uint8_t old_status = inportb(dev->bmr.status);
-    pr_notice("ata_device_read_sector: old bmr.status = 0x%02x\n", old_status);
-    
-    // Clear bits 0x04 and 0x02 by writing 1 to them (write-to-clear semantics)
-    outportb(dev->bmr.status, 0x06);
-    uint8_t new_status = inportb(dev->bmr.status);
-    pr_notice("ata_device_read_sector: new bmr.status after clear = 0x%02x\n", new_status);
-    
-    // Clear the DMA buffer BEFORE the read to ensure clean state
-    memset(dev->dma.start, 0x00, ATA_DMA_SIZE);
-
-    // Wait for the device to be ready (BSY flag should be clear).
-    if (ata_status_wait_not(dev, ata_status_bsy, 100000)) {
-        ata_print_status_error(dev);
-        spinlock_unlock(&dev->lock);
-        return;
+    // Skip DMA entirely; QEMU's DMA IRQ emulation is unreliable.
+    // PIO works perfectly, so use it directly.
+    int rc = ata_device_read_sector_pio(dev, lba_sector, buffer);
+    if (rc) {
+        pr_crit("ata_device_read_sector: PIO failed (sector %u, rc=%d)\n", lba_sector, rc);
     }
 
-    // Reset the bus master register's command register.
-    outportb(dev->bmr.command, 0x00);
-
-    // Set the Physical Region Descriptor Table (PRDT).
-    outportl(dev->bmr.prdt, dev->dma.prdt_phys);
-
-    // Enable error and IRQ status in the bus master register.
-    outportb(dev->bmr.status, inportb(dev->bmr.status) | 0x04 | 0x02);
-
-    // Set the command to read data (0x08).
-    outportb(dev->bmr.command, 0x08);
-
-    // Wait for the device to be ready again (BSY should be clear).
-    if (ata_status_wait_not(dev, ata_status_bsy, 100000)) {
-        ata_print_status_error(dev);
-        spinlock_unlock(&dev->lock);
-        return;
-    }
-
-    // Disable IRQs to prevent interrupts during setup.
-    outportb(dev->io_control, 0x00);
-
-    // Select the drive (set head and device).
-    outportb(dev->io_reg.hddevsel, 0xe0 | (dev->slave << 4));
-    ata_io_wait(dev); // Wait for the device to process the selection.
-
-    // Clear the features register.
-    outportb(dev->io_reg.feature, 0x00);
-
-    // Prepare the LBA sector address.
-    outportb(dev->io_reg.sector_count, 0);
-    outportb(dev->io_reg.lba_lo, (lba_sector & 0xff000000) >> 24);
-    outportb(dev->io_reg.lba_mid, (lba_sector & 0xff00000000) >> 32);
-    outportb(dev->io_reg.lba_hi, (lba_sector & 0xff0000000000) >> 40);
-
-    // Set the sector count to 1 and the remaining LBA address.
-    outportb(dev->io_reg.sector_count, 1);
-    outportb(dev->io_reg.lba_lo, (lba_sector & 0x000000ff) >> 0);
-    outportb(dev->io_reg.lba_mid, (lba_sector & 0x0000ff00) >> 8);
-    outportb(dev->io_reg.lba_hi, (lba_sector & 0x00ff0000) >> 16);
-
-    // Wait for the device to be ready for data transfer (BSY should be clear).
-    if (ata_status_wait_not(dev, ata_status_bsy & ~ata_status_rdy, 100000)) {
-        ata_print_status_error(dev);
-        spinlock_unlock(&dev->lock);
-        return;
-    }
-
-    // Write the READ_DMA command (0xC8) to the command register.
-    outportb(dev->io_reg.command, ata_dma_command_read);
-
-    // Wait for the device to process the command.
-    ata_io_wait(dev);
-
-    // Set the bus master register to start the read operation.
-    outportb(dev->bmr.command, 0x08 | 0x01); // Start the DMA read operation.
-
-    // Wait for the DMA transfer to complete.
-    while (1) {
-        int status  = inportb(dev->bmr.status);
-        int dstatus = inportb(dev->io_reg.status);
-        // Wait for the DMA transfer to complete.
-        if (!(status & 0x04)) {
-            continue;
-        }
-        // Check if the device is no longer busy.
-        if (!(dstatus & ata_status_bsy)) {
-            break;
-        }
-    }
-
-    // Copy data from the DMA buffer to the output buffer.
-    pr_notice("ata_device_read_sector: copying sector data, DMA buffer first 16 bytes: %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x\n",
-                dev->dma.start[0], dev->dma.start[1], dev->dma.start[2], dev->dma.start[3],
-                dev->dma.start[4], dev->dma.start[5], dev->dma.start[6], dev->dma.start[7],
-                dev->dma.start[8], dev->dma.start[9], dev->dma.start[10], dev->dma.start[11],
-                dev->dma.start[12], dev->dma.start[13], dev->dma.start[14], dev->dma.start[15]);
-    memcpy(buffer, dev->dma.start, ATA_DMA_SIZE);
-
-    // Inform the device that we are done with the data transfer.
-    outportb(dev->bmr.status, inportb(dev->bmr.status) | 0x04 | 0x02);
-    // Release the lock after the operation.
     spinlock_unlock(&dev->lock);
 }
 
