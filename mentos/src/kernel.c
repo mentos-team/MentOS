@@ -372,20 +372,24 @@ int kmain(boot_info_t *boot_informations)
     }
 
     //==========================================================================
-    pr_notice("Setting up keyboard driver...\n");
-    printf("Setting up keyboard driver...");
-    keyboard_initialize();
-    print_ok();
-    // Set the keymap type.
+    if (ps2_available) {
+        pr_notice("Setting up keyboard driver...\n");
+        printf("Setting up keyboard driver...");
+        keyboard_initialize();
+        print_ok();
+        // Set the keymap type.
 #ifdef USE_KEYMAP_US
-    set_keymap_type(KEYMAP_US);
+        set_keymap_type(KEYMAP_US);
 #elif USE_KEYMAP_DE
-    set_keymap_type(KEYMAP_DE);
+        set_keymap_type(KEYMAP_DE);
 #else
-    set_keymap_type(KEYMAP_IT);
+        set_keymap_type(KEYMAP_IT);
 #endif
 
-    keyboard_enable();
+        keyboard_enable();
+    } else {
+        pr_warning("Skipping keyboard driver because PS/2 is unavailable.\n");
+    }
 
     //==========================================================================
 #if 0

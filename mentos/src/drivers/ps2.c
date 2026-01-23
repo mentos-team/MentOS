@@ -4,10 +4,10 @@
 /// See LICENSE.md for details.
 
 // Setup the logging for this file (do this before any other include).
-#include "sys/kernel_levels.h"           // Include kernel log levels.
-#define __DEBUG_HEADER__ "[PS/2  ]"      ///< Change header.
-#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
-#include "io/debug.h"                    // Include debugging functions.
+#include "sys/kernel_levels.h"          // Include kernel log levels.
+#define __DEBUG_HEADER__ "[PS/2  ]"     ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_DEBUG ///< Set log level.
+#include "io/debug.h"                   // Include debugging functions.
 
 #include "drivers/ps2.h"
 #include "io/port_io.h"
@@ -81,9 +81,16 @@
 
 void ps2_write_data(unsigned char data)
 {
-    // Wait for the input buffer to be empty before sending data.
-    while (inportb(PS2_STATUS) & PS2_STATUS_INPUT_FULL) {
+    unsigned int timeout = 100000;
+
+    // Wait for the input buffer to be empty before sending data (with timeout).
+    while ((inportb(PS2_STATUS) & PS2_STATUS_INPUT_FULL) && --timeout) {
         pause();
+    }
+
+    if (!timeout) {
+        pr_warning("ps2_write_data: timeout waiting for input buffer\n");
+        return;
     }
 
     outportb(PS2_DATA, data);
@@ -92,12 +99,12 @@ void ps2_write_data(unsigned char data)
 void ps2_write_command(unsigned char command)
 {
     unsigned int timeout = 100000;
-    
+
     // Wait for the input buffer to be empty before sending data (with timeout).
     while ((inportb(PS2_STATUS) & PS2_STATUS_INPUT_FULL) && --timeout) {
         pause();
     }
-    
+
     if (!timeout) {
         pr_warning("ps2_write_command: timeout waiting for input buffer\n");
         return;
@@ -110,12 +117,12 @@ void ps2_write_command(unsigned char command)
 unsigned char ps2_read_data(void)
 {
     unsigned int timeout = 100000;
-    
+
     // Wait until the output buffer is not full (data is available, with timeout).
     while (!(inportb(PS2_STATUS) & PS2_STATUS_OUTPUT_FULL) && --timeout) {
         pause();
     }
-    
+
     if (!timeout) {
         pr_warning("ps2_read_data: timeout waiting for output buffer\n");
         return 0xFF;
@@ -201,6 +208,7 @@ int ps2_initialize(void)
     unsigned char status;
     unsigned char response;
     bool_t dual;
+    unsigned int flush_timeout;
 
     status = __ps2_get_controller_status();
     pr_debug("Status   : %s (%3d | %02x)\n", dec_to_binary(status, 8), status, status);
@@ -214,9 +222,17 @@ int ps2_initialize(void)
 
     pr_debug("Disabling first port...\n");
     __ps2_disable_first_port();
+    // Small delay to allow command to take effect
+    for (volatile int i = 0; i < 10000; i++) {
+        pause();
+    }
 
     pr_debug("Disabling second port...\n");
     __ps2_disable_second_port();
+    // Small delay to allow command to take effect
+    for (volatile int i = 0; i < 10000; i++) {
+        pause();
+    }
 
     // ========================================================================
     // Step 2: Flush The Output Buffer
@@ -230,7 +246,16 @@ int ps2_initialize(void)
     // you're discarding the data and don't care what it was).
 
     pr_debug("Flushing the output buffer...\n");
-    ps2_read_data();
+    // Flush the output buffer with timeout to prevent infinite loops
+    // Only read if output buffer is marked as full
+    flush_timeout = 100;
+    while (flush_timeout-- > 0) {
+        if (inportb(PS2_STATUS) & PS2_STATUS_OUTPUT_FULL) {
+            inportb(PS2_DATA);  // Read and discard
+        } else {
+            break;  // Buffer is empty, we're done
+        }
+    }
 
     // ========================================================================
     // Step 3: Set the Controller Configuration Byte
@@ -270,8 +295,17 @@ int ps2_initialize(void)
         pr_err("Self-test failed : 0x%02x\n", response);
         return 1;
     }
-    // Restore the value read before issuing 0xAA.
+    // The self-test can reset the controller, so always restore the configuration.
     __ps2_set_controller_status(status);
+    // Flush the output buffer after self-test as it can generate spurious data (with timeout).
+    flush_timeout = 100;
+    while (flush_timeout-- > 0) {
+        if (inportb(PS2_STATUS) & PS2_STATUS_OUTPUT_FULL) {
+            inportb(PS2_DATA);  // Read and discard
+        } else {
+            break;  // Buffer is empty
+        }
+    }
 
     // ========================================================================
     // Step 5: Determine If There Are 2 Channels
@@ -307,7 +341,8 @@ int ps2_initialize(void)
 
     ps2_write_command(PS2_CTRL_P1_TEST);
     response = ps2_read_data();
-    if (response && (response >= 0x01) && (response <= 0x04)) {
+    // Response 0x00 = success, 0x01-0x04 = specific line failure
+    if ((response >= 0x01) && (response <= 0x04)) {
         pr_err("Interface test failed on first port : %02x\n", response);
         pr_err("Reason: %s.\n", __ps2_get_response_error_message(response));
         return 1;
@@ -316,7 +351,7 @@ int ps2_initialize(void)
     if (dual) {
         ps2_write_command(PS2_CTRL_P2_TEST);
         response = ps2_read_data();
-        if (response && (response >= 0x01) && (response <= 0x04)) {
+        if ((response >= 0x01) && (response <= 0x04)) {
             pr_err("Interface test failed on second port : %02x\n", response);
             pr_err("Reason: %s.\n", __ps2_get_response_error_message(response));
             return 1;
@@ -360,33 +395,53 @@ int ps2_initialize(void)
     // 0xFA or 0xFC is received on a PS/2 port.
 
     // Reset first port.
+    pr_debug("Resetting first PS/2 port...\n");
     __ps2_write_first_port(0xFF);
     // Wait for `command acknowledged`.
     response = ps2_read_data();
-    if ((response) != PS2_DEV_SET_TYPEMATIC_ACK) {
-        pr_err("Failed to reset first PS/2 port: %d\n", response);
-        return 1;
-    }
-    // Wait for `self test successful`.
-    response = ps2_read_data();
-    if ((response) != PS2_DEV_SELF_TEST_PASS) {
-        pr_err("Failed to reset first PS/2 port: %d\n", response);
-        return 1;
+    if (response == 0xFF) {
+        // Timeout - device not present, this is acceptable.
+        pr_debug("First PS/2 port: no device present (timeout).\n");
+    } else if (response == PS2_DEV_SET_TYPEMATIC_ACK) {
+        // Device acknowledged reset (or resend), wait for self-test response.
+        response = ps2_read_data();
+        if (response == PS2_DEV_SELF_TEST_PASS) {
+            pr_debug("First PS/2 port: device reset successful.\n");
+        } else if (response == PS2_TEST_FAIL1 || response == PS2_TEST_FAIL2) {
+            pr_debug("First PS/2 port: device self-test failed (0x%02x).\n", response);
+        } else if (response == 0xFF) {
+            pr_debug("First PS/2 port: timeout waiting for self-test response.\n");
+        } else {
+            pr_debug("First PS/2 port: unexpected response to reset (0x%02x).\n", response);
+        }
+    } else {
+        pr_debug("First PS/2 port: unexpected response to reset (0x%02x).\n", response);
     }
 
-    // Reset second port.
-    __ps2_write_second_port(0xFF);
-    // Wait for `command acknowledged`.
-    response = ps2_read_data();
-    if ((response) != PS2_DEV_SET_TYPEMATIC_ACK) {
-        pr_err("Failed to reset first PS/2 port: %d\n", response);
-        return 1;
-    }
-    // Wait for `self test successful`.
-    response = ps2_read_data();
-    if ((response) != PS2_DEV_SELF_TEST_PASS) {
-        pr_err("Failed to reset first PS/2 port: %d\n", response);
-        return 1;
+    // Reset second port (only if dual channel).
+    if (dual) {
+        pr_debug("Resetting second PS/2 port...\n");
+        __ps2_write_second_port(0xFF);
+        // Wait for `command acknowledged`.
+        response = ps2_read_data();
+        if (response == 0xFF) {
+            // Timeout - device not present, this is acceptable.
+            pr_debug("Second PS/2 port: no device present (timeout).\n");
+        } else if (response == PS2_DEV_SET_TYPEMATIC_ACK) {
+            // Device acknowledged reset, wait for self-test response.
+            response = ps2_read_data();
+            if (response == PS2_DEV_SELF_TEST_PASS) {
+                pr_debug("Second PS/2 port: device reset successful.\n");
+            } else if (response == PS2_TEST_FAIL1 || response == PS2_TEST_FAIL2) {
+                pr_debug("Second PS/2 port: device self-test failed (0x%02x).\n", response);
+            } else if (response == 0xFF) {
+                pr_debug("Second PS/2 port: timeout waiting for self-test response.\n");
+            } else {
+                pr_debug("Second PS/2 port: unexpected response to reset (0x%02x).\n", response);
+            }
+        } else {
+            pr_debug("Second PS/2 port: unexpected response to reset (0x%02x).\n", response);
+        }
     }
 
     // Get the final status.
@@ -394,7 +449,15 @@ int ps2_initialize(void)
     pr_debug("Status   : %s (%3d | %02x)\n", dec_to_binary(status, 8), status, status);
 
     pr_debug("Flushing the output buffer...\n");
-    ps2_read_data();
+    // Final flush with timeout
+    flush_timeout = 100;
+    while (flush_timeout-- > 0) {
+        if (inportb(PS2_STATUS) & PS2_STATUS_OUTPUT_FULL) {
+            inportb(PS2_DATA);  // Read and discard
+        } else {
+            break;  // Buffer is empty
+        }
+    }
 
     return 0;
 }
