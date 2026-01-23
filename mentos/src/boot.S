@@ -29,8 +29,8 @@ MULTIBOOT_HEADER_FLAGS  equ (MULTIBOOT_PAGE_ALIGN | MULTIBOOT_MEMORY_INFO)
 MULTIBOOT_CHECKSUM      equ -(MULTIBOOT_HEADER_MAGIC + MULTIBOOT_HEADER_FLAGS)
 
 LOAD_MEMORY_ADDRESS equ 0x00000000
-; reserve (1024*1024) for the stack on a doubleword boundary
-KERNEL_STACK_SIZE   equ 0x100000
+; reserve (4*1024*1024) for the stack on a doubleword boundary (increased from 1MB for debug logging)
+KERNEL_STACK_SIZE   equ 0x400000
 
 ; -----------------------------------------------------------------------------
 ; SECTION (multiboot_header)

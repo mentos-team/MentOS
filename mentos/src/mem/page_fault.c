@@ -179,14 +179,48 @@ void page_fault_handler(pt_regs_t *f)
     // |  1  0  1 | User process tried to read a page and caused a protection fault
     // |  1  1  0 | User process tried to write to a non-present page entry
     // |  1  1  1 | User process tried to write a page and caused a protection fault
+    
+    // =========================================================================
+    // STACK OVERFLOW DETECTION - Check this FIRST
+    // =========================================================================
+    extern uint32_t stack_bottom, stack_top;
+    uint32_t faulting_addr = get_cr2();
+    
+    // Check if this is a fault on the kernel stack guard page (overflow)
+    if (faulting_addr == (uint32_t)&stack_bottom) {
+        pr_crit("\n");
+        pr_crit("========================================================\n");
+        pr_crit("           KERNEL STACK OVERFLOW DETECTED!\n");
+        pr_crit("========================================================\n");
+        pr_crit("Guard page fault at: 0x%p\n", faulting_addr);
+        pr_crit("Stack range: 0x%p - 0x%p\n", &stack_bottom, &stack_top);
+        pr_crit("Current ESP: 0x%p\n", f->esp);
+        pr_crit("Faulting EIP: 0x%p\n", f->eip);
+        pr_crit("The kernel stack has been exhausted by excessive usage.\n");
+        pr_crit("Possible causes:\n");
+        pr_crit("  - Recursive function calls\n");
+        pr_crit("  - Large local variables on stack\n");
+        pr_crit("  - Deep nested function calls during debug logging\n");
+        pr_crit("========================================================\n");
+        kernel_panic("Kernel Stack Overflow");
+        return;
+    }
+    
+    // Warn if stack usage is getting dangerously high (> 75% used)
+    uint32_t stack_used = (uint32_t)&stack_top - f->esp;
+    uint32_t stack_total = (uint32_t)&stack_top - (uint32_t)&stack_bottom;
+    if (stack_used > ((3 * stack_total) / 4)) {
+        pr_warning("WARNING: Kernel stack heavily used: %u KB / %u KB total (%.1f%%)\n",
+                    stack_used / 1024, stack_total / 1024,
+                    ((float)stack_used * 100.0f) / stack_total);
+    }
 
     // Extract the error
     int err_user    = bit_check(f->err_code, 2) != 0;
     int err_rw      = bit_check(f->err_code, 1) != 0;
     int err_present = bit_check(f->err_code, 0) != 0;
 
-    // Extract the address that caused the page fault from the CR2 register.
-    uint32_t faulting_addr = get_cr2();
+    // faulting_addr is already extracted above for stack overflow check
 
     // Retrieve the current page directory's physical address.
     uint32_t phy_dir = (uint32_t)paging_get_current_pgd();
