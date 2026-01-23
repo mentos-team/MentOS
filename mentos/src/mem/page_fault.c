@@ -207,12 +207,22 @@ void page_fault_handler(pt_regs_t *f)
     }
     
     // Warn if stack usage is getting dangerously high (> 75% used)
-    uint32_t stack_used = (uint32_t)&stack_top - f->esp;
-    uint32_t stack_total = (uint32_t)&stack_top - (uint32_t)&stack_bottom;
-    if (stack_used > ((3 * stack_total) / 4)) {
-        pr_warning("WARNING: Kernel stack heavily used: %u KB / %u KB total (%.1f%%)\n",
-                    stack_used / 1024, stack_total / 1024,
-                    ((float)stack_used * 100.0f) / stack_total);
+    // Stack grows downward: stack_top (high addr) -> esp (current) -> ... -> stack_bottom (low addr)
+    // stack_used represents how far we've grown from stack_top toward stack_bottom
+    // Note: These are linker symbols representing addresses directly
+    uint32_t stack_bottom_addr = (uint32_t)&stack_bottom;
+    uint32_t stack_top_addr = (uint32_t)&stack_top;
+    uint32_t stack_total = stack_top_addr - stack_bottom_addr;
+    if (stack_total > 0 && stack_total < (10 * 1024 * 1024)) {  // Sanity check: should be 4MB
+        uint32_t stack_used = stack_top_addr - f->esp;
+        if (stack_used > ((3 * stack_total) / 4)) {
+            // Convert to KB for readability (divide by 1024)
+            uint32_t total_kb = stack_total >> 10;  // Same as / 1024
+            uint32_t used_kb = stack_used >> 10;
+            float percent = ((float)stack_used * 100.0f) / (float)stack_total;
+            pr_warning("WARNING: Kernel stack heavily used: %u KB / %u KB total (%.1f%%)\n",
+                        used_kb, total_kb, percent);
+        }
     }
 
     // Extract the error
