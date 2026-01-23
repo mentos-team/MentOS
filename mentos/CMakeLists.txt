@@ -21,10 +21,12 @@ file(GLOB_RECURSE KERNEL_SOURCES "${CMAKE_SOURCE_DIR}/mentos/src/*.c" "${CMAKE_S
 if(NOT ENABLE_KERNEL_TESTS)
     list(FILTER KERNEL_SOURCES EXCLUDE REGEX ".*/tests/.*")
 endif()
+# Remove boot.c and boot.S from kernel sources - they only belong in the bootloader
+list(FILTER KERNEL_SOURCES EXCLUDE REGEX ".*boot\\.(c|S)$")
 # Collect the kernel include directories.
 set(KERNEL_INCLUDE_DIRS ${CMAKE_SOURCE_DIR}/mentos/inc ${CMAKE_SOURCE_DIR}/libc/inc)
-# Create the kernel static library.
-add_library(kernel ${KERNEL_SOURCES})
+# Create the kernel static library - explicitly include multiboot.c since it's needed by both kernel and bootloader
+add_library(kernel ${KERNEL_SOURCES} "${CMAKE_SOURCE_DIR}/mentos/src/multiboot.c")
 # Add the includes.
 target_include_directories(kernel PUBLIC ${KERNEL_INCLUDE_DIRS})
 # Define that this code is kernel code.
@@ -103,6 +105,7 @@ add_library(
     bootloader
     ${CMAKE_SOURCE_DIR}/mentos/src/boot.c
     ${CMAKE_SOURCE_DIR}/mentos/src/boot.S
+    ${CMAKE_SOURCE_DIR}/mentos/src/multiboot.c
 )
 # Add the includes.
 target_include_directories(
@@ -124,9 +127,9 @@ target_compile_definitions(
 # Build the kernel.
 add_custom_target(
     bootloader.bin ALL
-    COMMAND ${CMAKE_LINKER} --output kernel.bin -melf_i386 -static --oformat elf32-i386 -z noexecstack --script ${CMAKE_CURRENT_SOURCE_DIR}/kernel.lds $<TARGET_FILE_NAME:kernel> -u kmain
+    COMMAND ${CMAKE_LINKER} --output kernel.bin -melf_i386 -static --oformat elf32-i386 -z noexecstack --script ${CMAKE_CURRENT_SOURCE_DIR}/kernel.lds $<TARGET_FILE:kernel> -u kmain
     COMMAND ${CMAKE_OBJCOPY} -I binary -O elf32-i386 -B i386 kernel.bin kernel.bin.o
-    COMMAND ${CMAKE_LINKER} --output bootloader.bin -melf_i386 -static --oformat elf32-i386 -z noexecstack --script ${CMAKE_CURRENT_SOURCE_DIR}/boot.lds $<TARGET_FILE_NAME:bootloader> kernel.bin.o
+    COMMAND ${CMAKE_LINKER} --output bootloader.bin -melf_i386 -static --oformat elf32-i386 -z noexecstack --script ${CMAKE_CURRENT_SOURCE_DIR}/boot.lds $<TARGET_FILE:bootloader> kernel.bin.o
     DEPENDS kernel
     DEPENDS bootloader
 )
