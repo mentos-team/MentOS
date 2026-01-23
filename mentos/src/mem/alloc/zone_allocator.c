@@ -36,8 +36,8 @@
 /// @brief Aligns the given address up to the nearest order boundary.
 /// @param addr The address to align.
 /// @return The aligned address.
-#define MAX_ORDER_ALIGN(addr)                                                                                          \
-    (((addr) & (~((PAGE_SIZE << (MAX_BUDDYSYSTEM_GFP_ORDER - 1)) - 1))) +                                              \
+#define MAX_ORDER_ALIGN(addr)                                             \
+    (((addr) & (~((PAGE_SIZE << (MAX_BUDDYSYSTEM_GFP_ORDER - 1)) - 1))) + \
      (PAGE_SIZE << (MAX_BUDDYSYSTEM_GFP_ORDER - 1)))
 
 /// @brief Keeps track of system memory management data.
@@ -228,13 +228,13 @@ static int pmm_check(void)
     }
 
     char buddy_status[512] = {0};
-    pr_notice("Zones status before testing:\n");
+    pr_debug("Zones status before testing:\n");
     buddy_system_to_string(&zone_normal->buddy_system, buddy_status, sizeof(buddy_status));
-    pr_notice("    %s\n", buddy_status);
+    pr_debug("    %s\n", buddy_status);
     buddy_system_to_string(&zone_highmem->buddy_system, buddy_status, sizeof(buddy_status));
-    pr_notice("    %s\n", buddy_status);
+    pr_debug("    %s\n", buddy_status);
 
-    pr_notice("\tStep 1: Testing allocation in kernel-space...\n");
+    pr_debug("\tStep 1: Testing allocation in kernel-space...\n");
     {
         // Allocate a single page with GFP_KERNEL.
         page_t *page = alloc_pages(GFP_KERNEL, 0);
@@ -253,7 +253,7 @@ static int pmm_check(void)
             return 0;
         }
     }
-    pr_notice("\tStep 2: Testing allocation in user-space...\n");
+    pr_debug("\tStep 2: Testing allocation in user-space...\n");
     {
         // Allocate a single page with GFP_HIGHUSER.
         page_t *page = alloc_pages(GFP_HIGHUSER, 0);
@@ -272,8 +272,7 @@ static int pmm_check(void)
             return 0;
         }
     }
-    pr_notice("\tStep 3: Testing allocation of five 2^{i} page frames in "
-              "user-space...\n");
+    pr_debug("\tStep 3: Testing allocation of five 2^{i} page frames in user-space...\n");
     {
         page_t *pages[5];
         // Allocate pages with GFP_HIGHUSER.
@@ -297,8 +296,7 @@ static int pmm_check(void)
             return 0;
         }
     }
-    pr_notice("\tStep 4: Testing allocation of five 2^{i} page frames in "
-              "kernel-space...\n");
+    pr_debug("\tStep 4: Testing allocation of five 2^{i} page frames in kernel-space...\n");
     {
         page_t *pages[5];
         // Allocate pages with GFP_KERNEL.
@@ -399,7 +397,7 @@ static int zone_init(char *name, int zone_index, uint32_t adr_from, uint32_t adr
         return 0;
     }
 
-    __print_zone(LOGLEVEL_NOTICE, zone);
+    __print_zone(LOGLEVEL_DEBUG, zone);
 
     return 1;
 }
@@ -582,7 +580,7 @@ int pmmngr_init(boot_info_t *boot_info)
         return 0;
     }
 
-    __print_memory_info(LOGLEVEL_NOTICE, &memory);
+    __print_memory_info(LOGLEVEL_DEBUG, &memory);
 
     return pmm_check();
 }

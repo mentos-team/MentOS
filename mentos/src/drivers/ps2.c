@@ -4,10 +4,10 @@
 /// See LICENSE.md for details.
 
 // Setup the logging for this file (do this before any other include).
-#include "sys/kernel_levels.h"          // Include kernel log levels.
-#define __DEBUG_HEADER__ "[PS/2  ]"     ///< Change header.
-#define __DEBUG_LEVEL__  LOGLEVEL_DEBUG ///< Set log level.
-#include "io/debug.h"                   // Include debugging functions.
+#include "sys/kernel_levels.h"           // Include kernel log levels.
+#define __DEBUG_HEADER__ "[PS/2  ]"      ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
+#include "io/debug.h"                    // Include debugging functions.
 
 #include "drivers/ps2.h"
 #include "io/port_io.h"
@@ -251,9 +251,9 @@ int ps2_initialize(void)
     flush_timeout = 100;
     while (flush_timeout-- > 0) {
         if (inportb(PS2_STATUS) & PS2_STATUS_OUTPUT_FULL) {
-            inportb(PS2_DATA);  // Read and discard
+            inportb(PS2_DATA); // Read and discard
         } else {
-            break;  // Buffer is empty, we're done
+            break; // Buffer is empty, we're done
         }
     }
 
@@ -301,9 +301,9 @@ int ps2_initialize(void)
     flush_timeout = 100;
     while (flush_timeout-- > 0) {
         if (inportb(PS2_STATUS) & PS2_STATUS_OUTPUT_FULL) {
-            inportb(PS2_DATA);  // Read and discard
+            inportb(PS2_DATA); // Read and discard
         } else {
-            break;  // Buffer is empty
+            break; // Buffer is empty
         }
     }
 
@@ -453,9 +453,9 @@ int ps2_initialize(void)
     flush_timeout = 100;
     while (flush_timeout-- > 0) {
         if (inportb(PS2_STATUS) & PS2_STATUS_OUTPUT_FULL) {
-            inportb(PS2_DATA);  // Read and discard
+            inportb(PS2_DATA); // Read and discard
         } else {
-            break;  // Buffer is empty
+            break; // Buffer is empty
         }
     }
 

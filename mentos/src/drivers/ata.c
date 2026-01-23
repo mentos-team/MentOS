@@ -6,10 +6,10 @@
 /// @{
 
 // Setup the logging for this file (do this before any other include).
-#include "sys/kernel_levels.h"           // Include kernel log levels.
-#define __DEBUG_HEADER__ "[ATA   ]"      ///< Change header.
-#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
-#include "io/debug.h"                    // Include debugging functions.
+#include "sys/kernel_levels.h"          // Include kernel log levels.
+#define __DEBUG_HEADER__ "[ATA   ]"     ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_DEBUG ///< Set log level.
+#include "io/debug.h"                   // Include debugging functions.
 
 #include "drivers/ata/ata.h"
 #include "drivers/ata/ata_types.h"
@@ -260,90 +260,90 @@ static uint32_t ata_pci    = 0x00000000;
 /// @brief The ATA primary master control register locations.
 static ata_device_t ata_primary_master = {
     .io_base = 0x1F0,
-    .io_reg =
-        {
-            .data         = 0x1F0 + 0x00,
-            .error        = 0x1F0 + 0x01,
-            .feature      = 0x1F0 + 0x01,
-            .sector_count = 0x1F0 + 0x02,
-            .lba_lo       = 0x1F0 + 0x03,
-            .lba_mid      = 0x1F0 + 0x04,
-            .lba_hi       = 0x1F0 + 0x05,
-            .hddevsel     = 0x1F0 + 0x06,
-            .status       = 0x1F0 + 0x07,
-            .command      = 0x1F0 + 0x07,
-        },
+    .io_reg  = {
+                .data         = 0x1F0 + 0x00,
+                .error        = 0x1F0 + 0x01,
+                .feature      = 0x1F0 + 0x01,
+                .sector_count = 0x1F0 + 0x02,
+                .lba_lo       = 0x1F0 + 0x03,
+                .lba_mid      = 0x1F0 + 0x04,
+                .lba_hi       = 0x1F0 + 0x05,
+                .hddevsel     = 0x1F0 + 0x06,
+                .status       = 0x1F0 + 0x07,
+                .command      = 0x1F0 + 0x07,
+                },
     .io_control = 0x3F6,
     .primary    = 1,
     .secondary  = 0,
     .master     = 1,
-    .slave      = 0};
+    .slave      = 0
+};
 
 /// @brief The ATA primary slave control register locations.
 static ata_device_t ata_primary_slave = {
     .io_base = 0x1F0,
-    .io_reg =
-        {
-            .data         = 0x1F0 + 0x00,
-            .error        = 0x1F0 + 0x01,
-            .feature      = 0x1F0 + 0x01,
-            .sector_count = 0x1F0 + 0x02,
-            .lba_lo       = 0x1F0 + 0x03,
-            .lba_mid      = 0x1F0 + 0x04,
-            .lba_hi       = 0x1F0 + 0x05,
-            .hddevsel     = 0x1F0 + 0x06,
-            .status       = 0x1F0 + 0x07,
-            .command      = 0x1F0 + 0x07,
-        },
+    .io_reg  = {
+                .data         = 0x1F0 + 0x00,
+                .error        = 0x1F0 + 0x01,
+                .feature      = 0x1F0 + 0x01,
+                .sector_count = 0x1F0 + 0x02,
+                .lba_lo       = 0x1F0 + 0x03,
+                .lba_mid      = 0x1F0 + 0x04,
+                .lba_hi       = 0x1F0 + 0x05,
+                .hddevsel     = 0x1F0 + 0x06,
+                .status       = 0x1F0 + 0x07,
+                .command      = 0x1F0 + 0x07,
+                },
     .io_control = 0x3F6,
     .primary    = 1,
     .secondary  = 0,
     .master     = 0,
-    .slave      = 1};
+    .slave      = 1
+};
 
 /// @brief The ATA secondary master control register locations.
 static ata_device_t ata_secondary_master = {
     .io_base = 0x170,
-    .io_reg =
-        {
-            .data         = 0x170 + 0x00,
-            .error        = 0x170 + 0x01,
-            .feature      = 0x170 + 0x01,
-            .sector_count = 0x170 + 0x02,
-            .lba_lo       = 0x170 + 0x03,
-            .lba_mid      = 0x170 + 0x04,
-            .lba_hi       = 0x170 + 0x05,
-            .hddevsel     = 0x170 + 0x06,
-            .status       = 0x170 + 0x07,
-            .command      = 0x170 + 0x07,
-        },
+    .io_reg  = {
+                .data         = 0x170 + 0x00,
+                .error        = 0x170 + 0x01,
+                .feature      = 0x170 + 0x01,
+                .sector_count = 0x170 + 0x02,
+                .lba_lo       = 0x170 + 0x03,
+                .lba_mid      = 0x170 + 0x04,
+                .lba_hi       = 0x170 + 0x05,
+                .hddevsel     = 0x170 + 0x06,
+                .status       = 0x170 + 0x07,
+                .command      = 0x170 + 0x07,
+                },
     .io_control = 0x376,
     .primary    = 0,
     .secondary  = 1,
     .master     = 1,
-    .slave      = 0};
+    .slave      = 0
+};
 
 /// @brief The ATA secondary slave control register locations.
 static ata_device_t ata_secondary_slave = {
     .io_base = 0x170,
-    .io_reg =
-        {
-            .data         = 0x170 + 0x00,
-            .error        = 0x170 + 0x01,
-            .feature      = 0x170 + 0x01,
-            .sector_count = 0x170 + 0x02,
-            .lba_lo       = 0x170 + 0x03,
-            .lba_mid      = 0x170 + 0x04,
-            .lba_hi       = 0x170 + 0x05,
-            .hddevsel     = 0x170 + 0x06,
-            .status       = 0x170 + 0x07,
-            .command      = 0x170 + 0x07,
-        },
+    .io_reg  = {
+                .data         = 0x170 + 0x00,
+                .error        = 0x170 + 0x01,
+                .feature      = 0x170 + 0x01,
+                .sector_count = 0x170 + 0x02,
+                .lba_lo       = 0x170 + 0x03,
+                .lba_mid      = 0x170 + 0x04,
+                .lba_hi       = 0x170 + 0x05,
+                .hddevsel     = 0x170 + 0x06,
+                .status       = 0x170 + 0x07,
+                .command      = 0x170 + 0x07,
+                },
     .io_control = 0x376,
     .primary    = 0,
     .secondary  = 1,
     .master     = 0,
-    .slave      = 1};
+    .slave      = 1
+};
 
 // == SUPPORT FUNCTIONS =======================================================
 
@@ -1082,6 +1082,28 @@ static void ata_device_read_sector(ata_device_t *dev, uint32_t lba_sector, uint8
     // Acquire the lock for thread safety.
     spinlock_lock(&dev->lock);
 
+    // CRITICAL FIX: Completely reset the DMA controller before each read
+    // This ensures we don't carry over state from previous operations
+    pr_notice("ata_device_read_sector: full DMA reset before reading sector %u\n", lba_sector);
+    
+    // Stop any active DMA and clear all status bits
+    outportb(dev->bmr.command, 0x00);  // Stop DMA
+    // Wait a bit for the command to take effect
+    for (volatile int i = 0; i < 1000; i++);
+    
+    // Clear status bits by writing to them (write-to-clear)
+    // Read current status
+    uint8_t old_status = inportb(dev->bmr.status);
+    pr_notice("ata_device_read_sector: old bmr.status = 0x%02x\n", old_status);
+    
+    // Clear bits 0x04 and 0x02 by writing 1 to them (write-to-clear semantics)
+    outportb(dev->bmr.status, 0x06);
+    uint8_t new_status = inportb(dev->bmr.status);
+    pr_notice("ata_device_read_sector: new bmr.status after clear = 0x%02x\n", new_status);
+    
+    // Clear the DMA buffer BEFORE the read to ensure clean state
+    memset(dev->dma.start, 0x00, ATA_DMA_SIZE);
+
     // Wait for the device to be ready (BSY flag should be clear).
     if (ata_status_wait_not(dev, ata_status_bsy, 100000)) {
         ata_print_status_error(dev);
@@ -1161,11 +1183,15 @@ static void ata_device_read_sector(ata_device_t *dev, uint32_t lba_sector, uint8
     }
 
     // Copy data from the DMA buffer to the output buffer.
+    pr_notice("ata_device_read_sector: copying sector data, DMA buffer first 16 bytes: %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x\n",
+                dev->dma.start[0], dev->dma.start[1], dev->dma.start[2], dev->dma.start[3],
+                dev->dma.start[4], dev->dma.start[5], dev->dma.start[6], dev->dma.start[7],
+                dev->dma.start[8], dev->dma.start[9], dev->dma.start[10], dev->dma.start[11],
+                dev->dma.start[12], dev->dma.start[13], dev->dma.start[14], dev->dma.start[15]);
     memcpy(buffer, dev->dma.start, ATA_DMA_SIZE);
 
     // Inform the device that we are done with the data transfer.
     outportb(dev->bmr.status, inportb(dev->bmr.status) | 0x04 | 0x02);
-
     // Release the lock after the operation.
     spinlock_unlock(&dev->lock);
 }
@@ -1641,7 +1667,7 @@ static ata_device_type_t ata_device_detect(ata_device_t *dev)
         // Increment the drive letter.
         ++ata_drive_char;
 
-        pr_notice(
+        pr_debug(
             "Initialized %s device on %s.\n", ata_get_device_type_str(dev->type), ata_get_device_settings_str(dev));
 
     } else if ((type == ata_dev_type_patapi) || (type == ata_dev_type_satapi)) {
