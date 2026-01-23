@@ -318,37 +318,45 @@ void page_fault_handler(pt_regs_t *f)
         // Update the entry flags.
         __set_pg_table_flags(entry, MM_PRESENT | MM_RW | MM_GLOBAL | MM_COW | MM_UPDADDR);
     } else {
-        // Check if the page is Copy on Write (CoW).
-        if (__page_handle_cow(entry)) {
-            pr_crit(
-                "Page fault caused by Copy on Write (CoW). Flags: user=%d, "
-                "rw=%d, present=%d\n",
-                err_user, err_rw, err_present);
-            
-            // Handle based on fault context
-            // For user-mode faults with write access to present pages: send SIGSEGV
-            if (err_user && err_rw && err_present) {
-                // Get the current process.
-                task_struct *task = scheduler_get_current_process();
-                if (task) {
-                    // Notifies current process.
-                    sys_kill(task->pid, SIGSEGV);
-                    // Now, we know the process needs to be removed from the list of
-                    // running processes. We pushed the SEGV signal in the queues of
-                    // signal to send to the process. To properly handle the signal,
-                    // just run scheduler.
-                    scheduler_run(f);
-                    return;
+        // Check if the page is marked as Copy on Write (CoW) BEFORE trying to handle it.
+        // Only attempt CoW handling if the page actually has the kernel_cow flag set.
+        if (entry && entry->kernel_cow) {
+            // Try to handle the CoW fault.
+            if (__page_handle_cow(entry)) {
+                pr_crit(
+                    "Page fault caused by Copy on Write (CoW). Flags: user=%d, "
+                    "rw=%d, present=%d\n",
+                    err_user, err_rw, err_present);
+                
+                // Handle based on fault context
+                // For user-mode faults with write access to present pages: send SIGSEGV
+                if (err_user && err_rw && err_present) {
+                    // Get the current process.
+                    task_struct *task = scheduler_get_current_process();
+                    if (task) {
+                        // Notifies current process.
+                        sys_kill(task->pid, SIGSEGV);
+                        // Now, we know the process needs to be removed from the list of
+                        // running processes. We pushed the SEGV signal in the queues of
+                        // signal to send to the process. To properly handle the signal,
+                        // just run scheduler.
+                        scheduler_run(f);
+                        return;
+                    }
+                    pr_crit("No task found for current process, unable to send SIGSEGV.\n");
+                } else {
+                    // For kernel-mode or non-write faults, log and continue
+                    // The page might not be CoW but still valid for this fault pattern
+                    pr_debug("Non-user-write CoW fault pattern detected, may be normal.\n");
                 }
-                pr_crit("No task found for current process, unable to send SIGSEGV.\n");
-            } else {
-                // For kernel-mode or non-write faults, log and continue
-                // The page might not be CoW but still valid for this fault pattern
-                pr_debug("Non-user-write CoW fault pattern detected, may be normal.\n");
+                
+                // Panic only if this is truly an invalid fault state
+                pr_crit("Continuing with page fault handling, triggering panic.\n");
+                __page_fault_panic(f, faulting_addr);
             }
-            
-            // Panic only if this is truly an invalid fault state
-            pr_crit("Continuing with page fault handling, triggering panic.\n");
+        } else {
+            // Page is not marked as CoW, this is a different fault type (e.g., demand paging)
+            pr_debug("Page fault is not Copy-on-Write, likely demand paging or other fault type.\n");
             __page_fault_panic(f, faulting_addr);
         }
     }
