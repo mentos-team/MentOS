@@ -4,10 +4,10 @@
 /// See LICENSE.md for details.
 
 // Setup the logging for this file (do this before any other include).
-#include "sys/kernel_levels.h"          // Include kernel log levels.
-#define __DEBUG_HEADER__ "[EXT2  ]"     ///< Change header.
-#define __DEBUG_LEVEL__  LOGLEVEL_DEBUG ///< Set log level.
-#include "io/debug.h"                   // Include debugging functions.
+#include "sys/kernel_levels.h"           // Include kernel log levels.
+#define __DEBUG_HEADER__ "[EXT2  ]"      ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
+#include "io/debug.h"                    // Include debugging functions.
 // If defined, ETX2 will debug everything.
 // #define EXT2_FULL_DEBUG
 
@@ -1166,7 +1166,7 @@ static int ext2_read_inode(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t 
     // Get the real inode offset inside the block.
     group_offset %= fs->inodes_per_block_count;
     // Allocate the cache.
-    uint8_t *cache = ext2_alloc_cache(fs);
+    uint8_t *cache        = ext2_alloc_cache(fs);
     // Read the block containing the inode table.
     uint32_t actual_block = fs->block_groups[group_index].inode_table + block_index;
     if (ext2_read_block(fs, actual_block, cache) < 0) {
@@ -1802,14 +1802,14 @@ static ssize_t ext2_read_inode_block(ext2_filesystem_t *fs, ext2_inode_t *inode,
 
     // Get the real block index
     uint32_t real_index = ext2_get_real_block_index(fs, inode, block_index);
-    
+
     // Note: real_index == 0 may indicate either:
     // 1. An unallocated block (sparse file)
     // 2. An actual error reading indirect blocks
     // We can't distinguish at this point, but we should still try to read block 0
     // (which is invalid and will fail in ext2_read_block anyway).
     // This is better than returning -1 for valid sparse files.
-    
+
     // Log the resolved block index (debug level)
 #ifdef EXT2_FULL_DEBUG
     pr_debug("ext2_read_inode_block(block: %4u, real: %4u)\n", block_index, real_index);
