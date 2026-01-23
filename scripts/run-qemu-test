@@ -1,0 +1,64 @@
+#!/bin/bash
+# Wrapper script to run QEMU tests with timeout and progress feedback for CI
+
+set -e
+
+BUILD_DIR="${1:-build}"
+TIMEOUT="${2:-600}"  # 10 minutes default
+
+echo "===================================================="
+echo "Starting QEMU test run (timeout: ${TIMEOUT}s)..."
+echo "===================================================="
+
+# Remove old logs to ensure fresh start
+rm -f "${BUILD_DIR}/test.log" "${BUILD_DIR}/serial.log"
+
+# Run QEMU with timeout
+# Note: First -serial goes to serial.log (kernel messages)
+#       Second -serial goes to test.log (test output from runtests)
+timeout --foreground "${TIMEOUT}" \
+    qemu-system-i386 \
+    -vga std \
+    -m 1096M \
+    -nodefaults \
+    -serial file:${BUILD_DIR}/serial.log \
+    -drive file=${BUILD_DIR}/rootfs.img,format=raw,if=ide,index=0,media=disk \
+    -serial file:${BUILD_DIR}/test.log \
+    -nographic \
+    -device isa-debug-exit \
+    -boot d \
+    -cdrom ${BUILD_DIR}/cdrom_test.iso &
+
+QEMU_PID=$!
+
+echo "QEMU started with PID: ${QEMU_PID}"
+echo "Monitoring test progress..."
+echo "Build directory: ${BUILD_DIR}"
+echo ""
+
+# Stream both logs in real-time using tail -F (follows by name, retries if file doesn't exist)
+# The --pid flag makes tail exit when QEMU dies
+(tail -F "${BUILD_DIR}/serial.log" 2>/dev/null | sed -u 's/^/[SERIAL] /' &)
+(tail -F "${BUILD_DIR}/test.log" 2>/dev/null | sed -u 's/^/[TEST]   /' &)
+
+# Wait for QEMU to finish
+wait "${QEMU_PID}"
+EXIT_CODE=$?
+
+# Give a moment for final output to flush
+sleep 1
+
+echo ""
+echo "===================================================="
+echo "QEMU finished with exit code: ${EXIT_CODE}"
+echo "===================================================="
+
+# QEMU with isa-debug-exit returns exit code 1 on success (exit code 0 from guest = 1 from host)
+# Any other exit code is a failure
+if [ "${EXIT_CODE}" -eq 1 ] || [ "${EXIT_CODE}" -eq 0 ]; then
+    echo "Test run completed successfully"
+    exit 0
+else
+    echo "Test run failed or timed out"
+    exit "${EXIT_CODE}"
+fi

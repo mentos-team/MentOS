@@ -118,17 +118,24 @@ static inline void rtc_read_datetime(void)
 static inline void rtc_update_datetime(void)
 {
     static unsigned int first_update = 1;
-    // Wait until rtc is not updating.
-    while (is_updating_rtc()) {
+    unsigned int timeout;
+    
+    // Wait until rtc is not updating (with timeout to prevent infinite loop).
+    timeout = 1000;
+    while (is_updating_rtc() && --timeout) {
+        __asm__ __volatile__("pause");
     }
+    
     // Read the values.
     rtc_read_datetime();
     if (first_update) {
         do {
             // Save the previous global time.
             previous_global_time = global_time;
-            // Wait until rtc is not updating.
-            while (is_updating_rtc()) {
+            // Wait until rtc is not updating (with timeout).
+            timeout = 1000;
+            while (is_updating_rtc() && --timeout) {
+                __asm__ __volatile__("pause");
             }
             // Read the values.
             rtc_read_datetime();

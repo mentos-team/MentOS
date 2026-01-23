@@ -179,8 +179,6 @@ add_custom_target(filesystem
     COMMAND echo '============================================================================='
     COMMAND echo 'Creating EXT2 filesystem...'
     COMMAND echo '============================================================================='
-    COMMAND mkdir -p ${CMAKE_SOURCE_DIR}/files/proc
-    COMMAND mkdir -p ${CMAKE_SOURCE_DIR}/files/dev
     COMMAND mke2fs -L 'rootfs' -N 0 -d ${CMAKE_SOURCE_DIR}/files -b 4096 -m 5 -r 1 -t ext2 -v -F ${CMAKE_BINARY_DIR}/rootfs.img 32M
     COMMAND echo '============================================================================='
     COMMAND echo 'Done!'
@@ -300,7 +298,7 @@ add_custom_target(
   COMMAND mv ${CMAKE_BINARY_DIR}/iso/boot/grub/grub.cfg.runtests ${CMAKE_BINARY_DIR}/iso/boot/grub/grub.cfg
   COMMAND cp ${CMAKE_BINARY_DIR}/mentos/bootloader.bin ${CMAKE_BINARY_DIR}/iso/boot
   COMMAND grub-mkrescue -o ${CMAKE_BINARY_DIR}/cdrom_test.iso ${CMAKE_BINARY_DIR}/iso
-  DEPENDS bootloader.bin
+    DEPENDS bootloader.bin filesystem
 )
 
 # This target runs the emulator, and executes the runtests binary as init process.

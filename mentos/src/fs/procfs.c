@@ -578,8 +578,10 @@ static inline int procfs_unlink(const char *path)
         return -EPERM;
     }
     procfs_file_t *procfs_file = procfs_find_entry_path(path);
-    if (procfs_file != NULL) {
-        return -EEXIST;
+    // If the file does not exist, report ENOENT. The previous logic inverted
+    // this condition and led to a NULL dereference below, triggering CI errors.
+    if (procfs_file == NULL) {
+        return -ENOENT;
     }
     // Check the type.
     if ((procfs_file->flags & DT_REG) == 0) {

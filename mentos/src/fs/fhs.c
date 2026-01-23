@@ -49,6 +49,8 @@ static const fhs_directory_t fhs_directories[] = {
     {"/etc",       S_IFDIR | 0755,  "System configuration"          },
     // Device files
     {"/dev",       S_IFDIR | 0755,  "Device files"                  },
+    // Process information
+    {"/proc",      S_IFDIR | 0555,  "Process information"           },
     // Mount points
     {"/mnt",       S_IFDIR | 0755,  "Temporary mount points"        },
     {"/media",     S_IFDIR | 0755,  "Removable media mount points"  },
@@ -90,7 +92,7 @@ static int create_directory_if_not_exists(const char *path, mode_t mode)
 
 int fhs_initialize(void)
 {
-    pr_notice("Initializing Filesystem Hierarchy Standard (FHS) directories...\n");
+    pr_debug("Initializing Filesystem Hierarchy Standard (FHS) directories...\n");
 
     int failed_count = 0;
 
@@ -105,7 +107,7 @@ int fhs_initialize(void)
     }
 
     if (failed_count == 0) {
-        pr_notice("[FHS] Successfully initialized all standard directories.\n");
+        pr_debug("[FHS] Successfully initialized all standard directories.\n");
         return 0;
     } else {
         pr_warning("[FHS] %d directory initialization warnings (non-critical).\n", failed_count);

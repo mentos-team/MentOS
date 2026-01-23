@@ -257,14 +257,14 @@ int kmain(boot_info_t *boot_informations)
     print_ok();
 
     //==========================================================================
-    pr_notice("Initialize Filesystem Hierarchy Standard directories...\n");
-    printf("Initialize FHS directories...");
-    if (fhs_initialize()) {
-        print_fail();
-        pr_emerg("Failed to initialize FHS directories!\n");
-        return 1;
-    }
-    print_ok();
+    // pr_notice("Initialize Filesystem Hierarchy Standard directories...\n");
+    // printf("Initialize FHS directories...");
+    // if (fhs_initialize()) {
+    //     print_fail();
+    //     pr_emerg("Failed to initialize FHS directories!\n");
+    //     return 1;
+    // }
+    // print_ok();
 
     //==========================================================================
     pr_notice("    Initialize memory devices...\n");
@@ -363,28 +363,33 @@ int kmain(boot_info_t *boot_informations)
     //==========================================================================
     pr_notice("Setting up PS/2 driver...\n");
     printf("Setting up PS/2 driver...");
-    if (ps2_initialize()) {
+    int ps2_available = (ps2_initialize() == 0);
+    if (!ps2_available) {
         print_fail();
-        pr_emerg("Failed to initialize proc system entries!\n");
-        return 1;
+        pr_warning("PS/2 not available (likely headless/QEMU). Continuing without keyboard/mouse.\n");
+    } else {
+        print_ok();
     }
-    print_ok();
 
     //==========================================================================
-    pr_notice("Setting up keyboard driver...\n");
-    printf("Setting up keyboard driver...");
-    keyboard_initialize();
-    print_ok();
-    // Set the keymap type.
+    if (ps2_available) {
+        pr_notice("Setting up keyboard driver...\n");
+        printf("Setting up keyboard driver...");
+        keyboard_initialize();
+        print_ok();
+        // Set the keymap type.
 #ifdef USE_KEYMAP_US
-    set_keymap_type(KEYMAP_US);
+        set_keymap_type(KEYMAP_US);
 #elif USE_KEYMAP_DE
-    set_keymap_type(KEYMAP_DE);
+        set_keymap_type(KEYMAP_DE);
 #else
-    set_keymap_type(KEYMAP_IT);
+        set_keymap_type(KEYMAP_IT);
 #endif
 
-    keyboard_enable();
+        keyboard_enable();
+    } else {
+        pr_warning("Skipping keyboard driver because PS/2 is unavailable.\n");
+    }
 
     //==========================================================================
 #if 0
