@@ -490,16 +490,19 @@ int kmain(boot_info_t *boot_informations)
 
     // Switch to the page directory of init.
     paging_switch_pgd(init_process->mm->pgd);
+    
+    // Debug: print init process details before jumping
+    pr_notice("Init process details:\n");
+    pr_notice("  EIP: 0x%08x\n", init_process->thread.regs.eip);
+    pr_notice("  ESP: 0x%08x\n", init_process->thread.regs.useresp);
+    pr_notice("  PGD: 0x%08x\n", init_process->mm->pgd);
+    
     // Jump into init process.
     scheduler_enter_user_jmp(
         // Entry point.
         init_process->thread.regs.eip,
         // Stack pointer.
         init_process->thread.regs.useresp);
-    // Enable interrupt requests.
-    sti();
-    for (;;) {
-    }
     // We should not be here.
     pr_emerg("Dear developer, we have to talk...\n");
     return 1;
