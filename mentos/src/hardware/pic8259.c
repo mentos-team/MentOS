@@ -80,10 +80,8 @@ void pic8259_init_irq(void)
     outportb(MASTER_PORT_DATA, master_cur_mask);
     outportb(SLAVE_PORT_DATA, slave_cur_mask);
 
+    // Enable the cascade to the slave PIC (IRQ2).
     pic8259_irq_enable(IRQ_TO_SLAVE_PIC);
-
-    outportb(0xFF, MASTER_PORT_DATA);
-    outportb(0xFF, SLAVE_PORT_DATA);
 }
 
 int pic8259_irq_enable(uint32_t irq)

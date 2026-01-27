@@ -116,7 +116,7 @@ void ps2_write_command(unsigned char command)
 
 unsigned char ps2_read_data(void)
 {
-    unsigned int timeout = 100000;
+    unsigned int timeout = 1000000;
 
     // Wait until the output buffer is not full (data is available, with timeout).
     while (!(inportb(PS2_STATUS) & PS2_STATUS_OUTPUT_FULL) && --timeout) {
@@ -150,7 +150,13 @@ static inline void __ps2_set_controller_status(unsigned char status)
 
 /// @brief Checks if the PS2 controller is dual channel.
 /// @return 1 if dual channel, 0 otherwise.
-static inline int __ps2_is_dual_channel(void) { return bit_check(__ps2_get_controller_status(), 6) != 0; }
+static inline int __ps2_is_dual_channel(void)
+{
+    // Bit 5 is the clock-disable for the second port when a second port exists.
+    // If that bit stays set even after enabling the second port, we assume single channel.
+    const unsigned char status = __ps2_get_controller_status();
+    return bit_check(status, 5) == 0;
+}
 
 /// @brief Enables the first PS2 port.
 static inline void __ps2_enable_first_port(void) { ps2_write_command(PS2_CTRL_P1_ENABLE); }
@@ -210,8 +216,21 @@ int ps2_initialize(void)
     bool_t dual;
     unsigned int flush_timeout;
 
+    // Pre-init: aggressively flush any stale data from BIOS/bootloader
+    pr_debug("Initial aggressive buffer flush...\n");
+    for (int flush_retry = 0; flush_retry < 10; flush_retry++) {
+        unsigned int retry = 100;
+        while (retry-- > 0) {
+            if (inportb(PS2_STATUS) & PS2_STATUS_OUTPUT_FULL) {
+                inportb(PS2_DATA); // Read and discard
+            } else {
+                break;
+            }
+        }
+    }
+
     status = __ps2_get_controller_status();
-    pr_debug("Status   : %s (%3d | %02x)\n", dec_to_binary(status, 8), status, status);
+    pr_debug("Initial Status   : %s (%3d | %02x)\n", dec_to_binary(status, 8), status, status);
 
     // ========================================================================
     // Step 1: Disable Devices
@@ -269,12 +288,12 @@ int ps2_initialize(void)
 
     // Get the status.
     status = __ps2_get_controller_status();
-    pr_debug("Disable IRQs and translation...\n");
-    // Clear bits 0, 1 and 6.
+    pr_debug("Disable IRQs, enable clocks, and disable translation...\n");
+    // Clear bits 0, 1 and 6 (IRQs off, translation off) and bit 4 (P1 clock on).
     bit_clear_assign(status, 0);
     bit_clear_assign(status, 1);
-    // We want to keep the translation from Set 2/3 to Set 1, active.
-    //bit_clear_assign(status, 6);
+    bit_clear_assign(status, 4);
+    bit_clear_assign(status, 6);
     __ps2_set_controller_status(status);
     pr_debug("Status   : %s (%3d | %02x)\n", dec_to_binary(status, 8), status, status);
 
@@ -319,11 +338,14 @@ int ps2_initialize(void)
     __ps2_enable_second_port();
     // Read the status.
     status = __ps2_get_controller_status();
-    // Check if it is a dual channel PS/2 device.
+    // Check if it is a dual channel PS/2 device (bit 5 clear after enabling second clock).
     dual   = !bit_check(status, 5);
     if (dual) {
         pr_debug("Recognized a `dual channel` PS/2 controller...\n");
         __ps2_disable_second_port();
+        // Ensure second clock is enabled in the config byte for later use.
+        bit_clear_assign(status, 5);
+        __ps2_set_controller_status(status);
     } else {
         pr_debug("Recognized a `single channel` PS/2 controller...\n");
     }
@@ -375,12 +397,14 @@ int ps2_initialize(void)
     // Get the status.
     status = __ps2_get_controller_status();
     pr_debug("Status   : %s (%3d | %02x)\n", dec_to_binary(status, 8), status, status);
-    // Set bit 0 for the first port.
-    bit_set_assign(status, 0);
+    // Enable IRQs and clocks, keep translation disabled.
+    bit_set_assign(status, 0);  // IRQ for first port
+    bit_clear_assign(status, 4); // Ensure first clock enabled
     if (dual) {
-        // Set bit 1 for the second port.
-        bit_set_assign(status, 1);
+        bit_set_assign(status, 1);  // IRQ for second port
+        bit_clear_assign(status, 5); // Ensure second clock enabled
     }
+    bit_clear_assign(status, 6); // Keep translation off after init
     __ps2_set_controller_status(status);
 
     // ========================================================================
@@ -394,17 +418,39 @@ int ps2_initialize(void)
     // and let the hot-plug code figure out that the device is present if/when
     // 0xFA or 0xFC is received on a PS/2 port.
 
+    // Before resetting devices, flush any stale data in the buffer.
+    pr_debug("Flushing buffer before device reset...\n");
+    flush_timeout = 100;
+    while (flush_timeout-- > 0) {
+        if (inportb(PS2_STATUS) & PS2_STATUS_OUTPUT_FULL) {
+            inportb(PS2_DATA); // Read and discard
+        } else {
+            break;
+        }
+    }
+
     // Reset first port.
     pr_debug("Resetting first PS/2 port...\n");
     __ps2_write_first_port(0xFF);
+    // Give device time to respond
+    for (volatile int i = 0; i < 50000; i++) {
+        pause();
+    }
     // Wait for `command acknowledged`.
     response = ps2_read_data();
+    pr_debug("First port reset response: 0x%02x\n", response);
     if (response == 0xFF) {
         // Timeout - device not present, this is acceptable.
         pr_debug("First PS/2 port: no device present (timeout).\n");
     } else if (response == PS2_DEV_SET_TYPEMATIC_ACK) {
         // Device acknowledged reset (or resend), wait for self-test response.
+        pr_debug("First port reset acknowledged, waiting for self-test...\n");
+        // Give device time to complete self-test
+        for (volatile int i = 0; i < 100000; i++) {
+            pause();
+        }
         response = ps2_read_data();
+        pr_debug("First port self-test response: 0x%02x\n", response);
         if (response == PS2_DEV_SELF_TEST_PASS) {
             pr_debug("First PS/2 port: device reset successful.\n");
         } else if (response == PS2_TEST_FAIL1 || response == PS2_TEST_FAIL2) {
@@ -422,14 +468,25 @@ int ps2_initialize(void)
     if (dual) {
         pr_debug("Resetting second PS/2 port...\n");
         __ps2_write_second_port(0xFF);
+        // Give device time to respond
+        for (volatile int i = 0; i < 50000; i++) {
+            pause();
+        }
         // Wait for `command acknowledged`.
         response = ps2_read_data();
+        pr_debug("Second port reset response: 0x%02x\n", response);
         if (response == 0xFF) {
             // Timeout - device not present, this is acceptable.
             pr_debug("Second PS/2 port: no device present (timeout).\n");
         } else if (response == PS2_DEV_SET_TYPEMATIC_ACK) {
             // Device acknowledged reset, wait for self-test response.
+            pr_debug("Second port reset acknowledged, waiting for self-test...\n");
+            // Give device time to complete self-test
+            for (volatile int i = 0; i < 100000; i++) {
+                pause();
+            }
             response = ps2_read_data();
+            pr_debug("Second port self-test response: 0x%02x\n", response);
             if (response == PS2_DEV_SELF_TEST_PASS) {
                 pr_debug("Second PS/2 port: device reset successful.\n");
             } else if (response == PS2_TEST_FAIL1 || response == PS2_TEST_FAIL2) {
@@ -458,6 +515,14 @@ int ps2_initialize(void)
             break; // Buffer is empty
         }
     }
+
+    // ========================================================================
+    // Step 9: PS/2 initialization complete
+    // The PS/2 controller is now configured with interrupts enabled in its
+    // config byte. IRQ handlers will enable the corresponding PIC IRQs when
+    // they are installed (keyboard_initialize, mouse_install, etc).
+
+    pr_notice("PS/2 controller initialized successfully.\n");
 
     return 0;
 }
