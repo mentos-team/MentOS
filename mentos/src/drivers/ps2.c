@@ -288,12 +288,13 @@ int ps2_initialize(void)
 
     // Get the status.
     status = __ps2_get_controller_status();
-    pr_debug("Disable IRQs, enable clocks, and disable translation...\n");
-    // Clear bits 0, 1 and 6 (IRQs off, translation off) and bit 4 (P1 clock on).
+    pr_debug("Disable IRQs, enable clocks, and enable translation...\n");
+    // Clear bits 0 and 1 (IRQs off) and bit 4 (P1 clock on).
+    // Keep bit 6 SET to enable translation (convert set 2 to set 1).
     bit_clear_assign(status, 0);
     bit_clear_assign(status, 1);
     bit_clear_assign(status, 4);
-    bit_clear_assign(status, 6);
+    bit_set_assign(status, 6);  // Enable translation
     __ps2_set_controller_status(status);
     pr_debug("Status   : %s (%3d | %02x)\n", dec_to_binary(status, 8), status, status);
 
@@ -397,14 +398,14 @@ int ps2_initialize(void)
     // Get the status.
     status = __ps2_get_controller_status();
     pr_debug("Status   : %s (%3d | %02x)\n", dec_to_binary(status, 8), status, status);
-    // Enable IRQs and clocks, keep translation disabled.
+    // Enable IRQs and clocks, keep translation enabled.
     bit_set_assign(status, 0);  // IRQ for first port
     bit_clear_assign(status, 4); // Ensure first clock enabled
     if (dual) {
         bit_set_assign(status, 1);  // IRQ for second port
         bit_clear_assign(status, 5); // Ensure second clock enabled
     }
-    bit_clear_assign(status, 6); // Keep translation off after init
+    bit_set_assign(status, 6); // Keep translation ON (set 2 -> set 1)
     __ps2_set_controller_status(status);
 
     // ========================================================================
