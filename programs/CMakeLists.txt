@@ -56,13 +56,16 @@ foreach(FILE_NAME ${PROGRAM_LIST})
     # TEXT ADDRESS
     # =========================================================================
     # Randomize .text section address so when debugging symbols don't clash.
-    # The allowed range is from 256MB to 2.75GB
-    # Minimum allowed address: 0x10000000
-    # Max allowed address: 0xB0000000
+    # User-space range: 0x08000000 to 0x0BFFFFFF (safe user space, no kernel overlap)
+    # Third hex digit must be 8,9,A,B only (restrict from 0-F to 8-B)
     string(MD5 RAND_HASH ${FILE_NAME})
-    string(SUBSTRING ${RAND_HASH} 1 3 TEXADDR_INFIX)
-    string(RANDOM LENGTH 1 ALPHABET 0123456789AB RANDOM_SEED ${RAND_HASH} TEXADDR_FIRST)
-    set(TEXT_ADDR 0x${TEXADDR_FIRST}${TEXADDR_INFIX}0000)
+    string(SUBSTRING ${RAND_HASH} 1 2 TEXADDR_MID)
+    string(RANDOM LENGTH 1 ALPHABET 89AB RANDOM_SEED ${RAND_HASH} TEXADDR_HIGH)
+    # Create address in range 0x08XXXXXX to 0x0BXXXXXX (safe user space)
+    set(TEXT_ADDR 0x0${TEXADDR_HIGH}${TEXADDR_MID}0000)
+    if(FILE_NAME MATCHES "^init")
+        message(STATUS "init: TEXT_ADDR=${TEXT_ADDR}")
+    endif()
 
     # =========================================================================
     # EXECUTABLE
@@ -78,7 +81,8 @@ foreach(FILE_NAME ${PROGRAM_LIST})
     # We need to specify the name of the entry function.
     target_compile_options(${TARGET_NAME} PRIVATE -u_start)
     # Add the linking properties.
-    set_target_properties(${TARGET_NAME} PROPERTIES LINK_FLAGS "-Wl,-Ttext=${TEXT_ADDR},-e_start,-melf_i386")
+    # Place .text.entry section first to ensure consistent entry point offset
+    set_target_properties(${TARGET_NAME} PROPERTIES LINK_FLAGS "-Wl,-Ttext=${TEXT_ADDR},-e_start,-melf_i386,--sort-section=alignment")
     # Set the output directory.
     set_target_properties(${TARGET_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${MENTOS_BIN_DIR}")
     # Set the output name.
