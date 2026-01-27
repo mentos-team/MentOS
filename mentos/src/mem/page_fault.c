@@ -179,14 +179,49 @@ void page_fault_handler(pt_regs_t *f)
     // |  1  0  1 | User process tried to read a page and caused a protection fault
     // |  1  1  0 | User process tried to write to a non-present page entry
     // |  1  1  1 | User process tried to write a page and caused a protection fault
+    
+    // =========================================================================
+    // STACK OVERFLOW DETECTION - Check this FIRST
+    // =========================================================================
+    extern uint32_t stack_bottom, stack_top;
+    uint32_t faulting_addr = get_cr2();
+    
+    // Check if this is a fault on the kernel stack guard page (overflow)
+    if (faulting_addr == (uint32_t)&stack_bottom) {
+        pr_crit("\n");
+        pr_crit("========================================================\n");
+        pr_crit("           KERNEL STACK OVERFLOW DETECTED!\n");
+        pr_crit("========================================================\n");
+        pr_crit("Guard page fault at: 0x%p\n", faulting_addr);
+        pr_crit("Stack range: 0x%p - 0x%p\n", &stack_bottom, &stack_top);
+        pr_crit("Current ESP: 0x%p\n", f->esp);
+        pr_crit("Faulting EIP: 0x%p\n", f->eip);
+        pr_crit("The kernel stack has been exhausted by excessive usage.\n");
+        pr_crit("Possible causes:\n");
+        pr_crit("  - Recursive function calls\n");
+        pr_crit("  - Large local variables on stack\n");
+        pr_crit("  - Deep nested function calls during debug logging\n");
+        pr_crit("========================================================\n");
+        kernel_panic("Kernel Stack Overflow");
+        return;
+    }
+    
+    // Warn if stack usage is getting dangerously high (> 75% used)
+    // NOTE: This check is currently disabled due to issues with linker symbol resolution
+    // The more important guard page detection above will catch actual stack overflows
+    // TODO: Fix symbol resolution for stack_bottom and stack_top in paging context
+    
+    // Stack grows downward: stack_top (high addr) -> esp (current) -> ... -> stack_bottom (low addr)
+    // uint32_t stack_bottom_addr = (uint32_t)&stack_bottom;
+    // uint32_t stack_top_addr = (uint32_t)&stack_top;
+    // These would be used for usage calculation, but require proper symbol resolution
 
     // Extract the error
     int err_user    = bit_check(f->err_code, 2) != 0;
     int err_rw      = bit_check(f->err_code, 1) != 0;
     int err_present = bit_check(f->err_code, 0) != 0;
 
-    // Extract the address that caused the page fault from the CR2 register.
-    uint32_t faulting_addr = get_cr2();
+    // faulting_addr is already extracted above for stack overflow check
 
     // Retrieve the current page directory's physical address.
     uint32_t phy_dir = (uint32_t)paging_get_current_pgd();
@@ -283,32 +318,45 @@ void page_fault_handler(pt_regs_t *f)
         // Update the entry flags.
         __set_pg_table_flags(entry, MM_PRESENT | MM_RW | MM_GLOBAL | MM_COW | MM_UPDADDR);
     } else {
-        // Check if the page is Copy on Write (CoW).
-        if (__page_handle_cow(entry)) {
-            pr_crit(
-                "Page fault caused by Copy on Write (CoW). Flags: user=%d, "
-                "rw=%d, present=%d\n",
-                err_user, err_rw, err_present);
-            // If the fault was caused by a user process, send a SIGSEGV signal.
-            if (err_user && err_rw && err_present) {
-                // Get the current process.
-                task_struct *task = scheduler_get_current_process();
-                if (task) {
-                    // Notifies current process.
-                    sys_kill(task->pid, SIGSEGV);
-                    // Now, we know the process needs to be removed from the list of
-                    // running processes. We pushed the SEGV signal in the queues of
-                    // signal to send to the process. To properly handle the signal,
-                    // just run scheduler.
-                    scheduler_run(f);
-                    return;
+        // Check if the page is marked as Copy on Write (CoW) BEFORE trying to handle it.
+        // Only attempt CoW handling if the page actually has the kernel_cow flag set.
+        if (entry && entry->kernel_cow) {
+            // Try to handle the CoW fault.
+            if (__page_handle_cow(entry)) {
+                pr_crit(
+                    "Page fault caused by Copy on Write (CoW). Flags: user=%d, "
+                    "rw=%d, present=%d\n",
+                    err_user, err_rw, err_present);
+                
+                // Handle based on fault context
+                // For user-mode faults with write access to present pages: send SIGSEGV
+                if (err_user && err_rw && err_present) {
+                    // Get the current process.
+                    task_struct *task = scheduler_get_current_process();
+                    if (task) {
+                        // Notifies current process.
+                        sys_kill(task->pid, SIGSEGV);
+                        // Now, we know the process needs to be removed from the list of
+                        // running processes. We pushed the SEGV signal in the queues of
+                        // signal to send to the process. To properly handle the signal,
+                        // just run scheduler.
+                        scheduler_run(f);
+                        return;
+                    }
+                    pr_crit("No task found for current process, unable to send SIGSEGV.\n");
+                } else {
+                    // For kernel-mode or non-write faults, log and continue
+                    // The page might not be CoW but still valid for this fault pattern
+                    pr_debug("Non-user-write CoW fault pattern detected, may be normal.\n");
                 }
-                pr_crit("No task found for current process, unable to send "
-                        "SIGSEGV.\n");
-            } else {
-                pr_crit("Invalid flags for CoW handling, continuing...\n");
+                
+                // Panic only if this is truly an invalid fault state
+                pr_crit("Continuing with page fault handling, triggering panic.\n");
+                __page_fault_panic(f, faulting_addr);
             }
-            pr_crit("Continuing with page fault handling, triggering panic.\n");
+        } else {
+            // Page is not marked as CoW, this is a different fault type (e.g., demand paging)
+            pr_debug("Page fault is not Copy-on-Write, likely demand paging or other fault type.\n");
             __page_fault_panic(f, faulting_addr);
         }
     }

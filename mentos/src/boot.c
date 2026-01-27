@@ -19,8 +19,8 @@
 /// @param boot_info
 extern void boot_kernel(uint32_t stack_pointer, uint32_t entry, boot_info_t *boot_info);
 
-/// @brief Size of the kernel's stack.
-#define KERNEL_STACK_SIZE 0x100000
+/// @brief Size of the kernel's stack (4MB - increased from 1MB to accommodate debug logging).
+#define KERNEL_STACK_SIZE (4 * 0x100000)
 
 /// Serial port for QEMU.
 #define SERIAL_COM1 (0x03F8)
