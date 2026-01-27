@@ -13,9 +13,9 @@ extern int runtests;
 
 void kernel_panic(const char *msg)
 {
-    pr_emerg("\nPANIC:\n%s\n\nWelcome to Kernel Debugging Land...\n\n", msg);
-    pr_emerg("\n");
-    __asm__ __volatile__("cli"); // Disable interrupts
+    pr_emerg("Welcome to Kernel Debugging Land...\n");
+    pr_emerg("%s\n", msg);
+    __asm__ __volatile__("cli");
     if (runtests) {
         outports(SHUTDOWN_PORT, 0x2000);
     } // Terminate qemu running the tests
