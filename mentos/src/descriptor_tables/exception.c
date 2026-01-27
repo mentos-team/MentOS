@@ -60,7 +60,6 @@ char *isr_routines_description[IDT_SIZE];
 static inline void default_isr_handler(pt_regs_t *f)
 {
     uint32_t irq_line = f->int_no;
-    PRINT_REGS(pr_emerg, f);
     pr_emerg(
         "No handler for execption: %d (%s)\n", irq_line,
         (irq_line < 32) ? exception_messages[irq_line] : "no description");
