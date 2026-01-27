@@ -317,6 +317,7 @@ int elf_load_file(task_struct *task, vfs_file_t *file, uint32_t *entry)
     pr_debug("Entry          : 0x%x\n", header->entry);
     pr_debug("Headers offset : 0x%x\n", header->phoff);
     pr_debug("Headers count  : %d\n", header->phnum);
+    pr_notice("ELF entry point from header: 0x%x\n", header->entry);
     // Check the elf header.
     if (!elf_check_file_header(header)) {
         pr_err("File %s is not a valid ELF file.\n", stat_buf.st_size, file->name);
@@ -333,6 +334,7 @@ int elf_load_file(task_struct *task, vfs_file_t *file, uint32_t *entry)
     }
 
     // Set the entry.
+    pr_notice("Setting entry point to 0x%x (from ELF header)\n", header->entry);
     (*entry) = header->entry;
 
     kfree(buffer);
