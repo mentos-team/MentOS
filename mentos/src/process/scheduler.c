@@ -200,7 +200,7 @@ void scheduler_enter_user_jmp(uintptr_t location, uintptr_t stack)
 
     // last context switch time.
     runqueue.curr->se.exec_start = timer_get_ticks();
-
+    
     // Jump in location.
     enter_userspace(location, stack);
 }

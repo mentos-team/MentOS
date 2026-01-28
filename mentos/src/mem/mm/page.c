@@ -32,19 +32,29 @@ uint32_t get_virtual_address_from_page(page_t *page)
         return 0;
     }
 
-    // Calculate the offset from the low memory base address.
-    uint32_t offset = page_index - memory.page_index_min;
+    // Determine if this page is in LowMem or HighMem zone
+    uint32_t low_mem_max_pfn = memory.low_mem.end_addr / PAGE_SIZE;
+    uint32_t vaddr;
+    
+    if (page_index < low_mem_max_pfn) {
+        // LowMem page: calculate offset from low memory base
+        uint32_t offset = page_index - memory.page_index_min;
+        vaddr = memory.low_mem.virt_start + (offset * PAGE_SIZE);
+    } else {
+        // HighMem page: calculate offset from high memory base
+        uint32_t high_mem_min_pfn = memory.high_mem.start_addr / PAGE_SIZE;
+        uint32_t offset = page_index - high_mem_min_pfn;
+        vaddr = memory.high_mem.virt_start + (offset * PAGE_SIZE);
+    }
 
-    // Calculate the corresponding low memory virtual address.
-    uint32_t vaddr = memory.low_mem.virt_start + (offset * PAGE_SIZE);
-
-    // Validate the computed virtual address.
+    // Validate the computed virtual address
     if (!is_valid_virtual_address(vaddr)) {
-        pr_err("Computed virtual address 0x%p is invalid.\n", vaddr);
+        pr_err("Computed virtual address 0x%p is invalid (page_index=%u, in_lowmem=%d).\n",
+               vaddr, page_index, (page_index < low_mem_max_pfn));
         return 0;
     }
 
-    // Return the valid virtual address.
+    // Return the valid virtual address
     return vaddr;
 }
 

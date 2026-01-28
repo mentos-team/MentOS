@@ -6,10 +6,12 @@
 // Setup the logging for this file (do this before any other include).
 #include "sys/kernel_levels.h"           // Include kernel log levels.
 #define __DEBUG_HEADER__ "[VMEM  ]"      ///< Change header.
-#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
+#define __DEBUG_LEVEL__  LOGLEVEL_DEBUG ///< Set log level.
 #include "io/debug.h"                    // Include debugging functions.
 
 #include "mem/mm/vmem.h"
+#include "mem/mm/page.h"
+#include "mem/paging.h"
 #include "string.h"
 #include "system/panic.h"
 
@@ -178,16 +180,32 @@ uint32_t vmem_map_physical_pages(page_t *page, int pfn_count)
     // Get the physical address of the given page.
     uint32_t phy_address = get_physical_address_from_page(page);
 
-    // Get the main page directory.
-    page_directory_t *main_pgd = paging_get_main_pgd();
-    // Error handling: Failed to get the main page directory.
-    if (!main_pgd) {
-        pr_crit("Failed to get the main page directory\n");
+    // Resolve current PGD (CR3 phys) to lowmem virtual pointer for safe table manipulation
+    page_directory_t *curr_pgd = NULL;
+    uint32_t cr3_phys = 0;
+    {
+        cr3_phys = (uint32_t)paging_get_current_pgd();
+        if (cr3_phys) {
+            page_t *cr3_page = get_page_from_physical_address(cr3_phys);
+            if (cr3_page) {
+                curr_pgd = (page_directory_t *)get_virtual_address_from_page(cr3_page);
+            }
+        }
+        if (!curr_pgd) {
+            // Fallback to main PGD if current is unavailable
+            curr_pgd = paging_get_main_pgd();
+            pr_debug("vmem_map_physical_pages: using main_pgd fallback (cr3_phys=0x%08x)\n", cr3_phys);
+        } else {
+            pr_debug("vmem_map_physical_pages: resolved CR3 phys=0x%08x -> virt=0x%08x\n", cr3_phys, curr_pgd);
+        }
+    }
+    if (!curr_pgd) {
+        pr_crit("Failed to get a valid page directory for vmem mapping\n");
         return 0;
     }
 
-    // Update the virtual memory area with the new mapping.
-    mem_upd_vm_area(main_pgd, vaddr, phy_address, pfn_count * PAGE_SIZE, MM_PRESENT | MM_RW | MM_GLOBAL | MM_UPDADDR);
+    // Update the virtual memory area with the new mapping in the active PGD
+    mem_upd_vm_area(curr_pgd, vaddr, phy_address, pfn_count * PAGE_SIZE, MM_PRESENT | MM_RW | MM_GLOBAL | MM_UPDADDR);
 
     return vaddr;
 }
@@ -279,16 +297,27 @@ int vmem_unmap_virtual_address_page(virt_map_page_t *page)
     // Convert the virtual map page to its corresponding virtual address.
     uint32_t addr = VIRT_PAGE_TO_ADDRESS(page);
 
-    // Get the main page directory.
-    page_directory_t *main_pgd = paging_get_main_pgd();
-    // Error handling: Failed to get the main page directory.
-    if (!main_pgd) {
-        pr_crit("Failed to get the main page directory\n");
+    // Unmap in the current page directory (CR3 phys -> lowmem virt) to match mapping behavior
+    page_directory_t *curr_pgd = NULL;
+    {
+        uint32_t cr3_phys = (uint32_t)paging_get_current_pgd();
+        if (cr3_phys) {
+            page_t *cr3_page = get_page_from_physical_address(cr3_phys);
+            if (cr3_page) {
+                curr_pgd = (page_directory_t *)get_virtual_address_from_page(cr3_page);
+            }
+        }
+        if (!curr_pgd) {
+            curr_pgd = paging_get_main_pgd();
+        }
+    }
+    if (!curr_pgd) {
+        pr_crit("Failed to get a valid page directory for vmem unmapping\n");
         return -1;
     }
 
     // Set all virtual pages as not present to avoid unwanted memory accesses by the kernel.
-    mem_upd_vm_area(main_pgd, addr, 0, (1 << page->bbpage.order) * PAGE_SIZE, MM_GLOBAL);
+    mem_upd_vm_area(curr_pgd, addr, 0, (1 << page->bbpage.order) * PAGE_SIZE, MM_GLOBAL);
 
     // Free the pages in the buddy system.
     bb_free_pages(&virt_default_mapping.bb_instance, &page->bbpage);
@@ -299,46 +328,41 @@ int vmem_unmap_virtual_address_page(virt_map_page_t *page)
 // FIXME: Check if this function should support unaligned page-boundaries copy
 void vmem_memcpy(mm_struct_t *dst_mm, uint32_t dst_vaddr, mm_struct_t *src_mm, uint32_t src_vaddr, uint32_t size)
 {
-    // Buffer size for copying.
-    const uint32_t VMEM_BUFFER_SIZE = 65536;
+    // Copy using current PGD vmem mappings of physical pages to avoid cross-PGD faults.
+    while (size > 0) {
+        size_t src_chunk = size;
+        size_t dst_chunk = size;
 
-    // Determine the buffer size to use for copying.
-    uint32_t buffer_size = min(VMEM_BUFFER_SIZE, size);
+        // Resolve physical page backing for source and destination in their respective PGDs.
+        page_t *src_page = mem_virtual_to_page(src_mm->pgd, src_vaddr, &src_chunk);
+        page_t *dst_page = mem_virtual_to_page(dst_mm->pgd, dst_vaddr, &dst_chunk);
 
-    // Allocate virtual pages for the source and destination.
-    virt_map_page_t *src_vpage = vmem_map_alloc_virtual(size);
-    virt_map_page_t *dst_vpage = vmem_map_alloc_virtual(size);
-
-    // Error handling: ensure both source and destination virtual pages are allocated.
-    if (!src_vpage || !dst_vpage) {
-        kernel_panic("Cannot copy virtual memory address, unable to reserve vmem!");
-    }
-
-    // Loop to copy memory in chunks.
-    for (;;) {
-        // Map the source and destination virtual addresses to the allocated
-        // virtual pages.
-        uint32_t src_map = vmem_map_virtual_address(src_mm, src_vpage, src_vaddr, buffer_size);
-        uint32_t dst_map = vmem_map_virtual_address(dst_mm, dst_vpage, dst_vaddr, buffer_size);
-
-        // Determine the size to copy in this iteration.
-        uint32_t cpy_size = min(buffer_size, size);
-
-        // Perform the memory copy.
-        memcpy((void *)dst_map, (void *)src_map, cpy_size);
-
-        // Check if the entire size has been copied.
-        if (size <= buffer_size) {
-            break;
+        if (!src_page || !dst_page) {
+            kernel_panic("vmem_memcpy: failed to resolve virtual->physical page");
         }
 
-        // Update the remaining size and addresses for the next iteration.
+        // Use the minimum chunk size between src and dst.
+        uint32_t cpy_size = (uint32_t)min(src_chunk, dst_chunk);
+        if (cpy_size == 0) {
+            kernel_panic("vmem_memcpy: zero chunk size");
+        }
+
+        // Map physical pages into current PGD transiently and copy.
+        uint32_t src_map = vmem_map_physical_pages(src_page, 1);
+        uint32_t dst_map = vmem_map_physical_pages(dst_page, 1);
+        if (!src_map || !dst_map) {
+            kernel_panic("vmem_memcpy: failed to map pages into current PGD");
+        }
+
+        memcpy((void *)dst_map, (void *)src_map, cpy_size);
+
+        // Unmap transient mappings.
+        vmem_unmap_virtual_address(src_map);
+        vmem_unmap_virtual_address(dst_map);
+
+        // Advance pointers and remaining size.
         size -= cpy_size;
         src_vaddr += cpy_size;
         dst_vaddr += cpy_size;
     }
-
-    // Unmap the allocated virtual pages.
-    vmem_unmap_virtual_address_page(src_vpage);
-    vmem_unmap_virtual_address_page(dst_vpage);
 }

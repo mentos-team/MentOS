@@ -6,7 +6,7 @@
 // Setup the logging for this file (do this before any other include).
 #include "sys/kernel_levels.h"           // Include kernel log levels.
 #define __DEBUG_HEADER__ "[MM_STR]"      ///< Change header.
-#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
+#define __DEBUG_LEVEL__  LOGLEVEL_DEBUG ///< Set log level.
 #include "io/debug.h"                    // Include debugging functions.
 
 #include "mem/alloc/slab.h"
@@ -79,8 +79,10 @@ mm_struct_t *mm_create_blank(size_t stack_size)
     list_head_init(&mm->mmap_list);
 
     // Allocate the stack segment.
+    // Allocate initial stack eagerly (no COW) to ensure IRET/user entry does not fault
+    // Flags: present + RW + user; avoid COW for the initial stack
     vm_area_struct_t *segment = vm_area_create(
-        mm, PROCAREA_END_ADDR - stack_size, stack_size, MM_PRESENT | MM_RW | MM_USER | MM_COW, GFP_HIGHUSER);
+        mm, PROCAREA_END_ADDR - stack_size, stack_size, MM_PRESENT | MM_RW | MM_USER, GFP_HIGHUSER);
     if (!segment) {
         pr_crit("Failed to create stack segment for new process\n");
         // Free page directory if allocation fails.
@@ -136,6 +138,8 @@ mm_struct_t *mm_clone(mm_struct_t *mmp)
 
     // Assign the copied page directory to the mm_struct.
     mm->pgd = pdir_cpy;
+    
+    // VMEM page tables are copied from main_pgd above (they are global/shared)
 
     vm_area_struct_t *vm_area = NULL;
 

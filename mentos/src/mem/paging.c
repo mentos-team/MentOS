@@ -123,6 +123,16 @@ int paging_init(boot_info_t *info)
         return -1;
     }
 
+    // Ensure LowMem virtual range is mapped to its physical backing so kernel can
+    // safely access lowmem pages via get_virtual_address_from_page() in any PGD.
+    extern struct memory_info memory;
+    if (mem_upd_vm_area(
+            main_mm->pgd, memory.low_mem.virt_start, memory.low_mem.start_addr, memory.low_mem.size,
+            MM_RW | MM_PRESENT | MM_GLOBAL | MM_UPDADDR) < 0) {
+        pr_crit("Failed to map LowMem virtual range.\n");
+        return -1;
+    }
+
     // Switch to the newly created page directory.
     paging_switch_pgd(main_mm->pgd);
 

@@ -13,6 +13,7 @@
 
 #include "descriptor_tables/gdt.h"
 #include "descriptor_tables/idt.h"
+#include "descriptor_tables/tss.h"
 #include "drivers/ata/ata.h"
 #include "drivers/keyboard/keyboard.h"
 #include "drivers/keyboard/keymap.h"
@@ -78,6 +79,8 @@ extern uint32_t end;
 
 /// Initial ESP.
 uintptr_t initial_esp = 0;
+/// Breadcrumb marker to help locate double fault source.
+volatile uint32_t df_breadcrumb = 0;
 /// The boot info.
 boot_info_t boot_info;
 
@@ -488,21 +491,94 @@ int kmain(boot_info_t *boot_informations)
     }
 #endif
 
+    // Map kernel stack pages directly in init's PGD before switching
+    // The kernel stack at initial_esp is in HighMem and needs explicit mapping
+    // because HighMem pages aren't automatically mapped like LowMem.
+    extern struct memory_info memory;
+    if (initial_esp >= memory.high_mem.virt_start && initial_esp < memory.high_mem.virt_end) {
+        
+        // Calculate physical address for kernel stack in HighMem
+        uint32_t stack_virt = initial_esp & ~(PAGE_SIZE - 1);
+        uint32_t phys_offset = stack_virt - memory.high_mem.virt_start;
+        uint32_t stack_phys = memory.high_mem.start_addr + phys_offset;
+        
+        // Map a range of pages around the stack
+        // Stack grows downward from ESP, so we need more pages ABOVE the current ESP value
+        // Map from 2 pages below to 8 pages above to be safe
+        for (int i = -2; i <= 8; i++) {
+            uint32_t virt_addr = stack_virt + (i * PAGE_SIZE);
+            uint32_t phys_addr = stack_phys + (i * PAGE_SIZE);
+            
+            // Skip if out of HighMem bounds
+            if (virt_addr < memory.high_mem.virt_start || virt_addr >= memory.high_mem.virt_end) {
+                continue;
+            }
+            
+            // Get PDE index and PTE index
+            uint32_t pde_index = virt_addr >> 22;
+            uint32_t pte_index = (virt_addr >> 12) & 0x3FF;
+            
+            // Get the page directory entry
+            page_dir_entry_t *pde = &init_process->mm->pgd->entries[pde_index];
+            
+            // If PDE not present, skip (should not happen since we copied from main_pgd)
+            if (!pde->present) {
+                pr_warning("PDE[%u] not present, skipping\n", pde_index);
+                continue;
+            }
+            
+            // Get physical address of page table and convert to virtual
+            uint32_t pt_phys = pde->frame << 12;
+            page_t *pt_page = get_page_from_physical_address(pt_phys);
+            if (!pt_page) {
+                pr_warning("Cannot get page for PT at phys 0x%08x\n", pt_phys);
+                continue;
+            }
+            uint32_t pt_virt = get_virtual_address_from_page(pt_page);
+            if (!pt_virt) {
+                pr_warning("Cannot get virtual address for PT page\n");
+                continue;
+            }
+            
+            // Validate the virtual address is in LowMem range
+            if (pt_virt < memory.low_mem.virt_start || pt_virt >= memory.low_mem.virt_end) {
+                pr_warning("PT virtual address 0x%08x out of LowMem range\n", pt_virt);
+                continue;
+            }
+            
+            page_table_t *pt = (page_table_t *)pt_virt;
+            
+            if (!pt) {
+                pr_warning("Cannot access page table at phys 0x%08x\n", pt_phys);
+                continue;
+            }
+            
+            // Set the PTE
+            pt->pages[pte_index].frame = phys_addr >> 12;
+            pt->pages[pte_index].present = 1;
+            pt->pages[pte_index].rw = 1;
+            pt->pages[pte_index].global = 1;
+            pt->pages[pte_index].user = 0;  // Kernel stack
+        }
+    }
+
+    // Switch to the page directory of init.
+    paging_switch_pgd(init_process->mm->pgd);
+
     // Switch to the page directory of init.
     paging_switch_pgd(init_process->mm->pgd);
     
-    // Debug: print init process details before jumping
-    pr_notice("Init process details:\n");
-    pr_notice("  EIP: 0x%08x\n", init_process->thread.regs.eip);
-    pr_notice("  ESP: 0x%08x\n", init_process->thread.regs.useresp);
-    pr_notice("  PGD: 0x%08x\n", init_process->mm->pgd);
-    
+    // Breadcrumb: about to iret into user mode.
+    df_breadcrumb = 1;
     // Jump into init process.
     scheduler_enter_user_jmp(
         // Entry point.
         init_process->thread.regs.eip,
         // Stack pointer.
         init_process->thread.regs.useresp);
+    
+    // If we ever return here, mark second breadcrumb.
+    df_breadcrumb = 2;
     // We should not be here.
     pr_emerg("Dear developer, we have to talk...\n");
     return 1;

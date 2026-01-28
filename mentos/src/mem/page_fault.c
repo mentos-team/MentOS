@@ -61,6 +61,13 @@ static void __page_fault_panic(pt_regs_t *f, uint32_t addr)
     // Gather fault info and print to screen
     pr_err("Faulting address (cr2): 0x%p\n", addr);
 
+    // Print current CR3 and low/high mem virtual ranges for diagnostics
+    extern struct memory_info memory;
+    uint32_t cr3_val = (uint32_t)get_cr3();
+    pr_err("CR3 (phys): 0x%p\n", cr3_val);
+    pr_err("LowMem virt range: 0x%p - 0x%p\n", memory.low_mem.virt_start, memory.low_mem.virt_end);
+    pr_err("HighMem virt range: 0x%p - 0x%p\n", memory.high_mem.virt_start, memory.high_mem.virt_end);
+
     pr_err("EIP: 0x%p\n", f->eip);
 
     pr_err("Page fault: 0x%x\n", addr);
@@ -82,7 +89,6 @@ static void __page_fault_panic(pt_regs_t *f, uint32_t addr)
         pr_err("Instruction fetch ");
     }
     pr_err("]\n");
-    PRINT_REGS(pr_err, f);
 
     kernel_panic("Page fault!");
 
@@ -119,18 +125,13 @@ static int __page_handle_cow(page_table_entry_t *entry)
                 return 1;
             }
 
-            // Map the allocated physical page to a virtual address.
-            uint32_t vaddr = vmem_map_physical_pages(page, 1);
-            if (!vaddr) {
-                pr_crit("Failed to map the physical page to virtual address.\n");
+            // Clear the new page using its LowMem mapping to avoid vmem usage during PF
+            uint32_t low_vaddr = get_virtual_address_from_page(page);
+            if (!low_vaddr) {
+                pr_crit("Failed to get low memory address for newly allocated page.\n");
                 return 1;
             }
-
-            // Clear the new page by setting all its bytes to 0.
-            memset((void *)vaddr, 0, PAGE_SIZE);
-
-            // Unmap the virtual address after clearing the page.
-            vmem_unmap_virtual_address(vaddr);
+            memset((void *)low_vaddr, 0, PAGE_SIZE);
 
             // Set the physical frame address of the allocated page into the entry.
             entry->frame = get_physical_address_from_page(page) >> 12U; // Shift to get page frame number.
@@ -250,6 +251,8 @@ void page_fault_handler(pt_regs_t *f)
     // Panic only if page is in kernel memory, else abort process with SIGSEGV.
     if (!direntry->present) {
         pr_crit("ERR(0): Page directory entry not present (%d%d%d)\n", err_user, err_rw, err_present);
+        pr_crit("PF detail: faulting_addr=0x%p, PDE_index=%u\n", faulting_addr, faulting_addr / (1024U * PAGE_SIZE));
+        pr_crit("PF detail: lowmem_dir=0x%p (mapped from CR3 phys=0x%p)\n", lowmem_dir, phy_dir);
 
         // If the fault was caused by a user process, send a SIGSEGV signal.
         if (err_user) {

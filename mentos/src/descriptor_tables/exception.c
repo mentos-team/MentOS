@@ -66,6 +66,34 @@ static inline void default_isr_handler(pt_regs_t *f)
     kernel_panic("Missing ISR handler.");
 }
 
+// Breadcrumb to help locate where a double fault occurred.
+extern volatile uint32_t df_breadcrumb;
+
+/// @brief Handles a Double Fault (exception 8).
+/// @param frame The CPU registers at the time of the exception.
+static inline void handle_double_fault(pt_regs_t *frame)
+{
+    uint32_t cr2 = 0, cr3 = 0;
+    __asm__ __volatile__("mov %%cr2, %0" : "=r"(cr2));
+    __asm__ __volatile__("mov %%cr3, %0" : "=r"(cr3));
+
+    pr_emerg("Double Fault detected!\n");
+    pr_emerg("  breadcrumb: %u\n", df_breadcrumb);
+    pr_emerg("  CR2 (fault addr): 0x%08x\n", cr2);
+    pr_emerg("  CR3 (PGD):        0x%08x\n", cr3);
+    pr_emerg("  Error code:       0x%08x\n", frame->err_code);
+
+    // Unrecoverable: terminate current process if in user mode, else panic.
+    if ((frame->cs & 0x3) == 0x3) {
+        task_struct *task = scheduler_get_current_process();
+        if (task) {
+            pr_emerg("Terminating process %d due to double fault.\n", task->pid);
+            sys_kill(task->pid, SIGKILL);
+        }
+    }
+    kernel_panic("Double fault");
+}
+
 /// @brief Handles a General Protection Fault (exception 13).
 /// @param frame The CPU registers at the time of the exception.
 void handle_gp_fault(pt_regs_t *frame)
@@ -90,7 +118,6 @@ void handle_gp_fault(pt_regs_t *frame)
         scheduler_run(frame);
     } else {
         // Print all register values for debugging.
-        PRINT_REGS(pr_crit, frame);
         pr_crit("Kernel mode fault. System halt.\n");
         // Here, we halt the CPU to prevent further damage.
         kernel_panic("General protection fault.");
@@ -120,6 +147,8 @@ void isrs_init(void)
     for (uint32_t i = 0; i < IDT_SIZE; ++i) {
         isr_routines[i] = default_isr_handler;
     }
+    // Install specific exception handlers.
+    isr_routines[8]  = handle_double_fault; // Double fault
     isr_routines[13] = handle_gp_fault;
 }
 

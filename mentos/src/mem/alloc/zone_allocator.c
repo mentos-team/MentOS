@@ -559,25 +559,55 @@ int pmmngr_init(boot_info_t *boot_info)
     // Align the physical start address of the HighMem zone to the nearest valid boundary.
     memory.high_mem.start_addr = MAX_PAGE_ALIGN((uint32_t)boot_info->highmem_phy_start);
     // Align the physical end address of the HighMem zone to the nearest lower valid boundary.
-    memory.high_mem.end_addr   = MIN_PAGE_ALIGN((uint32_t)boot_info->highmem_phy_end);
-    // Calculate the size of the HighMem zone, ensuring it is aligned to the buddy system order.
-    memory.high_mem.size       = MIN_ORDER_ALIGN(memory.high_mem.end_addr - memory.high_mem.start_addr);
-    // Recalculate the aligned physical end address of the HighMem zone based on the adjusted size.
-    memory.high_mem.end_addr   = memory.high_mem.start_addr + memory.high_mem.size;
-    // Compute the virtual addresses for the HighMem zone.
-    memory.high_mem.virt_start = memory.low_mem.virt_end;
-    memory.high_mem.virt_end   = memory.high_mem.virt_start + memory.high_mem.size;
+    uint64_t highmem_end_64 = (uint64_t)boot_info->highmem_phy_end;
+    
+    // Cap highmem at 4GB - 1 (0xFFFFFFFF) to prevent 32-bit address wraparound
+    if (highmem_end_64 > 0xFFFFFFFFULL) {
+        highmem_end_64 = 0xFFFFFFFFULL;
+    }
+    memory.high_mem.end_addr = MIN_PAGE_ALIGN((uint32_t)highmem_end_64);
+    
+    // Validate highmem range
+    if (memory.high_mem.end_addr <= memory.high_mem.start_addr) {
+        // No highmem; disable it
+        memory.high_mem.start_addr = 0;
+        memory.high_mem.end_addr   = 0;
+        memory.high_mem.size       = 0;
+        memory.high_mem.virt_start = memory.low_mem.virt_end;
+        memory.high_mem.virt_end   = memory.low_mem.virt_end;
+    } else {
+        // Calculate the maximum highmem size that can fit in the remaining address space
+        memory.high_mem.virt_start = memory.low_mem.virt_end;
+        uint64_t max_virt_size = MIN_ORDER_ALIGN(0x100000000ULL - (uint64_t)memory.high_mem.virt_start);
+        uint64_t phys_size_64 = MIN_ORDER_ALIGN(memory.high_mem.end_addr - memory.high_mem.start_addr);
+        
+        // Use the smaller of physical size or available virtual address space
+        if (phys_size_64 > max_virt_size) {
+            memory.high_mem.size = (uint32_t)max_virt_size;
+            memory.high_mem.end_addr = memory.high_mem.start_addr + memory.high_mem.size;
+        } else {
+            memory.high_mem.size = (uint32_t)phys_size_64;
+        }
+        memory.high_mem.virt_end = memory.high_mem.virt_start + memory.high_mem.size;
+    }
 
     // Calculate the minimum page index (start of LowMem).
     memory.page_index_min = memory.low_mem.start_addr / PAGE_SIZE;
-    // Calculate the maximum page index (end of HighMem).
-    memory.page_index_max = (memory.high_mem.end_addr / PAGE_SIZE) - 1;
+    // Calculate the maximum page index (end of HighMem if present, otherwise end of LowMem).
+    if (memory.high_mem.size > 0) {
+        memory.page_index_max = (memory.high_mem.end_addr / PAGE_SIZE) - 1;
+    } else {
+        memory.page_index_max = (memory.low_mem.end_addr / PAGE_SIZE) - 1;
+    }
 
     if (!zone_init("Normal", ZONE_NORMAL, memory.low_mem.start_addr, memory.low_mem.end_addr)) {
         return 0;
     }
-    if (!zone_init("HighMem", ZONE_HIGHMEM, memory.high_mem.start_addr, memory.high_mem.end_addr)) {
-        return 0;
+    // Only initialize HighMem zone if it exists and has valid size
+    if (memory.high_mem.size > 0) {
+        if (!zone_init("HighMem", ZONE_HIGHMEM, memory.high_mem.start_addr, memory.high_mem.end_addr)) {
+            return 0;
+        }
     }
 
     __print_memory_info(LOGLEVEL_DEBUG, &memory);
