@@ -24,6 +24,9 @@ target_compile_definitions(bootloader PUBLIC MENTOS_ROOT="${CMAKE_SOURCE_DIR}")
 # Build the bootloader binary
 # =============================================================================
 
+# Ensure output directory exists
+file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/mentos)
+
 # Build the kernel binary first (from kernel library)
 add_custom_target(
     kernel.bin
