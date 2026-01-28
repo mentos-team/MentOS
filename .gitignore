@@ -119,4 +119,7 @@ files/bin/**
 iso/boot/*.bin
 
 # ClangD stuff.
-.cache
+.cache/
+
+# Wiki content (do not commit)
+WIKI/
