@@ -1,56 +1,32 @@
-# List of programs.
-set(PROGRAM_LIST
-    cat.c
-    chmod.c
-    chown.c
-    clear.c
-    cp.c
-    cpuid.c
-    date.c
-    echo.c
-    edit.c
-    env.c
-    false.c
-    head.c
-    id.c
-    init.c
-    ipcrm.c
-    ipcs.c
-    kill.c
-    login.c
-    logo.c
-    ls.c
-    man.c
-    mkdir.c
-    more.c
-    nice.c
-    poweroff.c
-    ps.c
-    pwd.c
-    reset.c
-    rm.c
-    rmdir.c
-    runtests.c
-    shell.c
-    showpid.c
-    sleep.c
-    stat.c
-    touch.c
-    uname.c
-    uptime.c
+# =============================================================================
+# PEDAGOGICAL EXAMPLES
+# =============================================================================
+# These are simplified, well-documented examples to help students learn MentOS
+# concepts in a natural progression:
+# - 01_hello.c:  Hello World
+# - 02_fork.c:   Process creation
+# - 03_pipes.c:  Inter-process communication
+# - 04_file_io.c: File operations
+
+# List of example programs.
+set(EXAMPLE_LIST
+    01_hello.c
+    02_fork.c
+    03_pipes.c
+    04_file_io.c
 )
 
 # Set the directory where the compiled binaries will be placed.
-set(MENTOS_BIN_DIR ${CMAKE_SOURCE_DIR}/files/bin)
+set(MENTOS_EXAMPLES_DIR ${CMAKE_SOURCE_DIR}/filesystem/bin/examples)
 
-foreach(FILE_NAME ${PROGRAM_LIST})
+foreach(FILE_NAME ${EXAMPLE_LIST})
     # =========================================================================
     # TARGET NAMING
     # =========================================================================
     # Prepare the program name.
     string(REPLACE ".c" "" EXECUTABLE_NAME ${FILE_NAME})
     # Set the name of the target.
-    set(TARGET_NAME prog_${EXECUTABLE_NAME})
+    set(TARGET_NAME example_${EXECUTABLE_NAME})
 
     # =========================================================================
     # TEXT ADDRESS
@@ -68,11 +44,11 @@ foreach(FILE_NAME ${PROGRAM_LIST})
     # EXECUTABLE
     # =========================================================================
     # Create the target.
-    add_executable(${TARGET_NAME} ${CMAKE_SOURCE_DIR}/programs/${FILE_NAME})
+    add_executable(${TARGET_NAME} ${CMAKE_CURRENT_SOURCE_DIR}/${FILE_NAME})
     # Add the dependency to libc.
     add_dependencies(${TARGET_NAME} libc)
     # Add the includes.
-    target_include_directories(${TARGET_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/libc/inc)
+    target_include_directories(${TARGET_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/lib/inc)
     # Link the libc library.
     target_link_libraries(${TARGET_NAME} libc)
     # We need to specify the name of the entry function.
@@ -80,13 +56,13 @@ foreach(FILE_NAME ${PROGRAM_LIST})
     # Add the linking properties.
     set_target_properties(${TARGET_NAME} PROPERTIES LINK_FLAGS "-Wl,-Ttext=${TEXT_ADDR},-e_start,-melf_i386")
     # Set the output directory.
-    set_target_properties(${TARGET_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${MENTOS_BIN_DIR}")
+    set_target_properties(${TARGET_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${MENTOS_EXAMPLES_DIR}")
     # Set the output name.
     set_target_properties(${TARGET_NAME} PROPERTIES OUTPUT_NAME "${EXECUTABLE_NAME}")
 
     # Append the program name to the list of all the executables.
-    list(APPEND ALL_EXECUTABLES ${TARGET_NAME})
+    list(APPEND ALL_EXAMPLES ${TARGET_NAME})
 endforeach()
 
-# Add the overall target that builds all the programs.
-add_custom_target(programs ALL DEPENDS ${ALL_EXECUTABLES})
+# Add the overall target that builds all the examples.
+add_custom_target(examples ALL DEPENDS ${ALL_EXAMPLES})
