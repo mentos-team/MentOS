@@ -58,14 +58,8 @@ static inline void __disable_fpu(void)
 static inline void __restore_fpu(task_struct *proc)
 {
     assert(proc && "Trying to restore FPU of NULL process.");
-
-    pr_debug("  __restore_fpu: proc=%p, fpu_register=%p\n", proc, &proc->thread.fpu_register);
-
     memcpy(&saves, (uint8_t *)&proc->thread.fpu_register, 512);
-    pr_debug("  __restore_fpu: memcpy done, fxrstor starting\n");
-
     __asm__ __volatile__("fxrstor (%0)" ::"r"(saves));
-    pr_debug("  __restore_fpu: fxrstor done\n");
 }
 
 /// @brief Save the FPU for a process.
@@ -73,14 +67,8 @@ static inline void __restore_fpu(task_struct *proc)
 static inline void __save_fpu(task_struct *proc)
 {
     assert(proc && "Trying to save FPU of NULL process.");
-
-    pr_debug("  __save_fpu: proc=%p, fpu_register=%p\n", proc, &proc->thread.fpu_register);
-
     __asm__ __volatile__("fxsave (%0)" ::"r"(saves));
-    pr_debug("  __save_fpu: fxsave done, memcpy starting\n");
-
     memcpy((uint8_t *)&proc->thread.fpu_register, &saves, 512);
-    pr_debug("  __save_fpu: memcpy done\n");
 }
 
 /// Initialize the FPU.
