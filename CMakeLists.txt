@@ -163,27 +163,27 @@ set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -m32")
 # =============================================================================
 
 # Add the sub-directories.
-add_subdirectory(programs)
-add_subdirectory(programs/tests)
-add_subdirectory(mentos)
-add_subdirectory(libc)
+add_subdirectory(boot)
+add_subdirectory(kernel)
+add_subdirectory(lib)
+add_subdirectory(userspace)
 
 # =============================================================================
 # FILESYSTEM
 # =============================================================================
 
 # MentOS is compatible with EXT2 fileystems. This target generates an EXT2
-# fileystem using the content of the `files` folder.
+# fileystem using the content of the `filesystem` folder.
 add_custom_target(filesystem
     BYPRODUCTS ${CMAKE_BINARY_DIR}/rootfs.img
     COMMAND echo '============================================================================='
     COMMAND echo 'Creating EXT2 filesystem...'
     COMMAND echo '============================================================================='
-    COMMAND mke2fs -L 'rootfs' -N 0 -d ${CMAKE_SOURCE_DIR}/files -b 4096 -m 5 -r 1 -t ext2 -v -F ${CMAKE_BINARY_DIR}/rootfs.img 32M
+    COMMAND mke2fs -L 'rootfs' -N 0 -d ${CMAKE_SOURCE_DIR}/filesystem -b 4096 -m 5 -r 1 -t ext2 -v -F ${CMAKE_BINARY_DIR}/rootfs.img 32M
     COMMAND echo '============================================================================='
     COMMAND echo 'Done!'
     COMMAND echo '============================================================================='
-    DEPENDS programs tests
+    DEPENDS userspace
 )
 
 # =============================================================================
@@ -316,18 +316,18 @@ add_custom_target(
 
 if(CLANG_TIDY_EXE)
     file(GLOB_RECURSE ALL_PROJECT_FILES
-        "${PROJECT_SOURCE_DIR}/libc/inc/**/*.h"
-        "${PROJECT_SOURCE_DIR}/libc/inc/*.h"
-        "${PROJECT_SOURCE_DIR}/libc/src/**/*.c"
-        "${PROJECT_SOURCE_DIR}/libc/src/*.c"
-        "${PROJECT_SOURCE_DIR}/mentos/inc/**/*.h"
-        "${PROJECT_SOURCE_DIR}/mentos/inc/*.h"
-        "${PROJECT_SOURCE_DIR}/mentos/src/**/*.c"
-        "${PROJECT_SOURCE_DIR}/mentos/src/*.c"
-        "${PROJECT_SOURCE_DIR}/programs/**/*.h"
-        "${PROJECT_SOURCE_DIR}/programs/*.h"
-        "${PROJECT_SOURCE_DIR}/programs/**/*.c"
-        "${PROJECT_SOURCE_DIR}/programs/*.c"
+        "${PROJECT_SOURCE_DIR}/lib/inc/**/*.h"
+        "${PROJECT_SOURCE_DIR}/lib/inc/*.h"
+        "${PROJECT_SOURCE_DIR}/lib/src/**/*.c"
+        "${PROJECT_SOURCE_DIR}/lib/src/*.c"
+        "${PROJECT_SOURCE_DIR}/kernel/inc/**/*.h"
+        "${PROJECT_SOURCE_DIR}/kernel/inc/*.h"
+        "${PROJECT_SOURCE_DIR}/kernel/src/**/*.c"
+        "${PROJECT_SOURCE_DIR}/kernel/src/*.c"
+        "${PROJECT_SOURCE_DIR}/userspace/**/*.h"
+        "${PROJECT_SOURCE_DIR}/userspace/*.h"
+        "${PROJECT_SOURCE_DIR}/userspace/**/*.c"
+        "${PROJECT_SOURCE_DIR}/userspace/*.c"
     )
     add_custom_target(
         ${PROJECT_NAME}_clang_tidy
@@ -370,7 +370,7 @@ if (DOXYGEN_FOUND)
     )
 
     # Read the file with the version.
-    file(READ ${PROJECT_SOURCE_DIR}/mentos/inc/version.h version_file)
+    file(READ ${PROJECT_SOURCE_DIR}/kernel/inc/version.h version_file)
     # Extract the version.
     string(REGEX MATCH "OS_MAJOR_VERSION ([0-9]*)" _ ${version_file})
     set(OS_MAJOR_VERSION ${CMAKE_MATCH_1})
@@ -412,14 +412,14 @@ if (DOXYGEN_FOUND)
 
     # Add Doxygen documentation target.
     file(GLOB_RECURSE ALL_PROJECT_FILES
-        "${PROJECT_SOURCE_DIR}/libc/inc/**/*.h"
-        "${PROJECT_SOURCE_DIR}/libc/inc/*.h"
-        "${PROJECT_SOURCE_DIR}/libc/src/**/*.c"
-        "${PROJECT_SOURCE_DIR}/libc/src/*.c"
-        "${PROJECT_SOURCE_DIR}/mentos/inc/**/*.h"
-        "${PROJECT_SOURCE_DIR}/mentos/inc/*.h"
-        "${PROJECT_SOURCE_DIR}/mentos/src/**/*.c"
-        "${PROJECT_SOURCE_DIR}/mentos/src/*.c"
+        "${PROJECT_SOURCE_DIR}/lib/inc/**/*.h"
+        "${PROJECT_SOURCE_DIR}/lib/inc/*.h"
+        "${PROJECT_SOURCE_DIR}/lib/src/**/*.c"
+        "${PROJECT_SOURCE_DIR}/lib/src/*.c"
+        "${PROJECT_SOURCE_DIR}/kernel/inc/**/*.h"
+        "${PROJECT_SOURCE_DIR}/kernel/inc/*.h"
+        "${PROJECT_SOURCE_DIR}/kernel/src/**/*.c"
+        "${PROJECT_SOURCE_DIR}/kernel/src/*.c"
     )
 
     doxygen_add_docs(
