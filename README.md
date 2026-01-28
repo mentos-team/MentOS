@@ -49,11 +49,13 @@ make qemu
 **All documentation is in the [Wiki](https://github.com/mentos-team/MentOS/wiki)**:
 
 ### Getting Started
+
 - **[Getting Started](https://github.com/mentos-team/MentOS/wiki/Getting-Started)** - Set up your environment
 - **[Building MentOS](https://github.com/mentos-team/MentOS/wiki/Building-MentOS)** - Compile the OS
 - **[Running MentOS](https://github.com/mentos-team/MentOS/wiki/Running-MentOS)** - Boot in QEMU or GRUB
 
 ### Understanding the Codebase
+
 - **[Architecture](https://github.com/mentos-team/MentOS/wiki/Architecture)** - Project structure
 - **[Kernel](https://github.com/mentos-team/MentOS/wiki/Kernel)** - Kernel components and data structures
 - **[C Library](https://github.com/mentos-team/MentOS/wiki/C-Library)** - Standard library implementation
@@ -63,6 +65,7 @@ make qemu
 - **[Programs](https://github.com/mentos-team/MentOS/wiki/Programs)** - Userspace utilities (40+)
 
 ### Development
+
 - **[Development Guide](https://github.com/mentos-team/MentOS/wiki/Development-Guide)** - Add programs and features
 - **[Debugging](https://github.com/mentos-team/MentOS/wiki/Debugging)** - GDB and kernel logging
 - **[Contributing](https://github.com/mentos-team/MentOS/wiki/Contributing)** - Contribution guidelines
