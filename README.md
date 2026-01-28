@@ -18,7 +18,9 @@
 
 - [MentOS (Mentoring Operating System)](#mentos-mentoring-operating-system)
   - [Table of Contents](#table-of-contents)
+  - [Quick Start](#quick-start)
   - [What is MentOS](#what-is-mentos)
+  - [Project Structure](#project-structure)
   - [Implemented features](#implemented-features)
     - [Processes and Events](#processes-and-events)
     - [Memory](#memory)
@@ -40,6 +42,49 @@
   - [Change the scheduling algorithm](#change-the-scheduling-algorithm)
   - [Debugging the kernel](#debugging-the-kernel)
   - [Contributors](#contributors)
+
+---
+
+## Quick Start
+
+**New to MentOS?** Start here:
+
+1. **Understand the structure**: Read [ARCHITECTURE.md](ARCHITECTURE.md) for project overview
+2. **Learn the components**:
+   - [Bootloader](boot/README.md) - How the system starts
+   - [Kernel](kernel/README.md) - Core OS functionality
+   - [C Library](lib/README.md) - System calls and utilities
+   - [Userspace Apps](userspace/README.md) - User programs
+   - [Filesystem](filesystem/README.md) - Root filesystem
+3. **Build and run**:
+   ```bash
+   mkdir build && cd build
+   cmake ..
+   make
+   make qemu      # Run in QEMU emulator
+   ```
+4. **Debug with GDB**: `make qemu-gdb` (two terminals)
+5. **Run tests**: `make qemu-test`
+
+👉 **[See detailed Build Instructions →](doc/BUILD.md)**
+
+---
+
+## Project Structure
+
+```
+mentos/
+├── boot/              ← Bootloader and multiboot
+├── kernel/            ← Core OS (process, memory, FS, drivers, syscalls)
+├── lib/               ← C Standard Library + system call wrappers
+├── userspace/         ← User programs and tests
+├── filesystem/        ← Root filesystem (EXT2 image content)
+├── iso/               ← ISO boot files
+├── doc/               ← Documentation
+└── ...
+```
+
+👉 **[Read ARCHITECTURE.md for full structure →](ARCHITECTURE.md)**
 
 ---
 
