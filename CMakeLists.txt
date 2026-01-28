@@ -53,25 +53,20 @@ else()
     # Generic Unix System.
     # Find the `lsb_release` program.
     find_program(LSB_RELEASE_EXEC lsb_release HINTS /usr/bin/ /usr/local/bin/)
-    # Mark the program path as advanced, we do not want it to appear as an option.
     mark_as_advanced(LSB_RELEASE_EXEC)
-    # Get the version.
-    execute_process(
-        COMMAND "${LSB_RELEASE_EXEC}" --short --release
-        OUTPUT_VARIABLE LSB_RELEASE_VERSION_SHORT
-        OUTPUT_STRIP_TRAILING_WHITESPACE
-    )
-    message(STATUS "LSB version    : ${LSB_RELEASE_VERSION_SHORT}")
-    if(${LSB_RELEASE_VERSION_SHORT} MATCHES "^18")
-        # Ubuntu 18 set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -sdl)
-    elseif(${LSB_RELEASE_VERSION_SHORT} MATCHES "^19")
-        # Ubuntu 19
-        set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -display gtk)
-    elseif(${LSB_RELEASE_VERSION_SHORT} MATCHES "^20")
-        # Ubuntu 20
-        set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -display gtk)
-    else()
-        # set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -sdl)
+    
+    if(LSB_RELEASE_EXEC)
+        execute_process(
+            COMMAND "${LSB_RELEASE_EXEC}" --short --release
+            OUTPUT_VARIABLE LSB_RELEASE_VERSION_SHORT
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+        )
+        message(STATUS "LSB version    : ${LSB_RELEASE_VERSION_SHORT}")
+        
+        # Use GTK display for Ubuntu 19+
+        if(LSB_RELEASE_VERSION_SHORT MATCHES "^(19|2[0-9])")
+            set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -display gtk)
+        endif()
     endif()
 endif()
 
@@ -118,42 +113,48 @@ endif()
 # =============================================================================
 
 # Warning flags.
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Werror")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wpedantic")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -pedantic-errors")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wshadow")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=gnu99")
+list(APPEND MENTOS_C_FLAGS
+    -Wall
+    -Werror
+    -Wpedantic
+    -pedantic-errors
+    -Wshadow
+    -std=gnu99
+    # Disable specific warnings
+    -Wno-unused-function
+    -Wno-unused-variable
+    -Wno-unknown-pragmas
+    -Wno-missing-braces
+    -Wno-unused-command-line-argument
+)
 
-# Disable some specific warnings.
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-unused-function")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-unused-variable")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-unknown-pragmas")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-missing-braces")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-unused-command-line-argument")
+# Compiler options for freestanding kernel environment.
+list(APPEND MENTOS_C_FLAGS
+    -static
+    -nostdlib
+    -nostdinc
+    -fno-builtin
+    -fno-stack-protector
+    -fno-pic
+    -fomit-frame-pointer
+    -m32
+    -march=i686
+)
 
-# Set the compiler options.
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -static")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -nostdlib")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -nostdinc")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-builtin")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-stack-protector")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-pic")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fomit-frame-pointer")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -m32")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -march=i686")
+# Join all flags into CMAKE_C_FLAGS
+string(REPLACE ";" " " CMAKE_C_FLAGS "${MENTOS_C_FLAGS}")
 
+# GCC 10+ requires -fcommon for legacy code.
 if(CMAKE_C_COMPILER_VERSION VERSION_GREATER_EQUAL 10)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fcommon")
 endif()
 
+# Build-specific optimization and debug flags.
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g3")
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -ggdb")
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O0")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g3 -ggdb -O0")
 elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O3")
-endif(CMAKE_BUILD_TYPE STREQUAL "Debug")
+endif()
 
 # Set the assembly compiler flags.
 set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -m32")
@@ -163,29 +164,28 @@ set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -m32")
 # =============================================================================
 
 # Add the sub-directories.
-add_subdirectory(programs)
-add_subdirectory(programs/tests)
-add_subdirectory(mentos)
-add_subdirectory(libc)
+add_subdirectory(boot)
+add_subdirectory(kernel)
+add_subdirectory(lib)
+add_subdirectory(userspace)
+add_subdirectory(examples)
 
 # =============================================================================
 # FILESYSTEM
 # =============================================================================
 
 # MentOS is compatible with EXT2 fileystems. This target generates an EXT2
-# fileystem using the content of the `files` folder.
+# fileystem using the content of the `filesystem` folder.
 add_custom_target(filesystem
     BYPRODUCTS ${CMAKE_BINARY_DIR}/rootfs.img
     COMMAND echo '============================================================================='
     COMMAND echo 'Creating EXT2 filesystem...'
     COMMAND echo '============================================================================='
-    COMMAND mkdir -p ${CMAKE_SOURCE_DIR}/files/proc
-    COMMAND mkdir -p ${CMAKE_SOURCE_DIR}/files/dev
-    COMMAND mke2fs -L 'rootfs' -N 0 -d ${CMAKE_SOURCE_DIR}/files -b 4096 -m 5 -r 1 -t ext2 -v -F ${CMAKE_BINARY_DIR}/rootfs.img 32M
+    COMMAND mke2fs -L 'rootfs' -N 0 -d ${CMAKE_SOURCE_DIR}/filesystem -b 4096 -m 5 -r 1 -t ext2 -v -F ${CMAKE_BINARY_DIR}/rootfs.img 32M
     COMMAND echo '============================================================================='
     COMMAND echo 'Done!'
     COMMAND echo '============================================================================='
-    DEPENDS programs tests
+    DEPENDS programs tests examples
 )
 
 # =============================================================================
@@ -206,7 +206,7 @@ if(${EMULATOR_OUTPUT_TYPE} STREQUAL OUTPUT_LOG)
     set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -serial file:${CMAKE_BINARY_DIR}/serial.log)
 elseif(${EMULATOR_OUTPUT_TYPE} STREQUAL OUTPUT_STDIO)
     set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -serial stdio)
-endif(${EMULATOR_OUTPUT_TYPE} STREQUAL OUTPUT_LOG)
+endif()
 # Set the EXT2 drive.
 set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -drive file=${CMAKE_BINARY_DIR}/rootfs.img,format=raw,if=ide,index=0,media=disk)
 
@@ -234,7 +234,7 @@ add_custom_target(
     # Create the generic gdb configuration.
     COMMAND echo "add-symbol-file ${CMAKE_BINARY_DIR}/mentos/kernel.bin" > ${CMAKE_BINARY_DIR}/gdb.run
     COMMAND echo "add-symbol-file ${CMAKE_BINARY_DIR}/mentos/bootloader.bin" >> ${CMAKE_BINARY_DIR}/gdb.run
-    COMMAND find ${CMAKE_SOURCE_DIR}/files/bin -type f  | xargs realpath | sed 's/^/add-symbol-file /' >> ${CMAKE_BINARY_DIR}/gdb.run
+    COMMAND find ${CMAKE_SOURCE_DIR}/filesystem/bin -type f | xargs realpath | sed 's/^/add-symbol-file /' >> ${CMAKE_BINARY_DIR}/gdb.run
     COMMAND echo "break boot.c: boot_main" >> ${CMAKE_BINARY_DIR}/gdb.run
     COMMAND echo "break kernel.c: kmain" >> ${CMAKE_BINARY_DIR}/gdb.run
     # Create the GDB connection file.
@@ -300,7 +300,7 @@ add_custom_target(
   COMMAND mv ${CMAKE_BINARY_DIR}/iso/boot/grub/grub.cfg.runtests ${CMAKE_BINARY_DIR}/iso/boot/grub/grub.cfg
   COMMAND cp ${CMAKE_BINARY_DIR}/mentos/bootloader.bin ${CMAKE_BINARY_DIR}/iso/boot
   COMMAND grub-mkrescue -o ${CMAKE_BINARY_DIR}/cdrom_test.iso ${CMAKE_BINARY_DIR}/iso
-  DEPENDS bootloader.bin
+    DEPENDS bootloader.bin filesystem
 )
 
 # This target runs the emulator, and executes the runtests binary as init process.
@@ -318,18 +318,18 @@ add_custom_target(
 
 if(CLANG_TIDY_EXE)
     file(GLOB_RECURSE ALL_PROJECT_FILES
-        "${PROJECT_SOURCE_DIR}/libc/inc/**/*.h"
-        "${PROJECT_SOURCE_DIR}/libc/inc/*.h"
-        "${PROJECT_SOURCE_DIR}/libc/src/**/*.c"
-        "${PROJECT_SOURCE_DIR}/libc/src/*.c"
-        "${PROJECT_SOURCE_DIR}/mentos/inc/**/*.h"
-        "${PROJECT_SOURCE_DIR}/mentos/inc/*.h"
-        "${PROJECT_SOURCE_DIR}/mentos/src/**/*.c"
-        "${PROJECT_SOURCE_DIR}/mentos/src/*.c"
-        "${PROJECT_SOURCE_DIR}/programs/**/*.h"
-        "${PROJECT_SOURCE_DIR}/programs/*.h"
-        "${PROJECT_SOURCE_DIR}/programs/**/*.c"
-        "${PROJECT_SOURCE_DIR}/programs/*.c"
+        "${PROJECT_SOURCE_DIR}/lib/inc/**/*.h"
+        "${PROJECT_SOURCE_DIR}/lib/inc/*.h"
+        "${PROJECT_SOURCE_DIR}/lib/src/**/*.c"
+        "${PROJECT_SOURCE_DIR}/lib/src/*.c"
+        "${PROJECT_SOURCE_DIR}/kernel/inc/**/*.h"
+        "${PROJECT_SOURCE_DIR}/kernel/inc/*.h"
+        "${PROJECT_SOURCE_DIR}/kernel/src/**/*.c"
+        "${PROJECT_SOURCE_DIR}/kernel/src/*.c"
+        "${PROJECT_SOURCE_DIR}/userspace/**/*.h"
+        "${PROJECT_SOURCE_DIR}/userspace/*.h"
+        "${PROJECT_SOURCE_DIR}/userspace/**/*.c"
+        "${PROJECT_SOURCE_DIR}/userspace/*.c"
     )
     add_custom_target(
         ${PROJECT_NAME}_clang_tidy
@@ -372,7 +372,7 @@ if (DOXYGEN_FOUND)
     )
 
     # Read the file with the version.
-    file(READ ${PROJECT_SOURCE_DIR}/mentos/inc/version.h version_file)
+    file(READ ${PROJECT_SOURCE_DIR}/kernel/inc/version.h version_file)
     # Extract the version.
     string(REGEX MATCH "OS_MAJOR_VERSION ([0-9]*)" _ ${version_file})
     set(OS_MAJOR_VERSION ${CMAKE_MATCH_1})
@@ -414,14 +414,14 @@ if (DOXYGEN_FOUND)
 
     # Add Doxygen documentation target.
     file(GLOB_RECURSE ALL_PROJECT_FILES
-        "${PROJECT_SOURCE_DIR}/libc/inc/**/*.h"
-        "${PROJECT_SOURCE_DIR}/libc/inc/*.h"
-        "${PROJECT_SOURCE_DIR}/libc/src/**/*.c"
-        "${PROJECT_SOURCE_DIR}/libc/src/*.c"
-        "${PROJECT_SOURCE_DIR}/mentos/inc/**/*.h"
-        "${PROJECT_SOURCE_DIR}/mentos/inc/*.h"
-        "${PROJECT_SOURCE_DIR}/mentos/src/**/*.c"
-        "${PROJECT_SOURCE_DIR}/mentos/src/*.c"
+        "${PROJECT_SOURCE_DIR}/lib/inc/**/*.h"
+        "${PROJECT_SOURCE_DIR}/lib/inc/*.h"
+        "${PROJECT_SOURCE_DIR}/lib/src/**/*.c"
+        "${PROJECT_SOURCE_DIR}/lib/src/*.c"
+        "${PROJECT_SOURCE_DIR}/kernel/inc/**/*.h"
+        "${PROJECT_SOURCE_DIR}/kernel/inc/*.h"
+        "${PROJECT_SOURCE_DIR}/kernel/src/**/*.c"
+        "${PROJECT_SOURCE_DIR}/kernel/src/*.c"
     )
 
     doxygen_add_docs(

@@ -114,9 +114,13 @@ src/initscp/initfscp
 
 # OS filesystem files.
 files/bin/**
+filesystem/bin/**
 
 # ISO creation files.
 iso/boot/*.bin
 
 # ClangD stuff.
-.cache
+.cache/
+
+# Wiki content (do not commit)
+WIKI/
