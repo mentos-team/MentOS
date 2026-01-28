@@ -19,8 +19,8 @@
 - [MentOS (Mentoring Operating System)](#mentos-mentoring-operating-system)
   - [Table of Contents](#table-of-contents)
   - [Quick Start](#quick-start)
-  - [What is MentOS](#what-is-mentos)
   - [Project Structure](#project-structure)
+  - [What is MentOS](#what-is-mentos)
   - [Implemented features](#implemented-features)
     - [Processes and Events](#processes-and-events)
     - [Memory](#memory)
@@ -57,12 +57,14 @@
    - [Userspace Apps](userspace/README.md) - User programs
    - [Filesystem](filesystem/README.md) - Root filesystem
 3. **Build and run**:
+
    ```bash
    mkdir build && cd build
    cmake ..
    make
    make qemu      # Run in QEMU emulator
    ```
+
 4. **Debug with GDB**: `make qemu-gdb` (two terminals)
 5. **Run tests**: `make qemu-test`
 
@@ -83,8 +85,6 @@ mentos/
 ├── doc/               ← Documentation
 └── ...
 ```
-
-👉 **[Read ARCHITECTURE.md for full structure →](ARCHITECTURE.md)**
 
 ---
 

@@ -15,11 +15,13 @@ userspace/
 Standard utilities and system programs:
 
 ### System Programs
+
 - **`init.c`** - Initial process (PID 1), mounts filesystem, starts shell
 - **`shell.c`** - Command-line shell with pipe support, job control
 - **`login.c`** - User login interface
 
 ### File Management
+
 - `cat.c` - Display file contents
 - `ls.c` - List directory contents
 - `mkdir.c` - Create directories
@@ -29,6 +31,7 @@ Standard utilities and system programs:
 - `touch.c` - Create/update files
 
 ### Utilities
+
 - `echo.c` - Print text
 - `pwd.c` - Print working directory
 - `cd.c` - Change directory (built-in to shell)
@@ -40,6 +43,7 @@ Standard utilities and system programs:
 - `kill.c` - Send signals
 
 ### Hardware & System
+
 - `cpuid.c` - CPU information
 - `date.c` - Date and time
 - `uname.c` - System information
@@ -47,6 +51,7 @@ Standard utilities and system programs:
 - `poweroff.c` - Shutdown system
 
 ### IPC & Maintenance
+
 - `ipcs.c`, `ipcrm.c` - IPC resource management
 - `man.c` - Manual pages
 - `nice.c` - Change process priority
@@ -55,6 +60,7 @@ Standard utilities and system programs:
 - `showpid.c` - Show PID
 
 ### Testing
+
 - `runtests.c` - Test runner
 
 ## Test Programs (`tests/`)
@@ -62,54 +68,65 @@ Standard utilities and system programs:
 Comprehensive test suite (~60 tests) covering:
 
 ### Process Management
+
 - `t_fork.c`, `t_exec.c` - Process creation
 - `t_exit.c`, `t_wait*` - Process exit
 - `t_kill.c` - Signal delivery
 - `t_periodic*.c` - Real-time scheduling
 
 ### Memory
+
 - `t_mem.c` - Memory allocation
 - `t_write_read.c`, `t_big_write.c` - I/O
 
 ### File System
+
 - `t_chdir.c` - Directory operations
 - `t_mkdir.c`, `t_creat.c` - File creation
 - `t_fhs.c` - Filesystem hierarchy
 
 ### IPC
+
 - `t_msgget.c`, `t_semget.c`, `t_shmget.c` - IPC primitives
 - `t_semop.c`, `t_semflg.c` - Semaphore operations
 - `t_shm.c` - Shared memory
 - `t_pipe_*.c` - Pipe communication
 
 ### Signals
+
 - `t_signal.c`, `t_sigaction.c` - Signal handling
 - `t_sigusr.c`, `t_sigfpe.c` - Specific signals
 - `t_sigmask.c` - Signal masking
 
 ### User/Group Management
+
 - `t_pwd.c`, `t_grp.c` - User/group info
 - `t_gid.c`, `t_environ.c` - Environment
 
 ### Data Structures
+
 - `t_hashmap.c`, `t_list.c`, `t_ndtree.c` - Built-in data structures
 
 ### Filesystem
+
 - `t_ext2_audit_*.c` - EXT2 filesystem auditing
 
 ## Building Programs
 
 ### Single Program
+
 ```bash
 make prog_cat        # Build just cat
 ```
 
 ### All Programs
+
 ```bash
 make programs        # Build all executables
 ```
 
 ### Programs + Tests
+
 ```bash
 make                 # Build everything
 ```
@@ -117,7 +134,8 @@ make                 # Build everything
 ## Output Location
 
 Built binaries go to:
-```
+
+```bash
 filesystem/bin/          ← Executables
 filesystem/bin/tests/    ← Test binaries
 ```
@@ -127,6 +145,7 @@ These are placed in the filesystem image when you run `make filesystem`.
 ## Running Programs
 
 ### In QEMU
+
 ```bash
 make qemu      # Run OS in QEMU
 login          # At MentOS prompt, login as user
@@ -134,6 +153,7 @@ shell> ls      # Run commands
 ```
 
 ### Running Tests
+
 ```bash
 make qemu-test # Run test suite in QEMU
 ```
@@ -161,6 +181,7 @@ int main(int argc, char *argv[]) {
 ### Compilation Settings
 
 Each program is compiled with:
+
 - **Text address randomization**: Different programs load at different addresses
 - **Static linking**: Linked with libc
 - **Custom entry point**: Uses `_start` from libc (`crt0.S`)
@@ -192,16 +213,19 @@ myprog [args...]
 ## Debugging Programs
 
 ### Printf Debugging
+
 ```c
 printf("Debug: value = %d\n", value);
 ```
 
 ### GDB Debugging
+
 ```bash
 make qemu-gdb          # Start QEMU with GDB wait
 ```
 
 In another terminal:
+
 ```bash
 gdb
 (gdb) source build/gdb.run
@@ -220,7 +244,6 @@ This allows debugging with GDB while keeping full address space.
 
 ## Related
 
-- [ARCHITECTURE.md](../ARCHITECTURE.md) - Project overview
 - [lib/README.md](../lib/README.md) - C Library/system calls
 - [kernel/README.md](../kernel/README.md) - Kernel
 - [shell.c](./bin/shell.c) - Shell implementation (good example)

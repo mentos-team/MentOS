@@ -69,15 +69,18 @@ kernel/
 ## Key Entry Points
 
 **`src/kernel.c: kmain()`** - Kernel main function
+
 - Called by bootloader after CPU setup
 - Initializes subsystems
 - Starts the scheduler
 
 **`src/process/scheduler.c`** - CPU scheduling
+
 - Multiple scheduler algorithms (Round-Robin, Priority, CFS, EDF, etc)
 - Selectable via CMake: `SCHEDULER_TYPE`
 
 **`src/system/syscall.c`** - System call dispatcher
+
 - Handles all userspace syscalls
 - Implemented via INT 0x80
 
@@ -92,6 +95,7 @@ cmake .. -DENABLE_KERNEL_TESTS=ON
 ```
 
 Available schedulers:
+
 - `SCHEDULER_RR` - Round-robin
 - `SCHEDULER_PRIORITY` - Priority-based
 - `SCHEDULER_CFS` - Completely Fair Scheduler
@@ -102,17 +106,20 @@ Available schedulers:
 ## How to Add Features
 
 ### Add a System Call
+
 1. Implement function in kernel code
 2. Add entry to syscall dispatcher in `src/system/syscall.c`
 3. Add wrapper in `lib/inc/system/syscall_types.h`
 4. Create user-facing wrapper in `lib/src/unistd/`
 
 ### Add a Device Driver
+
 1. Create files in `src/drivers/`
 2. Register with driver initialization
 3. Call from `kmain()` or dynamically
 
 ### Add File System Support
+
 1. Implement VFS operations in `src/fs/`
 2. Register filesystem type
 3. Handle mount in syscalls
@@ -135,7 +142,6 @@ make qemu-gdb          # Run with GDB debugging
 
 ## Related
 
-- [ARCHITECTURE.md](../ARCHITECTURE.md) - Project overview
 - [lib/README.md](../lib/README.md) - C Library
 - [boot/README.md](../boot/README.md) - Bootloader
 - [Kernel API Documentation](../doc/syscall.md)

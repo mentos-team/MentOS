@@ -44,17 +44,21 @@ lib/
 ## Standard Functions
 
 ### String & Memory
+
 - `strcpy()`, `strlen()`, `strcmp()`, `memcpy()`, `memset()`, etc.
 
 ### I/O
+
 - `printf()`, `sprintf()`, `scanf()`, `fprintf()` (kernel-compatible versions)
 
 ### Data Structures
+
 - `list.c` - Linked lists
 - `hashmap.c` - Hash tables
 - `ndtree.c` - N-dimensional trees
 
 ### Math
+
 - `sqrt()`, `sin()`, `cos()`, `pow()`, etc.
 
 ## System Call Wrappers
@@ -82,7 +86,7 @@ pid_t child = fork();  // Wrapper in lib/src/unistd/fork.c
 
 ## Implementation Pattern
 
-### In libc:
+### In libc
 
 ```c
 // lib/src/unistd/fork.c
@@ -95,12 +99,13 @@ pid_t fork(void) {
 ```
 
 The `_syscall0()`, `_syscall1()`, etc. macros issue the INT 0x80 interrupt, which:
+
 1. Switches to kernel mode
 2. Kernel dispatcher reads syscall number and arguments
 3. Kernel executes syscall
 4. Returns to userspace
 
-### In kernel:
+### In kernel
 
 ```c
 // kernel/src/system/syscall.c
@@ -111,6 +116,7 @@ case SYS_fork:
 ## Compilation
 
 The library compiles into:
+
 - **`build/libc`** - Static library (libc.a or similar)
 - Used by both kernel and userspace programs
 
@@ -130,16 +136,19 @@ The library compiles into:
 ## Features
 
 ### Data Structures
+
 - Linked lists: `list.h`
 - Hash maps: `hashmap.h`
 - N-D trees: `ndtree.h`
 - Ring buffers: `ring_buffer.h`
 
 ### String Functions
+
 - Format strings: `vsprintf()`, `vscanf()`
 - Memory operations: `strcpy()`, `memcpy()`, `strlen()`, etc.
 
 ### Math Library
+
 - Trigonometric: `sin()`, `cos()`, `tan()`
 - Power: `pow()`, `sqrt()`, `exp()`, `log()`
 - Utilities: `abs()`, `min()`, `max()`
@@ -152,6 +161,5 @@ The library compiles into:
 
 ## Related
 
-- [ARCHITECTURE.md](../ARCHITECTURE.md) - Project overview
 - [kernel/README.md](../kernel/README.md) - Kernel
 - [syscall.md](../doc/syscall.md) - System call documentation
