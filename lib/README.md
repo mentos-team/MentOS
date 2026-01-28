@@ -11,7 +11,7 @@ The library serves two audiences:
 
 ## Contents
 
-```
+```text
 lib/
 ├── src/
 │   ├── stdlib.c, string.c, math.c  ← Standard C functions

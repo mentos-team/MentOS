@@ -14,7 +14,7 @@ The heart of MentOS - the core OS functionality that runs in kernel mode (ring 0
 
 ## Directory Structure
 
-```
+```text
 kernel/
 ├── src/
 │   ├── kernel.c              ← Kernel main entry point (kmain)

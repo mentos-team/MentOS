@@ -72,7 +72,7 @@
 
 ## Project Structure
 
-```
+```text
 mentos/
 ├── boot/              ← Bootloader and multiboot
 ├── kernel/            ← Core OS (process, memory, FS, drivers, syscalls)

@@ -27,12 +27,13 @@ The bootloader is the first code executed after the BIOS/bootloader loads MentOS
 **`build/mentos/bootloader.bin`** - The final bootable binary
 
 This contains:
+
 - Bootloader code
 - Embedded kernel binary (as data)
 
 ## Build Process
 
-```
+```text
 boot/src/*.c + boot/src/*.S
          ↓
    bootloader library
@@ -49,6 +50,7 @@ bootloader.bin ✓
 ## Multiboot
 
 MentOS uses the **Multiboot specification** to allow loading via GRUB. This enables:
+
 - Flexible bootloaders (QEMU, physical hardware with GRUB, etc.)
 - Memory map information from bootloader
 - Module support
@@ -70,5 +72,4 @@ See `multiboot.c` for multiboot handling.
 
 ## Related
 
-- [ARCHITECTURE.md](../ARCHITECTURE.md) - Overall project structure
 - [Multiboot Specification](https://www.gnu.org/software/grub/manual/multiboot/multiboot.html)

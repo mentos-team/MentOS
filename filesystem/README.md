@@ -4,7 +4,7 @@ The root filesystem content that gets packaged into an EXT2 disk image.
 
 ## Structure
 
-```
+```text
 filesystem/
 ├── bin/              ← Compiled user programs (symlink/copy)
 │   ├── shell, cat, ls, mkdir, ...
@@ -36,6 +36,7 @@ make filesystem
 ```
 
 This creates:
+
 ```
 build/rootfs.img     ← EXT2 filesystem image (32MB by default)
 ```
@@ -45,6 +46,7 @@ The image is created using `mke2fs` with the contents from `filesystem/`.
 ## EXT2 Image
 
 The filesystem image:
+
 - **Size**: 32MB (configurable in root CMakeLists.txt)
 - **Format**: EXT2 (Linux second extended filesystem)
 - **Inode count**: Calculated automatically
@@ -53,15 +55,34 @@ The filesystem image:
 ## Configuration Files
 
 ### `etc/passwd`
+
 User accounts and home directories
 
+```text
+root:*:0:0::/root:/bin/shell
+user:*:1000:1000::/home/user:/bin/shell
+```
+
 ### `etc/group`
+
 User groups
 
+```text
+root:*:0:
+wheel:*:1:
+user:*:1000:
+```
+
 ### `etc/shadow`
+
 Password hashes
 
+```text
+root:HASH:1:0:99999:7:0:0:
+```
+
 ### `etc/hostname`
+
 System hostname
 
 ### Manual Pages
@@ -94,7 +115,6 @@ make qemu            # Run new image in QEMU
 
 ## Related
 
-- [ARCHITECTURE.md](../ARCHITECTURE.md) - Project overview
 - [userspace/README.md](../userspace/README.md) - User programs
 - [boot/README.md](../boot/README.md) - Bootloader
 - [kernel/README.md](../kernel/README.md) - Kernel

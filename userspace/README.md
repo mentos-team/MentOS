@@ -4,7 +4,7 @@ All user-mode applications and tests that run in ring 3.
 
 ## Structure
 
-```
+```text
 userspace/
 ├── bin/        ← Executables (shell, utilities, etc.)
 └── tests/      ← Test programs
