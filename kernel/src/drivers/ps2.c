@@ -4,10 +4,10 @@
 /// See LICENSE.md for details.
 
 // Setup the logging for this file (do this before any other include).
-#include "sys/kernel_levels.h"          // Include kernel log levels.
-#define __DEBUG_HEADER__ "[PS/2  ]"     ///< Change header.
-#define __DEBUG_LEVEL__  LOGLEVEL_DEBUG ///< Set log level.
-#include "io/debug.h"                   // Include debugging functions.
+#include "sys/kernel_levels.h"           // Include kernel log levels.
+#define __DEBUG_HEADER__ "[PS/2  ]"      ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
+#include "io/debug.h"                    // Include debugging functions.
 
 #include "drivers/ps2.h"
 #include "io/port_io.h"
@@ -294,7 +294,7 @@ int ps2_initialize(void)
     bit_clear_assign(status, 0);
     bit_clear_assign(status, 1);
     bit_clear_assign(status, 4);
-    bit_set_assign(status, 6);  // Enable translation
+    bit_set_assign(status, 6); // Enable translation
     __ps2_set_controller_status(status);
     pr_debug("Status   : %s (%3d | %02x)\n", dec_to_binary(status, 8), status, status);
 
@@ -399,10 +399,10 @@ int ps2_initialize(void)
     status = __ps2_get_controller_status();
     pr_debug("Status   : %s (%3d | %02x)\n", dec_to_binary(status, 8), status, status);
     // Enable IRQs and clocks, keep translation enabled.
-    bit_set_assign(status, 0);  // IRQ for first port
+    bit_set_assign(status, 0);   // IRQ for first port
     bit_clear_assign(status, 4); // Ensure first clock enabled
     if (dual) {
-        bit_set_assign(status, 1);  // IRQ for second port
+        bit_set_assign(status, 1);   // IRQ for second port
         bit_clear_assign(status, 5); // Ensure second clock enabled
     }
     bit_set_assign(status, 6); // Keep translation ON (set 2 -> set 1)
