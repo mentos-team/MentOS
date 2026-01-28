@@ -5,6 +5,7 @@ This file tracks features organized by priority. See [Features Wiki](https://git
 ## High Priority
 
 ### Processes and Events
+
 - [x] Memory protection (User vs Kernel mode)
 - [x] Process management (fork, exec, exit, wait)
 - [x] Scheduler (multiple algorithms: RR, Priority, CFS, EDF, RM, AEDF)
@@ -17,6 +18,7 @@ This file tracks features organized by priority. See [Features Wiki](https://git
 - [ ] Thread support (POSIX threads)
 
 ### Memory Management
+
 - [x] Paging (virtual memory)
 - [x] Buddy system (physical allocator)
 - [x] Slab allocation
@@ -30,6 +32,7 @@ This file tracks features organized by priority. See [Features Wiki](https://git
 - [ ] Memory cgroups
 
 ### File Systems
+
 - [x] Virtual Filesystem (VFS)
 - [x] Initramfs
 - [x] EXT2 filesystem
@@ -42,6 +45,7 @@ This file tracks features organized by priority. See [Features Wiki](https://git
 - [ ] Symlinks
 
 ### Input/Output
+
 - [x] PIC drivers
 - [x] PS/2 drivers
 - [x] ATA drivers (IDE)
@@ -57,6 +61,7 @@ This file tracks features organized by priority. See [Features Wiki](https://git
 ## Medium Priority
 
 ### Inter-Process Communication
+
 - [x] Semaphores (System V)
 - [x] Message queues (System V)
 - [x] Shared memory (System V)
@@ -68,6 +73,7 @@ This file tracks features organized by priority. See [Features Wiki](https://git
 - [ ] Enhanced signal handling
 
 ### Security
+
 - [x] User/group management
 - [x] File permissions (Unix-style)
 - [x] Process privileges (UID/GID)
@@ -77,6 +83,7 @@ This file tracks features organized by priority. See [Features Wiki](https://git
 - [ ] ASLR (Address Space Layout Randomization)
 
 ### Networking
+
 - [ ] Network stack (TCP/IP)
 - [ ] Socket API (Berkeley sockets)
 - [ ] Ethernet driver
@@ -87,6 +94,7 @@ This file tracks features organized by priority. See [Features Wiki](https://git
 - [ ] DNS resolution
 
 ### Development Tools
+
 - [x] GDB support
 - [x] Serial console output
 - [x] Kernel logging (pr_debug, pr_info, etc.)
@@ -98,6 +106,7 @@ This file tracks features organized by priority. See [Features Wiki](https://git
 ## Low Priority
 
 ### Advanced Scheduling
+
 - [x] Round-Robin (RR)
 - [x] Priority-based
 - [x] Completely Fair Scheduler (CFS)
@@ -110,6 +119,7 @@ This file tracks features organized by priority. See [Features Wiki](https://git
 - [ ] Nice values (runtime adjustment)
 
 ### Power Management
+
 - [ ] ACPI support
 - [ ] CPU frequency scaling
 - [ ] Suspend/resume
@@ -117,6 +127,7 @@ This file tracks features organized by priority. See [Features Wiki](https://git
 - [ ] Power profiles
 
 ### Graphics and UI
+
 - [ ] Framebuffer support
 - [ ] VGA graphics mode
 - [ ] Windowing system
@@ -125,6 +136,7 @@ This file tracks features organized by priority. See [Features Wiki](https://git
 - [ ] Graphical terminal emulator
 
 ### System Services
+
 - [x] init system (PID 1)
 - [x] Login/authentication
 - [x] Shell (command-line interface)
@@ -133,6 +145,7 @@ This file tracks features organized by priority. See [Features Wiki](https://git
 - [ ] Syslog (system logging daemon)
 
 ### Userspace Programs
+
 - [x] Core utilities (40+ programs: cat, ls, mkdir, rm, cp, etc.)
 - [x] System tools (ps, kill, uptime, uname, etc.)
 - [x] Text editor (edit)
@@ -143,6 +156,7 @@ This file tracks features organized by priority. See [Features Wiki](https://git
 - [ ] Scripting language (sh, python)
 
 ### Testing and Quality
+
 - [x] Test suite (60+ tests)
 - [x] CI/CD pipeline (GitHub Actions)
 - [x] Documentation (Doxygen)
@@ -152,6 +166,7 @@ This file tracks features organized by priority. See [Features Wiki](https://git
 - [ ] Fuzzing (security testing)
 
 ### Miscellaneous
+
 - [ ] Loadable kernel modules (LKM)
 - [ ] Dynamic linking (shared libraries)
 - [ ] Kernel configuration (Kconfig-like)
@@ -204,6 +219,7 @@ Want to help implement a feature? See [Contributing Guide](https://github.com/me
 ### Feature Requests
 
 Have an idea? [Open an issue](https://github.com/mentos-team/MentOS/issues) with:
+
 - Feature description
 - Use case
 - Priority justification

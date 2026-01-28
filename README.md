@@ -101,7 +101,7 @@ See the [Debugging Guide](https://github.com/mentos-team/MentOS/wiki/Debugging) 
 
 We welcome contributions! Please see the [Contributing Guide](https://github.com/mentos-team/MentOS/wiki/Contributing).
 
-### Quick contribution steps:
+### Quick contribution steps
 
 1. Fork the repository
 2. Create a feature branch: `git checkout -b feature/my-feature`
