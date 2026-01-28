@@ -168,6 +168,7 @@ add_subdirectory(boot)
 add_subdirectory(kernel)
 add_subdirectory(lib)
 add_subdirectory(userspace)
+add_subdirectory(examples)
 
 # =============================================================================
 # FILESYSTEM
@@ -184,7 +185,7 @@ add_custom_target(filesystem
     COMMAND echo '============================================================================='
     COMMAND echo 'Done!'
     COMMAND echo '============================================================================='
-    DEPENDS programs tests
+    DEPENDS programs tests examples
 )
 
 # =============================================================================
