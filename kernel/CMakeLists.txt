@@ -46,22 +46,25 @@ endif()
 # Enables memory allocation tracing.
 if(ENABLE_KMEM_TRACE)
     target_compile_definitions(kernel PUBLIC ENABLE_KMEM_TRACE)
-endif(ENABLE_KMEM_TRACE)
+endif()
+
 if(ENABLE_PAGE_TRACE)
     target_compile_definitions(kernel PUBLIC ENABLE_PAGE_TRACE)
-endif(ENABLE_PAGE_TRACE)
+endif()
+
 if(ENABLE_EXT2_TRACE)
     target_compile_definitions(kernel PUBLIC ENABLE_EXT2_TRACE)
-endif(ENABLE_EXT2_TRACE)
+endif()
+
 if(ENABLE_FILE_TRACE)
     target_compile_definitions(kernel PUBLIC ENABLE_FILE_TRACE)
-endif(ENABLE_FILE_TRACE)
+endif()
 
 # =============================================================================
 # Enables scheduling feedback on terminal.
 if(ENABLE_SCHEDULER_FEEDBACK)
     target_compile_definitions(kernel PUBLIC ENABLE_SCHEDULER_FEEDBACK)
-endif(ENABLE_SCHEDULER_FEEDBACK)
+endif()
 
 # =============================================================================
 # Set the list of valid scheduling options.

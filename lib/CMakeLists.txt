@@ -2,83 +2,14 @@
 # LIBRARY
 # =============================================================================
 
-# Add the library.
-add_library(
-    libc
-    ${CMAKE_SOURCE_DIR}/lib/src/err.c
-    ${CMAKE_SOURCE_DIR}/lib/src/shadow.c
-    ${CMAKE_SOURCE_DIR}/lib/src/unistd/dup.c
-    ${CMAKE_SOURCE_DIR}/lib/src/stdio.c
-    ${CMAKE_SOURCE_DIR}/lib/src/ctype.c
-    ${CMAKE_SOURCE_DIR}/lib/src/string.c
-    ${CMAKE_SOURCE_DIR}/lib/src/stdlib.c
-    ${CMAKE_SOURCE_DIR}/lib/src/math.c
-    ${CMAKE_SOURCE_DIR}/lib/src/time.c
-    ${CMAKE_SOURCE_DIR}/lib/src/strerror.c
-    ${CMAKE_SOURCE_DIR}/lib/src/termios.c
-    ${CMAKE_SOURCE_DIR}/lib/src/libgen.c
-    ${CMAKE_SOURCE_DIR}/lib/src/vsprintf.c
-    ${CMAKE_SOURCE_DIR}/lib/src/vscanf.c
-    ${CMAKE_SOURCE_DIR}/lib/src/pwd.c
-    ${CMAKE_SOURCE_DIR}/lib/src/grp.c
-    ${CMAKE_SOURCE_DIR}/lib/src/sched.c
-    ${CMAKE_SOURCE_DIR}/lib/src/readline.c
-    ${CMAKE_SOURCE_DIR}/lib/src/setenv.c
-    ${CMAKE_SOURCE_DIR}/lib/src/assert.c
-    ${CMAKE_SOURCE_DIR}/lib/src/abort.c
-    ${CMAKE_SOURCE_DIR}/lib/src/syslog.c
-    ${CMAKE_SOURCE_DIR}/lib/src/ndtree.c
-    ${CMAKE_SOURCE_DIR}/lib/src/list.c
-    ${CMAKE_SOURCE_DIR}/lib/src/hashmap.c
-    ${CMAKE_SOURCE_DIR}/lib/src/crypt/sha256.c
-    ${CMAKE_SOURCE_DIR}/lib/src/io/mm_io.c
-    ${CMAKE_SOURCE_DIR}/lib/src/sys/ipc.c
-    ${CMAKE_SOURCE_DIR}/lib/src/sys/unistd.c
-    ${CMAKE_SOURCE_DIR}/lib/src/sys/errno.c
-    ${CMAKE_SOURCE_DIR}/lib/src/sys/utsname.c
-    ${CMAKE_SOURCE_DIR}/lib/src/sys/mman.c
-    ${CMAKE_SOURCE_DIR}/lib/src/sys/ioctl.c
-    ${CMAKE_SOURCE_DIR}/lib/src/unistd/chmod.c
-    ${CMAKE_SOURCE_DIR}/lib/src/unistd/chown.c
-    ${CMAKE_SOURCE_DIR}/lib/src/unistd/creat.c
-    ${CMAKE_SOURCE_DIR}/lib/src/unistd/getppid.c
-    ${CMAKE_SOURCE_DIR}/lib/src/unistd/getpid.c
-    ${CMAKE_SOURCE_DIR}/lib/src/unistd/exit.c
-    ${CMAKE_SOURCE_DIR}/lib/src/unistd/fcntl.c
-    ${CMAKE_SOURCE_DIR}/lib/src/unistd/setsid.c
-    ${CMAKE_SOURCE_DIR}/lib/src/unistd/getsid.c
-    ${CMAKE_SOURCE_DIR}/lib/src/unistd/setpgid.c
-    ${CMAKE_SOURCE_DIR}/lib/src/unistd/getpgid.c
-    ${CMAKE_SOURCE_DIR}/lib/src/unistd/setgid.c
-    ${CMAKE_SOURCE_DIR}/lib/src/unistd/getgid.c
-    ${CMAKE_SOURCE_DIR}/lib/src/unistd/setuid.c
-    ${CMAKE_SOURCE_DIR}/lib/src/unistd/getuid.c
-    ${CMAKE_SOURCE_DIR}/lib/src/unistd/fork.c
-    ${CMAKE_SOURCE_DIR}/lib/src/unistd/read.c
-    ${CMAKE_SOURCE_DIR}/lib/src/unistd/write.c
-    ${CMAKE_SOURCE_DIR}/lib/src/unistd/exec.c
-    ${CMAKE_SOURCE_DIR}/lib/src/unistd/nice.c
-    ${CMAKE_SOURCE_DIR}/lib/src/unistd/open.c
-    ${CMAKE_SOURCE_DIR}/lib/src/unistd/pipe.c
-    ${CMAKE_SOURCE_DIR}/lib/src/unistd/reboot.c
-    ${CMAKE_SOURCE_DIR}/lib/src/unistd/waitpid.c
-    ${CMAKE_SOURCE_DIR}/lib/src/unistd/chdir.c
-    ${CMAKE_SOURCE_DIR}/lib/src/unistd/getcwd.c
-    ${CMAKE_SOURCE_DIR}/lib/src/unistd/close.c
-    ${CMAKE_SOURCE_DIR}/lib/src/unistd/stat.c
-    ${CMAKE_SOURCE_DIR}/lib/src/unistd/rmdir.c
-    ${CMAKE_SOURCE_DIR}/lib/src/unistd/mkdir.c
-    ${CMAKE_SOURCE_DIR}/lib/src/unistd/unlink.c
-    ${CMAKE_SOURCE_DIR}/lib/src/unistd/getdents.c
-    ${CMAKE_SOURCE_DIR}/lib/src/unistd/lseek.c
-    ${CMAKE_SOURCE_DIR}/lib/src/unistd/kill.c
-    ${CMAKE_SOURCE_DIR}/lib/src/unistd/signal.c
-    ${CMAKE_SOURCE_DIR}/lib/src/unistd/interval.c
-    ${CMAKE_SOURCE_DIR}/lib/src/unistd/symlink.c
-    ${CMAKE_SOURCE_DIR}/lib/src/unistd/readlink.c
-    ${CMAKE_SOURCE_DIR}/lib/src/libc_start.c
-    ${CMAKE_SOURCE_DIR}/lib/src/crt0.S
+# Automatically collect all library source files.
+file(GLOB_RECURSE LIBC_SOURCES 
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/*.S"
 )
+
+# Create the libc library.
+add_library(libc ${LIBC_SOURCES})
 
 # Add the includes.
 target_include_directories(libc PUBLIC inc)
