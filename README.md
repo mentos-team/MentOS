@@ -48,14 +48,25 @@ make qemu
 
 **All documentation is in the [Wiki](https://github.com/mentos-team/MentOS/wiki)**:
 
+### Getting Started
 - **[Getting Started](https://github.com/mentos-team/MentOS/wiki/Getting-Started)** - Set up your environment
 - **[Building MentOS](https://github.com/mentos-team/MentOS/wiki/Building-MentOS)** - Compile the OS
 - **[Running MentOS](https://github.com/mentos-team/MentOS/wiki/Running-MentOS)** - Boot in QEMU or GRUB
+
+### Understanding the Codebase
 - **[Architecture](https://github.com/mentos-team/MentOS/wiki/Architecture)** - Project structure
+- **[Kernel](https://github.com/mentos-team/MentOS/wiki/Kernel)** - Kernel components and data structures
+- **[C Library](https://github.com/mentos-team/MentOS/wiki/C-Library)** - Standard library implementation
+- **[System Calls](https://github.com/mentos-team/MentOS/wiki/System-Calls)** - 60+ syscall reference
+- **[Filesystem](https://github.com/mentos-team/MentOS/wiki/Filesystem)** - VFS, EXT2, and ProcFS
+- **[IPC](https://github.com/mentos-team/MentOS/wiki/IPC)** - Semaphores, message queues, shared memory
+- **[Programs](https://github.com/mentos-team/MentOS/wiki/Programs)** - Userspace utilities (40+)
+
+### Development
 - **[Development Guide](https://github.com/mentos-team/MentOS/wiki/Development-Guide)** - Add programs and features
 - **[Debugging](https://github.com/mentos-team/MentOS/wiki/Debugging)** - GDB and kernel logging
-- **[Features](https://github.com/mentos-team/MentOS/wiki/Features)** - What's implemented
-- **[Contributing](https://github.com/mentos-team/MentOS/wiki/Contributing)** - How to contribute
+- **[Contributing](https://github.com/mentos-team/MentOS/wiki/Contributing)** - Contribution guidelines
+- **[Features](https://github.com/mentos-team/MentOS/wiki/Features)** - Feature roadmap with priorities
 
 ## Project Structure
 
@@ -85,7 +96,7 @@ mentos/
 - ✅ 40+ userspace programs (ls, cat, ps, etc.)
 - ✅ 60+ test programs
 
-See [Features](https://github.com/mentos-team/MentOS/wiki/Features) for the complete list and [TODO.md](TODO.md) for planned work.
+See [Features](https://github.com/mentos-team/MentOS/wiki/Features) for the complete list of implemented features and roadmap.
 
 ## Debugging
 
