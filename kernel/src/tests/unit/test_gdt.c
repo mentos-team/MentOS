@@ -11,11 +11,30 @@
 
 #include "descriptor_tables/gdt.h"
 #include "math.h"
+#include "string.h"
 #include "tests/test.h"
 #include "tests/test_utils.h"
 
 // External declaration for GDT array
 extern gdt_descriptor_t gdt[GDT_SIZE];
+
+/// @brief Safe GDT entry copy for testing (read-only access).
+/// @param src_idx Source GDT index.
+/// @param dest_buffer Destination buffer (must be at least 8 bytes).
+/// @return 0 on success, -1 on invalid index.
+static inline int gdt_safe_copy(size_t src_idx, void *dest_buffer)
+{
+    if (src_idx >= GDT_SIZE) {
+        pr_warning("Invalid GDT index %zu (max: %d)\n", src_idx, GDT_SIZE - 1);
+        return -1;
+    }
+    if (dest_buffer == NULL) {
+        pr_warning("NULL destination buffer for GDT copy\n");
+        return -1;
+    }
+    memcpy(dest_buffer, &gdt[src_idx], sizeof(gdt_descriptor_t));
+    return 0;
+}
 
 /// @brief Test that the GDT structure has the correct size.
 TEST(gdt_structure_size)
@@ -31,7 +50,7 @@ TEST(gdt_null_descriptor)
     TEST_SECTION_START("GDT null descriptor");
 
     gdt_descriptor_t null_entry;
-    ASSERT(test_gdt_safe_copy(0, &null_entry) == 0);
+    ASSERT(gdt_safe_copy(0, &null_entry) == 0);
 
     // Null descriptor must have all fields as 0
     ASSERT_MSG(null_entry.base_low == 0, "Null descriptor base_low must be 0");
@@ -51,14 +70,16 @@ TEST(gdt_essential_entries_initialized)
 
     // Entry 1: Should be kernel code segment
     gdt_descriptor_t code_entry;
-    ASSERT(test_gdt_safe_copy(1, &code_entry) == 0);
+    ASSERT(gdt_safe_copy(1, &code_entry) == 0);
     ASSERT_MSG((code_entry.access & 0x80) != 0, "Code segment must be present");
-    ASSERT_MSG((code_entry.access & 0x18) == 0x08, "Entry 1 must be code segment");
+    // Code segment has GDT_S (0x10) and GDT_EX (0x08) bits set
+    ASSERT_MSG((code_entry.access & 0x18) == 0x18, "Entry 1 must be code segment");
 
     // Entry 2: Should be kernel data segment
     gdt_descriptor_t data_entry;
-    ASSERT(test_gdt_safe_copy(2, &data_entry) == 0);
+    ASSERT(gdt_safe_copy(2, &data_entry) == 0);
     ASSERT_MSG((data_entry.access & 0x80) != 0, "Data segment must be present");
+    // Data segment has GDT_S (0x10) but not GDT_EX (0x08)
     ASSERT_MSG((data_entry.access & 0x18) == 0x10, "Entry 2 must be data segment");
 
     TEST_SECTION_END();
@@ -71,11 +92,11 @@ TEST(gdt_bounds_validation)
 
     // Verify we can access last valid entry without issues
     gdt_descriptor_t last_entry;
-    ASSERT(test_gdt_safe_copy(GDT_SIZE - 1, &last_entry) == 0);
+    ASSERT(gdt_safe_copy(GDT_SIZE - 1, &last_entry) == 0);
 
     // Verify invalid indices are rejected
-    ASSERT(test_gdt_safe_copy(GDT_SIZE, NULL) == -1);
-    ASSERT(test_gdt_safe_copy(GDT_SIZE + 100, NULL) == -1);
+    ASSERT(gdt_safe_copy(GDT_SIZE, NULL) == -1);
+    ASSERT(gdt_safe_copy(GDT_SIZE + 100, NULL) == -1);
 
     TEST_SECTION_END();
 }
@@ -88,7 +109,7 @@ TEST(gdt_base_address_layout)
     // Test a few entries to ensure base address fields are used
     for (int i = 1; i < min(5, GDT_SIZE); i++) {
         gdt_descriptor_t entry;
-        ASSERT(test_gdt_safe_copy(i, &entry) == 0);
+        ASSERT(gdt_safe_copy(i, &entry) == 0);
 
         // For kernel segments (present bit set), verify base fields exist
         if ((entry.access & 0x80) != 0) {
@@ -112,7 +133,7 @@ TEST(gdt_limit_field_layout)
     // Test a few entries to ensure limit fields are used
     for (int i = 1; i < min(5, GDT_SIZE); i++) {
         gdt_descriptor_t entry;
-        ASSERT(test_gdt_safe_copy(i, &entry) == 0);
+        ASSERT(gdt_safe_copy(i, &entry) == 0);
 
         // For present entries, verify limit fields
         if ((entry.access & 0x80) != 0) {
@@ -134,7 +155,7 @@ TEST(gdt_access_byte_format)
     // Examine a few entries
     for (int i = 1; i < min(5, GDT_SIZE); i++) {
         gdt_descriptor_t entry;
-        ASSERT(test_gdt_safe_copy(i, &entry) == 0);
+        ASSERT(gdt_safe_copy(i, &entry) == 0);
 
         // If present (bit 7 set), verify access byte structure
         if ((entry.access & 0x80) != 0) {
@@ -161,7 +182,7 @@ TEST(gdt_granularity_byte_format)
     // Examine entries
     for (int i = 1; i < min(5, GDT_SIZE); i++) {
         gdt_descriptor_t entry;
-        ASSERT(test_gdt_safe_copy(i, &entry) == 0);
+        ASSERT(gdt_safe_copy(i, &entry) == 0);
 
         if ((entry.access & 0x80) != 0) {
             // Bit 7: Granularity (0 = byte, 1 = 4KB)
@@ -193,7 +214,7 @@ TEST(gdt_array_bounds)
     // Verify we can access all entries safely
     for (int i = 0; i < GDT_SIZE; i++) {
         gdt_descriptor_t entry;
-        ASSERT(test_gdt_safe_copy(i, &entry) == 0);
+        ASSERT(gdt_safe_copy(i, &entry) == 0);
     }
 
     TEST_SECTION_END();

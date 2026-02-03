@@ -87,18 +87,4 @@ static inline int test_bounds_check(uint32_t value, uint32_t min, uint32_t max, 
     return 1;
 }
 
-/// @brief Safe GDT entry copy for testing (non-destructive).
-/// @note Only use this to make test copies of GDT entries.
-/// @param src_idx Source GDT index.
-/// @param dest_buffer Destination buffer (must be at least 8 bytes).
-/// @return 0 on success, -1 on invalid index.
-int test_gdt_safe_copy(size_t src_idx, void *dest_buffer);
-
-/// @brief Safe IDT entry copy for testing (non-destructive).
-/// @note Only use this to make test copies of IDT entries.
-/// @param src_idx Source IDT index.
-/// @param dest_buffer Destination buffer (must be at least 8 bytes).
-/// @return 0 on success, -1 on invalid index.
-int test_idt_safe_copy(size_t src_idx, void *dest_buffer);
-
 /// @}
