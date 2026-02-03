@@ -4,10 +4,10 @@
 /// See LICENSE.md for details.
 
 // Setup the logging for this file (do this before any other include).
-#include "sys/kernel_levels.h"           // Include kernel log levels.
-#define __DEBUG_HEADER__ "[TUNIT ]"      ///< Change header.
-#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
-#include "io/debug.h"                    // Include debugging functions.
+#include "sys/kernel_levels.h"          // Include kernel log levels.
+#define __DEBUG_HEADER__ "[TUNIT ]"     ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_DEBUG ///< Set log level.
+#include "io/debug.h"                   // Include debugging functions.
 
 #include "descriptor_tables/gdt.h"
 #include "math.h"
@@ -237,6 +237,34 @@ TEST(gdt_pointer_configuration)
     TEST_SECTION_END();
 }
 
+/// @brief Verify user mode code segment (entry 3) is correctly configured.
+TEST(gdt_user_code_segment)
+{
+    TEST_SECTION_START("GDT user code segment (entry 3)");
+
+    gdt_descriptor_t descriptor;
+    gdt_safe_copy(3, &descriptor);
+
+    // Entry 3 should be a user mode code segment
+    // Access byte should have: PRESENT | USER | EXECUTABLE | READABLE
+    uint8_t expected_access = GDT_PRESENT | GDT_USER | GDT_CODE | GDT_RW;
+    ASSERT_MSG(descriptor.access == expected_access, "User code segment access byte incorrect");
+
+    // Base address should be 0
+    uint32_t base = descriptor.base_low | (descriptor.base_middle << 16) | (descriptor.base_high << 24);
+    ASSERT_MSG(base == 0, "User code segment base must be 0");
+
+    // Limit should be 0xFFFF (granularity byte has upper 4 bits of limit)
+    uint32_t limit = descriptor.limit_low | (((uint32_t)(descriptor.granularity & 0x0F)) << 16);
+    ASSERT_MSG(limit == 0xFFFFF, "User code segment limit must be 0xFFFFF");
+
+    // Granularity should have GRANULARITY and OPERAND_SIZE flags
+    uint8_t expected_granularity = GDT_GRANULARITY | GDT_OPERAND_SIZE;
+    ASSERT_MSG((descriptor.granularity & 0xF0) == expected_granularity, "User code segment granularity flags incorrect");
+
+    TEST_SECTION_END();
+}
+
 /// @brief Main test function for GDT subsystem.
 /// This function runs all GDT tests in sequence.
 void test_gdt(void)
@@ -252,5 +280,6 @@ void test_gdt(void)
     test_gdt_granularity_byte_format();
     test_gdt_array_bounds();
     test_gdt_pointer_configuration();
+    test_gdt_user_code_segment();
 }
 
