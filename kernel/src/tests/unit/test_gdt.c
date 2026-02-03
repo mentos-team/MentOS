@@ -265,6 +265,34 @@ TEST(gdt_user_code_segment)
     TEST_SECTION_END();
 }
 
+/// @brief Verify user mode data segment (entry 4) is correctly configured.
+TEST(gdt_user_data_segment)
+{
+    TEST_SECTION_START("GDT user data segment (entry 4)");
+
+    gdt_descriptor_t descriptor;
+    gdt_safe_copy(4, &descriptor);
+
+    // Entry 4 should be a user mode data segment
+    // Access byte should have: PRESENT | USER | WRITABLE (not executable)
+    uint8_t expected_access = GDT_PRESENT | GDT_USER | GDT_DATA;
+    ASSERT_MSG(descriptor.access == expected_access, "User data segment access byte incorrect");
+
+    // Base address should be 0
+    uint32_t base = descriptor.base_low | (descriptor.base_middle << 16) | (descriptor.base_high << 24);
+    ASSERT_MSG(base == 0, "User data segment base must be 0");
+
+    // Limit should be 0xFFFFF (same as code segment)
+    uint32_t limit = descriptor.limit_low | (((uint32_t)(descriptor.granularity & 0x0F)) << 16);
+    ASSERT_MSG(limit == 0xFFFFF, "User data segment limit must be 0xFFFFF");
+
+    // Granularity should have GRANULARITY and OPERAND_SIZE flags
+    uint8_t expected_granularity = GDT_GRANULARITY | GDT_OPERAND_SIZE;
+    ASSERT_MSG((descriptor.granularity & 0xF0) == expected_granularity, "User data segment granularity flags incorrect");
+
+    TEST_SECTION_END();
+}
+
 /// @brief Main test function for GDT subsystem.
 /// This function runs all GDT tests in sequence.
 void test_gdt(void)
@@ -281,5 +309,6 @@ void test_gdt(void)
     test_gdt_array_bounds();
     test_gdt_pointer_configuration();
     test_gdt_user_code_segment();
+        test_gdt_user_data_segment();
 }
 
