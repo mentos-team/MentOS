@@ -361,6 +361,26 @@ TEST(gdt_segment_flags)
     TEST_SECTION_END();
 }
 
+/// @brief Verify base and limit values for code/data segments.
+TEST(gdt_segment_base_limit_values)
+{
+    TEST_SECTION_START("GDT segment base/limit values");
+
+    gdt_descriptor_t entry;
+
+    for (int i = 1; i <= 4; i++) {
+        ASSERT(gdt_safe_copy(i, &entry) == 0);
+
+        uint32_t base = entry.base_low | (entry.base_middle << 16) | (entry.base_high << 24);
+        ASSERT_MSG(base == 0, "Segment base must be 0");
+
+        uint32_t limit = entry.limit_low | (((uint32_t)(entry.granularity & 0x0F)) << 16);
+        ASSERT_MSG(limit == 0xFFFFF, "Segment limit must be 0xFFFFF");
+    }
+
+    TEST_SECTION_END();
+}
+
 /// @brief Main test function for GDT subsystem.
 /// This function runs all GDT tests in sequence.
 void test_gdt(void)
@@ -381,5 +401,6 @@ void test_gdt(void)
     test_gdt_tss_descriptor();
     test_gdt_privilege_levels();
     test_gdt_segment_flags();
+    test_gdt_segment_base_limit_values();
 }
 
