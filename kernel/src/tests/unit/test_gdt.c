@@ -344,6 +344,23 @@ TEST(gdt_privilege_levels)
     TEST_SECTION_END();
 }
 
+/// @brief Verify granularity and operand size flags for code/data segments.
+TEST(gdt_segment_flags)
+{
+    TEST_SECTION_START("GDT segment flags");
+
+    gdt_descriptor_t entry;
+    uint8_t expected_flags = GDT_GRANULARITY | GDT_OPERAND_SIZE;
+
+    // Kernel code/data and user code/data should be 4KB granularity, 32-bit
+    for (int i = 1; i <= 4; i++) {
+        ASSERT(gdt_safe_copy(i, &entry) == 0);
+        ASSERT_MSG((entry.granularity & 0xF0) == expected_flags, "Segment flags must be G and D/B");
+    }
+
+    TEST_SECTION_END();
+}
+
 /// @brief Main test function for GDT subsystem.
 /// This function runs all GDT tests in sequence.
 void test_gdt(void)
@@ -363,5 +380,6 @@ void test_gdt(void)
     test_gdt_user_data_segment();
     test_gdt_tss_descriptor();
     test_gdt_privilege_levels();
+    test_gdt_segment_flags();
 }
 
