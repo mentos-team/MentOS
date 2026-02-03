@@ -30,11 +30,13 @@ typedef struct {
 
 extern void test_gdt(void);
 extern void test_idt(void);
+extern void test_isr(void);
 
 /// @brief Test registry - one entry per subsystem.
 static const test_entry_t test_functions[] = {
     {test_gdt, "GDT Subsystem"},
     {test_idt, "IDT Subsystem"},
+    {test_isr, "ISR Subsystem"},
 };
 
 static const int num_tests = sizeof(test_functions) / sizeof(test_entry_t);
