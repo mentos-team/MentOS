@@ -257,14 +257,14 @@ int kmain(boot_info_t *boot_informations)
     print_ok();
 
     //==========================================================================
-    // pr_notice("Initialize Filesystem Hierarchy Standard directories...\n");
-    // printf("Initialize FHS directories...");
-    // if (fhs_initialize()) {
-    //     print_fail();
-    //     pr_emerg("Failed to initialize FHS directories!\n");
-    //     return 1;
-    // }
-    // print_ok();
+    pr_notice("Initialize Filesystem Hierarchy Standard directories...\n");
+    printf("Initialize FHS directories...");
+    if (fhs_initialize()) {
+        print_fail();
+        pr_emerg("Failed to initialize FHS directories!\n");
+        return 1;
+    }
+    print_ok();
 
     //==========================================================================
     pr_notice("    Initialize memory devices...\n");
