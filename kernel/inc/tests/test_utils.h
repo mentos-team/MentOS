@@ -16,13 +16,13 @@
 /// @param description A description of what is being tested.
 #define TEST_SECTION_START(description)            \
     do {                                           \
-        pr_notice("  Testing: %s\n", description); \
+        pr_info("  Testing: %s\n", description); \
     } while (0)
 
 /// @brief Mark the end of a test section.
 #define TEST_SECTION_END()                      \
     do {                                        \
-        pr_notice("  ✓ Test section passed\n"); \
+        pr_info("  ✓ Test section passed\n"); \
     } while (0)
 
 /// @brief Assert and provide context about what failed.
