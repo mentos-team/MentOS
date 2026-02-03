@@ -31,12 +31,14 @@ typedef struct {
 extern void test_gdt(void);
 extern void test_idt(void);
 extern void test_isr(void);
+extern void test_paging(void);
 
 /// @brief Test registry - one entry per subsystem.
 static const test_entry_t test_functions[] = {
     {test_gdt, "GDT Subsystem"},
     {test_idt, "IDT Subsystem"},
     {test_isr, "ISR Subsystem"},
+    {test_paging, "Paging Subsystem"},
 };
 
 static const int num_tests = sizeof(test_functions) / sizeof(test_entry_t);
@@ -48,10 +50,9 @@ int kernel_run_tests(void)
     pr_notice("Starting kernel tests...\n");
     int passed = 0;
     for (int i = 0; i < num_tests; i++) {
-        pr_notice("========== %s ==========\n", test_functions[i].name);
+        pr_notice("Running test %2d of %2d: %s...\n", i + 1, num_tests, test_functions[i].name);
         test_functions[i].func();
         passed++;
-        pr_notice("========== %s Done ==========\n", test_functions[i].name);
     }
     pr_notice("Kernel tests completed: %d/%d passed\n", passed, num_tests);
 
