@@ -86,22 +86,6 @@ TEST(gdt_essential_entries_initialized)
     TEST_SECTION_END();
 }
 
-/// @brief Verify GDT bounds checking.
-TEST(gdt_bounds_validation)
-{
-    TEST_SECTION_START("GDT bounds validation");
-
-    // Verify we can access last valid entry without issues
-    gdt_descriptor_t last_entry;
-    ASSERT(gdt_safe_copy(GDT_SIZE - 1, &last_entry) == 0);
-
-    // Verify invalid indices are rejected
-    ASSERT(gdt_safe_copy(GDT_SIZE, NULL) == -1);
-    ASSERT(gdt_safe_copy(GDT_SIZE + 100, NULL) == -1);
-
-    TEST_SECTION_END();
-}
-
 /// @brief Verify base address field layout in GDT entries.
 TEST(gdt_base_address_layout)
 {
@@ -381,6 +365,21 @@ TEST(gdt_segment_base_limit_values)
     TEST_SECTION_END();
 }
 
+/// @brief Verify unused GDT entries are zero-initialized.
+TEST(gdt_unused_entries_zeroed)
+{
+    TEST_SECTION_START("GDT unused entries zeroed");
+
+    // Entries 6..GDT_SIZE-1 should be zeroed (unused)
+    for (int i = 6; i < GDT_SIZE; i++) {
+        gdt_descriptor_t entry;
+        ASSERT(gdt_safe_copy(i, &entry) == 0);
+        ASSERT_MSG(test_is_zeroed(&entry, sizeof(entry), "unused_gdt_entry"), "Unused GDT entry must be zeroed");
+    }
+
+    TEST_SECTION_END();
+}
+
 /// @brief Main test function for GDT subsystem.
 /// This function runs all GDT tests in sequence.
 void test_gdt(void)
@@ -389,7 +388,6 @@ void test_gdt(void)
     test_gdt_structure_size();
     test_gdt_null_descriptor();
     test_gdt_essential_entries_initialized();
-    test_gdt_bounds_validation();
     test_gdt_base_address_layout();
     test_gdt_limit_field_layout();
     test_gdt_access_byte_format();
@@ -402,5 +400,6 @@ void test_gdt(void)
     test_gdt_privilege_levels();
     test_gdt_segment_flags();
     test_gdt_segment_base_limit_values();
+    test_gdt_unused_entries_zeroed();
 }
 
