@@ -293,6 +293,33 @@ TEST(gdt_user_data_segment)
     TEST_SECTION_END();
 }
 
+/// @brief Verify TSS descriptor (entry 5) is correctly configured.
+TEST(gdt_tss_descriptor)
+{
+    TEST_SECTION_START("GDT TSS descriptor (entry 5)");
+
+    gdt_descriptor_t descriptor;
+    ASSERT(gdt_safe_copy(5, &descriptor) == 0);
+
+    // TSS is a system segment: S bit must be 0
+    ASSERT_MSG((descriptor.access & GDT_S) == 0, "TSS descriptor must be a system segment");
+
+    // Access byte should include required TSS bits (present, DPL=3, executable)
+    uint8_t required_access = GDT_PRESENT | GDT_USER | GDT_EX;
+    ASSERT_MSG((descriptor.access & required_access) == required_access, "TSS descriptor access bits missing");
+
+    // Accessed bit should be set (CPU may update it)
+    ASSERT_MSG((descriptor.access & GDT_AC) != 0, "TSS descriptor accessed bit must be set");
+
+    // Granularity flags should be clear for TSS (no 4K or 32-bit flags)
+    ASSERT_MSG((descriptor.granularity & 0xF0) == 0, "TSS granularity flags must be 0");
+
+    // Limit high nibble must be within 4-bit range
+    ASSERT_MSG((descriptor.granularity & 0x0F) <= 0x0F, "TSS limit high bits invalid");
+
+    TEST_SECTION_END();
+}
+
 /// @brief Main test function for GDT subsystem.
 /// This function runs all GDT tests in sequence.
 void test_gdt(void)
@@ -309,6 +336,7 @@ void test_gdt(void)
     test_gdt_array_bounds();
     test_gdt_pointer_configuration();
     test_gdt_user_code_segment();
-        test_gdt_user_data_segment();
+    test_gdt_user_data_segment();
+    test_gdt_tss_descriptor();
 }
 
