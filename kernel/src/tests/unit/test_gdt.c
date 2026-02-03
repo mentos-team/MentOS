@@ -17,6 +17,7 @@
 
 // External declaration for GDT array
 extern gdt_descriptor_t gdt[GDT_SIZE];
+extern gdt_pointer_t gdt_pointer;
 
 /// @brief Safe GDT entry copy for testing (read-only access).
 /// @param src_idx Source GDT index.
@@ -220,6 +221,22 @@ TEST(gdt_array_bounds)
     TEST_SECTION_END();
 }
 
+/// @brief Verify GDT pointer is correctly configured.
+TEST(gdt_pointer_configuration)
+{
+    TEST_SECTION_START("GDT pointer configuration");
+
+    // GDT pointer should point to the GDT array
+    ASSERT_MSG((uint32_t)&gdt == gdt_pointer.base, "GDT pointer base must point to GDT array");
+
+    // Limit should be (number_of_entries * entry_size) - 1
+    // We have 6 entries, each 8 bytes, so limit should be 47 (6*8-1)
+    uint16_t expected_limit = sizeof(gdt_descriptor_t) * 6 - 1;
+    ASSERT_MSG(gdt_pointer.limit == expected_limit, "GDT pointer limit must be 47");
+
+    TEST_SECTION_END();
+}
+
 /// @brief Main test function for GDT subsystem.
 /// This function runs all GDT tests in sequence.
 void test_gdt(void)
@@ -234,5 +251,6 @@ void test_gdt(void)
     test_gdt_access_byte_format();
     test_gdt_granularity_byte_format();
     test_gdt_array_bounds();
+    test_gdt_pointer_configuration();
 }
 
