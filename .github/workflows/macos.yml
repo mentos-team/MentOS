@@ -1,0 +1,93 @@
+name: macOS
+
+# Trigger the workflow on push or pull requests for main and develop branches
+on:
+  push:
+    branches:
+    - main
+    - develop
+    paths:
+    - '**/*.c'
+    - '**/*.cpp'
+    - '**/*.h'
+    - '**/*.hpp'
+    - '**/*.S'
+    - '**/*.asm'
+    - '**/CMakeLists.txt'
+    - '**/Makefile'
+    - '**/cmake/**'
+    - '**/tools/toolchain-i686-elf.cmake'
+    - '.github/workflows/macos.yml'
+  pull_request:
+    branches:
+    - main
+    - develop
+    paths:
+    - '**/*.c'
+    - '**/*.cpp'
+    - '**/*.h'
+    - '**/*.hpp'
+    - '**/*.S'
+    - '**/*.asm'
+    - '**/CMakeLists.txt'
+    - '**/Makefile'
+    - '**/cmake/**'
+    - '**/tools/toolchain-i686-elf.cmake'
+    - '.github/workflows/macos.yml'
+
+jobs:
+  build:
+    name: Build and Compile (macOS)
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # macOS runners come with clang, we test with the system clang
+          # i686-elf-gcc is installed via Homebrew for cross-compilation
+          - { os: macos-14, arch: "Intel" }
+          - { os: macos-14-large, arch: "Apple Silicon" }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+    - name: Clone repository
+      uses: actions/checkout@v4
+
+    - name: Install dependencies via Homebrew
+      run: |
+        # Update Homebrew
+        brew update || true
+        
+        # Install required tools
+        brew install nasm cmake
+        
+        # Install cross-compiler for i386 (bare-metal)
+        # This is critical - we need i686-elf-gcc, not i686-linux-gnu
+        brew install i686-elf-gcc
+        
+        # Verify installation
+        echo "=== Checking installed tools ==="
+        nasm --version
+        cmake --version
+        i686-elf-gcc --version
+
+    - name: Build with cross-compilation toolchain
+      run: |
+        # Create build directory
+        mkdir -p build
+        cd build
+        
+        # Configure with the i686-elf toolchain file
+        # This is essential for macOS (which is ARM-based)
+        cmake .. -DCMAKE_TOOLCHAIN_FILE=../tools/toolchain-i686-elf.cmake \
+                 -DCMAKE_BUILD_TYPE=Release
+        
+        # Build all targets
+        cmake --build . --parallel $(sysctl -n hw.ncpu)
+
+    - name: Verify build artifacts
+      run: |
+        echo "=== Build artifacts ==="
+        ls -lh build/mentos/ || echo "mentos/ not found"
+        ls -lh build/*.bin 2>/dev/null || echo "*.bin files not found"
+        file build/mentos/bootloader.bin 2>/dev/null || echo "bootloader.bin not found"
+
