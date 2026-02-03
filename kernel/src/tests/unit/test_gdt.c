@@ -320,6 +320,30 @@ TEST(gdt_tss_descriptor)
     TEST_SECTION_END();
 }
 
+/// @brief Verify privilege levels for kernel and user segments.
+TEST(gdt_privilege_levels)
+{
+    TEST_SECTION_START("GDT privilege levels");
+
+    gdt_descriptor_t entry;
+
+    // Kernel code (entry 1) and data (entry 2) must be DPL 0
+    ASSERT(gdt_safe_copy(1, &entry) == 0);
+    ASSERT_MSG((entry.access & 0x60) == GDT_KERNEL, "Kernel code segment DPL must be 0");
+
+    ASSERT(gdt_safe_copy(2, &entry) == 0);
+    ASSERT_MSG((entry.access & 0x60) == GDT_KERNEL, "Kernel data segment DPL must be 0");
+
+    // User code (entry 3) and data (entry 4) must be DPL 3
+    ASSERT(gdt_safe_copy(3, &entry) == 0);
+    ASSERT_MSG((entry.access & 0x60) == GDT_USER, "User code segment DPL must be 3");
+
+    ASSERT(gdt_safe_copy(4, &entry) == 0);
+    ASSERT_MSG((entry.access & 0x60) == GDT_USER, "User data segment DPL must be 3");
+
+    TEST_SECTION_END();
+}
+
 /// @brief Main test function for GDT subsystem.
 /// This function runs all GDT tests in sequence.
 void test_gdt(void)
@@ -338,5 +362,6 @@ void test_gdt(void)
     test_gdt_user_code_segment();
     test_gdt_user_data_segment();
     test_gdt_tss_descriptor();
+    test_gdt_privilege_levels();
 }
 
