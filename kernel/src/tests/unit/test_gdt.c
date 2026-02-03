@@ -380,6 +380,26 @@ TEST(gdt_unused_entries_zeroed)
     TEST_SECTION_END();
 }
 
+/// @brief Verify kernel code/data segments have exact access bytes.
+TEST(gdt_kernel_segment_access)
+{
+    TEST_SECTION_START("GDT kernel segment access");
+
+    gdt_descriptor_t entry;
+
+    // Kernel code segment (entry 1)
+    ASSERT(gdt_safe_copy(1, &entry) == 0);
+    uint8_t expected_code_access = GDT_PRESENT | GDT_KERNEL | GDT_CODE | GDT_RW;
+    ASSERT_MSG((entry.access & ~GDT_AC) == expected_code_access, "Kernel code segment access byte incorrect");
+
+    // Kernel data segment (entry 2)
+    ASSERT(gdt_safe_copy(2, &entry) == 0);
+    uint8_t expected_data_access = GDT_PRESENT | GDT_KERNEL | GDT_DATA;
+    ASSERT_MSG((entry.access & ~GDT_AC) == expected_data_access, "Kernel data segment access byte incorrect");
+
+    TEST_SECTION_END();
+}
+
 /// @brief Main test function for GDT subsystem.
 /// This function runs all GDT tests in sequence.
 void test_gdt(void)
@@ -401,5 +421,6 @@ void test_gdt(void)
     test_gdt_segment_flags();
     test_gdt_segment_base_limit_values();
     test_gdt_unused_entries_zeroed();
+    test_gdt_kernel_segment_access();
 }
 
