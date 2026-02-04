@@ -679,7 +679,7 @@ static inline uintptr_t ata_dma_alloc(size_t size, uintptr_t *physical)
     // Allocate a contiguous block of memory pages. Ensure that alloc_pages
     // returns physically contiguous pages suitable for DMA, as DMA transfers
     // usually require physically contiguous memory.
-    page_t *page = alloc_pages(GFP_KERNEL, order);
+    page_t *page = alloc_pages(GFP_DMA, order);
     if (!page) {
         pr_crit("Failed to allocate pages for DMA memory (order = %d).\n", order);
         return 0;

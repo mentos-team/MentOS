@@ -4,10 +4,10 @@
 /// See LICENSE.md for details.
 
 // Setup the logging for this file (do this before any other include).
-#include "sys/kernel_levels.h"           // Include kernel log levels.
-#define __DEBUG_HEADER__ "[PMM   ]"      ///< Change header.
-#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
-#include "io/debug.h"                    // Include debugging functions.
+#include "sys/kernel_levels.h"          // Include kernel log levels.
+#define __DEBUG_HEADER__ "[PMM   ]"     ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_DEBUG ///< Set log level.
+#include "io/debug.h"                   // Include debugging functions.
 
 #include "assert.h"
 #include "kernel.h"
@@ -39,6 +39,9 @@
 #define MAX_ORDER_ALIGN(addr)                                             \
     (((addr) & (~((PAGE_SIZE << (MAX_BUDDYSYSTEM_GFP_ORDER - 1)) - 1))) + \
      (PAGE_SIZE << (MAX_BUDDYSYSTEM_GFP_ORDER - 1)))
+
+/// @brief DMA zone size carved from lowmem (fixed 16MB).
+#define DMA_ZONE_SIZE (16U * 1024U * 1024U)
 
 /// @brief Keeps track of system memory management data.
 memory_info_t memory;
@@ -83,6 +86,7 @@ static inline void __print_memory_info(int log_level, const memory_info_t *mem_i
     pr_log(log_level, "    Total Page Frames       : %u\n", mem_info->mem_map_num);
     pr_log(log_level, "    Size                    : %s\n", to_human_size(sizeof(page_t) * mem_info->mem_map_num));
     pr_log(log_level, "Memory Zones:\n");
+    __print_memory_zone(log_level, "DMA", &mem_info->dma_mem);
     __print_memory_zone(log_level, "LowMem", &mem_info->low_mem);
     __print_memory_zone(log_level, "HighMem", &mem_info->high_mem);
 }
@@ -158,6 +162,10 @@ static zone_t *get_zone_from_flags(gfp_t gfp_mask)
 
     // Determine the appropriate zone based on the given GFP mask.
     switch (gfp_mask) {
+    case GFP_DMA:
+        // Return the DMA zone.
+        return &memory.page_data->node_zones[ZONE_DMA];
+
     case GFP_KERNEL:
     case GFP_ATOMIC:
     case GFP_NOFS:
@@ -404,6 +412,9 @@ static int zone_init(char *name, int zone_index, uint32_t adr_from, uint32_t adr
 
 int is_valid_virtual_address(uint32_t addr)
 {
+    if ((addr >= memory.dma_mem.virt_start) && (addr < memory.dma_mem.virt_end)) {
+        return 1;
+    }
     if ((addr >= memory.low_mem.virt_start) && (addr < memory.low_mem.virt_end)) {
         return 1;
     }
@@ -535,6 +546,15 @@ ssize_t pmmngr_initialize_page_data(const boot_info_t *boot_info, size_t offset)
 
 int pmmngr_init(boot_info_t *boot_info)
 {
+    // Store kernel region info for later address translation.
+    // This includes not just the kernel binary but also the kernel heap space
+    // allocated before lowmem begins.
+    memory.kernel_mem.start_addr = boot_info->kernel_phy_start;
+    memory.kernel_mem.end_addr   = boot_info->lowmem_phy_start;  // Extends to lowmem start
+    memory.kernel_mem.virt_start = boot_info->kernel_start;
+    memory.kernel_mem.virt_end   = boot_info->lowmem_virt_start;  // Extends to lowmem virt start
+    memory.kernel_mem.size       = boot_info->lowmem_virt_start - boot_info->kernel_start;
+
     // Place the pages in memory.
     ssize_t offset_pages = pmmngr_initialize_pages(boot_info, 0U);
 
@@ -556,6 +576,57 @@ int pmmngr_init(boot_info_t *boot_info)
     memory.low_mem.virt_start      = tmp_normal_virt_start + (memory.low_mem.start_addr - tmp_normal_phy_start);
     memory.low_mem.virt_end        = boot_info->lowmem_virt_end;
 
+    // Initialize DMA zone within lowmem (first 32MB).
+    // The DMA zone must start at a 32MB boundary and be sized to 32MB for buddy system alignment.
+    uint32_t dma_start_aligned = memory.low_mem.start_addr;
+    // Align DMA start to 32MB boundary (max buddy order size).
+    uint32_t remainder         = dma_start_aligned % (32 * 1024 * 1024);
+    if (remainder != 0) {
+        dma_start_aligned += (32 * 1024 * 1024 - remainder);
+    }
+    uint32_t dma_size_desired = DMA_ZONE_SIZE;
+    // Align the size to the buddy system's max order requirement.
+    uint32_t dma_size_aligned = MIN_ORDER_ALIGN(dma_size_desired);
+    // If the desired size rounds down to zero, use the max order size instead.
+    if (dma_size_aligned == 0 && dma_size_desired > 0) {
+        dma_size_aligned = (PAGE_SIZE << (MAX_BUDDYSYSTEM_GFP_ORDER - 1));
+    }
+    // Clamp to available lowmem, but don't exceed the already-aligned size.
+    uint32_t dma_end_candidate = dma_start_aligned + dma_size_aligned;
+    uint32_t dma_size          = (dma_end_candidate <= memory.low_mem.end_addr)
+                                     ? dma_size_aligned
+                                     : MIN_ORDER_ALIGN(memory.low_mem.end_addr - dma_start_aligned);
+
+    memory.dma_mem.start_addr = dma_start_aligned;
+    memory.dma_mem.size       = dma_size;
+    memory.dma_mem.end_addr   = memory.dma_mem.start_addr + memory.dma_mem.size;
+    memory.dma_mem.virt_start = memory.low_mem.virt_start;
+    memory.dma_mem.virt_end   = memory.dma_mem.virt_start + memory.dma_mem.size;
+
+    if (memory.dma_mem.size == 0) {
+        pr_crit("DMA zone size is zero; DMA zone must be present.\n");
+        return 0;
+    }
+
+    // Shrink LowMem (ZONE_NORMAL) to exclude DMA zone.
+    memory.low_mem.start_addr = memory.dma_mem.end_addr;
+    memory.low_mem.size       = (memory.low_mem.end_addr > memory.low_mem.start_addr)
+                                    ? MIN_ORDER_ALIGN(memory.low_mem.end_addr - memory.low_mem.start_addr)
+                                    : 0U;
+    memory.low_mem.end_addr   = memory.low_mem.start_addr + memory.low_mem.size;
+    memory.low_mem.virt_start = memory.dma_mem.virt_end;
+    memory.low_mem.virt_end   = memory.low_mem.virt_start + memory.low_mem.size;
+    
+    // Update kernel_mem to extend to the start of the memory zone's DMA zone
+    // (the first actual memory zone). This ensures addresses allocated from kernel heap
+    // that fall between kernel code and the first memory zone are properly handled.
+    memory.kernel_mem.virt_end = memory.dma_mem.virt_start;
+
+    if (memory.low_mem.size == 0) {
+        pr_crit("Normal zone size is zero after DMA split.\n");
+        return 0;
+    }
+
     // Align the physical start address of the HighMem zone to the nearest valid boundary.
     memory.high_mem.start_addr = MAX_PAGE_ALIGN((uint32_t)boot_info->highmem_phy_start);
     // Align the physical end address of the HighMem zone to the nearest lower valid boundary.
@@ -568,11 +639,18 @@ int pmmngr_init(boot_info_t *boot_info)
     memory.high_mem.virt_start = memory.low_mem.virt_end;
     memory.high_mem.virt_end   = memory.high_mem.virt_start + memory.high_mem.size;
 
-    // Calculate the minimum page index (start of LowMem).
-    memory.page_index_min = memory.low_mem.start_addr / PAGE_SIZE;
+    // Calculate the minimum page index (start of DMA or LowMem).
+    if (memory.dma_mem.size > 0) {
+        memory.page_index_min = memory.dma_mem.start_addr / PAGE_SIZE;
+    } else {
+        memory.page_index_min = memory.low_mem.start_addr / PAGE_SIZE;
+    }
     // Calculate the maximum page index (end of HighMem).
     memory.page_index_max = (memory.high_mem.end_addr / PAGE_SIZE) - 1;
 
+    if (!zone_init("DMA", ZONE_DMA, memory.dma_mem.start_addr, memory.dma_mem.end_addr)) {
+        return 0;
+    }
     if (!zone_init("Normal", ZONE_NORMAL, memory.low_mem.start_addr, memory.low_mem.end_addr)) {
         return 0;
     }

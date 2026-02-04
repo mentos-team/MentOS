@@ -28,13 +28,13 @@ int init_modules(multiboot_info_t *header)
         modules[i].pad       = 0;
     }
     if (!bitmask_check(header->flags, MULTIBOOT_FLAG_MODS)) {
-        return 1;
+        return -1;
     }
     multiboot_module_t *mod = first_module(header);
     for (int i = 0; (mod != 0) && (i < MAX_MODULES); ++i, mod = next_module(header, mod)) {
         memcpy(&modules[i], mod, sizeof(multiboot_module_t));
     }
-    return 1;
+    return 0;
 }
 
 int relocate_modules(void)
@@ -53,7 +53,7 @@ int relocate_modules(void)
         uint32_t memory = (uint32_t)kmalloc(mod_size + cmdline_size);
 
         if (!memory) {
-            return 0;
+            return -1;
         }
 
         // Copy module and its command line
@@ -64,7 +64,7 @@ int relocate_modules(void)
         modules[i].mod_start = memory;
         modules[i].mod_end = modules[i].cmdline = memory + mod_size;
     }
-    return 1;
+    return 0;
 }
 
 uintptr_t get_address_after_modules(void)

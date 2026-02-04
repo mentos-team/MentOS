@@ -4,10 +4,10 @@
 /// See LICENSE.md for details.
 
 // Setup the logging for this file (do this before any other include).
-#include "sys/kernel_levels.h"           // Include kernel log levels.
-#define __DEBUG_HEADER__ "[PAGING]"      ///< Change header.
-#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
-#include "io/debug.h"                    // Include debugging functions.
+#include "sys/kernel_levels.h"          // Include kernel log levels.
+#define __DEBUG_HEADER__ "[PAGING]"     ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_DEBUG ///< Set log level.
+#include "io/debug.h"                   // Include debugging functions.
 
 #include "assert.h"
 #include "fs/vfs.h"
@@ -105,9 +105,16 @@ int paging_init(boot_info_t *info)
         pr_crit("Failed to allocate main_mm page directory.\n");
         return -1;
     }
-
-    // Calculate the size of low kernel memory.
-    uint32_t lowkmem_size = info->stack_end - info->kernel_start;
+    
+    // Verify it was zero-initialized
+    uint32_t *pgd_check = (uint32_t *)main_mm->pgd;
+    for (int i = 0; i < 1024; i++) {
+        if (pgd_check[i] != 0) {
+            pr_crit("WARNING: pgd[%d] = 0x%08x (should be 0)\n", i, pgd_check[i]);
+            break;
+        }
+    }
+    pr_crit("pgd zero-check complete\n");
 
     // Map the first 1MB of memory with physical mapping to access video memory and other BIOS functions.
     if (mem_upd_vm_area(main_mm->pgd, 0, 0, 1024 * 1024, MM_RW | MM_PRESENT | MM_GLOBAL | MM_UPDADDR) < 0) {
@@ -115,11 +122,21 @@ int paging_init(boot_info_t *info)
         return -1;
     }
 
-    // Map the kernel memory region into the virtual memory space.
+    // Map the kernel code/data region into the virtual memory space.
+    uint32_t kernel_code_size = info->lowmem_virt_start - info->kernel_start;
     if (mem_upd_vm_area(
-            main_mm->pgd, info->kernel_start, info->kernel_phy_start, lowkmem_size,
+            main_mm->pgd, info->kernel_start, info->kernel_phy_start, kernel_code_size,
             MM_RW | MM_PRESENT | MM_GLOBAL | MM_UPDADDR) < 0) {
-        pr_crit("Failed to map kernel memory region.\n");
+        pr_crit("Failed to map kernel code region.\n");
+        return -1;
+    }
+
+    // Map the kernel heap region into the virtual memory space.
+    uint32_t kernel_heap_size = info->stack_end - info->lowmem_virt_start;
+    if (mem_upd_vm_area(
+            main_mm->pgd, info->lowmem_virt_start, info->lowmem_phy_start, kernel_heap_size,
+            MM_RW | MM_PRESENT | MM_GLOBAL | MM_UPDADDR) < 0) {
+        pr_crit("Failed to map kernel heap region.\n");
         return -1;
     }
 

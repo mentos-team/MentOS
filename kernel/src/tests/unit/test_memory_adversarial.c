@@ -368,7 +368,7 @@ TEST(memory_adversarial_dma_physical_addressing)
     unsigned long free_before = get_zone_free_space(GFP_KERNEL);
 
     // Allocate pages as DMA would (must be physically contiguous)
-    page_t *page = alloc_pages(GFP_KERNEL, 2); // Order 2 = 4 contiguous pages
+    page_t *page = alloc_pages(GFP_DMA, 2); // Order 2 = 4 contiguous pages
     ASSERT_MSG(page != NULL, "DMA allocation must succeed");
 
     // Extract physical address (what DMA device receives)
@@ -414,7 +414,7 @@ TEST(memory_adversarial_dma_physical_contiguity)
 
     // Allocate multiple contiguous pages (DMA requirement)
     const unsigned int order = 3; // 8 pages
-    page_t *page = alloc_pages(GFP_KERNEL, order);
+    page_t *page = alloc_pages(GFP_DMA, order);
     ASSERT_MSG(page != NULL, "Multi-page DMA allocation must succeed");
 
     uint32_t first_phys = get_physical_address_from_page(page);
@@ -450,7 +450,7 @@ TEST(memory_adversarial_dma_ata_simulation)
     const uint32_t dma_size = 16 * PAGE_SIZE; // 64KB DMA buffer
     uint32_t order = find_nearest_order_greater(0, dma_size);
 
-    page_t *dma_page = alloc_pages(GFP_KERNEL, order);
+    page_t *dma_page = alloc_pages(GFP_DMA, order);
     ASSERT_MSG(dma_page != NULL, "DMA buffer allocation must succeed");
 
     // Extract physical and virtual addresses (as ATA driver does)
@@ -491,11 +491,11 @@ TEST(memory_adversarial_dma_lowmem_constraint)
     unsigned long free_before = get_zone_free_space(GFP_KERNEL);
 
     // DMA must allocate from lowmem (ZONE_NORMAL) since no ZONE_DMA exists
-    page_t *dma_page = alloc_pages(GFP_KERNEL, 0);
+    page_t *dma_page = alloc_pages(GFP_DMA, 0);
     ASSERT_MSG(dma_page != NULL, "DMA allocation must succeed");
 
     // Verify page is in lowmem zone (required for DMA workaround)
-    ASSERT_MSG(is_lowmem_page_struct(dma_page), "DMA page must be in lowmem zone");
+    ASSERT_MSG(is_dma_page_struct(dma_page), "DMA page must be in DMA zone");
 
     uint32_t phys_addr = get_physical_address_from_page(dma_page);
     uint32_t virt_addr = get_virtual_address_from_page(dma_page);
@@ -528,7 +528,7 @@ TEST(memory_adversarial_dma_multiple_buffers)
 
     // Allocate multiple DMA buffers (as multiple devices might)
     for (unsigned int i = 0; i < num_buffers; ++i) {
-        dma_buffers[i] = alloc_pages(GFP_KERNEL, 2); // 4 pages each
+        dma_buffers[i] = alloc_pages(GFP_DMA, 2); // 4 pages each
         ASSERT_MSG(dma_buffers[i] != NULL, "DMA buffer allocation must succeed");
 
         phys_addrs[i] = get_physical_address_from_page(dma_buffers[i]);
@@ -569,7 +569,7 @@ TEST(memory_adversarial_dma_alignment)
 
     for (unsigned int i = 0; i < sizeof(sizes) / sizeof(sizes[0]); ++i) {
         uint32_t order = find_nearest_order_greater(0, sizes[i]);
-        page_t *page = alloc_pages(GFP_KERNEL, order);
+        page_t *page = alloc_pages(GFP_DMA, order);
         
         if (page != NULL) {
             uint32_t phys = get_physical_address_from_page(page);
