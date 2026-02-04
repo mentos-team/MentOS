@@ -295,6 +295,40 @@ TEST(dma_full_exhaustion_recovery)
     TEST_SECTION_END();
 }
 
+/// @brief Test allocation reaches the last DMA page boundary.
+TEST(dma_boundary_last_page)
+{
+    TEST_SECTION_START("DMA boundary last page");
+
+    unsigned long max_pages = memory.dma_mem.size / PAGE_SIZE;
+    page_t **pages = (page_t **)kmalloc(sizeof(page_t *) * max_pages);
+    ASSERT_MSG(pages != NULL, "kmalloc for DMA page list must succeed");
+
+    uint32_t max_phys = 0;
+    unsigned long count = 0;
+    for (; count < max_pages; ++count) {
+        pages[count] = alloc_pages(GFP_DMA, 0);
+        if (pages[count] == NULL) {
+            break;
+        }
+        uint32_t phys = get_physical_address_from_page(pages[count]);
+        assert_dma_isa_limit(phys);
+        if (phys > max_phys) {
+            max_phys = phys;
+        }
+    }
+
+    ASSERT_MSG(max_phys == (memory.dma_mem.end_addr - PAGE_SIZE), "DMA allocation must reach last page");
+
+    for (unsigned long i = 0; i < count; ++i) {
+        ASSERT_MSG(free_pages(pages[i]) == 0, "DMA free must succeed");
+    }
+
+    kfree(pages);
+
+    TEST_SECTION_END();
+}
+
 /// @brief Main test function for DMA tests.
 void test_dma(void)
 {
@@ -306,4 +340,5 @@ void test_dma(void)
     test_dma_alignment();
     test_dma_partial_exhaustion_recovery();
     test_dma_full_exhaustion_recovery();
+    test_dma_boundary_last_page();
 }
