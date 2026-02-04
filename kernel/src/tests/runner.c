@@ -39,20 +39,22 @@ extern void test_vmem(void);
 extern void test_mm(void);
 extern void test_buddy(void);
 extern void test_page(void);
+extern void test_memory_adversarial(void);
 
 /// @brief Test registry - one entry per subsystem.
 static const test_entry_t test_functions[] = {
-    {test_gdt,            "GDT Subsystem"           },
-    {test_idt,            "IDT Subsystem"           },
-    {test_isr,            "ISR Subsystem"           },
-    {test_paging,         "Paging Subsystem"        },
-    {test_scheduler,      "Scheduler Subsystem"     },
-    {test_zone_allocator, "Zone Allocator Subsystem"},
-    {test_slab,           "Slab Subsystem"          },
-    {test_vmem,           "VMEM Subsystem"          },
-    {test_mm,             "MM/VMA Subsystem"        },
-    {test_buddy,          "Buddy System Subsystem"  },
-    {test_page,           "Page Structure Subsystem"},
+    {test_gdt,                 "GDT Subsystem"                },
+    {test_idt,                 "IDT Subsystem"                },
+    {test_isr,                 "ISR Subsystem"                },
+    {test_paging,              "Paging Subsystem"             },
+    {test_scheduler,           "Scheduler Subsystem"          },
+    {test_zone_allocator,      "Zone Allocator Subsystem"     },
+    {test_slab,                "Slab Subsystem"               },
+    {test_vmem,                "VMEM Subsystem"               },
+    {test_mm,                  "MM/VMA Subsystem"             },
+    {test_buddy,               "Buddy System Subsystem"       },
+    {test_page,                "Page Structure Subsystem"     },
+    {test_memory_adversarial,  "Memory Adversarial/Error Tests"},
 };
 
 static const int num_tests = sizeof(test_functions) / sizeof(test_entry_t);
