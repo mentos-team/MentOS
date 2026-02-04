@@ -4,10 +4,10 @@
 /// See LICENSE.md for details.
 
 // Setup the logging for this file (do this before any other include).
-#include "sys/kernel_levels.h"          // Include kernel log levels.
-#define __DEBUG_HEADER__ "[PAGE  ]"     ///< Change header.
-#define __DEBUG_LEVEL__  LOGLEVEL_DEBUG ///< Set log level.
-#include "io/debug.h"                   // Include debugging functions.
+#include "sys/kernel_levels.h"           // Include kernel log levels.
+#define __DEBUG_HEADER__ "[PAGE  ]"      ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
+#include "io/debug.h"                    // Include debugging functions.
 
 #include "mem/alloc/zone_allocator.h"
 #include "mem/mm/page.h"
@@ -46,32 +46,32 @@ uint32_t get_virtual_address_from_page(page_t *page)
         vaddr = memory.kernel_mem.virt_start + (paddr - memory.kernel_mem.start_addr);
     } else {
         // Determine which zone the page belongs to and calculate virtual address.
-    if ((paddr >= memory.boot_low_mem.start_addr) && (paddr < memory.boot_low_mem.end_addr)) {
-        // Page is in boot-time lowmem region (mem_map/page_data gap).
-        uint32_t offset = paddr - memory.boot_low_mem.start_addr;
-        vaddr           = memory.boot_low_mem.virt_start + offset;
-    } else if ((paddr >= memory.dma_mem.start_addr) && (paddr < memory.dma_mem.end_addr)) {
-        // Page is in DMA zone.
-        uint32_t offset = paddr - memory.dma_mem.start_addr;
-        vaddr           = memory.dma_mem.virt_start + offset;
-    } else if ((paddr >= memory.low_mem.start_addr) && (paddr < memory.low_mem.end_addr)) {
-        // Page is in Normal (low_mem) zone.
-        uint32_t offset = paddr - memory.low_mem.start_addr;
-        vaddr           = memory.low_mem.virt_start + offset;
-    } else if ((paddr >= memory.high_mem.start_addr) && (paddr < memory.high_mem.end_addr)) {
-        // Page is in HighMem zone - no permanent mapping exists.
-        // HighMem pages must be temporarily mapped via kmap() before use.
-        pr_err("HighMem page (paddr 0x%08x) has no permanent virtual mapping. Use kmap().\n", paddr);
-        return 0;
-    } else if ((paddr >= memory.kernel_mem.start_addr) && (paddr < memory.kernel_mem.end_addr)) {
-        // Page is in kernel region.
-        uint32_t offset = paddr - memory.kernel_mem.start_addr;
-        vaddr           = memory.kernel_mem.virt_start + offset;
-    } else {
-        pr_err("Physical address 0x%08x (page index %u) does not belong to any known memory zone.\n", paddr, page_index);
-        pr_err("  DMA: 0x%08x-0x%08x, Normal: 0x%08x-0x%08x, HighMem: 0x%08x-0x%08x\n", memory.dma_mem.start_addr, memory.dma_mem.end_addr, memory.low_mem.start_addr, memory.low_mem.end_addr, memory.high_mem.start_addr, memory.high_mem.end_addr);
-        return 0;
-    }
+        if ((paddr >= memory.boot_low_mem.start_addr) && (paddr < memory.boot_low_mem.end_addr)) {
+            // Page is in boot-time lowmem region (mem_map/page_data gap).
+            uint32_t offset = paddr - memory.boot_low_mem.start_addr;
+            vaddr           = memory.boot_low_mem.virt_start + offset;
+        } else if ((paddr >= memory.dma_mem.start_addr) && (paddr < memory.dma_mem.end_addr)) {
+            // Page is in DMA zone.
+            uint32_t offset = paddr - memory.dma_mem.start_addr;
+            vaddr           = memory.dma_mem.virt_start + offset;
+        } else if ((paddr >= memory.low_mem.start_addr) && (paddr < memory.low_mem.end_addr)) {
+            // Page is in Normal (low_mem) zone.
+            uint32_t offset = paddr - memory.low_mem.start_addr;
+            vaddr           = memory.low_mem.virt_start + offset;
+        } else if ((paddr >= memory.high_mem.start_addr) && (paddr < memory.high_mem.end_addr)) {
+            // Page is in HighMem zone - no permanent mapping exists.
+            // HighMem pages must be temporarily mapped via kmap() before use.
+            pr_err("HighMem page (paddr 0x%08x) has no permanent virtual mapping. Use kmap().\n", paddr);
+            return 0;
+        } else if ((paddr >= memory.kernel_mem.start_addr) && (paddr < memory.kernel_mem.end_addr)) {
+            // Page is in kernel region.
+            uint32_t offset = paddr - memory.kernel_mem.start_addr;
+            vaddr           = memory.kernel_mem.virt_start + offset;
+        } else {
+            pr_err("Physical address 0x%08x (page index %u) does not belong to any known memory zone.\n", paddr, page_index);
+            pr_err("  DMA: 0x%08x-0x%08x, Normal: 0x%08x-0x%08x, HighMem: 0x%08x-0x%08x\n", memory.dma_mem.start_addr, memory.dma_mem.end_addr, memory.low_mem.start_addr, memory.low_mem.end_addr, memory.high_mem.start_addr, memory.high_mem.end_addr);
+            return 0;
+        }
     }
 
     // Validate the computed virtual address.

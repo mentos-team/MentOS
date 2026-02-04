@@ -4,10 +4,10 @@
 /// See LICENSE.md for details.
 
 // Setup the logging for this file (do this before any other include).
-#include "sys/kernel_levels.h"          // Include kernel log levels.
-#define __DEBUG_HEADER__ "[PAGING]"     ///< Change header.
-#define __DEBUG_LEVEL__  LOGLEVEL_DEBUG ///< Set log level.
-#include "io/debug.h"                   // Include debugging functions.
+#include "sys/kernel_levels.h"           // Include kernel log levels.
+#define __DEBUG_HEADER__ "[PAGING]"      ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
+#include "io/debug.h"                    // Include debugging functions.
 
 #include "assert.h"
 #include "fs/vfs.h"
@@ -132,15 +132,13 @@ int paging_init(boot_info_t *info)
         return -1;
     }
 
-    // Map the DMA zone into virtual memory. DMA zone is in physical memory 
+    // Map the DMA zone into virtual memory. DMA zone is in physical memory
     // below the kernel (0x0-0x800000) and needs its own virtual mapping.
-    extern memory_info_t memory;  // From zone_allocator
+    extern memory_info_t memory; // From zone_allocator
     if (memory.dma_mem.size > 0) {
-        pr_debug("Mapping DMA zone: virt 0x%08x -> phys 0x%08x, size %u MB\n",
-                memory.dma_mem.virt_start, memory.dma_mem.start_addr, 
-                memory.dma_mem.size / (1024 * 1024));
+        pr_debug("Mapping DMA zone: virt 0x%08x -> phys 0x%08x, size %u MB\n", memory.dma_mem.virt_start, memory.dma_mem.start_addr, memory.dma_mem.size / (1024 * 1024));
         if (mem_upd_vm_area(
-                main_mm->pgd, memory.dma_mem.virt_start, memory.dma_mem.start_addr, 
+                main_mm->pgd, memory.dma_mem.virt_start, memory.dma_mem.start_addr,
                 memory.dma_mem.size, MM_RW | MM_PRESENT | MM_GLOBAL | MM_UPDADDR) < 0) {
             pr_crit("Failed to map DMA zone.\n");
             return -1;

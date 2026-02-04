@@ -40,6 +40,7 @@ extern void test_mm(void);
 extern void test_buddy(void);
 extern void test_page(void);
 extern void test_memory_adversarial(void);
+extern void test_dma(void);
 
 /// @brief Test registry - one entry per subsystem.
 static const test_entry_t test_functions[] = {
@@ -54,6 +55,7 @@ static const test_entry_t test_functions[] = {
     {test_mm,                  "MM/VMA Subsystem"             },
     {test_buddy,               "Buddy System Subsystem"       },
     {test_page,                "Page Structure Subsystem"     },
+    {test_dma,                 "DMA Zone/Allocation Tests"    },
     {test_memory_adversarial,  "Memory Adversarial/Error Tests"},
 };
 

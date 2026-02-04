@@ -4,10 +4,10 @@
 /// See LICENSE.md for details.
 
 // Setup the logging for this file (do this before any other include).
-#include "sys/kernel_levels.h"          // Include kernel log levels.
-#define __DEBUG_HEADER__ "[PMM   ]"     ///< Change header.
-#define __DEBUG_LEVEL__  LOGLEVEL_DEBUG ///< Set log level.
-#include "io/debug.h"                   // Include debugging functions.
+#include "sys/kernel_levels.h"           // Include kernel log levels.
+#define __DEBUG_HEADER__ "[PMM   ]"      ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
+#include "io/debug.h"                    // Include debugging functions.
 
 #include "assert.h"
 #include "kernel.h"
@@ -330,7 +330,7 @@ static int pmm_check(void)
         // Allocate several blocks to test buddy system behavior.
         page_t *blocks[4] = {NULL};
         int block_size    = 8; // Order 8 = 256 pages = 1MB each
-        
+
         // Allocate 4 x 1MB blocks (total 4MB out of 8MB).
         for (int i = 0; i < 4; i++) {
             blocks[i] = alloc_pages(GFP_DMA, block_size);
