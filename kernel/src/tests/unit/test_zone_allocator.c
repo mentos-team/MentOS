@@ -185,6 +185,29 @@ TEST(memory_lowmem_boundary_pages)
     TEST_SECTION_END();
 }
 
+/// @brief Test HighMem boundary pages resolve to HighMem (if present).
+TEST(memory_highmem_boundary_pages)
+{
+    TEST_SECTION_START("HighMem boundary pages");
+
+    if (memory.high_mem.size > 0) {
+        uint32_t first_phys = memory.high_mem.start_addr;
+        uint32_t last_phys  = memory.high_mem.end_addr - PAGE_SIZE;
+
+        page_t *first_page = get_page_from_physical_address(first_phys);
+        page_t *last_page  = get_page_from_physical_address(last_phys);
+
+        ASSERT_MSG(first_page != NULL, "HighMem first page must be resolvable");
+        ASSERT_MSG(last_page != NULL, "HighMem last page must be resolvable");
+        ASSERT_MSG(is_lowmem_page_struct(first_page) == 0, "HighMem first page must not be LowMem");
+        ASSERT_MSG(is_lowmem_page_struct(last_page) == 0, "HighMem last page must not be LowMem");
+        ASSERT_MSG(is_dma_page_struct(first_page) == 0, "HighMem first page must not be DMA");
+        ASSERT_MSG(is_dma_page_struct(last_page) == 0, "HighMem last page must not be DMA");
+    }
+
+    TEST_SECTION_END();
+}
+
 /// @brief Test single-page allocation and free in buddy system.
 TEST(memory_alloc_free_roundtrip)
 {
@@ -419,6 +442,7 @@ void test_zone_allocator(void)
     test_memory_zone_space_metrics();
     test_memory_zone_total_space_matches();
     test_memory_lowmem_boundary_pages();
+    test_memory_highmem_boundary_pages();
     test_memory_alloc_free_roundtrip();
     test_memory_alloc_free_order1();
     test_memory_alloc_free_stress();
