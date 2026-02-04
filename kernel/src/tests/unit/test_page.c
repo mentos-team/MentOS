@@ -201,6 +201,22 @@ TEST(memory_page_virt_phys_relationship)
     TEST_SECTION_END();
 }
 
+/// @brief Test LowMem virtual-physical offset consistency.
+TEST(memory_page_lowmem_offset)
+{
+    TEST_SECTION_START("LowMem virt/phys offset");
+
+    uint32_t phys = memory.low_mem.start_addr;
+    page_t *page = get_page_from_physical_address(phys);
+    ASSERT_MSG(page != NULL, "LowMem start page must be resolvable");
+
+    uint32_t vaddr = get_virtual_address_from_page(page);
+    uint32_t expected = memory.low_mem.virt_start - memory.low_mem.start_addr;
+    ASSERT_MSG(vaddr - phys == expected, "LowMem virtual-physical offset must match");
+
+    TEST_SECTION_END();
+}
+
 /// @brief Test page write/read through virtual address.
 TEST(memory_page_write_read_virt)
 {
@@ -242,5 +258,6 @@ void test_page(void)
     test_memory_page_dma_virt_range();
     test_memory_page_get_phys_addr();
     test_memory_page_virt_phys_relationship();
+    test_memory_page_lowmem_offset();
     test_memory_page_write_read_virt();
 }
