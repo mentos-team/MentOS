@@ -474,6 +474,29 @@ TEST(dma_mapping_isolation)
     TEST_SECTION_END();
 }
 
+/// @brief Test DMA allocations never return pages outside DMA zone.
+TEST(dma_allocation_zone_isolation)
+{
+    TEST_SECTION_START("DMA allocation zone isolation");
+
+    page_t *page = alloc_pages(GFP_DMA, 0);
+    ASSERT_MSG(page != NULL, "DMA allocation must succeed");
+    ASSERT_MSG(is_dma_page_struct(page), "DMA allocation must return DMA page");
+
+    uint32_t phys = get_physical_address_from_page(page);
+    assert_dma_isa_limit(phys);
+    ASSERT_MSG(phys >= memory.dma_mem.start_addr && phys < memory.dma_mem.end_addr,
+               "DMA allocation physical address must be in DMA zone");
+
+    if (memory.low_mem.start_addr > memory.dma_mem.end_addr) {
+        ASSERT_MSG(phys < memory.low_mem.start_addr, "DMA allocation must be below LowMem start");
+    }
+
+    ASSERT_MSG(free_pages(page) == 0, "DMA free must succeed");
+
+    TEST_SECTION_END();
+}
+
 /// @brief Stress DMA allocator with mixed orders and randomized frees.
 TEST(dma_mixed_order_stress)
 {
@@ -535,5 +558,6 @@ void test_dma(void)
     test_dma_translation_last_page();
     test_dma_virtual_end_invalid();
     test_dma_mapping_isolation();
+    test_dma_allocation_zone_isolation();
     test_dma_mixed_order_stress();
 }
