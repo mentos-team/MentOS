@@ -657,6 +657,41 @@ TEST(paging_dma_user_separation)
     TEST_SECTION_END();
 }
 
+/// @brief Test DMA mapping permissions: user access must be denied.
+TEST(paging_dma_mapping_permissions)
+{
+    TEST_SECTION_START("DMA mapping permissions");
+
+    page_directory_t *pgd = paging_get_main_pgd();
+    ASSERT_MSG(pgd != NULL, "Page directory must exist");
+
+    // Get the DMA region
+    uint32_t dma_virt_start = memory.dma_mem.virt_start;
+    uint32_t dma_virt_end = memory.dma_mem.virt_start + memory.dma_mem.size;
+
+    // Test permission flags for pages within the DMA virtual range
+    for (uint32_t virt_addr = dma_virt_start; virt_addr < dma_virt_end; virt_addr += PAGE_SIZE) {
+        uint32_t pde_index = virt_addr / (4 * 1024 * 1024);
+        if (pgd->entries[pde_index].present) {
+            page_table_t *table = (page_table_t *)get_virtual_address_from_page(
+                get_page_from_physical_address(((uint32_t)pgd->entries[pde_index].frame) << 12));
+            if (table) {
+                uint32_t pte_index = (virt_addr / PAGE_SIZE) % 1024;
+                if (table->pages[pte_index].present) {
+                    // DMA pages must have supervisor access (user bit = 0)
+                    ASSERT_MSG(table->pages[pte_index].user == 0, 
+                        "DMA PTE must have supervisor-only access (user bit must be 0)");
+                    // DMA pages must be readable/writable
+                    ASSERT_MSG(table->pages[pte_index].rw == 1, 
+                        "DMA PTE must be readable/writable");
+                }
+            }
+        }
+    }
+
+    TEST_SECTION_END();
+}
+
 /// @brief Main test function for paging subsystem.
 /// This function runs all paging tests in sequence.
 void test_paging(void)
@@ -704,4 +739,5 @@ void test_paging(void)
     test_paging_dma_pde_flags();
     test_paging_dma_pde_coverage();
     test_paging_dma_user_separation();
+    test_paging_dma_mapping_permissions();
 }
