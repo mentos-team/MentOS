@@ -300,6 +300,30 @@ TEST(memory_buddy_fragmentation_dma)
     TEST_SECTION_END();
 }
 
+/// @brief Test cross-zone buddy accounting (DMA vs Kernel).
+TEST(memory_buddy_cross_zone_accounting)
+{
+    TEST_SECTION_START("Buddy cross-zone accounting");
+
+    if (memory.dma_mem.size > 0) {
+        unsigned long dma_before = get_zone_free_space(GFP_DMA);
+        unsigned long kern_before = get_zone_free_space(GFP_KERNEL);
+
+        page_t *page = alloc_pages(GFP_DMA, 0);
+        ASSERT_MSG(page != NULL, "DMA allocation must succeed");
+
+        unsigned long kern_after = get_zone_free_space(GFP_KERNEL);
+        ASSERT_MSG(kern_after == kern_before, "Kernel free space must be unchanged by DMA alloc");
+
+        ASSERT_MSG(free_pages(page) == 0, "DMA free must succeed");
+
+        unsigned long dma_after = get_zone_free_space(GFP_DMA);
+        ASSERT_MSG(dma_after >= dma_before, "DMA free space must be restored");
+    }
+
+    TEST_SECTION_END();
+}
+
 /// @brief Test allocation/free interleaving pattern.
 TEST(memory_buddy_interleaved_alloc_free)
 {
@@ -349,5 +373,6 @@ void test_buddy(void)
     test_memory_buddy_max_order_alloc();
     test_memory_buddy_max_supported_order();
     test_memory_buddy_fragmentation_dma();
+    test_memory_buddy_cross_zone_accounting();
     test_memory_buddy_interleaved_alloc_free();
 }
