@@ -16,6 +16,11 @@
 #include "tests/test.h"
 #include "tests/test_utils.h"
 
+static inline void assert_dma_isa_limit(uint32_t phys)
+{
+    ASSERT_MSG(phys < 0x01000000, "DMA physical address must be below 16MB ISA limit");
+}
+
 /// @brief Validate DMA zone metadata and virtual mapping.
 TEST(dma_zone_integrity)
 {
@@ -58,6 +63,7 @@ TEST(dma_order_allocations_and_translation)
         uint32_t phys = get_physical_address_from_page(page);
         uint32_t virt = get_virtual_address_from_page(page);
 
+        assert_dma_isa_limit(phys);
         ASSERT_MSG(phys >= memory.dma_mem.start_addr && phys < memory.dma_mem.end_addr, "DMA physical address must be inside DMA zone");
         ASSERT_MSG(virt >= memory.dma_mem.virt_start && virt < memory.dma_mem.virt_end, "DMA virtual address must be inside DMA zone");
         ASSERT_MSG((phys & (PAGE_SIZE - 1)) == 0, "DMA physical address must be page-aligned");
@@ -89,12 +95,14 @@ TEST(dma_physical_contiguity)
     ASSERT_MSG(page != NULL, "DMA allocation must succeed");
 
     uint32_t first_phys = get_physical_address_from_page(page);
+    assert_dma_isa_limit(first_phys);
     ASSERT_MSG(first_phys >= memory.dma_mem.start_addr && first_phys < memory.dma_mem.end_addr, "First physical address must be inside DMA zone");
 
     for (unsigned int i = 0; i < (1U << order); ++i) {
         page_t *current_page = page + i;
         uint32_t expected    = first_phys + (i * PAGE_SIZE);
         uint32_t actual      = get_physical_address_from_page(current_page);
+        assert_dma_isa_limit(actual);
         ASSERT_MSG(actual == expected, "DMA pages must be physically contiguous");
     }
 
@@ -122,6 +130,7 @@ TEST(dma_ata_like_buffer)
     uint32_t phys_addr = get_physical_address_from_page(dma_page);
     uint32_t virt_addr = get_virtual_address_from_page(dma_page);
 
+    assert_dma_isa_limit(phys_addr);
     ASSERT_MSG(phys_addr >= memory.dma_mem.start_addr && phys_addr < memory.dma_mem.end_addr, "DMA physical address must be inside DMA zone");
     ASSERT_MSG(virt_addr >= memory.dma_mem.virt_start && virt_addr < memory.dma_mem.virt_end, "DMA virtual address must be inside DMA zone");
     ASSERT_MSG((phys_addr & (PAGE_SIZE - 1)) == 0, "DMA physical address must be page-aligned");
@@ -159,6 +168,7 @@ TEST(dma_multiple_buffers_no_overlap)
         ASSERT_MSG(dma_buffers[i] != NULL, "DMA buffer allocation must succeed");
 
         phys_addrs[i] = get_physical_address_from_page(dma_buffers[i]);
+        assert_dma_isa_limit(phys_addrs[i]);
         ASSERT_MSG(phys_addrs[i] >= memory.dma_mem.start_addr && phys_addrs[i] < memory.dma_mem.end_addr, "DMA physical address must be inside DMA zone");
     }
 
@@ -198,6 +208,7 @@ TEST(dma_alignment)
         uint32_t phys = get_physical_address_from_page(page);
         uint32_t virt = get_virtual_address_from_page(page);
 
+        assert_dma_isa_limit(phys);
         ASSERT_MSG((phys & (PAGE_SIZE - 1)) == 0, "Physical address must be page-aligned");
         ASSERT_MSG((virt & (PAGE_SIZE - 1)) == 0, "Virtual address must be page-aligned");
 
@@ -226,6 +237,7 @@ TEST(dma_partial_exhaustion_recovery)
     for (unsigned long i = 0; i < target_blocks; ++i) {
         blocks[i] = alloc_pages(GFP_DMA, block_order);
         ASSERT_MSG(blocks[i] != NULL, "DMA block allocation must succeed");
+        assert_dma_isa_limit(get_physical_address_from_page(blocks[i]));
     }
 
     unsigned long free_mid = get_zone_free_space(GFP_DMA);
