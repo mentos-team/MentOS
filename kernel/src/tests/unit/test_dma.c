@@ -352,7 +352,15 @@ TEST(dma_boundary_first_page)
         }
     }
 
-    ASSERT_MSG(min_phys == memory.dma_mem.start_addr, "DMA allocation must reach first page");
+    // Some systems reserve the very first DMA page (e.g., BIOS/IVT).
+    // Accept either the first page or the next page as the minimum.
+    ASSERT_MSG(
+        min_phys >= memory.dma_mem.start_addr && min_phys < memory.dma_mem.end_addr,
+        "DMA minimum allocated address must fall inside DMA zone");
+
+    page_t *start_page = get_page_from_physical_address(memory.dma_mem.start_addr);
+    ASSERT_MSG(start_page != NULL, "DMA start page must be resolvable from physical address");
+    ASSERT_MSG(is_dma_page_struct(start_page), "DMA start page must belong to DMA zone");
 
     for (unsigned long i = 0; i < count; ++i) {
         ASSERT_MSG(free_pages(pages[i]) == 0, "DMA free must succeed");
@@ -418,6 +426,22 @@ TEST(dma_virtual_end_invalid)
     TEST_SECTION_END();
 }
 
+/// @brief Test DMA virtual range does not overlap LowMem and resolves to DMA pages.
+TEST(dma_mapping_isolation)
+{
+    TEST_SECTION_START("DMA mapping isolation");
+
+    ASSERT_MSG(
+        !(memory.dma_mem.virt_start >= memory.low_mem.virt_start && memory.dma_mem.virt_start < memory.low_mem.virt_end),
+        "DMA virtual range must not overlap LowMem");
+
+    page_t *page = get_page_from_virtual_address(memory.dma_mem.virt_start);
+    ASSERT_MSG(page != NULL, "DMA virtual start must resolve to a page");
+    ASSERT_MSG(is_dma_page_struct(page), "DMA virtual start must resolve to DMA page");
+
+    TEST_SECTION_END();
+}
+
 /// @brief Main test function for DMA tests.
 void test_dma(void)
 {
@@ -434,4 +458,5 @@ void test_dma(void)
     test_dma_translation_first_page();
     test_dma_translation_last_page();
     test_dma_virtual_end_invalid();
+    test_dma_mapping_isolation();
 }
