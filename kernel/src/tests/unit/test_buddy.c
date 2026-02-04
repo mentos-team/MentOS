@@ -10,6 +10,7 @@
 #include "io/debug.h"                   // Include debugging functions.
 
 #include "mem/alloc/buddy_system.h"
+#include "mem/alloc/slab.h"
 #include "mem/alloc/zone_allocator.h"
 #include "mem/gfp.h"
 #include "mem/mm/page.h"
@@ -244,6 +245,61 @@ TEST(memory_buddy_max_supported_order)
     TEST_SECTION_END();
 }
 
+/// @brief Test fragmentation causes higher-order allocation failure and recovery.
+TEST(memory_buddy_fragmentation_dma)
+{
+    TEST_SECTION_START("Buddy fragmentation (DMA)");
+
+    if (memory.dma_mem.size > 0) {
+        unsigned long max_pages = memory.dma_mem.size / PAGE_SIZE;
+        page_t **pages = (page_t **)kmalloc(sizeof(page_t *) * max_pages);
+        ASSERT_MSG(pages != NULL, "kmalloc for DMA page list must succeed");
+
+        unsigned long count = 0;
+        for (; count < max_pages; ++count) {
+            pages[count] = alloc_pages(GFP_DMA, 0);
+            if (pages[count] == NULL) {
+                break;
+            }
+        }
+
+        // Sort pages by physical address to ensure alternating physical frees.
+        for (unsigned long i = 0; i < count; ++i) {
+            for (unsigned long j = i + 1; j < count; ++j) {
+                uint32_t phys_i = get_physical_address_from_page(pages[i]);
+                uint32_t phys_j = get_physical_address_from_page(pages[j]);
+                if (phys_j < phys_i) {
+                    page_t *tmp = pages[i];
+                    pages[i] = pages[j];
+                    pages[j] = tmp;
+                }
+            }
+        }
+
+        for (unsigned long i = 0; i < count; i += 2) {
+            ASSERT_MSG(free_pages(pages[i]) == 0, "free must succeed");
+            pages[i] = NULL;
+        }
+
+        page_t *order1 = alloc_pages(GFP_DMA, 1);
+        ASSERT_MSG(order1 == NULL, "order-1 allocation must fail under fragmentation");
+
+        for (unsigned long i = 0; i < count; ++i) {
+            if (pages[i] != NULL) {
+                ASSERT_MSG(free_pages(pages[i]) == 0, "free must succeed");
+            }
+        }
+
+        kfree(pages);
+
+        page_t *recovered = alloc_pages(GFP_DMA, 1);
+        ASSERT_MSG(recovered != NULL, "order-1 allocation must succeed after recovery");
+        ASSERT_MSG(free_pages(recovered) == 0, "free must succeed after recovery");
+    }
+
+    TEST_SECTION_END();
+}
+
 /// @brief Test allocation/free interleaving pattern.
 TEST(memory_buddy_interleaved_alloc_free)
 {
@@ -292,5 +348,6 @@ void test_buddy(void)
     test_memory_buddy_large_order();
     test_memory_buddy_max_order_alloc();
     test_memory_buddy_max_supported_order();
+    test_memory_buddy_fragmentation_dma();
     test_memory_buddy_interleaved_alloc_free();
 }
