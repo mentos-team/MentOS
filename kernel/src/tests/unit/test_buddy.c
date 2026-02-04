@@ -9,6 +9,8 @@
 #define __DEBUG_LEVEL__  LOGLEVEL_DEBUG ///< Set log level.
 #include "io/debug.h"                   // Include debugging functions.
 
+#include "mem/alloc/buddy_system.h"
+#include "mem/alloc/slab.h"
 #include "mem/alloc/zone_allocator.h"
 #include "mem/gfp.h"
 #include "mem/mm/page.h"
@@ -225,6 +227,103 @@ TEST(memory_buddy_max_order_alloc)
     TEST_SECTION_END();
 }
 
+/// @brief Test allocation at maximum supported order.
+TEST(memory_buddy_max_supported_order)
+{
+    TEST_SECTION_START("Max supported order allocation");
+
+    unsigned long total = get_zone_total_space(GFP_KERNEL);
+    int max_order = MAX_BUDDYSYSTEM_GFP_ORDER - 1;
+    unsigned long max_size = (1UL << max_order) * PAGE_SIZE;
+
+    if (total >= max_size) {
+        page_t *page = alloc_pages(GFP_KERNEL, max_order);
+        ASSERT_MSG(page != NULL, "max supported order allocation must succeed");
+        ASSERT_MSG(free_pages(page) == 0, "max supported order free must succeed");
+    }
+
+    TEST_SECTION_END();
+}
+
+/// @brief Test fragmentation causes higher-order allocation failure and recovery.
+TEST(memory_buddy_fragmentation_dma)
+{
+    TEST_SECTION_START("Buddy fragmentation (DMA)");
+
+    if (memory.dma_mem.size > 0) {
+        unsigned long max_pages = memory.dma_mem.size / PAGE_SIZE;
+        page_t **pages = (page_t **)kmalloc(sizeof(page_t *) * max_pages);
+        ASSERT_MSG(pages != NULL, "kmalloc for DMA page list must succeed");
+
+        unsigned long count = 0;
+        for (; count < max_pages; ++count) {
+            pages[count] = alloc_pages(GFP_DMA, 0);
+            if (pages[count] == NULL) {
+                break;
+            }
+        }
+
+        // Sort pages by physical address to ensure alternating physical frees.
+        for (unsigned long i = 0; i < count; ++i) {
+            for (unsigned long j = i + 1; j < count; ++j) {
+                uint32_t phys_i = get_physical_address_from_page(pages[i]);
+                uint32_t phys_j = get_physical_address_from_page(pages[j]);
+                if (phys_j < phys_i) {
+                    page_t *tmp = pages[i];
+                    pages[i] = pages[j];
+                    pages[j] = tmp;
+                }
+            }
+        }
+
+        for (unsigned long i = 0; i < count; i += 2) {
+            ASSERT_MSG(free_pages(pages[i]) == 0, "free must succeed");
+            pages[i] = NULL;
+        }
+
+        page_t *order1 = alloc_pages(GFP_DMA, 1);
+        ASSERT_MSG(order1 == NULL, "order-1 allocation must fail under fragmentation");
+
+        for (unsigned long i = 0; i < count; ++i) {
+            if (pages[i] != NULL) {
+                ASSERT_MSG(free_pages(pages[i]) == 0, "free must succeed");
+            }
+        }
+
+        kfree(pages);
+
+        page_t *recovered = alloc_pages(GFP_DMA, 1);
+        ASSERT_MSG(recovered != NULL, "order-1 allocation must succeed after recovery");
+        ASSERT_MSG(free_pages(recovered) == 0, "free must succeed after recovery");
+    }
+
+    TEST_SECTION_END();
+}
+
+/// @brief Test cross-zone buddy accounting (DMA vs Kernel).
+TEST(memory_buddy_cross_zone_accounting)
+{
+    TEST_SECTION_START("Buddy cross-zone accounting");
+
+    if (memory.dma_mem.size > 0) {
+        unsigned long dma_before = get_zone_free_space(GFP_DMA);
+        unsigned long kern_before = get_zone_free_space(GFP_KERNEL);
+
+        page_t *page = alloc_pages(GFP_DMA, 0);
+        ASSERT_MSG(page != NULL, "DMA allocation must succeed");
+
+        unsigned long kern_after = get_zone_free_space(GFP_KERNEL);
+        ASSERT_MSG(kern_after == kern_before, "Kernel free space must be unchanged by DMA alloc");
+
+        ASSERT_MSG(free_pages(page) == 0, "DMA free must succeed");
+
+        unsigned long dma_after = get_zone_free_space(GFP_DMA);
+        ASSERT_MSG(dma_after >= dma_before, "DMA free space must be restored");
+    }
+
+    TEST_SECTION_END();
+}
+
 /// @brief Test allocation/free interleaving pattern.
 TEST(memory_buddy_interleaved_alloc_free)
 {
@@ -261,6 +360,43 @@ TEST(memory_buddy_interleaved_alloc_free)
     TEST_SECTION_END();
 }
 
+/// @brief Test buddy coalescing at zone boundaries.
+TEST(memory_buddy_coalescing_at_boundaries)
+{
+    TEST_SECTION_START("Buddy coalescing at zone boundaries");
+
+    // DMA and Normal zones have physical boundaries
+    // When freeing pages that are at zone boundaries, the buddy system
+    // should properly coalesce within the zone but not cross boundaries
+
+    unsigned long dma_before = get_zone_free_space(GFP_DMA);
+    unsigned long kern_before = get_zone_free_space(GFP_KERNEL);
+
+    // Allocate last pages from DMA zone (near boundary)
+    page_t *dma_page1 = alloc_pages(GFP_DMA, 0);
+    page_t *dma_page2 = alloc_pages(GFP_DMA, 0);
+
+    if (dma_page1 != NULL && dma_page2 != NULL) {
+        unsigned long dma_mid = get_zone_free_space(GFP_DMA);
+        ASSERT_MSG(dma_mid < dma_before, "DMA free space should decrease after allocations");
+
+        // Free in order - should allow coalescing
+        ASSERT_MSG(free_pages(dma_page1) == 0, "first free must succeed");
+        ASSERT_MSG(free_pages(dma_page2) == 0, "second free must succeed");
+
+        unsigned long dma_after = get_zone_free_space(GFP_DMA);
+        ASSERT_MSG(dma_after >= dma_mid, "DMA free space should be restored after frees");
+    } else {
+        if (dma_page1 != NULL) free_pages(dma_page1);
+        if (dma_page2 != NULL) free_pages(dma_page2);
+    }
+
+    unsigned long kern_after = get_zone_free_space(GFP_KERNEL);
+    ASSERT_MSG(kern_after == kern_before, "Kernel zone should not be affected by DMA operations");
+
+    TEST_SECTION_END();
+}
+
 /// @brief Main test function for buddy system.
 void test_buddy(void)
 {
@@ -272,5 +408,9 @@ void test_buddy(void)
     test_memory_buddy_non_sequential_free();
     test_memory_buddy_large_order();
     test_memory_buddy_max_order_alloc();
+    test_memory_buddy_max_supported_order();
+    test_memory_buddy_fragmentation_dma();
+    test_memory_buddy_cross_zone_accounting();
     test_memory_buddy_interleaved_alloc_free();
+    test_memory_buddy_coalescing_at_boundaries();
 }

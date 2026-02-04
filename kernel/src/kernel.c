@@ -141,7 +141,7 @@ int kmain(boot_info_t *boot_informations)
     //==========================================================================
     pr_notice("Initialize modules...\n");
     printf("Initialize modules...");
-    if (!init_modules(boot_info.multiboot_header)) {
+    if (init_modules(boot_info.multiboot_header) < 0) {
         print_fail();
         return 1;
     }
@@ -192,13 +192,19 @@ int kmain(boot_info_t *boot_informations)
     //==========================================================================
     pr_notice("Relocate modules.\n");
     printf("Relocate modules...");
-    relocate_modules();
+    if (relocate_modules() < 0) {
+        print_fail();
+        return 1;
+    }
     print_ok();
 
     //==========================================================================
     pr_notice("Initialize paging.\n");
     printf("Initialize paging...");
-    paging_init(&boot_info);
+    if (paging_init(&boot_info) < 0) {
+        print_fail();
+        return 1;
+    }
     print_ok();
 
     //==========================================================================

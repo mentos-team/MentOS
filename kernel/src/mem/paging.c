@@ -106,8 +106,14 @@ int paging_init(boot_info_t *info)
         return -1;
     }
 
-    // Calculate the size of low kernel memory.
-    uint32_t lowkmem_size = info->stack_end - info->kernel_start;
+    // Verify it was zero-initialized
+    uint32_t *pgd_check = (uint32_t *)main_mm->pgd;
+    for (int i = 0; i < 1024; i++) {
+        if (pgd_check[i] != 0) {
+            pr_crit("WARNING: pgd[%d] = 0x%08x (should be 0)\n", i, pgd_check[i]);
+            break;
+        }
+    }
 
     // Map the first 1MB of memory with physical mapping to access video memory and other BIOS functions.
     if (mem_upd_vm_area(main_mm->pgd, 0, 0, 1024 * 1024, MM_RW | MM_PRESENT | MM_GLOBAL | MM_UPDADDR) < 0) {
@@ -115,7 +121,10 @@ int paging_init(boot_info_t *info)
         return -1;
     }
 
-    // Map the kernel memory region into the virtual memory space.
+    // Calculate the size of low kernel memory.
+    uint32_t lowkmem_size = info->stack_end - info->kernel_start;
+
+    // Map the kernel memory region into the virtual memory space (linear mapping).
     if (mem_upd_vm_area(
             main_mm->pgd, info->kernel_start, info->kernel_phy_start, lowkmem_size,
             MM_RW | MM_PRESENT | MM_GLOBAL | MM_UPDADDR) < 0) {
@@ -123,11 +132,27 @@ int paging_init(boot_info_t *info)
         return -1;
     }
 
+    // Map the DMA zone into virtual memory. DMA zone is in physical memory
+    // below the kernel (0x0-0x800000) and needs its own virtual mapping.
+    extern memory_info_t memory; // From zone_allocator
+    if (memory.dma_mem.size > 0) {
+        pr_debug("Mapping DMA zone: virt 0x%08x -> phys 0x%08x, size %u MB\n", memory.dma_mem.virt_start, memory.dma_mem.start_addr, memory.dma_mem.size / (1024 * 1024));
+        if (mem_upd_vm_area(
+                main_mm->pgd, memory.dma_mem.virt_start, memory.dma_mem.start_addr,
+                memory.dma_mem.size, MM_RW | MM_PRESENT | MM_GLOBAL | MM_UPDADDR) < 0) {
+            pr_crit("Failed to map DMA zone.\n");
+            return -1;
+        }
+    }
+
     // Switch to the newly created page directory.
     paging_switch_pgd(main_mm->pgd);
 
-    // Enable paging.
+    // Paging is already enabled by the bootloader; keep the semantics.
     paging_enable();
+
+    // Disable bootstrap mapping after paging switch.
+    page_set_bootstrap_mapping(0);
 
     return 0;
 }
@@ -175,6 +200,7 @@ int paging_switch_pgd(page_directory_t *dir)
             pr_crit("Failed to get physical address from page\n");
             return -1;
         }
+        uint32_t boot_vaddr = memory.kernel_mem.virt_start + (phys_addr - memory.kernel_mem.start_addr);
     } else {
         phys_addr = (uintptr_t)dir;
     }

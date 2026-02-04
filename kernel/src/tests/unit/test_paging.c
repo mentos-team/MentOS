@@ -12,6 +12,7 @@
 #include "mem/mm/mm.h"
 #include "mem/mm/page.h"
 #include "mem/mm/vm_area.h"
+#include "mem/mm/vmem.h"
 #include "mem/paging.h"
 #include "string.h"
 #include "tests/test.h"
@@ -595,6 +596,155 @@ TEST(paging_address_boundaries)
     TEST_SECTION_END();
 }
 
+/// @brief Test DMA PDE flags (present, RW, global, supervisor).
+TEST(paging_dma_pde_flags)
+{
+    TEST_SECTION_START("DMA PDE flags");
+
+    page_directory_t *pgd = paging_get_main_pgd();
+    ASSERT_MSG(pgd != NULL, "Page directory must exist");
+
+    uint32_t dma_pde_index = memory.dma_mem.virt_start / (4 * 1024 * 1024);
+    page_dir_entry_t *dma_pde = &pgd->entries[dma_pde_index];
+
+    ASSERT_MSG(dma_pde->present == 1, "DMA PDE must be present");
+    ASSERT_MSG(dma_pde->rw == 1, "DMA PDE must be writable");
+    ASSERT_MSG(dma_pde->global == 1, "DMA PDE must be global");
+    ASSERT_MSG(dma_pde->user == 0, "DMA PDE must be supervisor-only");
+
+    TEST_SECTION_END();
+}
+
+/// @brief Test DMA virtual range is covered by PDEs.
+TEST(paging_dma_pde_coverage)
+{
+    TEST_SECTION_START("DMA PDE coverage");
+
+    page_directory_t *pgd = paging_get_main_pgd();
+    ASSERT_MSG(pgd != NULL, "Page directory must exist");
+
+    uint32_t start_index = memory.dma_mem.virt_start / (4 * 1024 * 1024);
+    uint32_t end_index = (memory.dma_mem.virt_end - 1) / (4 * 1024 * 1024);
+
+    for (uint32_t i = start_index; i <= end_index; ++i) {
+        ASSERT_MSG(pgd->entries[i].present == 1, "DMA PDE range must be present");
+    }
+
+    TEST_SECTION_END();
+}
+
+/// @brief Test DMA PDE index does not overlap user space and user PDEs are non-global.
+TEST(paging_dma_user_separation)
+{
+    TEST_SECTION_START("DMA/user PDE separation");
+
+    page_directory_t *pgd = paging_get_main_pgd();
+    ASSERT_MSG(pgd != NULL, "Page directory must exist");
+
+    // The critical separation is that DMA/kernel space is at high addresses
+    uint32_t dma_index = memory.dma_mem.virt_start / (4 * 1024 * 1024);
+    ASSERT_MSG(dma_index >= 768, "DMA PDE must be in kernel space (index >= 768, address >= 0xC0000000)");
+
+    // Verify DMA region starts above PROCAREA_END_ADDR (0xC0000000)
+    ASSERT_MSG(memory.dma_mem.virt_start >= PROCAREA_END_ADDR, "DMA must be in kernel space");
+
+    // In the main PGD, DMA PDEs should be present and set as kernel (supervisor)
+    if (pgd->entries[dma_index].present) {
+        ASSERT_MSG(pgd->entries[dma_index].rw == 1, "DMA PDE must be readable/writable");
+        // DMA memory should have global flag for kernel TLB persistence
+        ASSERT_MSG(pgd->entries[dma_index].global == 1, "DMA PDE should be global");
+    }
+
+    TEST_SECTION_END();
+}
+
+/// @brief Test DMA mapping permissions: user access must be denied.
+TEST(paging_dma_mapping_permissions)
+{
+    TEST_SECTION_START("DMA mapping permissions");
+
+    page_directory_t *pgd = paging_get_main_pgd();
+    ASSERT_MSG(pgd != NULL, "Page directory must exist");
+
+    // Get the DMA region
+    uint32_t dma_virt_start = memory.dma_mem.virt_start;
+    uint32_t dma_virt_end = memory.dma_mem.virt_start + memory.dma_mem.size;
+
+    // Test permission flags for pages within the DMA virtual range
+    for (uint32_t virt_addr = dma_virt_start; virt_addr < dma_virt_end; virt_addr += PAGE_SIZE) {
+        uint32_t pde_index = virt_addr / (4 * 1024 * 1024);
+        if (pgd->entries[pde_index].present) {
+            page_table_t *table = (page_table_t *)get_virtual_address_from_page(
+                get_page_from_physical_address(((uint32_t)pgd->entries[pde_index].frame) << 12));
+            if (table) {
+                uint32_t pte_index = (virt_addr / PAGE_SIZE) % 1024;
+                if (table->pages[pte_index].present) {
+                    // DMA pages must have supervisor access (user bit = 0)
+                    ASSERT_MSG(table->pages[pte_index].user == 0, 
+                        "DMA PTE must have supervisor-only access (user bit must be 0)");
+                    // DMA pages must be readable/writable
+                    ASSERT_MSG(table->pages[pte_index].rw == 1, 
+                        "DMA PTE must be readable/writable");
+                }
+            }
+        }
+    }
+
+    TEST_SECTION_END();
+}
+
+/// @brief Test TLB consistency after mapping/unmapping operations.
+TEST(paging_tlb_consistency)
+{
+    TEST_SECTION_START("TLB consistency");
+
+    page_directory_t *pgd = paging_get_main_pgd();
+    ASSERT_MSG(pgd != NULL, "Page directory must exist");
+
+    // Test that page table entries are properly invalidated
+    // by verifying that we can create and destroy mappings
+    uint32_t test_vaddr = 0x10000000; // Test virtual address (far from kernel space)
+    
+    // Get a test page to work with
+    page_t *test_page = alloc_pages(GFP_KERNEL, 0);
+    ASSERT_MSG(test_page != NULL, "Must be able to allocate test page");
+    
+    uint32_t test_phys = get_physical_address_from_page(test_page);
+    ASSERT_MSG(test_phys != 0, "Must get physical address from page");
+
+    // Use vmem to map/unmap and verify consistency
+    uint32_t vaddr = vmem_map_physical_pages(test_page, 1);
+    ASSERT_MSG(vaddr != 0, "vmem_map_physical_pages must return valid address");
+    
+    // Verify the mapping exists by checking the page table
+    uint32_t pde_index = vaddr / (4 * 1024 * 1024);
+    uint32_t pte_index = (vaddr / PAGE_SIZE) % 1024;
+    
+    if (pgd->entries[pde_index].present) {
+        page_table_t *table = (page_table_t *)get_virtual_address_from_page(
+            get_page_from_physical_address(((uint32_t)pgd->entries[pde_index].frame) << 12));
+        if (table != NULL) {
+            ASSERT_MSG(table->pages[pte_index].present, "PTE should be present after mapping");
+        }
+    }
+    
+    // Unmap the page
+    int unmap_result = vmem_unmap_virtual_address(vaddr);
+    ASSERT_MSG(unmap_result == 0, "vmem_unmap_virtual_address must succeed");
+    
+    // After unmapping, TLB should be invalidated (kernel handles this)
+    // We verify this by checking that we can re-map the same physical page
+    // and the old mapping doesn't interfere
+    uint32_t vaddr2 = vmem_map_physical_pages(test_page, 1);
+    ASSERT_MSG(vaddr2 != 0, "Second mapping must succeed");
+    ASSERT_MSG(vmem_unmap_virtual_address(vaddr2) == 0, "Second unmap must succeed");
+
+    // Free the test page
+    free_pages(test_page);
+
+    TEST_SECTION_END();
+}
+
 /// @brief Main test function for paging subsystem.
 /// This function runs all paging tests in sequence.
 void test_paging(void)
@@ -639,4 +789,9 @@ void test_paging(void)
 
     // Boundary tests
     test_paging_address_boundaries();
+    test_paging_dma_pde_flags();
+    test_paging_dma_pde_coverage();
+    test_paging_dma_user_separation();
+    test_paging_dma_mapping_permissions();
+    test_paging_tlb_consistency();
 }

@@ -179,13 +179,13 @@ void page_fault_handler(pt_regs_t *f)
     // |  1  0  1 | User process tried to read a page and caused a protection fault
     // |  1  1  0 | User process tried to write to a non-present page entry
     // |  1  1  1 | User process tried to write a page and caused a protection fault
-    
+
     // =========================================================================
     // STACK OVERFLOW DETECTION - Check this FIRST
     // =========================================================================
     extern uint32_t stack_bottom, stack_top;
     uint32_t faulting_addr = get_cr2();
-    
+
     // Check if this is a fault on the kernel stack guard page (overflow)
     if (faulting_addr == (uint32_t)&stack_bottom) {
         pr_crit("\n");
@@ -205,12 +205,12 @@ void page_fault_handler(pt_regs_t *f)
         kernel_panic("Kernel Stack Overflow");
         return;
     }
-    
+
     // Warn if stack usage is getting dangerously high (> 75% used)
     // NOTE: This check is currently disabled due to issues with linker symbol resolution
     // The more important guard page detection above will catch actual stack overflows
     // TODO: Fix symbol resolution for stack_bottom and stack_top in paging context
-    
+
     // Stack grows downward: stack_top (high addr) -> esp (current) -> ... -> stack_bottom (low addr)
     // uint32_t stack_bottom_addr = (uint32_t)&stack_bottom;
     // uint32_t stack_top_addr = (uint32_t)&stack_top;
@@ -327,7 +327,7 @@ void page_fault_handler(pt_regs_t *f)
                     "Page fault caused by Copy on Write (CoW). Flags: user=%d, "
                     "rw=%d, present=%d\n",
                     err_user, err_rw, err_present);
-                
+
                 // Handle based on fault context
                 // For user-mode faults with write access to present pages: send SIGSEGV
                 if (err_user && err_rw && err_present) {
@@ -349,7 +349,7 @@ void page_fault_handler(pt_regs_t *f)
                     // The page might not be CoW but still valid for this fault pattern
                     pr_debug("Non-user-write CoW fault pattern detected, may be normal.\n");
                 }
-                
+
                 // Panic only if this is truly an invalid fault state
                 pr_crit("Continuing with page fault handling, triggering panic.\n");
                 __page_fault_panic(f, faulting_addr);

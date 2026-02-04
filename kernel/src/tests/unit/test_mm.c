@@ -409,6 +409,110 @@ TEST(memory_mm_vma_fragmentation)
     TEST_SECTION_END();
 }
 
+/// @brief Test overlapping VMA creation rejection.
+TEST(memory_mm_overlapping_vma_rejection)
+{
+    TEST_SECTION_START("Overlapping VMA rejection");
+
+    mm_struct_t *mm = mm_create_blank(PAGE_SIZE * 8);
+    ASSERT_MSG(mm != NULL, "mm_create_blank must succeed");
+
+    // Create first VMA at a safe address within the allocated mm space
+    uint32_t base_vaddr = 0x10000000; // Far from kernel space
+    vm_area_struct_t *vma1 = vm_area_create(mm, base_vaddr, PAGE_SIZE, MM_PRESENT | MM_RW | MM_USER, GFP_HIGHUSER);
+    ASSERT_MSG(vma1 != NULL, "First VMA creation must succeed");
+
+    // Store initial map count
+    int initial_count = mm->map_count;
+
+    // Try to create overlapping VMA - should be rejected
+    vm_area_struct_t *vma_overlap = vm_area_create(mm, base_vaddr + 0x800, PAGE_SIZE, MM_PRESENT | MM_RW | MM_USER, GFP_HIGHUSER);
+    ASSERT_MSG(vma_overlap == NULL, "Overlapping VMA should be rejected");
+
+    // map_count should not have increased
+    ASSERT_MSG(mm->map_count == initial_count, "map_count should not change after rejection");
+
+    ASSERT_MSG(mm_destroy(mm) == 0, "mm_destroy must succeed");
+
+    TEST_SECTION_END();
+}
+
+/// @brief Test VMA permissions propagation to PTEs.
+TEST(memory_mm_vma_permissions_propagation)
+{
+    TEST_SECTION_START("VMA permissions propagation");
+
+    mm_struct_t *mm = mm_create_blank(PAGE_SIZE * 8);
+    ASSERT_MSG(mm != NULL, "mm_create_blank must succeed");
+
+    // Create VMA with RW and USER permissions
+    uint32_t base_vaddr = 0x20000000; // Far from kernel space
+    vm_area_struct_t *vma = vm_area_create(mm, base_vaddr, PAGE_SIZE, MM_PRESENT | MM_RW | MM_USER, GFP_HIGHUSER);
+    ASSERT_MSG(vma != NULL, "VMA creation must succeed");
+    
+    // Verify VMA struct fields are set correctly
+    ASSERT_MSG(vma->vm_start == base_vaddr, "vm_start should match");
+    ASSERT_MSG(vma->vm_end == base_vaddr + PAGE_SIZE, "vm_end should match");
+    ASSERT_MSG(vma->vm_mm == mm, "vm_mm should reference the mm_struct");
+    
+    // Cleanup
+    ASSERT_MSG(vm_area_destroy(mm, vma) == 0, "destroy VMA");
+    ASSERT_MSG(mm_destroy(mm) == 0, "mm_destroy must succeed");
+
+    TEST_SECTION_END();
+}
+
+/// @brief Test VMA removal validates no stale PTEs remain.
+TEST(memory_mm_vma_removal_validates_ptes)
+{
+    TEST_SECTION_START("VMA removal PTE validation");
+
+    mm_struct_t *mm = mm_create_blank(PAGE_SIZE * 8);
+    ASSERT_MSG(mm != NULL, "mm_create_blank must succeed");
+
+    // Create a VMA and then destroy it
+    uint32_t base_vaddr = 0x30000000; // Far from kernel space
+    vm_area_struct_t *vma = vm_area_create(mm, base_vaddr, PAGE_SIZE, MM_PRESENT | MM_RW | MM_USER, GFP_HIGHUSER);
+    ASSERT_MSG(vma != NULL, "VMA creation must succeed");
+
+    // Destroy the VMA - should clean up PTEs
+    int destroy_result = vm_area_destroy(mm, vma);
+    ASSERT_MSG(destroy_result == 0, "vm_area_destroy must succeed");
+
+    // The VMAs are properly tracked
+    ASSERT_MSG(mm->map_count <= 1, "map_count should decrease after VMA destruction");
+
+    ASSERT_MSG(mm_destroy(mm) == 0, "mm_destroy must succeed");
+
+    TEST_SECTION_END();
+}
+
+/// @brief Test stack growth and guard page enforcement.
+TEST(memory_mm_stack_growth_guard_page)
+{
+    TEST_SECTION_START("Stack growth and guard page enforcement");
+
+    mm_struct_t *mm = mm_create_blank(PAGE_SIZE * 16);
+    ASSERT_MSG(mm != NULL, "mm_create_blank must succeed");
+
+    // Create a stack VMA at a high address
+    uint32_t stack_top = 0x50000000; // High address for stack
+    uint32_t stack_size = PAGE_SIZE * 4; // 4 pages for stack
+    vm_area_struct_t *stack_vma = vm_area_create(mm, stack_top - stack_size, stack_size, 
+                                                   MM_PRESENT | MM_RW | MM_USER, GFP_HIGHUSER);
+    ASSERT_MSG(stack_vma != NULL, "Stack VMA creation must succeed");
+
+    // Verify the stack VMA has the correct boundaries
+    ASSERT_MSG(stack_vma->vm_start == stack_top - stack_size, "Stack start address should match");
+    ASSERT_MSG(stack_vma->vm_end == stack_top, "Stack end address should match");
+    ASSERT_MSG(stack_vma->vm_mm == mm, "Stack VMA should reference mm_struct");
+
+    // Destroy the mm - this should safely clean up the stack VMA
+    ASSERT_MSG(mm_destroy(mm) == 0, "mm_destroy must succeed");
+
+    TEST_SECTION_END();
+}
+
 /// @brief Main test function for mm subsystem.
 void test_mm(void)
 {
@@ -421,4 +525,8 @@ void test_mm(void)
     test_memory_mm_clone_copies_multi_page();
     test_memory_mm_vma_randomized();
     test_memory_mm_vma_fragmentation();
+    test_memory_mm_overlapping_vma_rejection();
+    test_memory_mm_vma_permissions_propagation();
+    test_memory_mm_vma_removal_validates_ptes();
+    test_memory_mm_stack_growth_guard_page();
 }

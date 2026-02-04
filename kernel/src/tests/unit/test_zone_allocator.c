@@ -13,6 +13,7 @@
 #include "mem/gfp.h"
 #include "mem/mm/page.h"
 #include "mem/paging.h"
+#include "string.h"
 #include "tests/test.h"
 #include "tests/test_utils.h"
 
@@ -26,6 +27,17 @@ TEST(memory_info_integrity)
     ASSERT_MSG(memory.mem_size > 0, "mem_size must be > 0");
     ASSERT_MSG(memory.mem_map_num > 0, "mem_map_num must be > 0");
     ASSERT_MSG(memory.page_index_min <= memory.page_index_max, "page index range must be valid");
+
+    // Check DMA zone if present.
+    if (memory.dma_mem.size > 0) {
+        ASSERT_MSG(memory.dma_mem.start_addr < memory.dma_mem.end_addr, "dma_mem address range invalid");
+        ASSERT_MSG(
+            memory.dma_mem.size == (memory.dma_mem.end_addr - memory.dma_mem.start_addr),
+            "dma_mem size must match range");
+        ASSERT_MSG((memory.dma_mem.start_addr & (PAGE_SIZE - 1)) == 0, "dma_mem start must be page-aligned");
+        ASSERT_MSG((memory.dma_mem.end_addr & (PAGE_SIZE - 1)) == 0, "dma_mem end must be page-aligned");
+        ASSERT_MSG(memory.dma_mem.virt_start < memory.dma_mem.virt_end, "dma_mem virtual range invalid");
+    }
 
     ASSERT_MSG(memory.low_mem.size > 0, "low_mem size must be > 0");
     ASSERT_MSG(memory.low_mem.start_addr < memory.low_mem.end_addr, "low_mem address range invalid");
@@ -43,14 +55,31 @@ TEST(memory_info_integrity)
             "high_mem size must match range");
         ASSERT_MSG((memory.high_mem.start_addr & (PAGE_SIZE - 1)) == 0, "high_mem start must be page-aligned");
         ASSERT_MSG((memory.high_mem.end_addr & (PAGE_SIZE - 1)) == 0, "high_mem end must be page-aligned");
+        // HighMem has no permanent virtual mapping in 32-bit systems (requires kmap).
         ASSERT_MSG(
-            memory.high_mem.virt_end == (memory.high_mem.virt_start + memory.high_mem.size),
-            "high_mem virtual range must match size");
+            memory.high_mem.virt_start == 0 && memory.high_mem.virt_end == 0,
+            "high_mem should have no permanent virtual mapping (virt_start and virt_end must be 0)");
     }
 
     ASSERT_MSG(
-        memory.page_index_min == (memory.low_mem.start_addr / PAGE_SIZE),
-        "page_index_min must match low_mem start PFN");
+        memory.page_index_min == ((memory.dma_mem.size > 0) ? (memory.dma_mem.start_addr / PAGE_SIZE) : (memory.low_mem.start_addr / PAGE_SIZE)),
+        "page_index_min must match first zone (DMA if present, otherwise LowMem) start PFN");
+
+    TEST_SECTION_END();
+}
+
+/// @brief Test page index max matches last usable PFN.
+TEST(memory_page_index_max_matches)
+{
+    TEST_SECTION_START("Page index max matches");
+
+    if (memory.high_mem.size > 0) {
+        uint32_t expected = (memory.high_mem.end_addr / PAGE_SIZE) - 1;
+        ASSERT_MSG(memory.page_index_max == expected, "page_index_max must match HighMem end PFN");
+    } else {
+        uint32_t expected = (memory.low_mem.end_addr / PAGE_SIZE) - 1;
+        ASSERT_MSG(memory.page_index_max == expected, "page_index_max must match LowMem end PFN");
+    }
 
     TEST_SECTION_END();
 }
@@ -60,29 +89,27 @@ TEST(memory_virtual_address_validation)
 {
     TEST_SECTION_START("Virtual address validation");
 
-    ASSERT_MSG(is_valid_virtual_address(memory.low_mem.virt_start) == 1, "low_mem start must be valid");
+    // Check DMA zone if present.
+    if (memory.dma_mem.size > 0) {
+        ASSERT_MSG(is_valid_virtual_address(memory.dma_mem.virt_start) == 1, "dma_mem start must be valid");
+        ASSERT_MSG(
+            is_valid_virtual_address(memory.dma_mem.virt_end - 1) == 1, "dma_mem end-1 must be valid");
+    }
 
+    // Check LowMem zone.
+    ASSERT_MSG(is_valid_virtual_address(memory.low_mem.virt_start) == 1, "low_mem start must be valid");
     if (memory.low_mem.virt_end > memory.low_mem.virt_start) {
         ASSERT_MSG(
             is_valid_virtual_address(memory.low_mem.virt_end - 1) == 1, "low_mem end-1 must be valid");
     }
 
-    if (memory.low_mem.virt_start >= PAGE_SIZE) {
-        ASSERT_MSG(
-            is_valid_virtual_address(memory.low_mem.virt_start - PAGE_SIZE) == 0,
-            "address below low_mem must be invalid");
-    }
-
+    // Check HighMem zone (which has no permanent virtual mapping).
     unsigned long total_high = get_zone_total_space(GFP_HIGHUSER);
-    if (total_high > 0 && memory.high_mem.virt_end > memory.high_mem.virt_start) {
-        ASSERT_MSG(is_valid_virtual_address(memory.high_mem.virt_start) == 1, "high_mem start must be valid");
+    if (total_high > 0) {
+        // HighMem has no permanent mapping, so virt_start and virt_end should be 0.
         ASSERT_MSG(
-            is_valid_virtual_address(memory.high_mem.virt_end - 1) == 1, "high_mem end-1 must be valid");
-        ASSERT_MSG(is_valid_virtual_address(memory.high_mem.virt_end) == 0, "high_mem end must be invalid");
-    } else {
-        ASSERT_MSG(
-            is_valid_virtual_address(memory.low_mem.virt_end) == 0,
-            "low_mem end must be invalid when no high_mem");
+            memory.high_mem.virt_start == 0 && memory.high_mem.virt_end == 0,
+            "high_mem should have no permanent virtual mapping");
     }
 
     TEST_SECTION_END();
@@ -131,10 +158,44 @@ TEST(memory_zone_space_metrics)
     TEST_SECTION_END();
 }
 
+/// @brief Test buddy system status includes zone name.
+TEST(memory_zone_buddy_status_names)
+{
+    TEST_SECTION_START("Zone buddy status names");
+
+    char buddy_status[256] = {0};
+
+    int status_len = get_zone_buddy_system_status(GFP_DMA, buddy_status, sizeof(buddy_status));
+    if (status_len > 0) {
+        ASSERT_MSG(strstr(buddy_status, "DMA") != NULL, "DMA buddy status must include zone name");
+    }
+
+    memset(buddy_status, 0, sizeof(buddy_status));
+    status_len = get_zone_buddy_system_status(GFP_KERNEL, buddy_status, sizeof(buddy_status));
+    ASSERT_MSG(status_len > 0, "GFP_KERNEL buddy status must be non-empty");
+    ASSERT_MSG(strstr(buddy_status, "Normal") != NULL, "Kernel buddy status must include zone name");
+
+    unsigned long total_high = get_zone_total_space(GFP_HIGHUSER);
+    if (total_high > 0) {
+        memset(buddy_status, 0, sizeof(buddy_status));
+        status_len = get_zone_buddy_system_status(GFP_HIGHUSER, buddy_status, sizeof(buddy_status));
+        ASSERT_MSG(status_len > 0, "GFP_HIGHUSER buddy status must be non-empty");
+        ASSERT_MSG(strstr(buddy_status, "HighMem") != NULL, "HighMem buddy status must include zone name");
+    }
+
+    TEST_SECTION_END();
+}
+
 /// @brief Test zone total sizes match configuration bounds.
 TEST(memory_zone_total_space_matches)
 {
     TEST_SECTION_START("Zone total space matches");
+
+    unsigned long total_dma = get_zone_total_space(GFP_DMA);
+    if (memory.dma_mem.size > 0) {
+        ASSERT_MSG(total_dma > 0, "DMA total space must be > 0 when DMA zone exists");
+        ASSERT_MSG(total_dma <= memory.dma_mem.size, "DMA total space must be within dma_mem size");
+    }
 
     unsigned long total_low = get_zone_total_space(GFP_KERNEL);
     ASSERT_MSG(total_low > 0, "Lowmem total space must be > 0");
@@ -143,6 +204,81 @@ TEST(memory_zone_total_space_matches)
     unsigned long total_high = get_zone_total_space(GFP_HIGHUSER);
     if (total_high > 0) {
         ASSERT_MSG(total_high <= memory.high_mem.size, "Highmem total space must be within high_mem size");
+    }
+
+    TEST_SECTION_END();
+}
+
+/// @brief Test cached space behavior under allocations and frees.
+TEST(memory_zone_cached_space_behavior)
+{
+    TEST_SECTION_START("Zone cached space behavior");
+
+    unsigned long total = get_zone_total_space(GFP_KERNEL);
+    unsigned long cached_before = get_zone_cached_space(GFP_KERNEL);
+    ASSERT_MSG(cached_before <= total, "Cached space must not exceed total");
+
+    page_t *pages[16] = {0};
+    for (unsigned int i = 0; i < 16; ++i) {
+        pages[i] = alloc_pages(GFP_KERNEL, 0);
+        ASSERT_MSG(pages[i] != NULL, "alloc_pages must succeed");
+    }
+
+    for (unsigned int i = 0; i < 16; ++i) {
+        ASSERT_MSG(free_pages(pages[i]) == 0, "free_pages must succeed");
+    }
+
+    unsigned long cached_after = get_zone_cached_space(GFP_KERNEL);
+    ASSERT_MSG(cached_after <= total, "Cached space must not exceed total after alloc/free");
+
+    TEST_SECTION_END();
+}
+
+/// @brief Test LowMem boundary pages resolve to LowMem.
+TEST(memory_lowmem_boundary_pages)
+{
+    TEST_SECTION_START("LowMem boundary pages");
+
+    uint32_t first_phys = memory.low_mem.start_addr;
+    uint32_t last_phys  = memory.low_mem.end_addr - PAGE_SIZE;
+
+    page_t *first_page = get_page_from_physical_address(first_phys);
+    page_t *last_page  = get_page_from_physical_address(last_phys);
+
+    ASSERT_MSG(first_page != NULL, "LowMem first page must be resolvable");
+    ASSERT_MSG(last_page != NULL, "LowMem last page must be resolvable");
+    ASSERT_MSG(is_lowmem_page_struct(first_page), "LowMem first page must be in lowmem map");
+    ASSERT_MSG(is_lowmem_page_struct(last_page), "LowMem last page must be in lowmem map");
+
+    uint32_t first_virt = get_virtual_address_from_page(first_page);
+    uint32_t last_virt  = get_virtual_address_from_page(last_page);
+
+    ASSERT_MSG(first_virt >= memory.low_mem.virt_start && first_virt < memory.low_mem.virt_end,
+               "LowMem first page virtual must be in LowMem range");
+    ASSERT_MSG(last_virt >= memory.low_mem.virt_start && last_virt < memory.low_mem.virt_end,
+               "LowMem last page virtual must be in LowMem range");
+
+    TEST_SECTION_END();
+}
+
+/// @brief Test HighMem boundary pages resolve to HighMem (if present).
+TEST(memory_highmem_boundary_pages)
+{
+    TEST_SECTION_START("HighMem boundary pages");
+
+    if (memory.high_mem.size > 0) {
+        uint32_t first_phys = memory.high_mem.start_addr;
+        uint32_t last_phys  = memory.high_mem.end_addr - PAGE_SIZE;
+
+        page_t *first_page = get_page_from_physical_address(first_phys);
+        page_t *last_page  = get_page_from_physical_address(last_phys);
+
+        ASSERT_MSG(first_page != NULL, "HighMem first page must be resolvable");
+        ASSERT_MSG(last_page != NULL, "HighMem last page must be resolvable");
+        ASSERT_MSG(is_lowmem_page_struct(first_page) == 0, "HighMem first page must not be LowMem");
+        ASSERT_MSG(is_lowmem_page_struct(last_page) == 0, "HighMem last page must not be LowMem");
+        ASSERT_MSG(is_dma_page_struct(first_page) == 0, "HighMem first page must not be DMA");
+        ASSERT_MSG(is_dma_page_struct(last_page) == 0, "HighMem last page must not be DMA");
     }
 
     TEST_SECTION_END();
@@ -377,10 +513,15 @@ TEST(memory_zone_low_memory_stress)
 void test_zone_allocator(void)
 {
     test_memory_info_integrity();
+    test_memory_page_index_max_matches();
     test_memory_virtual_address_validation();
     test_memory_order_calculation();
     test_memory_zone_space_metrics();
+    test_memory_zone_buddy_status_names();
     test_memory_zone_total_space_matches();
+    test_memory_zone_cached_space_behavior();
+    test_memory_lowmem_boundary_pages();
+    test_memory_highmem_boundary_pages();
     test_memory_alloc_free_roundtrip();
     test_memory_alloc_free_order1();
     test_memory_alloc_free_stress();

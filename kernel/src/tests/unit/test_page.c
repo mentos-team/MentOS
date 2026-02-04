@@ -122,6 +122,39 @@ TEST(memory_page_get_virt_addr)
     TEST_SECTION_END();
 }
 
+/// @brief Test HighMem pages have no permanent virtual address.
+TEST(memory_page_highmem_no_virt)
+{
+    TEST_SECTION_START("HighMem page has no virtual mapping");
+
+    if (memory.high_mem.size > 0) {
+        page_t *page = get_page_from_physical_address(memory.high_mem.start_addr);
+        ASSERT_MSG(page != NULL, "HighMem page must be resolvable from physical address");
+
+        uint32_t vaddr = get_virtual_address_from_page(page);
+        ASSERT_MSG(vaddr == 0, "HighMem page must not have a permanent virtual mapping");
+    }
+
+    TEST_SECTION_END();
+}
+
+/// @brief Test DMA pages map to DMA virtual range.
+TEST(memory_page_dma_virt_range)
+{
+    TEST_SECTION_START("DMA page virtual range");
+
+    if (memory.dma_mem.size > 0) {
+        page_t *page = get_page_from_physical_address(memory.dma_mem.start_addr);
+        ASSERT_MSG(page != NULL, "DMA page must be resolvable from physical address");
+
+        uint32_t vaddr = get_virtual_address_from_page(page);
+        ASSERT_MSG(vaddr >= memory.dma_mem.virt_start && vaddr < memory.dma_mem.virt_end,
+                   "DMA page virtual address must be in DMA range");
+    }
+
+    TEST_SECTION_END();
+}
+
 /// @brief Test get_physical_address_from_page.
 TEST(memory_page_get_phys_addr)
 {
@@ -168,6 +201,22 @@ TEST(memory_page_virt_phys_relationship)
     TEST_SECTION_END();
 }
 
+/// @brief Test LowMem virtual-physical offset consistency.
+TEST(memory_page_lowmem_offset)
+{
+    TEST_SECTION_START("LowMem virt/phys offset");
+
+    uint32_t phys = memory.low_mem.start_addr;
+    page_t *page = get_page_from_physical_address(phys);
+    ASSERT_MSG(page != NULL, "LowMem start page must be resolvable");
+
+    uint32_t vaddr = get_virtual_address_from_page(page);
+    uint32_t expected = memory.low_mem.virt_start - memory.low_mem.start_addr;
+    ASSERT_MSG(vaddr - phys == expected, "LowMem virtual-physical offset must match");
+
+    TEST_SECTION_END();
+}
+
 /// @brief Test page write/read through virtual address.
 TEST(memory_page_write_read_virt)
 {
@@ -197,6 +246,54 @@ TEST(memory_page_write_read_virt)
     TEST_SECTION_END();
 }
 
+/// @brief Test that HighMem pages require kmap for virtual access.
+TEST(memory_page_highmem_requires_kmap)
+{
+    TEST_SECTION_START("HighMem requires kmap");
+
+    // Try to allocate a HighMem page
+    page_t *highmem_page = alloc_pages(GFP_HIGHUSER, 0);
+
+    if (highmem_page != NULL && is_highmem_page_struct(highmem_page)) {
+        // HighMem page allocated - kmap would be required in real code
+        // For this test, just verify get_virtual_address_from_page returns 0
+        uint32_t virt = get_virtual_address_from_page(highmem_page);
+        ASSERT_MSG(virt == 0, "HighMem page virt address must be 0 (requires kmap)");
+
+        ASSERT_MSG(free_pages(highmem_page) == 0, "free_pages must succeed");
+    }
+    // If no HighMem available, test still passes
+
+    TEST_SECTION_END();
+}
+
+/// @brief Test that get_page_from_virtual_address rejects HighMem ranges.
+TEST(memory_page_virt_address_rejects_highmem)
+{
+    TEST_SECTION_START("get_page_from_virtual_address rejects HighMem");
+
+    // Try to get a page from a HighMem virtual address
+    // HighMem doesn't have permanent virtual mappings, so asking for a page
+    // from a random high address should return NULL
+
+    unsigned long total_high = get_zone_total_space(GFP_HIGHUSER);
+    if (total_high > 0) {
+        // HighMem exists - try to translate a bogus high virtual address
+        // This should return NULL or 0 since we're not using kmap
+        uint32_t bogus_highmem_addr = memory.high_mem.virt_start;
+        page_t *page = get_page_from_virtual_address(bogus_highmem_addr);
+        
+        // The function should return NULL for unmapped HighMem regions
+        // (get_page_from_virtual_address only works for lowmem)
+        if (page != NULL) {
+            // If it did return something, it should not be from HighMem
+            ASSERT_MSG(!is_highmem_page_struct(page), "Page must not be from HighMem for unmapped virtual");
+        }
+    }
+
+    TEST_SECTION_END();
+}
+
 /// @brief Main test function for page structure.
 void test_page(void)
 {
@@ -205,7 +302,12 @@ void test_page(void)
     test_memory_page_inc_dec();
     test_memory_page_set_count();
     test_memory_page_get_virt_addr();
+    test_memory_page_highmem_no_virt();
+    test_memory_page_dma_virt_range();
     test_memory_page_get_phys_addr();
     test_memory_page_virt_phys_relationship();
+    test_memory_page_lowmem_offset();
     test_memory_page_write_read_virt();
+    test_memory_page_highmem_requires_kmap();
+    test_memory_page_virt_address_rejects_highmem();
 }
