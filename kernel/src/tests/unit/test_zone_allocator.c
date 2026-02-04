@@ -13,6 +13,7 @@
 #include "mem/gfp.h"
 #include "mem/mm/page.h"
 #include "mem/paging.h"
+#include "string.h"
 #include "tests/test.h"
 #include "tests/test_utils.h"
 
@@ -136,6 +137,34 @@ TEST(memory_zone_space_metrics)
         unsigned long cached_high = get_zone_cached_space(GFP_HIGHUSER);
         ASSERT_MSG(free_high <= total_high, "GFP_HIGHUSER free space must be <= total");
         ASSERT_MSG(cached_high <= total_high, "GFP_HIGHUSER cached space must be <= total");
+    }
+
+    TEST_SECTION_END();
+}
+
+/// @brief Test buddy system status includes zone name.
+TEST(memory_zone_buddy_status_names)
+{
+    TEST_SECTION_START("Zone buddy status names");
+
+    char buddy_status[256] = {0};
+
+    int status_len = get_zone_buddy_system_status(GFP_DMA, buddy_status, sizeof(buddy_status));
+    if (status_len > 0) {
+        ASSERT_MSG(strstr(buddy_status, "DMA") != NULL, "DMA buddy status must include zone name");
+    }
+
+    memset(buddy_status, 0, sizeof(buddy_status));
+    status_len = get_zone_buddy_system_status(GFP_KERNEL, buddy_status, sizeof(buddy_status));
+    ASSERT_MSG(status_len > 0, "GFP_KERNEL buddy status must be non-empty");
+    ASSERT_MSG(strstr(buddy_status, "Normal") != NULL, "Kernel buddy status must include zone name");
+
+    unsigned long total_high = get_zone_total_space(GFP_HIGHUSER);
+    if (total_high > 0) {
+        memset(buddy_status, 0, sizeof(buddy_status));
+        status_len = get_zone_buddy_system_status(GFP_HIGHUSER, buddy_status, sizeof(buddy_status));
+        ASSERT_MSG(status_len > 0, "GFP_HIGHUSER buddy status must be non-empty");
+        ASSERT_MSG(strstr(buddy_status, "HighMem") != NULL, "HighMem buddy status must include zone name");
     }
 
     TEST_SECTION_END();
@@ -440,6 +469,7 @@ void test_zone_allocator(void)
     test_memory_virtual_address_validation();
     test_memory_order_calculation();
     test_memory_zone_space_metrics();
+    test_memory_zone_buddy_status_names();
     test_memory_zone_total_space_matches();
     test_memory_lowmem_boundary_pages();
     test_memory_highmem_boundary_pages();
