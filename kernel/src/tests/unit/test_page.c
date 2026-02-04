@@ -122,6 +122,22 @@ TEST(memory_page_get_virt_addr)
     TEST_SECTION_END();
 }
 
+/// @brief Test HighMem pages have no permanent virtual address.
+TEST(memory_page_highmem_no_virt)
+{
+    TEST_SECTION_START("HighMem page has no virtual mapping");
+
+    if (memory.high_mem.size > 0) {
+        page_t *page = get_page_from_physical_address(memory.high_mem.start_addr);
+        ASSERT_MSG(page != NULL, "HighMem page must be resolvable from physical address");
+
+        uint32_t vaddr = get_virtual_address_from_page(page);
+        ASSERT_MSG(vaddr == 0, "HighMem page must not have a permanent virtual mapping");
+    }
+
+    TEST_SECTION_END();
+}
+
 /// @brief Test get_physical_address_from_page.
 TEST(memory_page_get_phys_addr)
 {
@@ -205,6 +221,7 @@ void test_page(void)
     test_memory_page_inc_dec();
     test_memory_page_set_count();
     test_memory_page_get_virt_addr();
+    test_memory_page_highmem_no_virt();
     test_memory_page_get_phys_addr();
     test_memory_page_virt_phys_relationship();
     test_memory_page_write_read_virt();
