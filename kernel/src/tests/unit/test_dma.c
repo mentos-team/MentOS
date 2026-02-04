@@ -9,6 +9,7 @@
 #define __DEBUG_LEVEL__  LOGLEVEL_DEBUG ///< Set log level.
 #include "io/debug.h"                   // Include debugging functions.
 
+#include "mem/alloc/slab.h"
 #include "mem/alloc/zone_allocator.h"
 #include "mem/gfp.h"
 #include "mem/mm/page.h"
@@ -253,6 +254,47 @@ TEST(dma_partial_exhaustion_recovery)
     TEST_SECTION_END();
 }
 
+/// @brief Test full DMA exhaustion and recovery.
+TEST(dma_full_exhaustion_recovery)
+{
+    TEST_SECTION_START("DMA full exhaustion and recovery");
+
+    unsigned long free_before = get_zone_free_space(GFP_DMA);
+    unsigned long max_pages   = memory.dma_mem.size / PAGE_SIZE;
+
+    page_t **pages = (page_t **)kmalloc(sizeof(page_t *) * max_pages);
+    ASSERT_MSG(pages != NULL, "kmalloc for DMA page list must succeed");
+
+    unsigned long count = 0;
+    for (; count < max_pages; ++count) {
+        pages[count] = alloc_pages(GFP_DMA, 0);
+        if (pages[count] == NULL) {
+            break;
+        }
+        assert_dma_isa_limit(get_physical_address_from_page(pages[count]));
+    }
+
+    ASSERT_MSG(count > 0, "At least one DMA allocation must succeed before exhaustion");
+
+    page_t *should_fail = alloc_pages(GFP_DMA, 0);
+    ASSERT_MSG(should_fail == NULL, "DMA allocation must fail when exhausted");
+
+    for (unsigned long i = 0; i < count; ++i) {
+        ASSERT_MSG(free_pages(pages[i]) == 0, "DMA free must succeed during recovery");
+    }
+
+    kfree(pages);
+
+    unsigned long free_after = get_zone_free_space(GFP_DMA);
+    ASSERT_MSG(free_after >= free_before, "DMA free space must be restored after exhaustion");
+
+    page_t *probe = alloc_pages(GFP_DMA, 0);
+    ASSERT_MSG(probe != NULL, "DMA allocation must succeed after recovery");
+    ASSERT_MSG(free_pages(probe) == 0, "DMA free must succeed after recovery");
+
+    TEST_SECTION_END();
+}
+
 /// @brief Main test function for DMA tests.
 void test_dma(void)
 {
@@ -263,4 +305,5 @@ void test_dma(void)
     test_dma_multiple_buffers_no_overlap();
     test_dma_alignment();
     test_dma_partial_exhaustion_recovery();
+    test_dma_full_exhaustion_recovery();
 }
