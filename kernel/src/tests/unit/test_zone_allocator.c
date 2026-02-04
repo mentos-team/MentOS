@@ -175,6 +175,12 @@ TEST(memory_zone_total_space_matches)
 {
     TEST_SECTION_START("Zone total space matches");
 
+    unsigned long total_dma = get_zone_total_space(GFP_DMA);
+    if (memory.dma_mem.size > 0) {
+        ASSERT_MSG(total_dma > 0, "DMA total space must be > 0 when DMA zone exists");
+        ASSERT_MSG(total_dma <= memory.dma_mem.size, "DMA total space must be within dma_mem size");
+    }
+
     unsigned long total_low = get_zone_total_space(GFP_KERNEL);
     ASSERT_MSG(total_low > 0, "Lowmem total space must be > 0");
     ASSERT_MSG(total_low <= memory.low_mem.size, "Lowmem total space must be within low_mem size");
