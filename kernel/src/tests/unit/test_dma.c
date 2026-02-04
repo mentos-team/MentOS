@@ -482,8 +482,8 @@ TEST(dma_mixed_order_stress)
     unsigned long free_before = get_zone_free_space(GFP_DMA);
 
     const unsigned int count = 16;
-    page_t *allocs[count] = {NULL};
-    uint32_t orders[count] = {0};
+    page_t *allocs[16] = {NULL};
+    uint32_t orders[16] = {0};
 
     uint32_t rng = 0xC0FFEEu;
     for (unsigned int i = 0; i < count; ++i) {
