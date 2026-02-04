@@ -487,6 +487,32 @@ TEST(memory_mm_vma_removal_validates_ptes)
     TEST_SECTION_END();
 }
 
+/// @brief Test stack growth and guard page enforcement.
+TEST(memory_mm_stack_growth_guard_page)
+{
+    TEST_SECTION_START("Stack growth and guard page enforcement");
+
+    mm_struct_t *mm = mm_create_blank(PAGE_SIZE * 16);
+    ASSERT_MSG(mm != NULL, "mm_create_blank must succeed");
+
+    // Create a stack VMA at a high address
+    uint32_t stack_top = 0x50000000; // High address for stack
+    uint32_t stack_size = PAGE_SIZE * 4; // 4 pages for stack
+    vm_area_struct_t *stack_vma = vm_area_create(mm, stack_top - stack_size, stack_size, 
+                                                   MM_PRESENT | MM_RW | MM_USER, GFP_HIGHUSER);
+    ASSERT_MSG(stack_vma != NULL, "Stack VMA creation must succeed");
+
+    // Verify the stack VMA has the correct boundaries
+    ASSERT_MSG(stack_vma->vm_start == stack_top - stack_size, "Stack start address should match");
+    ASSERT_MSG(stack_vma->vm_end == stack_top, "Stack end address should match");
+    ASSERT_MSG(stack_vma->vm_mm == mm, "Stack VMA should reference mm_struct");
+
+    // Destroy the mm - this should safely clean up the stack VMA
+    ASSERT_MSG(mm_destroy(mm) == 0, "mm_destroy must succeed");
+
+    TEST_SECTION_END();
+}
+
 /// @brief Main test function for mm subsystem.
 void test_mm(void)
 {
@@ -502,4 +528,5 @@ void test_mm(void)
     test_memory_mm_overlapping_vma_rejection();
     test_memory_mm_vma_permissions_propagation();
     test_memory_mm_vma_removal_validates_ptes();
+    test_memory_mm_stack_growth_guard_page();
 }

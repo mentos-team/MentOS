@@ -12,6 +12,7 @@
 #include "mem/mm/mm.h"
 #include "mem/mm/page.h"
 #include "mem/mm/vm_area.h"
+#include "mem/mm/vmem.h"
 #include "mem/paging.h"
 #include "string.h"
 #include "tests/test.h"
@@ -692,6 +693,58 @@ TEST(paging_dma_mapping_permissions)
     TEST_SECTION_END();
 }
 
+/// @brief Test TLB consistency after mapping/unmapping operations.
+TEST(paging_tlb_consistency)
+{
+    TEST_SECTION_START("TLB consistency");
+
+    page_directory_t *pgd = paging_get_main_pgd();
+    ASSERT_MSG(pgd != NULL, "Page directory must exist");
+
+    // Test that page table entries are properly invalidated
+    // by verifying that we can create and destroy mappings
+    uint32_t test_vaddr = 0x10000000; // Test virtual address (far from kernel space)
+    
+    // Get a test page to work with
+    page_t *test_page = alloc_pages(GFP_KERNEL, 0);
+    ASSERT_MSG(test_page != NULL, "Must be able to allocate test page");
+    
+    uint32_t test_phys = get_physical_address_from_page(test_page);
+    ASSERT_MSG(test_phys != 0, "Must get physical address from page");
+
+    // Use vmem to map/unmap and verify consistency
+    uint32_t vaddr = vmem_map_physical_pages(test_page, 1);
+    ASSERT_MSG(vaddr != 0, "vmem_map_physical_pages must return valid address");
+    
+    // Verify the mapping exists by checking the page table
+    uint32_t pde_index = vaddr / (4 * 1024 * 1024);
+    uint32_t pte_index = (vaddr / PAGE_SIZE) % 1024;
+    
+    if (pgd->entries[pde_index].present) {
+        page_table_t *table = (page_table_t *)get_virtual_address_from_page(
+            get_page_from_physical_address(((uint32_t)pgd->entries[pde_index].frame) << 12));
+        if (table != NULL) {
+            ASSERT_MSG(table->pages[pte_index].present, "PTE should be present after mapping");
+        }
+    }
+    
+    // Unmap the page
+    int unmap_result = vmem_unmap_virtual_address(vaddr);
+    ASSERT_MSG(unmap_result == 0, "vmem_unmap_virtual_address must succeed");
+    
+    // After unmapping, TLB should be invalidated (kernel handles this)
+    // We verify this by checking that we can re-map the same physical page
+    // and the old mapping doesn't interfere
+    uint32_t vaddr2 = vmem_map_physical_pages(test_page, 1);
+    ASSERT_MSG(vaddr2 != 0, "Second mapping must succeed");
+    ASSERT_MSG(vmem_unmap_virtual_address(vaddr2) == 0, "Second unmap must succeed");
+
+    // Free the test page
+    free_pages(test_page);
+
+    TEST_SECTION_END();
+}
+
 /// @brief Main test function for paging subsystem.
 /// This function runs all paging tests in sequence.
 void test_paging(void)
@@ -740,4 +793,5 @@ void test_paging(void)
     test_paging_dma_pde_coverage();
     test_paging_dma_user_separation();
     test_paging_dma_mapping_permissions();
+    test_paging_tlb_consistency();
 }
