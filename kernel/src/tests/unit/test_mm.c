@@ -29,6 +29,9 @@ TEST(memory_mm_vm_area_lifecycle)
 {
     TEST_SECTION_START("MM/VMA lifecycle");
 
+    unsigned long free_kernel_before = get_zone_free_space(GFP_KERNEL);
+    unsigned long free_user_before   = get_zone_free_space(GFP_HIGHUSER);
+
     mm_struct_t *mm = mm_create_blank(PAGE_SIZE * 2);
     ASSERT_MSG(mm != NULL, "mm_create_blank must succeed");
     ASSERT_MSG(mm->pgd != NULL, "mm->pgd must be initialized");
@@ -54,6 +57,11 @@ TEST(memory_mm_vm_area_lifecycle)
 
     ASSERT_MSG(mm_destroy(mm) == 0, "mm_destroy must succeed");
 
+    unsigned long free_kernel_after = get_zone_free_space(GFP_KERNEL);
+    unsigned long free_user_after   = get_zone_free_space(GFP_HIGHUSER);
+    ASSERT_MSG(free_kernel_after == free_kernel_before, "Kernel zone free pages must be restored");
+    ASSERT_MSG(free_user_after == free_user_before, "User zone free pages must be restored");
+
     TEST_SECTION_END();
 }
 
@@ -61,6 +69,9 @@ TEST(memory_mm_vm_area_lifecycle)
 TEST(memory_mm_create_blank_sanity)
 {
     TEST_SECTION_START("MM create blank sanity");
+
+    unsigned long free_kernel_before = get_zone_free_space(GFP_KERNEL);
+    unsigned long free_user_before   = get_zone_free_space(GFP_HIGHUSER);
 
     size_t stack_size = PAGE_SIZE * 2;
     mm_struct_t *mm   = mm_create_blank(stack_size);
@@ -79,6 +90,9 @@ TEST(memory_mm_clone)
 {
     TEST_SECTION_START("MM clone");
 
+    unsigned long free_kernel_before = get_zone_free_space(GFP_KERNEL);
+    unsigned long free_user_before   = get_zone_free_space(GFP_HIGHUSER);
+
     mm_struct_t *mm = mm_create_blank(PAGE_SIZE * 2);
     ASSERT_MSG(mm != NULL, "mm_create_blank must succeed");
 
@@ -90,6 +104,11 @@ TEST(memory_mm_clone)
 
     ASSERT_MSG(mm_destroy(clone) == 0, "mm_destroy(clone) must succeed");
     ASSERT_MSG(mm_destroy(mm) == 0, "mm_destroy(mm) must succeed");
+
+    unsigned long free_kernel_after = get_zone_free_space(GFP_KERNEL);
+    unsigned long free_user_after   = get_zone_free_space(GFP_HIGHUSER);
+    ASSERT_MSG(free_kernel_after == free_kernel_before, "Kernel zone free pages must be restored");
+    ASSERT_MSG(free_user_after == free_user_before, "User zone free pages must be restored");
 
     TEST_SECTION_END();
 }
@@ -114,8 +133,8 @@ TEST(memory_mm_clone_separate_pages)
         mm_struct_t *clone = mm_clone(mm);
         ASSERT_MSG(clone != NULL, "mm_clone must succeed");
 
-        size_t size_a = PAGE_SIZE;
-        size_t size_b = PAGE_SIZE;
+        size_t size_a  = PAGE_SIZE;
+        size_t size_b  = PAGE_SIZE;
         page_t *page_a = mem_virtual_to_page(mm->pgd, (uint32_t)vm_start, &size_a);
         page_t *page_b = mem_virtual_to_page(clone->pgd, (uint32_t)vm_start, &size_b);
 
@@ -135,6 +154,9 @@ TEST(memory_mm_clone_copies_content)
 {
     TEST_SECTION_START("MM clone copies content");
 
+    unsigned long free_kernel_before = get_zone_free_space(GFP_KERNEL);
+    unsigned long free_user_before   = get_zone_free_space(GFP_HIGHUSER);
+
     mm_struct_t *mm = mm_create_blank(PAGE_SIZE * 2);
     ASSERT_MSG(mm != NULL, "mm_create_blank must succeed");
 
@@ -147,7 +169,7 @@ TEST(memory_mm_clone_copies_content)
             vm_area_create(mm, (uint32_t)vm_start, PAGE_SIZE, MM_PRESENT | MM_RW | MM_USER, GFP_HIGHUSER);
         ASSERT_MSG(segment != NULL, "vm_area_create must succeed");
 
-        size_t size_a = PAGE_SIZE;
+        size_t size_a  = PAGE_SIZE;
         page_t *page_a = mem_virtual_to_page(mm->pgd, (uint32_t)vm_start, &size_a);
         ASSERT_MSG(page_a != NULL, "source mapping must be present");
 
@@ -162,7 +184,7 @@ TEST(memory_mm_clone_copies_content)
         mm_struct_t *clone = mm_clone(mm);
         ASSERT_MSG(clone != NULL, "mm_clone must succeed");
 
-        size_t size_b = PAGE_SIZE;
+        size_t size_b  = PAGE_SIZE;
         page_t *page_b = mem_virtual_to_page(clone->pgd, (uint32_t)vm_start, &size_b);
         ASSERT_MSG(page_b != NULL, "clone mapping must be present");
         ASSERT_MSG(page_a != page_b, "clone must not share physical pages");
@@ -180,6 +202,11 @@ TEST(memory_mm_clone_copies_content)
 
     ASSERT_MSG(mm_destroy(mm) == 0, "mm_destroy(mm) must succeed");
 
+    unsigned long free_kernel_after = get_zone_free_space(GFP_KERNEL);
+    unsigned long free_user_after   = get_zone_free_space(GFP_HIGHUSER);
+    ASSERT_MSG(free_kernel_after == free_kernel_before, "Kernel zone free pages must be restored");
+    ASSERT_MSG(free_user_after == free_user_before, "User zone free pages must be restored");
+
     TEST_SECTION_END();
 }
 
@@ -187,6 +214,9 @@ TEST(memory_mm_clone_copies_content)
 TEST(memory_mm_clone_copies_multi_page)
 {
     TEST_SECTION_START("MM clone copies multi-page");
+
+    unsigned long free_kernel_before = get_zone_free_space(GFP_KERNEL);
+    unsigned long free_user_before   = get_zone_free_space(GFP_HIGHUSER);
 
     const uint32_t pages = 3;
     const uint32_t size  = pages * PAGE_SIZE;
@@ -204,8 +234,8 @@ TEST(memory_mm_clone_copies_multi_page)
         ASSERT_MSG(segment != NULL, "vm_area_create must succeed");
 
         for (uint32_t p = 0; p < pages; ++p) {
-            uint32_t addr = (uint32_t)vm_start + (p * PAGE_SIZE);
-            size_t size_a = PAGE_SIZE;
+            uint32_t addr  = (uint32_t)vm_start + (p * PAGE_SIZE);
+            size_t size_a  = PAGE_SIZE;
             page_t *page_a = mem_virtual_to_page(mm->pgd, addr, &size_a);
             ASSERT_MSG(page_a != NULL, "source mapping must be present");
 
@@ -222,8 +252,8 @@ TEST(memory_mm_clone_copies_multi_page)
         ASSERT_MSG(clone != NULL, "mm_clone must succeed");
 
         for (uint32_t p = 0; p < pages; ++p) {
-            uint32_t addr = (uint32_t)vm_start + (p * PAGE_SIZE);
-            size_t size_b = PAGE_SIZE;
+            uint32_t addr  = (uint32_t)vm_start + (p * PAGE_SIZE);
+            size_t size_b  = PAGE_SIZE;
             page_t *page_b = mem_virtual_to_page(clone->pgd, addr, &size_b);
             ASSERT_MSG(page_b != NULL, "clone mapping must be present");
 
@@ -241,6 +271,11 @@ TEST(memory_mm_clone_copies_multi_page)
 
     ASSERT_MSG(mm_destroy(mm) == 0, "mm_destroy(mm) must succeed");
 
+    unsigned long free_kernel_after = get_zone_free_space(GFP_KERNEL);
+    unsigned long free_user_after   = get_zone_free_space(GFP_HIGHUSER);
+    ASSERT_MSG(free_kernel_after == free_kernel_before, "Kernel zone free pages must be restored");
+    ASSERT_MSG(free_user_after == free_user_before, "User zone free pages must be restored");
+
     TEST_SECTION_END();
 }
 
@@ -249,10 +284,10 @@ TEST(memory_mm_lifecycle_stress)
 {
     TEST_SECTION_START("MM lifecycle stress");
 
-    const unsigned int rounds = 8;
-    unsigned long base_low_free = 0;
+    const unsigned int rounds    = 8;
+    unsigned long base_low_free  = 0;
     unsigned long base_high_free = 0;
-    unsigned long total_high = get_zone_total_space(GFP_HIGHUSER);
+    unsigned long total_high     = get_zone_total_space(GFP_HIGHUSER);
 
     for (unsigned int r = 0; r < rounds; ++r) {
         mm_struct_t *mm = mm_create_blank(PAGE_SIZE * 2);
@@ -264,11 +299,11 @@ TEST(memory_mm_lifecycle_stress)
         ASSERT_MSG(mm_destroy(clone) == 0, "mm_destroy(clone) must succeed");
         ASSERT_MSG(mm_destroy(mm) == 0, "mm_destroy(mm) must succeed");
 
-        unsigned long low_free = get_zone_free_space(GFP_KERNEL);
+        unsigned long low_free  = get_zone_free_space(GFP_KERNEL);
         unsigned long high_free = (total_high > 0) ? get_zone_free_space(GFP_HIGHUSER) : 0;
 
         if (r == 0) {
-            base_low_free = low_free;
+            base_low_free  = low_free;
             base_high_free = high_free;
         } else {
             ASSERT_MSG(low_free >= base_low_free, "lowmem free space must not decrease after warmup");
@@ -296,14 +331,14 @@ TEST(memory_mm_vma_randomized)
     }
 
     unsigned int created = 0;
-    uint32_t rng = 0xC0FFEEu;
+    uint32_t rng         = 0xC0FFEEu;
 
     for (unsigned int i = 0; i < max_segments; ++i) {
         uint32_t pages = (mm_test_rand(&rng) % 4) + 1;
-        size_t size = pages * PAGE_SIZE;
+        size_t size    = pages * PAGE_SIZE;
 
         uintptr_t vm_start = 0;
-        int search_rc = vm_area_search_free_area(mm, size, &vm_start);
+        int search_rc      = vm_area_search_free_area(mm, size, &vm_start);
         if (search_rc != 0) {
             continue;
         }
@@ -345,9 +380,9 @@ TEST(memory_mm_vma_fragmentation)
     }
 
     for (unsigned int i = 0; i < count; ++i) {
-        size_t size = ((i % 2) + 1) * PAGE_SIZE;
+        size_t size        = ((i % 2) + 1) * PAGE_SIZE;
         uintptr_t vm_start = 0;
-        int search_rc = vm_area_search_free_area(mm, size, &vm_start);
+        int search_rc      = vm_area_search_free_area(mm, size, &vm_start);
         if (search_rc != 0) {
             continue;
         }

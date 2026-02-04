@@ -10,6 +10,7 @@
 #include "io/debug.h"                   // Include debugging functions.
 
 #include "mem/alloc/slab.h"
+#include "mem/alloc/zone_allocator.h"
 #include "mem/gfp.h"
 #include "string.h"
 #include "tests/test.h"
@@ -40,6 +41,8 @@ TEST(memory_slab_cache_alloc_free)
         uint32_t b;
     } test_obj_t;
 
+    unsigned long free_before = get_zone_free_space(GFP_KERNEL);
+
     kmem_cache_t *cache = kmem_cache_create("test_obj", sizeof(test_obj_t), alignof(test_obj_t), GFP_KERNEL, NULL, NULL);
     ASSERT_MSG(cache != NULL, "kmem_cache_create must succeed");
 
@@ -51,6 +54,9 @@ TEST(memory_slab_cache_alloc_free)
     ASSERT_MSG(kmem_cache_free(obj) == 0, "kmem_cache_free must succeed");
     ASSERT_MSG(kmem_cache_destroy(cache) == 0, "kmem_cache_destroy must succeed");
 
+    unsigned long free_after = get_zone_free_space(GFP_KERNEL);
+    ASSERT_MSG(free_after == free_before, "Zone free pages must be restored after cache destroy");
+
     TEST_SECTION_END();
 }
 
@@ -59,10 +65,15 @@ TEST(memory_kmalloc_kfree)
 {
     TEST_SECTION_START("kmalloc/kfree");
 
+    unsigned long free_before = get_zone_free_space(GFP_KERNEL);
+
     void *ptr = kmalloc(128);
     ASSERT_MSG(ptr != NULL, "kmalloc must return a valid pointer");
     memset(ptr, 0xAB, 128);
     kfree(ptr);
+
+    unsigned long free_after = get_zone_free_space(GFP_KERNEL);
+    ASSERT_MSG(free_after == free_before, "Zone free pages must be restored after kfree");
 
     TEST_SECTION_END();
 }
@@ -71,6 +82,8 @@ TEST(memory_kmalloc_kfree)
 TEST(memory_kmalloc_write_read)
 {
     TEST_SECTION_START("kmalloc write/read");
+
+    unsigned long free_before = get_zone_free_space(GFP_KERNEL);
 
     uint8_t *ptr = (uint8_t *)kmalloc(256);
     ASSERT_MSG(ptr != NULL, "kmalloc must return a valid pointer");
@@ -83,7 +96,8 @@ TEST(memory_kmalloc_write_read)
     }
 
     kfree(ptr);
-
+    unsigned long free_after = get_zone_free_space(GFP_KERNEL);
+    ASSERT_MSG(free_after == free_before, "Zone free pages must be restored after kfree");
     TEST_SECTION_END();
 }
 

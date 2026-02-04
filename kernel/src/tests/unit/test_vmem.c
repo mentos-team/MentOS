@@ -22,9 +22,14 @@ TEST(memory_vmem_alloc_unmap)
 {
     TEST_SECTION_START("VMEM alloc/unmap");
 
+    unsigned long free_before = get_zone_free_space(GFP_KERNEL);
+
     virt_map_page_t *vpage = vmem_map_alloc_virtual(PAGE_SIZE);
     ASSERT_MSG(vpage != NULL, "vmem_map_alloc_virtual must succeed");
     ASSERT_MSG(vmem_unmap_virtual_address_page(vpage) == 0, "vmem_unmap_virtual_address_page must succeed");
+
+    unsigned long free_after = get_zone_free_space(GFP_KERNEL);
+    ASSERT_MSG(free_after == free_before, "Zone free pages must be restored after vmem unmap");
 
     TEST_SECTION_END();
 }
@@ -34,9 +39,14 @@ TEST(memory_vmem_alloc_unmap_multi)
 {
     TEST_SECTION_START("VMEM alloc/unmap multi-page");
 
+    unsigned long free_before = get_zone_free_space(GFP_KERNEL);
+
     virt_map_page_t *vpage = vmem_map_alloc_virtual(PAGE_SIZE * 3);
     ASSERT_MSG(vpage != NULL, "vmem_map_alloc_virtual must succeed");
     ASSERT_MSG(vmem_unmap_virtual_address_page(vpage) == 0, "vmem_unmap_virtual_address_page must succeed");
+
+    unsigned long free_after = get_zone_free_space(GFP_KERNEL);
+    ASSERT_MSG(free_after == free_before, "Zone free pages must be restored after vmem unmap");
 
     TEST_SECTION_END();
 }
@@ -45,6 +55,8 @@ TEST(memory_vmem_alloc_unmap_multi)
 TEST(memory_vmem_map_physical)
 {
     TEST_SECTION_START("VMEM map physical pages");
+
+    unsigned long free_before = get_zone_free_space(GFP_KERNEL);
 
     page_t *page = alloc_pages(GFP_KERNEL, 0);
     ASSERT_MSG(page != NULL, "alloc_pages must return a valid page");
@@ -56,6 +68,9 @@ TEST(memory_vmem_map_physical)
 
     ASSERT_MSG(free_pages(page) == 0, "free_pages must succeed");
 
+    unsigned long free_after = get_zone_free_space(GFP_KERNEL);
+    ASSERT_MSG(free_after == free_before, "Zone free pages must be restored after vmem unmap and free_pages");
+
     TEST_SECTION_END();
 }
 
@@ -63,6 +78,8 @@ TEST(memory_vmem_map_physical)
 TEST(memory_vmem_write_read)
 {
     TEST_SECTION_START("VMEM write/read");
+
+    unsigned long free_before = get_zone_free_space(GFP_KERNEL);
 
     page_t *page = alloc_pages(GFP_KERNEL, 0);
     ASSERT_MSG(page != NULL, "alloc_pages must return a valid page");
@@ -84,6 +101,9 @@ TEST(memory_vmem_write_read)
 
     ASSERT_MSG(vmem_unmap_virtual_address(vaddr) == 0, "vmem_unmap_virtual_address must succeed");
     ASSERT_MSG(free_pages(page) == 0, "free_pages must succeed");
+
+    unsigned long free_after = get_zone_free_space(GFP_KERNEL);
+    ASSERT_MSG(free_after == free_before, "Zone free pages must be restored after vmem unmap and free_pages");
 
     TEST_SECTION_END();
 }
@@ -109,12 +129,17 @@ TEST(memory_vmem_stress)
 {
     TEST_SECTION_START("VMEM stress");
 
+    unsigned long free_before = get_zone_free_space(GFP_KERNEL);
+
     const unsigned int rounds = 16;
     for (unsigned int i = 0; i < rounds; ++i) {
         virt_map_page_t *vpage = vmem_map_alloc_virtual(PAGE_SIZE * 2);
         ASSERT_MSG(vpage != NULL, "vmem_map_alloc_virtual must succeed");
         ASSERT_MSG(vmem_unmap_virtual_address_page(vpage) == 0, "vmem_unmap_virtual_address_page must succeed");
     }
+
+    unsigned long free_after = get_zone_free_space(GFP_KERNEL);
+    ASSERT_MSG(free_after == free_before, "Zone free pages must be restored after stress rounds");
 
     TEST_SECTION_END();
 }
