@@ -614,6 +614,24 @@ TEST(paging_dma_pde_flags)
     TEST_SECTION_END();
 }
 
+/// @brief Test DMA virtual range is covered by PDEs.
+TEST(paging_dma_pde_coverage)
+{
+    TEST_SECTION_START("DMA PDE coverage");
+
+    page_directory_t *pgd = paging_get_main_pgd();
+    ASSERT_MSG(pgd != NULL, "Page directory must exist");
+
+    uint32_t start_index = memory.dma_mem.virt_start / (4 * 1024 * 1024);
+    uint32_t end_index = (memory.dma_mem.virt_end - 1) / (4 * 1024 * 1024);
+
+    for (uint32_t i = start_index; i <= end_index; ++i) {
+        ASSERT_MSG(pgd->entries[i].present == 1, "DMA PDE range must be present");
+    }
+
+    TEST_SECTION_END();
+}
+
 /// @brief Main test function for paging subsystem.
 /// This function runs all paging tests in sequence.
 void test_paging(void)
@@ -659,4 +677,5 @@ void test_paging(void)
     // Boundary tests
     test_paging_address_boundaries();
     test_paging_dma_pde_flags();
+    test_paging_dma_pde_coverage();
 }
