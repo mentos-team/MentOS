@@ -138,6 +138,23 @@ TEST(memory_page_highmem_no_virt)
     TEST_SECTION_END();
 }
 
+/// @brief Test DMA pages map to DMA virtual range.
+TEST(memory_page_dma_virt_range)
+{
+    TEST_SECTION_START("DMA page virtual range");
+
+    if (memory.dma_mem.size > 0) {
+        page_t *page = get_page_from_physical_address(memory.dma_mem.start_addr);
+        ASSERT_MSG(page != NULL, "DMA page must be resolvable from physical address");
+
+        uint32_t vaddr = get_virtual_address_from_page(page);
+        ASSERT_MSG(vaddr >= memory.dma_mem.virt_start && vaddr < memory.dma_mem.virt_end,
+                   "DMA page virtual address must be in DMA range");
+    }
+
+    TEST_SECTION_END();
+}
+
 /// @brief Test get_physical_address_from_page.
 TEST(memory_page_get_phys_addr)
 {
@@ -222,6 +239,7 @@ void test_page(void)
     test_memory_page_set_count();
     test_memory_page_get_virt_addr();
     test_memory_page_highmem_no_virt();
+    test_memory_page_dma_virt_range();
     test_memory_page_get_phys_addr();
     test_memory_page_virt_phys_relationship();
     test_memory_page_write_read_virt();
