@@ -595,6 +595,25 @@ TEST(paging_address_boundaries)
     TEST_SECTION_END();
 }
 
+/// @brief Test DMA PDE flags (present, RW, global, supervisor).
+TEST(paging_dma_pde_flags)
+{
+    TEST_SECTION_START("DMA PDE flags");
+
+    page_directory_t *pgd = paging_get_main_pgd();
+    ASSERT_MSG(pgd != NULL, "Page directory must exist");
+
+    uint32_t dma_pde_index = memory.dma_mem.virt_start / (4 * 1024 * 1024);
+    page_dir_entry_t *dma_pde = &pgd->entries[dma_pde_index];
+
+    ASSERT_MSG(dma_pde->present == 1, "DMA PDE must be present");
+    ASSERT_MSG(dma_pde->rw == 1, "DMA PDE must be writable");
+    ASSERT_MSG(dma_pde->global == 1, "DMA PDE must be global");
+    ASSERT_MSG(dma_pde->user == 0, "DMA PDE must be supervisor-only");
+
+    TEST_SECTION_END();
+}
+
 /// @brief Main test function for paging subsystem.
 /// This function runs all paging tests in sequence.
 void test_paging(void)
@@ -639,4 +658,5 @@ void test_paging(void)
 
     // Boundary tests
     test_paging_address_boundaries();
+    test_paging_dma_pde_flags();
 }
