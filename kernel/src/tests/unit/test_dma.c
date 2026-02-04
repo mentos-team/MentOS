@@ -363,6 +363,28 @@ TEST(dma_boundary_first_page)
     TEST_SECTION_END();
 }
 
+/// @brief Test address translation for the first DMA page.
+TEST(dma_translation_first_page)
+{
+    TEST_SECTION_START("DMA translation first page");
+
+    page_t *page = get_page_from_physical_address(memory.dma_mem.start_addr);
+    ASSERT_MSG(page != NULL, "DMA first page must be resolvable from physical address");
+    ASSERT_MSG(is_dma_page_struct(page), "DMA first page must belong to DMA zone");
+
+    uint32_t phys = get_physical_address_from_page(page);
+    uint32_t virt = get_virtual_address_from_page(page);
+
+    assert_dma_isa_limit(phys);
+    ASSERT_MSG(phys == memory.dma_mem.start_addr, "DMA first page physical address must match start");
+    ASSERT_MSG(virt >= memory.dma_mem.virt_start && virt < memory.dma_mem.virt_end, "DMA first page virtual must be in DMA range");
+
+    page_t *from_virt = get_page_from_virtual_address(virt);
+    ASSERT_MSG(from_virt == page, "DMA first page must round-trip via virtual address");
+
+    TEST_SECTION_END();
+}
+
 /// @brief Main test function for DMA tests.
 void test_dma(void)
 {
@@ -376,4 +398,5 @@ void test_dma(void)
     test_dma_full_exhaustion_recovery();
     test_dma_boundary_last_page();
     test_dma_boundary_first_page();
+    test_dma_translation_first_page();
 }
