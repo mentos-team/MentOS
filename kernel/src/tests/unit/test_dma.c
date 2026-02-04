@@ -474,6 +474,49 @@ TEST(dma_mapping_isolation)
     TEST_SECTION_END();
 }
 
+/// @brief Stress DMA allocator with mixed orders and randomized frees.
+TEST(dma_mixed_order_stress)
+{
+    TEST_SECTION_START("DMA mixed-order stress");
+
+    unsigned long free_before = get_zone_free_space(GFP_DMA);
+
+    const unsigned int count = 16;
+    page_t *allocs[count] = {NULL};
+    uint32_t orders[count] = {0};
+
+    uint32_t rng = 0xC0FFEEu;
+    for (unsigned int i = 0; i < count; ++i) {
+        rng = (rng * 1664525u) + 1013904223u;
+        orders[i] = (rng % 4); // Orders 0-3
+        allocs[i] = alloc_pages(GFP_DMA, orders[i]);
+        ASSERT_MSG(allocs[i] != NULL, "DMA mixed-order allocation must succeed");
+        assert_dma_isa_limit(get_physical_address_from_page(allocs[i]));
+    }
+
+    // Shuffle-free using the same RNG
+    for (unsigned int i = 0; i < count; ++i) {
+        rng = (rng * 1664525u) + 1013904223u;
+        unsigned int idx = rng % count;
+        if (allocs[idx] != NULL) {
+            ASSERT_MSG(free_pages(allocs[idx]) == 0, "DMA free must succeed");
+            allocs[idx] = NULL;
+        }
+    }
+
+    // Free any remaining allocations
+    for (unsigned int i = 0; i < count; ++i) {
+        if (allocs[i] != NULL) {
+            ASSERT_MSG(free_pages(allocs[i]) == 0, "DMA free must succeed");
+        }
+    }
+
+    unsigned long free_after = get_zone_free_space(GFP_DMA);
+    ASSERT_MSG(free_after >= free_before, "DMA free space must be restored");
+
+    TEST_SECTION_END();
+}
+
 /// @brief Main test function for DMA tests.
 void test_dma(void)
 {
@@ -492,4 +535,5 @@ void test_dma(void)
     test_dma_translation_last_page();
     test_dma_virtual_end_invalid();
     test_dma_mapping_isolation();
+    test_dma_mixed_order_stress();
 }
