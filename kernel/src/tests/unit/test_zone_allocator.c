@@ -193,6 +193,63 @@ TEST(memory_alloc_free_order1)
     TEST_SECTION_END();
 }
 
+/// @brief Stress alloc/free patterns to detect buddy leaks.
+TEST(memory_alloc_free_stress)
+{
+    TEST_SECTION_START("Alloc/free stress");
+
+    const unsigned int count = 32;
+    page_t *pages[count];
+
+    unsigned long free_before = get_zone_free_space(GFP_KERNEL);
+
+    for (unsigned int i = 0; i < count; ++i) {
+        pages[i] = alloc_pages(GFP_KERNEL, 0);
+        ASSERT_MSG(pages[i] != NULL, "alloc_pages must succeed");
+    }
+
+    for (unsigned int i = 0; i < count; ++i) {
+        ASSERT_MSG(free_pages(pages[i]) == 0, "free_pages must succeed");
+    }
+
+    unsigned long free_after = get_zone_free_space(GFP_KERNEL);
+    ASSERT_MSG(free_after >= free_before, "free space must be restored after stress");
+
+    TEST_SECTION_END();
+}
+
+/// @brief Fragmentation pattern should fully recover free space.
+TEST(memory_alloc_free_fragmentation)
+{
+    TEST_SECTION_START("Alloc/free fragmentation");
+
+    page_t *order0[8];
+    page_t *order1[4];
+
+    unsigned long free_before = get_zone_free_space(GFP_KERNEL);
+
+    for (unsigned int i = 0; i < 8; ++i) {
+        order0[i] = alloc_pages(GFP_KERNEL, 0);
+        ASSERT_MSG(order0[i] != NULL, "alloc_pages(order=0) must succeed");
+    }
+    for (unsigned int i = 0; i < 4; ++i) {
+        order1[i] = alloc_pages(GFP_KERNEL, 1);
+        ASSERT_MSG(order1[i] != NULL, "alloc_pages(order=1) must succeed");
+    }
+
+    for (unsigned int i = 0; i < 4; ++i) {
+        ASSERT_MSG(free_pages(order1[i]) == 0, "free_pages(order=1) must succeed");
+    }
+    for (unsigned int i = 0; i < 8; ++i) {
+        ASSERT_MSG(free_pages(order0[i]) == 0, "free_pages(order=0) must succeed");
+    }
+
+    unsigned long free_after = get_zone_free_space(GFP_KERNEL);
+    ASSERT_MSG(free_after >= free_before, "free space must be restored after fragmentation");
+
+    TEST_SECTION_END();
+}
+
 /// @brief Test lowmem allocation helpers.
 TEST(memory_lowmem_alloc_free)
 {
@@ -272,6 +329,8 @@ void test_zone_allocator(void)
     test_memory_zone_total_space_matches();
     test_memory_alloc_free_roundtrip();
     test_memory_alloc_free_order1();
+    test_memory_alloc_free_stress();
+    test_memory_alloc_free_fragmentation();
     test_memory_lowmem_alloc_free();
     test_memory_lowmem_rejects_highuser();
     test_memory_page_address_roundtrip();

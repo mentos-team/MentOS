@@ -146,6 +146,35 @@ TEST(memory_slab_counters)
     TEST_SECTION_END();
 }
 
+/// @brief Stress slab allocations to detect internal leaks.
+TEST(memory_slab_stress)
+{
+    TEST_SECTION_START("Slab stress");
+
+    kmem_cache_t *cache = kmem_cache_create("test_obj_stress", 64, alignof(uint64_t), GFP_KERNEL, NULL, NULL);
+    ASSERT_MSG(cache != NULL, "kmem_cache_create must succeed");
+
+    const unsigned int rounds = 16;
+    const unsigned int batch  = 32;
+    void *objs[batch];
+
+    for (unsigned int r = 0; r < rounds; ++r) {
+        for (unsigned int i = 0; i < batch; ++i) {
+            objs[i] = kmem_cache_alloc(cache, GFP_KERNEL);
+            ASSERT_MSG(objs[i] != NULL, "kmem_cache_alloc must succeed");
+        }
+        for (unsigned int i = 0; i < batch; ++i) {
+            ASSERT_MSG(kmem_cache_free(objs[i]) == 0, "kmem_cache_free must succeed");
+        }
+
+        ASSERT_MSG(cache->free_num == cache->total_num, "all objects must be free after round");
+    }
+
+    ASSERT_MSG(kmem_cache_destroy(cache) == 0, "kmem_cache_destroy must succeed");
+
+    TEST_SECTION_END();
+}
+
 /// @brief Main test function for slab subsystem.
 void test_slab(void)
 {
@@ -154,4 +183,5 @@ void test_slab(void)
     test_memory_kmalloc_write_read();
     test_memory_slab_ctor_dtor();
     test_memory_slab_counters();
+    test_memory_slab_stress();
 }

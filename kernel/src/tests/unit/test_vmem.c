@@ -104,6 +104,21 @@ TEST(memory_vmem_invalid_address_detected)
     TEST_SECTION_END();
 }
 
+/// @brief Stress vmem alloc/unmap to detect leaks.
+TEST(memory_vmem_stress)
+{
+    TEST_SECTION_START("VMEM stress");
+
+    const unsigned int rounds = 16;
+    for (unsigned int i = 0; i < rounds; ++i) {
+        virt_map_page_t *vpage = vmem_map_alloc_virtual(PAGE_SIZE * 2);
+        ASSERT_MSG(vpage != NULL, "vmem_map_alloc_virtual must succeed");
+        ASSERT_MSG(vmem_unmap_virtual_address_page(vpage) == 0, "vmem_unmap_virtual_address_page must succeed");
+    }
+
+    TEST_SECTION_END();
+}
+
 /// @brief Main test function for vmem subsystem.
 void test_vmem(void)
 {
@@ -112,4 +127,5 @@ void test_vmem(void)
     test_memory_vmem_map_physical();
     test_memory_vmem_write_read();
     test_memory_vmem_invalid_address_detected();
+    test_memory_vmem_stress();
 }
