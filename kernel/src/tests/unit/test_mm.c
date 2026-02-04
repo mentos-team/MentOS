@@ -18,6 +18,12 @@
 #include "tests/test.h"
 #include "tests/test_utils.h"
 
+static uint32_t mm_test_rand(uint32_t *state)
+{
+    *state = (*state * 1664525u) + 1013904223u;
+    return *state;
+}
+
 /// @brief Test mm and vm_area lifecycle.
 TEST(memory_mm_vm_area_lifecycle)
 {
@@ -177,6 +183,67 @@ TEST(memory_mm_clone_copies_content)
     TEST_SECTION_END();
 }
 
+/// @brief Test cloned mm copies content across multiple pages.
+TEST(memory_mm_clone_copies_multi_page)
+{
+    TEST_SECTION_START("MM clone copies multi-page");
+
+    const uint32_t pages = 3;
+    const uint32_t size  = pages * PAGE_SIZE;
+
+    mm_struct_t *mm = mm_create_blank(PAGE_SIZE * 2);
+    ASSERT_MSG(mm != NULL, "mm_create_blank must succeed");
+
+    uintptr_t vm_start = 0;
+    int search_rc      = vm_area_search_free_area(mm, size, &vm_start);
+    ASSERT_MSG(search_rc == 0 || search_rc == 1, "vm_area_search_free_area must return 0 or 1");
+
+    if (search_rc == 0) {
+        vm_area_struct_t *segment =
+            vm_area_create(mm, (uint32_t)vm_start, size, MM_PRESENT | MM_RW | MM_USER, GFP_HIGHUSER);
+        ASSERT_MSG(segment != NULL, "vm_area_create must succeed");
+
+        for (uint32_t p = 0; p < pages; ++p) {
+            uint32_t addr = (uint32_t)vm_start + (p * PAGE_SIZE);
+            size_t size_a = PAGE_SIZE;
+            page_t *page_a = mem_virtual_to_page(mm->pgd, addr, &size_a);
+            ASSERT_MSG(page_a != NULL, "source mapping must be present");
+
+            uint32_t lowmem_a = get_virtual_address_from_page(page_a);
+            ASSERT_MSG(lowmem_a != 0, "get_virtual_address_from_page must succeed");
+
+            uint8_t *ptr_a = (uint8_t *)lowmem_a;
+            for (uint32_t i = 0; i < PAGE_SIZE; ++i) {
+                ptr_a[i] = (uint8_t)(0xA3 ^ i ^ p);
+            }
+        }
+
+        mm_struct_t *clone = mm_clone(mm);
+        ASSERT_MSG(clone != NULL, "mm_clone must succeed");
+
+        for (uint32_t p = 0; p < pages; ++p) {
+            uint32_t addr = (uint32_t)vm_start + (p * PAGE_SIZE);
+            size_t size_b = PAGE_SIZE;
+            page_t *page_b = mem_virtual_to_page(clone->pgd, addr, &size_b);
+            ASSERT_MSG(page_b != NULL, "clone mapping must be present");
+
+            uint32_t lowmem_b = get_virtual_address_from_page(page_b);
+            ASSERT_MSG(lowmem_b != 0, "get_virtual_address_from_page must succeed");
+
+            uint8_t *ptr_b = (uint8_t *)lowmem_b;
+            for (uint32_t i = 0; i < PAGE_SIZE; ++i) {
+                ASSERT_MSG(ptr_b[i] == (uint8_t)(0xA3 ^ i ^ p), "clone must preserve content");
+            }
+        }
+
+        ASSERT_MSG(mm_destroy(clone) == 0, "mm_destroy(clone) must succeed");
+    }
+
+    ASSERT_MSG(mm_destroy(mm) == 0, "mm_destroy(mm) must succeed");
+
+    TEST_SECTION_END();
+}
+
 /// @brief Stress mm create/clone/destroy to detect leaks.
 TEST(memory_mm_lifecycle_stress)
 {
@@ -214,6 +281,99 @@ TEST(memory_mm_lifecycle_stress)
     TEST_SECTION_END();
 }
 
+/// @brief Stress randomized VMA creation/destruction patterns.
+TEST(memory_mm_vma_randomized)
+{
+    TEST_SECTION_START("MM VMA randomized");
+
+    mm_struct_t *mm = mm_create_blank(PAGE_SIZE * 2);
+    ASSERT_MSG(mm != NULL, "mm_create_blank must succeed");
+
+    const unsigned int max_segments = 8;
+    vm_area_struct_t *segments[max_segments];
+    for (unsigned int i = 0; i < max_segments; ++i) {
+        segments[i] = NULL;
+    }
+
+    unsigned int created = 0;
+    uint32_t rng = 0xC0FFEEu;
+
+    for (unsigned int i = 0; i < max_segments; ++i) {
+        uint32_t pages = (mm_test_rand(&rng) % 4) + 1;
+        size_t size = pages * PAGE_SIZE;
+
+        uintptr_t vm_start = 0;
+        int search_rc = vm_area_search_free_area(mm, size, &vm_start);
+        if (search_rc != 0) {
+            continue;
+        }
+
+        vm_area_struct_t *segment =
+            vm_area_create(mm, (uint32_t)vm_start, size, MM_PRESENT | MM_RW | MM_USER, GFP_HIGHUSER);
+        if (!segment) {
+            continue;
+        }
+
+        segments[created++] = segment;
+    }
+
+    for (unsigned int i = 0; i < created; ++i) {
+        unsigned int idx = (mm_test_rand(&rng) % created);
+        if (segments[idx]) {
+            ASSERT_MSG(vm_area_destroy(mm, segments[idx]) == 0, "vm_area_destroy must succeed");
+            segments[idx] = NULL;
+        }
+    }
+
+    ASSERT_MSG(mm_destroy(mm) == 0, "mm_destroy must succeed");
+
+    TEST_SECTION_END();
+}
+
+/// @brief Fragmentation-like VMA pattern with non-sequential frees.
+TEST(memory_mm_vma_fragmentation)
+{
+    TEST_SECTION_START("MM VMA fragmentation");
+
+    mm_struct_t *mm = mm_create_blank(PAGE_SIZE * 2);
+    ASSERT_MSG(mm != NULL, "mm_create_blank must succeed");
+
+    const unsigned int count = 6;
+    vm_area_struct_t *segments[count];
+    for (unsigned int i = 0; i < count; ++i) {
+        segments[i] = NULL;
+    }
+
+    for (unsigned int i = 0; i < count; ++i) {
+        size_t size = ((i % 2) + 1) * PAGE_SIZE;
+        uintptr_t vm_start = 0;
+        int search_rc = vm_area_search_free_area(mm, size, &vm_start);
+        if (search_rc != 0) {
+            continue;
+        }
+
+        segments[i] =
+            vm_area_create(mm, (uint32_t)vm_start, size, MM_PRESENT | MM_RW | MM_USER, GFP_HIGHUSER);
+    }
+
+    for (unsigned int i = 0; i < count; i += 2) {
+        if (segments[i]) {
+            ASSERT_MSG(vm_area_destroy(mm, segments[i]) == 0, "vm_area_destroy must succeed");
+            segments[i] = NULL;
+        }
+    }
+    for (unsigned int i = 1; i < count; i += 2) {
+        if (segments[i]) {
+            ASSERT_MSG(vm_area_destroy(mm, segments[i]) == 0, "vm_area_destroy must succeed");
+            segments[i] = NULL;
+        }
+    }
+
+    ASSERT_MSG(mm_destroy(mm) == 0, "mm_destroy must succeed");
+
+    TEST_SECTION_END();
+}
+
 /// @brief Main test function for mm subsystem.
 void test_mm(void)
 {
@@ -223,4 +383,7 @@ void test_mm(void)
     test_memory_mm_clone_separate_pages();
     test_memory_mm_clone_copies_content();
     test_memory_mm_lifecycle_stress();
+    test_memory_mm_clone_copies_multi_page();
+    test_memory_mm_vma_randomized();
+    test_memory_mm_vma_fragmentation();
 }
