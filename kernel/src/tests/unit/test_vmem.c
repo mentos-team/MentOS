@@ -29,6 +29,18 @@ TEST(memory_vmem_alloc_unmap)
     TEST_SECTION_END();
 }
 
+/// @brief Test multi-page virtual allocation and unmap.
+TEST(memory_vmem_alloc_unmap_multi)
+{
+    TEST_SECTION_START("VMEM alloc/unmap multi-page");
+
+    virt_map_page_t *vpage = vmem_map_alloc_virtual(PAGE_SIZE * 3);
+    ASSERT_MSG(vpage != NULL, "vmem_map_alloc_virtual must succeed");
+    ASSERT_MSG(vmem_unmap_virtual_address_page(vpage) == 0, "vmem_unmap_virtual_address_page must succeed");
+
+    TEST_SECTION_END();
+}
+
 /// @brief Test mapping physical pages into virtual memory and unmapping.
 TEST(memory_vmem_map_physical)
 {
@@ -47,9 +59,27 @@ TEST(memory_vmem_map_physical)
     TEST_SECTION_END();
 }
 
+/// @brief Test detection of invalid virtual addresses for vmem.
+TEST(memory_vmem_invalid_address_detected)
+{
+    TEST_SECTION_START("VMEM invalid address detected");
+
+    uint32_t invalid_addr    = memory.low_mem.virt_end;
+    unsigned long total_high = get_zone_total_space(GFP_HIGHUSER);
+    if (total_high > 0) {
+        invalid_addr = memory.high_mem.virt_end;
+    }
+
+    ASSERT_MSG(is_valid_virtual_address(invalid_addr) == 0, "invalid address must be rejected");
+
+    TEST_SECTION_END();
+}
+
 /// @brief Main test function for vmem subsystem.
 void test_vmem(void)
 {
     test_memory_vmem_alloc_unmap();
+    test_memory_vmem_alloc_unmap_multi();
     test_memory_vmem_map_physical();
+    test_memory_vmem_invalid_address_detected();
 }

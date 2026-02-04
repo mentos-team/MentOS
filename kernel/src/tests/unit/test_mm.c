@@ -49,8 +49,29 @@ TEST(memory_mm_vm_area_lifecycle)
     TEST_SECTION_END();
 }
 
+/// @brief Test cloning of mm structures.
+TEST(memory_mm_clone)
+{
+    TEST_SECTION_START("MM clone");
+
+    mm_struct_t *mm = mm_create_blank(PAGE_SIZE * 2);
+    ASSERT_MSG(mm != NULL, "mm_create_blank must succeed");
+
+    mm_struct_t *clone = mm_clone(mm);
+    ASSERT_MSG(clone != NULL, "mm_clone must succeed");
+    ASSERT_MSG(clone->pgd != NULL, "clone->pgd must be initialized");
+    ASSERT_MSG(clone->pgd != mm->pgd, "clone must have a distinct page directory");
+    ASSERT_MSG(clone->map_count == mm->map_count, "clone must preserve map_count");
+
+    ASSERT_MSG(mm_destroy(clone) == 0, "mm_destroy(clone) must succeed");
+    ASSERT_MSG(mm_destroy(mm) == 0, "mm_destroy(mm) must succeed");
+
+    TEST_SECTION_END();
+}
+
 /// @brief Main test function for mm subsystem.
 void test_mm(void)
 {
     test_memory_mm_vm_area_lifecycle();
+    test_memory_mm_clone();
 }

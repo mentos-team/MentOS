@@ -131,6 +131,23 @@ TEST(memory_zone_space_metrics)
     TEST_SECTION_END();
 }
 
+/// @brief Test zone total sizes match configuration bounds.
+TEST(memory_zone_total_space_matches)
+{
+    TEST_SECTION_START("Zone total space matches");
+
+    unsigned long total_low = get_zone_total_space(GFP_KERNEL);
+    ASSERT_MSG(total_low > 0, "Lowmem total space must be > 0");
+    ASSERT_MSG(total_low <= memory.low_mem.size, "Lowmem total space must be within low_mem size");
+
+    unsigned long total_high = get_zone_total_space(GFP_HIGHUSER);
+    if (total_high > 0) {
+        ASSERT_MSG(total_high <= memory.high_mem.size, "Highmem total space must be within high_mem size");
+    }
+
+    TEST_SECTION_END();
+}
+
 /// @brief Test single-page allocation and free in buddy system.
 TEST(memory_alloc_free_roundtrip)
 {
@@ -153,6 +170,29 @@ TEST(memory_alloc_free_roundtrip)
     TEST_SECTION_END();
 }
 
+/// @brief Test multi-page allocation and free in buddy system.
+TEST(memory_alloc_free_order1)
+{
+    TEST_SECTION_START("Alloc/free order-1");
+
+    unsigned long free_before = get_zone_free_space(GFP_KERNEL);
+
+    page_t *page = alloc_pages(GFP_KERNEL, 1);
+    ASSERT_MSG(page != NULL, "alloc_pages(order=1) must return a valid page");
+    ASSERT_MSG(is_lowmem_page_struct(page), "GFP_KERNEL page must be in lowmem map");
+
+    unsigned long free_after_alloc = get_zone_free_space(GFP_KERNEL);
+    ASSERT_MSG(free_after_alloc < free_before, "free space must decrease after alloc");
+    ASSERT_MSG((free_before - free_after_alloc) >= PAGE_SIZE, "free space delta must be at least one page");
+
+    ASSERT_MSG(free_pages(page) == 0, "free_pages must succeed");
+
+    unsigned long free_after_free = get_zone_free_space(GFP_KERNEL);
+    ASSERT_MSG(free_after_free >= free_before, "free space must be restored after free");
+
+    TEST_SECTION_END();
+}
+
 /// @brief Test lowmem allocation helpers.
 TEST(memory_lowmem_alloc_free)
 {
@@ -162,6 +202,17 @@ TEST(memory_lowmem_alloc_free)
     ASSERT_MSG(vaddr != 0, "alloc_pages_lowmem must return a valid address");
     ASSERT_MSG(is_valid_virtual_address(vaddr) == 1, "lowmem address must be valid");
     ASSERT_MSG(free_pages_lowmem(vaddr) == 0, "free_pages_lowmem must succeed");
+
+    TEST_SECTION_END();
+}
+
+/// @brief Test lowmem allocator rejects non-kernel GFP masks.
+TEST(memory_lowmem_rejects_highuser)
+{
+    TEST_SECTION_START("Lowmem rejects highuser");
+
+    uint32_t vaddr = alloc_pages_lowmem(GFP_HIGHUSER, 0);
+    ASSERT_MSG(vaddr == 0, "alloc_pages_lowmem must reject GFP_HIGHUSER");
 
     TEST_SECTION_END();
 }
@@ -194,7 +245,10 @@ void test_zone_allocator(void)
     test_memory_virtual_address_validation();
     test_memory_order_calculation();
     test_memory_zone_space_metrics();
+    test_memory_zone_total_space_matches();
     test_memory_alloc_free_roundtrip();
+    test_memory_alloc_free_order1();
     test_memory_lowmem_alloc_free();
+    test_memory_lowmem_rejects_highuser();
     test_memory_page_address_roundtrip();
 }

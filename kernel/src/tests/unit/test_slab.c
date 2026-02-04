@@ -15,6 +15,21 @@
 #include "tests/test.h"
 #include "tests/test_utils.h"
 
+static unsigned int slab_ctor_calls;
+static unsigned int slab_dtor_calls;
+
+static void slab_test_ctor(void *ptr)
+{
+    slab_ctor_calls++;
+    memset(ptr, 0xCD, sizeof(uint64_t));
+}
+
+static void slab_test_dtor(void *ptr)
+{
+    slab_dtor_calls++;
+    memset(ptr, 0x00, sizeof(uint64_t));
+}
+
 /// @brief Test basic slab cache allocation and free.
 TEST(memory_slab_cache_alloc_free)
 {
@@ -52,9 +67,39 @@ TEST(memory_kmalloc_kfree)
     TEST_SECTION_END();
 }
 
+/// @brief Test ctor/dtor callbacks and multi-alloc behavior.
+TEST(memory_slab_ctor_dtor)
+{
+    TEST_SECTION_START("Slab ctor/dtor");
+
+    slab_ctor_calls = 0;
+    slab_dtor_calls = 0;
+
+    kmem_cache_t *cache =
+        kmem_cache_create("test_obj_ctor", sizeof(uint64_t), alignof(uint64_t), GFP_KERNEL, slab_test_ctor, slab_test_dtor);
+    ASSERT_MSG(cache != NULL, "kmem_cache_create must succeed");
+
+    void *obj1 = kmem_cache_alloc(cache, GFP_KERNEL);
+    void *obj2 = kmem_cache_alloc(cache, GFP_KERNEL);
+    void *obj3 = kmem_cache_alloc(cache, GFP_KERNEL);
+
+    ASSERT_MSG(obj1 != NULL && obj2 != NULL && obj3 != NULL, "allocations must succeed");
+    ASSERT_MSG(slab_ctor_calls >= 3, "ctor must run for each allocation");
+
+    ASSERT_MSG(kmem_cache_free(obj1) == 0, "kmem_cache_free must succeed");
+    ASSERT_MSG(kmem_cache_free(obj2) == 0, "kmem_cache_free must succeed");
+    ASSERT_MSG(kmem_cache_free(obj3) == 0, "kmem_cache_free must succeed");
+    ASSERT_MSG(slab_dtor_calls >= 3, "dtor must run for each free");
+
+    ASSERT_MSG(kmem_cache_destroy(cache) == 0, "kmem_cache_destroy must succeed");
+
+    TEST_SECTION_END();
+}
+
 /// @brief Main test function for slab subsystem.
 void test_slab(void)
 {
     test_memory_slab_cache_alloc_free();
     test_memory_kmalloc_kfree();
+    test_memory_slab_ctor_dtor();
 }
