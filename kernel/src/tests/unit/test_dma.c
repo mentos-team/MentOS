@@ -26,6 +26,7 @@ TEST(dma_zone_integrity)
     ASSERT_MSG(
         memory.dma_mem.size == (memory.dma_mem.end_addr - memory.dma_mem.start_addr),
         "DMA zone size must match physical range");
+    ASSERT_MSG(memory.dma_mem.end_addr <= 0x01000000, "DMA zone must fit within 16MB ISA limit");
     ASSERT_MSG((memory.dma_mem.start_addr & (PAGE_SIZE - 1)) == 0, "DMA zone start must be page-aligned");
     ASSERT_MSG((memory.dma_mem.end_addr & (PAGE_SIZE - 1)) == 0, "DMA zone end must be page-aligned");
 
