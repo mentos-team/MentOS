@@ -408,6 +408,16 @@ TEST(dma_translation_last_page)
     TEST_SECTION_END();
 }
 
+/// @brief Test DMA virtual end address is invalid.
+TEST(dma_virtual_end_invalid)
+{
+    TEST_SECTION_START("DMA virtual end invalid");
+
+    ASSERT_MSG(is_valid_virtual_address(memory.dma_mem.virt_end) == 0, "DMA virt_end must be invalid");
+
+    TEST_SECTION_END();
+}
+
 /// @brief Main test function for DMA tests.
 void test_dma(void)
 {
@@ -423,4 +433,5 @@ void test_dma(void)
     test_dma_boundary_first_page();
     test_dma_translation_first_page();
     test_dma_translation_last_page();
+    test_dma_virtual_end_invalid();
 }
