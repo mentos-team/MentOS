@@ -4,10 +4,10 @@
 /// See LICENSE.md for details.
 
 // Setup the logging for this file (do this before any other include).
-#include "sys/kernel_levels.h"           // Include kernel log levels.
-#define __DEBUG_HEADER__ "[TUNIT ]"      ///< Change header.
-#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
-#include "io/debug.h"                    // Include debugging functions.
+#include "sys/kernel_levels.h"          // Include kernel log levels.
+#define __DEBUG_HEADER__ "[TUNIT ]"     ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_DEBUG ///< Set log level.
+#include "io/debug.h"                   // Include debugging functions.
 
 #include "tests/test.h"
 
@@ -33,14 +33,22 @@ extern void test_idt(void);
 extern void test_isr(void);
 extern void test_paging(void);
 extern void test_scheduler(void);
+extern void test_zone_allocator(void);
+extern void test_slab(void);
+extern void test_vmem(void);
+extern void test_mm(void);
 
 /// @brief Test registry - one entry per subsystem.
 static const test_entry_t test_functions[] = {
-    { test_gdt, "GDT Subsystem" },
-    { test_idt, "IDT Subsystem" },
-    { test_isr, "ISR Subsystem" },
-    { test_paging, "Paging Subsystem" },
-    { test_scheduler, "Scheduler Subsystem" },
+    {test_gdt,            "GDT Subsystem"           },
+    {test_idt,            "IDT Subsystem"           },
+    {test_isr,            "ISR Subsystem"           },
+    {test_paging,         "Paging Subsystem"        },
+    {test_scheduler,      "Scheduler Subsystem"     },
+    {test_zone_allocator, "Zone Allocator Subsystem"},
+    {test_slab,           "Slab Subsystem"          },
+    {test_vmem,           "VMEM Subsystem"          },
+    {test_mm,             "MM/VMA Subsystem"        },
 };
 
 static const int num_tests = sizeof(test_functions) / sizeof(test_entry_t);
