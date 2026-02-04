@@ -132,7 +132,7 @@ bb_page_t *bb_alloc_pages(bb_instance_t *instance, unsigned int order)
     }
 
     // No suitable free block has been found.
-    pr_notice("No free blocks available for order %u.\n", order);
+    pr_warning("No free blocks available for order %u.\n", order);
     return NULL;
 
 block_found:

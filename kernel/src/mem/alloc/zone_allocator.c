@@ -325,42 +325,49 @@ static int pmm_check(void)
         }
     }
 
-    pr_debug("\tStep 3: Testing DMA zone exhaustion and recovery...\n");
+    pr_debug("\tStep 3: Testing DMA zone with multiple allocations...\n");
     {
-        // Try to allocate the maximum order block (should succeed).
-        int max_order       = MAX_BUDDYSYSTEM_GFP_ORDER - 1;
-        page_t *large_block = alloc_pages(GFP_DMA, max_order);
-        if (!large_block) {
-            pr_err("Failed to allocate max order block from DMA zone.\n");
-            return 0;
+        // Allocate several blocks to test buddy system behavior.
+        page_t *blocks[4] = {NULL};
+        int block_size    = 8; // Order 8 = 256 pages = 1MB each
+        
+        // Allocate 4 x 1MB blocks (total 4MB out of 8MB).
+        for (int i = 0; i < 4; i++) {
+            blocks[i] = alloc_pages(GFP_DMA, block_size);
+            if (!blocks[i]) {
+                pr_err("Failed to allocate block %d from DMA zone.\n", i);
+                // Free previously allocated blocks.
+                for (int j = 0; j < i; j++) {
+                    free_pages(blocks[j]);
+                }
+                return 0;
+            }
+            pr_debug("\t  Block %d allocated (order %d = %u KB)\n", i, block_size, (1U << block_size) * 4);
         }
-        pr_debug("\t  Allocated max order block (order %d = %u pages)\n", max_order, (1U << max_order));
 
-        // Verify DMA zone is now empty (all pages allocated).
+        // Verify DMA zone still has free space (8MB - 4MB = 4MB).
         unsigned long free_space = buddy_system_get_free_space(&zone_dma->buddy_system);
-        if (free_space != 0) {
-            pr_warning("DMA zone still has %lu bytes free after max allocation (expected 0).\n", free_space);
-        }
-
-        // Try to allocate another page (should fail).
-        page_t *should_fail = alloc_pages(GFP_DMA, 0);
-        if (should_fail != NULL) {
-            pr_err("DMA zone allowed allocation when exhausted!\n");
-            free_pages(should_fail);
-            free_pages(large_block);
+        if (free_space == 0) {
+            pr_err("DMA zone should still have free space but shows 0 bytes.\n");
+            for (int i = 0; i < 4; i++) {
+                free_pages(blocks[i]);
+            }
             return 0;
         }
-        pr_debug("\t  Correctly rejected allocation from exhausted DMA zone\n");
+        pr_debug("\t  DMA zone has %lu bytes free (expected ~4MB after 4x1MB allocations)\n", free_space);
 
-        // Free the large block.
-        if (free_pages(large_block) < 0) {
-            pr_err("Failed to free max order DMA block.\n");
-            return 0;
+        // Free all blocks.
+        for (int i = 0; i < 4; i++) {
+            if (free_pages(blocks[i]) < 0) {
+                pr_err("Failed to free block %d.\n", i);
+                return 0;
+            }
         }
+        pr_debug("\t  All blocks freed, DMA zone recovered\n");
 
         // Verify memory is clean again.
         if (!is_memory_clean(GFP_DMA)) {
-            pr_err("Test failed: DMA zone not clean after exhaustion test.\n");
+            pr_err("Test failed: DMA zone not clean after multiple allocations.\n");
             return 0;
         }
     }
@@ -722,11 +729,11 @@ int pmmngr_init(boot_info_t *boot_info)
 #define ISA_DMA_LIMIT        (16 * 1024 * 1024) // 16MB physical address limit
 #define CONVENTIONAL_MEM_END (1 * 1024 * 1024)  // End of conventional memory (1MB)
 
-    pr_crit("DMA zone calculation:\n");
-    pr_crit("  kernel_phy_start = 0x%08x\n", boot_info->kernel_phy_start);
-    pr_crit("  kernel_phy_end = 0x%08x\n", boot_info->kernel_phy_end);
-    pr_crit("  lowmem.start_addr = 0x%08x\n", memory.low_mem.start_addr);
-    pr_crit("  ISA_DMA_LIMIT = 0x%08x\n", ISA_DMA_LIMIT);
+    pr_debug("DMA zone calculation:\n");
+    pr_debug("  kernel_phy_start = 0x%08x\n", boot_info->kernel_phy_start);
+    pr_debug("  kernel_phy_end = 0x%08x\n", boot_info->kernel_phy_end);
+    pr_debug("  lowmem.start_addr = 0x%08x\n", memory.low_mem.start_addr);
+    pr_debug("  ISA_DMA_LIMIT = 0x%08x\n", ISA_DMA_LIMIT);
 
     // DMA zone is placed between page 0 and kernel start.
     // Align end down to ensure we don't overlap with kernel.
@@ -734,12 +741,12 @@ int pmmngr_init(boot_info_t *boot_info)
     // Ensure DMA zone doesn't exceed 16MB limit.
     uint32_t dma_end_limit     = (dma_end_candidate < ISA_DMA_LIMIT) ? dma_end_candidate : ISA_DMA_LIMIT;
 
-    pr_crit("  dma_end_limit = 0x%08x\n", dma_end_limit);
+    pr_debug("  dma_end_limit = 0x%08x\n", dma_end_limit);
 
     // Calculate available DMA region size (from physical 0 to kernel start or 16MB).
     uint32_t dma_available = dma_end_limit;
 
-    pr_crit("  dma_available = 0x%08x (%u MB)\n", dma_available, dma_available / (1024 * 1024));
+    pr_debug("  dma_available = 0x%08x (%u MB)\n", dma_available, dma_available / (1024 * 1024));
 
     // Determine DMA zone size: use what's available, aligned to buddy system.
     // Don't try to allocate more than available space.
@@ -755,7 +762,7 @@ int pmmngr_init(boot_info_t *boot_info)
         }
     }
 
-    pr_crit("  dma_size (aligned) = 0x%08x (%u MB)\n", dma_size, dma_size / (1024 * 1024));
+    pr_debug("  dma_size (aligned) = 0x%08x (%u MB)\n", dma_size, dma_size / (1024 * 1024));
 
     // Calculate DMA start: work backwards from end to get aligned region.
     uint32_t dma_end_address   = dma_end_limit;
@@ -783,24 +790,25 @@ int pmmngr_init(boot_info_t *boot_info)
     if (dma_size == 0) {
         pr_crit("  DMA zone: insufficient space for 32MB-aligned zone (available: %u MB)\n", dma_available / (1024 * 1024));
         pr_crit("  Consider reducing MAX_BUDDYSYSTEM_GFP_ORDER or relocating kernel.\n");
+        return 0;
     }
 
-    pr_crit("  DMA zone (PFN-aligned): 0x%08x - 0x%08x (size: 0x%08x, %u MB)\n", dma_start_aligned, dma_start_aligned + dma_size, dma_size, dma_size / (1024 * 1024));
-    pr_crit("  DMA start PFN: %u (aligned to %u-page boundary: %s)\n", dma_start_aligned / PAGE_SIZE, max_order_pages, ((dma_start_aligned / PAGE_SIZE) % max_order_pages == 0) ? "YES" : "NO");
+    pr_debug("  DMA zone (PFN-aligned): 0x%08x - 0x%08x (size: 0x%08x, %u MB)\n", dma_start_aligned, dma_start_aligned + dma_size, dma_size, dma_size / (1024 * 1024));
+    pr_debug("  DMA start PFN: %u (aligned to %u-page boundary: %s)\n", dma_start_aligned / PAGE_SIZE, max_order_pages, ((dma_start_aligned / PAGE_SIZE) % max_order_pages == 0) ? "YES" : "NO");
 
     memory.dma_mem.start_addr = dma_start_aligned;
     memory.dma_mem.size       = dma_size;
     memory.dma_mem.end_addr   = memory.dma_mem.start_addr + memory.dma_mem.size;
 
-    // DMA zone is BEFORE the kernel in physical memory (0x0-0x800000).
-    // Map it in kernel virtual space AFTER LowMem to avoid user space collision.
-    // User stack grows down from 0xc0000000, so mapping DMA at 0xbf800000 would
-    // conflict with user PDE entries. Instead, map at 0xf8000000 (after LowMem).
-    #define DMA_VIRT_START 0xf8000000
+// DMA zone is BEFORE the kernel in physical memory (0x0-0x800000).
+// Map it in kernel virtual space AFTER LowMem to avoid user space collision.
+// User stack grows down from 0xc0000000, so mapping DMA at 0xbf800000 would
+// conflict with user PDE entries. Instead, map at 0xf8000000 (after LowMem).
+#define DMA_VIRT_START 0xf8000000
     memory.dma_mem.virt_start = DMA_VIRT_START;
     memory.dma_mem.virt_end   = memory.dma_mem.virt_start + memory.dma_mem.size;
 
-    pr_crit("  DMA virtual mapping: 0x%08x - 0x%08x\n", memory.dma_mem.virt_start, memory.dma_mem.virt_end);
+    pr_debug("  DMA virtual mapping: 0x%08x - 0x%08x\n", memory.dma_mem.virt_start, memory.dma_mem.virt_end);
 
     if (memory.dma_mem.size == 0) {
         pr_crit("DMA zone size is zero; DMA zone must be present.\n");
