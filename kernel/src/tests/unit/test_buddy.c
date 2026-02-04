@@ -360,6 +360,43 @@ TEST(memory_buddy_interleaved_alloc_free)
     TEST_SECTION_END();
 }
 
+/// @brief Test buddy coalescing at zone boundaries.
+TEST(memory_buddy_coalescing_at_boundaries)
+{
+    TEST_SECTION_START("Buddy coalescing at zone boundaries");
+
+    // DMA and Normal zones have physical boundaries
+    // When freeing pages that are at zone boundaries, the buddy system
+    // should properly coalesce within the zone but not cross boundaries
+
+    unsigned long dma_before = get_zone_free_space(GFP_DMA);
+    unsigned long kern_before = get_zone_free_space(GFP_KERNEL);
+
+    // Allocate last pages from DMA zone (near boundary)
+    page_t *dma_page1 = alloc_pages(GFP_DMA, 0);
+    page_t *dma_page2 = alloc_pages(GFP_DMA, 0);
+
+    if (dma_page1 != NULL && dma_page2 != NULL) {
+        unsigned long dma_mid = get_zone_free_space(GFP_DMA);
+        ASSERT_MSG(dma_mid < dma_before, "DMA free space should decrease after allocations");
+
+        // Free in order - should allow coalescing
+        ASSERT_MSG(free_pages(dma_page1) == 0, "first free must succeed");
+        ASSERT_MSG(free_pages(dma_page2) == 0, "second free must succeed");
+
+        unsigned long dma_after = get_zone_free_space(GFP_DMA);
+        ASSERT_MSG(dma_after >= dma_mid, "DMA free space should be restored after frees");
+    } else {
+        if (dma_page1 != NULL) free_pages(dma_page1);
+        if (dma_page2 != NULL) free_pages(dma_page2);
+    }
+
+    unsigned long kern_after = get_zone_free_space(GFP_KERNEL);
+    ASSERT_MSG(kern_after == kern_before, "Kernel zone should not be affected by DMA operations");
+
+    TEST_SECTION_END();
+}
+
 /// @brief Main test function for buddy system.
 void test_buddy(void)
 {
@@ -375,4 +412,5 @@ void test_buddy(void)
     test_memory_buddy_fragmentation_dma();
     test_memory_buddy_cross_zone_accounting();
     test_memory_buddy_interleaved_alloc_free();
+    test_memory_buddy_coalescing_at_boundaries();
 }

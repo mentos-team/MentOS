@@ -212,3 +212,17 @@ static inline int is_dma_page_struct(void *addr)
     uint32_t addr_u32      = (uint32_t)addr;
     return (addr_u32 >= start_dma_map) && (addr_u32 < (start_dma_map + dma_map_size));
 }
+
+/// @brief Checks if the specified address points to a page_t that belongs to HighMem zone.
+/// @param addr The address to check.
+/// @return 1 if it belongs to HighMem zone, 0 otherwise.
+static inline int is_highmem_page_struct(void *addr)
+{
+    if (memory.page_data->node_zones[ZONE_HIGHMEM].num_pages == 0) {
+        return 0;  // No HighMem zone
+    }
+    uint32_t start_high_map = (uint32_t)memory.page_data->node_zones[ZONE_HIGHMEM].zone_mem_map;
+    uint32_t high_map_size  = sizeof(page_t) * memory.page_data->node_zones[ZONE_HIGHMEM].num_pages;
+    uint32_t addr_u32       = (uint32_t)addr;
+    return (addr_u32 >= start_high_map) && (addr_u32 < (start_high_map + high_map_size));
+}
