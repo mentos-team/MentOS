@@ -9,6 +9,7 @@
 #define __DEBUG_LEVEL__  LOGLEVEL_DEBUG ///< Set log level.
 #include "io/debug.h"                   // Include debugging functions.
 
+#include "mem/alloc/buddy_system.h"
 #include "mem/alloc/zone_allocator.h"
 #include "mem/gfp.h"
 #include "mem/mm/page.h"
@@ -225,6 +226,24 @@ TEST(memory_buddy_max_order_alloc)
     TEST_SECTION_END();
 }
 
+/// @brief Test allocation at maximum supported order.
+TEST(memory_buddy_max_supported_order)
+{
+    TEST_SECTION_START("Max supported order allocation");
+
+    unsigned long total = get_zone_total_space(GFP_KERNEL);
+    int max_order = MAX_BUDDYSYSTEM_GFP_ORDER - 1;
+    unsigned long max_size = (1UL << max_order) * PAGE_SIZE;
+
+    if (total >= max_size) {
+        page_t *page = alloc_pages(GFP_KERNEL, max_order);
+        ASSERT_MSG(page != NULL, "max supported order allocation must succeed");
+        ASSERT_MSG(free_pages(page) == 0, "max supported order free must succeed");
+    }
+
+    TEST_SECTION_END();
+}
+
 /// @brief Test allocation/free interleaving pattern.
 TEST(memory_buddy_interleaved_alloc_free)
 {
@@ -272,5 +291,6 @@ void test_buddy(void)
     test_memory_buddy_non_sequential_free();
     test_memory_buddy_large_order();
     test_memory_buddy_max_order_alloc();
+    test_memory_buddy_max_supported_order();
     test_memory_buddy_interleaved_alloc_free();
 }
