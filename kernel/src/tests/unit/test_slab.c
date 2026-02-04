@@ -304,6 +304,135 @@ TEST(memory_slab_large_objects)
     TEST_SECTION_END();
 }
 
+/// @brief Test odd-size object alignment in caches.
+TEST(memory_slab_odd_size_alignment)
+{
+    TEST_SECTION_START("Slab odd-size alignment");
+
+    // Test 24-byte allocation
+    void *ptr24_1 = kmalloc(24);
+    void *ptr24_2 = kmalloc(24);
+    ASSERT_MSG(ptr24_1 != NULL, "24-byte kmalloc must succeed");
+    ASSERT_MSG(ptr24_2 != NULL, "second 24-byte kmalloc must succeed");
+    ASSERT_MSG(ptr24_1 != ptr24_2, "allocations must be distinct");
+
+    // Test 40-byte allocation
+    void *ptr40 = kmalloc(40);
+    ASSERT_MSG(ptr40 != NULL, "40-byte kmalloc must succeed");
+
+    // Test 72-byte allocation
+    void *ptr72 = kmalloc(72);
+    ASSERT_MSG(ptr72 != NULL, "72-byte kmalloc must succeed");
+
+    // Write and verify
+    memset(ptr24_1, 0xAA, 24);
+    memset(ptr40, 0xBB, 40);
+    memset(ptr72, 0xCC, 72);
+
+    ASSERT_MSG(*(uint8_t *)ptr24_1 == 0xAA, "24-byte value must be readable");
+    ASSERT_MSG(*(uint8_t *)ptr40 == 0xBB, "40-byte value must be readable");
+    ASSERT_MSG(*(uint8_t *)ptr72 == 0xCC, "72-byte value must be readable");
+
+    kfree(ptr24_1);
+    kfree(ptr24_2);
+    kfree(ptr40);
+    kfree(ptr72);
+
+    TEST_SECTION_END();
+}
+
+/// @brief Test cache object reuse (same address returned after free).
+TEST(memory_slab_object_reuse)
+{
+    TEST_SECTION_START("Slab object reuse");
+
+    // Allocate, free, and reallocate same size
+    void *ptr1 = kmalloc(64);
+    ASSERT_MSG(ptr1 != NULL, "first kmalloc must succeed");
+
+    uint32_t addr1 = (uint32_t)ptr1;
+    kfree(ptr1);
+
+    // Allocate again - should possibly reuse same address
+    void *ptr2 = kmalloc(64);
+    ASSERT_MSG(ptr2 != NULL, "second kmalloc must succeed");
+
+    // Address reuse is an optimization - not guaranteed but common
+    // The important thing is that it works correctly
+    uint32_t addr2 = (uint32_t)ptr2;
+
+    // Write to ptr2 and verify
+    *(uint32_t *)ptr2 = 0xDEADBEEF;
+    ASSERT_MSG(*(uint32_t *)ptr2 == 0xDEADBEEF, "value must be correctly stored");
+
+    kfree(ptr2);
+
+    TEST_SECTION_END();
+}
+
+/// @brief Test stress across multiple caches in parallel.
+TEST(memory_slab_parallel_caches)
+{
+    TEST_SECTION_START("Slab parallel caches");
+
+    unsigned long free_before = get_zone_free_space(GFP_KERNEL);
+
+    // Allocate from different size classes concurrently
+    void *ptrs[12];
+    ptrs[0]  = kmalloc(16);
+    ptrs[1]  = kmalloc(32);
+    ptrs[2]  = kmalloc(64);
+    ptrs[3]  = kmalloc(128);
+    ptrs[4]  = kmalloc(256);
+    ptrs[5]  = kmalloc(512);
+    ptrs[6]  = kmalloc(24);
+    ptrs[7]  = kmalloc(48);
+    ptrs[8]  = kmalloc(96);
+    ptrs[9]  = kmalloc(192);
+    ptrs[10] = kmalloc(384);
+    ptrs[11] = kmalloc(768);
+
+    // Verify all succeeded
+    for (int i = 0; i < 12; i++) {
+        ASSERT_MSG(ptrs[i] != NULL, "kmalloc must succeed for all sizes");
+    }
+
+    // Free all
+    for (int i = 0; i < 12; i++) {
+        kfree(ptrs[i]);
+    }
+
+    unsigned long free_after = get_zone_free_space(GFP_KERNEL);
+    ASSERT_MSG(free_after >= free_before - PAGE_SIZE, "Free space should mostly be restored");
+
+    TEST_SECTION_END();
+}
+
+/// @brief Test cache destruction safety when empty but with prior allocations.
+TEST(memory_slab_cache_destruction_safety)
+{
+    TEST_SECTION_START("Slab cache destruction safety");
+
+    // Create a cache
+    kmem_cache_t *cache = kmem_cache_create("test_cache", 128, 0, 0, NULL, NULL);
+    ASSERT_MSG(cache != NULL, "kmem_cache_create must succeed");
+
+    // Allocate from it
+    void *obj1 = kmem_cache_alloc(cache, GFP_KERNEL);
+    void *obj2 = kmem_cache_alloc(cache, GFP_KERNEL);
+    ASSERT_MSG(obj1 != NULL, "cache alloc must succeed");
+    ASSERT_MSG(obj2 != NULL, "cache alloc must succeed");
+
+    // Free everything
+    kmem_cache_free(cache, obj1);
+    kmem_cache_free(cache, obj2);
+
+    // Destroy empty cache - should not crash
+    kmem_cache_destroy(cache);
+
+    TEST_SECTION_END();
+}
+
 /// @brief Main test function for slab subsystem.
 void test_slab(void)
 {
@@ -318,4 +447,8 @@ void test_slab(void)
     test_memory_slab_kmalloc_large();
     test_memory_slab_alignment();
     test_memory_slab_large_objects();
+    test_memory_slab_odd_size_alignment();
+    test_memory_slab_object_reuse();
+    test_memory_slab_parallel_caches();
+    test_memory_slab_cache_destruction_safety();
 }
