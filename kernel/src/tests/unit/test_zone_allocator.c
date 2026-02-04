@@ -68,6 +68,22 @@ TEST(memory_info_integrity)
     TEST_SECTION_END();
 }
 
+/// @brief Test page index max matches last usable PFN.
+TEST(memory_page_index_max_matches)
+{
+    TEST_SECTION_START("Page index max matches");
+
+    if (memory.high_mem.size > 0) {
+        uint32_t expected = (memory.high_mem.end_addr / PAGE_SIZE) - 1;
+        ASSERT_MSG(memory.page_index_max == expected, "page_index_max must match HighMem end PFN");
+    } else {
+        uint32_t expected = (memory.low_mem.end_addr / PAGE_SIZE) - 1;
+        ASSERT_MSG(memory.page_index_max == expected, "page_index_max must match LowMem end PFN");
+    }
+
+    TEST_SECTION_END();
+}
+
 /// @brief Test validity checks for virtual addresses.
 TEST(memory_virtual_address_validation)
 {
@@ -497,6 +513,7 @@ TEST(memory_zone_low_memory_stress)
 void test_zone_allocator(void)
 {
     test_memory_info_integrity();
+    test_memory_page_index_max_matches();
     test_memory_virtual_address_validation();
     test_memory_order_calculation();
     test_memory_zone_space_metrics();
