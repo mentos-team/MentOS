@@ -264,7 +264,7 @@ static inline int elf_load_exec(elf_header_t *header, task_struct *task)
             program_header->vaddr + program_header->memsz);
         if (program_header->type == PT_LOAD) {
             segment = vm_area_create(
-                task->mm, program_header->vaddr, program_header->memsz, MM_USER | MM_RW | MM_COW, GFP_KERNEL);
+                task->mm, program_header->vaddr, program_header->memsz, MM_USER | MM_RW | MM_PRESENT, GFP_KERNEL);
             vpage    = vmem_map_alloc_virtual(program_header->memsz);
             dst_addr = vmem_map_virtual_address(task->mm, vpage, segment->vm_start, program_header->memsz);
 
