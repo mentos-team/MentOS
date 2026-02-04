@@ -97,8 +97,10 @@ void timer_handler(pt_regs_t *reg)
     ++timer_ticks;
     // Update all timers
     run_timer_softirq();
-    // Perform the schedule.
-    scheduler_run(reg);
+    // Perform the schedule only if the interrupt came from user mode.
+    if ((reg->cs & 0x3) == 0x3) {
+        scheduler_run(reg);
+    }
     // Restore fpu state.
     unswitch_fpu();
     // The ack is sent to PIC only when all handlers terminated!
