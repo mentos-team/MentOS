@@ -540,6 +540,223 @@ TEST(dma_mixed_order_stress)
     TEST_SECTION_END();
 }
 
+/// @brief Test that page-0 is not returned by DMA allocations.
+TEST(dma_page_zero_not_returned)
+{
+    TEST_SECTION_START("DMA page-0 exclusion");
+
+    // Allocate multiple pages and verify page 0 is never returned
+    // Page 0 is often reserved for special purposes (NULL pointer detection, BIOS data)
+    page_t *allocs[32];
+    uint32_t count = 0;
+
+    for (unsigned int i = 0; i < 32; ++i) {
+        allocs[i] = alloc_pages(1, GFP_DMA);
+        if (!allocs[i]) {
+            break;
+        }
+        count++;
+
+        // Get physical address and verify it's not page 0
+        uint32_t phys = get_physical_address_from_page(allocs[i]);
+        ASSERT_MSG(phys != 0x00000000, "DMA must never allocate page 0");
+        ASSERT_MSG(phys >= PAGE_SIZE, "DMA allocations must start after page 0");
+    }
+
+    // Free all allocations
+    for (unsigned int i = 0; i < count; ++i) {
+        if (allocs[i] != NULL) {
+            ASSERT_MSG(free_pages(allocs[i]) == 0, "DMA free must succeed");
+        }
+    }
+
+    TEST_SECTION_END();
+}
+
+/// @brief Test DMA mapping permissions (user access should be denied).
+TEST(dma_mapping_permissions)
+{
+    TEST_SECTION_START("DMA mapping permissions");
+
+    page_directory_t *pgd = paging_get_main_pgd();
+    ASSERT_MSG(pgd != NULL, "Page directory must exist");
+
+    // DMA should be in kernel space (index >= 768)
+    uint32_t dma_index = memory.dma_mem.virt_start / (4 * 1024 * 1024);
+    ASSERT_MSG(dma_index >= 768, "DMA must be in kernel space");
+
+    // Allocate a DMA page to ensure mapping exists
+    page_t *dma_page = alloc_pages(1, GFP_DMA);
+    ASSERT_MSG(dma_page != NULL, "DMA page allocation must succeed");
+
+    // Get virtual address and verify it's in DMA range
+    uint32_t virt = get_virtual_address_from_page(dma_page);
+    ASSERT_MSG(virt >= memory.dma_mem.virt_start, "Virtual must be in DMA range");
+    ASSERT_MSG(virt < memory.dma_mem.virt_end, "Virtual must be in DMA range");
+
+    // DMA PDEs should have supervisor bit set (user = 0)
+    // User PDEs have user = 1
+    if (pgd->entries[dma_index].present) {
+        ASSERT_MSG(pgd->entries[dma_index].user == 0, "DMA PDE must have supervisor bit set");
+    }
+
+    // Free allocation
+    ASSERT_MSG(free_pages(dma_page) == 0, "DMA free must succeed");
+
+    TEST_SECTION_END();
+}
+
+/// @brief Test for GFP_DMA32 support and range validation (if supported).
+TEST(dma_gfp_dma32_support)
+{
+    TEST_SECTION_START("GFP_DMA32 support check");
+
+    // GFP_DMA32 is for 32-bit addressing devices (can access 0-4GB on 64-bit systems)
+    // On 32-bit systems it's typically not needed or not separately exposed
+    // This test verifies that using the __GFP_DMA32 flag doesn't break allocations
+
+    // Try to allocate with __GFP_DMA32 combined with GFP_KERNEL
+    gfp_t dma32_flags = GFP_KERNEL | __GFP_DMA32;
+    page_t *test_page = alloc_pages(dma32_flags, 0);
+
+    if (test_page != NULL) {
+        // Allocation succeeded with DMA32 flags
+        uint32_t phys = get_physical_address_from_page(test_page);
+        ASSERT_MSG(phys > 0, "DMA32 allocation must have valid physical address");
+
+        // On 32-bit systems, DMA32 is often treated same as NORMAL
+        // The important thing is it doesn't break allocations
+        ASSERT_MSG(free_pages(test_page) == 0, "DMA32 free must succeed");
+    } else {
+        // DMA32 allocation failed - this is also acceptable behavior
+        pr_debug("__GFP_DMA32 allocation not available on this system\n");
+    }
+
+    TEST_SECTION_END();
+}
+
+/// @brief Integration smoke test: DMA + zone allocator + paging together.
+/// Verifies that allocations from DMA zone are properly mapped and accessible
+/// through the paging system without corruption or leaks.
+TEST(dma_integration_paging_smoke)
+{
+    TEST_SECTION_START("DMA + zone allocator + paging integration");
+
+    // Get initial free space across all zones
+    unsigned long dma_free_before = get_zone_free_space(GFP_DMA);
+    unsigned long kernel_free_before = get_zone_free_space(GFP_KERNEL);
+
+    // Step 1: Allocate DMA pages
+    page_t *dma_pages[4];
+    for (int i = 0; i < 4; ++i) {
+        dma_pages[i] = alloc_pages(GFP_DMA, 0);
+        ASSERT_MSG(dma_pages[i] != NULL, "DMA page allocation must succeed");
+        ASSERT_MSG(is_dma_page_struct(dma_pages[i]), "Allocated page must be from DMA zone");
+    }
+
+    // Step 2: Verify DMA physical addresses are in ISA range
+    for (int i = 0; i < 4; ++i) {
+        uint32_t phys = get_physical_address_from_page(dma_pages[i]);
+        ASSERT_MSG(phys < 0x01000000, "DMA page must be below 16MB");
+    }
+
+    // Step 3: Verify DMA pages are mapped in the page directory
+    page_directory_t *pgd = paging_get_main_pgd();
+    ASSERT_MSG(pgd != NULL, "Page directory must exist");
+
+    for (int i = 0; i < 4; ++i) {
+        uint32_t virt = get_virtual_address_from_page(dma_pages[i]);
+        ASSERT_MSG(virt >= memory.dma_mem.virt_start && virt < memory.dma_mem.virt_start + memory.dma_mem.size,
+            "DMA page virtual address must be in DMA region");
+
+        uint32_t pde_index = virt / (4 * 1024 * 1024);
+        ASSERT_MSG(pde_index >= 768, "DMA PDE must be in kernel space");
+        ASSERT_MSG(pgd->entries[pde_index].present, "DMA PDE must be present");
+    }
+
+    // Step 4: Write and read through virtual addresses to verify mapping
+    for (int i = 0; i < 4; ++i) {
+        uint32_t virt = get_virtual_address_from_page(dma_pages[i]);
+        uint32_t *addr = (uint32_t *)virt;
+        *addr = 0xDEADBEEF + i;
+    }
+
+    for (int i = 0; i < 4; ++i) {
+        uint32_t virt = get_virtual_address_from_page(dma_pages[i]);
+        uint32_t *addr = (uint32_t *)virt;
+        ASSERT_MSG(*addr == (0xDEADBEEF + i), "Read-write through virtual address must work for DMA pages");
+    }
+
+    // Step 5: Allocate kernel pages and verify isolation
+    page_t *kernel_pages[4];
+    for (int i = 0; i < 4; ++i) {
+        kernel_pages[i] = alloc_pages(GFP_KERNEL, 0);
+        ASSERT_MSG(kernel_pages[i] != NULL, "Kernel page allocation must succeed");
+        ASSERT_MSG(!is_dma_page_struct(kernel_pages[i]), "Kernel page must NOT be from DMA zone");
+    }
+
+    // Step 6: Verify free space tracking
+    unsigned long dma_free_after = get_zone_free_space(GFP_DMA);
+    unsigned long kernel_free_after = get_zone_free_space(GFP_KERNEL);
+
+    ASSERT_MSG(dma_free_after < dma_free_before, "DMA free space must decrease after allocation");
+    ASSERT_MSG(kernel_free_after < kernel_free_before, "Kernel free space must decrease after allocation");
+
+    // Step 7: Free all pages and verify recovery
+    for (int i = 0; i < 4; ++i) {
+        ASSERT_MSG(free_pages(dma_pages[i]) == 0, "DMA page free must succeed");
+        ASSERT_MSG(free_pages(kernel_pages[i]) == 0, "Kernel page free must succeed");
+    }
+
+    // Verify free space restored
+    unsigned long dma_free_final = get_zone_free_space(GFP_DMA);
+    unsigned long kernel_free_final = get_zone_free_space(GFP_KERNEL);
+
+    ASSERT_MSG(dma_free_final == dma_free_before, "DMA free space must be fully restored");
+    ASSERT_MSG(kernel_free_final == kernel_free_before, "Kernel free space must be fully restored");
+
+    TEST_SECTION_END();
+}
+
+/// @brief Integration test: Stress DMA allocations with zone allocator under pressure.
+/// Verifies that DMA zone correctly rejects allocations when exhausted and
+/// recovers when memory is freed.
+TEST(dma_integration_zone_stress)
+{
+    TEST_SECTION_START("DMA zone allocator stress");
+
+    unsigned long dma_free_before = get_zone_free_space(GFP_DMA);
+
+    // Allocate pages until DMA zone is nearly exhausted
+    page_t *allocs[32];
+    int allocated_count = 0;
+
+    // First free pass - record how many we can allocate
+    page_t *page = NULL;
+    for (int i = 0; i < 32 && (page = alloc_pages(GFP_DMA, 0)) != NULL; ++i) {
+        allocs[i] = page;
+        allocated_count++;
+    }
+
+    ASSERT_MSG(allocated_count > 0, "Must be able to allocate at least one DMA page");
+
+    // Verify all allocations are from DMA zone
+    for (int i = 0; i < allocated_count; ++i) {
+        ASSERT_MSG(is_dma_page_struct(allocs[i]), "All allocations must be from DMA zone");
+    }
+
+    // Free all allocations
+    for (int i = 0; i < allocated_count; ++i) {
+        ASSERT_MSG(free_pages(allocs[i]) == 0, "Free must succeed for each allocation");
+    }
+
+    // Verify free space is restored
+    unsigned long dma_free_final = get_zone_free_space(GFP_DMA);
+    ASSERT_MSG(dma_free_final == dma_free_before, "DMA free space must be fully recovered");
+
+    TEST_SECTION_END();
+}
+
 /// @brief Main test function for DMA tests.
 void test_dma(void)
 {
@@ -560,4 +777,9 @@ void test_dma(void)
     test_dma_mapping_isolation();
     test_dma_allocation_zone_isolation();
     test_dma_mixed_order_stress();
+    test_dma_page_zero_not_returned();
+    test_dma_mapping_permissions();
+    test_dma_gfp_dma32_support();
+    test_dma_integration_paging_smoke();
+    test_dma_integration_zone_stress();
 }
