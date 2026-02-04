@@ -1,151 +1,142 @@
 /// @file test_idt.c
-/// @brief Unit tests for IDT functions.
+/// @brief IDT unit tests - Non-destructive version.
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 // Setup the logging for this file (do this before any other include).
 #include "sys/kernel_levels.h"          // Include kernel log levels.
 #define __DEBUG_HEADER__ "[TUNIT ]"     ///< Change header.
-#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
+#define __DEBUG_LEVEL__  LOGLEVEL_DEBUG ///< Set log level.
 #include "io/debug.h"                   // Include debugging functions.
 
+#include "descriptor_tables/gdt.h"
 #include "descriptor_tables/idt.h"
-#include "stddef.h"
+#include "string.h"
 #include "tests/test.h"
+#include "tests/test_utils.h"
 
-// Extern declarations for IDT structures
+// External declaration for IDT table and pointer
 extern idt_descriptor_t idt_table[IDT_SIZE];
 extern idt_pointer_t idt_pointer;
 
-// Test IDT initialization state (non-destructive)
-TEST(idt_initialization)
+/// @brief Safe IDT entry copy for testing (read-only access).
+/// @param src_idx Source IDT index.
+/// @param dest_buffer Destination buffer (must be at least 8 bytes).
+/// @return 0 on success, -1 on invalid index.
+static inline int idt_safe_copy(size_t src_idx, void *dest_buffer)
 {
-    // Check that IDT pointer is properly set (should already be initialized)
-    ASSERT(idt_pointer.limit == sizeof(idt_descriptor_t) * IDT_SIZE - 1);
-    ASSERT(idt_pointer.base == (uint32_t)&idt_table);
-
-    // Check that some key entries are set (interrupt 0 should be set)
-    ASSERT(idt_table[0].offset_low != 0 || idt_table[0].offset_high != 0);
-    ASSERT(idt_table[0].seg_selector == 0x8);   // Kernel code segment
-    ASSERT((idt_table[0].options & 0x80) != 0); // Present bit set
-
-    // Check that system call interrupt (128) is set
-    ASSERT(idt_table[128].offset_low != 0 || idt_table[128].offset_high != 0);
-    ASSERT((idt_table[128].options & 0x80) != 0);    // Present
-    ASSERT((idt_table[128].options & 0x60) == 0x60); // User privilege level
+    if (src_idx >= IDT_SIZE) {
+        pr_warning("Invalid IDT index %zu (max: %d)\n", src_idx, IDT_SIZE - 1);
+        return -1;
+    }
+    if (dest_buffer == NULL) {
+        pr_warning("NULL destination buffer for IDT copy\n");
+        return -1;
+    }
+    memcpy(dest_buffer, &idt_table[src_idx], sizeof(idt_descriptor_t));
+    return 0;
 }
 
-// Test bounds checking for IDT gate setting
-TEST(idt_bounds_check)
+/// @brief Test that the IDT structure has the correct size.
+TEST(idt_structure_size)
 {
-    // Test invalid index - this should not crash but log error
-    // Note: We can't directly call __idt_set_gate as it's static, so we test via init_idt behavior
-    // For now, just verify IDT_SIZE constant
-    ASSERT(IDT_SIZE == 256);
-
-    // Test that valid indices work
-    idt_descriptor_t original = idt_table[IDT_SIZE - 1];
-    // We can't directly test __idt_set_gate, but we can verify the table exists
-    ASSERT(&idt_table[IDT_SIZE - 1] != NULL);
-    idt_table[IDT_SIZE - 1] = original;
+    TEST_SECTION_START("IDT structure size");
+    ASSERT(sizeof(idt_descriptor_t) == 8);
+    TEST_SECTION_END();
 }
 
-// Test IDT gate types and options
-TEST(idt_gate_types)
+/// @brief Verify IDT pointer configuration.
+TEST(idt_pointer_configuration)
 {
-    // Test that different gate types are defined
-    ASSERT(INT32_GATE == 0xE);
-    ASSERT(TRAP32_GATE == 0xF);
-    ASSERT(INT16_GATE == 0x6);
-    ASSERT(TRAP16_GATE == 0x7);
-    ASSERT(TASK_GATE == 0x5);
+    TEST_SECTION_START("IDT pointer configuration");
+
+    ASSERT_MSG((uint32_t)&idt_table == idt_pointer.base, "IDT pointer base must point to IDT table");
+
+    uint16_t expected_limit = sizeof(idt_descriptor_t) * IDT_SIZE - 1;
+    ASSERT_MSG(idt_pointer.limit == expected_limit, "IDT pointer limit must be size-1");
+
+    TEST_SECTION_END();
 }
 
-// Test IDT privilege levels
-TEST(idt_privilege_levels)
+/// @brief Verify IDT reserved field is zero for all entries.
+TEST(idt_reserved_field_zero)
 {
-    // Check that after initialization, interrupts have correct privilege levels
-    // Most interrupts should be kernel level (ring 0)
-    ASSERT((idt_table[0].options & 0x60) == 0x00); // DPL = 0 for kernel
+    TEST_SECTION_START("IDT reserved field zero");
 
-    // System call (interrupt 128) should allow user level (ring 3)
-    ASSERT((idt_table[128].options & 0x60) == 0x60); // DPL = 3 for user
-}
-
-// Test IDT segment selectors
-TEST(idt_segment_selectors)
-{
-    // Check that interrupts use kernel code segment (0x8)
-    ASSERT(idt_table[0].seg_selector == 0x8);
-    ASSERT(idt_table[32].seg_selector == 0x8);  // IRQ 0
-    ASSERT(idt_table[128].seg_selector == 0x8); // System call
-}
-
-// Test IDT present bits
-TEST(idt_present_bits)
-{
-    // Check that initialized interrupts are present
-    ASSERT((idt_table[0].options & 0x80) != 0);   // Present
-    ASSERT((idt_table[32].options & 0x80) != 0);  // Present
-    ASSERT((idt_table[128].options & 0x80) != 0); // Present
-}
-
-// Test IDT reserved fields
-TEST(idt_reserved_fields)
-{
-    // Check that reserved fields are set correctly (should be 0)
-    ASSERT(idt_table[0].reserved == 0x00);
-    ASSERT(idt_table[32].reserved == 0x00);
-    ASSERT(idt_table[128].reserved == 0x00);
-}
-
-// Test IDT offset fields
-TEST(idt_offset_fields)
-{
-    // Check that offset fields are set (not zero for initialized entries)
-    ASSERT(idt_table[0].offset_low != 0 || idt_table[0].offset_high != 0);
-    ASSERT(idt_table[32].offset_low != 0 || idt_table[32].offset_high != 0);
-    ASSERT(idt_table[128].offset_low != 0 || idt_table[128].offset_high != 0);
-}
-
-// Test IDT table size
-TEST(idt_table_size)
-{
-    // Verify IDT has correct size
-    ASSERT(IDT_SIZE == 256);
-
-    // Verify pointer structure
-    ASSERT(sizeof(idt_descriptor_t) * IDT_SIZE == 2048); // 256 * 8 bytes
-    ASSERT(idt_pointer.limit == 2047);                   // size - 1
-}
-
-// Test IDT interrupt ranges
-TEST(idt_interrupt_ranges)
-{
-    // Test that CPU exceptions (0-31) are set
-    for (int i = 0; i < 32; i++) {
-        ASSERT(idt_table[i].offset_low != 0 || idt_table[i].offset_high != 0);
-        ASSERT((idt_table[i].options & 0x80) != 0); // Present
+    for (int i = 0; i < IDT_SIZE; i++) {
+        idt_descriptor_t entry;
+        ASSERT(idt_safe_copy(i, &entry) == 0);
+        ASSERT_MSG(entry.reserved == 0, "IDT reserved field must be zero");
     }
 
-    // Test that IRQs (32-47) are set
-    for (int i = 32; i < 48; i++) {
-        ASSERT(idt_table[i].offset_low != 0 || idt_table[i].offset_high != 0);
-        ASSERT((idt_table[i].options & 0x80) != 0); // Present
-    }
-
-    // Test that system call (128) is set
-    ASSERT(idt_table[128].offset_low != 0 || idt_table[128].offset_high != 0);
-    ASSERT((idt_table[128].options & 0x80) != 0); // Present
+    TEST_SECTION_END();
 }
 
-// Test IDT options field composition
-TEST(idt_options_composition)
+/// @brief Verify exception and IRQ entries are present and correctly configured.
+TEST(idt_exception_irq_entries)
 {
-    // Test that options field combines gate type and flags correctly
-    // For interrupt gates: present (0x80) | kernel (0x00) | type (0x0E) = 0x8E
-    ASSERT((idt_table[0].options & 0x0F) == INT32_GATE); // Type bits
+    TEST_SECTION_START("IDT exception/IRQ entries");
 
-    // For system call: present (0x80) | user (0x60) | type (0x0E) = 0xEE
-    ASSERT((idt_table[128].options & 0x0F) == INT32_GATE); // Type bits
+    for (int i = 0; i <= 47; i++) {
+        idt_descriptor_t entry;
+        ASSERT(idt_safe_copy(i, &entry) == 0);
+
+        uint32_t offset = entry.offset_low | ((uint32_t)entry.offset_high << 16);
+        ASSERT_MSG(offset != 0, "IDT handler offset must be non-zero");
+
+        ASSERT_MSG((entry.options & GDT_PRESENT) != 0, "IDT entry must be present");
+        ASSERT_MSG((entry.options & 0x60) == GDT_KERNEL, "IDT entry DPL must be 0 for kernel");
+        ASSERT_MSG((entry.options & 0x0F) == IDT_PADDING, "IDT entry type must be 32-bit interrupt gate");
+        ASSERT_MSG(entry.seg_selector == 0x8, "IDT segment selector must be 0x08");
+    }
+
+    TEST_SECTION_END();
+}
+
+/// @brief Verify system call entry (0x80) is user accessible and configured.
+TEST(idt_syscall_entry)
+{
+    TEST_SECTION_START("IDT syscall entry");
+
+    idt_descriptor_t entry;
+    ASSERT(idt_safe_copy(0x80, &entry) == 0);
+
+    uint32_t offset = entry.offset_low | ((uint32_t)entry.offset_high << 16);
+    ASSERT_MSG(offset != 0, "Syscall handler offset must be non-zero");
+
+    ASSERT_MSG((entry.options & GDT_PRESENT) != 0, "Syscall entry must be present");
+    ASSERT_MSG((entry.options & 0x60) == GDT_USER, "Syscall entry DPL must be 3");
+    ASSERT_MSG((entry.options & 0x0F) == IDT_PADDING, "Syscall entry type must be 32-bit interrupt gate");
+    ASSERT_MSG(entry.seg_selector == 0x8, "Syscall segment selector must be 0x08");
+
+    TEST_SECTION_END();
+}
+
+/// @brief Verify unused IDT entries remain zeroed.
+TEST(idt_unused_entries_zeroed)
+{
+    TEST_SECTION_START("IDT unused entries zeroed");
+
+    for (int i = 48; i < IDT_SIZE; i++) {
+        if (i == 0x80) {
+            continue;
+        }
+        idt_descriptor_t entry;
+        ASSERT(idt_safe_copy(i, &entry) == 0);
+        ASSERT_MSG(test_is_zeroed(&entry, sizeof(entry), "unused_idt_entry"), "Unused IDT entry must be zeroed");
+    }
+
+    TEST_SECTION_END();
+}
+
+/// @brief Main test function for IDT subsystem.
+/// This function runs all IDT tests in sequence.
+void test_idt(void)
+{
+    test_idt_structure_size();
+    test_idt_pointer_configuration();
+    test_idt_reserved_field_zero();
+    test_idt_exception_irq_entries();
+    test_idt_syscall_entry();
+    test_idt_unused_entries_zeroed();
 }

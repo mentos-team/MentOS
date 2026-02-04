@@ -443,6 +443,12 @@ page_t *mem_virtual_to_page(page_directory_t *pgd, uint32_t virt_start, size_t *
     uint32_t virt_pgt        = virt_pfn / 1024; // Page table index.
     uint32_t virt_pgt_offset = virt_pfn % 1024; // Offset within the page table.
 
+    // Ensure the page directory entry is present before dereferencing.
+    if (!pgd->entries[virt_pgt].present) {
+        pr_info("Page directory entry not present for vaddr 0x%p.\n", (void *)virt_start);
+        return NULL;
+    }
+
     // Get the physical page for the page directory entry.
     page_t *pgd_page = memory.mem_map + pgd->entries[virt_pgt].frame;
 
@@ -450,6 +456,12 @@ page_t *mem_virtual_to_page(page_directory_t *pgd, uint32_t virt_start, size_t *
     page_table_t *pgt_address = (page_table_t *)get_virtual_address_from_page(pgd_page);
     if (!pgt_address) {
         pr_crit("Failed to get low memory address from page directory entry.\n");
+        return NULL;
+    }
+
+    // Ensure the page table entry is present before dereferencing.
+    if (!pgt_address->pages[virt_pgt_offset].present) {
+        pr_info("Page table entry not present for vaddr 0x%p.\n", (void *)virt_start);
         return NULL;
     }
 

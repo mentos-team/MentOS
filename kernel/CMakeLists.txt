@@ -16,7 +16,7 @@ option(ENABLE_SCHEDULER_FEEDBACK "Enables scheduling feedback on terminal." OFF)
 
 # =============================================================================
 # Collect the kernel source files.
-file(GLOB_RECURSE KERNEL_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c" "${CMAKE_CURRENT_SOURCE_DIR}/src/*.S")
+file(GLOB_RECURSE KERNEL_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c" "${CMAKE_CURRENT_SOURCE_DIR}/src/*.S")
 # Remove the tests from the kernel sources if the tests are disabled.
 if(NOT ENABLE_KERNEL_TESTS)
     list(FILTER KERNEL_SOURCES EXCLUDE REGEX ".*/tests/.*")

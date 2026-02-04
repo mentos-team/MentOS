@@ -124,3 +124,5 @@ iso/boot/*.bin
 
 # Wiki content (do not commit)
 WIKI/
+# Summary documentation files (do not commit)
+*.summary.md

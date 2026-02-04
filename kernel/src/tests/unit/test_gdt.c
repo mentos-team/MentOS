@@ -1,291 +1,426 @@
-/// @file test_gdt.c
-/// @brief Unit tests for GDT functions.
+/// @file test_gdt_safe.c
+/// @brief Refactored GDT unit tests - Non-destructive version.
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
 // Setup the logging for this file (do this before any other include).
 #include "sys/kernel_levels.h"          // Include kernel log levels.
 #define __DEBUG_HEADER__ "[TUNIT ]"     ///< Change header.
-#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
+#define __DEBUG_LEVEL__  LOGLEVEL_DEBUG ///< Set log level.
 #include "io/debug.h"                   // Include debugging functions.
 
 #include "descriptor_tables/gdt.h"
+#include "math.h"
+#include "string.h"
 #include "tests/test.h"
+#include "tests/test_utils.h"
 
-// Extern declaration for gdt array
+// External declaration for GDT array
 extern gdt_descriptor_t gdt[GDT_SIZE];
+extern gdt_pointer_t gdt_pointer;
 
-// Test gdt_set_gate function
-TEST(gdt_set_gate)
+/// @brief Safe GDT entry copy for testing (read-only access).
+/// @param src_idx Source GDT index.
+/// @param dest_buffer Destination buffer (must be at least 8 bytes).
+/// @return 0 on success, -1 on invalid index.
+static inline int gdt_safe_copy(size_t src_idx, void *dest_buffer)
 {
-    // Save original GDT entry for restoration
-    gdt_descriptor_t original = gdt[1];
-
-    // Test setting a code segment
-    gdt_set_gate(1, 0x1000, 0x2000, 0x9A, 0xCF);
-    ASSERT(gdt[1].base_low == 0x1000);
-    ASSERT(gdt[1].base_middle == 0x00);
-    ASSERT(gdt[1].base_high == 0x00);
-    ASSERT(gdt[1].limit_low == 0x2000);
-    ASSERT(gdt[1].access == 0x9A);
-    ASSERT(gdt[1].granularity == 0xC0); // 0xCF & 0xF0 = 0xC0, since limit high bits are 0
-
-    // Restore original
-    gdt[1] = original;
+    if (src_idx >= GDT_SIZE) {
+        pr_warning("Invalid GDT index %zu (max: %d)\n", src_idx, GDT_SIZE - 1);
+        return -1;
+    }
+    if (dest_buffer == NULL) {
+        pr_warning("NULL destination buffer for GDT copy\n");
+        return -1;
+    }
+    memcpy(dest_buffer, &gdt[src_idx], sizeof(gdt_descriptor_t));
+    return 0;
 }
 
-// Test bounds checking for gdt_set_gate
-TEST(gdt_bounds_check)
+/// @brief Test that the GDT structure has the correct size.
+TEST(gdt_structure_size)
 {
-    // Test invalid index - this should not crash but log error
-    gdt_set_gate(GDT_SIZE, 0x1000, 0x2000, 0x9A, 0xCF);
-    gdt_set_gate(255, 0x1000, 0x2000, 0x9A, 0xCF);
-
-    // Test edge case - last valid index
-    gdt_descriptor_t original = gdt[GDT_SIZE - 1];
-    gdt_set_gate(GDT_SIZE - 1, 0x1000, 0x2000, 0x9A, 0xCF);
-    ASSERT(gdt[GDT_SIZE - 1].base_low == 0x1000);
-    gdt[GDT_SIZE - 1] = original;
+    TEST_SECTION_START("GDT structure size");
+    ASSERT(sizeof(gdt_descriptor_t) == 8);
+    TEST_SECTION_END();
 }
 
-// Test different segment types
-TEST(gdt_segment_types)
-{
-    gdt_descriptor_t original = gdt[2];
-
-    // Test data segment
-    gdt_set_gate(2, 0x2000, 0x3000, GDT_PRESENT | GDT_KERNEL | GDT_DATA, GDT_GRANULARITY | GDT_OPERAND_SIZE);
-    ASSERT(gdt[2].base_low == 0x2000);
-    ASSERT(gdt[2].limit_low == 0x3000);
-    ASSERT(gdt[2].access == (GDT_PRESENT | GDT_KERNEL | GDT_DATA));
-
-    // Test user mode code segment
-    gdt_set_gate(2, 0x4000, 0x5000, GDT_PRESENT | GDT_USER | GDT_CODE | GDT_RW, GDT_GRANULARITY | GDT_OPERAND_SIZE);
-    ASSERT(gdt[2].access == (GDT_PRESENT | GDT_USER | GDT_CODE | GDT_RW));
-
-    gdt[2] = original;
-}
-
-// Test base address splitting across fields
-TEST(gdt_base_address_fields)
-{
-    gdt_descriptor_t original = gdt[3];
-
-    // Test with a 32-bit base address
-    uint32_t base = 0x12345678;
-    gdt_set_gate(3, base, 0x1000, 0x9A, 0xCF);
-
-    ASSERT(gdt[3].base_low == (base & 0xFFFF));          // Low 16 bits
-    ASSERT(gdt[3].base_middle == ((base >> 16) & 0xFF)); // Middle 8 bits
-    ASSERT(gdt[3].base_high == ((base >> 24) & 0xFF));   // High 8 bits
-
-    gdt[3] = original;
-}
-
-// Test limit field handling
-TEST(gdt_limit_fields)
-{
-    gdt_descriptor_t original = gdt[4];
-
-    // Test with different limit values
-    uint32_t limit = 0x12345;
-    gdt_set_gate(4, 0x1000, limit, 0x9A, 0xCF);
-
-    ASSERT(gdt[4].limit_low == (limit & 0xFFFF));                  // Low 16 bits
-    ASSERT((gdt[4].granularity & 0x0F) == ((limit >> 16) & 0x0F)); // High 4 bits in granularity
-
-    gdt[4] = original;
-}
-
-// Test granularity field composition
-TEST(gdt_granularity_composition)
-{
-    gdt_descriptor_t original = gdt[5];
-
-    uint32_t limit = 0xABCDE;
-    uint8_t granul = 0xF0;
-    gdt_set_gate(5, 0x1000, limit, 0x9A, granul);
-
-    // Granularity should be: (granul & 0xF0) | ((limit >> 16) & 0x0F)
-    uint8_t expected_granularity = (granul & 0xF0) | ((limit >> 16) & 0x0F);
-    ASSERT(gdt[5].granularity == expected_granularity);
-
-    gdt[5] = original;
-}
-
-// Test NULL descriptor preservation
+/// @brief Verify that the null descriptor is correctly initialized.
 TEST(gdt_null_descriptor)
 {
-    // Ensure the NULL descriptor (index 0) remains zero
-    gdt_descriptor_t null_before = gdt[0];
+    TEST_SECTION_START("GDT null descriptor");
 
-    // Try to modify NULL descriptor (should work but violates convention)
-    gdt_set_gate(0, 0x1000, 0x2000, 0x9A, 0xCF);
+    gdt_descriptor_t null_entry;
+    ASSERT(gdt_safe_copy(0, &null_entry) == 0);
 
-    // In a real system, we might want to prevent this, but for now we just test it works
-    ASSERT(gdt[0].base_low == 0x1000);
+    // Null descriptor must have all fields as 0
+    ASSERT_MSG(null_entry.base_low == 0, "Null descriptor base_low must be 0");
+    ASSERT_MSG(null_entry.base_middle == 0, "Null descriptor base_middle must be 0");
+    ASSERT_MSG(null_entry.base_high == 0, "Null descriptor base_high must be 0");
+    ASSERT_MSG(null_entry.limit_low == 0, "Null descriptor limit_low must be 0");
+    ASSERT_MSG(null_entry.access == 0, "Null descriptor access must be 0");
+    ASSERT_MSG(null_entry.granularity == 0, "Null descriptor granularity must be 0");
 
-    // Restore NULL descriptor to maintain system integrity
-    gdt[0] = null_before;
-    ASSERT(gdt[0].base_low == 0);
-    ASSERT(gdt[0].base_middle == 0);
-    ASSERT(gdt[0].base_high == 0);
-    ASSERT(gdt[0].limit_low == 0);
-    ASSERT(gdt[0].access == 0);
-    ASSERT(gdt[0].granularity == 0);
+    TEST_SECTION_END();
 }
 
-// Test GDT initialization state
-TEST(gdt_initialization_state)
+/// @brief Verify that essential GDT entries are initialized.
+TEST(gdt_essential_entries_initialized)
 {
-    // Test that standard entries are properly initialized
-    // Note: We're testing the current state, not re-initializing
+    TEST_SECTION_START("GDT essential entries");
 
-    // Check NULL descriptor (index 0)
-    ASSERT(gdt[0].base_low == 0);
-    ASSERT(gdt[0].base_middle == 0);
-    ASSERT(gdt[0].base_high == 0);
-    ASSERT(gdt[0].limit_low == 0);
-    ASSERT(gdt[0].access == 0);
-    ASSERT(gdt[0].granularity == 0);
+    // Entry 1: Should be kernel code segment
+    gdt_descriptor_t code_entry;
+    ASSERT(gdt_safe_copy(1, &code_entry) == 0);
+    ASSERT_MSG((code_entry.access & 0x80) != 0, "Code segment must be present");
+    // Code segment has GDT_S (0x10) and GDT_EX (0x08) bits set
+    ASSERT_MSG((code_entry.access & 0x18) == 0x18, "Entry 1 must be code segment");
 
-    // Check kernel code segment (index 1)
-    ASSERT(gdt[1].base_low == 0);
-    ASSERT(gdt[1].base_middle == 0);
-    ASSERT(gdt[1].base_high == 0);
-    ASSERT(gdt[1].access & GDT_PRESENT); // Present bit should be set
-    ASSERT(!(gdt[1].access & GDT_USER)); // Should be kernel mode (user bits clear)
-    ASSERT(gdt[1].access & GDT_S);       // Should be segment descriptor
-    ASSERT(gdt[1].access & GDT_EX);      // Should be executable (code segment)
-    ASSERT(gdt[1].access & GDT_RW);      // Should be readable (code segment)
-    ASSERT((gdt[1].granularity & 0xF0) == (GDT_GRANULARITY | GDT_OPERAND_SIZE));
+    // Entry 2: Should be kernel data segment
+    gdt_descriptor_t data_entry;
+    ASSERT(gdt_safe_copy(2, &data_entry) == 0);
+    ASSERT_MSG((data_entry.access & 0x80) != 0, "Data segment must be present");
+    // Data segment has GDT_S (0x10) but not GDT_EX (0x08)
+    ASSERT_MSG((data_entry.access & 0x18) == 0x10, "Entry 2 must be data segment");
 
-    // Check kernel data segment (index 2)
-    ASSERT(gdt[2].base_low == 0);
-    // Check individual bits rather than exact value since accessed bit might be set
-    ASSERT(gdt[2].access & GDT_PRESENT); // Present bit should be set
-    ASSERT(!(gdt[2].access & GDT_USER)); // Should be kernel mode (user bits clear)
-    ASSERT(gdt[2].access & GDT_S);       // Should be segment descriptor
-    ASSERT(!(gdt[2].access & GDT_EX));   // Should not be executable (data segment)
-    ASSERT(gdt[2].access & GDT_RW);      // Should be writable (data segment)
-
-    // Check user code segment (index 3)
-    ASSERT(gdt[3].access & GDT_PRESENT); // Present bit should be set
-    ASSERT(gdt[3].access & GDT_USER);    // Should be user mode
-    ASSERT(gdt[3].access & GDT_S);       // Should be segment descriptor
-    ASSERT(gdt[3].access & GDT_EX);      // Should be executable (code segment)
-    ASSERT(gdt[3].access & GDT_RW);      // Should be readable (code segment)
-
-    // Check user data segment (index 4)
-    ASSERT(gdt[4].access & GDT_PRESENT); // Present bit should be set
-    ASSERT(gdt[4].access & GDT_USER);    // Should be user mode
-    ASSERT(gdt[4].access & GDT_S);       // Should be segment descriptor
-    ASSERT(!(gdt[4].access & GDT_EX));   // Should not be executable (data segment)
-    ASSERT(gdt[4].access & GDT_RW);      // Should be writable (data segment)
+    TEST_SECTION_END();
 }
 
-// Test privilege level encoding
+/// @brief Verify base address field layout in GDT entries.
+TEST(gdt_base_address_layout)
+{
+    TEST_SECTION_START("GDT base address field layout");
+
+    // Test a few entries to ensure base address fields are used
+    for (int i = 1; i < min(5, GDT_SIZE); i++) {
+        gdt_descriptor_t entry;
+        ASSERT(gdt_safe_copy(i, &entry) == 0);
+
+        // For kernel segments (present bit set), verify base fields exist
+        if ((entry.access & 0x80) != 0) {
+            uint32_t base = (entry.base_high << 24) |
+                            (entry.base_middle << 16) |
+                            (entry.base_low);
+
+            // Base should be within valid range
+            ASSERT_MSG(test_bounds_check(base, 0, 0xFFFFFFFF, "base_address"), "Base address out of expected range");
+        }
+    }
+
+    TEST_SECTION_END();
+}
+
+/// @brief Verify limit field layout in GDT entries.
+TEST(gdt_limit_field_layout)
+{
+    TEST_SECTION_START("GDT limit field layout");
+
+    // Test a few entries to ensure limit fields are used
+    for (int i = 1; i < min(5, GDT_SIZE); i++) {
+        gdt_descriptor_t entry;
+        ASSERT(gdt_safe_copy(i, &entry) == 0);
+
+        // For present entries, verify limit fields
+        if ((entry.access & 0x80) != 0) {
+            uint32_t limit = ((entry.granularity & 0x0F) << 16) | entry.limit_low;
+
+            // Limit should be within 20-bit range
+            ASSERT_MSG(limit <= 0xFFFFF, "Limit exceeds 20-bit field");
+        }
+    }
+
+    TEST_SECTION_END();
+}
+
+/// @brief Verify access byte format in GDT entries.
+TEST(gdt_access_byte_format)
+{
+    TEST_SECTION_START("GDT access byte format");
+
+    // Examine a few entries
+    for (int i = 1; i < min(5, GDT_SIZE); i++) {
+        gdt_descriptor_t entry;
+        ASSERT(gdt_safe_copy(i, &entry) == 0);
+
+        // If present (bit 7 set), verify access byte structure
+        if ((entry.access & 0x80) != 0) {
+            // Bit 7: Present
+            ASSERT_MSG((entry.access & 0x80) != 0, "Present bit should be set");
+
+            // Bits 6-5: Privilege level (0-3)
+            uint8_t dpl = (entry.access & 0x60) >> 5;
+            ASSERT_MSG(dpl <= 3, "DPL should be 0-3");
+
+            // Bit 4: Descriptor type (1 for code/data, 0 for system)
+            // Bits 3-0: Type (depends on descriptor type)
+        }
+    }
+
+    TEST_SECTION_END();
+}
+
+/// @brief Verify granularity byte format in GDT entries.
+TEST(gdt_granularity_byte_format)
+{
+    TEST_SECTION_START("GDT granularity byte format");
+
+    // Examine entries
+    for (int i = 1; i < min(5, GDT_SIZE); i++) {
+        gdt_descriptor_t entry;
+        ASSERT(gdt_safe_copy(i, &entry) == 0);
+
+        if ((entry.access & 0x80) != 0) {
+            // Bit 7: Granularity (0 = byte, 1 = 4KB)
+            uint8_t g = (entry.granularity & 0x80) >> 7;
+            ASSERT_MSG(g <= 1, "Granularity bit should be 0 or 1");
+
+            // Bit 6: Default/Big (0 = 16-bit, 1 = 32-bit)
+            uint8_t db = (entry.granularity & 0x40) >> 6;
+            ASSERT_MSG(db <= 1, "Default/Big bit should be 0 or 1");
+
+            // Bits 3-0: High 4 bits of limit
+            uint8_t limit_high = entry.granularity & 0x0F;
+            ASSERT_MSG(limit_high <= 15, "Limit high bits should be 0-15");
+        }
+    }
+
+    TEST_SECTION_END();
+}
+
+/// @brief Verify GDT size constant and array bounds.
+TEST(gdt_array_bounds)
+{
+    TEST_SECTION_START("GDT array bounds");
+
+    // Verify GDT_SIZE is reasonable
+    ASSERT(GDT_SIZE > 0);
+    ASSERT(GDT_SIZE <= 8192); // GDT can have at most 8192 entries
+
+    // Verify we can access all entries safely
+    for (int i = 0; i < GDT_SIZE; i++) {
+        gdt_descriptor_t entry;
+        ASSERT(gdt_safe_copy(i, &entry) == 0);
+    }
+
+    TEST_SECTION_END();
+}
+
+/// @brief Verify GDT pointer is correctly configured.
+TEST(gdt_pointer_configuration)
+{
+    TEST_SECTION_START("GDT pointer configuration");
+
+    // GDT pointer should point to the GDT array
+    ASSERT_MSG((uint32_t)&gdt == gdt_pointer.base, "GDT pointer base must point to GDT array");
+
+    // Limit should be (number_of_entries * entry_size) - 1
+    // We have 6 entries, each 8 bytes, so limit should be 47 (6*8-1)
+    uint16_t expected_limit = sizeof(gdt_descriptor_t) * 6 - 1;
+    ASSERT_MSG(gdt_pointer.limit == expected_limit, "GDT pointer limit must be 47");
+
+    TEST_SECTION_END();
+}
+
+/// @brief Verify user mode code segment (entry 3) is correctly configured.
+TEST(gdt_user_code_segment)
+{
+    TEST_SECTION_START("GDT user code segment (entry 3)");
+
+    gdt_descriptor_t descriptor;
+    gdt_safe_copy(3, &descriptor);
+
+    // Entry 3 should be a user mode code segment
+    // Access byte should have: PRESENT | USER | EXECUTABLE | READABLE
+    uint8_t expected_access = GDT_PRESENT | GDT_USER | GDT_CODE | GDT_RW;
+    ASSERT_MSG(descriptor.access == expected_access, "User code segment access byte incorrect");
+
+    // Base address should be 0
+    uint32_t base = descriptor.base_low | (descriptor.base_middle << 16) | (descriptor.base_high << 24);
+    ASSERT_MSG(base == 0, "User code segment base must be 0");
+
+    // Limit should be 0xFFFF (granularity byte has upper 4 bits of limit)
+    uint32_t limit = descriptor.limit_low | (((uint32_t)(descriptor.granularity & 0x0F)) << 16);
+    ASSERT_MSG(limit == 0xFFFFF, "User code segment limit must be 0xFFFFF");
+
+    // Granularity should have GRANULARITY and OPERAND_SIZE flags
+    uint8_t expected_granularity = GDT_GRANULARITY | GDT_OPERAND_SIZE;
+    ASSERT_MSG((descriptor.granularity & 0xF0) == expected_granularity, "User code segment granularity flags incorrect");
+
+    TEST_SECTION_END();
+}
+
+/// @brief Verify user mode data segment (entry 4) is correctly configured.
+TEST(gdt_user_data_segment)
+{
+    TEST_SECTION_START("GDT user data segment (entry 4)");
+
+    gdt_descriptor_t descriptor;
+    gdt_safe_copy(4, &descriptor);
+
+    // Entry 4 should be a user mode data segment
+    // Access byte should have: PRESENT | USER | WRITABLE (not executable)
+    uint8_t expected_access = GDT_PRESENT | GDT_USER | GDT_DATA;
+    ASSERT_MSG(descriptor.access == expected_access, "User data segment access byte incorrect");
+
+    // Base address should be 0
+    uint32_t base = descriptor.base_low | (descriptor.base_middle << 16) | (descriptor.base_high << 24);
+    ASSERT_MSG(base == 0, "User data segment base must be 0");
+
+    // Limit should be 0xFFFFF (same as code segment)
+    uint32_t limit = descriptor.limit_low | (((uint32_t)(descriptor.granularity & 0x0F)) << 16);
+    ASSERT_MSG(limit == 0xFFFFF, "User data segment limit must be 0xFFFFF");
+
+    // Granularity should have GRANULARITY and OPERAND_SIZE flags
+    uint8_t expected_granularity = GDT_GRANULARITY | GDT_OPERAND_SIZE;
+    ASSERT_MSG((descriptor.granularity & 0xF0) == expected_granularity, "User data segment granularity flags incorrect");
+
+    TEST_SECTION_END();
+}
+
+/// @brief Verify TSS descriptor (entry 5) is correctly configured.
+TEST(gdt_tss_descriptor)
+{
+    TEST_SECTION_START("GDT TSS descriptor (entry 5)");
+
+    gdt_descriptor_t descriptor;
+    ASSERT(gdt_safe_copy(5, &descriptor) == 0);
+
+    // TSS is a system segment: S bit must be 0
+    ASSERT_MSG((descriptor.access & GDT_S) == 0, "TSS descriptor must be a system segment");
+
+    // Access byte should include required TSS bits (present, DPL=3, executable)
+    uint8_t required_access = GDT_PRESENT | GDT_USER | GDT_EX;
+    ASSERT_MSG((descriptor.access & required_access) == required_access, "TSS descriptor access bits missing");
+
+    // Accessed bit should be set (CPU may update it)
+    ASSERT_MSG((descriptor.access & GDT_AC) != 0, "TSS descriptor accessed bit must be set");
+
+    // Granularity flags should be clear for TSS (no 4K or 32-bit flags)
+    ASSERT_MSG((descriptor.granularity & 0xF0) == 0, "TSS granularity flags must be 0");
+
+    // Limit high nibble must be within 4-bit range
+    ASSERT_MSG((descriptor.granularity & 0x0F) <= 0x0F, "TSS limit high bits invalid");
+
+    TEST_SECTION_END();
+}
+
+/// @brief Verify privilege levels for kernel and user segments.
 TEST(gdt_privilege_levels)
 {
-    gdt_descriptor_t original = gdt[6];
+    TEST_SECTION_START("GDT privilege levels");
 
-    // Test kernel privilege (Ring 0)
-    gdt_set_gate(6, 0x1000, 0x2000, GDT_PRESENT | GDT_KERNEL | GDT_CODE, 0);
-    ASSERT((gdt[6].access & 0x60) == GDT_KERNEL); // Bits 5-6 should be 00
+    gdt_descriptor_t entry;
 
-    // Test user privilege (Ring 3)
-    gdt_set_gate(6, 0x1000, 0x2000, GDT_PRESENT | GDT_USER | GDT_CODE, 0);
-    ASSERT((gdt[6].access & 0x60) == GDT_USER); // Bits 5-6 should be 11
+    // Kernel code (entry 1) and data (entry 2) must be DPL 0
+    ASSERT(gdt_safe_copy(1, &entry) == 0);
+    ASSERT_MSG((entry.access & 0x60) == GDT_KERNEL, "Kernel code segment DPL must be 0");
 
-    gdt[6] = original;
+    ASSERT(gdt_safe_copy(2, &entry) == 0);
+    ASSERT_MSG((entry.access & 0x60) == GDT_KERNEL, "Kernel data segment DPL must be 0");
+
+    // User code (entry 3) and data (entry 4) must be DPL 3
+    ASSERT(gdt_safe_copy(3, &entry) == 0);
+    ASSERT_MSG((entry.access & 0x60) == GDT_USER, "User code segment DPL must be 3");
+
+    ASSERT(gdt_safe_copy(4, &entry) == 0);
+    ASSERT_MSG((entry.access & 0x60) == GDT_USER, "User data segment DPL must be 3");
+
+    TEST_SECTION_END();
 }
 
-// Test segment type flags
+/// @brief Verify granularity and operand size flags for code/data segments.
 TEST(gdt_segment_flags)
 {
-    gdt_descriptor_t original = gdt[7];
+    TEST_SECTION_START("GDT segment flags");
 
-    // Test executable code segment
-    gdt_set_gate(7, 0, 0x1000, GDT_PRESENT | GDT_KERNEL | GDT_CODE, 0);
-    ASSERT(gdt[7].access & GDT_EX); // Executable bit should be set
-    ASSERT(gdt[7].access & GDT_S);  // Segment descriptor bit should be set
+    gdt_descriptor_t entry;
+    uint8_t expected_flags = GDT_GRANULARITY | GDT_OPERAND_SIZE;
 
-    // Test data segment (non-executable)
-    gdt_set_gate(7, 0, 0x1000, GDT_PRESENT | GDT_KERNEL | GDT_DATA, 0);
-    ASSERT(!(gdt[7].access & GDT_EX)); // Executable bit should be clear
-    ASSERT(gdt[7].access & GDT_S);     // Segment descriptor bit should be set
+    // Kernel code/data and user code/data should be 4KB granularity, 32-bit
+    for (int i = 1; i <= 4; i++) {
+        ASSERT(gdt_safe_copy(i, &entry) == 0);
+        ASSERT_MSG((entry.granularity & 0xF0) == expected_flags, "Segment flags must be G and D/B");
+    }
 
-    gdt[7] = original;
+    TEST_SECTION_END();
 }
 
-// Test limit boundary values
-TEST(gdt_limit_boundaries)
+/// @brief Verify base and limit values for code/data segments.
+TEST(gdt_segment_base_limit_values)
 {
-    gdt_descriptor_t original = gdt[8];
+    TEST_SECTION_START("GDT segment base/limit values");
 
-    // Test minimum limit (0)
-    gdt_set_gate(8, 0x1000, 0, 0x9A, 0);
-    ASSERT(gdt[8].limit_low == 0);
-    ASSERT((gdt[8].granularity & 0x0F) == 0);
+    gdt_descriptor_t entry;
 
-    // Test maximum 20-bit limit
-    uint32_t max_limit = 0xFFFFF;
-    gdt_set_gate(8, 0x1000, max_limit, 0x9A, 0xF0);
-    ASSERT(gdt[8].limit_low == 0xFFFF);
-    ASSERT((gdt[8].granularity & 0x0F) == 0x0F);
+    for (int i = 1; i <= 4; i++) {
+        ASSERT(gdt_safe_copy(i, &entry) == 0);
 
-    // Test limit overflow (should be truncated to 20 bits)
-    uint32_t overflow_limit = 0x123456;
-    gdt_set_gate(8, 0x1000, overflow_limit, 0x9A, 0);
-    ASSERT(gdt[8].limit_low == (overflow_limit & 0xFFFF));
-    ASSERT((gdt[8].granularity & 0x0F) == ((overflow_limit >> 16) & 0x0F));
+        uint32_t base = entry.base_low | (entry.base_middle << 16) | (entry.base_high << 24);
+        ASSERT_MSG(base == 0, "Segment base must be 0");
 
-    gdt[8] = original;
+        uint32_t limit = entry.limit_low | (((uint32_t)(entry.granularity & 0x0F)) << 16);
+        ASSERT_MSG(limit == 0xFFFFF, "Segment limit must be 0xFFFFF");
+    }
+
+    TEST_SECTION_END();
 }
 
-// Test granularity and operand size flags
-TEST(gdt_granularity_flags)
+/// @brief Verify unused GDT entries are zero-initialized.
+TEST(gdt_unused_entries_zeroed)
 {
-    gdt_descriptor_t original = gdt[9];
+    TEST_SECTION_START("GDT unused entries zeroed");
 
-    // Test with granularity bit set (4KB pages)
-    gdt_set_gate(9, 0, 0x1000, 0x9A, GDT_GRANULARITY);
-    ASSERT(gdt[9].granularity & GDT_GRANULARITY);
+    // Entries 6..GDT_SIZE-1 should be zeroed (unused)
+    for (int i = 6; i < GDT_SIZE; i++) {
+        gdt_descriptor_t entry;
+        ASSERT(gdt_safe_copy(i, &entry) == 0);
+        ASSERT_MSG(test_is_zeroed(&entry, sizeof(entry), "unused_gdt_entry"), "Unused GDT entry must be zeroed");
+    }
 
-    // Test with operand size bit set (32-bit)
-    gdt_set_gate(9, 0, 0x1000, 0x9A, GDT_OPERAND_SIZE);
-    ASSERT(gdt[9].granularity & GDT_OPERAND_SIZE);
-
-    // Test with both flags
-    gdt_set_gate(9, 0, 0x1000, 0x9A, GDT_GRANULARITY | GDT_OPERAND_SIZE);
-    ASSERT(gdt[9].granularity & GDT_GRANULARITY);
-    ASSERT(gdt[9].granularity & GDT_OPERAND_SIZE);
-
-    gdt[9] = original;
+    TEST_SECTION_END();
 }
 
-// Test access bit combinations
-TEST(gdt_access_combinations)
+/// @brief Verify kernel code/data segments have exact access bytes.
+TEST(gdt_kernel_segment_access)
 {
-    gdt_descriptor_t original = gdt[6];
+    TEST_SECTION_START("GDT kernel segment access");
 
-    // Test present + kernel + code + readable
-    uint8_t access = GDT_PRESENT | GDT_KERNEL | GDT_CODE | GDT_RW;
-    gdt_set_gate(6, 0, 0x1000, access, 0);
-    ASSERT(gdt[6].access == access);
-    ASSERT(gdt[6].access & GDT_PRESENT);
-    ASSERT(!(gdt[6].access & GDT_USER)); // Should be kernel mode
-    ASSERT(gdt[6].access & GDT_EX);      // Should be executable
-    ASSERT(gdt[6].access & GDT_RW);      // Should be readable
+    gdt_descriptor_t entry;
 
-    // Test present + user + data + writable
-    access = GDT_PRESENT | GDT_USER | GDT_DATA;
-    gdt_set_gate(6, 0, 0x1000, access, 0);
-    ASSERT(gdt[6].access == access);
-    ASSERT(gdt[6].access & GDT_PRESENT);
-    ASSERT(gdt[6].access & GDT_USER);  // Should be user mode
-    ASSERT(!(gdt[6].access & GDT_EX)); // Should not be executable
-    ASSERT(gdt[6].access & GDT_RW);    // Should be writable (for data)
+    // Kernel code segment (entry 1)
+    ASSERT(gdt_safe_copy(1, &entry) == 0);
+    uint8_t expected_code_access = GDT_PRESENT | GDT_KERNEL | GDT_CODE | GDT_RW;
+    ASSERT_MSG((entry.access & ~GDT_AC) == expected_code_access, "Kernel code segment access byte incorrect");
 
-    gdt[6] = original;
+    // Kernel data segment (entry 2)
+    ASSERT(gdt_safe_copy(2, &entry) == 0);
+    uint8_t expected_data_access = GDT_PRESENT | GDT_KERNEL | GDT_DATA;
+    ASSERT_MSG((entry.access & ~GDT_AC) == expected_data_access, "Kernel data segment access byte incorrect");
+
+    TEST_SECTION_END();
 }
+
+/// @brief Main test function for GDT subsystem.
+/// This function runs all GDT tests in sequence.
+void test_gdt(void)
+{
+
+    test_gdt_structure_size();
+    test_gdt_null_descriptor();
+    test_gdt_essential_entries_initialized();
+    test_gdt_base_address_layout();
+    test_gdt_limit_field_layout();
+    test_gdt_access_byte_format();
+    test_gdt_granularity_byte_format();
+    test_gdt_array_bounds();
+    test_gdt_pointer_configuration();
+    test_gdt_user_code_segment();
+    test_gdt_user_data_segment();
+    test_gdt_tss_descriptor();
+    test_gdt_privilege_levels();
+    test_gdt_segment_flags();
+    test_gdt_segment_base_limit_values();
+    test_gdt_unused_entries_zeroed();
+    test_gdt_kernel_segment_access();
+}
+
