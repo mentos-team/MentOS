@@ -158,6 +158,33 @@ TEST(memory_zone_total_space_matches)
     TEST_SECTION_END();
 }
 
+/// @brief Test LowMem boundary pages resolve to LowMem.
+TEST(memory_lowmem_boundary_pages)
+{
+    TEST_SECTION_START("LowMem boundary pages");
+
+    uint32_t first_phys = memory.low_mem.start_addr;
+    uint32_t last_phys  = memory.low_mem.end_addr - PAGE_SIZE;
+
+    page_t *first_page = get_page_from_physical_address(first_phys);
+    page_t *last_page  = get_page_from_physical_address(last_phys);
+
+    ASSERT_MSG(first_page != NULL, "LowMem first page must be resolvable");
+    ASSERT_MSG(last_page != NULL, "LowMem last page must be resolvable");
+    ASSERT_MSG(is_lowmem_page_struct(first_page), "LowMem first page must be in lowmem map");
+    ASSERT_MSG(is_lowmem_page_struct(last_page), "LowMem last page must be in lowmem map");
+
+    uint32_t first_virt = get_virtual_address_from_page(first_page);
+    uint32_t last_virt  = get_virtual_address_from_page(last_page);
+
+    ASSERT_MSG(first_virt >= memory.low_mem.virt_start && first_virt < memory.low_mem.virt_end,
+               "LowMem first page virtual must be in LowMem range");
+    ASSERT_MSG(last_virt >= memory.low_mem.virt_start && last_virt < memory.low_mem.virt_end,
+               "LowMem last page virtual must be in LowMem range");
+
+    TEST_SECTION_END();
+}
+
 /// @brief Test single-page allocation and free in buddy system.
 TEST(memory_alloc_free_roundtrip)
 {
@@ -391,6 +418,7 @@ void test_zone_allocator(void)
     test_memory_order_calculation();
     test_memory_zone_space_metrics();
     test_memory_zone_total_space_matches();
+    test_memory_lowmem_boundary_pages();
     test_memory_alloc_free_roundtrip();
     test_memory_alloc_free_order1();
     test_memory_alloc_free_stress();
