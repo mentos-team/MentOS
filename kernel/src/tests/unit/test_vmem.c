@@ -59,6 +59,35 @@ TEST(memory_vmem_map_physical)
     TEST_SECTION_END();
 }
 
+/// @brief Test write/read via vmem mapping and lowmem mapping.
+TEST(memory_vmem_write_read)
+{
+    TEST_SECTION_START("VMEM write/read");
+
+    page_t *page = alloc_pages(GFP_KERNEL, 0);
+    ASSERT_MSG(page != NULL, "alloc_pages must return a valid page");
+
+    uint32_t vaddr = vmem_map_physical_pages(page, 1);
+    ASSERT_MSG(vaddr != 0, "vmem_map_physical_pages must return a valid address");
+
+    uint8_t *mapped = (uint8_t *)vaddr;
+    for (uint32_t i = 0; i < PAGE_SIZE; ++i) {
+        mapped[i] = (uint8_t)(0x3C ^ i);
+    }
+
+    uint32_t lowmem = get_virtual_address_from_page(page);
+    ASSERT_MSG(lowmem != 0, "get_virtual_address_from_page must succeed");
+    uint8_t *lowptr = (uint8_t *)lowmem;
+    for (uint32_t i = 0; i < PAGE_SIZE; ++i) {
+        ASSERT_MSG(lowptr[i] == (uint8_t)(0x3C ^ i), "vmem mapping must hit same physical page");
+    }
+
+    ASSERT_MSG(vmem_unmap_virtual_address(vaddr) == 0, "vmem_unmap_virtual_address must succeed");
+    ASSERT_MSG(free_pages(page) == 0, "free_pages must succeed");
+
+    TEST_SECTION_END();
+}
+
 /// @brief Test detection of invalid virtual addresses for vmem.
 TEST(memory_vmem_invalid_address_detected)
 {
@@ -81,5 +110,6 @@ void test_vmem(void)
     test_memory_vmem_alloc_unmap();
     test_memory_vmem_alloc_unmap_multi();
     test_memory_vmem_map_physical();
+    test_memory_vmem_write_read();
     test_memory_vmem_invalid_address_detected();
 }

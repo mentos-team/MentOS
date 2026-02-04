@@ -67,6 +67,26 @@ TEST(memory_kmalloc_kfree)
     TEST_SECTION_END();
 }
 
+/// @brief Test kmalloc write/read roundtrip.
+TEST(memory_kmalloc_write_read)
+{
+    TEST_SECTION_START("kmalloc write/read");
+
+    uint8_t *ptr = (uint8_t *)kmalloc(256);
+    ASSERT_MSG(ptr != NULL, "kmalloc must return a valid pointer");
+
+    for (uint32_t i = 0; i < 256; ++i) {
+        ptr[i] = (uint8_t)(0x5A ^ i);
+    }
+    for (uint32_t i = 0; i < 256; ++i) {
+        ASSERT_MSG(ptr[i] == (uint8_t)(0x5A ^ i), "kmalloc data must round-trip");
+    }
+
+    kfree(ptr);
+
+    TEST_SECTION_END();
+}
+
 /// @brief Test ctor/dtor callbacks and multi-alloc behavior.
 TEST(memory_slab_ctor_dtor)
 {
@@ -96,10 +116,42 @@ TEST(memory_slab_ctor_dtor)
     TEST_SECTION_END();
 }
 
+/// @brief Test slab cache counters return to baseline after free.
+TEST(memory_slab_counters)
+{
+    TEST_SECTION_START("Slab counters");
+
+    kmem_cache_t *cache = kmem_cache_create("test_obj_cnt", 32, alignof(uint32_t), GFP_KERNEL, NULL, NULL);
+    ASSERT_MSG(cache != NULL, "kmem_cache_create must succeed");
+
+    unsigned int total_before = cache->total_num;
+    unsigned int free_before  = cache->free_num;
+
+    void *objs[8] = {0};
+    for (unsigned int i = 0; i < 8; ++i) {
+        objs[i] = kmem_cache_alloc(cache, GFP_KERNEL);
+        ASSERT_MSG(objs[i] != NULL, "kmem_cache_alloc must succeed");
+    }
+
+    for (unsigned int i = 0; i < 8; ++i) {
+        ASSERT_MSG(kmem_cache_free(objs[i]) == 0, "kmem_cache_free must succeed");
+    }
+
+    ASSERT_MSG(cache->total_num >= total_before, "total_num must not shrink");
+    ASSERT_MSG(cache->free_num >= free_before, "free_num must not shrink");
+    ASSERT_MSG(cache->free_num == cache->total_num, "all objects must be free after frees");
+
+    ASSERT_MSG(kmem_cache_destroy(cache) == 0, "kmem_cache_destroy must succeed");
+
+    TEST_SECTION_END();
+}
+
 /// @brief Main test function for slab subsystem.
 void test_slab(void)
 {
     test_memory_slab_cache_alloc_free();
     test_memory_kmalloc_kfree();
+    test_memory_kmalloc_write_read();
     test_memory_slab_ctor_dtor();
+    test_memory_slab_counters();
 }

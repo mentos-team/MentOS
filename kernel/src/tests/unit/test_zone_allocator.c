@@ -238,6 +238,30 @@ TEST(memory_page_address_roundtrip)
     TEST_SECTION_END();
 }
 
+/// @brief Test write/read on a freshly allocated page.
+TEST(memory_page_write_read)
+{
+    TEST_SECTION_START("Page write/read");
+
+    page_t *page = alloc_pages(GFP_KERNEL, 0);
+    ASSERT_MSG(page != NULL, "alloc_pages must return a valid page");
+
+    uint32_t vaddr = get_virtual_address_from_page(page);
+    ASSERT_MSG(vaddr != 0, "get_virtual_address_from_page must succeed");
+
+    uint8_t *ptr = (uint8_t *)vaddr;
+    for (uint32_t i = 0; i < PAGE_SIZE; ++i) {
+        ptr[i] = (uint8_t)(i ^ 0xA5);
+    }
+    for (uint32_t i = 0; i < PAGE_SIZE; ++i) {
+        ASSERT_MSG(ptr[i] == (uint8_t)(i ^ 0xA5), "page data must round-trip");
+    }
+
+    ASSERT_MSG(free_pages(page) == 0, "free_pages must succeed");
+
+    TEST_SECTION_END();
+}
+
 /// @brief Main test function for zone allocator subsystem.
 void test_zone_allocator(void)
 {
@@ -251,4 +275,5 @@ void test_zone_allocator(void)
     test_memory_lowmem_alloc_free();
     test_memory_lowmem_rejects_highuser();
     test_memory_page_address_roundtrip();
+    test_memory_page_write_read();
 }
