@@ -319,6 +319,60 @@ TEST(memory_page_write_read)
     TEST_SECTION_END();
 }
 
+/// @brief Test page allocation with different GFP flags.
+TEST(memory_zone_gfp_flags)
+{
+    TEST_SECTION_START("GFP flag variations");
+
+    unsigned long free_kernel_before = get_zone_free_space(GFP_KERNEL);
+
+    page_t *kernel_page = alloc_pages(GFP_KERNEL, 0);
+    ASSERT_MSG(kernel_page != NULL, "GFP_KERNEL allocation must succeed");
+    ASSERT_MSG(free_pages(kernel_page) == 0, "free must succeed");
+
+    unsigned long total_high = get_zone_total_space(GFP_HIGHUSER);
+    if (total_high > 0) {
+        unsigned long free_user_before = get_zone_free_space(GFP_HIGHUSER);
+
+        page_t *user_page = alloc_pages(GFP_HIGHUSER, 0);
+        if (user_page != NULL) {
+            ASSERT_MSG(free_pages(user_page) == 0, "free must succeed");
+
+            unsigned long free_user_after = get_zone_free_space(GFP_HIGHUSER);
+            ASSERT_MSG(free_user_after >= free_user_before, "User zone free space must be restored");
+        }
+    }
+
+    unsigned long free_kernel_after = get_zone_free_space(GFP_KERNEL);
+    ASSERT_MSG(free_kernel_after == free_kernel_before, "Kernel zone free space must be restored");
+
+    TEST_SECTION_END();
+}
+
+/// @brief Test allocation when memory is very low (stress until near OOM).
+TEST(memory_zone_low_memory_stress)
+{
+    TEST_SECTION_START("Low memory stress");
+
+    const unsigned int max_allocs = 128;
+    page_t *allocs[max_allocs];
+    unsigned int count = 0;
+
+    for (unsigned int i = 0; i < max_allocs; ++i) {
+        allocs[i] = alloc_pages(GFP_KERNEL, 2);
+        if (allocs[i] == NULL) {
+            break;
+        }
+        count++;
+    }
+
+    for (unsigned int i = 0; i < count; ++i) {
+        ASSERT_MSG(free_pages(allocs[i]) == 0, "free must succeed");
+    }
+
+    TEST_SECTION_END();
+}
+
 /// @brief Main test function for zone allocator subsystem.
 void test_zone_allocator(void)
 {
@@ -335,4 +389,6 @@ void test_zone_allocator(void)
     test_memory_lowmem_rejects_highuser();
     test_memory_page_address_roundtrip();
     test_memory_page_write_read();
+    test_memory_zone_gfp_flags();
+    test_memory_zone_low_memory_stress();
 }

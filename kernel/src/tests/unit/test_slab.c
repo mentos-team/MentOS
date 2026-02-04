@@ -12,6 +12,7 @@
 #include "mem/alloc/slab.h"
 #include "mem/alloc/zone_allocator.h"
 #include "mem/gfp.h"
+#include "mem/paging.h"
 #include "string.h"
 #include "tests/test.h"
 #include "tests/test_utils.h"
@@ -189,6 +190,120 @@ TEST(memory_slab_stress)
     TEST_SECTION_END();
 }
 
+/// @brief Test zero-size allocation handling in kmalloc.
+TEST(memory_slab_kmalloc_zero_size)
+{
+    TEST_SECTION_START("kmalloc zero size");
+
+    unsigned long free_before = get_zone_free_space(GFP_KERNEL);
+
+    void *ptr = kmalloc(0);
+    if (ptr != NULL) {
+        kfree(ptr);
+    }
+
+    unsigned long free_after = get_zone_free_space(GFP_KERNEL);
+    ASSERT_MSG(free_after == free_before, "Zone free space must be restored");
+
+    TEST_SECTION_END();
+}
+
+/// @brief Test NULL pointer handling in kfree.
+TEST(memory_slab_kfree_null)
+{
+    TEST_SECTION_START("kfree NULL");
+
+    kfree(NULL);
+
+    TEST_SECTION_END();
+}
+
+/// @brief Test very large kmalloc that should exceed slab cache.
+TEST(memory_slab_kmalloc_large)
+{
+    TEST_SECTION_START("kmalloc large allocation");
+
+    unsigned long free_before = get_zone_free_space(GFP_KERNEL);
+
+    uint32_t large_size = 16 * PAGE_SIZE;
+    void *ptr           = kmalloc(large_size);
+
+    if (ptr != NULL) {
+        for (uint32_t i = 0; i < 256; ++i) {
+            ((uint8_t *)ptr)[i] = (uint8_t)(i & 0xFF);
+        }
+
+        for (uint32_t i = 0; i < 256; ++i) {
+            ASSERT_MSG(((uint8_t *)ptr)[i] == (uint8_t)(i & 0xFF), "large allocation data must persist");
+        }
+
+        kfree(ptr);
+    }
+
+    unsigned long free_after = get_zone_free_space(GFP_KERNEL);
+    ASSERT_MSG(free_after >= free_before, "Free space must be restored");
+
+    TEST_SECTION_END();
+}
+
+/// @brief Test alignment verification for various slab sizes.
+TEST(memory_slab_alignment)
+{
+    TEST_SECTION_START("Slab alignment verification");
+
+    unsigned long free_before = get_zone_free_space(GFP_KERNEL);
+
+    uint32_t sizes[] = { 8, 16, 32, 64, 128, 256, 512, 1024 };
+    for (unsigned int i = 0; i < (sizeof(sizes) / sizeof(uint32_t)); ++i) {
+        void *ptr = kmalloc(sizes[i]);
+        if (ptr != NULL) {
+            uintptr_t addr = (uintptr_t)ptr;
+            ASSERT_MSG((addr & (sizes[i] - 1)) == 0, "allocation must be aligned to size");
+            kfree(ptr);
+        }
+    }
+
+    unsigned long free_after = get_zone_free_space(GFP_KERNEL);
+    ASSERT_MSG(free_after >= free_before, "Free space must be restored");
+
+    TEST_SECTION_END();
+}
+
+/// @brief Test slab cache with large objects.
+TEST(memory_slab_large_objects)
+{
+    TEST_SECTION_START("Slab large objects");
+
+    unsigned long free_before = get_zone_free_space(GFP_KERNEL);
+
+    typedef struct {
+        uint32_t data[16];
+    } large_obj_t;
+
+    kmem_cache_t *cache = kmem_cache_create("large_test", sizeof(large_obj_t), alignof(large_obj_t), GFP_KERNEL, NULL, NULL);
+    if (cache != NULL) {
+        large_obj_t *obj = kmem_cache_alloc(cache, GFP_KERNEL);
+        if (obj != NULL) {
+            for (int i = 0; i < 16; ++i) {
+                obj->data[i] = 0xDEADBEEFU;
+            }
+
+            for (int i = 0; i < 16; ++i) {
+                ASSERT_MSG(obj->data[i] == 0xDEADBEEFU, "data must persist");
+            }
+
+            ASSERT_MSG(kmem_cache_free(obj) == 0, "kmem_cache_free must succeed");
+        }
+
+        ASSERT_MSG(kmem_cache_destroy(cache) == 0, "kmem_cache_destroy must succeed");
+    }
+
+    unsigned long free_after = get_zone_free_space(GFP_KERNEL);
+    ASSERT_MSG(free_after >= free_before, "Free space must be restored");
+
+    TEST_SECTION_END();
+}
+
 /// @brief Main test function for slab subsystem.
 void test_slab(void)
 {
@@ -198,4 +313,9 @@ void test_slab(void)
     test_memory_slab_ctor_dtor();
     test_memory_slab_counters();
     test_memory_slab_stress();
+    test_memory_slab_kmalloc_zero_size();
+    test_memory_slab_kfree_null();
+    test_memory_slab_kmalloc_large();
+    test_memory_slab_alignment();
+    test_memory_slab_large_objects();
 }

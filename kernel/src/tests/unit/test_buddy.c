@@ -12,6 +12,7 @@
 #include "mem/alloc/zone_allocator.h"
 #include "mem/gfp.h"
 #include "mem/mm/page.h"
+#include "mem/paging.h"
 #include "tests/test.h"
 #include "tests/test_utils.h"
 
@@ -203,6 +204,63 @@ TEST(memory_buddy_large_order)
     TEST_SECTION_END();
 }
 
+/// @brief Test maximum practical order allocation.
+TEST(memory_buddy_max_order_alloc)
+{
+    TEST_SECTION_START("Maximum order allocation");
+
+    unsigned long free_before = get_zone_free_space(GFP_KERNEL);
+    unsigned long total       = get_zone_total_space(GFP_KERNEL);
+
+    if (total >= (256 * PAGE_SIZE)) {
+        page_t *large = alloc_pages(GFP_KERNEL, 8);
+        if (large != NULL) {
+            ASSERT_MSG(free_pages(large) == 0, "free large order must succeed");
+
+            unsigned long free_after = get_zone_free_space(GFP_KERNEL);
+            ASSERT_MSG(free_after >= free_before, "Free space must be restored");
+        }
+    }
+
+    TEST_SECTION_END();
+}
+
+/// @brief Test allocation/free interleaving pattern.
+TEST(memory_buddy_interleaved_alloc_free)
+{
+    TEST_SECTION_START("Interleaved alloc/free");
+
+    unsigned long free_before = get_zone_free_space(GFP_KERNEL);
+
+    const unsigned int count = 16;
+    page_t *pages[count];
+
+    for (unsigned int i = 0; i < count; i += 2) {
+        pages[i] = alloc_pages(GFP_KERNEL, 0);
+        ASSERT_MSG(pages[i] != NULL, "allocation must succeed");
+
+        if (i > 0) {
+            ASSERT_MSG(free_pages(pages[i - 2]) == 0, "free must succeed");
+        }
+    }
+
+    for (unsigned int i = 1; i < count; i += 2) {
+        pages[i] = alloc_pages(GFP_KERNEL, 0);
+        ASSERT_MSG(pages[i] != NULL, "allocation must succeed");
+    }
+
+    for (unsigned int i = 0; i < count; ++i) {
+        if (pages[i] != NULL) {
+            ASSERT_MSG(free_pages(pages[i]) == 0, "free must succeed");
+        }
+    }
+
+    unsigned long free_after = get_zone_free_space(GFP_KERNEL);
+    ASSERT_MSG(free_after >= free_before, "Free space must be restored");
+
+    TEST_SECTION_END();
+}
+
 /// @brief Main test function for buddy system.
 void test_buddy(void)
 {
@@ -213,4 +271,6 @@ void test_buddy(void)
     test_memory_buddy_mixed_order_stress();
     test_memory_buddy_non_sequential_free();
     test_memory_buddy_large_order();
+    test_memory_buddy_max_order_alloc();
+    test_memory_buddy_interleaved_alloc_free();
 }
