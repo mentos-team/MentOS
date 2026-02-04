@@ -115,6 +115,38 @@ TEST(dma_physical_contiguity)
     TEST_SECTION_END();
 }
 
+/// @brief Test physical contiguity for a larger DMA order.
+TEST(dma_physical_contiguity_large_order)
+{
+    TEST_SECTION_START("DMA physical contiguity (large order)");
+
+    unsigned long free_before = get_zone_free_space(GFP_DMA);
+
+    const unsigned int order = 6; // 64 pages
+    page_t *page             = alloc_pages(GFP_DMA, order);
+    ASSERT_MSG(page != NULL, "DMA large-order allocation must succeed");
+
+    uint32_t first_phys = get_physical_address_from_page(page);
+    assert_dma_isa_limit(first_phys);
+    ASSERT_MSG(first_phys >= memory.dma_mem.start_addr && first_phys < memory.dma_mem.end_addr,
+               "First physical address must be inside DMA zone");
+
+    for (unsigned int i = 0; i < (1U << order); ++i) {
+        page_t *current_page = page + i;
+        uint32_t expected    = first_phys + (i * PAGE_SIZE);
+        uint32_t actual      = get_physical_address_from_page(current_page);
+        assert_dma_isa_limit(actual);
+        ASSERT_MSG(actual == expected, "DMA pages must be physically contiguous (large order)");
+    }
+
+    ASSERT_MSG(free_pages(page) == 0, "DMA free must succeed");
+
+    unsigned long free_after = get_zone_free_space(GFP_DMA);
+    ASSERT_MSG(free_after >= free_before, "DMA free space must be restored");
+
+    TEST_SECTION_END();
+}
+
 /// @brief Test DMA buffer access and data integrity for ATA-like sizes.
 TEST(dma_ata_like_buffer)
 {
@@ -448,6 +480,7 @@ void test_dma(void)
     test_dma_zone_integrity();
     test_dma_order_allocations_and_translation();
     test_dma_physical_contiguity();
+    test_dma_physical_contiguity_large_order();
     test_dma_ata_like_buffer();
     test_dma_multiple_buffers_no_overlap();
     test_dma_alignment();
