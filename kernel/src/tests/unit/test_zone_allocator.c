@@ -193,6 +193,31 @@ TEST(memory_zone_total_space_matches)
     TEST_SECTION_END();
 }
 
+/// @brief Test cached space behavior under allocations and frees.
+TEST(memory_zone_cached_space_behavior)
+{
+    TEST_SECTION_START("Zone cached space behavior");
+
+    unsigned long total = get_zone_total_space(GFP_KERNEL);
+    unsigned long cached_before = get_zone_cached_space(GFP_KERNEL);
+    ASSERT_MSG(cached_before <= total, "Cached space must not exceed total");
+
+    page_t *pages[16] = {0};
+    for (unsigned int i = 0; i < 16; ++i) {
+        pages[i] = alloc_pages(GFP_KERNEL, 0);
+        ASSERT_MSG(pages[i] != NULL, "alloc_pages must succeed");
+    }
+
+    for (unsigned int i = 0; i < 16; ++i) {
+        ASSERT_MSG(free_pages(pages[i]) == 0, "free_pages must succeed");
+    }
+
+    unsigned long cached_after = get_zone_cached_space(GFP_KERNEL);
+    ASSERT_MSG(cached_after <= total, "Cached space must not exceed total after alloc/free");
+
+    TEST_SECTION_END();
+}
+
 /// @brief Test LowMem boundary pages resolve to LowMem.
 TEST(memory_lowmem_boundary_pages)
 {
@@ -477,6 +502,7 @@ void test_zone_allocator(void)
     test_memory_zone_space_metrics();
     test_memory_zone_buddy_status_names();
     test_memory_zone_total_space_matches();
+    test_memory_zone_cached_space_behavior();
     test_memory_lowmem_boundary_pages();
     test_memory_highmem_boundary_pages();
     test_memory_alloc_free_roundtrip();
