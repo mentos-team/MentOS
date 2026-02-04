@@ -10,7 +10,9 @@
 #include "stdint.h"
 
 /// @brief Max gfp pages order of buddysystem blocks.
-#define MAX_BUDDYSYSTEM_GFP_ORDER 14
+/// NOTE: Reduced from 14 to 12 to allow DMA zone (8MB blocks instead of 32MB).
+/// DMA zone needs to fit between 1MB-kernel_start (~10MB), so max 8MB works.
+#define MAX_BUDDYSYSTEM_GFP_ORDER 12
 
 /// @brief Provide the offset of the element inside the given type of page.
 #define BBSTRUCT_OFFSET(page, element) ((uint32_t) & (((page *)NULL)->element))

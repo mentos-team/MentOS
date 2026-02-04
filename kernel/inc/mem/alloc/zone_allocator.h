@@ -92,6 +92,7 @@ typedef struct memory_info {
     uint32_t page_index_min; ///< Minimum page index.
     uint32_t page_index_max; ///< Maximum page index.
     memory_zone_t dma_mem;   ///< DMA memory zone (legacy low memory).
+    memory_zone_t boot_low_mem; ///< Boot-time low memory region (mem_map/page_data gap).
     memory_zone_t low_mem;   ///< Low memory zone (normal zone).
     memory_zone_t high_mem;  ///< High memory zone.
     memory_zone_t kernel_mem; ///< Kernel code and initial structures region.

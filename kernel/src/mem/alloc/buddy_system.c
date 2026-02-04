@@ -456,7 +456,7 @@ int buddy_system_to_string(const bb_instance_t *instance, char *buffer, size_t b
     // Add the free list sizes for each order.
     for (int order = 0; order < MAX_BUDDYSYSTEM_GFP_ORDER; order++) {
         const bb_free_area_t *area = &instance->free_area[order];
-        int written                = snprintf(buffer + offset, bufsize - offset, "%2d ", area->nr_free);
+        int written                = snprintf(buffer + offset, bufsize - offset, "%3d ", area->nr_free);
         if (written < 0 || (size_t)(offset + written) >= bufsize) {
             return snprintf(buffer, bufsize, "String formatting error.\n");
         }
@@ -465,7 +465,7 @@ int buddy_system_to_string(const bb_instance_t *instance, char *buffer, size_t b
 
     // Add the total free space in human-readable format.
     int written =
-        snprintf(buffer + offset, bufsize - offset, ": %s", to_human_size(buddy_system_get_free_space(instance)));
+        snprintf(buffer + offset, bufsize - offset, ": %12s", to_human_size(buddy_system_get_free_space(instance)));
     if (written < 0 || (size_t)(offset + written) >= bufsize) {
         return snprintf(buffer, bufsize, "String formatting error.\n");
     }

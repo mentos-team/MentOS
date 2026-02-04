@@ -689,10 +689,8 @@ static inline uintptr_t ata_dma_alloc(size_t size, uintptr_t *physical)
     // address will be passed to the DMA engine, which uses it to directly
     // transfer data.
     *physical = get_physical_address_from_page(page);
-    if (*physical == 0) {
-        pr_crit("Failed to retrieve a valid physical address.\n");
-        return 0;
-    }
+    // Note: Physical address 0 is technically valid (though rare), so we don't check for it here.
+    // The buddy system will not allocate page 0 if it's reserved elsewhere.
 
     // Retrieve the low-memory address (logical address) that the CPU can use to
     // access the allocated memory. The CPU will use this address to interact

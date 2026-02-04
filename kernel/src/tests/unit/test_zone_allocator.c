@@ -27,6 +27,17 @@ TEST(memory_info_integrity)
     ASSERT_MSG(memory.mem_map_num > 0, "mem_map_num must be > 0");
     ASSERT_MSG(memory.page_index_min <= memory.page_index_max, "page index range must be valid");
 
+    // Check DMA zone if present.
+    if (memory.dma_mem.size > 0) {
+        ASSERT_MSG(memory.dma_mem.start_addr < memory.dma_mem.end_addr, "dma_mem address range invalid");
+        ASSERT_MSG(
+            memory.dma_mem.size == (memory.dma_mem.end_addr - memory.dma_mem.start_addr),
+            "dma_mem size must match range");
+        ASSERT_MSG((memory.dma_mem.start_addr & (PAGE_SIZE - 1)) == 0, "dma_mem start must be page-aligned");
+        ASSERT_MSG((memory.dma_mem.end_addr & (PAGE_SIZE - 1)) == 0, "dma_mem end must be page-aligned");
+        ASSERT_MSG(memory.dma_mem.virt_start < memory.dma_mem.virt_end, "dma_mem virtual range invalid");
+    }
+
     ASSERT_MSG(memory.low_mem.size > 0, "low_mem size must be > 0");
     ASSERT_MSG(memory.low_mem.start_addr < memory.low_mem.end_addr, "low_mem address range invalid");
     ASSERT_MSG(
@@ -43,14 +54,15 @@ TEST(memory_info_integrity)
             "high_mem size must match range");
         ASSERT_MSG((memory.high_mem.start_addr & (PAGE_SIZE - 1)) == 0, "high_mem start must be page-aligned");
         ASSERT_MSG((memory.high_mem.end_addr & (PAGE_SIZE - 1)) == 0, "high_mem end must be page-aligned");
+        // HighMem has no permanent virtual mapping in 32-bit systems (requires kmap).
         ASSERT_MSG(
-            memory.high_mem.virt_end == (memory.high_mem.virt_start + memory.high_mem.size),
-            "high_mem virtual range must match size");
+            memory.high_mem.virt_start == 0 && memory.high_mem.virt_end == 0,
+            "high_mem should have no permanent virtual mapping (virt_start and virt_end must be 0)");
     }
 
     ASSERT_MSG(
-        memory.page_index_min == (memory.low_mem.start_addr / PAGE_SIZE),
-        "page_index_min must match low_mem start PFN");
+        memory.page_index_min == ((memory.dma_mem.size > 0) ? (memory.dma_mem.start_addr / PAGE_SIZE) : (memory.low_mem.start_addr / PAGE_SIZE)),
+        "page_index_min must match first zone (DMA if present, otherwise LowMem) start PFN");
 
     TEST_SECTION_END();
 }
@@ -60,29 +72,27 @@ TEST(memory_virtual_address_validation)
 {
     TEST_SECTION_START("Virtual address validation");
 
-    ASSERT_MSG(is_valid_virtual_address(memory.low_mem.virt_start) == 1, "low_mem start must be valid");
+    // Check DMA zone if present.
+    if (memory.dma_mem.size > 0) {
+        ASSERT_MSG(is_valid_virtual_address(memory.dma_mem.virt_start) == 1, "dma_mem start must be valid");
+        ASSERT_MSG(
+            is_valid_virtual_address(memory.dma_mem.virt_end - 1) == 1, "dma_mem end-1 must be valid");
+    }
 
+    // Check LowMem zone.
+    ASSERT_MSG(is_valid_virtual_address(memory.low_mem.virt_start) == 1, "low_mem start must be valid");
     if (memory.low_mem.virt_end > memory.low_mem.virt_start) {
         ASSERT_MSG(
             is_valid_virtual_address(memory.low_mem.virt_end - 1) == 1, "low_mem end-1 must be valid");
     }
 
-    if (memory.low_mem.virt_start >= PAGE_SIZE) {
-        ASSERT_MSG(
-            is_valid_virtual_address(memory.low_mem.virt_start - PAGE_SIZE) == 0,
-            "address below low_mem must be invalid");
-    }
-
+    // Check HighMem zone (which has no permanent virtual mapping).
     unsigned long total_high = get_zone_total_space(GFP_HIGHUSER);
-    if (total_high > 0 && memory.high_mem.virt_end > memory.high_mem.virt_start) {
-        ASSERT_MSG(is_valid_virtual_address(memory.high_mem.virt_start) == 1, "high_mem start must be valid");
+    if (total_high > 0) {
+        // HighMem has no permanent mapping, so virt_start and virt_end should be 0.
         ASSERT_MSG(
-            is_valid_virtual_address(memory.high_mem.virt_end - 1) == 1, "high_mem end-1 must be valid");
-        ASSERT_MSG(is_valid_virtual_address(memory.high_mem.virt_end) == 0, "high_mem end must be invalid");
-    } else {
-        ASSERT_MSG(
-            is_valid_virtual_address(memory.low_mem.virt_end) == 0,
-            "low_mem end must be invalid when no high_mem");
+            memory.high_mem.virt_start == 0 && memory.high_mem.virt_end == 0,
+            "high_mem should have no permanent virtual mapping");
     }
 
     TEST_SECTION_END();

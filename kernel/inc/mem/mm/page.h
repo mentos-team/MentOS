@@ -65,3 +65,7 @@ page_t *get_page_from_physical_address(uint32_t paddr);
 /// @param vaddr the virtual address to convert.
 /// @return A pointer to the corresponding page, or NULL if the address is out of range.
 page_t *get_page_from_virtual_address(uint32_t vaddr);
+
+/// @brief Enables or disables bootstrap linear mapping for page translations.
+/// @param enabled Set to 1 to use bootstrap mapping, 0 to use zone mapping.
+void page_set_bootstrap_mapping(int enabled);

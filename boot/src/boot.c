@@ -271,25 +271,18 @@ void boot_main(uint32_t magic, multiboot_info_t *header, uint32_t esp)
     // size of the kernel (virt_high - virt_low).
     boot_info.kernel_phy_end   = boot_info.kernel_phy_start + boot_info.kernel_size;
 
-    // Align lowmem start to 32MB boundary to support clean DMA zone carving.
-    // The DMA zone (first 32MB of lowmem) needs to be aligned to the buddy
-    // system's maximum order size for proper memory management.
-    boot_info.lowmem_phy_start  = __align_rup(boot_info.kernel_phy_end, 32 * 1024 * 1024);
+    // Start lowmem right after the kernel end (page-aligned).
+    // DMA zone will be carved from physical memory below 16MB during zone init.
+    boot_info.lowmem_phy_start  = __align_rup(boot_info.kernel_phy_end, PAGE_SIZE);
     boot_info.lowmem_phy_end    = 896 * 1024 * 1024; // 896 MB of low memory max
     boot_info.lowmem_size       = boot_info.lowmem_phy_end - boot_info.lowmem_phy_start;
-    boot_info.lowmem_virt_start = __align_rup(boot_info.kernel_end, PAGE_SIZE);
+    // Use linear mapping offset so lowmem virtual addresses match physical addresses.
+    boot_info.lowmem_virt_start = boot_info.kernel_start + (boot_info.lowmem_phy_start - boot_info.kernel_phy_start);
     boot_info.lowmem_virt_end   = boot_info.lowmem_virt_start + boot_info.lowmem_size;
 
     boot_info.highmem_phy_start = boot_info.lowmem_phy_end;
     boot_info.highmem_phy_end   = header->mem_upper * 1024;
-    // Set stack_end to the end of kernel region + a reasonable kernel heap size
-    // The kernel heap is allocated from lowmem_virt_start, but we only pre-map
-    // a modest amount here. The rest will be demand-paged as needed.
-    // For now, allocate 16MB for the initial kernel heap.
-    // Note: The kernel will carve out a 32MB DMA zone from lowmem at a 32MB-aligned boundary,
-    // so we need to account for that here. Adjust lowmem_virt_start to skip DMA zone.
-    boot_info.lowmem_virt_start = __align_rup(boot_info.lowmem_virt_start, 32 * 1024 * 1024) + (32 * 1024 * 1024);
-    boot_info.stack_end         = boot_info.lowmem_virt_start + (16 * 1024 * 1024);
+    boot_info.stack_end         = boot_info.lowmem_virt_end;
 
     // Setup the page directory and page tables for the boot.
     __debug_puts("[bootloader] Setting up paging...\n");
