@@ -37,6 +37,8 @@ extern void test_zone_allocator(void);
 extern void test_slab(void);
 extern void test_vmem(void);
 extern void test_mm(void);
+extern void test_buddy(void);
+extern void test_page(void);
 
 /// @brief Test registry - one entry per subsystem.
 static const test_entry_t test_functions[] = {
@@ -49,6 +51,8 @@ static const test_entry_t test_functions[] = {
     {test_slab,           "Slab Subsystem"          },
     {test_vmem,           "VMEM Subsystem"          },
     {test_mm,             "MM/VMA Subsystem"        },
+    {test_buddy,          "Buddy System Subsystem"  },
+    {test_page,           "Page Structure Subsystem"},
 };
 
 static const int num_tests = sizeof(test_functions) / sizeof(test_entry_t);
