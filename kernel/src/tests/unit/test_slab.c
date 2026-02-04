@@ -414,7 +414,7 @@ TEST(memory_slab_cache_destruction_safety)
     TEST_SECTION_START("Slab cache destruction safety");
 
     // Create a cache
-    kmem_cache_t *cache = kmem_cache_create("test_cache", 128, 0, 0, NULL, NULL);
+    kmem_cache_t *cache = kmem_cache_create("test_cache", 128, alignof(uint64_t), GFP_KERNEL, NULL, NULL);
     ASSERT_MSG(cache != NULL, "kmem_cache_create must succeed");
 
     // Allocate from it
@@ -424,8 +424,8 @@ TEST(memory_slab_cache_destruction_safety)
     ASSERT_MSG(obj2 != NULL, "cache alloc must succeed");
 
     // Free everything
-    kmem_cache_free(cache, obj1);
-    kmem_cache_free(cache, obj2);
+    kmem_cache_free(obj1);
+    kmem_cache_free(obj2);
 
     // Destroy empty cache - should not crash
     kmem_cache_destroy(cache);
