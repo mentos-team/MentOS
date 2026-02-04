@@ -14,8 +14,8 @@
 #include "list_head_algorithm.h"
 #include "mem/alloc/slab.h"
 #include "mem/mm/mm.h"
-#include "mem/paging.h"
 #include "mem/mm/vmem.h"
+#include "mem/paging.h"
 #include "string.h"
 
 /// Cache for storing vm_area_struct.
@@ -231,10 +231,16 @@ int vm_area_destroy(mm_struct_t *mm, vm_area_struct_t *area)
         // Translate the virtual address to the physical page.
         phy_page = mem_virtual_to_page(mm->pgd, area_start, &area_size);
 
-        // Check if the page was successfully retrieved.
+        // If the page is not present (e.g., COW without backing), skip freeing and advance.
         if (!phy_page) {
-            pr_crit("Failed to retrieve physical page for virtual address %p\n", (void *)area_start);
-            return -1;
+            pr_info("Skipping non-present page for virtual address %p\n", (void *)area_start);
+            area_size = PAGE_SIZE;
+            if (area_size > area_total_size) {
+                area_size = area_total_size;
+            }
+            area_total_size -= area_size;
+            area_start += area_size;
+            continue;
         }
 
         // If the pages are marked as copy-on-write, do not deallocate them.
