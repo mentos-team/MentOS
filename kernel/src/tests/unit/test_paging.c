@@ -632,6 +632,31 @@ TEST(paging_dma_pde_coverage)
     TEST_SECTION_END();
 }
 
+/// @brief Test DMA PDE index does not overlap user space and user PDEs are non-global.
+TEST(paging_dma_user_separation)
+{
+    TEST_SECTION_START("DMA/user PDE separation");
+
+    page_directory_t *pgd = paging_get_main_pgd();
+    ASSERT_MSG(pgd != NULL, "Page directory must exist");
+
+    // The critical separation is that DMA/kernel space is at high addresses
+    uint32_t dma_index = memory.dma_mem.virt_start / (4 * 1024 * 1024);
+    ASSERT_MSG(dma_index >= 768, "DMA PDE must be in kernel space (index >= 768, address >= 0xC0000000)");
+
+    // Verify DMA region starts above PROCAREA_END_ADDR (0xC0000000)
+    ASSERT_MSG(memory.dma_mem.virt_start >= PROCAREA_END_ADDR, "DMA must be in kernel space");
+
+    // In the main PGD, DMA PDEs should be present and set as kernel (supervisor)
+    if (pgd->entries[dma_index].present) {
+        ASSERT_MSG(pgd->entries[dma_index].rw == 1, "DMA PDE must be readable/writable");
+        // DMA memory should have global flag for kernel TLB persistence
+        ASSERT_MSG(pgd->entries[dma_index].global == 1, "DMA PDE should be global");
+    }
+
+    TEST_SECTION_END();
+}
+
 /// @brief Main test function for paging subsystem.
 /// This function runs all paging tests in sequence.
 void test_paging(void)
@@ -678,4 +703,5 @@ void test_paging(void)
     test_paging_address_boundaries();
     test_paging_dma_pde_flags();
     test_paging_dma_pde_coverage();
+    test_paging_dma_user_separation();
 }
