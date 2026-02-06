@@ -485,9 +485,9 @@ void run_timer_softirq(void)
     spinlock_lock(&base->lock);
 #ifdef ENABLE_REAL_TIMER_SYSTEM
     // While we are not up to date with current ticks
-    while (base->timer_ticks <= timer_get_ticks()) {
+    while (*(volatile uint32_t *)&base->timer_ticks <= timer_get_ticks()) {
         // Index of the current timer to execute.
-        timer_index = base->timer_ticks & TVR_MASK;
+        timer_index = *(volatile uint32_t *)&base->timer_ticks & TVR_MASK;
         // If the index is zero then all lists in base->tvr have been checked,
         // so they are empty.
         if (!timer_index) {
