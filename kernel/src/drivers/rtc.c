@@ -6,10 +6,10 @@
 /// @{
 
 // Setup the logging for this file (do this before any other include).
-#include "sys/kernel_levels.h"          // Include kernel log levels.
-#define __DEBUG_HEADER__ "[RTC   ]"     ///< Change header.
-#define __DEBUG_LEVEL__  LOGLEVEL_DEBUG ///< Set log level.
-#include "io/debug.h"                   // Include debugging functions.
+#include "sys/kernel_levels.h"           // Include kernel log levels.
+#define __DEBUG_HEADER__ "[RTC   ]"      ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
+#include "io/debug.h"                    // Include debugging functions.
 
 #include "descriptor_tables/isr.h"
 #include "drivers/rtc.h"
@@ -82,27 +82,39 @@ static inline unsigned int __rtc_times_match(tm_t *t0, tm_t *t1)
 // RTC I/O Functions
 // ============================================================================
 
-/// @brief Reads the value from a CMOS register.
-/// @param reg The register address to read from.
-/// @return The value read from the register.
-__attribute__((noinline)) static unsigned char read_register(unsigned char reg)
+/// @brief Reads a CMOS register using inline assembly to prevent compiler optimization.
+/// @param reg The CMOS register number (0x00-0x0F for RTC, higher for extension).
+/// @return The value read from the CMOS register.
+/// @details Uses direct inline assembly to ensure the I/O operations cannot be
+/// optimized away by aggressive compiler optimizations in Release mode. Sets NMI
+/// disable bit (0x80) during access, performs I/O wait cycles, and enforces
+/// memory barriers to guarantee correct execution order.
+__attribute__((noinline)) static unsigned char __rtc_read_cmos_direct(unsigned char reg)
 {
-    outportb(CMOS_ADDR, (unsigned char)(CMOS_NMI_DISABLE | reg));
-    // Small delay to allow hardware to settle after address selection.
-    __rtc_io_wait();
-    unsigned char value = inportb(CMOS_DATA);
-    // Memory barrier to prevent compiler from caching or reordering I/O operations.
-    __asm__ __volatile__("" ::: "memory");
+    volatile unsigned char value;
+    // Direct inline assembly prevents any compiler optimization in Release mode.
+    // This is critical for CMOS/RTC reads which have hardware timing requirements.
+    __asm__ __volatile__(
+        "movb %1, %%al\n\t"                            // Load register number with NMI disabled
+        "outb %%al, $0x70\n\t"                         // Select CMOS register (port 0x70)
+        "outb %%al, $0x80\n\t"                         // I/O wait cycle (port 0x80 is diagnostic port)
+        "outb %%al, $0x80\n\t"                         // Second I/O wait (~400ns total)
+        "inb $0x71, %%al\n\t"                          // Read CMOS data (port 0x71)
+        "movb %%al, %0"                                // Store result
+        : "=m"(value)                                  // Output: value
+        : "r"((unsigned char)(CMOS_NMI_DISABLE | reg)) // Input: register with NMI disabled
+        : "al", "memory"                               // Clobbered: AL register, all memory
+    );
     return value;
 }
 
 /// @brief Writes a value to a CMOS register.
 /// @param reg The register address to write to.
 /// @param value The value to write.
+/// @details Disables NMI during write, performs I/O wait for hardware timing.
 static inline void write_register(unsigned char reg, unsigned char value)
 {
     outportb(CMOS_ADDR, (unsigned char)(CMOS_NMI_DISABLE | reg));
-    // Small delay to allow hardware to settle after address selection.
     __rtc_io_wait();
     outportb(CMOS_DATA, value);
 }
@@ -116,122 +128,71 @@ static inline unsigned char bcd2bin(unsigned char bcd) { return ((bcd >> 4U) * 1
 /// @details Reads all time fields (seconds, minutes, hours, month, year, weekday, monthday)
 /// from CMOS registers and stores them in the global_time structure. Handles both
 /// BCD and binary formats based on the control register configuration.
+/// @note Uses direct assembly CMOS reads to prevent compiler optimization in Release mode.
 __attribute__((noinline)) static void rtc_read_datetime(void)
 {
-    // Wait until RTC update is not in progress (UIP bit clear).
+    // Wait until RTC update cycle completes (UIP bit clears).
     // This ensures we read a consistent snapshot of the time registers.
     volatile unsigned int timeout = 10000;
     while (__rtc_is_updating() && timeout--) {
         pause();
     }
+
+    // Warn if UIP flag never cleared (hardware issue or extreme timing problem).
     if (timeout == 0) {
-        unsigned char status_a = read_register(0x0A);
-        unsigned char status_b = read_register(0x0B);
-        unsigned char status_c = read_register(0x0C);
+        unsigned char status_a = __rtc_read_cmos_direct(0x0A);
+        unsigned char status_b = __rtc_read_cmos_direct(0x0B);
+        unsigned char status_c = __rtc_read_cmos_direct(0x0C);
         pr_warning("rtc_read_datetime: UIP timeout (A=0x%02x B=0x%02x C=0x%02x)\n", status_a, status_b, status_c);
     }
 
-    // Read raw values from CMOS using direct inline assembly to prevent any optimization
-    volatile unsigned char sec, min, hour, mon, year, wday, mday;
-    
-    // Force each read to execute with inline assembly - compiler cannot optimize this away
-    __asm__ __volatile__(
-        "movb $0x80, %%al\n\t"      // NMI disable | register 0x00
-        "outb %%al, $0x70\n\t"       // Select seconds register
-        "outb %%al, $0x80\n\t"       // I/O wait
-        "outb %%al, $0x80\n\t"
-        "inb $0x71, %%al\n\t"        // Read seconds
-        "movb %%al, %0"
-        : "=m"(sec) : : "al", "memory");
-    
-    __asm__ __volatile__(
-        "movb $0x82, %%al\n\t"      // NMI disable | register 0x02
-        "outb %%al, $0x70\n\t"       // Select minutes register
-        "outb %%al, $0x80\n\t"       // I/O wait
-        "outb %%al, $0x80\n\t"
-        "inb $0x71, %%al\n\t"        // Read minutes
-        "movb %%al, %0"
-        : "=m"(min) : : "al", "memory");
-    
-    __asm__ __volatile__(
-        "movb $0x84, %%al\n\t"      // NMI disable | register 0x04
-        "outb %%al, $0x70\n\t"       // Select hours register
-        "outb %%al, $0x80\n\t"       // I/O wait
-        "outb %%al, $0x80\n\t"
-        "inb $0x71, %%al\n\t"        // Read hours
-        "movb %%al, %0"
-        : "=m"(hour) : : "al", "memory");
-    
-    __asm__ __volatile__(
-        "movb $0x88, %%al\n\t"      // NMI disable | register 0x08
-        "outb %%al, $0x70\n\t"       // Select month register
-        "outb %%al, $0x80\n\t"       // I/O wait
-        "outb %%al, $0x80\n\t"
-        "inb $0x71, %%al\n\t"        // Read month
-        "movb %%al, %0"
-        : "=m"(mon) : : "al", "memory");
-    
-    __asm__ __volatile__(
-        "movb $0x89, %%al\n\t"      // NMI disable | register 0x09
-        "outb %%al, $0x70\n\t"       // Select year register
-        "outb %%al, $0x80\n\t"       // I/O wait
-        "outb %%al, $0x80\n\t"
-        "inb $0x71, %%al\n\t"        // Read year
-        "movb %%al, %0"
-        : "=m"(year) : : "al", "memory");
-    
-    __asm__ __volatile__(
-        "movb $0x86, %%al\n\t"      // NMI disable | register 0x06
-        "outb %%al, $0x70\n\t"       // Select day of week register
-        "outb %%al, $0x80\n\t"       // I/O wait
-        "outb %%al, $0x80\n\t"
-        "inb $0x71, %%al\n\t"        // Read day of week
-        "movb %%al, %0"
-        : "=m"(wday) : : "al", "memory");
-    
-    __asm__ __volatile__(
-        "movb $0x87, %%al\n\t"      // NMI disable | register 0x07
-        "outb %%al, $0x70\n\t"       // Select day of month register
-        "outb %%al, $0x80\n\t"       // I/O wait
-        "outb %%al, $0x80\n\t"
-        "inb $0x71, %%al\n\t"        // Read day of month
-        "movb %%al, %0"
-        : "=m"(mday) : : "al", "memory");
+    // Read all RTC time/date registers using optimized direct assembly reads.
+    // Using the unified __rtc_read_cmos_direct() ensures no compiler optimization.
+    unsigned char sec  = __rtc_read_cmos_direct(0x00);
+    unsigned char min  = __rtc_read_cmos_direct(0x02);
+    unsigned char hour = __rtc_read_cmos_direct(0x04);
+    unsigned char mon  = __rtc_read_cmos_direct(0x08);
+    unsigned char year = __rtc_read_cmos_direct(0x09);
+    unsigned char wday = __rtc_read_cmos_direct(0x06);
+    unsigned char mday = __rtc_read_cmos_direct(0x07);
 
-    // Debug: print raw values
+    // Debug output for troubleshooting.
     pr_debug("Raw RTC: sec=%u min=%u hour=%u mon=%u year=%u wday=%u mday=%u (BCD=%d)\n", sec, min, hour, mon, year, wday, mday, is_bcd);
+
+    // Diagnostic checks for known hardware failure modes (one-shot warnings).
     if (sec == 0 && min == 0 && hour == 0 && mon == 0 && year == 0 && wday == 0 && mday == 0) {
         static int warned_zero = 0;
         if (!warned_zero) {
             warned_zero = 1;
-            pr_warning("rtc_read_datetime: all-zero read (BCD=%d)\n", is_bcd);
+            pr_warning("rtc_read_datetime: all-zero read (hardware not initialized or QEMU issue)\n");
         }
     }
-    if (sec == 0xFF && min == 0xFF && hour == 0xFF && mon == 0xFF && year == 0xFF && wday == 0xFF && mday == 0xFF) {
+    if (sec == 0xFF && min == 0xFF && hour == 0xFF && mon == 0xFF &&
+        year == 0xFF && wday == 0xFF && mday == 0xFF) {
         static int warned_ff = 0;
         if (!warned_ff) {
             warned_ff = 1;
-            pr_warning("rtc_read_datetime: all-0xFF read (BCD=%d)\n", is_bcd);
+            pr_warning("rtc_read_datetime: all-0xFF read (CMOS bus floating or disconnected)\n");
         }
     }
-    if (sec == (unsigned char)(0x80 | 0x00) &&
-        min == (unsigned char)(0x80 | 0x02) &&
-        hour == (unsigned char)(0x80 | 0x04) &&
-        wday == (unsigned char)(0x80 | 0x06) &&
-        mday == (unsigned char)(0x80 | 0x07) &&
-        mon == (unsigned char)(0x80 | 0x08) &&
-        year == (unsigned char)(0x80 | 0x09)) {
+
+    // Check for mirrored register indices (data port echoing address instead of data).
+    if (sec == (0x80 | 0x00) && min == (0x80 | 0x02) && hour == (0x80 | 0x04) &&
+        wday == (0x80 | 0x06) && mday == (0x80 | 0x07) && mon == (0x80 | 0x08) &&
+        year == (0x80 | 0x09)) {
         static int warned_mirror = 0;
         if (!warned_mirror) {
             warned_mirror          = 1;
-            unsigned char status_a = read_register(0x0A);
-            unsigned char status_b = read_register(0x0B);
-            unsigned char status_c = read_register(0x0C);
+            unsigned char status_a = __rtc_read_cmos_direct(0x0A);
+            unsigned char status_b = __rtc_read_cmos_direct(0x0B);
+            unsigned char status_c = __rtc_read_cmos_direct(0x0C);
             pr_warning("rtc_read_datetime: mirrored index values (A=0x%02x B=0x%02x C=0x%02x)\n", status_a, status_b, status_c);
         }
     }
 
+    // Convert and store the datetime values.
     if (is_bcd) {
+        // BCD format: each nibble is a decimal digit (e.g., 0x59 = 59).
         global_time.tm_sec  = bcd2bin(sec);
         global_time.tm_min  = bcd2bin(min);
         global_time.tm_hour = bcd2bin(hour);
@@ -240,6 +201,7 @@ __attribute__((noinline)) static void rtc_read_datetime(void)
         global_time.tm_wday = bcd2bin(wday);
         global_time.tm_mday = bcd2bin(mday);
     } else {
+        // Binary format: direct values.
         global_time.tm_sec  = sec;
         global_time.tm_min  = min;
         global_time.tm_hour = hour;
@@ -310,7 +272,7 @@ int rtc_initialize(void)
     unsigned char status;
 
     // Read the control register B to modify interrupt configuration.
-    status = read_register(0x0B);
+    status = __rtc_read_cmos_direct(0x0B);
     // Enable 24-hour mode (bit 1).
     status |= 0x02U;
     // Enable update-ended interrupt (bit 4) to get notified when time changes.
@@ -325,7 +287,7 @@ int rtc_initialize(void)
     write_register(0x0B, status);
 
     // Clear any pending interrupts by reading register C.
-    read_register(0x0C);
+    __rtc_read_cmos_direct(0x0C);
 
     // Install the RTC interrupt handler for the real-time clock IRQ.
     irq_install_handler(IRQ_REAL_TIME_CLOCK, rtc_handler_isr, "Real Time Clock (RTC)");
@@ -336,7 +298,7 @@ int rtc_initialize(void)
     rtc_update_datetime();
 
     // Debug print the initialized time.
-    pr_notice("RTC initialized: %04d-%02d-%02d %02d:%02d:%02d (BCD: %s)\n", global_time.tm_year, global_time.tm_mon, global_time.tm_mday, global_time.tm_hour, global_time.tm_min, global_time.tm_sec, is_bcd ? "Yes" : "No");
+    pr_debug("RTC initialized: %04d-%02d-%02d %02d:%02d:%02d (BCD: %s)\n", global_time.tm_year, global_time.tm_mon, global_time.tm_mday, global_time.tm_hour, global_time.tm_min, global_time.tm_sec, is_bcd ? "Yes" : "No");
     return 0;
 }
 
