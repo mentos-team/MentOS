@@ -185,6 +185,11 @@ void scheduler_restore_context(task_struct *process, pt_regs_t *f)
     runqueue.curr = process;
     // Restore the registers.
     *f            = process->thread.regs;
+    // CRITICAL: Memory barrier to prevent compiler from reordering the page directory
+    // switch before the above memory writes. In Release mode, the compiler can
+    // reorder operations, which would cause us to switch page directories BEFORE
+    // restoring the register context. This leads to immediate faults on process switch.
+    __asm__ __volatile__("" ::: "memory");
     // TODO(enrico): Explain paging switch (ring 0 doesn't need page switching)
     // Switch to process page directory
     paging_switch_pgd(process->mm->pgd);
