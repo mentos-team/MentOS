@@ -6,23 +6,16 @@
 
 extern isr_handler
 
-; Macro used to define a ISR which does not push an error code.
-%macro ISR_NOERR 1
+; Unified macro for all ISRs - takes interrupt number and error code flag.
+; 2nd parameter: has_error_code (1 if CPU pushes error code, 0 if not)
+%macro ISR 2
     global INT_%1
     INT_%1:
         cli
-        ; A normal ISR stub that pops a dummy error code to keep a
-        ; uniform stack frame
-        push 0
-        push %1
-        jmp isr_common
-%endmacro
-
-; Macro used to define a ISR which pushes an error code.
-%macro ISR_ERR 1
-    global INT_%1
-    INT_%1:
-        cli
+        %if %2 == 0
+            ; CPU didn't push error code, push dummy for uniform stack frame
+            push 0
+        %endif
         push %1
         jmp isr_common
 %endmacro
@@ -33,40 +26,40 @@ extern isr_handler
 section .text
 
 ; Standard X86 interrupt service routines
-ISR_NOERR 0
-ISR_NOERR 1
-ISR_NOERR 2
-ISR_NOERR 3
-ISR_NOERR 4
-ISR_NOERR 5
-ISR_NOERR 6
-ISR_NOERR 7
-ISR_ERR   8
-ISR_NOERR 9
-ISR_ERR   10
-ISR_ERR   11
-ISR_ERR   12
-ISR_ERR   13
-ISR_ERR   14
-ISR_NOERR 15
-ISR_NOERR 16
-ISR_NOERR 17
-ISR_NOERR 18
-ISR_NOERR 19
-ISR_NOERR 20
-ISR_NOERR 21
-ISR_NOERR 22
-ISR_NOERR 23
-ISR_NOERR 24
-ISR_NOERR 25
-ISR_NOERR 26
-ISR_NOERR 27
-ISR_NOERR 28
-ISR_NOERR 29
-ISR_NOERR 30
-ISR_NOERR 31
+ISR 0, 0
+ISR 1, 0
+ISR 2, 0
+ISR 3, 0
+ISR 4, 0
+ISR 5, 0
+ISR 6, 0
+ISR 7, 0
+ISR 8, 1
+ISR 9, 0
+ISR 10, 1
+ISR 11, 1
+ISR 12, 1
+ISR 13, 1
+ISR 14, 1
+ISR 15, 0
+ISR 16, 0
+ISR 17, 0
+ISR 18, 0
+ISR 19, 0
+ISR 20, 0
+ISR 21, 0
+ISR 22, 0
+ISR 23, 0
+ISR 24, 0
+ISR 25, 0
+ISR 26, 0
+ISR 27, 0
+ISR 28, 0
+ISR 29, 0
+ISR 30, 0
+ISR 31, 0
 
-ISR_NOERR 80
+ISR 80, 0
 
 isr_common:
     ; Save all registers (eax, ecx, edx, ebx, esp, ebp, esi, edi)
@@ -78,20 +71,35 @@ isr_common:
     push fs
     push gs
 
+    ; Normalize stack frame: CPU only pushes SS/UESP on privilege level change.
+    ; Check if we came from user mode (ring 3) by examining CS on stack.
+    ; Stack layout at this point:
+    ;   [ESP+0]=GS, [ESP+4]=FS, [ESP+8]=ES, [ESP+12]=DS, [ESP+16]=EDI, [ESP+20]=ESI,
+    ;   [ESP+24]=EBP, [ESP+28]=ESP, [ESP+32]=EBX, [ESP+36]=EDX, [ESP+40]=ECX, [ESP+44]=EAX,
+    ;   [ESP+48]=INT_NO, [ESP+52]=ERR_CODE, [ESP+56]=EIP, [ESP+60]=CS, [ESP+64]=EFLAGS, [ESP+68/72]=UESP/SS
+    mov eax, [esp + 60]         ; Load CS (offset: 60 bytes from current ESP)
+    test eax, 0x3               ; Check privilege bits (ring 0 = 0x00, ring 3 = 0x03)
+    jnz .from_user_mode
+
+    ; From kernel mode - CPU didn't push SS/UESP, so we must push them
+    ; to maintain consistent pt_regs structure
+    mov eax, 0x10               ; Kernel data segment selector
+    push eax                    ; Push as SS
+    mov eax, [esp + 60]         ; Re-load original ESP before our pushes
+    add eax, 8                  ; Account for INT_NO and ERR_CODE on stack
+    push eax                    ; Push as UESP
+    jmp .frame_normalized
+
+.from_user_mode:
+    ; From user mode - CPU already pushed SS/UESP, they're already on stack
+    ; No action needed, frame is already normalized
+
+.frame_normalized:
     mov ax, 0x10
     mov ds, ax
     mov es, ax
     mov fs, ax
     mov gs, ax
-    ; CLD - Azzera la flag di Direzione
-    ; Questa istruzione forza semplicemente a zero la flag di Direzione.
-    ; Quando la flag di direzione vale 0 tutte le istruzioni per la
-    ;  manipolazione delle stringhe agiscono in avanti, cioè dagli indirizzi più
-    ;  bassi a quelli più alti.
-    ; L'istruzione agisce dunque sui puntatori SI e DI producendo su essi un
-    ;  autoincremento proporzionale alla dimensione degli operandi trattati.
-    ; Le sue caratteristiche sono riassunte nella seguente tabella (leggi le
-    ;  istruzioni  Legenda della Tabella):
     cld
 
     ; Call the interrupt handler.
@@ -111,6 +119,8 @@ isr_common:
     ; Cleanup error code and IRQ #
     add esp, 0x8
 
+    ; Pop SS and UESP (normalized frame)
+    add esp, 0x8
 
     iret                        ; pops 5 things at once:
                                 ;   CS, EIP, EFLAGS, SS, and ESP
