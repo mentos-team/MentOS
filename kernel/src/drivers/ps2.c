@@ -111,16 +111,16 @@
 /// @return 0 if the condition is met, 1 otherwise.
 typedef int (*ps2_wait_condition_fn)(int);
 
-/// @brief Returns 0 if the input buffer is empty (ready for new command), non-zero if still waiting.
+/// @brief Returns 0 if the input buffer is empty (ready for new data), non-zero while still full (waiting).
 static inline int __cond_input_full(int status)
 {
-    return (status & PS2_STATUS_INPUT_FULL) != 0;
+    return (status & PS2_STATUS_INPUT_FULL) != 0; // Non-zero (keep waiting) while full, 0 when empty
 }
 
-/// @brief Returns 0 if the output buffer is not full (data is available), non-zero if still waiting.
-static inline int __cond_output_full(int status)
+/// @brief Returns 0 if data is available in output buffer, non-zero while empty (waiting).
+static inline int __cond_output_empty(int status)
 {
-    return (status & PS2_STATUS_OUTPUT_FULL) != 0;
+    return (status & PS2_STATUS_OUTPUT_FULL) == 0; // Non-zero (keep waiting) while empty, 0 when data available
 }
 
 static inline int __wait_for_condition(ps2_wait_condition_fn condition_fn, unsigned int timeout_max)
@@ -158,6 +158,44 @@ static inline int __wait_for_condition(ps2_wait_condition_fn condition_fn, unsig
     return -1; // Timeout
 }
 
+/// @brief Perform a busy-wait delay with memory barriers to prevent compiler optimization.
+/// @param iterations the number of pause() iterations to execute.
+static inline void __ps2_delay(unsigned int iterations)
+{
+    for (volatile unsigned int i = 0; i < iterations; i++) {
+        pause();
+    }
+    __asm__ __volatile__("" ::: "memory");
+}
+
+/// @brief Flush any stale data in the output buffer with blind reads (no status check).
+/// @param count the number of blind reads to perform.
+static inline void __ps2_blind_read_buffer(unsigned int count)
+{
+    for (volatile unsigned int i = 0; i < count; i++) {
+        // Internal delay loop before each blind read.
+        __ps2_delay(1000);
+        // Blind read - don't check status. We just want to clear out any stale data that might be sitting in the output
+        // buffer.
+        inportb(PS2_DATA);
+        __asm__ __volatile__("" ::: "memory");
+    }
+}
+
+/// @brief Flush the output buffer by reading while data is available (with timeout).
+/// @param max_iterations maximum number of reads to attempt before giving up.
+static inline void __ps2_flush_output_buffer(unsigned int max_iterations)
+{
+    volatile unsigned int timeout = max_iterations;
+    while (timeout-- > 0) {
+        if (inportb(PS2_STATUS) & PS2_STATUS_OUTPUT_FULL) {
+            inportb(PS2_DATA); // Read and discard
+        } else {
+            break; // Buffer is empty, we're done
+        }
+    }
+}
+
 // ================================================================================
 // Core PS/2 Driver Functions
 // ================================================================================
@@ -165,18 +203,7 @@ static inline int __wait_for_condition(ps2_wait_condition_fn condition_fn, unsig
 void ps2_write_data(unsigned char data)
 {
     // Before writing, ensure output buffer is empty to avoid deadlock
-    // Use blind reads without status checks (status can be unreliable)
-    for (volatile int i = 0; i < 20; i++) {
-        // Force delay and memory barrier to prevent compiler caching
-        volatile unsigned int delay_loop = 10000;
-        while (delay_loop-- > 0) {
-            pause();
-        }
-        __asm__ __volatile__("" ::: "memory");
-        // Do blind read - don't check status
-        inportb(PS2_DATA);
-        __asm__ __volatile__("" ::: "memory");
-    }
+    __ps2_blind_read_buffer(20);
 
     // Wait for the input buffer to be empty before sending data (with timeout).
     volatile int wait_result = __wait_for_condition(__cond_input_full, 100);
@@ -189,21 +216,8 @@ void ps2_write_data(unsigned char data)
 
 void ps2_write_command(unsigned char command)
 {
-    volatile unsigned int timeout = 1000;
-
     // Before writing, ensure output buffer is empty to avoid deadlock
-    // Use blind reads without status checks (status can be unreliable)
-    for (volatile int i = 0; i < 20; i++) {
-        // Force delay and memory barrier to prevent compiler caching
-        volatile unsigned int delay_loop = 10000;
-        while (delay_loop-- > 0) {
-            pause();
-        }
-        __asm__ __volatile__("" ::: "memory");
-        // Do blind read - don't check status
-        inportb(PS2_DATA);
-        __asm__ __volatile__("" ::: "memory");
-    }
+    __ps2_blind_read_buffer(20);
 
     // Wait for the input buffer to be empty before sending the command (with timeout).
     volatile int wait_result = __wait_for_condition(__cond_input_full, 100);
@@ -217,8 +231,8 @@ void ps2_write_command(unsigned char command)
 
 unsigned char ps2_read_data(void)
 {
-    // Wait until the output buffer is not full (data is available, with timeout).
-    volatile int wait_result = __wait_for_condition(__cond_output_full, 1000);
+    // Wait until the output buffer has data available (with timeout).
+    volatile int wait_result = __wait_for_condition(__cond_output_empty, 1000);
     if (wait_result < 0) {
         return 0xFF; // Return an error value on timeout.
     }
@@ -315,11 +329,10 @@ int ps2_initialize(void)
     unsigned char status;
     unsigned char response;
     bool_t dual;
-    volatile unsigned int flush_timeout;
 
     // Pre-init: Read initial status before doing anything
     unsigned char initial_status = inportb(PS2_STATUS);
-    pr_notice("PS/2 pre-init: initial status register = 0x%02x\n", initial_status);
+    pr_info("PS/2 pre-init: initial status register = 0x%02x\n", initial_status);
 
     // Pre-init: aggressively flush any stale data from BIOS/bootloader
     // Do BLIND reads first (without status check) since status itself might be unreliable
@@ -350,13 +363,10 @@ int ps2_initialize(void)
             }
         }
     }
-    pr_notice("PS/2: total flushed %d bytes from output buffer\n", bytes_flushed);
+    pr_info("PS/2: total flushed %d bytes from output buffer\n", bytes_flushed);
 
     // Long delay to let controller stabilize
-    for (volatile int settle = 0; settle < 1000; settle++) {
-        pause();
-    }
-    __asm__ __volatile__("" ::: "memory");
+    __ps2_delay(1000);
 
     status = __ps2_get_controller_status();
     pr_debug("Initial Status   : %s (%3d | %02x)\n", dec_to_binary(status, 8), status, status);
@@ -371,20 +381,12 @@ int ps2_initialize(void)
     pr_debug("Disabling first port...\n");
     __ps2_disable_first_port();
     // Small delay to allow command to take effect
-    for (volatile int i = 0; i < 10000; i++) {
-        pause();
-    }
-    // Memory barrier to prevent optimization away of delay loop
-    __asm__ __volatile__("" ::: "memory");
+    __ps2_delay(1000);
 
     pr_debug("Disabling second port...\n");
     __ps2_disable_second_port();
     // Small delay to allow command to take effect
-    for (volatile int i = 0; i < 10000; i++) {
-        pause();
-    }
-    // Memory barrier to prevent optimization away of delay loop
-    __asm__ __volatile__("" ::: "memory");
+    __ps2_delay(1000);
 
     // ========================================================================
     // Step 2: Flush The Output Buffer
@@ -399,15 +401,7 @@ int ps2_initialize(void)
 
     pr_debug("Flushing the output buffer...\n");
     // Flush the output buffer with timeout to prevent infinite loops
-    // Only read if output buffer is marked as full
-    flush_timeout = 100;
-    while (flush_timeout-- > 0) {
-        if (inportb(PS2_STATUS) & PS2_STATUS_OUTPUT_FULL) {
-            inportb(PS2_DATA); // Read and discard
-        } else {
-            break; // Buffer is empty, we're done
-        }
-    }
+    __ps2_flush_output_buffer(100);
 
     // ========================================================================
     // Step 3: Set the Controller Configuration Byte
@@ -453,16 +447,9 @@ int ps2_initialize(void)
     // The self-test can reset the controller, so always restore the configuration.
     __ps2_set_controller_status(status);
     // Re-read status to ensure write took effect (prevents compiler caching)
-    status        = __ps2_get_controller_status();
+    status = __ps2_get_controller_status();
     // Flush the output buffer after self-test as it can generate spurious data (with timeout).
-    flush_timeout = 100;
-    while (flush_timeout-- > 0) {
-        if (inportb(PS2_STATUS) & PS2_STATUS_OUTPUT_FULL) {
-            inportb(PS2_DATA); // Read and discard
-        } else {
-            break; // Buffer is empty
-        }
-    }
+    __ps2_flush_output_buffer(100);
 
     // ========================================================================
     // Step 5: Determine If There Are 2 Channels
@@ -562,26 +549,13 @@ int ps2_initialize(void)
 
     // Before resetting devices, flush any stale data in the buffer.
     pr_debug("Flushing buffer before device reset...\n");
-    {
-        flush_timeout = 100;
-        while (flush_timeout-- > 0) {
-            if (inportb(PS2_STATUS) & PS2_STATUS_OUTPUT_FULL) {
-                inportb(PS2_DATA); // Read and discard
-            } else {
-                break;
-            }
-        }
-    }
+    __ps2_flush_output_buffer(100);
 
     // Reset first port.
     pr_debug("Resetting first PS/2 port...\n");
     __ps2_write_first_port(0xFF);
     // Give device time to respond
-    for (volatile int i = 0; i < 50000; i++) {
-        pause();
-    }
-    // Memory barrier to prevent optimization away of delay loop
-    __asm__ __volatile__("" ::: "memory");
+    __ps2_delay(50000);
     // Wait for `command acknowledged`.
     response = ps2_read_data();
     pr_debug("First port reset response: 0x%02x\n", response);
@@ -592,11 +566,7 @@ int ps2_initialize(void)
         // Device acknowledged reset (or resend), wait for self-test response.
         pr_debug("First port reset acknowledged, waiting for self-test...\n");
         // Give device time to complete self-test
-        for (volatile int i = 0; i < 1000; i++) {
-            pause();
-        }
-        // Memory barrier to prevent optimization away of delay loop
-        __asm__ __volatile__("" ::: "memory");
+        __ps2_delay(1000);
         response = ps2_read_data();
         pr_debug("First port self-test response: 0x%02x\n", response);
         if (response == PS2_DEV_SELF_TEST_PASS) {
@@ -617,11 +587,7 @@ int ps2_initialize(void)
         pr_debug("Resetting second PS/2 port...\n");
         __ps2_write_second_port(0xFF);
         // Give device time to respond
-        for (volatile int i = 0; i < 50000; i++) {
-            pause();
-        }
-        // Memory barrier to prevent optimization away of delay loop
-        __asm__ __volatile__("" ::: "memory");
+        __ps2_delay(50000);
         // Wait for `command acknowledged`.
         response = ps2_read_data();
         pr_debug("Second port reset response: 0x%02x\n", response);
@@ -632,11 +598,7 @@ int ps2_initialize(void)
             // Device acknowledged reset, wait for self-test response.
             pr_debug("Second port reset acknowledged, waiting for self-test...\n");
             // Give device time to complete self-test
-            for (volatile int i = 0; i < 1000; i++) {
-                pause();
-            }
-            // Memory barrier to prevent optimization away of delay loop
-            __asm__ __volatile__("" ::: "memory");
+            __ps2_delay(1000);
             response = ps2_read_data();
             pr_debug("Second port self-test response: 0x%02x\n", response);
             if (response == PS2_DEV_SELF_TEST_PASS) {
@@ -659,16 +621,7 @@ int ps2_initialize(void)
 
     pr_debug("Flushing the output buffer...\n");
     // Final flush with timeout
-    {
-        flush_timeout = 100;
-        while (flush_timeout-- > 0) {
-            if (inportb(PS2_STATUS) & PS2_STATUS_OUTPUT_FULL) {
-                inportb(PS2_DATA); // Read and discard
-            } else {
-                break; // Buffer is empty
-            }
-        }
-    }
+    __ps2_flush_output_buffer(100);
 
     // ========================================================================
     // Step 9: PS/2 initialization complete
@@ -676,7 +629,7 @@ int ps2_initialize(void)
     // config byte. IRQ handlers will enable the corresponding PIC IRQs when
     // they are installed (keyboard_initialize, mouse_install, etc).
 
-    pr_notice("PS/2 controller initialized successfully.\n");
+    pr_info("PS/2 controller initialized successfully.\n");
 
     return 0;
 }
