@@ -149,6 +149,9 @@ struct pt_regs;
         dbg_fn("    EIP    = 0x%-09x\n", (frame)->eip);                                                                \
         dbg_fn("    CS     = 0x%-04x\n", (frame)->cs);                                                                 \
         dbg_fn("    EFLAGS = 0x%-09x\n", (frame)->eflags);                                                             \
-        dbg_fn("    UESP   = 0x%-09x\n", (frame)->useresp);                                                            \
-        dbg_fn("    SS     = 0x%-04x\n", (frame)->ss);                                                                 \
+        /* Only print user mode stack info if exception came from user mode (CS privilege bits = 3) */                \
+        if (((frame)->cs & 0x3) == 3) {                                                                                \
+            dbg_fn("    UESP   = 0x%-09x\n", (frame)->useresp);                                                        \
+            dbg_fn("    SS     = 0x%-04x\n", (frame)->ss);                                                             \
+        }                                                                                                               \
     } while (0)

@@ -71,30 +71,6 @@ isr_common:
     push fs
     push gs
 
-    ; Normalize stack frame: CPU only pushes SS/UESP on privilege level change.
-    ; Check if we came from user mode (ring 3) by examining CS on stack.
-    ; Stack layout at this point:
-    ;   [ESP+0]=GS, [ESP+4]=FS, [ESP+8]=ES, [ESP+12]=DS, [ESP+16]=EDI, [ESP+20]=ESI,
-    ;   [ESP+24]=EBP, [ESP+28]=ESP, [ESP+32]=EBX, [ESP+36]=EDX, [ESP+40]=ECX, [ESP+44]=EAX,
-    ;   [ESP+48]=INT_NO, [ESP+52]=ERR_CODE, [ESP+56]=EIP, [ESP+60]=CS, [ESP+64]=EFLAGS, [ESP+68/72]=UESP/SS
-    mov eax, [esp + 60]         ; Load CS (offset: 60 bytes from current ESP)
-    test eax, 0x3               ; Check privilege bits (ring 0 = 0x00, ring 3 = 0x03)
-    jnz .from_user_mode
-
-    ; From kernel mode - CPU didn't push SS/UESP, so we must push them
-    ; to maintain consistent pt_regs structure
-    mov eax, 0x10               ; Kernel data segment selector
-    push eax                    ; Push as SS
-    mov eax, [esp + 60]         ; Re-load original ESP before our pushes
-    add eax, 8                  ; Account for INT_NO and ERR_CODE on stack
-    push eax                    ; Push as UESP
-    jmp .frame_normalized
-
-.from_user_mode:
-    ; From user mode - CPU already pushed SS/UESP, they're already on stack
-    ; No action needed, frame is already normalized
-
-.frame_normalized:
     mov ax, 0x10
     mov ds, ax
     mov es, ax
@@ -113,13 +89,10 @@ isr_common:
     pop es
     pop ds
 
-    ; Restore all registers  (eax, ecx, edx, ebx, esp, ebp, esi, edi).
+    ; Restore all registers (eax, ecx, edx, ebx, esp, ebp, esi, edi).
     popa
 
     ; Cleanup error code and IRQ #
-    add esp, 0x8
-
-    ; Pop SS and UESP (normalized frame)
     add esp, 0x8
 
     iret                        ; pops 5 things at once:
