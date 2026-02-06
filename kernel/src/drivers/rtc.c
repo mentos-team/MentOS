@@ -297,7 +297,7 @@ int rtc_initialize(void)
     // Perform initial time synchronization.
     rtc_update_datetime();
 
-    // Debug print the initialized time.
+    // Log successful initialization with current time.
     pr_debug("RTC initialized: %04d-%02d-%02d %02d:%02d:%02d (BCD: %s)\n", global_time.tm_year, global_time.tm_mon, global_time.tm_mday, global_time.tm_hour, global_time.tm_min, global_time.tm_sec, is_bcd ? "Yes" : "No");
     return 0;
 }
