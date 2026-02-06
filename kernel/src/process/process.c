@@ -143,6 +143,10 @@ start:
         pr_err("Cannot find executable!\n");
         return -errno;
     }
+    if (!file->fs_operations || !file->sys_operations) {
+        pr_err("Executable has no filesystem operations (unmounted fs?).\n");
+        return -ENOENT;
+    }
     // Check that the file has the execute permission set
     if (!vfs_valid_exec_permission(task, file)) {
         pr_err("This is not executable `%s`!\n", path);
