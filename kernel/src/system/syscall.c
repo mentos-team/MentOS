@@ -134,7 +134,7 @@ void syscall_handler(pt_regs_t *f)
 
     // The result of the system call.
     if (f->eax >= SYSCALL_NUMBER) {
-        f->eax = ENOSYS;
+        f->eax = -ENOSYS;
     } else {
         // Retrieve the system call function from the system call table.
         SystemCall5 fun = (SystemCall5)sys_call_table[f->eax];
