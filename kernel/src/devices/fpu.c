@@ -16,9 +16,10 @@
 #include "process/process.h"
 #include "process/scheduler.h"
 #include "string.h"
+#include "system/panic.h"
 #include "system/signal.h"
 
-/// Pointerst to the current thread using the FPU.
+/// Pointer to the thread currently using the FPU, if any.
 task_struct *thread_using_fpu = NULL;
 /// Temporary aligned buffer for copying around FPU contexts.
 uint8_t saves[512] __attribute__((aligned(16)));
@@ -138,6 +139,36 @@ static inline void __sigfpe_handler(pt_regs_t *f)
     pr_debug("  SIGFPE sent.\n");
 }
 
+/// Kernel trap for invalid opcode exceptions
+/// @param f The interrupt stack frame.
+static inline void __invalid_opcode_handler(pt_regs_t *f)
+{
+    pr_debug("__invalid_opcode_handler(%p) - Invalid opcode trap\n", f);
+    pr_debug("  EIP: 0x%x, Error code: 0x%x\n", f->eip, f->err_code);
+
+    // Check if this is user mode or kernel mode
+    if ((f->cs & 0x3) == 0x3) {
+        // User mode - send SIGILL
+        task_struct *task = scheduler_get_current_process();
+        // Get the action for SIGILL.
+        sigaction_t *action = &task->sighand.action[SIGILL - 1];
+        // If the user did not install a SIGILL handler, terminate immediately.
+        // Returning to the same invalid instruction would just re-trigger the fault.
+        if ((action->sa_handler == SIG_DFL) || (action->sa_handler == SIG_IGN)) {
+            do_exit(132 << 8);
+            return;
+        }
+        pr_debug("  Sending SIGILL to user process (pid=%d)\n", task->pid);
+        sys_kill(task->pid, SIGILL);
+        pr_debug("  SIGILL sent.\n");
+    } else {
+        // Kernel mode - panic
+        pr_crit("Invalid opcode in kernel mode at 0x%x\n", f->eip);
+        PRINT_REGS(pr_crit, f);
+        kernel_panic("Invalid opcode in kernel");
+    }
+}
+
 /// @brief Ensure basic FPU functionality works.
 /// @details
 /// For processors without a FPU, this tests that maths libraries link
@@ -217,11 +248,15 @@ int fpu_install(void)
     isr_install_handler(DEV_NOT_AVL, &__invalid_op, "fpu: device missing");
     pr_debug("  DEV_NOT_AVL handler installed.\n");
 
-    pr_debug("  Step 6: Installing DIVIDE_ERROR handler\n");
+    pr_debug("  Step 6: Installing INVALID_OPCODE handler\n");
+    isr_install_handler(INVALID_OPCODE, &__invalid_opcode_handler, "invalid opcode");
+    pr_debug("  INVALID_OPCODE handler installed.\n");
+
+    pr_debug("  Step 7: Installing DIVIDE_ERROR handler\n");
     isr_install_handler(DIVIDE_ERROR, &__sigfpe_handler, "divide error");
     pr_debug("  DIVIDE_ERROR handler installed.\n");
 
-    pr_debug("  Step 7: Installing FLOATING_POINT_ERR handler\n");
+    pr_debug("  Step 8: Installing FLOATING_POINT_ERR handler\n");
     isr_install_handler(FLOATING_POINT_ERR, &__sigfpe_handler, "floating point error");
     pr_debug("  FLOATING_POINT_ERR handler installed.\n");
 
