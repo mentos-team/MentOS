@@ -148,11 +148,11 @@ if(CMAKE_C_COMPILER_VERSION VERSION_GREATER_EQUAL 10)
 endif()
 
 # Build-specific optimization and debug flags.
-# if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-#     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g3 -ggdb -O0")
-# elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
-#     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O3")
-# endif()
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g3 -ggdb -O0")
+elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O3")
+endif()
 
 # Set the assembly compiler flags.
 set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -m32")

@@ -6,7 +6,7 @@
 // Setup the logging for this file (do this before any other include).
 #include "sys/kernel_levels.h"           // Include kernel log levels.
 #define __DEBUG_HEADER__ "[KHEAP ]"      ///< Change header.
-#define __DEBUG_LEVEL__  LOGLEVEL_DEBUG ///< Set log level.
+#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
 #include "io/debug.h"                    // Include debugging functions.
 
 #include "assert.h"
@@ -549,7 +549,7 @@ static void *__do_malloc(vm_area_struct_t *heap, size_t size)
     block->is_free = 0;
 
     // Optionally dump the current state of the heap for debugging.
-    __blkmngr_dump(LOGLEVEL_DEBUG, header);
+    __blkmngr_dump(LOGLEVEL_NOTICE, header);
 
     // Return a pointer to the memory area, skipping the block header.
     return (void *)((char *)block + OVERHEAD);
@@ -617,7 +617,7 @@ static int __do_free(vm_area_struct_t *heap, void *ptr)
     }
 
     // Dump the current state of the heap for debugging purposes.
-    __blkmngr_dump(LOGLEVEL_DEBUG, header);
+    __blkmngr_dump(LOGLEVEL_NOTICE, header);
 
     return 0; // Return success.
 }
@@ -699,7 +699,7 @@ void *sys_brk(void *addr)
         block->is_free = 1;
 
         // Dump the state of the memory manager for debugging.
-        __blkmngr_dump(LOGLEVEL_DEBUG, header);
+        __blkmngr_dump(LOGLEVEL_NOTICE, header);
     }
 
     // Variable to hold the return pointer.

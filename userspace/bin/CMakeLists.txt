@@ -1,7 +1,3 @@
-# Force Release mode compilation for all userspace programs
-set(CMAKE_C_FLAGS_DEBUG "-O2 -g0 -DNDEBUG")
-set(CMAKE_C_FLAGS_RELEASE "-O2 -g0 -DNDEBUG")
-
 # List of programs.
 set(PROGRAM_LIST
     cat.c

@@ -6,7 +6,7 @@
 // Setup the logging for this file (do this before any other include).
 #include "sys/kernel_levels.h"           // Include kernel log levels.
 #define __DEBUG_HEADER__ "[TIMER ]"      ///< Change header.
-#define __DEBUG_LEVEL__  LOGLEVEL_DEBUG ///< Set log level.
+#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
 #include "io/debug.h"                    // Include debugging functions.
 
 #include "assert.h"
@@ -131,7 +131,7 @@ unsigned long timer_get_ticks(void) { return timer_ticks; }
 /// @param vector the vector for which we print the details.
 static inline void __print_vector(list_head_t *vector)
 {
-#if defined(ENABLE_REAL_TIMER_SYSTEM_DUMP) && (__DEBUG_LEVEL__ == LOGLEVEL_DEBUG)
+#if defined(ENABLE_REAL_TIMER_SYSTEM_DUMP) && (__DEBUG_LEVEL__ == LOGLEVEL_NOTICE)
     if (!list_head_empty(vector)) {
         pr_debug("0x%p = [ ", vector);
         list_for_each_decl (it, vector) {
@@ -146,7 +146,7 @@ static inline void __print_vector(list_head_t *vector)
 /// @param base the base for which we print the details.
 static inline void __print_vector_base(tvec_base_t *base)
 {
-#if defined(ENABLE_REAL_TIMER_SYSTEM_DUMP) && (__DEBUG_LEVEL__ == LOGLEVEL_DEBUG)
+#if defined(ENABLE_REAL_TIMER_SYSTEM_DUMP) && (__DEBUG_LEVEL__ == LOGLEVEL_NOTICE)
     pr_debug("========================================\n");
     for (int i = 0; i < TVR_SIZE; ++i) {
         if (!list_head_empty(&base->tvr[i])) {

@@ -8,10 +8,6 @@
 # - 03_pipes.c:  Inter-process communication
 # - 04_file_io.c: File operations
 
-# Force Release mode compilation for all examples
-set(CMAKE_C_FLAGS_DEBUG "-O2 -g0 -DNDEBUG")
-set(CMAKE_C_FLAGS_RELEASE "-O2 -g0 -DNDEBUG")
-
 # List of example programs.
 set(EXAMPLE_LIST
     01_hello.c

@@ -2,10 +2,6 @@
 # LIBRARY
 # =============================================================================
 
-# Force Release mode compilation for libc
-set(CMAKE_C_FLAGS_DEBUG "-O2 -g0 -DNDEBUG")
-set(CMAKE_C_FLAGS_RELEASE "-O2 -g0 -DNDEBUG")
-
 # Automatically collect all library source files.
 file(GLOB_RECURSE LIBC_SOURCES 
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c"
