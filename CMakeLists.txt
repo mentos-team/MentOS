@@ -166,7 +166,6 @@ add_subdirectory(boot)
 add_subdirectory(kernel)
 add_subdirectory(lib)
 add_subdirectory(userspace)
-add_subdirectory(examples)
 
 # =============================================================================
 # FILESYSTEM
