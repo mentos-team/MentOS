@@ -103,7 +103,7 @@ set(CMAKE_ASM_COMPILER ${ASM_COMPILER})
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     set(CMAKE_ASM_COMPILE_OBJECT "<CMAKE_ASM_COMPILER> -f elf -g -O0 -F dwarf -o <OBJECT> <SOURCE>")
 else()
-    set(CMAKE_ASM_COMPILE_OBJECT "<CMAKE_ASM_COMPILER> -f elf -g -O3 -o <OBJECT> <SOURCE>")
+    set(CMAKE_ASM_COMPILE_OBJECT "<CMAKE_ASM_COMPILER> -f elf -g -O2 -o <OBJECT> <SOURCE>")
 endif()
 
 # =============================================================================
@@ -151,7 +151,7 @@ endif()
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g3 -ggdb -O0")
 elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O3")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O2")
 endif()
 
 # Set the assembly compiler flags.
@@ -201,6 +201,8 @@ set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -rtc base=localtime)
 # Disables all default devices (e.g., serial ports, network cards, VGA
 # adapters). Only devices we explicitly specify will be added.
 set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -nodefaults)
+# Disable reboot and shutdown.
+set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -no-reboot)
 # Set the debug type.
 if(${EMULATOR_OUTPUT_TYPE} STREQUAL OUTPUT_LOG)
     set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -serial file:${CMAKE_BINARY_DIR}/serial.log)
@@ -272,8 +274,10 @@ add_custom_target(
 # First, we need to build the ISO for the cdrom.
 add_custom_target(
     cdrom.iso
-    COMMAND cp -rf ${CMAKE_SOURCE_DIR}/iso .
-    COMMAND cp ${CMAKE_BINARY_DIR}/mentos/bootloader.bin ${CMAKE_BINARY_DIR}/iso/boot
+    COMMAND ${CMAKE_COMMAND} -E rm -rf ${CMAKE_BINARY_DIR}/iso
+    COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/iso ${CMAKE_BINARY_DIR}/iso
+    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/mentos/bootloader.bin ${CMAKE_BINARY_DIR}/iso/boot/bootloader.bin
+    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/iso/boot/grub/grub.cfg ${CMAKE_BINARY_DIR}/iso/boot/grub/grub.cfg
     COMMAND grub-mkrescue -o ${CMAKE_BINARY_DIR}/cdrom.iso ${CMAKE_BINARY_DIR}/iso
     DEPENDS bootloader.bin
 )
@@ -296,10 +300,11 @@ add_custom_target(
 # kernel command line including 'test'.
 add_custom_target(
     cdrom_test.iso
-    COMMAND cp -rf ${CMAKE_SOURCE_DIR}/iso .
-    COMMAND mv ${CMAKE_BINARY_DIR}/iso/boot/grub/grub.cfg.runtests ${CMAKE_BINARY_DIR}/iso/boot/grub/grub.cfg
-    COMMAND cp ${CMAKE_BINARY_DIR}/mentos/bootloader.bin ${CMAKE_BINARY_DIR}/iso/boot
-    COMMAND grub-mkrescue -o ${CMAKE_BINARY_DIR}/cdrom_test.iso ${CMAKE_BINARY_DIR}/iso
+    COMMAND ${CMAKE_COMMAND} -E rm -rf ${CMAKE_BINARY_DIR}/iso_test
+    COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/iso ${CMAKE_BINARY_DIR}/iso_test
+    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/iso/boot/grub/grub.cfg.runtests ${CMAKE_BINARY_DIR}/iso_test/boot/grub/grub.cfg
+    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/mentos/bootloader.bin ${CMAKE_BINARY_DIR}/iso_test/boot/bootloader.bin
+    COMMAND grub-mkrescue -o ${CMAKE_BINARY_DIR}/cdrom_test.iso ${CMAKE_BINARY_DIR}/iso_test
     DEPENDS bootloader.bin filesystem
 )
 
@@ -308,7 +313,7 @@ add_custom_target(
 # after the tests are done.
 add_custom_target(
     qemu-test
-    COMMAND ${EMULATOR} ${EMULATOR_FLAGS} -serial file:${CMAKE_BINARY_DIR}/test.log -nographic -device isa-debug-exit -boot d -cdrom ${CMAKE_BINARY_DIR}/cdrom_test.iso
+    COMMAND ${EMULATOR} ${EMULATOR_FLAGS} -nographic -device isa-debug-exit -boot d -cdrom ${CMAKE_BINARY_DIR}/cdrom_test.iso
     DEPENDS cdrom_test.iso
 )
 
