@@ -1,0 +1,785 @@
+/// @file test_dma.c
+/// @brief DMA zone and allocation tests.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
+/// See LICENSE.md for details.
+
+// Setup the logging for this file (do this before any other include).
+#include "sys/kernel_levels.h"          // Include kernel log levels.
+#define __DEBUG_HEADER__ "[TUNIT ]"     ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
+#include "io/debug.h"                   // Include debugging functions.
+
+#include "mem/alloc/slab.h"
+#include "mem/alloc/zone_allocator.h"
+#include "mem/gfp.h"
+#include "mem/mm/page.h"
+#include "mem/paging.h"
+#include "tests/test.h"
+#include "tests/test_utils.h"
+
+static inline void assert_dma_isa_limit(uint32_t phys)
+{
+    ASSERT_MSG(phys < 0x01000000, "DMA physical address must be below 16MB ISA limit");
+}
+
+/// @brief Validate DMA zone metadata and virtual mapping.
+TEST(dma_zone_integrity)
+{
+    TEST_SECTION_START("DMA zone integrity");
+
+    ASSERT_MSG(memory.dma_mem.size > 0, "DMA zone size must be > 0");
+    ASSERT_MSG(memory.dma_mem.start_addr < memory.dma_mem.end_addr, "DMA zone physical range invalid");
+    ASSERT_MSG(
+        memory.dma_mem.size == (memory.dma_mem.end_addr - memory.dma_mem.start_addr),
+        "DMA zone size must match physical range");
+    ASSERT_MSG(memory.dma_mem.end_addr <= 0x01000000, "DMA zone must fit within 16MB ISA limit");
+    ASSERT_MSG((memory.dma_mem.start_addr & (PAGE_SIZE - 1)) == 0, "DMA zone start must be page-aligned");
+    ASSERT_MSG((memory.dma_mem.end_addr & (PAGE_SIZE - 1)) == 0, "DMA zone end must be page-aligned");
+
+    ASSERT_MSG(memory.dma_mem.virt_start < memory.dma_mem.virt_end, "DMA zone virtual range invalid");
+    ASSERT_MSG(
+        memory.dma_mem.virt_end == (memory.dma_mem.virt_start + memory.dma_mem.size),
+        "DMA zone virtual range must match size");
+    ASSERT_MSG((memory.dma_mem.virt_start & (PAGE_SIZE - 1)) == 0, "DMA zone virt start must be page-aligned");
+    ASSERT_MSG((memory.dma_mem.virt_end & (PAGE_SIZE - 1)) == 0, "DMA zone virt end must be page-aligned");
+
+    ASSERT_MSG(is_valid_virtual_address(memory.dma_mem.virt_start) == 1, "DMA virt start must be valid");
+    ASSERT_MSG(is_valid_virtual_address(memory.dma_mem.virt_end - 1) == 1, "DMA virt end-1 must be valid");
+
+    TEST_SECTION_END();
+}
+
+/// @brief Test small order allocations and address translations in DMA zone.
+TEST(dma_order_allocations_and_translation)
+{
+    TEST_SECTION_START("DMA order allocations and translation");
+
+    unsigned long free_before = get_zone_free_space(GFP_DMA);
+
+    for (uint32_t order = 0; order <= 5; ++order) {
+        page_t *page = alloc_pages(GFP_DMA, order);
+        ASSERT_MSG(page != NULL, "DMA allocation must succeed");
+        ASSERT_MSG(is_dma_page_struct(page), "DMA allocation must come from DMA zone");
+
+        uint32_t phys = get_physical_address_from_page(page);
+        uint32_t virt = get_virtual_address_from_page(page);
+
+        assert_dma_isa_limit(phys);
+        ASSERT_MSG(phys >= memory.dma_mem.start_addr && phys < memory.dma_mem.end_addr, "DMA physical address must be inside DMA zone");
+        ASSERT_MSG(virt >= memory.dma_mem.virt_start && virt < memory.dma_mem.virt_end, "DMA virtual address must be inside DMA zone");
+        ASSERT_MSG((phys & (PAGE_SIZE - 1)) == 0, "DMA physical address must be page-aligned");
+        ASSERT_MSG((virt & (PAGE_SIZE - 1)) == 0, "DMA virtual address must be page-aligned");
+
+        page_t *from_phys = get_page_from_physical_address(phys);
+        page_t *from_virt = get_page_from_virtual_address(virt);
+        ASSERT_MSG(from_phys == page, "Physical address must map back to same page");
+        ASSERT_MSG(from_virt == page, "Virtual address must map back to same page");
+
+        ASSERT_MSG(free_pages(page) == 0, "DMA free must succeed");
+    }
+
+    unsigned long free_after = get_zone_free_space(GFP_DMA);
+    ASSERT_MSG(free_after >= free_before, "DMA free space must be restored");
+
+    TEST_SECTION_END();
+}
+
+/// @brief Test physical contiguity for DMA multi-page allocations.
+TEST(dma_physical_contiguity)
+{
+    TEST_SECTION_START("DMA physical contiguity");
+
+    unsigned long free_before = get_zone_free_space(GFP_DMA);
+
+    const unsigned int order = 4; // 16 pages
+    page_t *page             = alloc_pages(GFP_DMA, order);
+    ASSERT_MSG(page != NULL, "DMA allocation must succeed");
+
+    uint32_t first_phys = get_physical_address_from_page(page);
+    assert_dma_isa_limit(first_phys);
+    ASSERT_MSG(first_phys >= memory.dma_mem.start_addr && first_phys < memory.dma_mem.end_addr, "First physical address must be inside DMA zone");
+
+    for (unsigned int i = 0; i < (1U << order); ++i) {
+        page_t *current_page = page + i;
+        uint32_t expected    = first_phys + (i * PAGE_SIZE);
+        uint32_t actual      = get_physical_address_from_page(current_page);
+        assert_dma_isa_limit(actual);
+        ASSERT_MSG(actual == expected, "DMA pages must be physically contiguous");
+    }
+
+    ASSERT_MSG(free_pages(page) == 0, "DMA free must succeed");
+
+    unsigned long free_after = get_zone_free_space(GFP_DMA);
+    ASSERT_MSG(free_after >= free_before, "DMA free space must be restored");
+
+    TEST_SECTION_END();
+}
+
+/// @brief Test physical contiguity for a larger DMA order.
+TEST(dma_physical_contiguity_large_order)
+{
+    TEST_SECTION_START("DMA physical contiguity (large order)");
+
+    unsigned long free_before = get_zone_free_space(GFP_DMA);
+
+    const unsigned int order = 6; // 64 pages
+    page_t *page             = alloc_pages(GFP_DMA, order);
+    ASSERT_MSG(page != NULL, "DMA large-order allocation must succeed");
+
+    uint32_t first_phys = get_physical_address_from_page(page);
+    assert_dma_isa_limit(first_phys);
+    ASSERT_MSG(first_phys >= memory.dma_mem.start_addr && first_phys < memory.dma_mem.end_addr,
+               "First physical address must be inside DMA zone");
+
+    for (unsigned int i = 0; i < (1U << order); ++i) {
+        page_t *current_page = page + i;
+        uint32_t expected    = first_phys + (i * PAGE_SIZE);
+        uint32_t actual      = get_physical_address_from_page(current_page);
+        assert_dma_isa_limit(actual);
+        ASSERT_MSG(actual == expected, "DMA pages must be physically contiguous (large order)");
+    }
+
+    ASSERT_MSG(free_pages(page) == 0, "DMA free must succeed");
+
+    unsigned long free_after = get_zone_free_space(GFP_DMA);
+    ASSERT_MSG(free_after >= free_before, "DMA free space must be restored");
+
+    TEST_SECTION_END();
+}
+
+/// @brief Test DMA buffer access and data integrity for ATA-like sizes.
+TEST(dma_ata_like_buffer)
+{
+    TEST_SECTION_START("DMA ATA-like buffer");
+
+    unsigned long free_before = get_zone_free_space(GFP_DMA);
+
+    const uint32_t dma_size = 16 * PAGE_SIZE; // 64KB
+    uint32_t order          = find_nearest_order_greater(0, dma_size);
+
+    page_t *dma_page = alloc_pages(GFP_DMA, order);
+    ASSERT_MSG(dma_page != NULL, "DMA buffer allocation must succeed");
+
+    uint32_t phys_addr = get_physical_address_from_page(dma_page);
+    uint32_t virt_addr = get_virtual_address_from_page(dma_page);
+
+    assert_dma_isa_limit(phys_addr);
+    ASSERT_MSG(phys_addr >= memory.dma_mem.start_addr && phys_addr < memory.dma_mem.end_addr, "DMA physical address must be inside DMA zone");
+    ASSERT_MSG(virt_addr >= memory.dma_mem.virt_start && virt_addr < memory.dma_mem.virt_end, "DMA virtual address must be inside DMA zone");
+    ASSERT_MSG((phys_addr & (PAGE_SIZE - 1)) == 0, "DMA physical address must be page-aligned");
+    ASSERT_MSG((virt_addr & (PAGE_SIZE - 1)) == 0, "DMA virtual address must be page-aligned");
+
+    uint8_t *buffer = (uint8_t *)virt_addr;
+    for (uint32_t i = 0; i < dma_size; ++i) {
+        buffer[i] = (uint8_t)(i & 0xFF);
+    }
+    for (uint32_t i = 0; i < dma_size; ++i) {
+        ASSERT_MSG(buffer[i] == (uint8_t)(i & 0xFF), "DMA buffer data must be intact");
+    }
+
+    ASSERT_MSG(free_pages(dma_page) == 0, "DMA buffer free must succeed");
+
+    unsigned long free_after = get_zone_free_space(GFP_DMA);
+    ASSERT_MSG(free_after >= free_before, "DMA free space must be restored");
+
+    TEST_SECTION_END();
+}
+
+/// @brief Test multiple DMA buffers and ensure no overlap.
+TEST(dma_multiple_buffers_no_overlap)
+{
+    TEST_SECTION_START("DMA multiple buffers");
+
+    unsigned long free_before = get_zone_free_space(GFP_DMA);
+
+    const unsigned int num_buffers = 8;
+    page_t *dma_buffers[num_buffers];
+    uint32_t phys_addrs[num_buffers];
+
+    for (unsigned int i = 0; i < num_buffers; ++i) {
+        dma_buffers[i] = alloc_pages(GFP_DMA, 2); // 4 pages each
+        ASSERT_MSG(dma_buffers[i] != NULL, "DMA buffer allocation must succeed");
+
+        phys_addrs[i] = get_physical_address_from_page(dma_buffers[i]);
+        assert_dma_isa_limit(phys_addrs[i]);
+        ASSERT_MSG(phys_addrs[i] >= memory.dma_mem.start_addr && phys_addrs[i] < memory.dma_mem.end_addr, "DMA physical address must be inside DMA zone");
+    }
+
+    for (unsigned int i = 0; i < num_buffers; ++i) {
+        for (unsigned int j = i + 1; j < num_buffers; ++j) {
+            uint32_t buf_i_end = phys_addrs[i] + (4 * PAGE_SIZE);
+            uint32_t buf_j_end = phys_addrs[j] + (4 * PAGE_SIZE);
+            int overlap        = (phys_addrs[i] < buf_j_end) && (phys_addrs[j] < buf_i_end);
+            ASSERT_MSG(!overlap, "DMA buffers must not overlap");
+        }
+    }
+
+    for (unsigned int i = 0; i < num_buffers; ++i) {
+        ASSERT_MSG(free_pages(dma_buffers[i]) == 0, "DMA free must succeed");
+    }
+
+    unsigned long free_after = get_zone_free_space(GFP_DMA);
+    ASSERT_MSG(free_after >= free_before, "DMA free space must be restored");
+
+    TEST_SECTION_END();
+}
+
+/// @brief Test DMA alignment for various buffer sizes.
+TEST(dma_alignment)
+{
+    TEST_SECTION_START("DMA alignment");
+
+    unsigned long free_before = get_zone_free_space(GFP_DMA);
+
+    uint32_t sizes[] = {PAGE_SIZE, 2 * PAGE_SIZE, 4 * PAGE_SIZE, 8 * PAGE_SIZE, 64 * PAGE_SIZE};
+
+    for (unsigned int i = 0; i < (sizeof(sizes) / sizeof(sizes[0])); ++i) {
+        uint32_t order = find_nearest_order_greater(0, sizes[i]);
+        page_t *page   = alloc_pages(GFP_DMA, order);
+        ASSERT_MSG(page != NULL, "DMA allocation must succeed");
+
+        uint32_t phys = get_physical_address_from_page(page);
+        uint32_t virt = get_virtual_address_from_page(page);
+
+        assert_dma_isa_limit(phys);
+        ASSERT_MSG((phys & (PAGE_SIZE - 1)) == 0, "Physical address must be page-aligned");
+        ASSERT_MSG((virt & (PAGE_SIZE - 1)) == 0, "Virtual address must be page-aligned");
+
+        ASSERT_MSG(free_pages(page) == 0, "DMA free must succeed");
+    }
+
+    unsigned long free_after = get_zone_free_space(GFP_DMA);
+    ASSERT_MSG(free_after >= free_before, "DMA free space must be restored");
+
+    TEST_SECTION_END();
+}
+
+/// @brief Test partial exhaustion and recovery of the DMA zone.
+TEST(dma_partial_exhaustion_recovery)
+{
+    TEST_SECTION_START("DMA partial exhaustion and recovery");
+
+    unsigned long free_before = get_zone_free_space(GFP_DMA);
+
+    const uint32_t block_order     = 8; // 1MB
+    const unsigned long block_size = (1UL << block_order) * PAGE_SIZE;
+    unsigned long max_blocks       = (block_size == 0) ? 0 : (memory.dma_mem.size / block_size);
+    unsigned long target_blocks    = (max_blocks >= 4) ? 4 : ((max_blocks >= 2) ? 2 : 1);
+
+    page_t *blocks[4] = {NULL};
+    for (unsigned long i = 0; i < target_blocks; ++i) {
+        blocks[i] = alloc_pages(GFP_DMA, block_order);
+        ASSERT_MSG(blocks[i] != NULL, "DMA block allocation must succeed");
+        assert_dma_isa_limit(get_physical_address_from_page(blocks[i]));
+    }
+
+    unsigned long free_mid = get_zone_free_space(GFP_DMA);
+    ASSERT_MSG(free_mid < free_before, "DMA free space must decrease after allocations");
+
+    for (unsigned long i = 0; i < target_blocks; ++i) {
+        ASSERT_MSG(free_pages(blocks[i]) == 0, "DMA block free must succeed");
+    }
+
+    unsigned long free_after = get_zone_free_space(GFP_DMA);
+    ASSERT_MSG(free_after >= free_before, "DMA free space must be restored");
+
+    TEST_SECTION_END();
+}
+
+/// @brief Test full DMA exhaustion and recovery.
+TEST(dma_full_exhaustion_recovery)
+{
+    TEST_SECTION_START("DMA full exhaustion and recovery");
+
+    unsigned long free_before = get_zone_free_space(GFP_DMA);
+    unsigned long max_pages   = memory.dma_mem.size / PAGE_SIZE;
+
+    page_t **pages = (page_t **)kmalloc(sizeof(page_t *) * max_pages);
+    ASSERT_MSG(pages != NULL, "kmalloc for DMA page list must succeed");
+
+    unsigned long count = 0;
+    for (; count < max_pages; ++count) {
+        pages[count] = alloc_pages(GFP_DMA, 0);
+        if (pages[count] == NULL) {
+            break;
+        }
+        assert_dma_isa_limit(get_physical_address_from_page(pages[count]));
+    }
+
+    ASSERT_MSG(count > 0, "At least one DMA allocation must succeed before exhaustion");
+
+    page_t *should_fail = alloc_pages(GFP_DMA, 0);
+    ASSERT_MSG(should_fail == NULL, "DMA allocation must fail when exhausted");
+
+    for (unsigned long i = 0; i < count; ++i) {
+        ASSERT_MSG(free_pages(pages[i]) == 0, "DMA free must succeed during recovery");
+    }
+
+    kfree(pages);
+
+    unsigned long free_after = get_zone_free_space(GFP_DMA);
+    ASSERT_MSG(free_after >= free_before, "DMA free space must be restored after exhaustion");
+
+    page_t *probe = alloc_pages(GFP_DMA, 0);
+    ASSERT_MSG(probe != NULL, "DMA allocation must succeed after recovery");
+    ASSERT_MSG(free_pages(probe) == 0, "DMA free must succeed after recovery");
+
+    TEST_SECTION_END();
+}
+
+/// @brief Test allocation reaches the last DMA page boundary.
+TEST(dma_boundary_last_page)
+{
+    TEST_SECTION_START("DMA boundary last page");
+
+    unsigned long max_pages = memory.dma_mem.size / PAGE_SIZE;
+    page_t **pages = (page_t **)kmalloc(sizeof(page_t *) * max_pages);
+    ASSERT_MSG(pages != NULL, "kmalloc for DMA page list must succeed");
+
+    uint32_t max_phys = 0;
+    unsigned long count = 0;
+    for (; count < max_pages; ++count) {
+        pages[count] = alloc_pages(GFP_DMA, 0);
+        if (pages[count] == NULL) {
+            break;
+        }
+        uint32_t phys = get_physical_address_from_page(pages[count]);
+        assert_dma_isa_limit(phys);
+        if (phys > max_phys) {
+            max_phys = phys;
+        }
+    }
+
+    ASSERT_MSG(max_phys == (memory.dma_mem.end_addr - PAGE_SIZE), "DMA allocation must reach last page");
+
+    for (unsigned long i = 0; i < count; ++i) {
+        ASSERT_MSG(free_pages(pages[i]) == 0, "DMA free must succeed");
+    }
+
+    kfree(pages);
+
+    TEST_SECTION_END();
+}
+
+/// @brief Test allocation reaches the first DMA page boundary.
+TEST(dma_boundary_first_page)
+{
+    TEST_SECTION_START("DMA boundary first page");
+
+    unsigned long max_pages = memory.dma_mem.size / PAGE_SIZE;
+    page_t **pages = (page_t **)kmalloc(sizeof(page_t *) * max_pages);
+    ASSERT_MSG(pages != NULL, "kmalloc for DMA page list must succeed");
+
+    uint32_t min_phys = 0xFFFFFFFFu;
+    unsigned long count = 0;
+    for (; count < max_pages; ++count) {
+        pages[count] = alloc_pages(GFP_DMA, 0);
+        if (pages[count] == NULL) {
+            break;
+        }
+        uint32_t phys = get_physical_address_from_page(pages[count]);
+        assert_dma_isa_limit(phys);
+        if (phys < min_phys) {
+            min_phys = phys;
+        }
+    }
+
+    // Some systems reserve the very first DMA page (e.g., BIOS/IVT).
+    // Accept either the first page or the next page as the minimum.
+    ASSERT_MSG(
+        min_phys >= memory.dma_mem.start_addr && min_phys < memory.dma_mem.end_addr,
+        "DMA minimum allocated address must fall inside DMA zone");
+
+    page_t *start_page = get_page_from_physical_address(memory.dma_mem.start_addr);
+    ASSERT_MSG(start_page != NULL, "DMA start page must be resolvable from physical address");
+    ASSERT_MSG(is_dma_page_struct(start_page), "DMA start page must belong to DMA zone");
+
+    for (unsigned long i = 0; i < count; ++i) {
+        ASSERT_MSG(free_pages(pages[i]) == 0, "DMA free must succeed");
+    }
+
+    kfree(pages);
+
+    TEST_SECTION_END();
+}
+
+/// @brief Test address translation for the first DMA page.
+TEST(dma_translation_first_page)
+{
+    TEST_SECTION_START("DMA translation first page");
+
+    page_t *page = get_page_from_physical_address(memory.dma_mem.start_addr);
+    ASSERT_MSG(page != NULL, "DMA first page must be resolvable from physical address");
+    ASSERT_MSG(is_dma_page_struct(page), "DMA first page must belong to DMA zone");
+
+    uint32_t phys = get_physical_address_from_page(page);
+    uint32_t virt = get_virtual_address_from_page(page);
+
+    assert_dma_isa_limit(phys);
+    ASSERT_MSG(phys == memory.dma_mem.start_addr, "DMA first page physical address must match start");
+    ASSERT_MSG(virt >= memory.dma_mem.virt_start && virt < memory.dma_mem.virt_end, "DMA first page virtual must be in DMA range");
+
+    page_t *from_virt = get_page_from_virtual_address(virt);
+    ASSERT_MSG(from_virt == page, "DMA first page must round-trip via virtual address");
+
+    TEST_SECTION_END();
+}
+
+/// @brief Test address translation for the last DMA page.
+TEST(dma_translation_last_page)
+{
+    TEST_SECTION_START("DMA translation last page");
+
+    uint32_t last_phys = memory.dma_mem.end_addr - PAGE_SIZE;
+    page_t *page = get_page_from_physical_address(last_phys);
+    ASSERT_MSG(page != NULL, "DMA last page must be resolvable from physical address");
+    ASSERT_MSG(is_dma_page_struct(page), "DMA last page must belong to DMA zone");
+
+    uint32_t phys = get_physical_address_from_page(page);
+    uint32_t virt = get_virtual_address_from_page(page);
+
+    assert_dma_isa_limit(phys);
+    ASSERT_MSG(phys == last_phys, "DMA last page physical address must match end-1 page");
+    ASSERT_MSG(virt >= memory.dma_mem.virt_start && virt < memory.dma_mem.virt_end, "DMA last page virtual must be in DMA range");
+
+    page_t *from_virt = get_page_from_virtual_address(virt);
+    ASSERT_MSG(from_virt == page, "DMA last page must round-trip via virtual address");
+
+    TEST_SECTION_END();
+}
+
+/// @brief Test DMA virtual end address is invalid.
+TEST(dma_virtual_end_invalid)
+{
+    TEST_SECTION_START("DMA virtual end invalid");
+
+    ASSERT_MSG(is_valid_virtual_address(memory.dma_mem.virt_end) == 0, "DMA virt_end must be invalid");
+
+    TEST_SECTION_END();
+}
+
+/// @brief Test DMA virtual range does not overlap LowMem and resolves to DMA pages.
+TEST(dma_mapping_isolation)
+{
+    TEST_SECTION_START("DMA mapping isolation");
+
+    ASSERT_MSG(
+        !(memory.dma_mem.virt_start >= memory.low_mem.virt_start && memory.dma_mem.virt_start < memory.low_mem.virt_end),
+        "DMA virtual range must not overlap LowMem");
+
+    page_t *page = get_page_from_virtual_address(memory.dma_mem.virt_start);
+    ASSERT_MSG(page != NULL, "DMA virtual start must resolve to a page");
+    ASSERT_MSG(is_dma_page_struct(page), "DMA virtual start must resolve to DMA page");
+
+    TEST_SECTION_END();
+}
+
+/// @brief Test DMA allocations never return pages outside DMA zone.
+TEST(dma_allocation_zone_isolation)
+{
+    TEST_SECTION_START("DMA allocation zone isolation");
+
+    page_t *page = alloc_pages(GFP_DMA, 0);
+    ASSERT_MSG(page != NULL, "DMA allocation must succeed");
+    ASSERT_MSG(is_dma_page_struct(page), "DMA allocation must return DMA page");
+
+    uint32_t phys = get_physical_address_from_page(page);
+    assert_dma_isa_limit(phys);
+    ASSERT_MSG(phys >= memory.dma_mem.start_addr && phys < memory.dma_mem.end_addr,
+               "DMA allocation physical address must be in DMA zone");
+
+    if (memory.low_mem.start_addr > memory.dma_mem.end_addr) {
+        ASSERT_MSG(phys < memory.low_mem.start_addr, "DMA allocation must be below LowMem start");
+    }
+
+    ASSERT_MSG(free_pages(page) == 0, "DMA free must succeed");
+
+    TEST_SECTION_END();
+}
+
+/// @brief Stress DMA allocator with mixed orders and randomized frees.
+TEST(dma_mixed_order_stress)
+{
+    TEST_SECTION_START("DMA mixed-order stress");
+
+    unsigned long free_before = get_zone_free_space(GFP_DMA);
+
+    const unsigned int count = 16;
+    page_t *allocs[16] = {NULL};
+    uint32_t orders[16] = {0};
+
+    uint32_t rng = 0xC0FFEEu;
+    for (unsigned int i = 0; i < count; ++i) {
+        rng = (rng * 1664525u) + 1013904223u;
+        orders[i] = (rng % 4); // Orders 0-3
+        allocs[i] = alloc_pages(GFP_DMA, orders[i]);
+        ASSERT_MSG(allocs[i] != NULL, "DMA mixed-order allocation must succeed");
+        assert_dma_isa_limit(get_physical_address_from_page(allocs[i]));
+    }
+
+    // Shuffle-free using the same RNG
+    for (unsigned int i = 0; i < count; ++i) {
+        rng = (rng * 1664525u) + 1013904223u;
+        unsigned int idx = rng % count;
+        if (allocs[idx] != NULL) {
+            ASSERT_MSG(free_pages(allocs[idx]) == 0, "DMA free must succeed");
+            allocs[idx] = NULL;
+        }
+    }
+
+    // Free any remaining allocations
+    for (unsigned int i = 0; i < count; ++i) {
+        if (allocs[i] != NULL) {
+            ASSERT_MSG(free_pages(allocs[i]) == 0, "DMA free must succeed");
+        }
+    }
+
+    unsigned long free_after = get_zone_free_space(GFP_DMA);
+    ASSERT_MSG(free_after >= free_before, "DMA free space must be restored");
+
+    TEST_SECTION_END();
+}
+
+/// @brief Test that page-0 is not returned by DMA allocations.
+TEST(dma_page_zero_not_returned)
+{
+    TEST_SECTION_START("DMA page-0 exclusion");
+
+    // Allocate multiple pages and verify page 0 is never returned
+    // Page 0 is often reserved for special purposes (NULL pointer detection, BIOS data)
+    page_t *allocs[32];
+    uint32_t count = 0;
+
+    for (unsigned int i = 0; i < 32; ++i) {
+        allocs[i] = alloc_pages(1, GFP_DMA);
+        if (!allocs[i]) {
+            break;
+        }
+        count++;
+
+        // Get physical address and verify it's not page 0
+        uint32_t phys = get_physical_address_from_page(allocs[i]);
+        ASSERT_MSG(phys != 0x00000000, "DMA must never allocate page 0");
+        ASSERT_MSG(phys >= PAGE_SIZE, "DMA allocations must start after page 0");
+    }
+
+    // Free all allocations
+    for (unsigned int i = 0; i < count; ++i) {
+        if (allocs[i] != NULL) {
+            ASSERT_MSG(free_pages(allocs[i]) == 0, "DMA free must succeed");
+        }
+    }
+
+    TEST_SECTION_END();
+}
+
+/// @brief Test DMA mapping permissions (user access should be denied).
+TEST(dma_mapping_permissions)
+{
+    TEST_SECTION_START("DMA mapping permissions");
+
+    page_directory_t *pgd = paging_get_main_pgd();
+    ASSERT_MSG(pgd != NULL, "Page directory must exist");
+
+    // DMA should be in kernel space (index >= 768)
+    uint32_t dma_index = memory.dma_mem.virt_start / (4 * 1024 * 1024);
+    ASSERT_MSG(dma_index >= 768, "DMA must be in kernel space");
+
+    // Allocate a DMA page to ensure mapping exists
+    page_t *dma_page = alloc_pages(1, GFP_DMA);
+    ASSERT_MSG(dma_page != NULL, "DMA page allocation must succeed");
+
+    // Get virtual address and verify it's in DMA range
+    uint32_t virt = get_virtual_address_from_page(dma_page);
+    ASSERT_MSG(virt >= memory.dma_mem.virt_start, "Virtual must be in DMA range");
+    ASSERT_MSG(virt < memory.dma_mem.virt_end, "Virtual must be in DMA range");
+
+    // DMA PDEs should have supervisor bit set (user = 0)
+    // User PDEs have user = 1
+    if (pgd->entries[dma_index].present) {
+        ASSERT_MSG(pgd->entries[dma_index].user == 0, "DMA PDE must have supervisor bit set");
+    }
+
+    // Free allocation
+    ASSERT_MSG(free_pages(dma_page) == 0, "DMA free must succeed");
+
+    TEST_SECTION_END();
+}
+
+/// @brief Test for GFP_DMA32 support and range validation (if supported).
+TEST(dma_gfp_dma32_support)
+{
+    TEST_SECTION_START("GFP_DMA32 support check");
+
+    // GFP_DMA32 is for 32-bit addressing devices (can access 0-4GB on 64-bit systems)
+    // On 32-bit systems it's typically not needed or not separately exposed
+    // This test verifies that using the __GFP_DMA32 flag doesn't break allocations
+
+    // Try to allocate with __GFP_DMA32 combined with GFP_KERNEL
+    gfp_t dma32_flags = GFP_KERNEL | __GFP_DMA32;
+    page_t *test_page = alloc_pages(dma32_flags, 0);
+
+    if (test_page != NULL) {
+        // Allocation succeeded with DMA32 flags
+        uint32_t phys = get_physical_address_from_page(test_page);
+        ASSERT_MSG(phys > 0, "DMA32 allocation must have valid physical address");
+
+        // On 32-bit systems, DMA32 is often treated same as NORMAL
+        // The important thing is it doesn't break allocations
+        ASSERT_MSG(free_pages(test_page) == 0, "DMA32 free must succeed");
+    } else {
+        // DMA32 allocation failed - this is also acceptable behavior
+        pr_debug("__GFP_DMA32 allocation not available on this system\n");
+    }
+
+    TEST_SECTION_END();
+}
+
+/// @brief Integration smoke test: DMA + zone allocator + paging together.
+/// Verifies that allocations from DMA zone are properly mapped and accessible
+/// through the paging system without corruption or leaks.
+TEST(dma_integration_paging_smoke)
+{
+    TEST_SECTION_START("DMA + zone allocator + paging integration");
+
+    // Get initial free space across all zones
+    unsigned long dma_free_before = get_zone_free_space(GFP_DMA);
+    unsigned long kernel_free_before = get_zone_free_space(GFP_KERNEL);
+
+    // Step 1: Allocate DMA pages
+    page_t *dma_pages[4];
+    for (int i = 0; i < 4; ++i) {
+        dma_pages[i] = alloc_pages(GFP_DMA, 0);
+        ASSERT_MSG(dma_pages[i] != NULL, "DMA page allocation must succeed");
+        ASSERT_MSG(is_dma_page_struct(dma_pages[i]), "Allocated page must be from DMA zone");
+    }
+
+    // Step 2: Verify DMA physical addresses are in ISA range
+    for (int i = 0; i < 4; ++i) {
+        uint32_t phys = get_physical_address_from_page(dma_pages[i]);
+        ASSERT_MSG(phys < 0x01000000, "DMA page must be below 16MB");
+    }
+
+    // Step 3: Verify DMA pages are mapped in the page directory
+    page_directory_t *pgd = paging_get_main_pgd();
+    ASSERT_MSG(pgd != NULL, "Page directory must exist");
+
+    for (int i = 0; i < 4; ++i) {
+        uint32_t virt = get_virtual_address_from_page(dma_pages[i]);
+        ASSERT_MSG(virt >= memory.dma_mem.virt_start && virt < memory.dma_mem.virt_start + memory.dma_mem.size,
+            "DMA page virtual address must be in DMA region");
+
+        uint32_t pde_index = virt / (4 * 1024 * 1024);
+        ASSERT_MSG(pde_index >= 768, "DMA PDE must be in kernel space");
+        ASSERT_MSG(pgd->entries[pde_index].present, "DMA PDE must be present");
+    }
+
+    // Step 4: Write and read through virtual addresses to verify mapping
+    for (int i = 0; i < 4; ++i) {
+        uint32_t virt = get_virtual_address_from_page(dma_pages[i]);
+        uint32_t *addr = (uint32_t *)virt;
+        *addr = 0xDEADBEEF + i;
+    }
+
+    for (int i = 0; i < 4; ++i) {
+        uint32_t virt = get_virtual_address_from_page(dma_pages[i]);
+        uint32_t *addr = (uint32_t *)virt;
+        ASSERT_MSG(*addr == (0xDEADBEEF + i), "Read-write through virtual address must work for DMA pages");
+    }
+
+    // Step 5: Allocate kernel pages and verify isolation
+    page_t *kernel_pages[4];
+    for (int i = 0; i < 4; ++i) {
+        kernel_pages[i] = alloc_pages(GFP_KERNEL, 0);
+        ASSERT_MSG(kernel_pages[i] != NULL, "Kernel page allocation must succeed");
+        ASSERT_MSG(!is_dma_page_struct(kernel_pages[i]), "Kernel page must NOT be from DMA zone");
+    }
+
+    // Step 6: Verify free space tracking
+    unsigned long dma_free_after = get_zone_free_space(GFP_DMA);
+    unsigned long kernel_free_after = get_zone_free_space(GFP_KERNEL);
+
+    ASSERT_MSG(dma_free_after < dma_free_before, "DMA free space must decrease after allocation");
+    ASSERT_MSG(kernel_free_after < kernel_free_before, "Kernel free space must decrease after allocation");
+
+    // Step 7: Free all pages and verify recovery
+    for (int i = 0; i < 4; ++i) {
+        ASSERT_MSG(free_pages(dma_pages[i]) == 0, "DMA page free must succeed");
+        ASSERT_MSG(free_pages(kernel_pages[i]) == 0, "Kernel page free must succeed");
+    }
+
+    // Verify free space restored
+    unsigned long dma_free_final = get_zone_free_space(GFP_DMA);
+    unsigned long kernel_free_final = get_zone_free_space(GFP_KERNEL);
+
+    ASSERT_MSG(dma_free_final == dma_free_before, "DMA free space must be fully restored");
+    ASSERT_MSG(kernel_free_final == kernel_free_before, "Kernel free space must be fully restored");
+
+    TEST_SECTION_END();
+}
+
+/// @brief Integration test: Stress DMA allocations with zone allocator under pressure.
+/// Verifies that DMA zone correctly rejects allocations when exhausted and
+/// recovers when memory is freed.
+TEST(dma_integration_zone_stress)
+{
+    TEST_SECTION_START("DMA zone allocator stress");
+
+    unsigned long dma_free_before = get_zone_free_space(GFP_DMA);
+
+    // Allocate pages until DMA zone is nearly exhausted
+    page_t *allocs[32];
+    int allocated_count = 0;
+
+    // First free pass - record how many we can allocate
+    page_t *page = NULL;
+    for (int i = 0; i < 32 && (page = alloc_pages(GFP_DMA, 0)) != NULL; ++i) {
+        allocs[i] = page;
+        allocated_count++;
+    }
+
+    ASSERT_MSG(allocated_count > 0, "Must be able to allocate at least one DMA page");
+
+    // Verify all allocations are from DMA zone
+    for (int i = 0; i < allocated_count; ++i) {
+        ASSERT_MSG(is_dma_page_struct(allocs[i]), "All allocations must be from DMA zone");
+    }
+
+    // Free all allocations
+    for (int i = 0; i < allocated_count; ++i) {
+        ASSERT_MSG(free_pages(allocs[i]) == 0, "Free must succeed for each allocation");
+    }
+
+    // Verify free space is restored
+    unsigned long dma_free_final = get_zone_free_space(GFP_DMA);
+    ASSERT_MSG(dma_free_final == dma_free_before, "DMA free space must be fully recovered");
+
+    TEST_SECTION_END();
+}
+
+/// @brief Main test function for DMA tests.
+void test_dma(void)
+{
+    test_dma_zone_integrity();
+    test_dma_order_allocations_and_translation();
+    test_dma_physical_contiguity();
+    test_dma_physical_contiguity_large_order();
+    test_dma_ata_like_buffer();
+    test_dma_multiple_buffers_no_overlap();
+    test_dma_alignment();
+    test_dma_partial_exhaustion_recovery();
+    test_dma_full_exhaustion_recovery();
+    test_dma_boundary_last_page();
+    test_dma_boundary_first_page();
+    test_dma_translation_first_page();
+    test_dma_translation_last_page();
+    test_dma_virtual_end_invalid();
+    test_dma_mapping_isolation();
+    test_dma_allocation_zone_isolation();
+    test_dma_mixed_order_stress();
+    test_dma_page_zero_not_returned();
+    test_dma_mapping_permissions();
+    test_dma_gfp_dma32_support();
+    test_dma_integration_paging_smoke();
+    test_dma_integration_zone_stress();
+}

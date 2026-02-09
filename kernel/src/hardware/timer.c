@@ -97,8 +97,10 @@ void timer_handler(pt_regs_t *reg)
     ++timer_ticks;
     // Update all timers
     run_timer_softirq();
-    // Perform the schedule.
-    scheduler_run(reg);
+    // Perform the schedule only if the interrupt came from user mode.
+    if ((reg->cs & 0x3) == 0x3) {
+        scheduler_run(reg);
+    }
     // Restore fpu state.
     unswitch_fpu();
     // The ack is sent to PIC only when all handlers terminated!
@@ -129,7 +131,7 @@ unsigned long timer_get_ticks(void) { return timer_ticks; }
 /// @param vector the vector for which we print the details.
 static inline void __print_vector(list_head_t *vector)
 {
-#if defined(ENABLE_REAL_TIMER_SYSTEM_DUMP) && (__DEBUG_LEVEL__ == LOGLEVEL_DEBUG)
+#if defined(ENABLE_REAL_TIMER_SYSTEM_DUMP) && (__DEBUG_LEVEL__ == LOGLEVEL_NOTICE)
     if (!list_head_empty(vector)) {
         pr_debug("0x%p = [ ", vector);
         list_for_each_decl (it, vector) {
@@ -144,7 +146,7 @@ static inline void __print_vector(list_head_t *vector)
 /// @param base the base for which we print the details.
 static inline void __print_vector_base(tvec_base_t *base)
 {
-#if defined(ENABLE_REAL_TIMER_SYSTEM_DUMP) && (__DEBUG_LEVEL__ == LOGLEVEL_DEBUG)
+#if defined(ENABLE_REAL_TIMER_SYSTEM_DUMP) && (__DEBUG_LEVEL__ == LOGLEVEL_NOTICE)
     pr_debug("========================================\n");
     for (int i = 0; i < TVR_SIZE; ++i) {
         if (!list_head_empty(&base->tvr[i])) {
@@ -483,9 +485,9 @@ void run_timer_softirq(void)
     spinlock_lock(&base->lock);
 #ifdef ENABLE_REAL_TIMER_SYSTEM
     // While we are not up to date with current ticks
-    while (base->timer_ticks <= timer_get_ticks()) {
+    while (*(volatile unsigned long *)&base->timer_ticks <= timer_get_ticks()) {
         // Index of the current timer to execute.
-        timer_index = base->timer_ticks & TVR_MASK;
+        timer_index = *(volatile unsigned long *)&base->timer_ticks & TVR_MASK;
         // If the index is zero then all lists in base->tvr have been checked,
         // so they are empty.
         if (!timer_index) {

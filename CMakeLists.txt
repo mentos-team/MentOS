@@ -8,11 +8,9 @@ cmake_minimum_required(VERSION 3.1...3.22)
 # Initialize the project.
 project(mentos C ASM)
 
-# Set the default build type to Debug.
-if(NOT CMAKE_BUILD_TYPE)
-    message(STATUS "Setting build type to 'Debug' as none was specified.")
-    set(CMAKE_BUILD_TYPE "Debug" CACHE STRING "Choose the type of build." FORCE)
-endif()
+# Add the CMAKE_BUILD_TYPE option with the full list of possible values.
+set(CMAKE_BUILD_TYPE "Debug" CACHE STRING "Choose the type of build: Debug, Release, RelWithDebInfo, MinSizeRel")
+set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release" "RelWithDebInfo" "MinSizeRel")
 
 # -----------------------------------------------------------------------------
 # ENABLE FETCH CONTENT
@@ -48,13 +46,13 @@ if((${CMAKE_HOST_SYSTEM_NAME} STREQUAL "Darwin") OR APPLE)
     # Specify the linker flags.
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -nostdlib")
 elseif((${CMAKE_HOST_SYSTEM_NAME} STREQUAL "Windows") OR WIN32)
-  # Windows set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -sdl)
+    # Windows set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -sdl)
 else()
     # Generic Unix System.
     # Find the `lsb_release` program.
     find_program(LSB_RELEASE_EXEC lsb_release HINTS /usr/bin/ /usr/local/bin/)
     mark_as_advanced(LSB_RELEASE_EXEC)
-    
+
     if(LSB_RELEASE_EXEC)
         execute_process(
             COMMAND "${LSB_RELEASE_EXEC}" --short --release
@@ -62,7 +60,7 @@ else()
             OUTPUT_STRIP_TRAILING_WHITESPACE
         )
         message(STATUS "LSB version    : ${LSB_RELEASE_VERSION_SHORT}")
-        
+
         # Use GTK display for Ubuntu 19+
         if(LSB_RELEASE_VERSION_SHORT MATCHES "^(19|2[0-9])")
             set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -display gtk)
@@ -105,7 +103,7 @@ set(CMAKE_ASM_COMPILER ${ASM_COMPILER})
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     set(CMAKE_ASM_COMPILE_OBJECT "<CMAKE_ASM_COMPILER> -f elf -g -O0 -F dwarf -o <OBJECT> <SOURCE>")
 else()
-    set(CMAKE_ASM_COMPILE_OBJECT "<CMAKE_ASM_COMPILER> -f elf -g -O3 -o <OBJECT> <SOURCE>")
+    set(CMAKE_ASM_COMPILE_OBJECT "<CMAKE_ASM_COMPILER> -f elf -g -O2 -o <OBJECT> <SOURCE>")
 endif()
 
 # =============================================================================
@@ -153,7 +151,7 @@ endif()
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g3 -ggdb -O0")
 elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O3")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O2")
 endif()
 
 # Set the assembly compiler flags.
@@ -198,9 +196,13 @@ set(EMULATOR qemu-system-i386)
 set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -vga std)
 # Set the amount of memory.
 set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -m 1096M)
+# Set the RTC to use local time.
+set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -rtc base=localtime)
 # Disables all default devices (e.g., serial ports, network cards, VGA
 # adapters). Only devices we explicitly specify will be added.
 set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -nodefaults)
+# Disable reboot and shutdown.
+set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -no-reboot)
 # Set the debug type.
 if(${EMULATOR_OUTPUT_TYPE} STREQUAL OUTPUT_LOG)
     set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -serial file:${CMAKE_BINARY_DIR}/serial.log)
@@ -271,11 +273,13 @@ add_custom_target(
 
 # First, we need to build the ISO for the cdrom.
 add_custom_target(
-  cdrom.iso
-  COMMAND cp -rf ${CMAKE_SOURCE_DIR}/iso .
-  COMMAND cp ${CMAKE_BINARY_DIR}/mentos/bootloader.bin ${CMAKE_BINARY_DIR}/iso/boot
-  COMMAND grub-mkrescue -o ${CMAKE_BINARY_DIR}/cdrom.iso ${CMAKE_BINARY_DIR}/iso
-  DEPENDS bootloader.bin
+    cdrom.iso
+    COMMAND ${CMAKE_COMMAND} -E rm -rf ${CMAKE_BINARY_DIR}/iso
+    COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/iso ${CMAKE_BINARY_DIR}/iso
+    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/mentos/bootloader.bin ${CMAKE_BINARY_DIR}/iso/boot/bootloader.bin
+    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/iso/boot/grub/grub.cfg ${CMAKE_BINARY_DIR}/iso/boot/grub/grub.cfg
+    COMMAND grub-mkrescue -o ${CMAKE_BINARY_DIR}/cdrom.iso ${CMAKE_BINARY_DIR}/iso
+    DEPENDS bootloader.bin
 )
 
 # This third target runs the emualtor, but this time, the kernel binary file is
@@ -295,11 +299,12 @@ add_custom_target(
 # First, we need to build the ISO for the cdrom. It has a slightly different
 # kernel command line including 'test'.
 add_custom_target(
-  cdrom_test.iso
-  COMMAND cp -rf ${CMAKE_SOURCE_DIR}/iso .
-  COMMAND mv ${CMAKE_BINARY_DIR}/iso/boot/grub/grub.cfg.runtests ${CMAKE_BINARY_DIR}/iso/boot/grub/grub.cfg
-  COMMAND cp ${CMAKE_BINARY_DIR}/mentos/bootloader.bin ${CMAKE_BINARY_DIR}/iso/boot
-  COMMAND grub-mkrescue -o ${CMAKE_BINARY_DIR}/cdrom_test.iso ${CMAKE_BINARY_DIR}/iso
+    cdrom_test.iso
+    COMMAND ${CMAKE_COMMAND} -E rm -rf ${CMAKE_BINARY_DIR}/iso_test
+    COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/iso ${CMAKE_BINARY_DIR}/iso_test
+    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/iso/boot/grub/grub.cfg.runtests ${CMAKE_BINARY_DIR}/iso_test/boot/grub/grub.cfg
+    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/mentos/bootloader.bin ${CMAKE_BINARY_DIR}/iso_test/boot/bootloader.bin
+    COMMAND grub-mkrescue -o ${CMAKE_BINARY_DIR}/cdrom_test.iso ${CMAKE_BINARY_DIR}/iso_test
     DEPENDS bootloader.bin filesystem
 )
 
@@ -308,7 +313,7 @@ add_custom_target(
 # after the tests are done.
 add_custom_target(
     qemu-test
-    COMMAND ${EMULATOR} ${EMULATOR_FLAGS} -serial file:${CMAKE_BINARY_DIR}/test.log -nographic -device isa-debug-exit -boot d -cdrom ${CMAKE_BINARY_DIR}/cdrom_test.iso
+    COMMAND ${EMULATOR} ${EMULATOR_FLAGS} -nographic -device isa-debug-exit -boot d -cdrom ${CMAKE_BINARY_DIR}/cdrom_test.iso
     DEPENDS cdrom_test.iso
 )
 
@@ -356,8 +361,8 @@ endif()
 # DOCUMENTATION
 # -----------------------------------------------------------------------------
 
-if (DOXYGEN_FOUND)
-    
+if(DOXYGEN_FOUND)
+
     # FetchContent: Doxygen Awesome CSS
     FetchContent_Declare(doxygenawesome
         GIT_REPOSITORY https://github.com/jothepro/doxygen-awesome-css
@@ -431,4 +436,4 @@ if (DOXYGEN_FOUND)
         ${ALL_PROJECT_FILES}
         COMMENT "Generating Doxygen documentation"
     )
-endif (DOXYGEN_FOUND)
+endif(DOXYGEN_FOUND)

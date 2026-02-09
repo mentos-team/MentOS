@@ -13,9 +13,9 @@
 #include "io/debug.h"                    // Include debugging functions.
 
 #include "assert.h"
-#include "mem/paging.h"
 #include "mem/alloc/slab.h"
 #include "mem/alloc/zone_allocator.h"
+#include "mem/paging.h"
 #include "resource_tracing.h"
 
 #ifdef ENABLE_KMEM_TRACE
@@ -668,7 +668,7 @@ void *pr_kmem_cache_alloc(const char *file, const char *fun, int line, kmem_cach
         list_head_insert_after(slab_full_elem, &cachep->slabs_full);
     }
 
-#if defined(ENABLE_CACHE_TRACE) || (__DEBUG_LEVEL__ >= LOGLEVEL_DEBUG)
+#ifdef ENABLE_CACHE_TRACE
     pr_notice("kmem_cache_alloc 0x%p in %-20s at %s:%d\n", ptr, cachep->name, file, line);
 #endif
 
@@ -706,7 +706,7 @@ int pr_kmem_cache_free(const char *file, const char *fun, int line, void *addr)
         return 1;
     }
 
-#if defined(ENABLE_CACHE_TRACE) || (__DEBUG_LEVEL__ >= LOGLEVEL_DEBUG)
+#ifdef ENABLE_CACHE_TRACE
     pr_notice("kmem_cache_free  0x%p in %-20s at %s:%d\n", addr, cachep->name, file, line);
 #endif
 

@@ -10,6 +10,11 @@
 
 /// @brief Enumeration for zone_t.
 enum zone_type {
+    /// @brief DMA zone (legacy/low addressable memory).
+    /// @details
+    /// Used for devices with strict DMA addressing limits (e.g., 16MB ISA).
+    ZONE_DMA,
+
     /// @brief Direct mapping. Used by the kernel.
     /// @details
     /// Normal addressable memory is in **ZONE_NORMAL**. DMA operations can be
@@ -86,8 +91,11 @@ typedef struct memory_info {
     uint32_t mem_map_num;    ///< Total number of memory frames (pages) available.
     uint32_t page_index_min; ///< Minimum page index.
     uint32_t page_index_max; ///< Maximum page index.
+    memory_zone_t dma_mem;   ///< DMA memory zone (legacy low memory).
+    memory_zone_t boot_low_mem; ///< Boot-time low memory region (mem_map/page_data gap).
     memory_zone_t low_mem;   ///< Low memory zone (normal zone).
     memory_zone_t high_mem;  ///< High memory zone.
+    memory_zone_t kernel_mem; ///< Kernel code and initial structures region.
 } memory_info_t;
 
 /// @brief Keeps track of system memory management data.
@@ -179,8 +187,42 @@ int get_zone_buddy_system_status(gfp_t gfp_mask, char *buffer, size_t bufsize);
 /// @return 1 if it belongs to lowmem, 0 otherwise.
 static inline int is_lowmem_page_struct(void *addr)
 {
-    uint32_t start_lowm_map  = (uint32_t)memory.page_data->node_zones[ZONE_NORMAL].zone_mem_map;
-    uint32_t lowmem_map_size = sizeof(page_t) * memory.page_data->node_zones[ZONE_NORMAL].num_pages;
-    uint32_t map_index       = (uint32_t)addr - start_lowm_map;
-    return map_index < lowmem_map_size;
+    uint32_t start_dma_map  = (uint32_t)memory.page_data->node_zones[ZONE_DMA].zone_mem_map;
+    uint32_t dma_map_size   = sizeof(page_t) * memory.page_data->node_zones[ZONE_DMA].num_pages;
+    uint32_t start_norm_map = (uint32_t)memory.page_data->node_zones[ZONE_NORMAL].zone_mem_map;
+    uint32_t norm_map_size  = sizeof(page_t) * memory.page_data->node_zones[ZONE_NORMAL].num_pages;
+
+    uint32_t addr_u32 = (uint32_t)addr;
+    if ((addr_u32 >= start_dma_map) && (addr_u32 < (start_dma_map + dma_map_size))) {
+        return 1;
+    }
+    if ((addr_u32 >= start_norm_map) && (addr_u32 < (start_norm_map + norm_map_size))) {
+        return 1;
+    }
+    return 0;
+}
+
+/// @brief Checks if the specified address points to a page_t that belongs to DMA zone.
+/// @param addr The address to check.
+/// @return 1 if it belongs to DMA zone, 0 otherwise.
+static inline int is_dma_page_struct(void *addr)
+{
+    uint32_t start_dma_map = (uint32_t)memory.page_data->node_zones[ZONE_DMA].zone_mem_map;
+    uint32_t dma_map_size  = sizeof(page_t) * memory.page_data->node_zones[ZONE_DMA].num_pages;
+    uint32_t addr_u32      = (uint32_t)addr;
+    return (addr_u32 >= start_dma_map) && (addr_u32 < (start_dma_map + dma_map_size));
+}
+
+/// @brief Checks if the specified address points to a page_t that belongs to HighMem zone.
+/// @param addr The address to check.
+/// @return 1 if it belongs to HighMem zone, 0 otherwise.
+static inline int is_highmem_page_struct(void *addr)
+{
+    if (memory.page_data->node_zones[ZONE_HIGHMEM].num_pages == 0) {
+        return 0;  // No HighMem zone
+    }
+    uint32_t start_high_map = (uint32_t)memory.page_data->node_zones[ZONE_HIGHMEM].zone_mem_map;
+    uint32_t high_map_size  = sizeof(page_t) * memory.page_data->node_zones[ZONE_HIGHMEM].num_pages;
+    uint32_t addr_u32       = (uint32_t)addr;
+    return (addr_u32 >= start_high_map) && (addr_u32 < (start_high_map + high_map_size));
 }

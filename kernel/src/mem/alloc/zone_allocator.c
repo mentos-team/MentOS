@@ -40,6 +40,9 @@
     (((addr) & (~((PAGE_SIZE << (MAX_BUDDYSYSTEM_GFP_ORDER - 1)) - 1))) + \
      (PAGE_SIZE << (MAX_BUDDYSYSTEM_GFP_ORDER - 1)))
 
+/// @brief DMA zone size carved from lowmem (fixed 16MB).
+#define DMA_ZONE_SIZE (16U * 1024U * 1024U)
+
 /// @brief Keeps track of system memory management data.
 memory_info_t memory;
 
@@ -83,6 +86,7 @@ static inline void __print_memory_info(int log_level, const memory_info_t *mem_i
     pr_log(log_level, "    Total Page Frames       : %u\n", mem_info->mem_map_num);
     pr_log(log_level, "    Size                    : %s\n", to_human_size(sizeof(page_t) * mem_info->mem_map_num));
     pr_log(log_level, "Memory Zones:\n");
+    __print_memory_zone(log_level, "DMA", &mem_info->dma_mem);
     __print_memory_zone(log_level, "LowMem", &mem_info->low_mem);
     __print_memory_zone(log_level, "HighMem", &mem_info->high_mem);
 }
@@ -158,6 +162,10 @@ static zone_t *get_zone_from_flags(gfp_t gfp_mask)
 
     // Determine the appropriate zone based on the given GFP mask.
     switch (gfp_mask) {
+    case GFP_DMA:
+        // Return the DMA zone.
+        return &memory.page_data->node_zones[ZONE_DMA];
+
     case GFP_KERNEL:
     case GFP_ATOMIC:
     case GFP_NOFS:
@@ -207,6 +215,11 @@ static inline int is_memory_clean(gfp_t gfp_mask)
 /// @return 1 on success, 0 on failure.
 static int pmm_check(void)
 {
+    zone_t *zone_dma = get_zone_from_flags(GFP_DMA);
+    if (!zone_dma) {
+        pr_crit("Failed to retrieve the zone_dma.\n");
+        return 0;
+    }
     zone_t *zone_normal = get_zone_from_flags(GFP_KERNEL);
     if (!zone_normal) {
         pr_crit("Failed to retrieve the zone_normal.\n");
@@ -217,24 +230,149 @@ static int pmm_check(void)
         pr_crit("Failed to retrieve the zone_highmem.\n");
         return 0;
     }
-    // Verify memory state.
+
+    // Verify initial memory state for all zones.
+    if (!is_memory_clean(GFP_DMA)) {
+        pr_err("DMA zone memory not clean initially.\n");
+        return 0;
+    }
     if (!is_memory_clean(GFP_KERNEL)) {
-        pr_err("Memory not clean.\n");
+        pr_err("Normal zone memory not clean initially.\n");
         return 0;
     }
     if (!is_memory_clean(GFP_HIGHUSER)) {
-        pr_err("Memory not clean.\n");
+        pr_err("HighMem zone memory not clean initially.\n");
         return 0;
     }
 
     char buddy_status[512] = {0};
     pr_debug("Zones status before testing:\n");
+    buddy_system_to_string(&zone_dma->buddy_system, buddy_status, sizeof(buddy_status));
+    pr_debug("    %s\n", buddy_status);
     buddy_system_to_string(&zone_normal->buddy_system, buddy_status, sizeof(buddy_status));
     pr_debug("    %s\n", buddy_status);
     buddy_system_to_string(&zone_highmem->buddy_system, buddy_status, sizeof(buddy_status));
     pr_debug("    %s\n", buddy_status);
 
-    pr_debug("\tStep 1: Testing allocation in kernel-space...\n");
+    pr_debug("\tStep 1: Testing single page allocation in DMA zone...\n");
+    {
+        // Allocate a single page with GFP_DMA.
+        page_t *page = alloc_pages(GFP_DMA, 0);
+        if (!page) {
+            pr_err("DMA page allocation failed.\n");
+            return 0;
+        }
+        // Verify the allocated page is in DMA zone physical address range.
+        uint32_t phys_addr = get_physical_address_from_page(page);
+        if (phys_addr >= memory.dma_mem.end_addr) {
+            pr_err("DMA allocated page (phys: 0x%08x) is outside DMA zone (0x%08x-0x%08x).\n", phys_addr, memory.dma_mem.start_addr, memory.dma_mem.end_addr);
+            return 0;
+        }
+        // Verify the virtual address is in DMA zone virtual address range.
+        uint32_t virt_addr = get_virtual_address_from_page(page);
+        if (virt_addr == 0 || virt_addr < memory.dma_mem.virt_start || virt_addr >= memory.dma_mem.virt_end) {
+            pr_err("DMA allocated page has invalid virtual address (0x%08x). Expected: 0x%08x-0x%08x.\n", virt_addr, memory.dma_mem.virt_start, memory.dma_mem.virt_end);
+            return 0;
+        }
+        pr_debug("\t  DMA page: phys=0x%08x, virt=0x%08x\n", phys_addr, virt_addr);
+        // Free the allocated page.
+        if (free_pages(page) < 0) {
+            pr_err("DMA page deallocation failed.\n");
+            return 0;
+        }
+        // Verify memory state after deallocation.
+        if (!is_memory_clean(GFP_DMA)) {
+            pr_err("Test failed: DMA zone memory not clean after free.\n");
+            return 0;
+        }
+    }
+
+    pr_debug("\tStep 2: Testing multiple order allocations in DMA zone...\n");
+    {
+        // Test different order allocations (up to order 5 for DMA zone).
+        // DMA zone is only 8MB with MAX_ORDER=12, so we can test up to order 5 (128 pages = 512KB).
+        const int max_test_order = 5;
+        page_t *pages[max_test_order];
+
+        // Allocate pages with increasing orders.
+        for (int i = 0; i < max_test_order; i++) {
+            pages[i] = alloc_pages(GFP_DMA, i);
+            if (!pages[i]) {
+                pr_err("DMA page allocation failed at order %d.\n", i);
+                return 0;
+            }
+            // Verify physical address is within DMA zone.
+            uint32_t phys_addr = get_physical_address_from_page(pages[i]);
+            if (phys_addr >= memory.dma_mem.end_addr) {
+                pr_err("DMA allocated page at order %d (phys: 0x%08x) is outside DMA zone.\n", i, phys_addr);
+                return 0;
+            }
+            pr_debug("\t  Order %d: phys=0x%08x, virt=0x%08x, size=%u pages\n", i, phys_addr, get_virtual_address_from_page(pages[i]), (1U << i));
+        }
+
+        // Free the allocated pages in reverse order.
+        for (int i = max_test_order - 1; i >= 0; i--) {
+            if (free_pages(pages[i]) < 0) {
+                pr_err("DMA page deallocation failed at order %d.\n", i);
+                return 0;
+            }
+        }
+
+        // Verify memory state after all deallocations.
+        if (!is_memory_clean(GFP_DMA)) {
+            pr_err("Test failed: DMA zone memory not clean after multiple allocations.\n");
+            return 0;
+        }
+    }
+
+    pr_debug("\tStep 3: Testing DMA zone with multiple allocations...\n");
+    {
+        // Allocate several blocks to test buddy system behavior.
+        page_t *blocks[4] = {NULL};
+        int block_size    = 8; // Order 8 = 256 pages = 1MB each
+
+        // Allocate 4 x 1MB blocks (total 4MB out of 8MB).
+        for (int i = 0; i < 4; i++) {
+            blocks[i] = alloc_pages(GFP_DMA, block_size);
+            if (!blocks[i]) {
+                pr_err("Failed to allocate block %d from DMA zone.\n", i);
+                // Free previously allocated blocks.
+                for (int j = 0; j < i; j++) {
+                    free_pages(blocks[j]);
+                }
+                return 0;
+            }
+            pr_debug("\t  Block %d allocated (order %d = %u KB)\n", i, block_size, (1U << block_size) * 4);
+        }
+
+        // Verify DMA zone still has free space (8MB - 4MB = 4MB).
+        unsigned long free_space = buddy_system_get_free_space(&zone_dma->buddy_system);
+        if (free_space == 0) {
+            pr_err("DMA zone should still have free space but shows 0 bytes.\n");
+            for (int i = 0; i < 4; i++) {
+                free_pages(blocks[i]);
+            }
+            return 0;
+        }
+        pr_debug("\t  DMA zone has %lu bytes free (expected ~4MB after 4x1MB allocations)\n", free_space);
+
+        // Free all blocks.
+        for (int i = 0; i < 4; i++) {
+            if (free_pages(blocks[i]) < 0) {
+                pr_err("Failed to free block %d.\n", i);
+                return 0;
+            }
+        }
+        pr_debug("\t  All blocks freed, DMA zone recovered\n");
+
+        // Verify memory is clean again.
+        if (!is_memory_clean(GFP_DMA)) {
+            pr_err("Test failed: DMA zone not clean after multiple allocations.\n");
+            return 0;
+        }
+    }
+
+    pr_debug("\tStep 4: Testing allocation in kernel-space...\n");
     {
         // Allocate a single page with GFP_KERNEL.
         page_t *page = alloc_pages(GFP_KERNEL, 0);
@@ -253,7 +391,7 @@ static int pmm_check(void)
             return 0;
         }
     }
-    pr_debug("\tStep 2: Testing allocation in user-space...\n");
+    pr_debug("\tStep 5: Testing allocation in user-space...\n");
     {
         // Allocate a single page with GFP_HIGHUSER.
         page_t *page = alloc_pages(GFP_HIGHUSER, 0);
@@ -272,7 +410,7 @@ static int pmm_check(void)
             return 0;
         }
     }
-    pr_debug("\tStep 3: Testing allocation of five 2^{i} page frames in user-space...\n");
+    pr_debug("\tStep 6: Testing allocation of five 2^{i} page frames in user-space...\n");
     {
         page_t *pages[5];
         // Allocate pages with GFP_HIGHUSER.
@@ -296,7 +434,7 @@ static int pmm_check(void)
             return 0;
         }
     }
-    pr_debug("\tStep 4: Testing allocation of five 2^{i} page frames in kernel-space...\n");
+    pr_debug("\tStep 7: Testing allocation of five 2^{i} page frames in kernel-space...\n");
     {
         page_t *pages[5];
         // Allocate pages with GFP_KERNEL.
@@ -320,6 +458,8 @@ static int pmm_check(void)
             return 0;
         }
     }
+
+    pr_debug("\tAll PMM tests passed successfully!\n");
     return 1;
 }
 
@@ -397,13 +537,22 @@ static int zone_init(char *name, int zone_index, uint32_t adr_from, uint32_t adr
         return 0;
     }
 
-    __print_zone(LOGLEVEL_DEBUG, zone);
+    __print_zone(LOGLEVEL_NOTICE, zone);
 
     return 1;
 }
 
 int is_valid_virtual_address(uint32_t addr)
 {
+    if ((addr >= memory.kernel_mem.virt_start) && (addr < memory.kernel_mem.virt_end)) {
+        return 1;
+    }
+    if ((addr >= memory.boot_low_mem.virt_start) && (addr < memory.boot_low_mem.virt_end)) {
+        return 1;
+    }
+    if ((addr >= memory.dma_mem.virt_start) && (addr < memory.dma_mem.virt_end)) {
+        return 1;
+    }
     if ((addr >= memory.low_mem.virt_start) && (addr < memory.low_mem.virt_end)) {
         return 1;
     }
@@ -535,6 +684,15 @@ ssize_t pmmngr_initialize_page_data(const boot_info_t *boot_info, size_t offset)
 
 int pmmngr_init(boot_info_t *boot_info)
 {
+    // Store kernel region info for later address translation.
+    // This includes not just the kernel binary but also the kernel heap space
+    // allocated before lowmem begins.
+    memory.kernel_mem.start_addr = boot_info->kernel_phy_start;
+    memory.kernel_mem.end_addr   = boot_info->lowmem_phy_start; // Extends to lowmem start
+    memory.kernel_mem.virt_start = boot_info->kernel_start;
+    memory.kernel_mem.virt_end   = boot_info->lowmem_virt_start; // Extends to lowmem virt start
+    memory.kernel_mem.size       = boot_info->lowmem_virt_start - boot_info->kernel_start;
+
     // Place the pages in memory.
     ssize_t offset_pages = pmmngr_initialize_pages(boot_info, 0U);
 
@@ -556,6 +714,135 @@ int pmmngr_init(boot_info_t *boot_info)
     memory.low_mem.virt_start      = tmp_normal_virt_start + (memory.low_mem.start_addr - tmp_normal_phy_start);
     memory.low_mem.virt_end        = boot_info->lowmem_virt_end;
 
+    // Track the boot-time lowmem region used for mem_map/page_data and alignment gaps.
+    memory.boot_low_mem.start_addr = boot_info->lowmem_phy_start;
+    memory.boot_low_mem.virt_start = boot_info->lowmem_virt_start;
+    memory.boot_low_mem.size       = (memory.low_mem.virt_start > boot_info->lowmem_virt_start)
+                                         ? (memory.low_mem.virt_start - boot_info->lowmem_virt_start)
+                                         : 0U;
+    memory.boot_low_mem.end_addr   = memory.boot_low_mem.start_addr + memory.boot_low_mem.size;
+    memory.boot_low_mem.virt_end   = memory.boot_low_mem.virt_start + memory.boot_low_mem.size;
+
+// Initialize DMA zone from physical memory below 16MB (ISA DMA limit: 0x01000000).
+// DMA devices can only access first 16MB due to 24-bit addressing.
+// Strategy: Place DMA zone before the kernel, in the 1MB-kernel_start range.
+#define ISA_DMA_LIMIT        (16 * 1024 * 1024) // 16MB physical address limit
+#define CONVENTIONAL_MEM_END (1 * 1024 * 1024)  // End of conventional memory (1MB)
+
+    pr_debug("DMA zone calculation:\n");
+    pr_debug("  kernel_phy_start = 0x%08x\n", boot_info->kernel_phy_start);
+    pr_debug("  kernel_phy_end = 0x%08x\n", boot_info->kernel_phy_end);
+    pr_debug("  lowmem.start_addr = 0x%08x\n", memory.low_mem.start_addr);
+    pr_debug("  ISA_DMA_LIMIT = 0x%08x\n", ISA_DMA_LIMIT);
+
+    // DMA zone is placed between page 0 and kernel start.
+    // Align end down to ensure we don't overlap with kernel.
+    uint32_t dma_end_candidate = MIN_PAGE_ALIGN(boot_info->kernel_phy_start);
+    // Ensure DMA zone doesn't exceed 16MB limit.
+    uint32_t dma_end_limit     = (dma_end_candidate < ISA_DMA_LIMIT) ? dma_end_candidate : ISA_DMA_LIMIT;
+
+    pr_debug("  dma_end_limit = 0x%08x\n", dma_end_limit);
+
+    // Calculate available DMA region size (from physical 0 to kernel start or 16MB).
+    uint32_t dma_available = dma_end_limit;
+
+    pr_debug("  dma_available = 0x%08x (%u MB)\n", dma_available, dma_available / (1024 * 1024));
+
+    // Determine DMA zone size: use what's available, aligned to buddy system.
+    // Don't try to allocate more than available space.
+    uint32_t dma_size = MIN_ORDER_ALIGN(dma_available);
+
+    // If MIN_ORDER_ALIGN rounds down to zero (available space < max buddy order),
+    // use the largest power-of-2 pages that fit.
+    if (dma_size == 0 && dma_available > 0) {
+        // Find the largest power-of-2 multiple of PAGE_SIZE that fits.
+        dma_size = PAGE_SIZE;
+        while ((dma_size << 1) <= dma_available) {
+            dma_size <<= 1;
+        }
+    }
+
+    pr_debug("  dma_size (aligned) = 0x%08x (%u MB)\n", dma_size, dma_size / (1024 * 1024));
+
+    // Calculate DMA start: work backwards from end to get aligned region.
+    uint32_t dma_end_address   = dma_end_limit;
+    uint32_t dma_start_aligned = dma_end_address - dma_size;
+
+    // CRITICAL: Buddy system requires the starting PFN to be aligned to max order!
+    // Max order block = (1 << (MAX_BUDDYSYSTEM_GFP_ORDER - 1)) pages = 2048 pages for order 12.
+    // We need start_pfn % 2048 == 0 for the buddy system to work.
+    uint32_t max_order_pages = (1U << (MAX_BUDDYSYSTEM_GFP_ORDER - 1));
+    uint32_t max_order_bytes = max_order_pages * PAGE_SIZE; // 8MB for order 12
+
+    // Align dma_start down to max_order boundary (should result in 0x0).
+    uint32_t pfn_remainder = (dma_start_aligned / PAGE_SIZE) % max_order_pages;
+    if (pfn_remainder != 0) {
+        // Adjust start down to align PFN.
+        dma_start_aligned -= pfn_remainder * PAGE_SIZE;
+    }
+
+    // CRITICAL: Size must also be a multiple of max_order_bytes for buddy system.
+    // Round size down to nearest 32MB boundary.
+    dma_size = (dma_size / max_order_bytes) * max_order_bytes;
+
+    // If size rounded down to 0, we don't have enough space for even one max-order block.
+    // In this case, we cannot create a DMA zone with the current buddy system constraints.
+    if (dma_size == 0) {
+        pr_crit("  DMA zone: insufficient space for 32MB-aligned zone (available: %u MB)\n", dma_available / (1024 * 1024));
+        pr_crit("  Consider reducing MAX_BUDDYSYSTEM_GFP_ORDER or relocating kernel.\n");
+        return 0;
+    }
+
+    pr_debug("  DMA zone (PFN-aligned): 0x%08x - 0x%08x (size: 0x%08x, %u MB)\n", dma_start_aligned, dma_start_aligned + dma_size, dma_size, dma_size / (1024 * 1024));
+    pr_debug("  DMA start PFN: %u (aligned to %u-page boundary: %s)\n", dma_start_aligned / PAGE_SIZE, max_order_pages, ((dma_start_aligned / PAGE_SIZE) % max_order_pages == 0) ? "YES" : "NO");
+
+    memory.dma_mem.start_addr = dma_start_aligned;
+    memory.dma_mem.size       = dma_size;
+    memory.dma_mem.end_addr   = memory.dma_mem.start_addr + memory.dma_mem.size;
+
+// DMA zone is BEFORE the kernel in physical memory (0x0-0x800000).
+// Map it in kernel virtual space AFTER LowMem to avoid user space collision.
+// User stack grows down from 0xc0000000, so mapping DMA at 0xbf800000 would
+// conflict with user PDE entries. Instead, map at 0xf8000000 (after LowMem).
+#define DMA_VIRT_START 0xf8000000
+    memory.dma_mem.virt_start = DMA_VIRT_START;
+    memory.dma_mem.virt_end   = memory.dma_mem.virt_start + memory.dma_mem.size;
+
+    pr_debug("  DMA virtual mapping: 0x%08x - 0x%08x\n", memory.dma_mem.virt_start, memory.dma_mem.virt_end);
+
+    if (memory.dma_mem.size == 0) {
+        pr_crit("DMA zone size is zero; DMA zone must be present.\n");
+        return 0;
+    }
+
+    // Adjust LowMem (ZONE_NORMAL) to exclude DMA zone if there's overlap.
+    // If DMA zone ends before lowmem starts, lowmem remains unchanged.
+    uint32_t original_lowmem_start = memory.low_mem.start_addr;
+
+    if (memory.dma_mem.end_addr > original_lowmem_start) {
+        // DMA zone overlaps with lowmem region - shrink lowmem.
+        memory.low_mem.start_addr = memory.dma_mem.end_addr;
+        memory.low_mem.size       = (memory.low_mem.end_addr > memory.low_mem.start_addr)
+                                        ? MIN_ORDER_ALIGN(memory.low_mem.end_addr - memory.low_mem.start_addr)
+                                        : 0U;
+        memory.low_mem.end_addr   = memory.low_mem.start_addr + memory.low_mem.size;
+        memory.low_mem.virt_start = memory.dma_mem.virt_end;
+        memory.low_mem.virt_end   = memory.low_mem.virt_start + memory.low_mem.size;
+
+        // Update boot_low_mem to account for gap between DMA and new lowmem start.
+        if (memory.dma_mem.end_addr > memory.boot_low_mem.end_addr) {
+            memory.boot_low_mem.size     = memory.dma_mem.start_addr - memory.boot_low_mem.start_addr;
+            memory.boot_low_mem.end_addr = memory.boot_low_mem.start_addr + memory.boot_low_mem.size;
+            memory.boot_low_mem.virt_end = memory.boot_low_mem.virt_start + memory.boot_low_mem.size;
+        }
+    }
+    // else: DMA zone is entirely below lowmem (in kernel area), lowmem stays as is.
+
+    if (memory.low_mem.size == 0) {
+        pr_crit("Normal zone size is zero after DMA split.\n");
+        return 0;
+    }
+
     // Align the physical start address of the HighMem zone to the nearest valid boundary.
     memory.high_mem.start_addr = MAX_PAGE_ALIGN((uint32_t)boot_info->highmem_phy_start);
     // Align the physical end address of the HighMem zone to the nearest lower valid boundary.
@@ -564,15 +851,25 @@ int pmmngr_init(boot_info_t *boot_info)
     memory.high_mem.size       = MIN_ORDER_ALIGN(memory.high_mem.end_addr - memory.high_mem.start_addr);
     // Recalculate the aligned physical end address of the HighMem zone based on the adjusted size.
     memory.high_mem.end_addr   = memory.high_mem.start_addr + memory.high_mem.size;
-    // Compute the virtual addresses for the HighMem zone.
-    memory.high_mem.virt_start = memory.low_mem.virt_end;
-    memory.high_mem.virt_end   = memory.high_mem.virt_start + memory.high_mem.size;
 
-    // Calculate the minimum page index (start of LowMem).
-    memory.page_index_min = memory.low_mem.start_addr / PAGE_SIZE;
+    // HighMem is NOT permanently mapped in kernel virtual address space.
+    // These pages are only temporarily mapped when needed via kmap/kunmap.
+    // Setting virtual addresses to 0 indicates "no permanent mapping."
+    memory.high_mem.virt_start = 0;
+    memory.high_mem.virt_end   = 0;
+
+    // Calculate the minimum page index (start of DMA or LowMem).
+    if (memory.dma_mem.size > 0) {
+        memory.page_index_min = memory.dma_mem.start_addr / PAGE_SIZE;
+    } else {
+        memory.page_index_min = memory.low_mem.start_addr / PAGE_SIZE;
+    }
     // Calculate the maximum page index (end of HighMem).
     memory.page_index_max = (memory.high_mem.end_addr / PAGE_SIZE) - 1;
 
+    if (!zone_init("DMA", ZONE_DMA, memory.dma_mem.start_addr, memory.dma_mem.end_addr)) {
+        return 0;
+    }
     if (!zone_init("Normal", ZONE_NORMAL, memory.low_mem.start_addr, memory.low_mem.end_addr)) {
         return 0;
     }
@@ -580,7 +877,7 @@ int pmmngr_init(boot_info_t *boot_info)
         return 0;
     }
 
-    __print_memory_info(LOGLEVEL_DEBUG, &memory);
+    __print_memory_info(LOGLEVEL_NOTICE, &memory);
 
     return pmm_check();
 }

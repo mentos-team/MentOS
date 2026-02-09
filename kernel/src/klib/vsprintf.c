@@ -87,6 +87,9 @@ static int __emit_number(char *buffer, size_t buflen, unsigned long num, int bas
 /// @param flags Formatting flags.
 static void __format_string(char **buf, char *end, const char *str, int width, int precision, int flags)
 {
+    if (str == NULL) {
+        str = "(null)";
+    }
     int len       = 0;
     const char *s = str;
     // If precision is set, limit the length to precision.

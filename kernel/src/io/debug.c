@@ -15,7 +15,7 @@
 /// Serial port for QEMU.
 #define SERIAL_COM1 (0x03F8)
 /// Determines the log level.
-static int max_log_level = LOGLEVEL_DEBUG;
+static int max_log_level = LOGLEVEL_NOTICE;
 
 /// @brief Prints the correct header for the given debug level.
 /// @param file the file origin of the debug message.
@@ -41,7 +41,7 @@ static inline void __debug_print_header(const char *file, const char *fun, int l
     static char tmp_prefix[BUFSIZ];
     static char final_prefix[BUFSIZ];
     // Check the log level.
-    if ((log_level < LOGLEVEL_EMERG) || (log_level > LOGLEVEL_DEBUG)) {
+    if ((log_level < LOGLEVEL_EMERG) || (log_level > LOGLEVEL_NOTICE)) {
         // Set it to default.
         log_level = 8;
     }
@@ -75,7 +75,7 @@ static inline void __debug_print_header(const char *file, const char *fun, int l
 
 void set_log_level(int level)
 {
-    if ((level >= LOGLEVEL_EMERG) && (level <= LOGLEVEL_DEBUG)) {
+    if ((level >= LOGLEVEL_EMERG) && (level <= LOGLEVEL_NOTICE)) {
         max_log_level = level;
     }
 }

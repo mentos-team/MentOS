@@ -271,10 +271,13 @@ void boot_main(uint32_t magic, multiboot_info_t *header, uint32_t esp)
     // size of the kernel (virt_high - virt_low).
     boot_info.kernel_phy_end   = boot_info.kernel_phy_start + boot_info.kernel_size;
 
+    // Start lowmem right after the kernel end (page-aligned).
+    // DMA zone will be carved from physical memory below 16MB during zone init.
     boot_info.lowmem_phy_start  = __align_rup(boot_info.kernel_phy_end, PAGE_SIZE);
     boot_info.lowmem_phy_end    = 896 * 1024 * 1024; // 896 MB of low memory max
     boot_info.lowmem_size       = boot_info.lowmem_phy_end - boot_info.lowmem_phy_start;
-    boot_info.lowmem_virt_start = __align_rup(boot_info.kernel_end, PAGE_SIZE);
+    // Use linear mapping offset so lowmem virtual addresses match physical addresses.
+    boot_info.lowmem_virt_start = boot_info.kernel_start + (boot_info.lowmem_phy_start - boot_info.kernel_phy_start);
     boot_info.lowmem_virt_end   = boot_info.lowmem_virt_start + boot_info.lowmem_size;
 
     boot_info.highmem_phy_start = boot_info.lowmem_phy_end;

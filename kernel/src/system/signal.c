@@ -31,9 +31,38 @@ static wait_queue_head_t stopped_queue;
 
 /// @brief The list of signal names.
 static const char *sys_siglist[] = {
-    "HUP",  "INT",  "QUIT", "ILL",  "TRAP", "ABRT",   "EMT",  "FPE",  "KILL",  "BUS", "SEGV",
-    "SYS",  "PIPE", "ALRM", "TERM", "USR1", "USR2",   "CHLD", "PWR",  "WINCH", "URG", "POLL",
-    "STOP", "TSTP", "CONT", "TTIN", "TTOU", "VTALRM", "PROF", "XCPU", "XFSZ",  NULL,
+    "HUP",
+    "INT",
+    "QUIT",
+    "ILL",
+    "TRAP",
+    "ABRT",
+    "EMT",
+    "FPE",
+    "KILL",
+    "BUS",
+    "SEGV",
+    "SYS",
+    "PIPE",
+    "ALRM",
+    "TERM",
+    "USR1",
+    "USR2",
+    "CHLD",
+    "PWR",
+    "WINCH",
+    "URG",
+    "POLL",
+    "STOP",
+    "TSTP",
+    "CONT",
+    "TTIN",
+    "TTOU",
+    "VTALRM",
+    "PROF",
+    "XCPU",
+    "XFSZ",
+    NULL,
 };
 
 /// @brief Copies the sigaction.
@@ -318,29 +347,28 @@ static inline int __handle_signal(int signr, siginfo_t *info, sigaction_t *ka, s
     // Store the registers before setting the ones required by the signal handling.
     current_process->thread.signal_regs = *regs;
 
-    // Restore the registers for the process that has set the signal.
-    *regs = current_process->thread.regs;
-
-    // Set the instruction pointer.
+    // Set the instruction pointer to the signal handler.
+    // Note: We keep all other registers (especially ESP/stack pointer) as-is from the
+    // exception frame, since they represent the actual user-mode state.
     regs->eip = (uintptr_t)ka->sa_handler;
 
     // If the user is also asking for the signal info, push it into the stack.
     if (bitmask_check(ka->sa_flags, SA_SIGINFO)) {
-        // Move the stack so that we have space for storing the siginfo.
-        regs->useresp -= sizeof(siginfo_t);
-        // Save the pointer where the siginfo is stored.
+        // Push the siginfo structure onto the stack.
+        stack_push_data(&regs->useresp, info, sizeof(siginfo_t));
+        // Save the pointer where the siginfo is stored (at the new SP).
         siginfo_t *siginfo_addr = (siginfo_t *)regs->useresp;
-        // We push on the stack the entire siginfo.
-        __copy_siginfo(siginfo_addr, info);
-        // We push on the stack the pointer to the siginfo we copied on the stack.
-        PUSH_VALUE_ON_STACK(regs->useresp, siginfo_addr);
+        // Push the pointer to the siginfo on the stack.
+        stack_push_ptr(&regs->useresp, siginfo_addr);
     }
 
     // Push on the stack the signal number, first and only argument of the handler.
-    PUSH_VALUE_ON_STACK(regs->useresp, signr);
+    stack_push_s32(&regs->useresp, signr);
 
     // Push on the stack the function required to handle the signal return.
-    PUSH_VALUE_ON_STACK(regs->useresp, current_process->sigreturn_addr);
+    stack_push_u32(&regs->useresp, current_process->sigreturn_addr);
+
+    pr_debug("Signal %d delivered to PID %d at EIP 0x%x, ESP 0x%x\n", signr, current_process->pid, regs->eip, regs->useresp);
 
     return 1;
 }
