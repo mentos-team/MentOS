@@ -168,6 +168,20 @@ add_subdirectory(lib)
 add_subdirectory(userspace)
 
 # =============================================================================
+# ENABLE exercise options
+# =============================================================================
+
+option(ENABLE_DEADLOCK_PREVENTION "Enable deadlock prevention exercise" OFF)
+
+if(ENABLE_DEADLOCK_PREVENTION)
+    add_subdirectory(${CMAKE_SOURCE_DIR}/exercises/deadlock-prevention/kernel experimental_kernel)
+    add_subdirectory(${CMAKE_SOURCE_DIR}/exercises/deadlock-prevention/lib experimental_lib)
+    add_subdirectory(${CMAKE_SOURCE_DIR}/exercises/deadlock-prevention/userspace experimental_userspace)
+    target_compile_definitions(kernel PUBLIC ENABLE_DEADLOCK_PREVENTION)
+    target_compile_definitions(libc PUBLIC ENABLE_DEADLOCK_PREVENTION)
+endif()
+
+# =============================================================================
 # FILESYSTEM
 # =============================================================================
 
