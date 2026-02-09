@@ -56,6 +56,9 @@ set(TEST_LIST
 # Set the directory where the compiled binaries will be placed.
 set(MENTOS_TESTS_DIR ${CMAKE_SOURCE_DIR}/filesystem/bin/tests)
 
+# Ensure the bin/tests directory exists.
+file(MAKE_DIRECTORY ${MENTOS_TESTS_DIR})
+
 foreach(FILE_NAME ${TEST_LIST})
     # =========================================================================
     # TARGET NAMING

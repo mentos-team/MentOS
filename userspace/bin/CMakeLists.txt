@@ -43,6 +43,9 @@ set(PROGRAM_LIST
 # Set the directory where the compiled binaries will be placed.
 set(MENTOS_BIN_DIR ${CMAKE_SOURCE_DIR}/filesystem/bin)
 
+# Ensure the bin directory exists.
+file(MAKE_DIRECTORY ${MENTOS_BIN_DIR})
+
 foreach(FILE_NAME ${PROGRAM_LIST})
     # =========================================================================
     # TARGET NAMING
