@@ -7,11 +7,9 @@
 
 #pragma once
 
-#include "stdio.h"
-#include "stdlib.h"
-#include "stdio.h"
-#include "stdbool.h"
-#include "string.h"
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
 
 /// @brief Resource allocation request status enumeration.
 typedef enum {

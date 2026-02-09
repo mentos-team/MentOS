@@ -7,8 +7,6 @@
 
 #pragma once
 
-#include "stdatomic.h"
-
 /// @brief Smart semaphore creation.
 /// @return The semaphore id or -1 if creation failed.
 int sys_sem_create();

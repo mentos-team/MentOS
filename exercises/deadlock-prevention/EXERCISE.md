@@ -166,14 +166,13 @@ Implementing deadlock prevention in MentOS is challenging because we need to kno
 
 **What Has Been Implemented:**
 
-1. Definition of `resource_t` with task reference that owns it
+1. Definition of `resource_t` with ownership tracking
 2. Creation of global created resources list
-3. List of resources that tasks are interested in, stored in `task_struct`
-4. Copy of this list in child `task_struct` during `fork()` syscall
-5. Resource creation during semaphore creation in kernel-side syscall
-6. Implementation of `arr_math` library
+3. A self-contained, fixed-size task-resource reference pool (no changes to `task_struct`)
+4. Resource creation during semaphore creation in kernel-side syscall
+5. Implementation of `arr_math` library
 
-#### Resource Definition and task_struct Improvements
+#### Resource Definition and Task-Resource References
 
 ```c
 typedef struct resource {
@@ -181,6 +180,8 @@ typedef struct resource {
     size_t rid;
     /// List head for resources list.
     list_head resources_list;
+    /// List head for task-resource references using this resource.
+    list_head task_refs;
     /// Number of instances of this resource. For now, always 1.
     size_t n_instances;
     /// If the resource has been assigned, it points to the task assigned,
@@ -190,12 +191,12 @@ typedef struct resource {
     size_t assigned_instances;
 } resource_t;
 
-typedef struct task_struct {
-    ...
-    /// Array of resource pointers that task needs.
-    struct resource *resources[TASK_RESOURCE_MAX_AMOUNT];
-    ...
-} task_struct;
+typedef struct task_resource_ref {
+   list_head list;
+   task_struct *task;
+   resource_t *resource;
+   bool_t in_use;
+} task_resource_ref_t;
 ```
 
 ### Library arr_math

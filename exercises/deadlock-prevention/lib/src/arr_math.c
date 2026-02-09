@@ -6,7 +6,7 @@
 
 #include "arr_math.h"
 
-uint32_t *all(uint32_t *dst, uint32_t value, size_t length)
+uint32_t *arr_all(uint32_t *dst, uint32_t value, size_t length)
 {
     for (size_t i = 0; i < length; i++) {
         *(dst + i) = value;

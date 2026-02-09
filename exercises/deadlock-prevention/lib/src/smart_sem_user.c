@@ -6,10 +6,9 @@
 
 #include "smart_sem_user.h"
 
-#include "syscall.h"
-#include "syscall_types.h"
-#include "errno.h"
-#include "debug.h"
+#include <errno.h>
+#include <syslog.h>
+#include <system/syscall_types.h>
 
 int sem_create()
 {
@@ -17,7 +16,7 @@ int sem_create()
 
     /* ... */
 
-    dbg_print("sem_create() -> %d\n", retval);
+    syslog(LOG_INFO, "sem_create() -> %d\n", retval);
 
     return retval;
 }
@@ -25,8 +24,8 @@ int sem_create()
 int sem_destroy(int id)
 {
     int retval = 0;
-    
-    dbg_print("sem_destroy(%d)\n", id);
+
+    syslog(LOG_INFO, "sem_destroy(%d)\n", id);
 
     /* ... */
 
@@ -36,8 +35,8 @@ int sem_destroy(int id)
 int sem_init(int id)
 {
     int retval = 0;
-    
-    dbg_print("sem_init(%d)\n", id);
+
+    syslog(LOG_INFO, "sem_init(%d)\n", id);
 
     /* ... */
 
@@ -46,9 +45,9 @@ int sem_init(int id)
 
 int sem_acquire(int id)
 {
-    int retval;
-    
-    dbg_print("sem_acquire(%d)\n", id);
+    int retval = 0;
+
+    syslog(LOG_INFO, "sem_acquire(%d)\n", id);
 
     do {
         /* ... */
@@ -60,10 +59,10 @@ int sem_acquire(int id)
 int sem_release(int id)
 {
     int retval = 0;
-    
-    dbg_print("sem_release(%d)\n", id);
+
+    syslog(LOG_INFO, "sem_release(%d)\n", id);
 
     /* ... */
-    
+
     return retval;
 }

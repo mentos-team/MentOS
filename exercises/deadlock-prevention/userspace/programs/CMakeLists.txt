@@ -4,7 +4,7 @@
 
 # List of deadlock-related programs
 set(DEADLOCK_PROGRAMS
-    deadlock.c  # TODO: Add cmd_deadlock implementation here
+    deadlock.c
 )
 
 foreach(FILE_NAME ${DEADLOCK_PROGRAMS})
@@ -22,6 +22,7 @@ foreach(FILE_NAME ${DEADLOCK_PROGRAMS})
     add_executable(${TARGET_NAME} ${CMAKE_CURRENT_SOURCE_DIR}/${FILE_NAME})
     add_dependencies(${TARGET_NAME} libc)
     target_include_directories(${TARGET_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/lib/inc)
+    target_include_directories(${TARGET_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../lib/inc)
     target_link_libraries(${TARGET_NAME} libc)
     target_compile_options(${TARGET_NAME} PRIVATE -u_start)
     set_target_properties(${TARGET_NAME} PROPERTIES 

@@ -5,33 +5,99 @@
 /// See LICENSE.md for details.
 
 #include "resource.h"
-#include "kheap.h"
-#include "string.h"
 #include "arr_math.h"
+#include "process/scheduler.h"
+#include "string.h"
+#include <stdbool.h>
 
 /// The list of processes.
 extern runqueue_t runqueue;
 /// The list of resources.
 resource_list_t r_list;
 
+// Maximum number of task-resource references tracked by the exercise.
+#define DEADLOCK_TASK_RESOURCE_MAX 100
+
+typedef struct task_resource_ref {
+    list_head_t list;
+    task_struct *task;
+    resource_t *resource;
+    bool_t in_use;
+} task_resource_ref_t;
+
+static task_resource_ref_t task_resource_refs[DEADLOCK_TASK_RESOURCE_MAX] = { 0 };
+
+static bool_t resource_list_initialized = 0;
+
+static void resource_list_ensure_initialized(void)
+{
+    if (resource_list_initialized) {
+        return;
+    }
+
+    list_head_init(&r_list.head);
+    r_list.num_active = 0;
+    for (size_t i = 0; i < DEADLOCK_TASK_RESOURCE_MAX; i++) {
+        task_resource_refs[i].in_use   = 0;
+        task_resource_refs[i].task     = NULL;
+        task_resource_refs[i].resource = NULL;
+        list_head_init(&task_resource_refs[i].list);
+    }
+
+    resource_list_initialized = 1;
+}
+
+static task_resource_ref_t *task_resource_ref_alloc(task_struct *task, resource_t *resource)
+{
+    for (size_t i = 0; i < DEADLOCK_TASK_RESOURCE_MAX; i++) {
+        if (!task_resource_refs[i].in_use) {
+            task_resource_refs[i].in_use   = 1;
+            task_resource_refs[i].task     = task;
+            task_resource_refs[i].resource = resource;
+            list_head_init(&task_resource_refs[i].list);
+            if (resource != NULL) {
+                list_head_insert_after(&task_resource_refs[i].list, &resource->task_refs);
+            }
+            return &task_resource_refs[i];
+        }
+    }
+    return NULL;
+}
+
+static void task_resource_ref_free(task_resource_ref_t *ref)
+{
+    if (!ref || !ref->in_use) {
+        return;
+    }
+    if (ref->list.next != NULL && ref->list.prev != NULL) {
+        list_head_remove(&ref->list);
+    }
+    ref->in_use   = 0;
+    ref->task     = NULL;
+    ref->resource = NULL;
+}
+
+static bool_t task_is_active(task_struct *task, task_struct *idx_map_task_struct[])
+{
+    size_t n = scheduler_get_active_processes();
+    for (size_t i = 0; i < n; i++) {
+        if (idx_map_task_struct[i] == task) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 /// @brief Remove the resource reference dependency from each task in running
 /// state.
 /// @param r Resource pointer.
 static void clean_resource_reference(resource_t *r)
 {
-    if (!r) return;
-    // Loop on running tasks.
-    list_head *it;
-    list_for_each (it, &runqueue.queue) {
-        task_struct *entry = list_entry(it, task_struct, run_list);
-        if (entry != NULL) {
-            // Loop on resources that tasks depend on.
-            for (size_t r_i = 0; r_i < TASK_RESOURCE_MAX_AMOUNT; r_i++) {
-                // Clean the resource reference in the task resources list.
-                if (entry->resources[r_i] == r) {
-                    entry->resources[r_i] = NULL;
-                }
-            }
+    if (!r)
+        return;
+    for (size_t i = 0; i < DEADLOCK_TASK_RESOURCE_MAX; i++) {
+        if (task_resource_refs[i].in_use && task_resource_refs[i].resource == r) {
+            task_resource_ref_free(&task_resource_refs[i]);
         }
     }
 }
@@ -41,10 +107,10 @@ static void clean_resource_reference(resource_t *r)
 /// @param idx_map_task_struct Pointer of the array already allocated to fill.
 /// @return The same pointer passed as parameter.
 static task_struct **compute_index_map_task_struct(
-        task_struct *idx_map_task_struct[])
+    task_struct *idx_map_task_struct[])
 {
     // Loop on running tasks.
-    list_head *task_it;
+    list_head_t *task_it;
     size_t t_i = 0;
     list_for_each (task_it, &runqueue.queue) {
         task_struct *task = list_entry(task_it, task_struct, run_list);
@@ -52,6 +118,14 @@ static task_struct **compute_index_map_task_struct(
             // Map a task with an index.
             idx_map_task_struct[t_i] = task;
             t_i++;
+        }
+    }
+
+    // Prune task-resource references for tasks no longer active.
+    for (size_t i = 0; i < DEADLOCK_TASK_RESOURCE_MAX; i++) {
+        if (task_resource_refs[i].in_use
+            && !task_is_active(task_resource_refs[i].task, idx_map_task_struct)) {
+            task_resource_ref_free(&task_resource_refs[i]);
         }
     }
 
@@ -65,12 +139,11 @@ static task_struct **compute_index_map_task_struct(
 static uint32_t *fill_available(uint32_t *arr_available)
 {
     // Loop on resources created.
-    list_head *resource_it;
+    list_head_t *resource_it;
     list_for_each (resource_it, &r_list.head) {
-        resource_t *resource = list_entry(resource_it, resource_t,
-                                          resources_list);
+        resource_t *resource = list_entry(resource_it, resource_t, resources_list);
         arr_available[resource->rid] =
-                resource->n_instances - resource->assigned_instances;
+            resource->n_instances - resource->assigned_instances;
     }
 
     return arr_available;
@@ -84,15 +157,16 @@ static uint32_t *fill_available(uint32_t *arr_available)
 static uint32_t **fill_max(uint32_t **mat_max, task_struct *idx_map_task_struct[])
 {
     // Loop on all tasks.
-    size_t n = kernel_get_active_processes();
-    size_t m = kernel_get_active_resources();
+    size_t n = scheduler_get_active_processes();
     for (size_t t_i = 0; t_i < n; t_i++) {
         task_struct *task = idx_map_task_struct[t_i];
         if (task != NULL) {
-            // Find resources needed by the task.
-            for (size_t r_i = 0; r_i < m; r_i++) {
-                if (task->resources[r_i] != NULL) {
-                    mat_max[t_i][r_i] = task->resources[r_i]->n_instances;
+            for (size_t i = 0; i < DEADLOCK_TASK_RESOURCE_MAX; i++) {
+                if (task_resource_refs[i].in_use
+                    && task_resource_refs[i].task == task
+                    && task_resource_refs[i].resource != NULL) {
+                    size_t rid = task_resource_refs[i].resource->rid;
+                    mat_max[t_i][rid] = task_resource_refs[i].resource->n_instances;
                 }
             }
         }
@@ -106,15 +180,13 @@ static uint32_t **fill_max(uint32_t **mat_max, task_struct *idx_map_task_struct[
 /// @param mat_alloc Pointer of the matrix already allocated to fill.
 /// @param idx_map_task_struct Pointer to the array of index and tasks mapping.
 /// @return The same pointer passed as first parameter.
-static uint32_t **fill_alloc(uint32_t **mat_alloc,
-                             task_struct *idx_map_task_struct[])
+static uint32_t **fill_alloc(uint32_t **mat_alloc, task_struct *idx_map_task_struct[])
 {
-    size_t n = kernel_get_active_processes();
+    size_t n = scheduler_get_active_processes();
     // Loop on resources created.
-    list_head *resource_it;
+    list_head_t *resource_it;
     list_for_each (resource_it, &r_list.head) {
-        resource_t *resource = list_entry(resource_it, resource_t,
-                                          resources_list);
+        resource_t *resource = list_entry(resource_it, resource_t, resources_list);
         // Find the task with this resource assigned and take the instances num.
         for (size_t t_i = 0; t_i < n; t_i++) {
             if (idx_map_task_struct[t_i] == resource->assigned_task) {
@@ -132,14 +204,13 @@ static uint32_t **fill_alloc(uint32_t **mat_alloc,
 /// @param mat_max Pointer to the max matrix.
 /// @param mat_alloc Pointer to the alloc matrix.
 /// @return The same pointer passed as first parameter.
-static uint32_t **fill_need(uint32_t **mat_need, uint32_t **mat_max,
-        uint32_t **mat_alloc)
+static uint32_t **fill_need(uint32_t **mat_need, uint32_t **mat_max, uint32_t **mat_alloc)
 {
     // Calculate need[i][j] = max[i][j] - alloc[i][j].
-    size_t n = kernel_get_active_processes();
+    size_t n = scheduler_get_active_processes();
     size_t m = kernel_get_active_resources();
     for (size_t i = 0; i < n; i++) {
-        memcpy(mat_need[i],  mat_max[i],   m * sizeof(uint32_t));
+        memcpy(mat_need[i], mat_max[i], m * sizeof(uint32_t));
         arr_sub(mat_need[i], mat_alloc[i], m);
     }
     return mat_need;
@@ -147,58 +218,59 @@ static uint32_t **fill_need(uint32_t **mat_need, uint32_t **mat_max,
 
 resource_t *resource_create(const char *category)
 {
-    // Check if current task can allocate a new resource.
-    task_struct *current_task = kernel_get_current_process();
-    size_t i = 0;
-    while(current_task->resources[i] != NULL) {
-        i++;
-
-        if (i >= TASK_RESOURCE_MAX_AMOUNT) {
-            return NULL;
-        }
+    resource_list_ensure_initialized();
+    // Check if there is an available reference slot for the current task.
+    task_struct *current_task = scheduler_get_current_process();
+    if (!current_task) {
+        return NULL;
     }
 
     // Allocate new resource and initialize it.
     resource_t *new = kmalloc(sizeof(resource_t));
     memset(new, 0, sizeof(resource_t));
-    new->rid = r_list.num_active++;
+    new->rid      = r_list.num_active++;
     new->category = category;
 
-    // Current task is one of the tasks that need for this resource allocation.
-    current_task->resources[i] = new;
+    list_head_init(&new->task_refs);
+    if (!task_resource_ref_alloc(current_task, new)) {
+        kfree(new);
+        return NULL;
+    }
+
     // The number of resource instances: for now always 1.
-    new->n_instances = 1;
+    new->n_instances           = 1;
 
     // Initialize the list_head.
     list_head_init(&new->resources_list);
-    list_head_add_tail(&new->resources_list, &r_list.head);
+    list_head_insert_after(&new->resources_list, &r_list.head);
 
     return new;
 }
 
 void resource_init(resource_t *r)
 {
-    if (!r) return;
-    r->assigned_task = NULL;
+    if (!r)
+        return;
+    r->assigned_task      = NULL;
     r->assigned_instances = 0;
 }
 
 void resource_destroy(resource_t *r)
 {
-    if (!r) return;
+    if (!r)
+        return;
     // Remove pointer of this resource from running processes.
     clean_resource_reference(r);
     // Remove this resource from resources list.
-    list_head_del(&r->resources_list);
+    list_head_remove(&r->resources_list);
     kfree(r);
     r_list.num_active--;
 
     // Normalize resource ids.
-    list_head *resource_it;
+    list_head_t *resource_it;
     size_t rid = 0;
     list_for_each (resource_it, &r_list.head) {
-        resource_t *resource = list_entry(resource_it, resource_t,
-                resources_list);
+        resource_t *resource = list_entry(resource_it, resource_t, resources_list);
         if (resource != NULL) {
             resource->rid = rid;
         }
@@ -207,24 +279,25 @@ void resource_destroy(resource_t *r)
 
 void resource_assign(resource_t *r)
 {
-    if (!r) return;
+    if (!r)
+        return;
     // Assign resource to current task.
-    r->assigned_task = kernel_get_current_process();
+    r->assigned_task      = scheduler_get_current_process();
     // Number of instances assigned, for now always 1.
     r->assigned_instances = 1;
 }
 
 void resource_deassign(resource_t *r)
 {
-    if (!r) return;
-    r->assigned_task = NULL;
+    if (!r)
+        return;
+    r->assigned_task      = NULL;
     r->assigned_instances = 0;
 }
 
-void init_deadlock_structures(uint32_t *arr_available, uint32_t **mat_max,
-        uint32_t **mat_alloc, uint32_t **mat_need,
-        task_struct *idx_map_task_struct[])
+void init_deadlock_structures(uint32_t *arr_available, uint32_t **mat_max, uint32_t **mat_alloc, uint32_t **mat_need, task_struct *idx_map_task_struct[])
 {
+    resource_list_ensure_initialized();
     reset_deadlock_structures(arr_available, mat_max, mat_alloc, idx_map_task_struct);
     compute_index_map_task_struct(idx_map_task_struct);
     fill_alloc(mat_alloc, idx_map_task_struct);
@@ -233,10 +306,9 @@ void init_deadlock_structures(uint32_t *arr_available, uint32_t **mat_max,
     fill_need(mat_need, mat_max, mat_alloc);
 }
 
-void reset_deadlock_structures(uint32_t *arr_available, uint32_t **mat_max,
-        uint32_t **mat_alloc, task_struct *idx_map_task_struct[])
+void reset_deadlock_structures(uint32_t *arr_available, uint32_t **mat_max, uint32_t **mat_alloc, task_struct *idx_map_task_struct[])
 {
-    size_t n = kernel_get_active_processes();
+    size_t n = scheduler_get_active_processes();
     size_t m = kernel_get_active_resources();
 
     // Clean idx_map_task_struct and rows of max and alloc.
@@ -257,10 +329,10 @@ size_t kernel_get_active_resources()
 
 int32_t get_current_task_idx_from(task_struct *idx_map_task_struct[])
 {
-    size_t n = kernel_get_active_processes();
+    size_t n    = scheduler_get_active_processes();
     int32_t ret = -1;
     for (size_t t_i = 0; t_i < n; t_i++) {
-        if (idx_map_task_struct[t_i] == kernel_get_current_process()) {
+        if (idx_map_task_struct[t_i] == scheduler_get_current_process()) {
             ret = t_i;
             break;
         }

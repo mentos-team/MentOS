@@ -6,10 +6,10 @@
 
 #pragma once
 
-#include "process.h"
-#include "stdint.h"
-#include "types.h"
-#include "list_head.h"
+#include <list_head.h>
+#include <process/process.h>
+#include <stdint.h>
+#include <sys/types.h>
 
 /// @brief Resource descriptor.
 typedef struct resource {
@@ -17,7 +17,10 @@ typedef struct resource {
     size_t rid;
 
     /// List head for tasks that share this resource.
-    list_head resources_list;
+    list_head_t resources_list;
+
+    /// List head for task-resource references using this resource.
+    list_head_t task_refs;
 
     /// Number of instances of this resource. For now, always 1.
     size_t n_instances;
@@ -41,7 +44,7 @@ typedef struct resource_list {
     size_t num_active;
 
     /// Head of resources.
-    list_head head;
+    list_head_t head;
 } resource_list_t;
 
 /// @brief Resource creation.
@@ -73,9 +76,7 @@ void resource_deassign(resource_t *r);
 ///                     each task.
 /// @param need         Matrix of current resources instances need of each task.
 /// @param idx_map_task_struct Pointer to the array of index and tasks mapping.
-void init_deadlock_structures(uint32_t *available, uint32_t **max,
-        uint32_t **alloc, uint32_t **need,
-        task_struct *idx_map_task_struct[]);
+void init_deadlock_structures(uint32_t *available, uint32_t **max, uint32_t **alloc, uint32_t **need, task_struct *idx_map_task_struct[]);
 
 /// @brief Reset to zero deadlock prevention structures.
 /// @param available    Array of resources instances currently available;
@@ -86,8 +87,7 @@ void init_deadlock_structures(uint32_t *available, uint32_t **max,
 /// @param idx_map_task_struct Pointer to the array of index and tasks mapping.
 /// There is no need to reset the need matrix because it has to be calculated
 /// starting from max matrix, which is clean.
-void reset_deadlock_structures(uint32_t *available, uint32_t **max,
-        uint32_t **alloc, task_struct *idx_map_task_struct[]);
+void reset_deadlock_structures(uint32_t *available, uint32_t **max, uint32_t **alloc, task_struct *idx_map_task_struct[]);
 
 /// @brief Get the number of total resources allocated in the system.
 /// @return The number of resources.

@@ -8,4 +8,4 @@
 #pragma once
 
 /// @brief Deadlock deterministic simulation start function.
-void deadlock_simulation();
+void deadlock_simulation(void);

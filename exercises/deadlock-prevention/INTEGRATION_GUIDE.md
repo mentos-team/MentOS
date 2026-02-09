@@ -20,14 +20,15 @@ The deadlock prevention exercise is organized into three layers, mirroring the M
 exercises/deadlock-prevention/
 ├── EXERCISE.md              (Student exercise document)
 ├── INTEGRATION_GUIDE.md     (This file)
-├── ARCHITECTURE.md          (System overview - TODO)
 ├── kernel/
 │   ├── inc/                 (Kernel headers)
 │   │   ├── deadlock_prevention.h      (Banker's algorithm interface)
+│   │   ├── deadlock_simulation.h      (Kernel-side deterministic simulation)
 │   │   ├── resource.h                 (Resource management structures)
 │   │   └── smart_sem_kernel.h         (Kernel semaphore utilities)
 │   ├── src/                 (Kernel implementation)
 │   │   ├── deadlock_prevention.c      (TODO: Implement Banker's algorithm)
+│   │   ├── deadlock_simulation.c      (Kernel-side deterministic simulation)
 │   │   ├── resource.c                 (Resource allocation/tracking)
 │   │   └── smart_sem_kernel.c         (Kernel-side semaphore code)
 │   └── CMakeLists.txt       (Kernel layer cmake configuration)
@@ -40,14 +41,10 @@ exercises/deadlock-prevention/
 │   │   └── smart_sem_user.c           (User-space semaphore code)
 │   └── CMakeLists.txt       (Library layer cmake configuration)
 └── userspace/
-    ├── programs/            (Shell commands and utilities)
-    │   ├── CMakeLists.txt   (Build configuration for programs)
-    │   └── deadlock.c       (TODO: Shell command deadlock [-i <iter>])
-    ├── simulations/         (Test programs)
-    │   ├── CMakeLists.txt   (Build configuration for simulations)
-    │   ├── deadlock_simulation.h
-    │   └── deadlock_simulation.c      (Deterministic deadlock simulation)
-    └── CMakeLists.txt       (Userspace layer cmake configuration)
+   ├── programs/            (Shell commands and utilities)
+   │   ├── CMakeLists.txt   (Build configuration for programs)
+   │   └── deadlock.c       (TODO: Shell command deadlock [-i <iter>])
+   └── CMakeLists.txt       (Userspace layer cmake configuration)
 ```
 
 ---
@@ -96,18 +93,28 @@ bool_t arr_ge(const uint32_t *left, const uint32_t *right, size_t length);
    - Kernel-side support for user-space semaphores
    - Integrates with deadlock prevention
 
+4. **Deterministic Simulation** (`kernel/src/deadlock_simulation.c`, `kernel/inc/deadlock_simulation.h`)
+   - Kernel-side deterministic test of the algorithm
+   - Prints matrices and decision flow to the debug console
+
 **Key Data Structures:**
 
 ```c
-// System-wide tracking
-extern resource_t *global_resources[MAX_RESOURCES];
-extern size_t total_resources;
+typedef struct resource {
+   size_t rid;
+   list_head_t resources_list;
+   list_head_t task_refs;
+   size_t n_instances;
+   task_struct *assigned_task;
+   size_t assigned_instances;
+} resource_t;
 
-// Per-task tracking
-task_struct {
-    struct resource *resources[TASK_RESOURCE_MAX_AMOUNT];
-    ...
-}
+typedef struct task_resource_ref {
+   list_head_t list;
+   task_struct *task;
+   resource_t *resource;
+   bool_t in_use;
+} task_resource_ref_t;
 ```
 
 **Algorithm Flow:**
@@ -124,12 +131,7 @@ task_struct {
 
 **Files:**
 
-1. **Simulation Program** (`userspace/simulations/deadlock_simulation.c`)
-   - Deterministic test of deadlock prevention
-   - Demonstrates the algorithm in action
-   - Look for debug output in kernel console
-
-2. **Shell Command** (`userspace/programs/deadlock.c`)
+1. **Shell Command** (`userspace/programs/deadlock.c`)
    - **TODO:** Interactive shell command: `deadlock [-i <iterations>]`
    - Creates multiple processes that contend for resources
    - Tests deadlock prevention under real conditions
@@ -157,7 +159,7 @@ This enables:
 
 - `ENABLE_DEADLOCK_PREVENTION` preprocessor define in kernel and libc
 - Conditional compilation of exercise code
-- Build of simulation and test programs
+- Build of the kernel-side deterministic simulation
 
 ### Step 3: Build
 
@@ -179,7 +181,8 @@ make qemu
 In QEMU:
 
 - Boot normally
-- Use `deadlock -i 2` command to run the simulation
+- Watch kernel debug output from the deterministic simulation
+- Use `deadlock -i 2` to exercise the runtime path
 
 ---
 
@@ -211,11 +214,10 @@ In QEMU:
   - [ ] Return true if safe, false if unsafe
 
 - [ ] **Phase 4: Testing**
-  - [ ] Compile without errors
-  - [ ] Run simulation: `deadlock -i 1`
-  - [ ] Run with multiple iterations: `deadlock -i 3`
-  - [ ] Observe kernel debug output
-  - [ ] Verify safe sequence detection
+   - [ ] Compile without errors
+   - [ ] Observe kernel debug output from the deterministic simulation
+   - [ ] Run with multiple iterations: `deadlock -i 3`
+   - [ ] Verify safe sequence detection
 
 ---
 

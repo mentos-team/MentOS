@@ -6,18 +6,16 @@
 
 #pragma once
 
-#include "stdio.h"
-#include "stdlib.h"
-#include "stdio.h"
-#include "stdint.h"
-#include "stdbool.h"
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
 
 /// @brief Initialize all memory cells of destination array with a value.
 /// @param dst Pointer of destination array.
 /// @param value Value to use for array inizialization.
 /// @param length Length of destination array. 
 /// @return The pointer of the destination array.
-uint32_t *all(uint32_t *dst, uint32_t value, size_t length);
+uint32_t *arr_all(uint32_t *dst, uint32_t value, size_t length);
 
 /// @brief Element wise array subtraction.
 /// @param left Pointer of left operator and destination array.
