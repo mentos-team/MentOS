@@ -4,10 +4,10 @@
 /// See LICENSE.md for details.
 
 // Setup the logging for this file (do this before any other include).
-#include "sys/kernel_levels.h"           // Include kernel log levels.
-#define __DEBUG_HEADER__ "[SCHED ]"      ///< Change header.
+#include "sys/kernel_levels.h"          // Include kernel log levels.
+#define __DEBUG_HEADER__ "[SCHED ]"     ///< Change header.
 #define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
-#include "io/debug.h"                    // Include debugging functions.
+#include "io/debug.h"                   // Include debugging functions.
 
 #include "assert.h"
 #include "descriptor_tables/tss.h"
@@ -185,6 +185,11 @@ void scheduler_restore_context(task_struct *process, pt_regs_t *f)
     runqueue.curr = process;
     // Restore the registers.
     *f            = process->thread.regs;
+    // CRITICAL: Memory barrier to prevent compiler from reordering the page directory
+    // switch before the above memory writes. In Release mode, the compiler can
+    // reorder operations, which would cause us to switch page directories BEFORE
+    // restoring the register context. This leads to immediate faults on process switch.
+    __asm__ __volatile__("" ::: "memory");
     // TODO(enrico): Explain paging switch (ring 0 doesn't need page switching)
     // Switch to process page directory
     paging_switch_pgd(process->mm->pgd);

@@ -456,8 +456,12 @@ static pg_iter_entry_t __pg_iter_next(page_iterator_t *iter)
     return result;
 }
 
+__attribute__((noinline))
 page_t *mem_virtual_to_page(page_directory_t *pgd, uint32_t virt_start, size_t *size)
 {
+    // Memory barrier to prevent aggressive compiler optimization in Release mode.
+    __asm__ __volatile__("" ::: "memory");
+    
     // Check for null pointer to the page directory to avoid dereferencing.
     if (!pgd) {
         pr_crit("The page directory is null.\n");
@@ -470,29 +474,53 @@ page_t *mem_virtual_to_page(page_directory_t *pgd, uint32_t virt_start, size_t *
     uint32_t virt_pgt_offset = virt_pfn % 1024; // Offset within the page table.
 
     // Ensure the page directory entry is present before dereferencing.
-    if (!pgd->entries[virt_pgt].present) {
-        pr_info("Page directory entry not present for vaddr 0x%p.\n", (void *)virt_start);
+    // Use volatile read to prevent compiler optimization in Release mode.
+    unsigned int pde_present = pgd->entries[virt_pgt].present;
+    __asm__ __volatile__("" ::: "memory");
+    
+    if (!pde_present) {
         return NULL;
     }
 
     // Get the physical page for the page directory entry.
-    page_t *pgd_page = memory.mem_map + pgd->entries[virt_pgt].frame;
+    // Use volatile read to prevent compiler from optimizing frame access.
+    unsigned int pde_frame = pgd->entries[virt_pgt].frame;
+    __asm__ __volatile__("" ::: "memory");
+    
+    page_t *pgd_page = memory.mem_map + pde_frame;
 
     // Get the low memory address of the page table.
     page_table_t *pgt_address = (page_table_t *)get_virtual_address_from_page(pgd_page);
     if (!pgt_address) {
-        pr_crit("Failed to get low memory address from page directory entry.\n");
+        static int warn_count = 0;
+        if (warn_count++ < 5) {
+            pr_debug("mem_virtual_to_page: get_virtual_address_from_page returned NULL for PDE %u (frame %u)\n",
+                     virt_pgt, pde_frame);
+        }
         return NULL;
     }
 
     // Ensure the page table entry is present before dereferencing.
-    if (!pgt_address->pages[virt_pgt_offset].present) {
-        pr_info("Page table entry not present for vaddr 0x%p.\n", (void *)virt_start);
+    // Use volatile read to prevent compiler optimization in Release mode.
+    unsigned int pte_present = pgt_address->pages[virt_pgt_offset].present;
+    __asm__ __volatile__("" ::: "memory");
+    
+    if (!pte_present) {
+        static volatile int pte_not_present_count = 0;
+        if (pte_not_present_count < 3) {
+            pte_not_present_count++;
+            pr_warning("mem_virtual_to_page: PTE not present for vaddr 0x%p (PDE %u, PTE offset %u)\n",
+                       (void *)virt_start, virt_pgt, virt_pgt_offset);
+        }
         return NULL;
     }
 
     // Get the physical frame number for the corresponding entry in the page table.
-    uint32_t pfn = pgt_address->pages[virt_pgt_offset].frame;
+    // Use volatile read to prevent compiler optimization.
+    unsigned int pte_frame = pgt_address->pages[virt_pgt_offset].frame;
+    __asm__ __volatile__("" ::: "memory");
+    
+    uint32_t pfn = pte_frame;
 
     // Map the physical frame number to a physical page.
     page_t *page = memory.mem_map + pfn;

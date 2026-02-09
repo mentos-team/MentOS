@@ -34,18 +34,24 @@ static int32_t mouse_y = (600 / 2);
 
 /// @brief      Mouse wait for a command.
 /// @param type 1 for sending - 0 for receiving.
+/// @details Uses volatile timeout semantics to prevent the compiler from
+///          optimizing away the timing-critical poll loops. This ensures
+///          proper hardware synchronization even with aggressive optimization.
 static void __mouse_waitcmd(unsigned char type)
 {
-    register unsigned int _time_out = 100000;
+    // Use volatile to prevent compiler optimization of timeout loops.
+    // The timeout variable is critical for ensuring the mouse device has time
+    // to respond to commands within the expected hardware constraints.
+    volatile unsigned int _time_out = 100000;
     if (type == 0) {
-        // DATA
+        // DATA - Wait for output buffer full bit (0x64 & 0x01)
         while (_time_out--) {
             if ((inportb(0x64) & 1) == 1) {
                 break;
             }
         }
     } else {
-        // SIGNALS
+        // SIGNALS - Wait for input buffer empty bit (0x64 & 0x02)
         while (_time_out--) {
             if ((inportb(0x64) & 2) == 0) {
                 break;

@@ -28,7 +28,7 @@ int main(int argc, char *argv[])
 
     // ========================================================================
     // Generate a unique key using ftok.
-    key = ftok("/README.md", 5);
+    key = ftok("/", 5);
     if (key < 0) {
         perror("Failed to generate key using ftok");
         return 1;

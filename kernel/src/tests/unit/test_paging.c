@@ -6,7 +6,7 @@
 // Setup the logging for this file (do this before any other include).
 #include "sys/kernel_levels.h"          // Include kernel log levels.
 #define __DEBUG_HEADER__ "[TUNIT ]"     ///< Change header.
-#define __DEBUG_LEVEL__  LOGLEVEL_DEBUG ///< Set log level.
+#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
 #include "io/debug.h"                   // Include debugging functions.
 
 #include "mem/mm/mm.h"
@@ -369,17 +369,44 @@ TEST(paging_virt_to_page)
 
     // The page might be NULL if this specific address isn't mapped
     // But if we try the first mapped kernel entry, it should work
-    int found_mapping = 0;
-    for (int i = 768; i < MAX_PAGE_DIR_ENTRIES && !found_mapping; ++i) {
-        if (pgd->entries[i].present) {
-            // Try an address in this page directory entry
-            uint32_t test_addr = i * 4 * 1024 * 1024; // Each PDE covers 4MB
-            size_t test_size   = PAGE_SIZE;
-            page_t *test_page  = mem_virtual_to_page(pgd, test_addr, &test_size);
-
-            if (test_page != NULL) {
-                found_mapping = 1;
-                ASSERT_MSG(test_size <= PAGE_SIZE, "Returned size should not exceed requested");
+    volatile int found_mapping = 0;
+    volatile int present_pde_count = 0;
+    
+    // Scan kernel page directory entries (768-1023, corresponding to 0xC0000000+)
+    for (int pde_idx = 768; pde_idx < MAX_PAGE_DIR_ENTRIES && !found_mapping; ++pde_idx) {
+        // Force read of PDE present bit with memory barrier
+        unsigned int pde_present = pgd->entries[pde_idx].present;
+        __asm__ __volatile__("" ::: "memory");
+        
+        if (pde_present) {
+            present_pde_count++;
+            
+            // Get the page table for this PDE
+            unsigned int pde_frame = pgd->entries[pde_idx].frame;
+            __asm__ __volatile__("" ::: "memory");
+            
+            page_t *pgt_page = memory.mem_map + pde_frame;
+            page_table_t *pgt = (page_table_t *)get_virtual_address_from_page(pgt_page);
+            
+            if (pgt) {
+                // Scan this page table for a present PTE
+                for (int pte_idx = 0; pte_idx < MAX_PAGE_TABLE_ENTRIES && !found_mapping; ++pte_idx) {
+                    unsigned int pte_present = pgt->pages[pte_idx].present;
+                    __asm__ __volatile__("" ::: "memory");
+                    
+                    if (pte_present) {
+                        // Found a present PTE! Calculate its virtual address
+                        uint32_t test_addr = (pde_idx * 1024 + pte_idx) * PAGE_SIZE;
+                        size_t test_size = PAGE_SIZE;
+                        
+                        page_t *test_page = mem_virtual_to_page(pgd, test_addr, &test_size);
+                        
+                        if (test_page != NULL) {
+                            found_mapping = 1;
+                            ASSERT_MSG(test_size <= PAGE_SIZE, "Returned size should not exceed requested");
+                        }
+                    }
+                }
             }
         }
     }

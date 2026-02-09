@@ -28,13 +28,13 @@ int init_modules(multiboot_info_t *header)
         modules[i].pad       = 0;
     }
     if (!bitmask_check(header->flags, MULTIBOOT_FLAG_MODS)) {
-        return -1;
+        return 1; // No modules, but that's OK
     }
     multiboot_module_t *mod = first_module(header);
     for (int i = 0; (mod != 0) && (i < MAX_MODULES); ++i, mod = next_module(header, mod)) {
         memcpy(&modules[i], mod, sizeof(multiboot_module_t));
     }
-    return 0;
+    return 1; // Successfully loaded modules
 }
 
 int relocate_modules(void)

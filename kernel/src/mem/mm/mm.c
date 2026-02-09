@@ -80,7 +80,7 @@ mm_struct_t *mm_create_blank(size_t stack_size)
 
     // Allocate the stack segment.
     vm_area_struct_t *segment = vm_area_create(
-        mm, PROCAREA_END_ADDR - stack_size, stack_size, MM_PRESENT | MM_RW | MM_USER | MM_COW, GFP_HIGHUSER);
+        mm, PROCAREA_END_ADDR - stack_size, stack_size, MM_PRESENT | MM_RW | MM_USER, GFP_HIGHUSER);
     if (!segment) {
         pr_crit("Failed to create stack segment for new process\n");
         // Free page directory if allocation fails.

@@ -6,10 +6,10 @@
 /// @{
 
 // Setup the logging for this file (do this before any other include).
-#include "sys/kernel_levels.h"          // Include kernel log levels.
-#define __DEBUG_HEADER__ "[ATA   ]"     ///< Change header.
+#include "sys/kernel_levels.h"           // Include kernel log levels.
+#define __DEBUG_HEADER__ "[ATA   ]"      ///< Change header.
 #define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
-#include "io/debug.h"                   // Include debugging functions.
+#include "io/debug.h"                    // Include debugging functions.
 
 #include "drivers/ata/ata.h"
 #include "drivers/ata/ata_types.h"
@@ -528,45 +528,107 @@ static inline void ata_dump_device(ata_device_t *dev)
     pr_debug("    }\n");
 }
 
-/// @brief Waits for approximately 400 nanoseconds by performing four I/O reads.
-/// @param dev The device on which we wait.
+/// @brief Waits for approximately 400 nanoseconds by reading the control register.
+/// @param dev The ATA device to wait on.
+/// @details Performs four I/O port reads (~100ns each) for a total of ~400ns.
+/// This delay is required by the ATA specification between certain operations.
 static inline void ata_io_wait(ata_device_t *dev)
 {
-    // Perform four reads from the control register to wait for 400 ns.
+    // Each inportb is approximately 100 nanoseconds on a modern processor.
+    // Four reads provide the ~400ns delay specified by the ATA standard.
     inportb(dev->io_control);
     inportb(dev->io_control);
     inportb(dev->io_control);
     inportb(dev->io_control);
+}
+
+// ============================================================================
+// ATA Status Wait Functions
+// ============================================================================
+
+/// @typedef ata_status_condition_fn
+/// @brief Function pointer for device status condition checks.
+/// @note Status conditions return 0 when ready to proceed, non-zero while waiting.
+typedef int (*ata_status_condition_fn)(uint8_t status);
+
+/// @brief Condition: status bits (matching mask) are STILL SET (keep waiting).
+/// @param status The current device status register value.
+/// @param mask The status bits to check.
+/// @return Non-zero (waiting) while bits match, 0 when bits are cleared.
+/// @details Helper for polling until status bits are cleared.
+static inline int __cond_status_has_bits(uint8_t status, uint8_t mask)
+{
+    return (status & mask) == mask;
+}
+
+/// @brief Condition: status bits (matching mask) are STILL CLEAR (keep waiting).
+/// @param status The current device status register value.
+/// @param mask The status bits to check.
+/// @return Non-zero (waiting) while bits are clear, 0 when bits are set.
+/// @details Helper for polling until status bits are set.
+static inline int __cond_status_missing_bits(uint8_t status, uint8_t mask)
+{
+    return (status & mask) != mask;
+}
+
+/// @brief Unified ATA device status waiter with timeout protection.
+/// @param dev The ATA device to poll.
+/// @param mask The status bits to check.
+/// @param condition The condition to evaluate (0=ready, non-zero=keep waiting).
+/// @param timeout Maximum iterations before giving up.
+/// @return 0 on success (condition satisfied), 1 on timeout.
+/// @details Polls the device status register while applying the condition function.
+/// Uses volatile timeout to prevent compiler optimization of the critical wait loop.
+static inline int ata_status_wait(ata_device_t *dev, uint8_t mask, 
+                                  int (*evaluate_condition)(uint8_t, uint8_t),
+                                  long timeout)
+{
+    uint8_t status;
+    // Use volatile local copy to prevent compiler optimization of timeout loop.
+    // The return value depends on proper timeout decrement, making volatile
+    // semantics critical for correctness.
+    volatile long volatile_timeout = timeout;
+    
+    do {
+        // Read current device status.
+        status = inportb(dev->io_reg.status);
+        // Check if condition is satisfied.
+        if (!evaluate_condition(status, mask)) {
+            // Condition met - operation succeeded.
+            return 0;
+        }
+    } while (--volatile_timeout > 0);
+    
+    // Timeout occurred - operation failed or device not responding.
+    return 1;
 }
 
 /// @brief Waits until the status bits selected through the mask are zero.
-/// @param dev The device we need to wait for.
-/// @param mask The mask used to check the status bits.
-/// @param timeout The maximum number of cycles to wait before timing out.
-/// @return 1 on success, 0 if it times out.
+/// @param dev The ATA device to poll.
+/// @param mask The status bits to check.
+/// @param timeout Maximum poll iterations before timing out.
+/// @return 0 on success (bits cleared), 1 on timeout.
+/// @details Polls the device status register until the bits specified by mask
+/// are all cleared (0). Uses volatile semantics to ensure the timeout loop
+/// cannot be optimized away by the compiler.
 static inline int ata_status_wait_not(ata_device_t *dev, long mask, long timeout)
 {
-    uint8_t status;
-    do {
-        status = inportb(dev->io_reg.status);
-    } while (((status & mask) == mask) && (--timeout > 0));
-    // Return 1 on success (bits cleared), 0 on timeout.
-    return timeout <= 0;
+    // Call unified waiter with condition that bits should be cleared.
+    return ata_status_wait(dev, (uint8_t)mask, __cond_status_has_bits, timeout);
 }
 
 /// @brief Waits until the status bits selected through the mask are set.
-/// @param dev The device we need to wait for.
-/// @param mask The mask used to check the status bits.
-/// @param timeout The maximum number of cycles to wait before timing out.
-/// @return 1 on success, 0 if it times out.
+/// @param dev The ATA device to poll.
+/// @param mask The status bits to check.
+/// @param timeout Maximum poll iterations before timing out.
+/// @return 0 on success (bits set), 1 on timeout.
+/// @details Polls the device status register until the bits specified by mask
+/// are all set (1). Uses volatile semantics to ensure the timeout loop
+/// cannot be optimized away by the compiler.
 static inline int ata_status_wait_for(ata_device_t *dev, long mask, long timeout)
 {
-    uint8_t status;
-    do {
-        status = inportb(dev->io_reg.status);
-    } while (((status & mask) != mask) && (--timeout > 0));
-    // Return 1 on success (bits set), 0 on timeout.
-    return timeout <= 0;
+    // Call unified waiter with condition that bits should be set.
+    return ata_status_wait(dev, (uint8_t)mask, __cond_status_missing_bits, timeout);
 }
 
 /// @brief Prints the status and error information about the device.

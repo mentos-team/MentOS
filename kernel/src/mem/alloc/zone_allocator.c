@@ -537,7 +537,7 @@ static int zone_init(char *name, int zone_index, uint32_t adr_from, uint32_t adr
         return 0;
     }
 
-    __print_zone(LOGLEVEL_DEBUG, zone);
+    __print_zone(LOGLEVEL_NOTICE, zone);
 
     return 1;
 }
@@ -877,7 +877,7 @@ int pmmngr_init(boot_info_t *boot_info)
         return 0;
     }
 
-    __print_memory_info(LOGLEVEL_DEBUG, &memory);
+    __print_memory_info(LOGLEVEL_NOTICE, &memory);
 
     return pmm_check();
 }

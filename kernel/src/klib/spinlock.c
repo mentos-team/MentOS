@@ -13,7 +13,11 @@ void spinlock_lock(spinlock_t *spinlock)
         if (atomic_set_and_test(spinlock, SPINLOCK_BUSY) == 0) {
             break;
         }
-        while (*spinlock) {
+        // CRITICAL: Use volatile read to prevent compiler from optimizing away
+        // the loop. In Release mode, the compiler might eliminate the while loop
+        // if it doesn't see that *spinlock changes inside the loop.
+        // This causes deadlock when waiting for another CPU to release the lock.
+        while (*(volatile spinlock_t *)spinlock) {
             cpu_relax();
         }
     }

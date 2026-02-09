@@ -70,15 +70,15 @@ static inline char **__push_args_on_stack(uintptr_t *stack, char *args[])
     char *args_location[256];
     for (int i = argc - 1; i >= 0; --i) {
         for (int j = strlen(args[i]); j >= 0; --j) {
-            PUSH_VALUE_ON_STACK(*stack, args[i][j]);
+            stack_push_u8((uint32_t *)stack, args[i][j]);
         }
         args_location[i] = (char *)(*stack);
     }
     // Push terminating NULL.
-    PUSH_VALUE_ON_STACK(*stack, (char *)NULL);
+    stack_push_ptr((uint32_t *)stack, NULL);
     // Push array of pointers to the arguments.
     for (int i = argc - 1; i >= 0; --i) {
-        PUSH_VALUE_ON_STACK(*stack, args_location[i]);
+        stack_push_ptr((uint32_t *)stack, args_location[i]);
     }
     return (char **)(*stack);
 }
@@ -142,6 +142,10 @@ start:
     if (file == NULL) {
         pr_err("Cannot find executable!\n");
         return -errno;
+    }
+    if (!file->fs_operations || !file->sys_operations) {
+        pr_err("Executable has no filesystem operations (unmounted fs?).\n");
+        return -ENOENT;
     }
     // Check that the file has the execute permission set
     if (!vfs_valid_exec_permission(task, file)) {
@@ -409,9 +413,9 @@ int process_create_init(const char *path)
     // Save where the environmental variables end.
     init_process->mm->env_end   = init_process->thread.regs.useresp;
     // Push the `main` arguments on the stack (argc, argv, envp).
-    PUSH_VALUE_ON_STACK(init_process->thread.regs.useresp, envp_ptr);
-    PUSH_VALUE_ON_STACK(init_process->thread.regs.useresp, argv_ptr);
-    PUSH_VALUE_ON_STACK(init_process->thread.regs.useresp, argc);
+    stack_push_ptr(&init_process->thread.regs.useresp, envp_ptr);
+    stack_push_ptr(&init_process->thread.regs.useresp, argv_ptr);
+    stack_push_s32(&init_process->thread.regs.useresp, argc);
 
     // Restore previous pgdir
     paging_switch_pgd(crtdir);
@@ -681,9 +685,9 @@ int sys_execve(pt_regs_t *f)
     // Save where the environmental variables end.
     current->mm->env_end                          = current->thread.regs.useresp;
     // Push the `main` arguments on the stack (argc, argv, envp).
-    PUSH_VALUE_ON_STACK(current->thread.regs.useresp, final_envp);
-    PUSH_VALUE_ON_STACK(current->thread.regs.useresp, final_argv);
-    PUSH_VALUE_ON_STACK(current->thread.regs.useresp, argc);
+    stack_push_ptr(&current->thread.regs.useresp, final_envp);
+    stack_push_ptr(&current->thread.regs.useresp, final_argv);
+    stack_push_s32(&current->thread.regs.useresp, argc);
 
     // Restore previous pgdir
     paging_switch_pgd(crtdir);
