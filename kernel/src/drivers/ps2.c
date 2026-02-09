@@ -337,7 +337,6 @@ int ps2_initialize(void)
     // Pre-init: aggressively flush any stale data from BIOS/bootloader
     // Do BLIND reads first (without status check) since status itself might be unreliable
     pr_debug("Initial aggressive buffer flush with blind reads...\n");
-    int bytes_flushed = 0;
 
     // Blind reads: force-read without checking status
     for (int i = 0; i < 16; i++) {
@@ -346,7 +345,6 @@ int ps2_initialize(void)
             pause();
         }
         unsigned char data = inportb(PS2_DATA);
-        bytes_flushed++;
         pr_debug("  Blind read [%d]: 0x%02x\n", i, data);
     }
 
@@ -356,14 +354,12 @@ int ps2_initialize(void)
         while (retry-- > 0) {
             if (inportb(PS2_STATUS) & PS2_STATUS_OUTPUT_FULL) {
                 unsigned char data = inportb(PS2_DATA); // Read and discard
-                bytes_flushed++;
                 pr_debug("  Status-guarded read: 0x%02x\n", data);
             } else {
                 break;
             }
         }
     }
-    pr_info("PS/2: total flushed %d bytes from output buffer\n", bytes_flushed);
 
     // Long delay to let controller stabilize
     __ps2_delay(1000);

@@ -549,7 +549,7 @@ static void *__do_malloc(vm_area_struct_t *heap, size_t size)
     block->is_free = 0;
 
     // Optionally dump the current state of the heap for debugging.
-    __blkmngr_dump(LOGLEVEL_NOTICE, header);
+    __blkmngr_dump(LOGLEVEL_INFO, header);
 
     // Return a pointer to the memory area, skipping the block header.
     return (void *)((char *)block + OVERHEAD);
@@ -617,7 +617,7 @@ static int __do_free(vm_area_struct_t *heap, void *ptr)
     }
 
     // Dump the current state of the heap for debugging purposes.
-    __blkmngr_dump(LOGLEVEL_NOTICE, header);
+    __blkmngr_dump(LOGLEVEL_INFO, header);
 
     return 0; // Return success.
 }
@@ -699,7 +699,7 @@ void *sys_brk(void *addr)
         block->is_free = 1;
 
         // Dump the state of the memory manager for debugging.
-        __blkmngr_dump(LOGLEVEL_NOTICE, header);
+        __blkmngr_dump(LOGLEVEL_INFO, header);
     }
 
     // Variable to hold the return pointer.
