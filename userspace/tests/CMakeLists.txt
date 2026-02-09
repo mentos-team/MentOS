@@ -1,3 +1,7 @@
+# Force Release mode compilation for all tests
+set(CMAKE_C_FLAGS_DEBUG "-O2 -g0 -DNDEBUG")
+set(CMAKE_C_FLAGS_RELEASE "-O2 -g0 -DNDEBUG")
+
 # List of programs.
 set(TEST_LIST
     t_exit.c
