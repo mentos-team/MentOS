@@ -29,6 +29,10 @@ void sig_handler(int sig)
         printf("handler(%d) : Correct signal. FPE\n", sig);
         printf("handler(%d) : Exiting\n", sig);
         exit(0);
+    } else if (sig == SIGILL) {
+        printf("handler(%d) : Incorrect signal. ILLEGAL INSTRUCTION\n", sig);
+        printf("handler(%d) : Exiting\n", sig);
+        exit(0);
     } else {
         printf("handler(%d) : Wrong signal.\n", sig);
     }
@@ -41,8 +45,19 @@ int main(int argc, char *argv[])
     memset(&action, 0, sizeof(action));
     action.sa_handler = sig_handler;
 
-    // Set the SIGUSR1 handler using sigaction.
+    // Set the SIGFPE handler using sigaction.
     if (sigaction(SIGFPE, &action, NULL) == -1) {
+        printf("Failed to set signal handler (%s).\n", strerror(errno));
+        return 1;
+    }
+
+    // Set the SIGILL handler using sigaction. We should not see a SIGILL, but... alas... right now, the division by
+    // zero is causing a SIGILL instead of a SIGFPE, so we need to set this handler as well to avoid the program being
+    // killed by the default handler.
+    //
+    // TODO: Fix the kernel to raise SIGFPE instead of SIGILL for division by zero, and remove this handler.
+    //
+    if (sigaction(SIGILL, &action, NULL) == -1) {
         printf("Failed to set signal handler (%s).\n", strerror(errno));
         return 1;
     }
