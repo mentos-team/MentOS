@@ -14,9 +14,6 @@
 #include "tests/test.h"
 #include "tests/test_utils.h"
 
-/// @brief Tollerance for floating point comparisons.
-#define EPSILON 1e-10
-
 /// @brief Check if two floating point numbers are equal within a tolerance.
 /// @param a First value.
 /// @param b Second value.
@@ -43,7 +40,7 @@ TEST(fpu_addition)
     double a      = 3.14;
     double b      = 2.86;
     double result = a + b;
-    ASSERT(check_float_equality(result, 6.0, EPSILON));
+    ASSERT(check_float_equality(result, 6.0, macheps(6.0)));
     TEST_SECTION_END();
 }
 
@@ -54,7 +51,7 @@ TEST(fpu_multiplication)
     double a      = 3.0;
     double b      = 4.0;
     double result = a * b;
-    ASSERT(check_float_equality(result, 12.0, EPSILON));
+    ASSERT(check_float_equality(result, 12.0, macheps(12.0)));
     TEST_SECTION_END();
 }
 
@@ -65,7 +62,7 @@ TEST(fpu_division)
     double a      = 10.0;
     double b      = 2.0;
     double result = a / b;
-    ASSERT(check_float_equality(result, 5.0, EPSILON));
+    ASSERT(check_float_equality(result, 5.0, macheps(5.0)));
     TEST_SECTION_END();
 }
 
@@ -75,7 +72,7 @@ TEST(fpu_sqrt)
     TEST_SECTION_START("FPU square root");
     double a      = 9.0;
     double result = sqrt(a);
-    ASSERT(check_float_equality(result, 3.0, EPSILON));
+    ASSERT(check_float_equality(result, 3.0, macheps(3.0)));
     TEST_SECTION_END();
 }
 
@@ -85,7 +82,7 @@ TEST(fpu_sin)
     TEST_SECTION_START("FPU sine");
     double a      = 0.0;
     double result = sin(a);
-    ASSERT(check_float_equality(result, 0.0, EPSILON));
+    ASSERT(check_float_equality(result, 0.0, macheps(0.0)));
     TEST_SECTION_END();
 }
 
@@ -95,7 +92,7 @@ TEST(fpu_cos)
     TEST_SECTION_START("FPU cosine");
     double a      = 0.0;
     double result = cos(a);
-    ASSERT(check_float_equality(result, 1.0, EPSILON));
+    ASSERT(check_float_equality(result, 1.0, macheps(1.0)));
     TEST_SECTION_END();
 }
 
@@ -106,7 +103,7 @@ TEST(fpu_pow)
     double a      = 2.0;
     double b      = 3.0;
     double result = pow(a, b);
-    ASSERT(check_float_equality(result, 8.0, EPSILON));
+    ASSERT(check_float_equality(result, 8.0, macheps(8.0)));
     TEST_SECTION_END();
 }
 
@@ -116,7 +113,7 @@ TEST(fpu_log)
     TEST_SECTION_START("FPU logarithm");
     double a      = 1.0;
     double result = log(a);
-    ASSERT(check_float_equality(result, 0.0, EPSILON));
+    ASSERT(check_float_equality(result, 0.0, macheps(0.0)));
     TEST_SECTION_END();
 }
 
@@ -126,7 +123,7 @@ TEST(fpu_exp)
     TEST_SECTION_START("FPU exponential");
     double a      = 0.0;
     double result = exp(a);
-    ASSERT(check_float_equality(result, 1.0, EPSILON));
+    ASSERT(check_float_equality(result, 1.0, macheps(1.0)));
     TEST_SECTION_END();
 }
 

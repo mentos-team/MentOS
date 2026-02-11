@@ -180,3 +180,20 @@ double modf(double x, double *intpart)
     // Signed fractional part.
     return (x - (*intpart));
 }
+
+double macheps(double x)
+{
+    static const double base = 2.0;
+    double eps;
+
+    if (isnan(x))
+        eps = x;
+    else {
+        eps = (x == 0.0) ? 1.0 : x;
+
+        while ((x + eps / base) != x)
+            eps /= base;
+    }
+
+    return (eps);
+}

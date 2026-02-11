@@ -173,3 +173,9 @@ double cos(double x);
 /// @param intpart Where we store the integer part.
 /// @return the fractional part.
 double modf(double x, double *intpart);
+
+/// @brief Compute the unit in the last place (ULP) for a floating-point number.
+/// @param x The value to compute ULP for.
+/// @return The ULP of x, which represents the smallest representable difference
+///         at the scale of x.
+double macheps(double x);
