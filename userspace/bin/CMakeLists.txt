@@ -43,9 +43,6 @@ set(PROGRAM_LIST
 # Set the directory where the compiled binaries will be placed.
 set(MENTOS_BIN_DIR ${CMAKE_SOURCE_DIR}/filesystem/bin)
 
-# Ensure the bin directory exists.
-file(MAKE_DIRECTORY ${MENTOS_BIN_DIR})
-
 foreach(FILE_NAME ${PROGRAM_LIST})
     # =========================================================================
     # TARGET NAMING
@@ -86,7 +83,11 @@ foreach(FILE_NAME ${PROGRAM_LIST})
     set_target_properties(${TARGET_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${MENTOS_BIN_DIR}")
     # Set the output name.
     set_target_properties(${TARGET_NAME} PROPERTIES OUTPUT_NAME "${EXECUTABLE_NAME}")
-
+    # Make sure the bin folder exists.
+    add_custom_command(
+        TARGET ${TARGET_NAME} PRE_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${MENTOS_BIN_DIR}
+    )
     # Append the program name to the list of all the executables.
     list(APPEND ALL_EXECUTABLES ${TARGET_NAME})
 endforeach()
