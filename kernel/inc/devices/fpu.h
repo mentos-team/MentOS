@@ -129,5 +129,9 @@ void unswitch_fpu(void);
 /// @return 0 if fails, 1 if succeed.
 int fpu_install(void);
 
+/// @brief Check if the FPU is properly initialized.
+/// @return 1 if FPU is initialized, 0 otherwise.
+int fpu_is_initialized(void);
+
 /// @}
 /// @}
