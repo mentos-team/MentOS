@@ -153,8 +153,29 @@ double ln(double x);
 /// @return Return the result.
 double logx(double x, double y);
 
+/// @brief Natural logarithm function (alias for ln).
+/// @param x Topic of the logarithm function.
+/// @return Return the result.
+double log(double x);
+
+/// @brief Sine function.
+/// @param x Angle in radians.
+/// @return Sine of x.
+double sin(double x);
+
+/// @brief Cosine function.
+/// @param x Angle in radians.
+/// @return Cosine of x.
+double cos(double x);
+
 /// @brief Breaks x into an integral and a fractional part, both parts have the same sign as x.
 /// @param x       The value we want to break.
 /// @param intpart Where we store the integer part.
 /// @return the fractional part.
 double modf(double x, double *intpart);
+
+/// @brief Compute the unit in the last place (ULP) for a floating-point number.
+/// @param x The value to compute ULP for.
+/// @return The ULP of x, which represents the smallest representable difference
+///         at the scale of x.
+double macheps(double x);
