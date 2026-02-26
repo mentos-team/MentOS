@@ -134,6 +134,25 @@ double logx(double x, double y)
     return ln(x) / ln(y);
 }
 
+double log(double x)
+{
+    return ln(x);
+}
+
+double sin(double x)
+{
+    double out;
+    __asm__ __volatile__("fldl %1; fsin" : "=t"(out) : "m"(x));
+    return out;
+}
+
+double cos(double x)
+{
+    double out;
+    __asm__ __volatile__("fldl %1; fcos" : "=t"(out) : "m"(x));
+    return out;
+}
+
 /// Max power for forward and reverse projections.
 #define MAXPOWTWO 4.503599627370496000E+15
 
@@ -160,4 +179,21 @@ double modf(double x, double *intpart)
     }
     // Signed fractional part.
     return (x - (*intpart));
+}
+
+double macheps(double x)
+{
+    static const double base = 2.0;
+    double eps;
+
+    if (isnan(x))
+        eps = x;
+    else {
+        eps = (x == 0.0) ? 1.0 : x;
+
+        while ((x + eps / base) != x)
+            eps /= base;
+    }
+
+    return (eps);
 }
