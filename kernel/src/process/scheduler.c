@@ -170,7 +170,7 @@ void scheduler_run(pt_regs_t *f)
                 if (runqueue.num_active == 0) {
                     while (runqueue.num_active == 0) {
                         sti();
-                        asm volatile("hlt");
+                        __asm__ __volatile__("hlt");
                         cli();
                     }
                     next = scheduler_pick_next_task(&runqueue);
