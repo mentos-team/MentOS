@@ -132,6 +132,8 @@ void wake_up_all(wait_queue_head_t *head)
         if (entry->func(entry, TASK_RUNNING, 0)) {
             remove_wait_queue(head, entry);
             pr_debug("wake_up_all: waking process %d\n", entry->task->pid);
+            // reinsert into runqueue; it has been dequeued when it slept
+            scheduler_enqueue_task(entry->task);
             wait_queue_entry_dealloc(entry);
         }
     }
@@ -215,6 +217,9 @@ wait_queue_entry_t *sleep_on(wait_queue_head_t *head)
 
     // Set the task state to uninterruptible to indicate it is sleeping.
     sleeping_task->state = TASK_UNINTERRUPTIBLE;
+
+    // Remove task from runqueue so scheduler will ignore it while blocked.
+    scheduler_dequeue_task(sleeping_task);
 
     // Allocate memory for a new wait queue entry.
     wait_queue_entry_t *entry = wait_queue_entry_alloc();

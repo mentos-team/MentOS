@@ -39,9 +39,15 @@ static inline bool_t __is_periodic_task(task_struct *task)
 /// @return the next task on success, NULL on failure.
 static inline task_struct *__scheduler_rr(runqueue_t *runqueue, bool_t skip_periodic)
 {
-    // If there is just one task, return it; no need to do anything.
+    // If there is just one task in the list, we normally would return it.
+    // however, if the current task is not in a runnable state we must
+    // indicate that no suitable candidate exists.
     if (list_head_size(&runqueue->curr->run_list) <= 1) {
-        return runqueue->curr;
+        if (runqueue->curr->state == TASK_RUNNING) {
+            return runqueue->curr;
+        } else {
+            return NULL;
+        }
     }
     // This will hold a given entry, while iterating the list of tasks.
     task_struct *entry = NULL;
@@ -381,17 +387,17 @@ task_struct *scheduler_pick_next_task(runqueue_t *runqueue)
 #error "You should enable a scheduling algorithm!"
 #endif
 
-    assert(next && "No valid task selected by the scheduling algorithm.");
-
-    // Update the last context switch time of the next task.
-    next->se.exec_start = timer_get_ticks();
-
+    if (next != NULL) {
+        // Update the last context switch time of the next task.
+        next->se.exec_start = timer_get_ticks();
 #ifdef ENABLE_SCHEDULER_FEEDBACK
-    // Update the feedback statistics for the new scheduled task.
-    scheduler_feedback_task_update(next);
-    // Update the overall feedback system.
-    scheduler_feedback_update();
+        // Update the feedback statistics for the new scheduled task.
+        scheduler_feedback_task_update(next);
+        // Update the overall feedback system.
+        scheduler_feedback_update();
 #endif
+    }
+
     return next;
 }
 

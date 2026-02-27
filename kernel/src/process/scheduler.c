@@ -162,6 +162,26 @@ void scheduler_run(pt_regs_t *f)
 #endif
             // Pointer to the next process to be executed.
             next = scheduler_pick_next_task(&runqueue);
+
+            /* if no runnable task was found we may be in a situation where
+             * every user process is blocked.  rather than assert or return
+             * to the blocked task we idle the cpu until some other task is
+             * enqueued; the scheduler_pick_next_task call above will have
+             * already re-enabled the cpu if necessary. */
+            if (!next) {
+                if (runqueue.num_active == 0) {
+                    while (runqueue.num_active == 0) {
+                        sti();
+                        asm volatile("hlt");
+                        cli();
+                    }
+                    next = scheduler_pick_next_task(&runqueue);
+                }
+                if (!next) {
+                    /* still nothing, resume current (will likely block again) */
+                    next = runqueue.curr;
+                }
+            }
             //=====================================================================
         }
         // Check if the next and current processes are different.
