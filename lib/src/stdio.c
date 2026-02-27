@@ -18,10 +18,25 @@ void puts(const char *str) { write(STDOUT_FILENO, str, strlen(str)); }
 
 int getchar(void)
 {
-    char c = 0;
-    while (read(STDIN_FILENO, &c, 1) == 0) {
+    unsigned char c;
+    ssize_t r;
+
+    while (1) {
+        r = read(STDIN_FILENO, &c, 1);
+        if (r > 0) {
+            return (int)c;
+        }
+        if (r == 0) {
+            /* EOF reached; keep looping in case more data comes later */
+            continue;
+        }
+        /* error: for blocking descriptors we ignore EAGAIN/EWOULDBLOCK and
+         * retry; otherwise propagate EOF. */
+        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            continue;
+        }
+        return EOF;
     }
-    return c;
 }
 
 char *gets(char *str)
@@ -190,22 +205,38 @@ int fgetc(int fd)
     char c;
     ssize_t bytes_read;
 
-    // Read a single character from the file descriptor.
-    bytes_read = read(fd, &c, 1);
+    for (;;) {
+        // Read a single character from the file descriptor.
+        bytes_read = read(fd, &c, 1);
 
-    // Check for errors or EOF.
-    if (bytes_read == -1) {
-        perror("Error reading from file descriptor");
-        return EOF; // Return EOF on error.
-    }
-    if (bytes_read == 0) {
-        return EOF; // Return EOF if no bytes were read (end of file).
-    }
+        // Check for errors or EOF.
+        if (bytes_read == -1) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                continue; // retry on temporary unavailability
+            }
+            return EOF; // other error treated as EOF
+        }
+        if (bytes_read == 0) {
+            return EOF; // End of file
+        }
 
-    // Return the character as an unsigned char.
-    return (unsigned char)c;
+        // Return the character as an unsigned char.
+        return (unsigned char)c;
+    }
 }
 
+
+/*
+ * Simple fgets implementation used throughout userspace.  It performs a
+ * byte‑oriented read(2) loop until a newline is observed, the buffer is
+ * full, or an EOF/error is returned.  Note that the behaviour of the
+ * underlying read(2) call is outside of libc's control: if the descriptor
+ * refers to a terminal in non‑canonical mode, the kernel will deliver
+ * whatever bytes are available (typically a single keystroke) and return
+ * immediately.  In that case fgets may return a partial line (or even NULL
+ * if no data is ready); programs wishing to receive complete lines should
+ * either leave ICANON enabled or implement their own buffering logic.
+ */
 char *fgets(char *buf, int n, int fd)
 {
     char *p   = buf;

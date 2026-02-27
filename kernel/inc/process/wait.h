@@ -123,3 +123,10 @@ int default_wake_function(wait_queue_entry_t *entry, unsigned mode, int sync);
 /// @return Pointer to the entry inside the wq representing the
 ///         sleeping process.
 wait_queue_entry_t *sleep_on(wait_queue_head_t *head);
+
+/// @brief Wake all tasks waiting on the queue.
+///
+/// Calls each entry's wake function and removes entries whose function
+/// returns non‑zero.  This is the generic helper used by drivers when
+/// data arrives.
+void wake_up_all(wait_queue_head_t *head);

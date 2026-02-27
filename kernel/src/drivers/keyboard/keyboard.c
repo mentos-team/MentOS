@@ -8,12 +8,13 @@
 // Setup the logging for this file (do this before any other include).
 #include "sys/kernel_levels.h"           // Include kernel log levels.
 #define __DEBUG_HEADER__ "[KEYBRD]"      ///< Change header.
-#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
+#define __DEBUG_LEVEL__  LOGLEVEL_DEBUG ///< Set log level.
 #include "io/debug.h"                    // Include debugging functions.
 
 #include "ctype.h"
 #include "descriptor_tables/isr.h"
 #include "drivers/keyboard/keyboard.h"
+#include "process/wait.h"  /* need sleep_on / wake_up_all */
 #include "drivers/keyboard/keymap.h"
 #include "drivers/ps2.h"
 #include "hardware/pic8259.h"
@@ -32,6 +33,11 @@ static uint32_t kflags  = 0;
 rb_keybuffer_t scancodes;
 /// Spinlock to protect access to the scancode buffer.
 spinlock_t scancodes_lock;
+
+/* wait queue used by keyboard_pop_back(), initialized in
+ * keyboard_initialize().  Readers sleep here when the scancode buffer
+ * is empty; the ISR wakes them when a new key arrives. */
+static wait_queue_head_t keyboard_wait_queue;
 
 #define KBD_LEFT_SHIFT    (1 << 0) ///< Flag which identifies the left shift.
 #define KBD_RIGHT_SHIFT   (1 << 1) ///< Flag which identifies the right shift.
@@ -91,6 +97,9 @@ static inline void keyboard_push_back(unsigned int c)
 
     // Unlock the buffer after the push operation is complete.
     spinlock_unlock(&scancodes_lock);
+
+    /* wake any readers waiting for input */
+    wake_up_all(&keyboard_wait_queue);
 }
 
 /// @brief Pushes a character into the scancode ring buffer.
@@ -105,6 +114,9 @@ static inline void keyboard_push_front(unsigned int c)
 
     // Unlock the buffer after the push operation is complete.
     spinlock_unlock(&scancodes_lock);
+
+    /* wake readers as well; front or back both add data */
+    wake_up_all(&keyboard_wait_queue);
 }
 
 /// @brief Pushes a sequence of characters (scancodes) into the keyboard buffer.
@@ -143,10 +155,20 @@ static inline void keyboard_push_front_sequence(char *sequence)
 /// @return the value we removed from the ring buffer.
 int keyboard_pop_back(void)
 {
+    int c;
+
     spinlock_lock(&scancodes_lock);
-    int c = rb_keybuffer_pop_back(&scancodes);
+    c = rb_keybuffer_pop_back(&scancodes);
     spinlock_unlock(&scancodes_lock);
+
+    /* simply return what we have; caller decides what to do when empty */
     return c;
+}
+
+/// @brief Put the current task to sleep waiting for keyboard data.
+void keyboard_wait(void)
+{
+    sleep_on(&keyboard_wait_queue);
 }
 
 int keyboard_peek_back(void)
@@ -411,6 +433,8 @@ int keyboard_initialize(void)
     rb_keybuffer_init(&scancodes);
     // Initialize the spinlock.
     spinlock_init(&scancodes_lock);
+    // init wait queue used by readers
+    wait_queue_head_init(&keyboard_wait_queue);
     // Initialize the keymaps.
     init_keymaps();
     // Install the IRQ.

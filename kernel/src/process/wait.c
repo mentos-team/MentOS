@@ -12,9 +12,11 @@
 #include "process/wait.h"
 
 #include "assert.h"
+#include <stdint.h>
 #include "mem/alloc/slab.h"
 #include "process/scheduler.h"
 #include "string.h"
+#include "klib/irqflags.h"  /* irq_disable/irq_enable */
 
 /// @brief Adds the entry to the wait queue.
 /// @param head the wait queue.
@@ -117,6 +119,24 @@ void wait_queue_entry_dealloc(wait_queue_entry_t *entry)
     kfree(entry);
 }
 
+void wake_up_all(wait_queue_head_t *head)
+{
+    if (!head) {
+        pr_err("wake_up_all: head is NULL\n");
+        return;
+    }
+
+    // iterate through the queue and invoke each wake function
+    list_for_each_safe_decl(it, store, &head->task_list) {
+        wait_queue_entry_t *entry = list_entry(it, wait_queue_entry_t, task_list);
+        if (entry->func(entry, TASK_RUNNING, 0)) {
+            remove_wait_queue(head, entry);
+            pr_debug("wake_up_all: waking process %d\n", entry->task->pid);
+            wait_queue_entry_dealloc(entry);
+        }
+    }
+}
+
 void wait_queue_entry_init(wait_queue_entry_t *entry, struct task_struct *task)
 {
     // Validate the input.
@@ -183,6 +203,16 @@ wait_queue_entry_t *sleep_on(wait_queue_head_t *head)
         return NULL;
     }
 
+    /*
+     * We want to avoid a race where an interrupt arrives between setting the
+     * task state to TASK_UNINTERRUPTIBLE and the caller adding the entry to
+     * the queue.  If the wakeup occurs in that window the notification is
+     * lost and the task could sleep forever.  The simple way to prevent this
+     * is to disable interrupts while changing the state and inserting the
+     * entry; IRQs are restored before returning so normal operation resumes.
+     */
+    uint8_t irqs = irq_disable();
+
     // Set the task state to uninterruptible to indicate it is sleeping.
     sleeping_task->state = TASK_UNINTERRUPTIBLE;
 
@@ -190,6 +220,7 @@ wait_queue_entry_t *sleep_on(wait_queue_head_t *head)
     wait_queue_entry_t *entry = wait_queue_entry_alloc();
     if (!entry) {
         pr_err("Failed to allocate memory for wait queue entry.\n");
+        irq_enable(irqs);
         return NULL;
     }
 
@@ -198,6 +229,9 @@ wait_queue_entry_t *sleep_on(wait_queue_head_t *head)
 
     // Add the wait queue entry to the specified wait queue.
     add_wait_queue(head, entry);
+
+    /* restore interrupts before returning */
+    irq_enable(irqs);
 
     pr_debug("Added process %d to the wait queue.\n", sleeping_task->pid);
 

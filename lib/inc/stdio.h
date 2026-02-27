@@ -51,6 +51,19 @@ int fgetc(int fd);
 /// @param n   The amount of characters to read.
 /// @param fd  The file descriptor from which it reads.
 /// @return The read string.
+/*
+ * Read up to n-1 characters from the file descriptor `fd` into `buf`,
+ * stopping after a newline or on end-of-file.  The newline is retained
+ * and a null terminator is appended.  The function returns `buf` on
+ * success, or NULL on error or EOF.
+ *
+ * WARNING: this implementation simply performs raw reads from the file
+ * descriptor.  If `fd` refers to a terminal with ICANON disabled, read(2)
+ * may return as soon as any input is available; `fgets` will then return
+ * the data that was read rather than blocking for a full line.  This
+ * mirrors standard POSIX semantics – applications that rely on line
+ * discipline should use canonical mode or perform their own buffering.
+ */
 char *fgets(char *buf, int n, int fd);
 
 /// @brief Flushes the output buffer of a stream.

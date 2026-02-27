@@ -88,7 +88,11 @@ static ssize_t procv_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyt
 
     // Check that it's a valid character.
     if (c < 0) {
-        return 0; // No valid character received.
+        if ((file->flags & O_NONBLOCK) == 0) {
+            /* blocking descriptor; sleep until a key arrives. */
+            keyboard_wait();
+        }
+        return -EAGAIN;
     }
 
     // Keep only the character, not the scancode.
