@@ -114,27 +114,33 @@ mm_struct_t *mm_clone(mm_struct_t *mmp)
     // Copy the contents of the source mm_struct to the new one.
     memcpy(mm, mmp, sizeof(mm_struct_t));
 
-    // Get the source process page directory.
-    page_directory_t *src_pgd = (page_directory_t *)mmp->pgd;
-    if (!src_pgd) {
-        pr_crit("Invalid source pgd in mm_clone\n");
+    // We deliberately **do not** copy the parent's page directory verbatim because that would reproduce every
+    // user‑space mapping in the child. vm_area_clone()/mem_clone_vm_area below will populate the child's page tables
+    // explicitly, which gives us better control and avoids aliasing the same physical page tables between processes.
+    //
+    // Instead we copy the *kernel* portion of the main page directory and leave the user half empty.
+    page_directory_t *main_pgd = paging_get_main_pgd();
+    if (!main_pgd) {
+        pr_crit("Failed to get main page directory\n");
         kmem_cache_free(mm);
         return NULL;
     }
 
-    // Allocate a new page directory to avoid data races on page tables.
     page_directory_t *pdir_cpy = kmem_cache_alloc(pgdir_cache, GFP_KERNEL);
     if (!pdir_cpy) {
         pr_crit("Failed to allocate page directory for new process.\n");
-        // Free the previously allocated mm_struct.
         kmem_cache_free(mm);
         return NULL;
     }
 
-    // Initialize the new page directory by copying from the source directory.
-    memcpy(pdir_cpy, src_pgd, sizeof(page_directory_t));
+    /* copy entire main directory then clear user entries */
+    memcpy(pdir_cpy, main_pgd, sizeof(page_directory_t));
+    for (int i = 0; i < 768; ++i) {
+        /* user entries start at 0, clear them */
+        pdir_cpy->entries[i].present = 0;
+        pdir_cpy->entries[i].frame   = 0;
+    }
 
-    // Assign the copied page directory to the mm_struct.
     mm->pgd = pdir_cpy;
 
     vm_area_struct_t *vm_area = NULL;
