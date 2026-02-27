@@ -114,11 +114,11 @@ mm_struct_t *mm_clone(mm_struct_t *mmp)
     // Copy the contents of the source mm_struct to the new one.
     memcpy(mm, mmp, sizeof(mm_struct_t));
 
-    // Get the main page directory.
-    page_directory_t *main_pgd = paging_get_main_pgd();
-    // Error handling: Failed to get the main page directory.
-    if (!main_pgd) {
-        pr_crit("Failed to get the main page directory\n");
+    // Get the source process page directory.
+    page_directory_t *src_pgd = (page_directory_t *)mmp->pgd;
+    if (!src_pgd) {
+        pr_crit("Invalid source pgd in mm_clone\n");
+        kmem_cache_free(mm);
         return NULL;
     }
 
@@ -131,8 +131,8 @@ mm_struct_t *mm_clone(mm_struct_t *mmp)
         return NULL;
     }
 
-    // Initialize the new page directory by copying from the main directory.
-    memcpy(pdir_cpy, main_pgd, sizeof(page_directory_t));
+    // Initialize the new page directory by copying from the source directory.
+    memcpy(pdir_cpy, src_pgd, sizeof(page_directory_t));
 
     // Assign the copied page directory to the mm_struct.
     mm->pgd = pdir_cpy;
