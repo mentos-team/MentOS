@@ -500,7 +500,7 @@ int rbtree_tree_test(rbtree_t *tree, rbtree_node_t *root)
     rbtree_node_t *ln = root->link[0];
     rbtree_node_t *rn = root->link[1];
 
-    /* Consecutive red links */
+    // Consecutive red links.
     if (rbtree_node_is_red(root)) {
         if (rbtree_node_is_red(ln) || rbtree_node_is_red(rn)) {
             pr_err("Red violation");
@@ -511,19 +511,19 @@ int rbtree_tree_test(rbtree_t *tree, rbtree_node_t *root)
     lh = rbtree_tree_test(tree, ln);
     rh = rbtree_tree_test(tree, rn);
 
-    /* Invalid binary search tree */
+    // Invalid binary search tree.
     if ((ln != NULL && tree->cmp(tree, ln, root) >= 0) || (rn != NULL && tree->cmp(tree, rn, root) <= 0)) {
         pr_err("Binary tree violation");
         return 0;
     }
 
-    /* Black height mismatch */
+    // Black height mismatch.
     if (lh != 0 && rh != 0 && lh != rh) {
         pr_err("Black violation");
         return 0;
     }
 
-    /* Only count black links */
+    // Only count black links.
     if (lh != 0 && rh != 0) {
         return rbtree_node_is_red(root) ? lh : lh + 1;
     }

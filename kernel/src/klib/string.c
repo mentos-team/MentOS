@@ -260,9 +260,7 @@ void *memmove(void *dst, const void *src, size_t n)
     void *ret = dst;
 
     if (dst <= src || (char *)dst >= ((char *)src + n)) {
-        /* Non-overlapping buffers; copy from lower addresses to higher
-         * addresses.
-         */
+        // Non-overlapping buffers; copy from lower addresses to higher addresses.
         while (n--) {
             *(char *)dst = *(char *)src;
             dst          = (char *)dst + 1;
@@ -387,29 +385,23 @@ char *strtok_r(char *str, const char *delim, char **saveptr)
         map[*ctrl >> 3] |= (char)(1 << (*ctrl & 7));
     } while (*ctrl++);
 
-    /* Initialize s. If str is NULL, set s to the saved
-     * pointer (i.e., continue breaking tokens out of the str
-     * from the last strtok call).
-     */
+    // Initialize s. If str is NULL, set s to the saved pointer (i.e., continue breaking tokens out of the str from the
+    // last strtok call).
     if (str) {
         s = str;
     } else {
         s = *saveptr;
     }
 
-    /* Find beginning of token (skip over leading delimiters). Note that
-     * there is no token iff this loop sets s to point to the terminal
-     * null (*s == '\0').
-     */
+    // Find beginning of token (skip over leading delimiters). Note that there is no token iff this loop sets s to point
+    // to the terminal null (*s == '\0').
     while ((map[*s >> 3] & (1 << (*s & 7))) && *s) {
         s++;
     }
 
     str = s;
 
-    /* Find the end of the token. If it is not the end of the str,
-     * put a null there.
-     */
+    // Find the end of the token. If it is not the end of the str, put a null there.
     for (; *s; s++) {
         if (map[*s >> 3] & (1 << (*s & 7))) {
             *s++ = '\0';
@@ -427,19 +419,6 @@ char *strtok_r(char *str, const char *delim, char **saveptr)
     }
     return str;
 }
-
-// Intrinsic functions.
-
-/*
- * #pragma function(memset)
- * #pragma function(memcmp)
- * #pragma function(memcpy)
- * #pragma function(strcpy)
- * #pragma function(strlen)
- * #pragma function(strcat)
- * #pragma function(strcmp)
- * #pragma function(strset)
- */
 
 void *memset(void *ptr, int value, size_t num)
 {
@@ -609,9 +588,7 @@ char *trim(char *str)
     len  = strlen(str);
     endp = str + len;
 
-    /* Move the front and back pointers to address the first non-whitespace
-     * characters from each end.
-     */
+    // Move the front and back pointers to address the first non-whitespace characters from each end.
     while (isspace((unsigned char)*frontp)) {
         ++frontp;
     }
@@ -624,10 +601,9 @@ char *trim(char *str)
     } else if (frontp != str && endp == frontp) {
         *str = '\0';
     }
-    /* Shift the string so that it starts at str so that if it's dynamically
-     * allocated, we can still free it on the returned pointer.  Note the reuse
-     * of endp to mean the front of the string buffer now.
-     */
+
+    // Shift the string so that it starts at str so that if it's dynamically allocated, we can still free it on the
+    // returned pointer. Note the reuse of endp to mean the front of the string buffer now.
     endp = str;
     if (frontp != str) {
         while (*frontp) {

@@ -4,10 +4,10 @@
 /// See LICENSE.md for details.
 
 // Setup the logging for this file (do this before any other include).
-#include "sys/kernel_levels.h"          // Include kernel log levels.
-#define __DEBUG_HEADER__ "[SCHED ]"     ///< Change header.
+#include "sys/kernel_levels.h"           // Include kernel log levels.
+#define __DEBUG_HEADER__ "[SCHED ]"      ///< Change header.
 #define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
-#include "io/debug.h"                   // Include debugging functions.
+#include "io/debug.h"                    // Include debugging functions.
 
 #include "assert.h"
 #include "descriptor_tables/tss.h"
@@ -163,11 +163,9 @@ void scheduler_run(pt_regs_t *f)
             // Pointer to the next process to be executed.
             next = scheduler_pick_next_task(&runqueue);
 
-            /* if no runnable task was found we may be in a situation where
-             * every user process is blocked.  rather than assert or return
-             * to the blocked task we idle the cpu until some other task is
-             * enqueued; the scheduler_pick_next_task call above will have
-             * already re-enabled the cpu if necessary. */
+            // If no runnable task was found we may be in a situation where every user process is blocked.  rather than
+            // assert or return to the blocked task we idle the cpu until some other task is enqueued; the
+            // scheduler_pick_next_task call above will have already re-enabled the cpu if necessary.
             if (!next) {
                 if (runqueue.num_active == 0) {
                     while (runqueue.num_active == 0) {
@@ -178,7 +176,7 @@ void scheduler_run(pt_regs_t *f)
                     next = scheduler_pick_next_task(&runqueue);
                 }
                 if (!next) {
-                    /* still nothing, resume current (will likely block again) */
+                    // Still nothing, resume current (will likely block again).
                     next = runqueue.curr;
                 }
             }

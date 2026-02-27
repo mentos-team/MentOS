@@ -27,11 +27,10 @@ int getchar(void)
             return (int)c;
         }
         if (r == 0) {
-            /* EOF reached; keep looping in case more data comes later */
+            // EOF reached; keep looping in case more data comes later
             continue;
         }
-        /* error: for blocking descriptors we ignore EAGAIN/EWOULDBLOCK and
-         * retry; otherwise propagate EOF. */
+        // error: for blocking descriptors we ignore EAGAIN/EWOULDBLOCK and retry; otherwise propagate EOF.
         if (errno == EAGAIN || errno == EWOULDBLOCK) {
             continue;
         }
@@ -225,7 +224,6 @@ int fgetc(int fd)
     }
 }
 
-
 /*
  * Simple fgets implementation used throughout userspace.  It performs a
  * byte‑oriented read(2) loop until a newline is observed, the buffer is
@@ -278,12 +276,12 @@ int fflush(int fd)
     // If fd is negative, the standard requires flushing all open output
     // streams, but since we don't maintain a list of open streams and
     // writes are unbuffered, we simply return success.
-    
+
     // For a valid file descriptor, we could verify it exists, but for
     // simplicity and compatibility, we just return success.
     // If buffering is added in the future, this function should be updated
     // to actually flush any pending data.
-    
+
     (void)fd; // Mark parameter as intentionally unused
     return 0; // Success
 }

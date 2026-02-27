@@ -12,11 +12,11 @@
 #include "process/wait.h"
 
 #include "assert.h"
-#include <stdint.h>
+#include "klib/irqflags.h"
 #include "mem/alloc/slab.h"
 #include "process/scheduler.h"
 #include "string.h"
-#include "klib/irqflags.h"  /* irq_disable/irq_enable */
+#include <stdint.h>
 
 /// @brief Adds the entry to the wait queue.
 /// @param head the wait queue.
@@ -127,7 +127,8 @@ void wake_up_all(wait_queue_head_t *head)
     }
 
     // iterate through the queue and invoke each wake function
-    list_for_each_safe_decl(it, store, &head->task_list) {
+    list_for_each_safe_decl(it, store, &head->task_list)
+    {
         wait_queue_entry_t *entry = list_entry(it, wait_queue_entry_t, task_list);
         if (entry->func(entry, TASK_RUNNING, 0)) {
             remove_wait_queue(head, entry);
@@ -205,14 +206,10 @@ wait_queue_entry_t *sleep_on(wait_queue_head_t *head)
         return NULL;
     }
 
-    /*
-     * We want to avoid a race where an interrupt arrives between setting the
-     * task state to TASK_UNINTERRUPTIBLE and the caller adding the entry to
-     * the queue.  If the wakeup occurs in that window the notification is
-     * lost and the task could sleep forever.  The simple way to prevent this
-     * is to disable interrupts while changing the state and inserting the
-     * entry; IRQs are restored before returning so normal operation resumes.
-     */
+    // We want to avoid a race where an interrupt arrives between setting the task state to TASK_UNINTERRUPTIBLE and the
+    // caller adding the entry to the queue.  If the wakeup occurs in that window the notification is lost and the task
+    // could sleep forever.  The simple way to prevent this is to disable interrupts while changing the state and
+    // inserting the entry; IRQs are restored before returning so normal operation resumes.
     uint8_t irqs = irq_disable();
 
     // Set the task state to uninterruptible to indicate it is sleeping.
