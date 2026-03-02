@@ -8,7 +8,7 @@
 #include "sys/kernel_levels.h" // Include kernel log levels.
 #include "system/syscall_types.h"
 #define __DEBUG_HEADER__ "[SYSCLL]"      ///< Change header.
-#define __DEBUG_LEVEL__  LOGLEVEL_DEBUG ///< Set log level.
+#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
 #include "io/debug.h"                    // Include debugging functions.
 
 #include "descriptor_tables/isr.h"

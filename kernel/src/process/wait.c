@@ -216,23 +216,6 @@ wait_queue_entry_t *sleep_on(wait_queue_head_t *head)
     // inserting the entry; IRQs are restored before returning so normal operation resumes.
     uint8_t irqs = irq_disable();
 
-    // If the process already has an entry on this queue, reuse it.
-    list_for_each_decl(it, &head->task_list) {
-        wait_queue_entry_t *e = list_entry(it, wait_queue_entry_t, task_list);
-        if (e->task == sleeping_task) {
-            // Ensure a consistent sleeping state and keep runqueue counters
-            // unchanged if the task has already been dequeued.
-            sleeping_task->state = TASK_UNINTERRUPTIBLE;
-            if (!list_head_empty(&sleeping_task->run_list)) {
-                scheduler_dequeue_task(sleeping_task);
-            }
-
-            /* already registered, no allocation necessary */
-            irq_enable(irqs);
-            return e;
-        }
-    }
-
     // Set the task state to uninterruptible to indicate it is sleeping.
     sleeping_task->state = TASK_UNINTERRUPTIBLE;
 
@@ -252,6 +235,7 @@ wait_queue_entry_t *sleep_on(wait_queue_head_t *head)
         // Roll back sleeping state to avoid leaving the current process
         // blocked and dequeued after allocation failure.
         sleeping_task->state = TASK_RUNNING;
+        sleeping_task->waiting_on = NULL;
         if (list_head_empty(&sleeping_task->run_list)) {
             scheduler_enqueue_task(sleeping_task);
         }
