@@ -34,6 +34,9 @@ runqueue_t runqueue;
 // Definition of the global init process pointer
 task_struct *init_process = NULL;
 
+/// Wait queue for processes blocked in waitpid().
+static wait_queue_head_t waitpid_queue;
+
 void scheduler_initialize(void)
 {
     // Initialize the runqueue list of tasks.
@@ -44,6 +47,8 @@ void scheduler_initialize(void)
     runqueue.curr       = NULL;
     // Reset the number of active tasks.
     runqueue.num_active = 0;
+    // Initialize the waitpid wait queue.
+    wait_queue_head_init(&waitpid_queue);
 }
 
 task_struct *scheduler_get_current_process(void) { return runqueue.curr; }
@@ -617,7 +622,26 @@ pid_t sys_waitpid(pid_t pid, int *status, int options)
     }
 
     // No eligible child process was found.
-    return 0;
+    // If WNOHANG is set, return immediately.
+    if (options & WNOHANG) {
+        return 0;
+    }
+
+    // Otherwise, block until a child exits (and sends SIGCHLD to wake us up).
+    pr_debug("Process %d sleeping in waitpid (no zombie child yet)\n", runqueue.curr->pid);
+    wait_queue_entry_t *wait_entry = sleep_on(&waitpid_queue);
+    if (!wait_entry) {
+        pr_err("Failed to sleep in waitpid\n");
+        return -ENOMEM;
+    }
+
+    // After being woken up (by SIGCHLD), retry the search for zombie children.
+    // The signal handler will have already moved us back to the runqueue.
+    pr_debug("Process %d woken up from waitpid sleep\n", runqueue.curr->pid);
+
+    // Return -EINTR to indicate the syscall was interrupted by a signal.
+    // The userspace waitpid() wrapper will retry the syscall.
+    return -EINTR;
 }
 
 void do_exit(int exit_code)
@@ -642,6 +666,9 @@ void do_exit(int exit_code)
                 "[%d] %5d failed sending signal %d : %s\n", ret, runqueue.curr->parent->pid, SIGCHLD, strerror(errno));
         }
     }
+
+    // Wake up any processes sleeping in waitpid().
+    wake_up_all(&waitpid_queue);
 
     // If it has children, then init process has to take care of them.
     if (!list_head_empty(&runqueue.curr->children)) {
