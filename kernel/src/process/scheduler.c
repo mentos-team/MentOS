@@ -6,7 +6,7 @@
 // Setup the logging for this file (do this before any other include).
 #include "sys/kernel_levels.h"           // Include kernel log levels.
 #define __DEBUG_HEADER__ "[SCHED ]"      ///< Change header.
-#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
+#define __DEBUG_LEVEL__  LOGLEVEL_DEBUG ///< Set log level.
 #include "io/debug.h"                    // Include debugging functions.
 
 #include "assert.h"
@@ -137,18 +137,20 @@ void scheduler_run(pt_regs_t *f)
 #if 1
         if (runqueue.curr->state == EXIT_ZOMBIE) {
             //==== Handle Zombies =================================================
-            //pr_debug("Handle zombie %d\n", runqueue.curr->pid);
-            // get the next process after the current one
-            list_head_t *nNode = runqueue.curr->run_list.next;
-            // check if we reached the head of list_head_t
-            if (nNode == &runqueue.queue) {
-                nNode = nNode->next;
-            }
-            // get the task_struct
-            next = list_entry(nNode, task_struct, run_list);
-            // Remove the zombie task.
+            // Remove the zombie task first, so it cannot be selected again.
             scheduler_dequeue_task(runqueue.curr);
-            assert(next && "No valid task selected after removing ZOMBIE.");
+
+            // Select the next runnable task from the runqueue.  There can be
+            // transient windows where tasks exist but none are currently
+            // runnable yet (e.g., parent sleeping in waitpid and waiting to be
+            // awakened by signal delivery), so we idle-and-retry until one is.
+            next = scheduler_pick_next_task(&runqueue);
+            while (!next) {
+                sti();
+                __asm__ __volatile__("hlt");
+                cli();
+                next = scheduler_pick_next_task(&runqueue);
+            }
             //=====================================================================
         } else {
 #endif
@@ -176,8 +178,30 @@ void scheduler_run(pt_regs_t *f)
                     next = scheduler_pick_next_task(&runqueue);
                 }
                 if (!next) {
-                    // Still nothing, resume current (will likely block again).
-                    next = runqueue.curr;
+                    // Resume current only if it is still runnable and queued.
+                    if ((runqueue.curr->state == TASK_RUNNING) && !list_head_empty(&runqueue.curr->run_list)) {
+                        next = runqueue.curr;
+                    } else {
+                        // Last-resort attempt to find a runnable queued task.
+                        list_for_each_decl(it, &runqueue.queue)
+                        {
+                            task_struct *entry = list_entry(it, task_struct, run_list);
+                            if (entry->state == TASK_RUNNING) {
+                                next = entry;
+                                break;
+                            }
+                        }
+                    }
+
+                    // If there is still no candidate, wait for an event and
+                    // retry rather than panicking or returning to an invalid
+                    // context.
+                    while (!next) {
+                        sti();
+                        __asm__ __volatile__("hlt");
+                        cli();
+                        next = scheduler_pick_next_task(&runqueue);
+                    }
                 }
             }
             //=====================================================================

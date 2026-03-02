@@ -6,7 +6,7 @@
 // Setup the logging for this file (do this before any other include).
 #include "sys/kernel_levels.h"           // Include kernel log levels.
 #define __DEBUG_HEADER__ "[IRQ   ]"      ///< Change header.
-#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
+#define __DEBUG_LEVEL__  LOGLEVEL_DEBUG ///< Set log level.
 #include "io/debug.h"                    // Include debugging functions.
 
 #include "assert.h"

@@ -158,6 +158,9 @@ typedef struct task_struct {
     /// Buffer for managing inputs from keyboard.
     rb_keybuffer_t keyboard_rb;
 
+    /// Wait queue this task is currently sleeping on (NULL if not sleeping).
+    struct wait_queue_head *waiting_on;
+
     //==== Future work =========================================================
     // - task's attributes:
     // struct task_struct __rcu	*real_parent;
