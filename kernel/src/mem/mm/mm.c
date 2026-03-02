@@ -121,26 +121,23 @@ mm_struct_t *mm_clone(mm_struct_t *mmp)
     // Instead we copy the *kernel* portion of the main page directory and leave the user half empty.
     page_directory_t *main_pgd = paging_get_main_pgd();
     if (!main_pgd) {
-        pr_crit("Failed to get main page directory\n");
-        kmem_cache_free(mm);
+        pr_crit("Failed to get the main page directory\n");
         return NULL;
     }
 
+    // Allocate a new page directory to avoid data races on page tables.
     page_directory_t *pdir_cpy = kmem_cache_alloc(pgdir_cache, GFP_KERNEL);
     if (!pdir_cpy) {
         pr_crit("Failed to allocate page directory for new process.\n");
+        // Free the previously allocated mm_struct.
         kmem_cache_free(mm);
         return NULL;
     }
 
-    /* copy entire main directory then clear user entries */
+    // Initialize the new page directory by copying from the main directory.
     memcpy(pdir_cpy, main_pgd, sizeof(page_directory_t));
-    for (int i = 0; i < 768; ++i) {
-        /* user entries start at 0, clear them */
-        pdir_cpy->entries[i].present = 0;
-        pdir_cpy->entries[i].frame   = 0;
-    }
 
+    // Assign the copied page directory to the mm_struct.
     mm->pgd = pdir_cpy;
 
     vm_area_struct_t *vm_area = NULL;
