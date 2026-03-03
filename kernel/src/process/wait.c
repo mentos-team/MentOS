@@ -4,10 +4,10 @@
 /// See LICENSE.md for details.
 
 // Setup the logging for this file (do this before any other include).
-#include "sys/kernel_levels.h"           // Include kernel log levels.
-#define __DEBUG_HEADER__ "[WAIT  ]"      ///< Change header.
+#include "sys/kernel_levels.h"          // Include kernel log levels.
+#define __DEBUG_HEADER__ "[WAIT  ]"     ///< Change header.
 #define __DEBUG_LEVEL__  LOGLEVEL_DEBUG ///< Set log level.
-#include "io/debug.h"                    // Include debugging functions.
+#include "io/debug.h"                   // Include debugging functions.
 
 #include "process/wait.h"
 
@@ -17,6 +17,9 @@
 #include "process/scheduler.h"
 #include "string.h"
 #include <stdint.h>
+
+/// The list of processes.
+extern runqueue_t runqueue;
 
 /// @brief Adds the entry to the wait queue.
 /// @param head the wait queue.
@@ -96,7 +99,7 @@ wait_queue_entry_t *wait_queue_entry_alloc(void)
 {
     // Allocate the memory.
     wait_queue_entry_t *entry = (wait_queue_entry_t *)kmalloc(sizeof(wait_queue_entry_t));
-    pr_debug("ALLOCATE wait_queue_entry_t %p\n", entry);
+    // pr_debug("ALLOCATE wait_queue_entry_t %p\n", entry);
     // Check the allocated memory.
     assert(entry && "Failed to allocate memory for a wait_queue_entry_t.");
     // Clean the memory.
@@ -114,7 +117,7 @@ wait_queue_entry_t *wait_queue_entry_alloc(void)
 void wait_queue_entry_dealloc(wait_queue_entry_t *entry)
 {
     assert(entry && "Received a NULL pointer.");
-    pr_debug("FREE     wait_queue_entry_t %p\n", entry);
+    // pr_debug("FREE     wait_queue_entry_t %p\n", entry);
     // Deallocate the memory.
     kfree(entry);
 }
@@ -131,10 +134,12 @@ void wake_up_all(wait_queue_head_t *head)
     {
         wait_queue_entry_t *entry = list_entry(it, wait_queue_entry_t, task_list);
         if (entry->func(entry, TASK_RUNNING, 0) || entry->task->state == TASK_RUNNING) {
+            // Debug on the output.
+            pr_debug("Process %d (%s) WOKEN UP from %s\n", entry->task->pid, entry->task->name, head->name);
+            // Remove the entry from the wait queue and re-enqueue the task if it's not already running.
             remove_wait_queue(head, entry);
             // Clear the wait queue tracking field when removing from queue
             entry->task->waiting_on = NULL;
-            pr_debug("wake_up_all(%p): waking process %d\n", head, entry->task->pid);
             /* only enqueue if not already on runqueue */
             if (list_head_empty(&entry->task->run_list)) {
                 scheduler_enqueue_task(entry->task);
@@ -142,6 +147,44 @@ void wake_up_all(wait_queue_head_t *head)
             wait_queue_entry_dealloc(entry);
         }
     }
+}
+
+int wake_up_process_on_queue(wait_queue_head_t *head, struct task_struct *task)
+{
+    if (!head) {
+        pr_err("wake_up_process_on_queue: head is NULL\n");
+        return 0;
+    }
+    if (!task) {
+        pr_err("wake_up_process_on_queue: task is NULL\n");
+        return 0;
+    }
+
+    // Search for the specific task in the wait queue
+    list_for_each_safe_decl(it, store, &head->task_list)
+    {
+        wait_queue_entry_t *entry = list_entry(it, wait_queue_entry_t, task_list);
+        // Check if this entry corresponds to our target task
+        if (entry->task == task) {
+            // Try to wake up the task using its wake function
+            if (entry->func(entry, TASK_RUNNING, 0) || entry->task->state == TASK_RUNNING) {
+                pr_debug("Process %d (%s) WOKEN UP from %s\n", entry->task->pid, entry->task->name, head->name);
+                // Remove the entry from the wait queue
+                remove_wait_queue(head, entry);
+                // Clear the wait queue tracking field
+                entry->task->waiting_on = NULL;
+                // Re-enqueue the task if it's not already on the runqueue
+                if (list_head_empty(&entry->task->run_list)) {
+                    scheduler_enqueue_task(entry->task);
+                }
+                wait_queue_entry_dealloc(entry);
+                return 1; // Successfully woken up
+            }
+        }
+    }
+
+    // Task was not found in this wait queue
+    return 0;
 }
 
 void wait_queue_entry_init(wait_queue_entry_t *entry, struct task_struct *task)
@@ -193,6 +236,8 @@ void remove_wait_queue(wait_queue_head_t *head, wait_queue_entry_t *entry)
     spinlock_lock(&head->lock);
     __remove_wait_queue(head, entry);
     spinlock_unlock(&head->lock);
+
+    pr_debug("Removed process %d (%s) from wait queue %s (entry %p)\n", entry->task->pid, entry->task->name, head->name, entry);
 }
 
 wait_queue_entry_t *sleep_on(wait_queue_head_t *head)
@@ -216,6 +261,13 @@ wait_queue_entry_t *sleep_on(wait_queue_head_t *head)
     // inserting the entry; IRQs are restored before returning so normal operation resumes.
     uint8_t irqs = irq_disable();
 
+    wait_queue_entry_t *entry = wait_queue_entry_alloc();
+    if (!entry) {
+        pr_err("Failed to allocate memory for wait queue entry.\n");
+        irq_enable(irqs);
+        return NULL;
+    }
+
     // Set the task state to uninterruptible to indicate it is sleeping.
     sleeping_task->state = TASK_UNINTERRUPTIBLE;
 
@@ -223,25 +275,7 @@ wait_queue_entry_t *sleep_on(wait_queue_head_t *head)
     sleeping_task->waiting_on = head;
 
     // Remove task from runqueue so scheduler will ignore it while blocked.
-    // Guard against double-dequeue: run_list is self-linked when not queued.
-    if (!list_head_empty(&sleeping_task->run_list)) {
-        scheduler_dequeue_task(sleeping_task);
-    }
-
-    // Allocate memory for a new wait queue entry.
-    wait_queue_entry_t *entry = wait_queue_entry_alloc();
-    if (!entry) {
-        pr_err("Failed to allocate memory for wait queue entry.\n");
-        // Roll back sleeping state to avoid leaving the current process
-        // blocked and dequeued after allocation failure.
-        sleeping_task->state = TASK_RUNNING;
-        sleeping_task->waiting_on = NULL;
-        if (list_head_empty(&sleeping_task->run_list)) {
-            scheduler_enqueue_task(sleeping_task);
-        }
-        irq_enable(irqs);
-        return NULL;
-    }
+    scheduler_dequeue_task(sleeping_task);
 
     // Initialize the wait queue entry with the current task.
     wait_queue_entry_init(entry, sleeping_task);
@@ -252,7 +286,7 @@ wait_queue_entry_t *sleep_on(wait_queue_head_t *head)
     /* restore interrupts before returning */
     irq_enable(irqs);
 
-    pr_debug("Added process %d to wait queue %p (entry %p)\n", sleeping_task->pid, head, entry);
+    pr_debug("Process %d (%s) SLEEPS ON %s (entry %p)\n", sleeping_task->pid, sleeping_task->name, head->name, entry);
 
     return entry;
 }

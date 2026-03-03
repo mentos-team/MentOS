@@ -37,7 +37,11 @@ spinlock_t scancodes_lock;
 /* wait queue used by keyboard_pop_back(), initialized in
  * keyboard_initialize().  Readers sleep here when the scancode buffer
  * is empty; the ISR wakes them when a new key arrives. */
-static wait_queue_head_t keyboard_wait_queue;
+static wait_queue_head_t keyboard_wait_queue = {
+    .name      = "keyboard_wait_queue",
+    .lock      = SPINLOCK_INIT,
+    .task_list = LIST_HEAD_INIT(keyboard_wait_queue.task_list),
+};
 
 #define KBD_LEFT_SHIFT    (1 << 0) ///< Flag which identifies the left shift.
 #define KBD_RIGHT_SHIFT   (1 << 1) ///< Flag which identifies the right shift.
@@ -433,8 +437,6 @@ int keyboard_initialize(void)
     rb_keybuffer_init(&scancodes);
     // Initialize the spinlock.
     spinlock_init(&scancodes_lock);
-    // init wait queue used by readers
-    wait_queue_head_init(&keyboard_wait_queue);
     // Initialize the keymaps.
     init_keymaps();
     // Install the IRQ.

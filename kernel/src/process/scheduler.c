@@ -4,10 +4,10 @@
 /// See LICENSE.md for details.
 
 // Setup the logging for this file (do this before any other include).
-#include "sys/kernel_levels.h"           // Include kernel log levels.
-#define __DEBUG_HEADER__ "[SCHED ]"      ///< Change header.
+#include "sys/kernel_levels.h"          // Include kernel log levels.
+#define __DEBUG_HEADER__ "[SCHED ]"     ///< Change header.
 #define __DEBUG_LEVEL__  LOGLEVEL_DEBUG ///< Set log level.
-#include "io/debug.h"                    // Include debugging functions.
+#include "io/debug.h"                   // Include debugging functions.
 
 #include "assert.h"
 #include "descriptor_tables/tss.h"
@@ -35,7 +35,11 @@ runqueue_t runqueue;
 task_struct *init_process = NULL;
 
 /// Wait queue for processes blocked in waitpid().
-static wait_queue_head_t waitpid_queue;
+static wait_queue_head_t waitpid_queue = {
+    .name      = "waitpid_queue",
+    .lock      = SPINLOCK_INIT,
+    .task_list = LIST_HEAD_INIT(waitpid_queue.task_list),
+};
 
 void scheduler_initialize(void)
 {
@@ -103,6 +107,14 @@ void scheduler_enqueue_task(task_struct *process)
     // Increment the number of active processes.
     ++runqueue.num_active;
 
+    // Print the entire running queue for debugging purposes.
+    pr_debug("scheduler_enqueue_task(%d): runqueue: [", process->pid);
+    list_for_each_decl (running_it, &runqueue.queue) {
+        task_struct *running_task = list_entry(running_it, task_struct, run_list);
+        pr_debug("%d ", running_task->pid);
+    }
+    pr_debug("]\n");
+
 #ifdef ENABLE_SCHEDULER_FEEDBACK
     scheduler_feedback_task_add(process);
 #endif
@@ -118,6 +130,14 @@ void scheduler_dequeue_task(task_struct *process)
     if (process->se.is_periodic) {
         runqueue.num_periodic--;
     }
+
+    // Print the entire running queue for debugging purposes.
+    pr_debug("scheduler_dequeue_task(%d): runqueue: [", process->pid);
+    list_for_each_decl (running_it, &runqueue.queue) {
+        task_struct *running_task = list_entry(running_it, task_struct, run_list);
+        pr_debug("%d ", running_task->pid);
+    }
+    pr_debug("]\n");
 
 #ifdef ENABLE_SCHEDULER_FEEDBACK
     scheduler_feedback_task_remove(process->pid);
@@ -139,83 +159,75 @@ void scheduler_run(pt_regs_t *f)
     // We check the existence of pending signals every time we finish
     // handling an interrupt or an exception.
     if (!do_signal(f)) {
-#if 1
+
         if (runqueue.curr->state == EXIT_ZOMBIE) {
-            //==== Handle Zombies =================================================
+
+            pr_debug("SCHEDULER_RUN: Current task %d is a zombie. Removing it and picking next task.\n", runqueue.curr->pid);
+
             // Remove the zombie task first, so it cannot be selected again.
             scheduler_dequeue_task(runqueue.curr);
+        }
 
-            // Select the next runnable task from the runqueue.  There can be
-            // transient windows where tasks exist but none are currently
-            // runnable yet (e.g., parent sleeping in waitpid and waiting to be
-            // awakened by signal delivery), so we idle-and-retry until one is.
-            next = scheduler_pick_next_task(&runqueue);
-            while (!next) {
-                sti();
-                __asm__ __volatile__("hlt");
-                cli();
-                next = scheduler_pick_next_task(&runqueue);
-            }
-            //=====================================================================
-        } else {
-#endif
-            //==== Scheduling =====================================================
-            // If we are currently executing a periodic process, and this process
-            //  has yet to complete, keep executing it.
+        // If we are currently executing a periodic process, and this process
+        //  has yet to complete, keep executing it.
 #ifdef SCHEDULER_EDF
-            if (runqueue.curr->se.is_periodic)
-                if (!runqueue.curr->se.executed)
-                    return;
+        if (runqueue.curr->se.is_periodic)
+            if (!runqueue.curr->se.executed)
+                return;
 #endif
-            // Pointer to the next process to be executed.
-            next = scheduler_pick_next_task(&runqueue);
+        // Pointer to the next process to be executed.
+        next = scheduler_pick_next_task(&runqueue);
 
-            // If no runnable task was found we may be in a situation where every user process is blocked.  rather than
-            // assert or return to the blocked task we idle the cpu until some other task is enqueued; the
-            // scheduler_pick_next_task call above will have already re-enabled the cpu if necessary.
-            if (!next) {
-                if (runqueue.num_active == 0) {
-                    while (runqueue.num_active == 0) {
-                        sti();
-                        __asm__ __volatile__("hlt");
-                        cli();
-                    }
-                    next = scheduler_pick_next_task(&runqueue);
+        // If no runnable task was found we may be in a situation where every user process is blocked.  rather than
+        // assert or return to the blocked task we idle the cpu until some other task is enqueued; the
+        // scheduler_pick_next_task call above will have already re-enabled the cpu if necessary.
+        if (!next) {
+            if (runqueue.num_active == 0) {
+                while (runqueue.num_active == 0) {
+                    sti();
+                    __asm__ __volatile__("hlt");
+                    cli();
                 }
-                if (!next) {
-                    // Resume current only if it is still runnable and queued.
-                    if ((runqueue.curr->state == TASK_RUNNING) && !list_head_empty(&runqueue.curr->run_list)) {
-                        next = runqueue.curr;
-                    } else {
-                        // Last-resort attempt to find a runnable queued task.
-                        list_for_each_decl(it, &runqueue.queue)
-                        {
-                            task_struct *entry = list_entry(it, task_struct, run_list);
-                            if (entry->state == TASK_RUNNING) {
-                                next = entry;
-                                break;
-                            }
+                next = scheduler_pick_next_task(&runqueue);
+                pr_debug("SCHEDULER_RUN: No active tasks, idling until a task is enqueued. Next task: %d\n", next ? next->pid : -1);
+            }
+            if (!next) {
+                // Resume current only if it is still runnable and queued.
+                if ((runqueue.curr->state == TASK_RUNNING) && !list_head_empty(&runqueue.curr->run_list)) {
+                    next = runqueue.curr;
+                } else {
+                    // Last-resort attempt to find a runnable queued task.
+                    list_for_each_decl (it, &runqueue.queue) {
+                        task_struct *entry = list_entry(it, task_struct, run_list);
+                        if (entry->state == TASK_RUNNING) {
+                            next = entry;
+                            pr_debug("SCHEDULER_RUN: No runnable tasks found, but found queued task %d in state TASK_RUNNING. Resuming it.\n", entry->pid);
+                            break;
                         }
                     }
-
-                    // If there is still no candidate, wait for an event and
-                    // retry rather than panicking or returning to an invalid
-                    // context.
-                    while (!next) {
-                        sti();
-                        __asm__ __volatile__("hlt");
-                        cli();
-                        next = scheduler_pick_next_task(&runqueue);
-                    }
                 }
+
+                // If there is still no candidate, wait for an event and
+                // retry rather than panicking or returning to an invalid
+                // context.
+                while (!next) {
+                    sti();
+                    __asm__ __volatile__("hlt");
+                    cli();
+                    next = scheduler_pick_next_task(&runqueue);
+                }
+                pr_debug("SCHEDULER_RUN: No runnable tasks, idling until a task is enqueued. Next task: %d\n", next ? next->pid : -1);
             }
-            //=====================================================================
         }
+
         // Check if the next and current processes are different.
         if (next != runqueue.curr) {
+            pr_debug("SCHEDULER_RUN: Picked next task %d to run.\n", next->pid);
             // Copy into Kernel stack the next process's context.
             scheduler_restore_context(next, f);
         }
+    } else {
+        pr_warning("SCHEDULER_RUN: Signal handler requested context switch, but signal handling is not yet implemented. Ignoring.\n");
     }
     //==========================================================================
 }
@@ -397,7 +409,7 @@ int sys_setpgid(pid_t pid, pid_t pgid)
     // Set the new process group ID.
     task->pgid = pgid;
 
-    pr_debug("Process %d assigned to process group %d.", task->pid, pgid);
+    pr_debug("Process %d assigned to process group %d.\n", task->pid, pgid);
 
     return 0;
 }
@@ -615,7 +627,7 @@ pid_t sys_waitpid(pid_t pid, int *status, int options)
         scheduler_dequeue_task(child);     // Remove from the scheduler.
         kmem_cache_free(child);            // Free the `task_struct`.
 
-        pr_debug("Process %d cleaned up child process %d.\n", runqueue.curr->pid, child_pid);
+        pr_debug("Process %d (%s) CLEANED UP process %d.\n", runqueue.curr->pid, runqueue.curr->name, child_pid);
 
         // Return the PID of the cleaned-up child.
         return child_pid;
@@ -628,19 +640,20 @@ pid_t sys_waitpid(pid_t pid, int *status, int options)
     }
 
     // Otherwise, block until a child exits (and sends SIGCHLD to wake us up).
-    pr_debug("Process %d sleeping in waitpid (no zombie child yet)\n", runqueue.curr->pid);
+    // sleep_on() will dequeue this task and mark it uninterruptible.
+    // Context switch will happen when this syscall returns and syscall_handler calls scheduler_run(f).
+    // When woken up (by wake_up_process_on_queue in do_exit), this task will be
+    // re-enqueued and eventually scheduled again, returning to userspace with -EINTR.
+    // Userspace must retry the syscall, which will then find and reap the zombie.
+    pr_debug("Process %d (%s) sleeping in waitpid (no zombie child yet)\n", runqueue.curr->pid, runqueue.curr->name);
     wait_queue_entry_t *wait_entry = sleep_on(&waitpid_queue);
     if (!wait_entry) {
         pr_err("Failed to sleep in waitpid\n");
         return -ENOMEM;
     }
 
-    // After being woken up (by SIGCHLD), retry the search for zombie children.
-    // The signal handler will have already moved us back to the runqueue.
-    pr_debug("Process %d woken up from waitpid sleep\n", runqueue.curr->pid);
-
-    // Return -EINTR to indicate the syscall was interrupted by a signal.
-    // The userspace waitpid() wrapper will retry the syscall.
+    // Return -EINTR to indicate the syscall was interrupted.
+    // The userspace waitpid() wrapper should retry the syscall on -EINTR.
     return -EINTR;
 }
 
@@ -654,6 +667,8 @@ void do_exit(int exit_code)
         kernel_panic("Init process cannot call sys_exit!");
     }
 
+    pr_debug("Process %d is exiting with code %d.\n", runqueue.curr->pid, exit_code);
+
     // Set the termination code of the process.
     runqueue.curr->exit_code = exit_code;
     // Set the state of the process to zombie.
@@ -665,10 +680,10 @@ void do_exit(int exit_code)
             pr_err(
                 "[%d] %5d failed sending signal %d : %s\n", ret, runqueue.curr->parent->pid, SIGCHLD, strerror(errno));
         }
+        // Wake up the parent if it's sleeping in waitpid().
+        // Only wake the parent, not all processes waiting on this queue.
+        wake_up_process_on_queue(&waitpid_queue, runqueue.curr->parent);
     }
-
-    // Wake up any processes sleeping in waitpid().
-    wake_up_all(&waitpid_queue);
 
     // If it has children, then init process has to take care of them.
     if (!list_head_empty(&runqueue.curr->children)) {

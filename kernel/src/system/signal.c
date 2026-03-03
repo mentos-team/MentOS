@@ -27,7 +27,11 @@
 static kmem_cache_t *sigqueue_cachep;
 
 /// Contains all stopped process waiting for a continue signal
-static wait_queue_head_t stopped_queue;
+static wait_queue_head_t stopped_queue = {
+    .name      = "stopped_queue",
+    .lock      = SPINLOCK_INIT,
+    .task_list = LIST_HEAD_INIT(stopped_queue.task_list),
+};
 
 /// @brief The list of signal names.
 static const char *sys_siglist[] = {
@@ -764,7 +768,7 @@ int sys_kill(pid_t pid, int sig)
     info.si_addr            = NULL;
     info.si_status          = 0;
     info.si_band            = 0;
-    int ret = __send_sig_info(sig, &info, process);
+    int ret                 = __send_sig_info(sig, &info, process);
 
     // If the target process is sleeping on a wait queue, remove it from the
     // queue and re-enqueue it to the runqueue so the scheduler will run it
@@ -774,11 +778,11 @@ int sys_kill(pid_t pid, int sig)
         // The task is sleeping on a wait queue. We need to find and remove
         // the entry from the wait queue, then move it to the runqueue.
         wait_queue_head_t *wait_queue = process->waiting_on;
-        wait_queue_entry_t *entry = NULL;
+        wait_queue_entry_t *entry     = NULL;
 
         // Acquire the wait queue lock and search for the entry.
         spinlock_lock(&wait_queue->lock);
-        list_for_each_decl(it, &wait_queue->task_list) {
+        list_for_each_decl (it, &wait_queue->task_list) {
             wait_queue_entry_t *candidate = list_entry(it, wait_queue_entry_t, task_list);
             if (candidate->task == process) {
                 entry = candidate;
@@ -798,12 +802,10 @@ int sys_kill(pid_t pid, int sig)
                 scheduler_enqueue_task(process);
             }
             wait_queue_entry_dealloc(entry);
-            pr_debug("sys_kill: removed task %d from wait queue %p and re-enqueued\n",
-                     process->pid, wait_queue);
+            pr_debug("sys_kill: removed task %d from wait queue %p and re-enqueued\n", process->pid, wait_queue);
         } else {
             spinlock_unlock(&wait_queue->lock);
-            pr_warning("sys_kill: task %d claims to sleep on wait queue %p but not found\n",
-                       process->pid, wait_queue);
+            pr_warning("sys_kill: task %d claims to sleep on wait queue %p but not found\n", process->pid, wait_queue);
         }
     } else if (process->state == TASK_UNINTERRUPTIBLE || process->state == TASK_INTERRUPTIBLE) {
         // Task is sleeping but not on a wait queue (shouldn't happen).

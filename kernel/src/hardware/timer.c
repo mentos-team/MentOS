@@ -4,10 +4,10 @@
 /// See LICENSE.md for details.
 
 // Setup the logging for this file (do this before any other include).
-#include "sys/kernel_levels.h"           // Include kernel log levels.
-#define __DEBUG_HEADER__ "[TIMER ]"      ///< Change header.
-#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
-#include "io/debug.h"                    // Include debugging functions.
+#include "sys/kernel_levels.h"          // Include kernel log levels.
+#define __DEBUG_HEADER__ "[TIMER ]"     ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_DEBUG ///< Set log level.
+#include "io/debug.h"                   // Include debugging functions.
 
 #include "assert.h"
 #include "descriptor_tables/isr.h"
@@ -75,7 +75,11 @@ static __volatile__ unsigned long timer_ticks = 0;
 /// Contains timer for each CPU (for now only one)
 static tvec_base_t cpu_base                   = {0};
 /// Contains all process waiting for a sleep.
-static wait_queue_head_t sleep_queue;
+static wait_queue_head_t sleep_queue          = {
+             .name      = "sleep_queue",
+             .lock      = SPINLOCK_INIT,
+             .task_list = LIST_HEAD_INIT(sleep_queue.task_list),
+};
 
 void timer_phase(const uint32_t hz)
 {

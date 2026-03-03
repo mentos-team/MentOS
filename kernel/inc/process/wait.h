@@ -61,10 +61,9 @@
 
 /// @brief Head of the waiting queue.
 typedef struct wait_queue_head {
-    /// Locking element for the waiting queque.
-    spinlock_t lock;
-    /// Head of the waiting queue, it contains wait_queue_entry_t elements.
-    struct list_head task_list;
+    const char *name;           ///< Name of the wait queue (Added for debug purpose).
+    spinlock_t lock;            ///< Locking element for the waiting queque.
+    struct list_head task_list; ///< Head of the waiting queue, it contains wait_queue_entry_t elements.
 } wait_queue_head_t;
 
 /// @brief Entry of the waiting queue.
@@ -130,3 +129,9 @@ wait_queue_entry_t *sleep_on(wait_queue_head_t *head);
 /// returns non‑zero.  This is the generic helper used by drivers when
 /// data arrives.
 void wake_up_all(wait_queue_head_t *head);
+
+/// @brief Wake up a specific process if it is waiting on the given queue.
+/// @param head The wait queue head to search.
+/// @param task The specific task to wake up.
+/// @return 1 if the task was found and woken up, 0 otherwise.
+int wake_up_process_on_queue(wait_queue_head_t *head, struct task_struct *task);
