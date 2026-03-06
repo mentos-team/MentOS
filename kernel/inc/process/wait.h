@@ -123,6 +123,14 @@ int default_wake_function(wait_queue_entry_t *entry, unsigned mode, int sync);
 ///         sleeping process.
 wait_queue_entry_t *sleep_on(wait_queue_head_t *head);
 
+/// @brief Sets the state of the current process to TASK_INTERRUPTIBLE
+///        and inserts it into the specified wait queue.
+///
+/// @param head Waitqueue where to sleep.
+/// @return Pointer to the entry inside the wq representing the
+///         sleeping process.
+wait_queue_entry_t *sleep_on_interruptible(wait_queue_head_t *head);
+
 /// @brief Wake all tasks waiting on the queue.
 ///
 /// Calls each entry's wake function and removes entries whose function

@@ -268,7 +268,7 @@ void remove_wait_queue(wait_queue_head_t *head, wait_queue_entry_t *entry)
     pr_debug("Removed process %d (%s) from wait queue %s (state: %d)\n", entry->task->pid, entry->task->name, head->name, entry->task->state);
 }
 
-wait_queue_entry_t *sleep_on(wait_queue_head_t *head)
+static wait_queue_entry_t *__sleep_on_state(wait_queue_head_t *head, int state)
 {
     // Validate input parameters.
     if (!head) {
@@ -296,9 +296,9 @@ wait_queue_entry_t *sleep_on(wait_queue_head_t *head)
         return NULL;
     }
 
-    // Set the task state to uninterruptible to indicate it is sleeping.
+    // Set the task state to indicate it is sleeping.
     // Task remains on runqueue - scheduler will skip it when picking next task.
-    sleeping_task->state = TASK_UNINTERRUPTIBLE;
+    sleeping_task->state = state;
 
     // Track which wait queue this task is sleeping on.
     sleeping_task->waiting_on = head;
@@ -315,4 +315,14 @@ wait_queue_entry_t *sleep_on(wait_queue_head_t *head)
     irq_enable(irqs);
 
     return entry;
+}
+
+wait_queue_entry_t *sleep_on(wait_queue_head_t *head)
+{
+    return __sleep_on_state(head, TASK_UNINTERRUPTIBLE);
+}
+
+wait_queue_entry_t *sleep_on_interruptible(wait_queue_head_t *head)
+{
+    return __sleep_on_state(head, TASK_INTERRUPTIBLE);
 }

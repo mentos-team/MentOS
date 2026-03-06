@@ -196,6 +196,20 @@ static int __send_signal(int sig, siginfo_t *info, struct task_struct *t)
     pr_debug(
         "Added pending signal (%2d:%s) to task (%2d:%s), pending `%d, %d`.\n", sig, strsignal(sig), t->pid, t->name,
         t->pending.signal.sig[0], t->pending.signal.sig[1]);
+
+    // If the task is in an interruptible sleep, wake it so the signal can be
+    // processed at the next return-to-user boundary.
+    if ((t->state == TASK_INTERRUPTIBLE) && (t->waiting_on != NULL)) {
+        // If task is sleeping in nanosleep, cancel its timer before waking.
+        if (t->sleep_timer != NULL) {
+            cancel_sleep_timer(t);
+        }
+
+        if (!wake_up_process_on_queue(t->waiting_on, t)) {
+            wake_up_process(t);
+        }
+    }
+
     __unlock_task_sighand(t);
     return 0;
 }

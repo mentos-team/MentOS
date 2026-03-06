@@ -696,7 +696,7 @@ int sys_nanosleep(const struct timespec *req, struct timespec *rem)
     // req and rem pointers (?)
     sleep_data_t *sleep_data       = __sleep_data_alloc();
     sleep_data->remaining          = rem;
-    sleep_data->wait_queue_entry   = sleep_on(&sleep_queue);
+    sleep_data->wait_queue_entry   = sleep_on_interruptible(&sleep_queue);
     // Setup the timer.
     sleep_timer->expires           = timer_get_ticks() + __timespec_to_ticks(req);
     sleep_timer->function          = &sleep_timeout;
