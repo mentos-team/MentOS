@@ -627,14 +627,10 @@ static inline void sleep_timeout(unsigned long data)
     // Clear the sleep_timer reference in the task before waking.
     task->sleep_timer = NULL;
 
-    // Remove from the sleep queue (this subsystem owns the queue entry).
-    remove_wait_queue(&sleep_queue, wait_queue_entry);
+    // Delegate full wake mechanics to wait.c (wake check + remove + enqueue + free).
+    wake_up_wait_queue_entry(&sleep_queue, wait_queue_entry, TASK_RUNNING, 0);
 
-    // Call centralized scheduler function to handle state and enqueue.
-    wake_up_process(task);
-
-    // Free the memory of the wait queue item and sleep_data.
-    wait_queue_entry_dealloc(wait_queue_entry);
+    // Free sleep_data owned by the timer callback.
     __sleep_data_dealloc(sleep_data);
 }
 

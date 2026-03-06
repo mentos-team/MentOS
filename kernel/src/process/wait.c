@@ -54,6 +54,14 @@ static inline void __remove_wait_queue(wait_queue_head_t *head, wait_queue_entry
 
 int default_wake_function(wait_queue_entry_t *entry, unsigned mode, int sync)
 {
+    /// Default wake predicate for wait queue entries.
+    /// Returns 1 if the task is in a sleep state and should be woken,
+    /// 0 if it should remain waiting.
+    ///
+    /// Wake functions are policy: they decide whether a task's wait
+    /// condition is satisfied. The wait.c layer handles mechanics:
+    /// removing from queue, calling wake_up_process(), freeing entry.
+
     // Validate the input.
     if (!entry) {
         pr_err("Variable entry is NULL.\n");
@@ -63,15 +71,16 @@ int default_wake_function(wait_queue_entry_t *entry, unsigned mode, int sync)
         pr_err("Variable entry->task is NULL.\n");
         return 0;
     }
-    // Only wake up tasks in TASK_INTERRUPTIBLE or TASK_UNINTERRUPTIBLE states.
-    if ((entry->task->state == TASK_INTERRUPTIBLE) || (entry->task->state == TASK_UNINTERRUPTIBLE)) {
 
-        pr_debug("Task %d (%s) is being woken up from default_wake_function, current state: %d\n", entry->task->pid, entry->task->name, entry->task->state);
-
+    // Wake if task is in a sleep state (interruptible or uninterruptible).
+    if ((entry->task->state == TASK_INTERRUPTIBLE) || 
+        (entry->task->state == TASK_UNINTERRUPTIBLE)) {
+        pr_debug("Task %d (%s) wake condition met (state: %d)\n", 
+                 entry->task->pid, entry->task->name, entry->task->state);
         return 1;
     }
 
-    // Task is not in a wakeable state.
+    // Task is not in a wakeable state (already running, stopped, or zombie).
     return 0;
 }
 
@@ -116,6 +125,53 @@ void wait_queue_entry_dealloc(wait_queue_entry_t *entry)
     kfree(entry);
 }
 
+int wake_up_wait_queue_entry(wait_queue_head_t *head, wait_queue_entry_t *entry, unsigned mode, int sync)
+{
+    /// Core wait queue wake primitive. Evaluates wake condition via entry's
+    /// wake function, and if satisfied, performs the full wake sequence:
+    ///   1. Remove entry from wait queue (wait layer responsibility)
+    ///   2. Call wake_up_process() to transition task to TASK_RUNNING
+    ///   3. Free wait queue entry (wait layer responsibility)
+    ///
+    /// This is the ONLY function that should perform this sequence.
+    /// Subsystems (pipes, timers) delegate full wake mechanics here.
+
+    if (!head) {
+        pr_err("wake_up_wait_queue_entry: head is NULL\n");
+        return 0;
+    }
+    if (!entry) {
+        pr_err("wake_up_wait_queue_entry: entry is NULL\n");
+        return 0;
+    }
+    if (!entry->task) {
+        pr_err("wake_up_wait_queue_entry: entry->task is NULL\n");
+        return 0;
+    }
+
+    // Evaluate wake condition via function pointer (policy decision).
+    int should_wake = 0;
+    if (entry->func) {
+        should_wake = entry->func(entry, mode, sync);
+    } else {
+        should_wake = default_wake_function(entry, mode, sync);
+    }
+
+    // Also wake if task is already TASK_RUNNING (race or redundant wake).
+    if (!should_wake && (entry->task->state != TASK_RUNNING)) {
+        return 0;
+    }
+
+    pr_debug("Process %d (%s) WOKEN UP from %s\n", 
+             entry->task->pid, entry->task->name, head->name);
+
+    // Perform wake sequence: remove, wake, free (wait layer mechanics).
+    remove_wait_queue(head, entry);
+    wake_up_process(entry->task);
+    wait_queue_entry_dealloc(entry);
+    return 1;
+}
+
 void wake_up_all(wait_queue_head_t *head)
 {
     if (!head) {
@@ -129,20 +185,7 @@ void wake_up_all(wait_queue_head_t *head)
     list_for_each_safe_decl(it, store, &head->task_list)
     {
         wait_queue_entry_t *entry = list_entry(it, wait_queue_entry_t, task_list);
-
-        // Check if this task should be woken (via wake function).
-        if (entry->func(entry, TASK_RUNNING, 0) || entry->task->state == TASK_RUNNING) {
-            pr_debug("Process %d (%s) WOKEN UP from %s\n", entry->task->pid, entry->task->name, head->name);
-
-            // Remove the entry from the wait queue.
-            remove_wait_queue(head, entry);
-
-            // Call centralized scheduler function to handle state and enqueue.
-            wake_up_process(entry->task);
-
-            // Clean up the entry.
-            wait_queue_entry_dealloc(entry);
-        }
+        wake_up_wait_queue_entry(head, entry, TASK_RUNNING, 0);
     }
 }
 
@@ -164,21 +207,7 @@ int wake_up_process_on_queue(wait_queue_head_t *head, struct task_struct *task)
 
         // Check if this entry corresponds to our target task.
         if (entry->task == task) {
-            // Try to wake up the task using its wake function.
-            if (entry->func(entry, TASK_RUNNING, 0) || entry->task->state == TASK_RUNNING) {
-                pr_debug("Process %d (%s) WOKEN UP from %s\n", entry->task->pid, entry->task->name, head->name);
-
-                // Remove the entry from the wait queue.
-                remove_wait_queue(head, entry);
-
-                // Call centralized scheduler function to handle state and enqueue.
-                wake_up_process(entry->task);
-
-                // Clean up the entry.
-                wait_queue_entry_dealloc(entry);
-
-                return 1; // Successfully woken up
-            }
+            return wake_up_wait_queue_entry(head, entry, TASK_RUNNING, 0);
         }
     }
 
@@ -268,13 +297,11 @@ wait_queue_entry_t *sleep_on(wait_queue_head_t *head)
     }
 
     // Set the task state to uninterruptible to indicate it is sleeping.
+    // Task remains on runqueue - scheduler will skip it when picking next task.
     sleeping_task->state = TASK_UNINTERRUPTIBLE;
 
     // Track which wait queue this task is sleeping on.
     sleeping_task->waiting_on = head;
-
-    // Remove task from runqueue so scheduler will ignore it while blocked.
-    scheduler_dequeue_task(sleeping_task);
 
     // Initialize the wait queue entry with the current task.
     wait_queue_entry_init(entry, sleeping_task);
@@ -282,7 +309,7 @@ wait_queue_entry_t *sleep_on(wait_queue_head_t *head)
     // Add the wait queue entry to the specified wait queue.
     add_wait_queue(head, entry);
 
-    pr_debug("Process %d (%s) SLEEPS ON %s (state: %d)\n", sleeping_task->pid, sleeping_task->name, head->name, sleeping_task->state);
+    pr_debug("Process %d (%s) SLEEPS ON %s (state: %d, stays on runqueue)\n", sleeping_task->pid, sleeping_task->name, head->name, sleeping_task->state);
 
     // Restore interrupts before returning.
     irq_enable(irqs);

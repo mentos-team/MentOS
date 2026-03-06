@@ -152,21 +152,21 @@ void scheduler_dequeue_task(task_struct *process)
 
 int wake_up_process(task_struct *task)
 {
-    /// Handles waking up a task that was blocked or stopped.
-    /// This is the single centralized point where a task transitions
-    /// to TASK_RUNNING and gets enqueued to the runqueue.
+    /// Wakes up a blocked or stopped task by transitioning it to TASK_RUNNING.
     ///
-    /// Key design: This function does NOT search wait queues - it only
-    /// manages task state and runqueue placement. The subsystem that put
-    /// the task on a wait queue (pipes, signals, timers) is responsible for
-    /// removing it from that queue and then calling this function.
+    /// Architecture: Tasks remain on the runqueue even when blocked. The
+    /// scheduler naturally skips non-TASK_RUNNING tasks when picking next.
+    /// This function only manages task state transitions, NOT queue membership.
     ///
-    /// With boundary-based context switching (no in-kernel preemption),
-    /// we don't need to do immediate scheduling - the next interrupt/exception
-    /// boundary will call scheduler_run() to pick the next task.
+    /// The wait queue layer (wait.c) is responsible for:
+    ///   - Removing task from wait queue before calling this
+    ///   - Freeing wait queue entry after this returns
     ///
-    /// @param task The task to wake up.
-    /// @return 0 on success, -1 if task was already runnable.
+    /// With boundary-based scheduling, the task becomes eligible at the
+    /// next interrupt/exception boundary when scheduler_run() executes.
+    ///
+    /// @param task The task to wake up (must be on runqueue).
+    /// @return 0 on success, -1 if task was already TASK_RUNNING.
 
     if (!task) {
         pr_err("wake_up_process: task is NULL\n");
@@ -179,16 +179,17 @@ int wake_up_process(task_struct *task)
         return -1;
     }
 
-    // Set the task to runnable state.
+    // Transition task to runnable state.
     task->state = TASK_RUNNING;
 
-    // Clear wait queue tracking since we're waking up.
+    // Clear wait queue tracking.
     task->waiting_on = NULL;
 
-    // If not on the runqueue, enqueue it.
+    // Safety check: task should already be on runqueue. Only enqueue if
+    // somehow it was removed (e.g., during process creation).
     if (list_head_empty(&task->run_list)) {
+        pr_warning("wake_up_process: task %d not on runqueue, re-enqueueing\n", task->pid);
         scheduler_enqueue_task(task);
-        pr_debug("wake_up_process: enqueued task %d to runqueue\n", task->pid);
     }
 
     return 0;
@@ -711,10 +712,10 @@ pid_t sys_waitpid(pid_t pid, int *status, int options)
     }
 
     // Otherwise, block until a child exits (and sends SIGCHLD to wake us up).
-    // sleep_on() will dequeue this task and mark it uninterruptible.
+    // Task will remain on runqueue but in TASK_UNINTERRUPTIBLE state.
     // Context switch will happen when this syscall returns and syscall_handler calls scheduler_run(f).
-    // When woken up (by wake_up_process_on_queue in do_exit), this task will be
-    // re-enqueued and eventually scheduled again, returning to userspace with -EINTR.
+    // When woken up (by wake_up_all in do_exit), task state transitions to TASK_RUNNING,
+    // and eventually scheduler picks it again, returning to userspace with -EINTR.
     // Userspace must retry the syscall, which will then find and reap the zombie.
     pr_debug("Process %d (%s) sleeping in waitpid (no zombie child yet)\n", runqueue.curr->pid, runqueue.curr->name);
     wait_queue_entry_t *wait_entry = sleep_on(&waitpid_queue);

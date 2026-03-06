@@ -135,3 +135,11 @@ void wake_up_all(wait_queue_head_t *head);
 /// @param task The specific task to wake up.
 /// @return 1 if the task was found and woken up, 0 otherwise.
 int wake_up_process_on_queue(wait_queue_head_t *head, struct task_struct *task);
+
+/// @brief Wake a specific wait queue entry.
+/// @param head The wait queue head that owns the entry.
+/// @param entry The wait queue entry to evaluate and wake.
+/// @param mode Wake mode passed to the entry wake function.
+/// @param sync Wake sync flag passed to the entry wake function.
+/// @return 1 if the task was woken, 0 otherwise.
+int wake_up_wait_queue_entry(wait_queue_head_t *head, wait_queue_entry_t *entry, unsigned mode, int sync);
