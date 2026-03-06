@@ -39,36 +39,32 @@ static inline bool_t __is_periodic_task(task_struct *task)
 /// @return the next task on success, NULL on failure.
 static inline task_struct *__scheduler_rr(runqueue_t *runqueue, bool_t skip_periodic)
 {
-    // If there is just one task in the list, we normally would return it.
-    // however, if the current task is not in a runnable state we must
-    // indicate that no suitable candidate exists.
-    if (list_head_size(&runqueue->curr->run_list) <= 1) {
-        if (runqueue->curr->state == TASK_RUNNING) {
-            return runqueue->curr;
-        } else {
-            return NULL;
+    // If the current task is still enqueued, start searching from its next node
+    // to preserve round-robin fairness. Otherwise, start from the runqueue head.
+    list_head_t *start = list_head_empty(&runqueue->curr->run_list)
+                             ? runqueue->queue.next
+                             : runqueue->curr->run_list.next;
+    list_head_t *it    = start;
+
+    // Iterate at most one full runqueue cycle.
+    while (it != &runqueue->queue) {
+        task_struct *entry = list_entry(it, task_struct, run_list);
+        if ((entry->state == TASK_RUNNING) &&
+            !(__is_periodic_task(entry) && skip_periodic)) {
+            return entry;
         }
+        it = it->next;
     }
-    // This will hold a given entry, while iterating the list of tasks.
-    task_struct *entry = NULL;
-    // Search for the next task (we do not start from the head, so INSIDE, skip the head).
-    list_for_each_decl (it, &runqueue->curr->run_list) {
-        // Check if we reached the head of list_head, and skip it.
-        if (it == &runqueue->queue) {
-            continue;
+
+    // Wrap once if we started from current->next and did not reach start yet.
+    it = runqueue->queue.next;
+    while ((it != &runqueue->queue) && (it != start)) {
+        task_struct *entry = list_entry(it, task_struct, run_list);
+        if ((entry->state == TASK_RUNNING) &&
+            !(__is_periodic_task(entry) && skip_periodic)) {
+            return entry;
         }
-        // Get the current entry.
-        entry = list_entry(it, task_struct, run_list);
-        // We consider only runnable processes.
-        if (entry->state != TASK_RUNNING) {
-            continue;
-        }
-        // If entry is a periodic task, and we were asked to skip periodic tasks, skip it.
-        if (__is_periodic_task(entry) && skip_periodic) {
-            continue;
-        }
-        // We have our next entry.
-        return entry;
+        it = it->next;
     }
 
     return NULL;
@@ -366,8 +362,11 @@ static inline task_struct *__scheduler_rm(runqueue_t *runqueue)
 
 task_struct *scheduler_pick_next_task(runqueue_t *runqueue)
 {
-    // Update task statistics.
-    __update_task_statistics(runqueue->curr);
+    // Update statistics only for a runnable task still present in the runqueue.
+    if (runqueue->curr && (runqueue->curr->state == TASK_RUNNING) &&
+        !list_head_empty(&runqueue->curr->run_list)) {
+        __update_task_statistics(runqueue->curr);
+    }
 
     // Pointer to the next task to schedule.
     task_struct *next = NULL;

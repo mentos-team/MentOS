@@ -575,6 +575,11 @@ static inline void sleep_timeout(unsigned long data)
         pr_debug("Process (pid: %d) restored from sleep\n", wait_queue_entry->task->pid);
         // Removes entry from list and memory.
         remove_wait_queue(&sleep_queue, wait_queue_entry);
+        // Clear wait queue tracking and re-enqueue if the task is currently not runnable.
+        wait_queue_entry->task->waiting_on = NULL;
+        if (list_head_empty(&wait_queue_entry->task->run_list)) {
+            scheduler_enqueue_task(wait_queue_entry->task);
+        }
         // Free the memory of the wait queue item.
         wait_queue_entry_dealloc(wait_queue_entry);
         // Free the memory of the sleep_data.
