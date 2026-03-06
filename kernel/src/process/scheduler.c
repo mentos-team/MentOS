@@ -4,10 +4,10 @@
 /// See LICENSE.md for details.
 
 // Setup the logging for this file (do this before any other include).
-#include "sys/kernel_levels.h"          // Include kernel log levels.
-#define __DEBUG_HEADER__ "[SCHED ]"     ///< Change header.
-#define __DEBUG_LEVEL__  LOGLEVEL_DEBUG ///< Set log level.
-#include "io/debug.h"                   // Include debugging functions.
+#include "sys/kernel_levels.h"           // Include kernel log levels.
+#define __DEBUG_HEADER__ "[SCHED ]"      ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
+#include "io/debug.h"                    // Include debugging functions.
 
 #include "assert.h"
 #include "descriptor_tables/tss.h"
@@ -40,6 +40,15 @@ static wait_queue_head_t waitpid_queue = {
     .lock      = SPINLOCK_INIT,
     .task_list = LIST_HEAD_INIT(waitpid_queue.task_list),
 };
+
+void __dump_runqueue(int log_level)
+{
+    pr_log(log_level, "Dumping runqueue (num_active: %zu, num_periodic: %zu):\n", runqueue.num_active, runqueue.num_periodic);
+    list_for_each_decl (it, &runqueue.queue) {
+        task_struct *entry = list_entry(it, task_struct, run_list);
+        pr_log(log_level, "  PID %d (%s) - state: %ld, vruntime: %lu\n", entry->pid, entry->name, entry->state, entry->se.vruntime);
+    }
+}
 
 void scheduler_initialize(void)
 {
@@ -98,6 +107,13 @@ task_struct *scheduler_get_running_process(pid_t pid)
 void scheduler_enqueue_task(task_struct *process)
 {
     assert(process && "Received a NULL process.");
+
+    // If the process is already in a list, raise an error.
+    if (!list_head_empty(&process->run_list)) {
+        pr_err("scheduler_enqueue_task: Process %d is already in a list.\n", process->pid);
+        __dump_runqueue(LOGLEVEL_ERR);
+        return;
+    }
     // If current_process is NULL, then process is the current process.
     if (runqueue.curr == NULL) {
         runqueue.curr = process;
@@ -107,14 +123,6 @@ void scheduler_enqueue_task(task_struct *process)
     // Increment the number of active processes.
     ++runqueue.num_active;
 
-    // Print the entire running queue for debugging purposes.
-    pr_debug("scheduler_enqueue_task(%d): runqueue: [", process->pid);
-    list_for_each_decl (running_it, &runqueue.queue) {
-        task_struct *running_task = list_entry(running_it, task_struct, run_list);
-        pr_debug("%d ", running_task->pid);
-    }
-    pr_debug("]\n");
-
 #ifdef ENABLE_SCHEDULER_FEEDBACK
     scheduler_feedback_task_add(process);
 #endif
@@ -123,6 +131,13 @@ void scheduler_enqueue_task(task_struct *process)
 void scheduler_dequeue_task(task_struct *process)
 {
     assert(process && "Received a NULL process.");
+
+    // If the process is not in a list, raise an error.
+    if (list_head_empty(&process->run_list)) {
+        pr_err("scheduler_dequeue_task: Process %d is not in a list.\n", process->pid);
+        __dump_runqueue(LOGLEVEL_ERR);
+        return;
+    }
     // Delete the process from the list of running processes.
     list_head_remove(&process->run_list);
     // Decrement the number of active processes.
@@ -130,15 +145,6 @@ void scheduler_dequeue_task(task_struct *process)
     if (process->se.is_periodic) {
         runqueue.num_periodic--;
     }
-
-    // Print the entire running queue for debugging purposes.
-    pr_debug("scheduler_dequeue_task(%d): runqueue: [", process->pid);
-    list_for_each_decl (running_it, &runqueue.queue) {
-        task_struct *running_task = list_entry(running_it, task_struct, run_list);
-        pr_debug("%d ", running_task->pid);
-    }
-    pr_debug("]\n");
-
 #ifdef ENABLE_SCHEDULER_FEEDBACK
     scheduler_feedback_task_remove(process->pid);
 #endif
@@ -183,15 +189,23 @@ void scheduler_run(pt_regs_t *f)
         // scheduler_pick_next_task call above will have already re-enabled the cpu if necessary.
         if (!next) {
             if (runqueue.num_active == 0) {
+
+                pr_debug("SCHEDULER_RUN: No active tasks in the runqueue.\n");
+
                 while (runqueue.num_active == 0) {
                     sti();
                     __asm__ __volatile__("hlt");
                     cli();
                 }
+
                 next = scheduler_pick_next_task(&runqueue);
+
                 pr_debug("SCHEDULER_RUN: No active tasks, idling until a task is enqueued. Next task: %d\n", next ? next->pid : -1);
             }
             if (!next) {
+
+                pr_debug("SCHEDULER_RUN: No runnable tasks found in the runqueue.\n");
+
                 // Resume current only if it is still runnable and queued.
                 if ((runqueue.curr->state == TASK_RUNNING) && !list_head_empty(&runqueue.curr->run_list)) {
                     next = runqueue.curr;

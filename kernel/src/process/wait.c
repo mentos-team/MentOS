@@ -4,10 +4,10 @@
 /// See LICENSE.md for details.
 
 // Setup the logging for this file (do this before any other include).
-#include "sys/kernel_levels.h"          // Include kernel log levels.
-#define __DEBUG_HEADER__ "[WAIT  ]"     ///< Change header.
-#define __DEBUG_LEVEL__  LOGLEVEL_DEBUG ///< Set log level.
-#include "io/debug.h"                   // Include debugging functions.
+#include "sys/kernel_levels.h"           // Include kernel log levels.
+#define __DEBUG_HEADER__ "[WAIT  ]"      ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
+#include "io/debug.h"                    // Include debugging functions.
 
 #include "process/wait.h"
 
@@ -17,9 +17,6 @@
 #include "process/scheduler.h"
 #include "string.h"
 #include <stdint.h>
-
-/// The list of processes.
-extern runqueue_t runqueue;
 
 /// @brief Adds the entry to the wait queue.
 /// @param head the wait queue.
