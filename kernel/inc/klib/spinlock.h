@@ -11,6 +11,8 @@
 #define SPINLOCK_FREE 0
 /// Determines if the spinlock is busy.
 #define SPINLOCK_BUSY 1
+/// Initializes a spinlock with the value of SPINLOCK_FREE.
+#define SPINLOCK_INIT SPINLOCK_FREE
 
 /// @brief Spinlock structure.
 typedef atomic_t spinlock_t;

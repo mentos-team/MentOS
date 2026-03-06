@@ -4,10 +4,10 @@
 /// See LICENSE.md for details.
 
 // Setup the logging for this file (do this before any other include).
-#include "sys/kernel_levels.h"           // Include kernel log levels.
-#define __DEBUG_HEADER__ "[TIMER ]"      ///< Change header.
+#include "sys/kernel_levels.h"          // Include kernel log levels.
+#define __DEBUG_HEADER__ "[TIMER ]"     ///< Change header.
 #define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
-#include "io/debug.h"                    // Include debugging functions.
+#include "io/debug.h"                   // Include debugging functions.
 
 #include "assert.h"
 #include "descriptor_tables/isr.h"
@@ -75,7 +75,11 @@ static __volatile__ unsigned long timer_ticks = 0;
 /// Contains timer for each CPU (for now only one)
 static tvec_base_t cpu_base                   = {0};
 /// Contains all process waiting for a sleep.
-static wait_queue_head_t sleep_queue;
+static wait_queue_head_t sleep_queue          = {
+             .name      = "sleep_queue",
+             .lock      = SPINLOCK_INIT,
+             .task_list = LIST_HEAD_INIT(sleep_queue.task_list),
+};
 
 void timer_phase(const uint32_t hz)
 {
@@ -558,6 +562,50 @@ static inline void debug_timeout(unsigned long data)
         data, timer_ticks, timer_get_seconds());
 }
 
+/// @brief Cancels a sleep timer for a task being woken up by signals.
+/// This handles the race where a signal interrupts a sleeping task:
+/// the signal handler calls this to stop the sleep timer from firing.
+/// 
+/// With boundary-based context switching, we don't need to trigger
+/// immediate scheduling - the signal handler will return to the next
+/// interrupt/exception boundary where scheduler_run() picks the next task.
+///
+/// @param task The task whose sleep timer should be canceled.
+/// @return 0 on success, -1 if no sleep timer exists.
+int cancel_sleep_timer(struct task_struct *task)
+{
+    // Check if the task has a sleep timer.
+    if (!task || !task->sleep_timer) {
+        return -1;
+    }
+
+    // Remove the timer from the timer system.
+    remove_timer(task->sleep_timer);
+
+    // Extract the sleep data to prevent the timer callback from using stale pointers.
+    sleep_data_t *sleep_data = (sleep_data_t *)task->sleep_timer->data;
+
+    // Mark the wait_queue_entry as NULL so if the timer fires during removal,
+    // sleep_timeout() will see NULL and skip waking (the signal already did).
+    if (sleep_data && sleep_data->wait_queue_entry) {
+        sleep_data->wait_queue_entry = NULL;
+    }
+
+    // Free the timer.
+    __timer_list_dealloc(task->sleep_timer);
+
+    // Clear the sleep_timer reference in the task.
+    task->sleep_timer = NULL;
+
+    // Free the sleep data.
+    if (sleep_data) {
+        __sleep_data_dealloc(sleep_data);
+    }
+
+    pr_debug("cancel_sleep_timer: canceled for process (pid: %d)\n", task->pid);
+    return 0;
+}
+
 /// @brief Callback for when a sleep timer expires.
 /// @param data Custom data stored in the timer.
 static inline void sleep_timeout(unsigned long data)
@@ -566,16 +614,24 @@ static inline void sleep_timeout(unsigned long data)
     sleep_data_t *sleep_data             = (sleep_data_t *)data;
     // Get the wait_queue_entry.
     wait_queue_entry_t *wait_queue_entry = sleep_data->wait_queue_entry;
-    // Executed entry's wakeup test function
-    if (wait_queue_entry->func(wait_queue_entry, TASK_RUNNING, 0) == 1) {
-        pr_debug("Process (pid: %d) restored from sleep\n", wait_queue_entry->task->pid);
-        // Removes entry from list and memory.
-        remove_wait_queue(&sleep_queue, wait_queue_entry);
-        // Free the memory of the wait queue item.
-        wait_queue_entry_dealloc(wait_queue_entry);
-        // Free the memory of the sleep_data.
+    // Check if entry is still valid (not already freed by signal).
+    if (!wait_queue_entry || !wait_queue_entry->task) {
+        pr_debug("sleep_timeout: wait_queue_entry is NULL (already woken by signal)\n");
         __sleep_data_dealloc(sleep_data);
+        return;
     }
+
+    task_struct *task = wait_queue_entry->task;
+    pr_debug("sleep_timeout: timer expired for process (pid: %d)\n", task->pid);
+
+    // Clear the sleep_timer reference in the task before waking.
+    task->sleep_timer = NULL;
+
+    // Delegate full wake mechanics to wait.c (wake check + remove + enqueue + free).
+    wake_up_wait_queue_entry(&sleep_queue, wait_queue_entry, TASK_RUNNING, 0);
+
+    // Free sleep_data owned by the timer callback.
+    __sleep_data_dealloc(sleep_data);
 }
 
 /// @brief Function executed when the real_timer of a process expires, sends
@@ -625,6 +681,13 @@ int sys_nanosleep(const struct timespec *req, struct timespec *rem)
     // We need to store rem somewhere, because it contains how much time left
     // until the timer expires, when the timer is stopped early by a signal.
     pr_debug("sys_nanosleep([s:%d; ns:%d],...)\n", req->tv_sec, req->tv_nsec);
+    // Get the current task.
+    task_struct *current = scheduler_get_current_process();
+    assert(current && "No current process in sys_nanosleep");
+    // Prevent a race between entering sleep state and arming the wake timer.
+    // If a timer interrupt preempts in that window, the task can become
+    // TASK_UNINTERRUPTIBLE without a wake source and block the system.
+    uint8_t irqs = irq_disable();
     // Create a dinamic timer to wake up the process after some time
     struct timer_list *sleep_timer = __timer_list_alloc();
     // First, we save the remaining time. Then, we remove the current process
@@ -633,13 +696,17 @@ int sys_nanosleep(const struct timespec *req, struct timespec *rem)
     // req and rem pointers (?)
     sleep_data_t *sleep_data       = __sleep_data_alloc();
     sleep_data->remaining          = rem;
-    sleep_data->wait_queue_entry   = sleep_on(&sleep_queue);
+    sleep_data->wait_queue_entry   = sleep_on_interruptible(&sleep_queue);
     // Setup the timer.
     sleep_timer->expires           = timer_get_ticks() + __timespec_to_ticks(req);
     sleep_timer->function          = &sleep_timeout;
     sleep_timer->data              = (unsigned long)sleep_data;
+    // Store the timer in the task so signals can cancel it if needed.
+    current->sleep_timer           = sleep_timer;
     // Add the timer.
     add_timer(sleep_timer);
+    // Sleep state + wait queue entry + timer arm are now atomically visible.
+    irq_enable(irqs);
     return 0;
 }
 

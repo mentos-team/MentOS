@@ -42,19 +42,21 @@ int main(int argc, char *argv[])
         memset(&action, 0, sizeof(action));        // Clear the action structure
         action.sa_handler = child_sigusr1_handler; // Set handler function
 
-        // Check if setting up the signal handler fails
+        printf("Setting up signal handler for SIGUSR1 in child (pid: %d)...\n", cpid);
+
+        // Check if setting up the signal handler fails.
         if (sigaction(SIGUSR1, &action, NULL) == -1) {
             fprintf(STDERR_FILENO, "Failed to set signal handler for SIGUSR1: %s\n", strerror(errno));
             return EXIT_FAILURE; // Return failure if handler setup fails
         }
 
-        // Request to sleep for 100 ms.
-        struct timespec req = {0, 100000000};
+        // Request to sleep for 500 ms.
+        struct timespec req = {0, 500000000};
 
         // Child process loop - waiting for signals
         while (1) {
             printf("I'm the child (pid: %d): I'm waiting...\n", cpid);
-            // Sleep for 100 ms.
+            // Sleep for 500 ms.
             nanosleep(&req, NULL);
         }
 
@@ -62,11 +64,13 @@ int main(int argc, char *argv[])
         // Parent process
         printf("I'm the parent (pid: %d)!\n", getpid());
 
-        // Request to sleep for 500 ms.
-        struct timespec req = {0, 500000000};
+        // Request to sleep for 1.5 seconds.
+        struct timespec req = {1, 500000000};
 
-        // Sleep for 500 ms.
+        // Sleep for 1.5 seconds.
         nanosleep(&req, NULL);
+
+        printf("Sending SIGUSR1 to child (pid: %d)!\n", cpid);
 
         // Send SIGUSR1 to the child process
         if (kill(cpid, SIGUSR1) == -1) {
@@ -74,7 +78,7 @@ int main(int argc, char *argv[])
             return EXIT_FAILURE; // Return failure if signal sending fails
         }
 
-        // Wait before terminating the child process, sleep for 500 ms.
+        // Wait before terminating the child process, sleep for 1.5 seconds.
         nanosleep(&req, NULL);
 
         // Send SIGTERM to the child process to terminate it

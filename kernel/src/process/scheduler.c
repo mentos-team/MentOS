@@ -4,10 +4,10 @@
 /// See LICENSE.md for details.
 
 // Setup the logging for this file (do this before any other include).
-#include "sys/kernel_levels.h"          // Include kernel log levels.
-#define __DEBUG_HEADER__ "[SCHED ]"     ///< Change header.
+#include "sys/kernel_levels.h"           // Include kernel log levels.
+#define __DEBUG_HEADER__ "[SCHED ]"      ///< Change header.
 #define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
-#include "io/debug.h"                   // Include debugging functions.
+#include "io/debug.h"                    // Include debugging functions.
 
 #include "assert.h"
 #include "descriptor_tables/tss.h"
@@ -34,6 +34,22 @@ runqueue_t runqueue;
 // Definition of the global init process pointer
 task_struct *init_process = NULL;
 
+/// Wait queue for processes blocked in waitpid().
+static wait_queue_head_t waitpid_queue = {
+    .name      = "waitpid_queue",
+    .lock      = SPINLOCK_INIT,
+    .task_list = LIST_HEAD_INIT(waitpid_queue.task_list),
+};
+
+void __dump_runqueue(int log_level)
+{
+    pr_log(log_level, "Dumping runqueue (num_active: %zu, num_periodic: %zu):\n", runqueue.num_active, runqueue.num_periodic);
+    list_for_each_decl (it, &runqueue.queue) {
+        task_struct *entry = list_entry(it, task_struct, run_list);
+        pr_log(log_level, "  PID %d (%s) - state: %ld, vruntime: %lu\n", entry->pid, entry->name, entry->state, entry->se.vruntime);
+    }
+}
+
 void scheduler_initialize(void)
 {
     // Initialize the runqueue list of tasks.
@@ -44,6 +60,8 @@ void scheduler_initialize(void)
     runqueue.curr       = NULL;
     // Reset the number of active tasks.
     runqueue.num_active = 0;
+    // Initialize the waitpid wait queue.
+    wait_queue_head_init(&waitpid_queue);
 }
 
 task_struct *scheduler_get_current_process(void) { return runqueue.curr; }
@@ -89,6 +107,13 @@ task_struct *scheduler_get_running_process(pid_t pid)
 void scheduler_enqueue_task(task_struct *process)
 {
     assert(process && "Received a NULL process.");
+
+    // If the process is already in a list, raise an error.
+    if (!list_head_empty(&process->run_list)) {
+        pr_err("scheduler_enqueue_task: Process %d is already in a list.\n", process->pid);
+        __dump_runqueue(LOGLEVEL_ERR);
+        return;
+    }
     // If current_process is NULL, then process is the current process.
     if (runqueue.curr == NULL) {
         runqueue.curr = process;
@@ -106,6 +131,13 @@ void scheduler_enqueue_task(task_struct *process)
 void scheduler_dequeue_task(task_struct *process)
 {
     assert(process && "Received a NULL process.");
+
+    // If the process is not in a list, raise an error.
+    if (list_head_empty(&process->run_list)) {
+        pr_err("scheduler_dequeue_task: Process %d is not in a list.\n", process->pid);
+        __dump_runqueue(LOGLEVEL_ERR);
+        return;
+    }
     // Delete the process from the list of running processes.
     list_head_remove(&process->run_list);
     // Decrement the number of active processes.
@@ -113,10 +145,54 @@ void scheduler_dequeue_task(task_struct *process)
     if (process->se.is_periodic) {
         runqueue.num_periodic--;
     }
-
 #ifdef ENABLE_SCHEDULER_FEEDBACK
     scheduler_feedback_task_remove(process->pid);
 #endif
+}
+
+int wake_up_process(task_struct *task)
+{
+    /// Wakes up a blocked or stopped task by transitioning it to TASK_RUNNING.
+    ///
+    /// Architecture: Tasks remain on the runqueue even when blocked. The
+    /// scheduler naturally skips non-TASK_RUNNING tasks when picking next.
+    /// This function only manages task state transitions, NOT queue membership.
+    ///
+    /// The wait queue layer (wait.c) is responsible for:
+    ///   - Removing task from wait queue before calling this
+    ///   - Freeing wait queue entry after this returns
+    ///
+    /// With boundary-based scheduling, the task becomes eligible at the
+    /// next interrupt/exception boundary when scheduler_run() executes.
+    ///
+    /// @param task The task to wake up (must be on runqueue).
+    /// @return 0 on success, -1 if task was already TASK_RUNNING.
+
+    if (!task) {
+        pr_err("wake_up_process: task is NULL\n");
+        return -1;
+    }
+
+    // If already running, nothing to do.
+    if (task->state == TASK_RUNNING) {
+        pr_debug("wake_up_process: task %d is already TASK_RUNNING\n", task->pid);
+        return -1;
+    }
+
+    // Transition task to runnable state.
+    task->state = TASK_RUNNING;
+
+    // Clear wait queue tracking.
+    task->waiting_on = NULL;
+
+    // Safety check: task should already be on runqueue. Only enqueue if
+    // somehow it was removed (e.g., during process creation).
+    if (list_head_empty(&task->run_list)) {
+        pr_warning("wake_up_process: task %d not on runqueue, re-enqueueing\n", task->pid);
+        scheduler_enqueue_task(task);
+    }
+
+    return 0;
 }
 
 void scheduler_run(pt_regs_t *f)
@@ -134,40 +210,95 @@ void scheduler_run(pt_regs_t *f)
     // We check the existence of pending signals every time we finish
     // handling an interrupt or an exception.
     if (!do_signal(f)) {
-#if 1
+
         if (runqueue.curr->state == EXIT_ZOMBIE) {
-            //==== Handle Zombies =================================================
-            //pr_debug("Handle zombie %d\n", runqueue.curr->pid);
-            // get the next process after the current one
-            list_head_t *nNode = runqueue.curr->run_list.next;
-            // check if we reached the head of list_head_t
-            if (nNode == &runqueue.queue) {
-                nNode = nNode->next;
-            }
-            // get the task_struct
-            next = list_entry(nNode, task_struct, run_list);
-            // Remove the zombie task.
+
+            pr_debug("SCHEDULER_RUN: Current task %d is a zombie. Removing it and picking next task.\n", runqueue.curr->pid);
+
+            // Remove the zombie task first, so it cannot be selected again.
             scheduler_dequeue_task(runqueue.curr);
-            assert(next && "No valid task selected after removing ZOMBIE.");
-            //=====================================================================
-        } else {
-#endif
-            //==== Scheduling =====================================================
-            // If we are currently executing a periodic process, and this process
-            //  has yet to complete, keep executing it.
-#ifdef SCHEDULER_EDF
-            if (runqueue.curr->se.is_periodic)
-                if (!runqueue.curr->se.executed)
-                    return;
-#endif
-            // Pointer to the next process to be executed.
-            next = scheduler_pick_next_task(&runqueue);
-            //=====================================================================
         }
+
+        // If we are currently executing a periodic process, and this process
+        //  has yet to complete, keep executing it.
+#ifdef SCHEDULER_EDF
+        if (runqueue.curr->se.is_periodic)
+            if (!runqueue.curr->se.executed)
+                return;
+#endif
+        // Pointer to the next process to be executed.
+        next = scheduler_pick_next_task(&runqueue);
+
+        // If no runnable task was found we may be in a situation where every user process is blocked.  rather than
+        // assert or return to the blocked task we idle the cpu until some other task is enqueued; the
+        // scheduler_pick_next_task call above will have already re-enabled the cpu if necessary.
+        if (!next) {
+            if (runqueue.num_active == 0) {
+
+                pr_debug("SCHEDULER_RUN: No active tasks in the runqueue.\n");
+
+                while (runqueue.num_active == 0) {
+                    sti();
+                    __asm__ __volatile__("hlt");
+                    cli();
+                }
+
+                next = scheduler_pick_next_task(&runqueue);
+
+                pr_debug("SCHEDULER_RUN: No active tasks, idling until a task is enqueued. Next task: %d\n", next ? next->pid : -1);
+            }
+            if (!next) {
+
+                pr_debug("SCHEDULER_RUN: No runnable tasks found in the runqueue.\n");
+
+                // Resume current only if it is still runnable and queued.
+                if ((runqueue.curr->state == TASK_RUNNING) && !list_head_empty(&runqueue.curr->run_list)) {
+                    next = runqueue.curr;
+                } else {
+                    // Last-resort attempt to find a runnable queued task.
+                    list_for_each_decl (it, &runqueue.queue) {
+                        task_struct *entry = list_entry(it, task_struct, run_list);
+                        if (entry->state == TASK_RUNNING) {
+                            next = entry;
+                            pr_debug("SCHEDULER_RUN: No runnable tasks found, but found queued task %d in state TASK_RUNNING. Resuming it.\n", entry->pid);
+                            break;
+                        }
+                    }
+                }
+
+                // If there is still no candidate, wait for an event and
+                // retry rather than panicking or returning to an invalid
+                // context.
+                while (!next) {
+                    sti();
+                    __asm__ __volatile__("hlt");
+                    cli();
+                    next = scheduler_pick_next_task(&runqueue);
+                }
+                pr_debug("SCHEDULER_RUN: No runnable tasks, idling until a task is enqueued. Next task: %d\n", next ? next->pid : -1);
+            }
+        }
+
         // Check if the next and current processes are different.
         if (next != runqueue.curr) {
+            pr_debug("SCHEDULER_RUN: Picked next task %d to run.\n", next->pid);
             // Copy into Kernel stack the next process's context.
             scheduler_restore_context(next, f);
+        }
+    } else {
+        // Signal handling may have changed task state (e.g., stop/exit).
+        // If current is no longer runnable or queued, pick another task now.
+        if ((runqueue.curr->state != TASK_RUNNING) || list_head_empty(&runqueue.curr->run_list)) {
+            next = scheduler_pick_next_task(&runqueue);
+            while (!next) {
+                sti();
+                __asm__ __volatile__("hlt");
+                cli();
+                next = scheduler_pick_next_task(&runqueue);
+            }
+            if (next != runqueue.curr) {
+                scheduler_restore_context(next, f);
+            }
         }
     }
     //==========================================================================
@@ -350,7 +481,7 @@ int sys_setpgid(pid_t pid, pid_t pgid)
     // Set the new process group ID.
     task->pgid = pgid;
 
-    pr_debug("Process %d assigned to process group %d.", task->pid, pgid);
+    pr_debug("Process %d assigned to process group %d.\n", task->pid, pgid);
 
     return 0;
 }
@@ -565,17 +696,44 @@ pid_t sys_waitpid(pid_t pid, int *status, int options)
         pid_manager_mark_free(child->pid); // Free the PID.
         vfs_destroy_task(child);           // Finalize VFS structures.
         list_head_remove(&child->sibling); // Remove from parent's child list.
-        scheduler_dequeue_task(child);     // Remove from the scheduler.
-        kmem_cache_free(child);            // Free the `task_struct`.
 
-        pr_debug("Process %d cleaned up child process %d.\n", runqueue.curr->pid, child_pid);
+        // Zombie tasks are typically dequeued in scheduler_run() when they
+        // become current. During waitpid() reap they may already be out of
+        // the runqueue, so only dequeue if still linked.
+        if (!list_head_empty(&child->run_list)) {
+            scheduler_dequeue_task(child);
+        }
+
+        kmem_cache_free(child); // Free the `task_struct`.
+
+        pr_debug("Process %d (%s) CLEANED UP process %d.\n", runqueue.curr->pid, runqueue.curr->name, child_pid);
 
         // Return the PID of the cleaned-up child.
         return child_pid;
     }
 
     // No eligible child process was found.
-    return 0;
+    // If WNOHANG is set, return immediately.
+    if (options & WNOHANG) {
+        return 0;
+    }
+
+    // Otherwise, block until a child exits (and sends SIGCHLD to wake us up).
+    // Task will remain on runqueue but in TASK_UNINTERRUPTIBLE state.
+    // Context switch will happen when this syscall returns and syscall_handler calls scheduler_run(f).
+    // When woken up (by wake_up_all in do_exit), task state transitions to TASK_RUNNING,
+    // and eventually scheduler picks it again, returning to userspace with -EINTR.
+    // Userspace must retry the syscall, which will then find and reap the zombie.
+    pr_debug("Process %d (%s) sleeping in waitpid (no zombie child yet)\n", runqueue.curr->pid, runqueue.curr->name);
+    wait_queue_entry_t *wait_entry = sleep_on(&waitpid_queue);
+    if (!wait_entry) {
+        pr_err("Failed to sleep in waitpid\n");
+        return -ENOMEM;
+    }
+
+    // Return -EINTR to indicate the syscall was interrupted.
+    // The userspace waitpid() wrapper should retry the syscall on -EINTR.
+    return -EINTR;
 }
 
 void do_exit(int exit_code)
@@ -588,6 +746,8 @@ void do_exit(int exit_code)
         kernel_panic("Init process cannot call sys_exit!");
     }
 
+    pr_debug("Process %d is exiting with code %d.\n", runqueue.curr->pid, exit_code);
+
     // Set the termination code of the process.
     runqueue.curr->exit_code = exit_code;
     // Set the state of the process to zombie.
@@ -599,6 +759,9 @@ void do_exit(int exit_code)
             pr_err(
                 "[%d] %5d failed sending signal %d : %s\n", ret, runqueue.curr->parent->pid, SIGCHLD, strerror(errno));
         }
+        // Wake up the parent if it's sleeping in waitpid().
+        // Only wake the parent, not all processes waiting on this queue.
+        wake_up_process_on_queue(&waitpid_queue, runqueue.curr->parent);
     }
 
     // If it has children, then init process has to take care of them.

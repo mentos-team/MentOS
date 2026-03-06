@@ -11,10 +11,6 @@
 int main(int argc, char *argv[], char *envp[])
 {
     char *_argv[] = {"login", NULL};
-    int status;
-
-#pragma clang diagnostic push
-#pragma ide diagnostic ignored "EndlessLoop"
     while (1) {
         pid_t login = fork();
         if (login == 0) {
@@ -22,9 +18,8 @@ int main(int argc, char *argv[], char *envp[])
             printf("This is bad, I should not be here! EXEC NOT WORKING\n");
         }
 
-        while (wait(&status) != login) {
+        while (waitpid(-1, NULL, 0) != login) {
         }
     }
-#pragma clang diagnostic pop
     return 0;
 }

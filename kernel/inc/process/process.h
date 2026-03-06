@@ -139,6 +139,8 @@ typedef struct task_struct {
 
     /// Timer for alarm syscall.
     struct timer_list *real_timer;
+    /// Timer for nanosleep syscall (cancelled on signal delivery).
+    struct timer_list *sleep_timer;
 
     /// Next value for the real timer (ITIMER_REAL).
     unsigned long it_real_incr;
@@ -157,6 +159,9 @@ typedef struct task_struct {
     termios_t termios;
     /// Buffer for managing inputs from keyboard.
     rb_keybuffer_t keyboard_rb;
+
+    /// Wait queue this task is currently sleeping on (NULL if not sleeping).
+    struct wait_queue_head *waiting_on;
 
     //==== Future work =========================================================
     // - task's attributes:

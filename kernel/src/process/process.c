@@ -703,5 +703,6 @@ int sys_execve(pt_regs_t *f)
     scheduler_restore_context(current, f);
 
     pr_debug("Executing '%s' (pid: %d)...\n", current->name, current->pid);
+    
     return 0;
 }

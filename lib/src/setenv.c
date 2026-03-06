@@ -132,12 +132,12 @@ int unsetenv(const char *name)
     char **ep  = environ;
     while (*ep != NULL) {
         if (!strncmp(*ep, name, len) && (*ep)[len] == '=') {
-            /* Found it.  Remove this pointer by moving later ones back.  */
+            // Found it.  Remove this pointer by moving later ones back.
             char **dp = ep;
             do {
                 dp[0] = dp[1];
             } while (*dp++);
-            /* Continue the loop in case NAME appears again.  */
+            // Continue the loop in case NAME appears again.
         } else {
             ++ep;
         }

@@ -19,7 +19,7 @@ void abort(void)
     struct sigaction action;
     sigset_t sigset;
 
-    /* Unblock SIGABRT.  */
+    // Unblock SIGABRT.
     if (stage == 0) {
         ++stage;
 
@@ -28,7 +28,7 @@ void abort(void)
         sigprocmask(SIG_UNBLOCK, &sigset, 0);
     }
 
-    /* Send signal which possibly calls a user handler.  */
+    // Send signal which possibly calls a user handler.
     if (stage == 1) {
         // We must allow recursive calls of abort
         int save_stage = stage;
@@ -38,7 +38,7 @@ void abort(void)
         stage = save_stage + 1;
     }
 
-    /* There was a handler installed.  Now remove it.  */
+    // There was a handler installed.  Now remove it.
     if (stage == 2) {
         ++stage;
 
@@ -51,21 +51,21 @@ void abort(void)
         sigaction(SIGABRT, &action, NULL);
     }
 
-    /* Try again.  */
+    // Try again.
     if (stage == 3) {
         ++stage;
 
         kill(getpid(), SIGABRT);
     }
 
-    /* Now try to abort using the system specific command.  */
+    // Now try to abort using the system specific command.
     if (stage == 4) {
         ++stage;
 
         __asm__ __volatile__("hlt");
     }
 
-    /* If we can't signal ourselves and the abort instruction failed, exit.  */
+    // If we can't signal ourselves and the abort instruction failed, exit.
     if (stage == 5) {
         ++stage;
 

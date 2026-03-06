@@ -114,9 +114,12 @@ mm_struct_t *mm_clone(mm_struct_t *mmp)
     // Copy the contents of the source mm_struct to the new one.
     memcpy(mm, mmp, sizeof(mm_struct_t));
 
-    // Get the main page directory.
+    // We deliberately **do not** copy the parent's page directory verbatim because that would reproduce every
+    // user‑space mapping in the child. vm_area_clone()/mem_clone_vm_area below will populate the child's page tables
+    // explicitly, which gives us better control and avoids aliasing the same physical page tables between processes.
+    //
+    // Instead we copy the *kernel* portion of the main page directory and leave the user half empty.
     page_directory_t *main_pgd = paging_get_main_pgd();
-    // Error handling: Failed to get the main page directory.
     if (!main_pgd) {
         pr_crit("Failed to get the main page directory\n");
         return NULL;

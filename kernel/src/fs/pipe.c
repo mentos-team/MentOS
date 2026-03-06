@@ -496,17 +496,13 @@ int pipe_read_wake_function(wait_queue_entry_t *wait, unsigned mode, int sync)
 
     // Validate that data is available in the pipe for reading.
     if ((pipe_info_has_data(pipe_info) > 0) || (pipe_info->writers == 0)) {
-        // Check if the task is in an appropriate sleep state to be woken up.
-        if ((wait->task->state == TASK_UNINTERRUPTIBLE) || (wait->task->state == TASK_STOPPED)) {
-            // Set the task's state to the specified wake-up mode.
-            wait->task->state = mode;
-
-            // Signal that the task has been woken up.
+        // Check if the task is in uninterruptible sleep state (the state it
+        // entered when starting the pipe read operation).
+        if (wait->task->state == TASK_UNINTERRUPTIBLE) {
             pr_debug("Data available or no more writers, waking up reader %d.\n", wait->task->pid);
             return 1;
         }
         pr_debug("Reader %d not in the correct state for wake-up.\n", wait->task->pid);
-
     } else {
         pr_debug("No data available, reader %d should continue waiting.\n", wait->task->pid);
     }
@@ -533,17 +529,13 @@ int pipe_write_wake_function(wait_queue_entry_t *wait, unsigned mode, int sync)
 
     // Check if there is available space in the pipe for writing.
     if (pipe_info_has_space(pipe_info) > 0) {
-        // Only tasks in the state TASK_UNINTERRUPTIBLE or TASK_STOPPED can be woken up.
-        if ((wait->task->state == TASK_UNINTERRUPTIBLE) || (wait->task->state == TASK_STOPPED)) {
-            // Set the wake-up mode for the task.
-            wait->task->state = mode;
-
-            // Signal that the task has been woken up.
+        // Check if the task is in uninterruptible sleep state (the state it
+        // entered when starting the pipe write operation).
+        if (wait->task->state == TASK_UNINTERRUPTIBLE) {
             pr_debug("Space available, waking up writer %d.\n", wait->task->pid);
             return 1;
         }
         pr_debug("Writer %d not in the correct state for wake-up.\n", wait->task->pid);
-
     } else {
         pr_debug("No space available, writer %d should continue waiting.\n", wait->task->pid);
     }
@@ -566,15 +558,10 @@ static void pipe_wake_up_tasks(wait_queue_head_t *wait_queue, const char *debug_
     list_for_each_safe_decl(it, store, &wait_queue->task_list)
     {
         wait_queue_entry_t *wait_queue_entry = list_entry(it, wait_queue_entry_t, task_list);
+        int target_pid                     = wait_queue_entry->task ? wait_queue_entry->task->pid : -1;
 
-        // Run the wakeup test function for the waiting task.
-        if (wait_queue_entry->func(wait_queue_entry, TASK_RUNNING, 0)) {
-            // Task is ready, remove from the wait queue.
-            remove_wait_queue(wait_queue, wait_queue_entry);
-
-            // Log and free the memory associated with the wait entry.
-            pr_debug("%s: Process %d woken up.\n", debug_msg, wait_queue_entry->task->pid);
-            wait_queue_entry_dealloc(wait_queue_entry);
+        if (wake_up_wait_queue_entry(wait_queue, wait_queue_entry, TASK_RUNNING, 0)) {
+            pr_debug("%s: waking up process %d\n", debug_msg, target_pid);
         }
     }
 }

@@ -44,6 +44,13 @@ int keyboard_peek_front(void);
 /// @return 0 on success, 1 on error.
 int keyboard_initialize(void);
 
+/// @brief Sleep until a keypress is available on the global keyboard queue.
+///
+/// This is a simple helper used by higher‑level input code to block the
+/// current process until a character arrives.  It is safe to call from
+/// kernel contexts that know they have the keyboard lock.
+void keyboard_wait(void);
+
 /// @brief De-initializes the keyboard drivers.
 /// @return 0 on success, 1 on error.
 int keyboard_finalize(void);
