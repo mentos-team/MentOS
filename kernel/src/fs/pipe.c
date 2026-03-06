@@ -498,9 +498,6 @@ int pipe_read_wake_function(wait_queue_entry_t *wait, unsigned mode, int sync)
     if ((pipe_info_has_data(pipe_info) > 0) || (pipe_info->writers == 0)) {
         // Check if the task is in an appropriate sleep state to be woken up.
         if ((wait->task->state == TASK_UNINTERRUPTIBLE) || (wait->task->state == TASK_STOPPED)) {
-            // Set the task's state to the specified wake-up mode.
-            wait->task->state = mode;
-
             // Signal that the task has been woken up.
             pr_debug("Data available or no more writers, waking up reader %d.\n", wait->task->pid);
             return 1;
@@ -535,9 +532,6 @@ int pipe_write_wake_function(wait_queue_entry_t *wait, unsigned mode, int sync)
     if (pipe_info_has_space(pipe_info) > 0) {
         // Only tasks in the state TASK_UNINTERRUPTIBLE or TASK_STOPPED can be woken up.
         if ((wait->task->state == TASK_UNINTERRUPTIBLE) || (wait->task->state == TASK_STOPPED)) {
-            // Set the wake-up mode for the task.
-            wait->task->state = mode;
-
             // Signal that the task has been woken up.
             pr_debug("Space available, waking up writer %d.\n", wait->task->pid);
             return 1;

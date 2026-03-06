@@ -27,13 +27,6 @@
 /// SLAB caches for signal bits.
 static kmem_cache_t *sigqueue_cachep;
 
-/// Contains all stopped process waiting for a continue signal
-static wait_queue_head_t stopped_queue = {
-    .name      = "stopped_queue",
-    .lock      = SPINLOCK_INIT,
-    .task_list = LIST_HEAD_INIT(stopped_queue.task_list),
-};
-
 /// @brief The list of signal names.
 static const char *sys_siglist[] = {
     "HUP",
@@ -433,37 +426,6 @@ static void __rm_from_queue(sigset_t *mask, sigpending_t *q)
     }
 }
 
-/// @brief Wakes up a task that is waiting for a signal.
-/// @param entry the entry to wake up.
-/// @param mode the mode to set.
-/// @param sync the sync flag.
-/// @return 1 on success, 0 on failure.
-int stop_wake_function(wait_queue_entry_t *entry, unsigned mode, int sync)
-{
-    // Validate the input.
-    if (!entry) {
-        pr_err("Variable entry is NULL.\n");
-        return 0;
-    }
-    if (!entry->task) {
-        pr_err("Variable entry->task is NULL.\n");
-        return 0;
-    }
-    // Only wake up tasks in TASK_STOPPED state.
-    if (entry->task->state == TASK_STOPPED) {
-        // Set the task state to the specified mode.
-        entry->task->state = mode;
-
-        // Optionally handle sync-specific operations here if needed.
-        // For now, sync is unused.
-
-        return 1;
-    }
-
-    // Task is not in a wakeable state.
-    return 0;
-}
-
 /// @brief We do not consider group stopping because for now we don't have thread groups.
 /// @param current the current process.
 /// @param f the stack frame.
@@ -479,13 +441,11 @@ static void __do_signal_stop(struct task_struct *current, struct pt_regs *f, int
         }
     }
 
-    // The state is now TASK_UNINTERRUPTABLE
-    wait_queue_entry_t *entry = sleep_on(&stopped_queue);
-    entry->task->state        = TASK_STOPPED;
-    entry->task->exit_code    = signr;
-    entry->func               = stop_wake_function;
+    // Mark task as stopped (stays on runqueue, scheduler will skip it).
+    current->state     = TASK_STOPPED;
+    current->exit_code = signr;
 
-    // Call the scheduler.
+    // Call the scheduler to pick next runnable task.
     scheduler_run(f);
 }
 
@@ -645,8 +605,6 @@ int signals_init(void)
         pr_emerg("Failed to allocate cache for signals.\n");
         return 0;
     }
-    // Initialize wait queue.
-    wait_queue_head_init(&stopped_queue);
     return 1;
 }
 
@@ -684,24 +642,11 @@ void handle_stop_signal(int sig, siginfo_t *info, struct task_struct *p)
 
         __rm_from_queue(&mask, &p->pending);
 
-        list_for_each_safe_decl(it, store, &stopped_queue.task_list)
-        {
-            wait_queue_entry_t *entry = list_entry(it, wait_queue_entry_t, task_list);
-
-            // Select only the waiting entry for the target task pid.
-            if (entry->task->pid == p->pid) {
-                pr_debug("SIGCONT: waking up stopped process %d\n", p->pid);
-
-                // Remove from the stopped queue (this subsystem owns the entry).
-                remove_wait_queue(&stopped_queue, entry);
-
-                // Call centralized scheduler function to handle state and enqueue.
-                wake_up_process(entry->task);
-
-                // Clean up the wait queue entry.
-                wait_queue_entry_dealloc(entry);
-                break;
-            }
+        // If process is stopped, transition it back to running.
+        // Stopped tasks stay on runqueue but scheduler skips them.
+        if (p->state == TASK_STOPPED) {
+            pr_debug("SIGCONT: resuming stopped process %d\n", p->pid);
+            p->state = TASK_RUNNING;
         }
     }
 }
