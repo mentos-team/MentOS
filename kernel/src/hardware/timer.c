@@ -684,6 +684,10 @@ int sys_nanosleep(const struct timespec *req, struct timespec *rem)
     // Get the current task.
     task_struct *current = scheduler_get_current_process();
     assert(current && "No current process in sys_nanosleep");
+    // Prevent a race between entering sleep state and arming the wake timer.
+    // If a timer interrupt preempts in that window, the task can become
+    // TASK_UNINTERRUPTIBLE without a wake source and block the system.
+    uint8_t irqs = irq_disable();
     // Create a dinamic timer to wake up the process after some time
     struct timer_list *sleep_timer = __timer_list_alloc();
     // First, we save the remaining time. Then, we remove the current process
@@ -701,6 +705,8 @@ int sys_nanosleep(const struct timespec *req, struct timespec *rem)
     current->sleep_timer           = sleep_timer;
     // Add the timer.
     add_timer(sleep_timer);
+    // Sleep state + wait queue entry + timer arm are now atomically visible.
+    irq_enable(irqs);
     return 0;
 }
 
