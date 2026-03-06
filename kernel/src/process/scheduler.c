@@ -4,10 +4,10 @@
 /// See LICENSE.md for details.
 
 // Setup the logging for this file (do this before any other include).
-#include "sys/kernel_levels.h"          // Include kernel log levels.
-#define __DEBUG_HEADER__ "[SCHED ]"     ///< Change header.
-#define __DEBUG_LEVEL__  LOGLEVEL_DEBUG ///< Set log level.
-#include "io/debug.h"                   // Include debugging functions.
+#include "sys/kernel_levels.h"           // Include kernel log levels.
+#define __DEBUG_HEADER__ "[SCHED ]"      ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
+#include "io/debug.h"                    // Include debugging functions.
 
 #include "assert.h"
 #include "descriptor_tables/tss.h"
@@ -696,8 +696,15 @@ pid_t sys_waitpid(pid_t pid, int *status, int options)
         pid_manager_mark_free(child->pid); // Free the PID.
         vfs_destroy_task(child);           // Finalize VFS structures.
         list_head_remove(&child->sibling); // Remove from parent's child list.
-        scheduler_dequeue_task(child);     // Remove from the scheduler.
-        kmem_cache_free(child);            // Free the `task_struct`.
+
+        // Zombie tasks are typically dequeued in scheduler_run() when they
+        // become current. During waitpid() reap they may already be out of
+        // the runqueue, so only dequeue if still linked.
+        if (!list_head_empty(&child->run_list)) {
+            scheduler_dequeue_task(child);
+        }
+
+        kmem_cache_free(child); // Free the `task_struct`.
 
         pr_debug("Process %d (%s) CLEANED UP process %d.\n", runqueue.curr->pid, runqueue.curr->name, child_pid);
 
