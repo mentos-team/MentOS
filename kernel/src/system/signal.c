@@ -210,6 +210,14 @@ static int __send_signal(int sig, siginfo_t *info, struct task_struct *t)
         }
     }
 
+    // SIGKILL cannot be caught or ignored, so stopped tasks must be woken
+    // to process it. Note that SIGCONT already wakes stopped tasks via
+    // handle_stop_signal() which is called before __send_signal().
+    if ((sig == SIGKILL) && (t->state == TASK_STOPPED)) {
+        pr_debug("SIGKILL: waking stopped process %d (%s) so it can be killed\n", t->pid, t->name);
+        t->state = TASK_RUNNING;
+    }
+
     __unlock_task_sighand(t);
     return 0;
 }
