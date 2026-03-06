@@ -572,6 +572,12 @@ static void pipe_wake_up_tasks(wait_queue_head_t *wait_queue, const char *debug_
             // Task is ready, remove from the wait queue.
             remove_wait_queue(wait_queue, wait_queue_entry);
 
+            // Clear wait queue tracking and re-enqueue task if needed.
+            wait_queue_entry->task->waiting_on = NULL;
+            if (list_head_empty(&wait_queue_entry->task->run_list)) {
+                scheduler_enqueue_task(wait_queue_entry->task);
+            }
+
             // Log and free the memory associated with the wait entry.
             pr_debug("%s: Process %d woken up.\n", debug_msg, wait_queue_entry->task->pid);
             wait_queue_entry_dealloc(wait_queue_entry);
