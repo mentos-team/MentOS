@@ -4,10 +4,10 @@
 /// See LICENSE.md for details.
 
 // Setup the logging for this file (do this before any other include).
-#include "sys/kernel_levels.h"           // Include kernel log levels.
-#define __DEBUG_HEADER__ "[WAIT  ]"      ///< Change header.
-#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
-#include "io/debug.h"                    // Include debugging functions.
+#include "sys/kernel_levels.h"          // Include kernel log levels.
+#define __DEBUG_HEADER__ "[WAIT  ]"     ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_DEBUG ///< Set log level.
+#include "io/debug.h"                   // Include debugging functions.
 
 #include "process/wait.h"
 
@@ -126,21 +126,24 @@ void wake_up_all(wait_queue_head_t *head)
         return;
     }
 
-    // iterate through the queue and invoke each wake function
+    // Iterate through the queue and wake each task.
+    // Each subsystem (pipes, signals, timers) owns its wait queue entries.
+    // This function: removes entries, calls wake_up_process() to handle scheduling.
     list_for_each_safe_decl(it, store, &head->task_list)
     {
         wait_queue_entry_t *entry = list_entry(it, wait_queue_entry_t, task_list);
+
+        // Check if this task should be woken (via wake function).
         if (entry->func(entry, TASK_RUNNING, 0) || entry->task->state == TASK_RUNNING) {
-            // Debug on the output.
             pr_debug("Process %d (%s) WOKEN UP from %s\n", entry->task->pid, entry->task->name, head->name);
-            // Remove the entry from the wait queue and re-enqueue the task if it's not already running.
+
+            // Remove the entry from the wait queue.
             remove_wait_queue(head, entry);
-            // Clear the wait queue tracking field when removing from queue
-            entry->task->waiting_on = NULL;
-            /* only enqueue if not already on runqueue */
-            if (list_head_empty(&entry->task->run_list)) {
-                scheduler_enqueue_task(entry->task);
-            }
+
+            // Call centralized scheduler function to handle state and enqueue.
+            wake_up_process(entry->task);
+
+            // Clean up the entry.
             wait_queue_entry_dealloc(entry);
         }
     }
@@ -157,24 +160,26 @@ int wake_up_process_on_queue(wait_queue_head_t *head, struct task_struct *task)
         return 0;
     }
 
-    // Search for the specific task in the wait queue
+    // Search for the specific task in the wait queue.
     list_for_each_safe_decl(it, store, &head->task_list)
     {
         wait_queue_entry_t *entry = list_entry(it, wait_queue_entry_t, task_list);
-        // Check if this entry corresponds to our target task
+
+        // Check if this entry corresponds to our target task.
         if (entry->task == task) {
-            // Try to wake up the task using its wake function
+            // Try to wake up the task using its wake function.
             if (entry->func(entry, TASK_RUNNING, 0) || entry->task->state == TASK_RUNNING) {
                 pr_debug("Process %d (%s) WOKEN UP from %s\n", entry->task->pid, entry->task->name, head->name);
-                // Remove the entry from the wait queue
+
+                // Remove the entry from the wait queue.
                 remove_wait_queue(head, entry);
-                // Clear the wait queue tracking field
-                entry->task->waiting_on = NULL;
-                // Re-enqueue the task if it's not already on the runqueue
-                if (list_head_empty(&entry->task->run_list)) {
-                    scheduler_enqueue_task(entry->task);
-                }
+
+                // Call centralized scheduler function to handle state and enqueue.
+                wake_up_process(entry->task);
+
+                // Clean up the entry.
                 wait_queue_entry_dealloc(entry);
+
                 return 1; // Successfully woken up
             }
         }
@@ -245,18 +250,18 @@ wait_queue_entry_t *sleep_on(wait_queue_head_t *head)
         return NULL;
     }
 
+    // We want to avoid a race where an interrupt arrives between setting the task state to TASK_UNINTERRUPTIBLE and the
+    // caller adding the entry to the queue.  If the wakeup occurs in that window the notification is lost and the task
+    // could sleep forever.  The simple way to prevent this is to disable interrupts while changing the state and
+    // inserting the entry; IRQs are restored before returning so normal operation resumes.
+    uint8_t irqs = irq_disable();
+
     // Retrieve the current process/task.
     task_struct *sleeping_task = scheduler_get_current_process();
     if (!sleeping_task) {
         pr_err("Failed to retrieve the current process.\n");
         return NULL;
     }
-
-    // We want to avoid a race where an interrupt arrives between setting the task state to TASK_UNINTERRUPTIBLE and the
-    // caller adding the entry to the queue.  If the wakeup occurs in that window the notification is lost and the task
-    // could sleep forever.  The simple way to prevent this is to disable interrupts while changing the state and
-    // inserting the entry; IRQs are restored before returning so normal operation resumes.
-    uint8_t irqs = irq_disable();
 
     wait_queue_entry_t *entry = wait_queue_entry_alloc();
     if (!entry) {
@@ -280,10 +285,10 @@ wait_queue_entry_t *sleep_on(wait_queue_head_t *head)
     // Add the wait queue entry to the specified wait queue.
     add_wait_queue(head, entry);
 
-    /* restore interrupts before returning */
-    irq_enable(irqs);
-
     pr_debug("Process %d (%s) SLEEPS ON %s (entry %p)\n", sleeping_task->pid, sleeping_task->name, head->name, entry);
+
+    // Restore interrupts before returning.
+    irq_enable(irqs);
 
     return entry;
 }

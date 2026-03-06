@@ -569,17 +569,16 @@ static void pipe_wake_up_tasks(wait_queue_head_t *wait_queue, const char *debug_
 
         // Run the wakeup test function for the waiting task.
         if (wait_queue_entry->func(wait_queue_entry, TASK_RUNNING, 0)) {
-            // Task is ready, remove from the wait queue.
+            // Task is ready to be woken up.
+            pr_debug("%s: waking up process %d\n", debug_msg, wait_queue_entry->task->pid);
+            
+            // Remove from the pipe's wait queue (this subsystem owns the entry).
             remove_wait_queue(wait_queue, wait_queue_entry);
-
-            // Clear wait queue tracking and re-enqueue task if needed.
-            wait_queue_entry->task->waiting_on = NULL;
-            if (list_head_empty(&wait_queue_entry->task->run_list)) {
-                scheduler_enqueue_task(wait_queue_entry->task);
-            }
-
-            // Log and free the memory associated with the wait entry.
-            pr_debug("%s: Process %d woken up.\n", debug_msg, wait_queue_entry->task->pid);
+            
+            // Call centralized scheduler function to handle state and enqueue.
+            wake_up_process(wait_queue_entry->task);
+            
+            // Clean up the wait queue entry.
             wait_queue_entry_dealloc(wait_queue_entry);
         }
     }

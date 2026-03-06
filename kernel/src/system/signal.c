@@ -4,15 +4,16 @@
 /// See LICENSE.md for details.
 
 // Setup the logging for this file (do this before any other include).
-#include "sys/kernel_levels.h"           // Include kernel log levels.
-#define __DEBUG_HEADER__ "[SIGNAL]"      ///< Change header.
-#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
-#include "io/debug.h"                    // Include debugging functions.
+#include "sys/kernel_levels.h"          // Include kernel log levels.
+#define __DEBUG_HEADER__ "[SIGNAL]"     ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_DEBUG ///< Set log level.
+#include "io/debug.h"                   // Include debugging functions.
 
 #include "system/signal.h"
 
 #include "assert.h"
 #include "errno.h"
+#include "hardware/timer.h"
 #include "klib/irqflags.h"
 #include "klib/stack_helper.h"
 #include "process/process.h"
@@ -687,18 +688,18 @@ void handle_stop_signal(int sig, siginfo_t *info, struct task_struct *p)
         {
             wait_queue_entry_t *entry = list_entry(it, wait_queue_entry_t, task_list);
 
-            // Select only the waiting entry for the timer task pid.
+            // Select only the waiting entry for the target task pid.
             if (entry->task->pid == p->pid) {
-                // Executed entry's wakeup test function
-                if (entry->func(entry, TASK_RUNNING, 0)) {
-                    // Removes entry from list and memory
-                    remove_wait_queue(&stopped_queue, entry);
-                    // Free its memory.
-                    wait_queue_entry_dealloc(entry);
-                    pr_debug("Restored process (%d) from stop.\n", p->pid);
-                } else {
-                    pr_err("Failed to restore process (%d) from stop.\n", p->pid);
-                }
+                pr_debug("SIGCONT: waking up stopped process %d\n", p->pid);
+
+                // Remove from the stopped queue (this subsystem owns the entry).
+                remove_wait_queue(&stopped_queue, entry);
+
+                // Call centralized scheduler function to handle state and enqueue.
+                wake_up_process(entry->task);
+
+                // Clean up the wait queue entry.
+                wait_queue_entry_dealloc(entry);
                 break;
             }
         }
@@ -769,52 +770,6 @@ int sys_kill(pid_t pid, int sig)
     info.si_status          = 0;
     info.si_band            = 0;
     int ret                 = __send_sig_info(sig, &info, process);
-
-    // If the target process is sleeping on a wait queue, remove it from the
-    // queue and re-enqueue it to the runqueue so the scheduler will run it
-    // and handle the signal.
-    if ((process->state == TASK_UNINTERRUPTIBLE || process->state == TASK_INTERRUPTIBLE) &&
-        process->waiting_on != NULL) {
-        // The task is sleeping on a wait queue. We need to find and remove
-        // the entry from the wait queue, then move it to the runqueue.
-        wait_queue_head_t *wait_queue = process->waiting_on;
-        wait_queue_entry_t *entry     = NULL;
-
-        // Acquire the wait queue lock and search for the entry.
-        spinlock_lock(&wait_queue->lock);
-        list_for_each_decl (it, &wait_queue->task_list) {
-            wait_queue_entry_t *candidate = list_entry(it, wait_queue_entry_t, task_list);
-            if (candidate->task == process) {
-                entry = candidate;
-                break;
-            }
-        }
-
-        // If we found the entry, remove it from the wait queue.
-        if (entry) {
-            list_head_remove(&entry->task_list);
-            process->waiting_on = NULL;
-            spinlock_unlock(&wait_queue->lock);
-
-            // Now re-enqueue the task to the runqueue if not already queued.
-            process->state = TASK_RUNNING;
-            if (list_head_empty(&process->run_list)) {
-                scheduler_enqueue_task(process);
-            }
-            wait_queue_entry_dealloc(entry);
-            pr_debug("sys_kill: removed task %d from wait queue %p and re-enqueued\n", process->pid, wait_queue);
-        } else {
-            spinlock_unlock(&wait_queue->lock);
-            pr_warning("sys_kill: task %d claims to sleep on wait queue %p but not found\n", process->pid, wait_queue);
-        }
-    } else if (process->state == TASK_UNINTERRUPTIBLE || process->state == TASK_INTERRUPTIBLE) {
-        // Task is sleeping but not on a wait queue (shouldn't happen).
-        if (list_head_empty(&process->run_list)) {
-            process->state = TASK_RUNNING;
-            scheduler_enqueue_task(process);
-            pr_debug("sys_kill: re-enqueued sleeping task %d (not on wait queue)\n", process->pid);
-        }
-    }
 
     return ret;
 }

@@ -4,10 +4,10 @@
 /// See LICENSE.md for details.
 
 // Setup the logging for this file (do this before any other include).
-#include "sys/kernel_levels.h"           // Include kernel log levels.
-#define __DEBUG_HEADER__ "[SCHED ]"      ///< Change header.
-#define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
-#include "io/debug.h"                    // Include debugging functions.
+#include "sys/kernel_levels.h"          // Include kernel log levels.
+#define __DEBUG_HEADER__ "[SCHED ]"     ///< Change header.
+#define __DEBUG_LEVEL__  LOGLEVEL_DEBUG ///< Set log level.
+#include "io/debug.h"                   // Include debugging functions.
 
 #include "assert.h"
 #include "descriptor_tables/tss.h"
@@ -150,6 +150,50 @@ void scheduler_dequeue_task(task_struct *process)
 #endif
 }
 
+int wake_up_process(task_struct *task)
+{
+    /// Handles waking up a task that was blocked or stopped.
+    /// This is the single centralized point where a task transitions
+    /// to TASK_RUNNING and gets enqueued to the runqueue.
+    ///
+    /// Key design: This function does NOT search wait queues - it only
+    /// manages task state and runqueue placement. The subsystem that put
+    /// the task on a wait queue (pipes, signals, timers) is responsible for
+    /// removing it from that queue and then calling this function.
+    ///
+    /// With boundary-based context switching (no in-kernel preemption),
+    /// we don't need to do immediate scheduling - the next interrupt/exception
+    /// boundary will call scheduler_run() to pick the next task.
+    ///
+    /// @param task The task to wake up.
+    /// @return 0 on success, -1 if task was already runnable.
+
+    if (!task) {
+        pr_err("wake_up_process: task is NULL\n");
+        return -1;
+    }
+
+    // If already running, nothing to do.
+    if (task->state == TASK_RUNNING) {
+        pr_debug("wake_up_process: task %d is already TASK_RUNNING\n", task->pid);
+        return -1;
+    }
+
+    // Set the task to runnable state.
+    task->state = TASK_RUNNING;
+
+    // Clear wait queue tracking since we're waking up.
+    task->waiting_on = NULL;
+
+    // If not on the runqueue, enqueue it.
+    if (list_head_empty(&task->run_list)) {
+        scheduler_enqueue_task(task);
+        pr_debug("wake_up_process: enqueued task %d to runqueue\n", task->pid);
+    }
+
+    return 0;
+}
+
 void scheduler_run(pt_regs_t *f)
 {
     // Check if there is a running process.
@@ -241,7 +285,20 @@ void scheduler_run(pt_regs_t *f)
             scheduler_restore_context(next, f);
         }
     } else {
-        pr_warning("SCHEDULER_RUN: Signal handler requested context switch, but signal handling is not yet implemented. Ignoring.\n");
+        // Signal handling may have changed task state (e.g., stop/exit).
+        // If current is no longer runnable or queued, pick another task now.
+        if ((runqueue.curr->state != TASK_RUNNING) || list_head_empty(&runqueue.curr->run_list)) {
+            next = scheduler_pick_next_task(&runqueue);
+            while (!next) {
+                sti();
+                __asm__ __volatile__("hlt");
+                cli();
+                next = scheduler_pick_next_task(&runqueue);
+            }
+            if (next != runqueue.curr) {
+                scheduler_restore_context(next, f);
+            }
+        }
     }
     //==========================================================================
 }

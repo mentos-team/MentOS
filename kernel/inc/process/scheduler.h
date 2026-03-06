@@ -69,6 +69,17 @@ void scheduler_enqueue_task(task_struct *process);
 /// @param process Process that has to be activated.
 void scheduler_dequeue_task(task_struct *process);
 
+/// @brief Wake up a sleeping/stopped task and make it runnable.
+/// @details Handles all state transitions, queue management, and cleanup atomically:
+///          - Transitions task to TASK_RUNNING state
+///          - Removes task from any wait queue it's sleeping on
+///          - Cancels any active sleep timer
+///          - Enqueues task to scheduler runqueue
+///          - Clears wait queue tracking fields
+/// @param task The task to wake up
+/// @return 0 on success, negative on error
+int wake_up_process(task_struct *task);
+
 /// @brief The RR implementation of the scheduler.
 /// @param f The context of the process.
 void scheduler_run(pt_regs_t *f);

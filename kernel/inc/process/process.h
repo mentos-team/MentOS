@@ -139,6 +139,8 @@ typedef struct task_struct {
 
     /// Timer for alarm syscall.
     struct timer_list *real_timer;
+    /// Timer for nanosleep syscall (cancelled on signal delivery).
+    struct timer_list *sleep_timer;
 
     /// Next value for the real timer (ITIMER_REAL).
     unsigned long it_real_incr;
