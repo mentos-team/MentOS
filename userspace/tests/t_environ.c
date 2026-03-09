@@ -6,10 +6,12 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <strerror.h>
 #include <string.h>
+#include <syslog.h>
 #include <unistd.h>
 
 int main(int argc, char *argv[])
@@ -20,44 +22,44 @@ int main(int argc, char *argv[])
 
     // Set the environment variable
     if (setenv(env_var, initial_value, 1) != 0) {
-        perror("setenv failed");
+        syslog(LOG_ERR, "[t_environ] setenv failed: %s", strerror(errno));
         return EXIT_FAILURE;
     }
 
     // Retrieve the environment variable
     const char *value = getenv(env_var);
     if (!value) {
-        fprintf(stderr, "getenv failed: Environment variable %s not found.\n", env_var);
+        syslog(LOG_ERR, "[t_environ] getenv failed: Environment variable %s not found.\n", env_var);
         return EXIT_FAILURE;
     }
 
     // Verify the retrieved value matches the set value
     if (strcmp(value, initial_value) != 0) {
-        fprintf(stderr, "Mismatch: Expected '%s', but got '%s'.\n", initial_value, value);
+        syslog(LOG_ERR, "[t_environ] Mismatch: Expected '%s', but got '%s'.\n", initial_value, value);
         return EXIT_FAILURE;
     }
 
     // Update the environment variable
     if (setenv(env_var, updated_value, 1) != 0) {
-        perror("setenv failed (update)");
+        syslog(LOG_ERR, "[t_environ] setenv failed (update): %s", strerror(errno));
         return EXIT_FAILURE;
     }
 
     // Retrieve the updated environment variable
     value = getenv(env_var);
     if (!value) {
-        fprintf(stderr, "getenv failed: Environment variable %s not found after update.\n", env_var);
+        syslog(LOG_ERR, "[t_environ] getenv failed: Environment variable %s not found after update.\n", env_var);
         return EXIT_FAILURE;
     }
 
     // Verify the retrieved value matches the updated value
     if (strcmp(value, updated_value) != 0) {
-        fprintf(stderr, "Mismatch after update: Expected '%s', but got '%s'.\n", updated_value, value);
+        syslog(LOG_ERR, "[t_environ] Mismatch after update: Expected '%s', but got '%s'.\n", updated_value, value);
         return EXIT_FAILURE;
     }
 
     // Print success message
-    printf("Environment variable %s tested successfully.\n", env_var);
+    syslog(LOG_INFO, "[t_environ] Environment variable %s tested successfully.\n", env_var);
 
     return EXIT_SUCCESS;
 }

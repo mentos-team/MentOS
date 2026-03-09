@@ -8,11 +8,13 @@
 /// See LICENSE.md for details.
 
 #include <err.h>
+#include <errno.h>
 #include <grp.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <strerror.h>
 #include <string.h>
+#include <syslog.h>
 #include <unistd.h>
 
 /// @brief Test the getgrnam function.
@@ -22,7 +24,7 @@ static void __test_getgrnam(void)
 {
     // Test that getgrnam returns NULL for a non-existent group name.
     if (getgrnam("r") != NULL) {
-        errx(EXIT_FAILURE, "Group entry for non-existent group \"r\" found");
+        errx(EXIT_FAILURE, "Group entry for non-existent group r found");
     }
 
     // Test that getgrnam returns a valid entry for the "root" group.

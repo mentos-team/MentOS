@@ -4,12 +4,15 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <strerror.h>
 #include <sys/ipc.h>
 #include <sys/sem.h>
 #include <sys/shm.h>
 #include <sys/wait.h>
+#include <syslog.h>
 #include <unistd.h>
 
 /// Define the size of shared memory to hold two integers.
@@ -24,10 +27,10 @@ int main(void)
     // Create shared memory segment with IPC_PRIVATE key and specified memory size.
     shmid = shmget(IPC_PRIVATE, MEM_SIZE, IPC_CREAT | 0600);
     if (shmid == -1) {
-        perror("shmget");
+        syslog(LOG_ERR, "[t_shmget] shmget: %s", strerror(errno));
         return EXIT_FAILURE;
     }
-    printf("shmid = %d;\n", shmid);
+    syslog(LOG_INFO, "[t_shmget] shmid = %d;\n", shmid);
 
     // Create a child.
     cpid = fork();
@@ -35,10 +38,10 @@ int main(void)
         // Child attaches the shared memory.
         array = (int *)shmat(shmid, NULL, 0);
         if (array == NULL) {
-            perror("shmat");
+            syslog(LOG_ERR, "[t_shmget] shmat: %s", strerror(errno));
             return EXIT_FAILURE;
         }
-        printf("C: %p\n", array);
+        syslog(LOG_INFO, "[t_shmget] C: %p\n", array);
         array[0] = 1;
         return 0;
     }
@@ -46,7 +49,7 @@ int main(void)
     // Father attaches the shared memory.
     array = (int *)shmat(shmid, NULL, 0);
     if (array == NULL) {
-        perror("shmat");
+        syslog(LOG_ERR, "[t_shmget] shmat: %s", strerror(errno));
         return EXIT_FAILURE;
     }
 
@@ -54,21 +57,21 @@ int main(void)
     while (wait(NULL) != -1) {
     }
 
-    printf("F: %p\n", array);
+    syslog(LOG_INFO, "[t_shmget] F: %p\n", array);
     array[1] = 2;
 
-    printf("array[%d] : %d\n", 0, array[0]);
-    printf("array[%d] : %d\n", 1, array[1]);
+    syslog(LOG_INFO, "[t_shmget] array[%d] : %d\n", 0, array[0]);
+    syslog(LOG_INFO, "[t_shmget] array[%d] : %d\n", 1, array[1]);
 
     // Detatch the shared memory.
     if (shmdt(array) < 0) {
-        perror("shmdt");
+        syslog(LOG_ERR, "[t_shmget] shmdt: %s", strerror(errno));
         return EXIT_FAILURE;
     }
 
     // Remove the shared memory.
     if (shmctl(shmid, IPC_RMID, NULL) == -1) {
-        perror("shmctl");
+        syslog(LOG_ERR, "[t_shmget] shmctl: %s", strerror(errno));
         return EXIT_FAILURE;
     }
     return EXIT_SUCCESS;

@@ -7,10 +7,12 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
+#include <errno.h>
 #include <sched.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <strerror.h>
+#include <syslog.h>
 #include <unistd.h>
 
 int main(int argc, char *argv[])
@@ -20,7 +22,7 @@ int main(int argc, char *argv[])
 
     // Get current scheduling parameters.
     if (sched_getparam(cpid, &param) == -1) {
-        fprintf(STDERR_FILENO, "Failed to get scheduling parameters: %s\n", strerror(errno));
+        syslog(LOG_ERR, "[t_periodic1] Failed to get scheduling parameters: %s\n", strerror(errno));
         return EXIT_FAILURE;
     }
 
@@ -32,7 +34,7 @@ int main(int argc, char *argv[])
 
     // Set modified scheduling parameters.
     if (sched_setparam(cpid, &param) == -1) {
-        fprintf(STDERR_FILENO, "Failed to set scheduling parameters: %s\n", strerror(errno));
+        syslog(LOG_ERR, "[t_periodic1] Failed to set scheduling parameters: %s\n", strerror(errno));
         return EXIT_FAILURE;
     }
 
@@ -42,7 +44,7 @@ int main(int argc, char *argv[])
     if (fork() == 0) {
         char *_argv[] = {"/bin/tests/t_periodic2", NULL};
         execv(_argv[0], _argv);
-        fprintf(STDERR_FILENO, "Failed to execute %s: %s\n", _argv[0], strerror(errno));
+        syslog(LOG_ERR, "[t_periodic1] Failed to execute %s: %s\n", _argv[0], strerror(errno));
         return EXIT_FAILURE;
     }
 
@@ -50,7 +52,7 @@ int main(int argc, char *argv[])
     if (fork() == 0) {
         char *_argv[] = {"/bin/tests/t_periodic3", NULL};
         execv(_argv[0], _argv);
-        fprintf(STDERR_FILENO, "Failed to execute %s: %s\n", _argv[0], strerror(errno));
+        syslog(LOG_ERR, "[t_periodic1] Failed to execute %s: %s\n", _argv[0], strerror(errno));
         return EXIT_FAILURE;
     }
 
@@ -59,11 +61,11 @@ int main(int argc, char *argv[])
         if (++counter == 10) {
             counter = 0;
         }
-        printf("[periodic1] counter %d\n", counter);
+        syslog(LOG_INFO, "[t_periodic1] [periodic1] counter %d\n", counter);
 
         // Wait for the next period.
         if (waitperiod() == -1) {
-            fprintf(STDERR_FILENO, "[%s] Error in waitperiod: %s\n", argv[0], strerror(errno));
+            syslog(LOG_ERR, "[t_periodic1] [%s] Error in waitperiod: %s\n", argv[0], strerror(errno));
             break;
         }
     }

@@ -5,12 +5,14 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
+#include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <strerror.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <syslog.h>
 #include <unistd.h>
 
 int main(int argc, char *argv[])
@@ -23,21 +25,21 @@ int main(int argc, char *argv[])
     int fd = creat(filename, 0660);
     if (fd < 0) {
         // Error handling for file creation failure.
-        fprintf(STDERR_FILENO, "creat: %s: %s\n", filename, strerror(errno));
+        syslog(LOG_ERR, "[t_creat] creat: %s: %s\n", filename, strerror(errno));
         exit(EXIT_FAILURE);
     }
 
     // Write the string to the file.
     if (write(fd, content, content_size) != content_size) {
         // Error handling for write failure.
-        fprintf(STDERR_FILENO, "write: %s: %s\n", filename, strerror(errno));
+        syslog(LOG_ERR, "[t_creat] write: %s: %s\n", filename, strerror(errno));
         // Close the file descriptor.
         if (close(fd) < 0) {
-            fprintf(STDERR_FILENO, "close: %s: %s\n", filename, strerror(errno));
+            syslog(LOG_ERR, "[t_creat] close: %s: %s\n", filename, strerror(errno));
         }
         // Remove the file.
         if (unlink(filename) < 0) {
-            fprintf(STDERR_FILENO, "unlink: %s: %s\n", filename, strerror(errno));
+            syslog(LOG_ERR, "[t_creat] unlink: %s: %s\n", filename, strerror(errno));
         }
         exit(EXIT_FAILURE);
     }
@@ -45,10 +47,10 @@ int main(int argc, char *argv[])
     // Close the file descriptor.
     if (close(fd) < 0) {
         // Error handling for close failure.
-        fprintf(STDERR_FILENO, "close: %s: %s\n", filename, strerror(errno));
+        syslog(LOG_ERR, "[t_creat] close: %s: %s\n", filename, strerror(errno));
         // Remove the file.
         if (unlink(filename) < 0) {
-            fprintf(STDERR_FILENO, "unlink: %s: %s\n", filename, strerror(errno));
+            syslog(LOG_ERR, "[t_creat] unlink: %s: %s\n", filename, strerror(errno));
         }
         exit(EXIT_FAILURE);
     }
@@ -58,20 +60,20 @@ int main(int argc, char *argv[])
     // Get the status of the file filename.
     if (stat(filename, &st) < 0) {
         // Error handling for stat failure.
-        fprintf(STDERR_FILENO, "stat: %s: %s\n", filename, strerror(errno));
+        syslog(LOG_ERR, "[t_creat] stat: %s: %s\n", filename, strerror(errno));
         // Remove the file.
         if (unlink(filename) < 0) {
-            fprintf(STDERR_FILENO, "unlink: %s: %s\n", filename, strerror(errno));
+            syslog(LOG_ERR, "[t_creat] unlink: %s: %s\n", filename, strerror(errno));
         }
         exit(EXIT_FAILURE);
     }
 
     // Check if the file size is correct.
     if (st.st_size != content_size) {
-        fprintf(STDERR_FILENO, "Wrong file size. (expected: %ld, is: %ld)\n", content_size, st.st_size);
+        syslog(LOG_ERR, "[t_creat] Wrong file size. (expected: %ld, is: %ld)\n", content_size, st.st_size);
         // Remove the file.
         if (unlink(filename) < 0) {
-            fprintf(STDERR_FILENO, "unlink: %s: %s\n", filename, strerror(errno));
+            syslog(LOG_ERR, "[t_creat] unlink: %s: %s\n", filename, strerror(errno));
         }
         exit(EXIT_FAILURE);
     }
@@ -79,7 +81,7 @@ int main(int argc, char *argv[])
     // Remove the file.
     if (unlink(filename) < 0) {
         // Error handling for unlink failure.
-        fprintf(STDERR_FILENO, "unlink: %s: %s\n", filename, strerror(errno));
+        syslog(LOG_ERR, "[t_creat] unlink: %s: %s\n", filename, strerror(errno));
         exit(EXIT_FAILURE);
     }
 

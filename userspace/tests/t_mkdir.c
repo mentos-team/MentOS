@@ -6,12 +6,14 @@
 /// See LICENSE.md for details.
 
 #include <err.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <strerror.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <syslog.h>
 #include <unistd.h>
 
 /// @brief Constructs a full file path by combining a parent directory and a subdirectory name.
@@ -50,11 +52,11 @@ int create_dir(const char *parent_directory, const char *directory_name, mode_t 
 {
     char path[PATH_MAX];
     if (__build_path(parent_directory, directory_name, path, sizeof(path))) {
-        fprintf(stderr, "Error: Path construction failed.\n");
+        syslog(LOG_ERR, "[t_mkdir] Error: Path construction failed.\n");
         return EXIT_FAILURE;
     }
     if (mkdir(path, mode) < 0) {
-        fprintf(stderr, "Failed to create directory %s: %s\n", path, strerror(errno));
+        syslog(LOG_ERR, "[t_mkdir] Failed to create directory %s: %s\n", path, strerror(errno));
         return EXIT_FAILURE;
     }
     return EXIT_SUCCESS;
@@ -68,11 +70,11 @@ int remove_dir(const char *parent_directory, const char *directory_name)
 {
     char path[PATH_MAX];
     if (__build_path(parent_directory, directory_name, path, sizeof(path))) {
-        fprintf(stderr, "Error: Path construction failed.\n");
+        syslog(LOG_ERR, "[t_mkdir] Error: Path construction failed.\n");
         return EXIT_FAILURE;
     }
     if (rmdir(path) < 0) {
-        fprintf(stderr, "Failed to remove directory %s: %s\n", path, strerror(errno));
+        syslog(LOG_ERR, "[t_mkdir] Failed to remove directory %s: %s\n", path, strerror(errno));
         return EXIT_FAILURE;
     }
     return EXIT_SUCCESS;
@@ -86,16 +88,16 @@ int check_dir(const char *parent_directory, const char *directory_name)
 {
     char path[PATH_MAX];
     if (__build_path(parent_directory, directory_name, path, sizeof(path))) {
-        fprintf(stderr, "Error: Path construction failed.\n");
+        syslog(LOG_ERR, "[t_mkdir] Error: Path construction failed.\n");
         return EXIT_FAILURE;
     }
     struct stat buffer;
     if (stat(path, &buffer) < 0) {
-        fprintf(stderr, "Failed to check directory `%s`: %s\n", path, strerror(errno));
+        syslog(LOG_ERR, "[t_mkdir] Failed to check directory `%s`: %s\n", path, strerror(errno));
         return EXIT_FAILURE;
     }
     if (!S_ISDIR(buffer.st_mode)) {
-        fprintf(stderr, "Path `%s` is not a directory.\n", path);
+        syslog(LOG_ERR, "[t_mkdir] Path `%s` is not a directory.\n", path);
         return EXIT_FAILURE;
     }
     return EXIT_SUCCESS;

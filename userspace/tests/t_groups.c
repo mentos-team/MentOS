@@ -8,9 +8,11 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/wait.h>
+#include <syslog.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -22,7 +24,7 @@ int main(int argc, char **argv)
     pid_t sid = getsid(0);
 
     // Print the IDs of the current process.
-    printf("pid: %d, gid: %d, sid: %d\n\n", pid, gid, sid);
+    syslog(LOG_INFO, "[t_groups] pid: %d, gid: %d, sid: %d\n\n", pid, gid, sid);
 
     // Fork 5 child processes.
     for (int i = 0; i < 5; ++i) {
@@ -38,10 +40,7 @@ int main(int argc, char **argv)
             nanosleep(&req, NULL);
 
             // Print the IDs of the child process and its parent.
-            printf(
-                "%d) pid_child: %d, gid_child: %d, ppid_child: %d, sid_child: "
-                "%d\n",
-                i, pid_child, gid_child, ppid_child, sid_child);
+            syslog(LOG_INFO, "[t_groups] %d) pid_child: %d, gid_child: %d, ppid_child: %d, sid_child: %d\n", i, pid_child, gid_child, ppid_child, sid_child);
             exit(EXIT_SUCCESS);
         }
     }

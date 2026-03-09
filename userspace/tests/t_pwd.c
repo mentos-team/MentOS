@@ -7,11 +7,13 @@
 /// See LICENSE.md for details.
 
 #include <err.h>
+#include <errno.h>
 #include <pwd.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <strerror.h>
 #include <string.h>
+#include <syslog.h>
 #include <unistd.h>
 
 /// @brief Test `getpwnam` for valid and invalid user names.
@@ -22,7 +24,7 @@ static void __test_getpwnam(void)
     // Check for a non-existent user
     if (getpwnam("r") != NULL) {
         // If "r" is found, which is unexpected, exit with an error
-        errx(EXIT_FAILURE, "Password entry for non-existent user \"r\" found");
+        errx(EXIT_FAILURE, "Password entry for non-existent user r found");
     }
 
     // Check for the root user, which should always exist
@@ -31,7 +33,7 @@ static void __test_getpwnam(void)
         errx(EXIT_FAILURE, "Password entry for root user not found");
     } else {
         // If the root entry is found, print confirmation for debugging purposes
-        printf("Password entry for root user found.\n");
+        syslog(LOG_INFO, "[t_pwd] Password entry for root user found.\n");
     }
 }
 
@@ -52,7 +54,7 @@ static void __test_getpwuid(void)
         errx(EXIT_FAILURE, "Password entry for UID 0 (root) not found");
     } else {
         // If the UID 0 entry is found, print confirmation for debugging purposes
-        printf("Password entry for UID 0 (root) found.\n");
+        syslog(LOG_INFO, "[t_pwd] Password entry for UID 0 (root) found.\n");
     }
 }
 

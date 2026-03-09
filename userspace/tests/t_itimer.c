@@ -7,12 +7,14 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
+#include <errno.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <strerror.h>
 #include <string.h>
 #include <sys/wait.h>
+#include <syslog.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -46,7 +48,7 @@ int main(void)
 
     // Start the timer
     if (setitimer(ITIMER_REAL, &timer, NULL) == -1) {
-        perror("setitimer");
+        syslog(LOG_ERR, "[t_itimer] setitimer: %s", strerror(errno));
         return EXIT_FAILURE;
     }
 
@@ -62,7 +64,7 @@ int main(void)
             current_time = time(NULL);
 
             // Print the elapsed time since the start
-            printf("Timer event %d fired at %u seconds since start\n", timer_count, current_time - start_time);
+            syslog(LOG_INFO, "[t_itimer] Timer event %d fired at %u seconds since start\n", timer_count, current_time - start_time);
         }
     }
 
@@ -72,11 +74,11 @@ int main(void)
     timer.it_interval.tv_sec  = 0;
     timer.it_interval.tv_usec = 0;
     if (setitimer(ITIMER_REAL, &timer, NULL) == -1) {
-        perror("setitimer (stop)");
+        syslog(LOG_ERR, "[t_itimer] setitimer (stop): %s", strerror(errno));
         return EXIT_FAILURE;
     }
 
-    printf("Test completed: Timer fired %d times\n", timer_count);
+    syslog(LOG_INFO, "[t_itimer] Test completed: Timer fired %d times\n", timer_count);
 
     return EXIT_SUCCESS;
 }

@@ -3,9 +3,12 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <strerror.h>
 #include <string.h>
+#include <syslog.h>
 #include <unistd.h>
 
 int main(int argc, char *argv[])
@@ -19,19 +22,16 @@ int main(int argc, char *argv[])
         if (getcwd(cwd, sizeof(cwd)) != NULL) {
             // Compare cwd and the expected directory.
             if (strcmp(cwd, directory) == 0) {
-                printf("Successfully changed to the directory.\n");
+                syslog(LOG_INFO, "[t_chdir] Successfully changed to the directory.\n");
                 return EXIT_SUCCESS;
             }
-            printf(
-                "Directory change failed or directory differs: expected %s "
-                "but got %s\n",
-                directory, cwd);
+            syslog(LOG_INFO, "[t_chdir] Directory change failed or directory differs: expected %s but got %s\n", directory, cwd);
 
         } else {
-            perror("getcwd failed");
+            syslog(LOG_ERR, "[t_chdir] getcwd failed: %s", strerror(errno));
         }
     } else {
-        perror("chdir failed");
+        syslog(LOG_ERR, "[t_chdir] chdir failed: %s", strerror(errno));
     }
     return EXIT_FAILURE;
 }

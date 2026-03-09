@@ -9,11 +9,13 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
+#include <errno.h>
 #include <sched.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <strerror.h>
 #include <string.h>
+#include <syslog.h>
 #include <unistd.h>
 
 int main(int argc, char *argv[])
@@ -24,7 +26,7 @@ int main(int argc, char *argv[])
     // Get the current scheduling parameters for this process
     if (sched_getparam(cpid, &param) == -1) {
         // If fetching parameters fails, print an error message and exit
-        fprintf(stderr, "[%s] Error in sched_getparam: %s\n", argv[0], strerror(errno));
+        syslog(LOG_ERR, "[t_periodic3] [%s] Error in sched_getparam: %s\n", argv[0], strerror(errno));
         return EXIT_FAILURE;
     }
 
@@ -36,7 +38,7 @@ int main(int argc, char *argv[])
     // Set the new scheduling parameters for this process
     if (sched_setparam(cpid, &param) == -1) {
         // If setting parameters fails, print an error message and exit
-        fprintf(stderr, "[%s] Error in sched_setparam: %s\n", argv[0], strerror(errno));
+        syslog(LOG_ERR, "[t_periodic3] [%s] Error in sched_setparam: %s\n", argv[0], strerror(errno));
         return EXIT_FAILURE;
     }
 
@@ -50,12 +52,12 @@ int main(int argc, char *argv[])
         }
 
         // Print the current counter value
-        printf("[periodic3] counter: %d\n", counter);
+        syslog(LOG_INFO, "[t_periodic3] [periodic3] counter: %d\n", counter);
 
         // Wait for the next period and check for errors
         if (waitperiod() == -1) {
             // If waitperiod fails, print an error message and break out of the loop
-            fprintf(stderr, "[%s] Error in waitperiod: %s\n", argv[0], strerror(errno));
+            syslog(LOG_ERR, "[t_periodic3] [%s] Error in waitperiod: %s\n", argv[0], strerror(errno));
             break;
         }
     }

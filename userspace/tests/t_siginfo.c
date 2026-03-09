@@ -4,12 +4,14 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
+#include <errno.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <strerror.h>
 #include <string.h>
 #include <sys/wait.h>
+#include <syslog.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -20,22 +22,22 @@
 /// information about the signal.
 void sig_handler_info(int sig, siginfo_t *siginfo)
 {
-    printf("handler(%d, %p) : Starting handler.\n", sig, siginfo);
+    syslog(LOG_INFO, "[t_siginfo] handler(%d, %p) : Starting handler.\n", sig, siginfo);
 
     // Check if the received signal is SIGFPE.
     if (sig == SIGFPE) {
-        printf("handler(%d, %p) : Correct signal.\n", sig, siginfo);
+        syslog(LOG_INFO, "[t_siginfo] handler(%d, %p) : Correct signal.\n", sig, siginfo);
 
         // Print additional information from the siginfo structure.
-        printf("handler(%d, %p) : Code : %d\n", sig, siginfo, siginfo->si_code);
-        printf("handler(%d, %p) : Exiting\n", sig, siginfo);
+        syslog(LOG_INFO, "[t_siginfo] handler(%d, %p) : Code : %d\n", sig, siginfo, siginfo->si_code);
+        syslog(LOG_INFO, "[t_siginfo] handler(%d, %p) : Exiting\n", sig, siginfo);
 
         // Exit the process after handling the signal.
         exit(EXIT_SUCCESS);
     }
 
     // Handle unexpected signals.
-    printf("handler(%d, %p) : Wrong signal.\n", sig, siginfo);
+    syslog(LOG_INFO, "[t_siginfo] handler(%d, %p) : Wrong signal.\n", sig, siginfo);
     exit(EXIT_FAILURE);
 }
 
@@ -54,11 +56,11 @@ int main(int argc, char *argv[])
     // Attempt to set the signal handler for SIGFPE.
     if (sigaction(SIGFPE, &action, NULL) == -1) {
         // Print error message if sigaction fails.
-        printf("Failed to set signal handler (%s).\n", strerror(errno));
+        syslog(LOG_INFO, "[t_siginfo] Failed to set signal handler (%s).\n", strerror(errno));
         return 1;
     }
 
-    printf("Diving by zero (unrecoverable)...\n");
+    syslog(LOG_INFO, "[t_siginfo] Diving by zero (unrecoverable)...\n");
 
     // Perform a division that will eventually cause a divide-by-zero error to
     // trigger SIGFPE.
@@ -70,7 +72,7 @@ int main(int argc, char *argv[])
     while (1) {
         // Check to prevent division by zero for safety in other environments.
         if (e == 0) {
-            fprintf(stderr, "Attempt to divide by zero.\n");
+            syslog(LOG_ERR, "[t_siginfo] Attempt to divide by zero.\n");
             break;
         }
         d /= e;
@@ -78,7 +80,7 @@ int main(int argc, char *argv[])
     }
 
     // This line will not be reached if SIGFPE is triggered.
-    printf("d: %d, e: %d\n", d, e);
+    syslog(LOG_INFO, "[t_siginfo] d: %d, e: %d\n", d, e);
 
     return EXIT_SUCCESS;
 }

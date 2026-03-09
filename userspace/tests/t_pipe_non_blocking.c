@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/wait.h>
+#include <syslog.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -22,13 +23,13 @@ int main(void)
 
     // Create a pipe.
     if (pipe(fds) == -1) {
-        fprintf(stderr, "Failed to create pipe\n");
+        syslog(LOG_ERR, "[t_pipe_non_blocking] Failed to create pipe\n");
         return 1;
     }
 
     // Set both ends of the pipe to non-blocking mode.
     if (fcntl(fds[0], F_SETFL, O_NONBLOCK) == -1 || fcntl(fds[1], F_SETFL, O_NONBLOCK) == -1) {
-        fprintf(stderr, "Failed to set pipe to non-blocking mode\n");
+        syslog(LOG_ERR, "[t_pipe_non_blocking] Failed to set pipe to non-blocking mode\n");
         close(fds[0]);
         close(fds[1]);
         return 1;
@@ -38,7 +39,7 @@ int main(void)
     pid_t pid = fork();
 
     if (pid == -1) {
-        fprintf(stderr, "Failed to fork process\n");
+        syslog(LOG_ERR, "[t_pipe_non_blocking] Failed to fork process\n");
         close(fds[0]);
         close(fds[1]);
         return 1;
@@ -50,18 +51,18 @@ int main(void)
         // Request to sleep for 100 ms.
         struct timespec req = {0, 100000000};
 
-        printf("Child waiting to read from pipe...\n");
+        syslog(LOG_INFO, "[t_pipe_non_blocking] Child waiting to read from pipe...\n");
         do {
             bytes_read = read(fds[0], read_msg, sizeof(read_msg));
             if (bytes_read > 0) {
-                printf("Child read message: '%s' (%ld bytes)\n", read_msg, bytes_read);
+                syslog(LOG_INFO, "[t_pipe_non_blocking] Child read message: '%s' (%ld bytes)\n", read_msg, bytes_read);
             } else if (bytes_read == -1) {
                 if (errno != EAGAIN) {
-                    fprintf(stderr, "Error occurred during read in child process\n");
+                    syslog(LOG_ERR, "[t_pipe_non_blocking] Error occurred during read in child process\n");
                     error_code = 1;
                     break;
                 }
-                printf("Child has nothing to read...\n");
+                syslog(LOG_INFO, "[t_pipe_non_blocking] Child has nothing to read...\n");
                 nanosleep(&req, NULL);
             }
         } while (bytes_read != 0);
@@ -78,13 +79,13 @@ int main(void)
     // Sleep for 500 ms.
     nanosleep(&req, NULL);
 
-    printf("Parent writing to pipe...\n");
+    syslog(LOG_INFO, "[t_pipe_non_blocking] Parent writing to pipe...\n");
     bytes_written = write(fds[1], write_msg, sizeof(write_msg));
 
     if (bytes_written > 0) {
-        printf("Parent wrote message: '%s' (%ld bytes)\n", write_msg, bytes_written);
+        syslog(LOG_INFO, "[t_pipe_non_blocking] Parent wrote message: '%s' (%ld bytes)\n", write_msg, bytes_written);
     } else if (bytes_written == -1) {
-        fprintf(stderr, "Error occurred during write in parent process\n");
+        syslog(LOG_ERR, "[t_pipe_non_blocking] Error occurred during write in parent process\n");
         error_code = 1;
     }
 
