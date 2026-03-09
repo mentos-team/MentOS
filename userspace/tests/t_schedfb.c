@@ -8,18 +8,19 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <strerror.h>
 #include <sys/wait.h>
+#include <syslog.h>
 #include <unistd.h>
 
 int main(int argc, char *argv[])
 {
     pid_t cpid;
 
-    printf("First test: The child processes will sleep, so they will not be "
-           "scheduled immediately.\n");
+    syslog(LOG_INFO, "[t_schedfb] First test: The child processes will sleep, so they will not be scheduled immediately.\n");
 
     // Fork 10 child processes to run the t_alarm test.
     for (int i = 0; i < 10; ++i) {
@@ -27,7 +28,7 @@ int main(int argc, char *argv[])
         cpid = fork();
         if (cpid == -1) {
             // Fork failed, print the error and exit.
-            fprintf(stderr, "Failed to fork process: %s\n", strerror(errno));
+            syslog(LOG_ERR, "[t_schedfb] Failed to fork process: %s\n", strerror(errno));
             return EXIT_FAILURE;
         }
 
@@ -37,7 +38,7 @@ int main(int argc, char *argv[])
             // execl replaces the current process image with the one specified ("/bin/tests/t_alarm").
             if (execl("/bin/tests/t_alarm", "t_alarm", NULL) == -1) {
                 // If execl fails, print the error and exit the child process.
-                fprintf(stderr, "Failed to exec t_alarm: %s\n", strerror(errno));
+                syslog(LOG_ERR, "[t_schedfb] Failed to exec t_alarm: %s\n", strerror(errno));
                 return EXIT_FAILURE;
             }
             // Child process exits after executing the command.
@@ -52,11 +53,11 @@ int main(int argc, char *argv[])
 
     // If wait returns -1 and errno is not ECHILD, print an error.
     if (errno != ECHILD) {
-        fprintf(stderr, "Error occurred while waiting for child processes: %s\n", strerror(errno));
+        syslog(LOG_ERR, "[t_schedfb] Error occurred while waiting for child processes: %s\n", strerror(errno));
         return EXIT_FAILURE;
     }
 
-    printf("All child processes have completed.\n");
+    syslog(LOG_INFO, "[t_schedfb] All child processes have completed.\n");
 
     return EXIT_SUCCESS;
 }

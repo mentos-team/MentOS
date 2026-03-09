@@ -1,3 +1,9 @@
+/// @file t_syslog.c
+/// @brief Test program for syslog functionality.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
+/// See LICENSE.md for details.
+
+#include <errno.h>
 #include <syslog.h>
 #include <unistd.h>
 
@@ -10,14 +16,14 @@ int main(void)
     setlogmask(LOG_UPTO(LOG_WARNING));
 
     // Log messages at different levels to test filtering
-    syslog(LOG_DEBUG, "This is a debug message and should not appear.\n");
-    syslog(LOG_INFO, "This is an info message and should not appear.\n");
-    syslog(LOG_NOTICE, "This is a notice message and should not appear.\n");
-    syslog(LOG_WARNING, "This is a warning message and should appear.\n");
-    syslog(LOG_ERR, "This is an error message and should appear.\n");
-    syslog(LOG_CRIT, "This is a critical message and should appear.\n");
-    syslog(LOG_ALERT, "This is an alert message and should appear.\n");
-    syslog(LOG_EMERG, "This is an emergency message and should appear.\n");
+    syslog(LOG_DEBUG, "[t_syslog] This is a debug message and should not appear.\n");
+    syslog(LOG_INFO, "[t_syslog] This is an info message and should not appear.\n");
+    syslog(LOG_NOTICE, "[t_syslog] This is a notice message and should not appear.\n");
+    syslog(LOG_WARNING, "[t_syslog] This is a warning message and should appear.\n");
+    syslog(LOG_ERR, "[t_syslog] This is an error message and should appear.\n");
+    syslog(LOG_CRIT, "[t_syslog] This is a critical message and should appear.\n");
+    syslog(LOG_ALERT, "[t_syslog] This is an alert message and should appear.\n");
+    syslog(LOG_EMERG, "[t_syslog] This is an emergency message and should appear.\n");
 
     // Close the syslog connection
     closelog();

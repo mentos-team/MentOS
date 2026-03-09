@@ -5,12 +5,14 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
+#include <errno.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <strerror.h>
 #include <string.h>
 #include <sys/wait.h>
+#include <syslog.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -18,13 +20,13 @@
 /// @param sig Signal number (should be SIGUSR1 or SIGUSR2).
 void sig_handler(int sig)
 {
-    printf("handler(%d) : Starting handler.\n", sig);
+    syslog(LOG_INFO, "[t_sigusr] handler(%d) : Starting handler.\n", sig);
 
     // Static variable to count the number of SIGUSR1 signals received.
     static int counter = 0;
 
     if (sig == SIGUSR1 || sig == SIGUSR2) {
-        printf("handler(%d) : Correct signal. SIGUSER\n", sig);
+        syslog(LOG_INFO, "[t_sigusr] handler(%d) : Correct signal. SIGUSER\n", sig);
         // Increment the counter for received signals.
         counter += 1;
 
@@ -34,11 +36,11 @@ void sig_handler(int sig)
         }
     } else {
         // Handle unexpected signals.
-        printf("handler(%d) : Wrong signal.\n", sig);
+        syslog(LOG_INFO, "[t_sigusr] handler(%d) : Wrong signal.\n", sig);
         exit(EXIT_FAILURE);
     }
 
-    printf("handler(%d) : Ending handler.\n", sig);
+    syslog(LOG_INFO, "[t_sigusr] handler(%d) : Ending handler.\n", sig);
 }
 
 int main(int argc, char *argv[])
@@ -51,19 +53,19 @@ int main(int argc, char *argv[])
 
     // Set the signal handler for SIGUSR1.
     if (sigaction(SIGUSR1, &action, NULL) == -1) {
-        printf("Failed to set signal handler for SIGUSR1 (%s).\n", strerror(errno));
+        syslog(LOG_INFO, "[t_sigusr] Failed to set signal handler for SIGUSR1 (%s).\n", strerror(errno));
         return EXIT_FAILURE;
     }
 
     // Set the signal handler for SIGUSR2.
     if (sigaction(SIGUSR2, &action, NULL) == -1) {
-        printf("Failed to set signal handler for SIGUSR2 (%s).\n", strerror(errno));
+        syslog(LOG_INFO, "[t_sigusr] Failed to set signal handler for SIGUSR2 (%s).\n", strerror(errno));
         return EXIT_FAILURE;
     }
 
     // Send SIGUSR1 signal to the current process.
     if (kill(getpid(), SIGUSR1) == -1) {
-        perror("kill SIGUSR1");
+        syslog(LOG_ERR, "[t_sigusr] kill SIGUSR1: %s", strerror(errno));
         return EXIT_FAILURE;
     }
 
@@ -73,7 +75,7 @@ int main(int argc, char *argv[])
 
     // Send SIGUSR2 signal to the current process.
     if (kill(getpid(), SIGUSR2) == -1) {
-        perror("kill SIGUSR2");
+        syslog(LOG_ERR, "[t_sigusr] kill SIGUSR2: %s", strerror(errno));
         return EXIT_FAILURE;
     }
 

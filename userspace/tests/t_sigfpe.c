@@ -12,31 +12,33 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
+#include <errno.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <strerror.h>
 #include <string.h>
 #include <sys/wait.h>
+#include <syslog.h>
 #include <time.h>
 #include <unistd.h>
 
 /// Signal handler function that catches and handles SIGFPE.
 void sig_handler(int sig)
 {
-    printf("handler(%d) : Starting handler.\n", sig);
+    syslog(LOG_INFO, "[t_sigfpe] handler(%d) : Starting handler.\n", sig);
     if (sig == SIGFPE) {
-        printf("handler(%d) : Correct signal. FPE\n", sig);
-        printf("handler(%d) : Exiting\n", sig);
+        syslog(LOG_INFO, "[t_sigfpe] handler(%d) : Correct signal. FPE\n", sig);
+        syslog(LOG_INFO, "[t_sigfpe] handler(%d) : Exiting\n", sig);
         exit(0);
     } else if (sig == SIGILL) {
-        printf("handler(%d) : Incorrect signal. ILLEGAL INSTRUCTION\n", sig);
-        printf("handler(%d) : Exiting\n", sig);
+        syslog(LOG_INFO, "[t_sigfpe] handler(%d) : Incorrect signal. ILLEGAL INSTRUCTION\n", sig);
+        syslog(LOG_INFO, "[t_sigfpe] handler(%d) : Exiting\n", sig);
         exit(0);
     } else {
-        printf("handler(%d) : Wrong signal.\n", sig);
+        syslog(LOG_INFO, "[t_sigfpe] handler(%d) : Wrong signal.\n", sig);
     }
-    printf("handler(%d) : Ending handler.\n", sig);
+    syslog(LOG_INFO, "[t_sigfpe] handler(%d) : Ending handler.\n", sig);
 }
 
 int main(int argc, char *argv[])
@@ -47,7 +49,7 @@ int main(int argc, char *argv[])
 
     // Set the SIGFPE handler using sigaction.
     if (sigaction(SIGFPE, &action, NULL) == -1) {
-        printf("Failed to set signal handler (%s).\n", strerror(errno));
+        syslog(LOG_INFO, "[t_sigfpe] Failed to set signal handler (%s).\n", strerror(errno));
         return 1;
     }
 
@@ -58,11 +60,11 @@ int main(int argc, char *argv[])
     // TODO: Fix the kernel to raise SIGFPE instead of SIGILL for division by zero, and remove this handler.
     //
     if (sigaction(SIGILL, &action, NULL) == -1) {
-        printf("Failed to set signal handler (%s).\n", strerror(errno));
+        syslog(LOG_INFO, "[t_sigfpe] Failed to set signal handler (%s).\n", strerror(errno));
         return 1;
     }
 
-    printf("Diving by zero (unrecoverable)...\n");
+    syslog(LOG_INFO, "[t_sigfpe] Diving by zero (unrecoverable)...\n");
 
     // Should trigger ALU error, fighting the compiler...
     int d = 1;
@@ -71,7 +73,7 @@ int main(int argc, char *argv[])
     e -= 1;
     d /= e;
     e -= 1;
-    printf("d: %d, e: %d\n", d, e);
+    syslog(LOG_INFO, "[t_sigfpe] d: %d, e: %d\n", d, e);
 
     return EXIT_SUCCESS;
 }

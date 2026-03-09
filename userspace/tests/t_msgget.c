@@ -13,10 +13,12 @@
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <strerror.h>
 #include <string.h>
 #include <sys/ipc.h>
 #include <sys/msg.h>
 #include <sys/stat.h>
+#include <syslog.h>
 #include <unistd.h>
 
 #define MESSAGE_LEN 100
@@ -40,9 +42,9 @@ static inline void __send_message(int msqid, long mtype, message_t *message, con
     strncpy(message->mesg_text, msg, MESSAGE_LEN);
     // Send the message.
     if (msgsnd(msqid, message, sizeof(message->mesg_text), 0) < 0) {
-        perror("Failed to send the message");
+        syslog(LOG_ERR, "[t_msgget] Failed to send the message: %s", strerror(errno));
     } else {
-        printf("[%2d] Message sent (%2ld) `%s`\n", getpid(), message->mesg_type, message->mesg_text);
+        syslog(LOG_INFO, "[t_msgget] [%2d] Message sent (%2ld) `%s`\n", getpid(), message->mesg_type, message->mesg_text);
     }
 }
 
@@ -56,11 +58,9 @@ static inline void __receive_message(int msqid, long mtype, message_t *message)
     memset(message->mesg_text, 0, sizeof(char) * MESSAGE_LEN);
     // Receive the message.
     if (msgrcv(msqid, message, sizeof(message->mesg_text), mtype, 0) < 0) {
-        perror("Failed to receive the message");
+        syslog(LOG_ERR, "[t_msgget] Failed to receive the message: %s", strerror(errno));
     } else {
-        printf(
-            "[%2d] Message received (%2ld) `%s` (Query: %2ld)\n", getpid(), message->mesg_type, message->mesg_text,
-            mtype);
+        syslog(LOG_INFO, "[t_msgget] [%2d] Message received (%2ld) `%s` (Query: %2ld)\n", getpid(), message->mesg_type, message->mesg_text, mtype);
     }
 }
 
@@ -78,19 +78,19 @@ int main(int argc, char *argv[])
     // Generating a key using ftok
     key = ftok("/", 5);
     if (key < 0) {
-        perror("Failed to generate key using ftok");
+        syslog(LOG_ERR, "[t_msgget] Failed to generate key using ftok: %s", strerror(errno));
         return EXIT_FAILURE;
     }
-    printf("Generated key using ftok (key = %d)\n", key);
+    syslog(LOG_INFO, "[t_msgget] Generated key using ftok (key = %d)\n", key);
 
     // ========================================================================
     // Create the first message queue.
     msqid = msgget(key, IPC_CREAT | IPC_EXCL | S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
     if (msqid < 0) {
-        perror("Failed to create message queue");
+        syslog(LOG_ERR, "[t_msgget] Failed to create message queue: %s", strerror(errno));
         return EXIT_FAILURE;
     }
-    printf("Created message queue (id : %d)\n", msqid);
+    syslog(LOG_INFO, "[t_msgget] Created message queue (id : %d)\n", msqid);
 
     // ========================================================================
     // Send the message.
@@ -127,9 +127,9 @@ int main(int argc, char *argv[])
     // Delete the message queue.
     ret = msgctl(msqid, IPC_RMID, NULL);
     if (ret < 0) {
-        perror("Failed to remove message queue.");
+        syslog(LOG_ERR, "[t_msgget] Failed to remove message queue.: %s", strerror(errno));
         return EXIT_FAILURE;
     }
-    printf("Correctly removed message queue.\n");
+    syslog(LOG_INFO, "[t_msgget] Correctly removed message queue.\n");
     return EXIT_SUCCESS;
 }

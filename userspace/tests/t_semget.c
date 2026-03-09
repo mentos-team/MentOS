@@ -31,38 +31,38 @@ int main(int argc, char *argv[])
     // Generate a unique key using ftok.
     key = ftok("/", 5);
     if (key < 0) {
-        syslog(LOG_ERR, "[t_semget] Failed to generate key using ftok: %s\n", strerror(errno));
+        syslog(LOG_ERR, "[t_semget] [t_semget] Failed to generate key using ftok: %s\n", strerror(errno));
         return 1;
     }
-    syslog(LOG_INFO, "[t_semget] Generated key using ftok (key = %d)\n", key);
+    syslog(LOG_INFO, "[t_semget] [t_semget] Generated key using ftok (key = %d)\n", key);
 
     // ========================================================================
     // Create a semaphore set with one semaphore.
     semid = semget(key, 1, IPC_CREAT | IPC_EXCL | S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
     if (semid < 0) {
-        syslog(LOG_ERR, "[t_semget] Failed to create semaphore set: %s\n", strerror(errno));
+        syslog(LOG_ERR, "[t_semget] [t_semget] Failed to create semaphore set: %s\n", strerror(errno));
         return 1;
     }
-    syslog(LOG_INFO, "[t_semget][father] Created semaphore set (id : %ld)\n", semid);
+    syslog(LOG_INFO, "[t_semget] [t_semget][father] Created semaphore set (id : %ld)\n", semid);
 
     // ========================================================================
     // Set the value of the semaphore to 1.
     arg.val = 1;
     ret     = semctl(semid, 0, SETVAL, &arg);
     if (ret < 0) {
-        syslog(LOG_ERR, "[t_semget] Failed to set semaphore value: %s\n", strerror(errno));
+        syslog(LOG_ERR, "[t_semget] [t_semget] Failed to set semaphore value: %s\n", strerror(errno));
         return 1;
     }
-    syslog(LOG_INFO, "[t_semget][father] Set semaphore value to 1 (id : %ld)\n", semid);
+    syslog(LOG_INFO, "[t_semget] [t_semget][father] Set semaphore value to 1 (id : %ld)\n", semid);
 
     // ========================================================================
     // Verify that the semaphore value is set correctly.
     ret = semctl(semid, 0, GETVAL, NULL);
     if (ret < 0) {
-        syslog(LOG_ERR, "[t_semget] Failed to get semaphore value: %s\n", strerror(errno));
+        syslog(LOG_ERR, "[t_semget] [t_semget] Failed to get semaphore value: %s\n", strerror(errno));
         return 1;
     }
-    syslog(LOG_INFO, "[t_semget][father] Semaphore value is %ld (expected: 1)\n", ret);
+    syslog(LOG_INFO, "[t_semget] [t_semget][father] Semaphore value is %ld (expected: 1)\n", ret);
 
     // ========================================================================
     // Fork a child process.
@@ -78,42 +78,42 @@ int main(int argc, char *argv[])
 
         // Increment the semaphore, unblocking the parent.
         if (semop(semid, &op_child, 1) < 0) {
-            syslog(LOG_ERR, "[t_semget][child] Failed to perform child semaphore operation: %s\n", strerror(errno));
+            syslog(LOG_ERR, "[t_semget] [t_semget][child] Failed to perform child semaphore operation: %s\n", strerror(errno));
             return 1;
         }
-        syslog(LOG_INFO, "[t_semget][child] Performed first semaphore operation (id: %ld)\n", semid);
+        syslog(LOG_INFO, "[t_semget] [t_semget][child] Performed first semaphore operation (id: %ld)\n", semid);
 
         // Verify the updated semaphore value.
         ret = semctl(semid, 0, GETVAL, NULL);
         if (ret < 0) {
-            syslog(LOG_ERR, "[t_semget][child] Failed to get semaphore value in child: %s\n", strerror(errno));
+            syslog(LOG_ERR, "[t_semget] [t_semget][child] Failed to get semaphore value in child: %s\n", strerror(errno));
             return 1;
         }
-        syslog(LOG_INFO, "[t_semget][child] Semaphore value after first increment is %ld (concurrent parent may consume immediately)\n", ret);
+        syslog(LOG_INFO, "[t_semget] [t_semget][child] Semaphore value after first increment is %ld (concurrent parent may consume immediately)\n", ret);
 
         // Sleep and perform another increment operation.
         nanosleep(&req, NULL);
         if (semop(semid, &op_child, 1) < 0) {
-            syslog(LOG_ERR, "[t_semget][child] Failed to perform second child semaphore operation: %s\n", strerror(errno));
+            syslog(LOG_ERR, "[t_semget] [t_semget][child] Failed to perform second child semaphore operation: %s\n", strerror(errno));
             return 1;
         }
-        syslog(LOG_INFO, "[t_semget][child] Performed second semaphore operation (id: %ld)\n", semid);
+        syslog(LOG_INFO, "[t_semget] [t_semget][child] Performed second semaphore operation (id: %ld)\n", semid);
 
         // Check final semaphore value.
         ret = semctl(semid, 0, GETVAL, NULL);
         if (ret < 0) {
-            syslog(LOG_ERR, "[t_semget][child] Failed to get final semaphore value in child: %s\n", strerror(errno));
+            syslog(LOG_ERR, "[t_semget] [t_semget][child] Failed to get final semaphore value in child: %s\n", strerror(errno));
             return 1;
         }
-        syslog(LOG_INFO, "[t_semget][child] Final semaphore value is %ld\n", ret);
+        syslog(LOG_INFO, "[t_semget] [t_semget][child] Final semaphore value is %ld\n", ret);
 
         // Delete the semaphore set.
         ret = semctl(semid, 0, IPC_RMID, 0);
         if (ret < 0) {
-            syslog(LOG_ERR, "[t_semget][child] Failed to remove semaphore set in child: %s\n", strerror(errno));
+            syslog(LOG_ERR, "[t_semget] [t_semget][child] Failed to remove semaphore set in child: %s\n", strerror(errno));
             return 1;
         }
-        syslog(LOG_INFO, "[t_semget][child] Removed semaphore set (id: %ld)\n", semid);
+        syslog(LOG_INFO, "[t_semget] [t_semget][child] Removed semaphore set (id: %ld)\n", semid);
 
         // Exit the child process.
         return 0;
@@ -136,22 +136,22 @@ int main(int argc, char *argv[])
     // ========================================================================
     // Perform the blocking semaphore operations.
     if (semop(semid, op_father, 3) < 0) {
-        syslog(LOG_ERR, "[t_semget][father] Failed to perform parent semaphore operations: %s\n", strerror(errno));
+        syslog(LOG_ERR, "[t_semget] [t_semget][father] Failed to perform parent semaphore operations: %s\n", strerror(errno));
         return 1;
     }
-    syslog(LOG_INFO, "[t_semget][father] Performed semaphore operations (id: %ld)\n", semid);
+    syslog(LOG_INFO, "[t_semget] [t_semget][father] Performed semaphore operations (id: %ld)\n", semid);
 
     // Verify that the semaphore value is updated correctly.
     ret = semctl(semid, 0, GETVAL, NULL);
     if (ret < 0) {
-        syslog(LOG_ERR, "[t_semget][father] Failed to get semaphore value in parent: %s\n", strerror(errno));
+        syslog(LOG_ERR, "[t_semget] [t_semget][father] Failed to get semaphore value in parent: %s\n", strerror(errno));
         return 1;
     }
-    syslog(LOG_INFO, "[t_semget][father] Semaphore value is %ld (expected: 0)\n", ret);
+    syslog(LOG_INFO, "[t_semget] [t_semget][father] Semaphore value is %ld (expected: 0)\n", ret);
 
     // Wait for the child process to terminate.
     if (wait(NULL) == -1) {
-        syslog(LOG_ERR, "[t_semget] Failed to wait for child process: %s\n", strerror(errno));
+        syslog(LOG_ERR, "[t_semget] [t_semget] Failed to wait for child process: %s\n", strerror(errno));
         return EXIT_FAILURE; // Return failure if wait fails.
     }
 

@@ -5,12 +5,14 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
+#include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <strerror.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <syslog.h>
 #include <unistd.h>
 
 #define FILENAME    "/home/user/test.txt"
@@ -26,7 +28,7 @@ int main(int argc, char *argv[])
     // Open the file with specified flags and mode.
     int fd = open(FILENAME, O_WRONLY | O_CREAT | O_TRUNC, mode);
     if (fd < 0) {
-        fprintf(stderr, "Failed to open file %s: %s\n", FILENAME, strerror(errno));
+        syslog(LOG_ERR, "[t_big_write] Failed to open file %s: %s\n", FILENAME, strerror(errno));
         return EXIT_FAILURE;
     }
 
@@ -35,7 +37,7 @@ int main(int argc, char *argv[])
         for (unsigned i = 'A'; i < 'z'; ++i) {
             memset(write_buffer, i, sizeof(write_buffer));
             if (write(fd, write_buffer, sizeof(write_buffer)) < 0) {
-                fprintf(stderr, "Writing to file %s failed: %s\n", FILENAME, strerror(errno));
+                syslog(LOG_ERR, "[t_big_write] Writing to file %s failed: %s\n", FILENAME, strerror(errno));
                 close(fd);
                 unlink(FILENAME);
                 return EXIT_FAILURE;
@@ -45,7 +47,7 @@ int main(int argc, char *argv[])
 
     // Close the file descriptor.
     if (close(fd) < 0) {
-        fprintf(stderr, "Failed to close file %s: %s\n", FILENAME, strerror(errno));
+        syslog(LOG_ERR, "[t_big_write] Failed to close file %s: %s\n", FILENAME, strerror(errno));
         unlink(FILENAME);
         return EXIT_FAILURE;
     }
@@ -53,7 +55,7 @@ int main(int argc, char *argv[])
     // Open the file with specified flags and mode.
     fd = open(FILENAME, O_RDONLY, mode);
     if (fd < 0) {
-        fprintf(stderr, "Failed to open file %s: %s\n", FILENAME, strerror(errno));
+        syslog(LOG_ERR, "[t_big_write] Failed to open file %s: %s\n", FILENAME, strerror(errno));
         unlink(FILENAME);
         return EXIT_FAILURE;
     }
@@ -63,7 +65,7 @@ int main(int argc, char *argv[])
         for (unsigned i = 'A'; i < 'z'; ++i) {
             memset(write_buffer, i, sizeof(write_buffer));
             if (read(fd, read_buffer, sizeof(read_buffer)) < 0) {
-                fprintf(stderr, "Reading from file %s failed: %s\n", FILENAME, strerror(errno));
+                syslog(LOG_ERR, "[t_big_write] Reading from file %s failed: %s\n", FILENAME, strerror(errno));
                 close(fd);
                 unlink(FILENAME);
                 return EXIT_FAILURE;
@@ -71,7 +73,7 @@ int main(int argc, char *argv[])
 
             // Verify read data matches what was written.
             if (memcmp(write_buffer, read_buffer, sizeof(write_buffer)) != 0) {
-                fprintf(stderr, "Data mismatch in file %s at iteration %u, char %c\n", FILENAME, times, i);
+                syslog(LOG_ERR, "[t_big_write] Data mismatch in file %s at iteration %u, char %c\n", FILENAME, times, i);
                 close(fd);
                 unlink(FILENAME);
                 return EXIT_FAILURE;
@@ -81,14 +83,14 @@ int main(int argc, char *argv[])
 
     // Close the file descriptor.
     if (close(fd) < 0) {
-        fprintf(stderr, "Failed to close file %s: %s\n", FILENAME, strerror(errno));
+        syslog(LOG_ERR, "[t_big_write] Failed to close file %s: %s\n", FILENAME, strerror(errno));
         unlink(FILENAME);
         return EXIT_FAILURE;
     }
 
     // Delete the test file.
     if (unlink(FILENAME) < 0) {
-        fprintf(stderr, "Failed to delete file %s: %s\n", FILENAME, strerror(errno));
+        syslog(LOG_ERR, "[t_big_write] Failed to delete file %s: %s\n", FILENAME, strerror(errno));
         return EXIT_FAILURE;
     }
 

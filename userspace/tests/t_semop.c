@@ -8,10 +8,12 @@
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <strerror.h>
 #include <sys/ipc.h>
 #include <sys/sem.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
+#include <syslog.h>
 #include <unistd.h>
 
 int main(int argc, char *argv[])
@@ -55,7 +57,7 @@ int main(int argc, char *argv[])
     // Create a semaphore set with 4 semaphores.
     int semid = semget(17, 4, IPC_CREAT | IPC_EXCL | S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
     if (semid == -1) {
-        perror("Failed to create semaphore set");
+        syslog(LOG_ERR, "[t_semop] Failed to create semaphore set: %s", strerror(errno));
         return 1;
     }
 
@@ -66,7 +68,7 @@ int main(int argc, char *argv[])
     arg.array = values;
 
     if (semctl(semid, 0, SETALL, &arg) == -1) {
-        perror("Failed to set semaphore values");
+        syslog(LOG_ERR, "[t_semop] Failed to set semaphore values: %s", strerror(errno));
         return 1;
     }
 
@@ -76,14 +78,14 @@ int main(int argc, char *argv[])
     // Process 1: Wait for semaphore 0 to decrement, then print "cheers!"
     if (!fork()) {
         semop(semid, &sops[0], 1);
-        printf("cheers!\n");
+        syslog(LOG_INFO, "[t_semop] cheers!\n");
         exit(0);
     }
 
     // Process 2: Wait for semaphore 1, print "course, ", then increment semaphore 0
     if (!fork()) {
         semop(semid, &sops[1], 1);
-        printf("course, ");
+        syslog(LOG_INFO, "[t_semop] course, ");
         semop(semid, &sops[3], 1); // Increment semaphore 0 to signal Process 1.
         exit(0);
     }
@@ -91,14 +93,14 @@ int main(int argc, char *argv[])
     // Process 3: Wait for semaphore 2, print "systems ", then increment semaphore 1
     if (!fork()) {
         semop(semid, &sops[2], 1);
-        printf("systems ");
+        syslog(LOG_INFO, "[t_semop] systems ");
         semop(semid, &sops[4], 1); // Increment semaphore 1 to signal Process 2.
         exit(0);
     }
 
     // Process 4: Print "From the operating ", then increment semaphore 2 to start Process 3
     if (!fork()) {
-        printf("From the operating ");
+        syslog(LOG_INFO, "[t_semop] From the operating ");
         semop(semid, &sops[5], 1); // Increment semaphore 2 to signal Process 3.
         exit(0);
     }
@@ -112,7 +114,7 @@ int main(int argc, char *argv[])
     // ========================================================================
     // Remove the semaphore set after all processes are done.
     if (semctl(semid, 0, IPC_RMID, 0) == -1) {
-        perror("Failed to remove semaphore set");
+        syslog(LOG_ERR, "[t_semop] Failed to remove semaphore set: %s", strerror(errno));
         return 1;
     }
 

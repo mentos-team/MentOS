@@ -6,11 +6,13 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
+#include <errno.h>
 #include <grp.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <strerror.h>
 #include <string.h>
+#include <syslog.h>
 #include <unistd.h>
 
 /// @brief List all groups and their members.
@@ -18,11 +20,11 @@ static void list_groups(void)
 {
     struct group *iter;
     while ((iter = getgrent()) != NULL) {
-        printf("Group name: \"%12s\", passwd: \"%12s\"\n", iter->gr_name, iter->gr_passwd);
+        syslog(LOG_INFO, "[t_gid] Group name: %12s , passwd: %12s\n", iter->gr_name, iter->gr_passwd);
         puts("Names: [ ");
         size_t count = 0;
         while (iter->gr_mem[count] != NULL) {
-            printf("%s ", iter->gr_mem[count]);
+            syslog(LOG_INFO, "[t_gid] %s ", iter->gr_mem[count]);
             count += 1;
         }
         puts("]\n\n");
@@ -31,14 +33,14 @@ static void list_groups(void)
 
 int main(int argc, char **argv)
 {
-    printf("List of all groups:\n");
+    syslog(LOG_INFO, "[t_gid] List of all groups:\n");
 
     // List all groups.
     list_groups();
     // Reset the group list to the beginning.
     setgrent();
 
-    printf("List all groups again:\n");
+    syslog(LOG_INFO, "[t_gid] List all groups again:\n");
 
     // List all groups again.
     list_groups();
@@ -48,22 +50,22 @@ int main(int argc, char **argv)
     // Get the group information for the group with GID 0.
     struct group *root_group = getgrgid(0);
     if (root_group == NULL) {
-        fprintf(STDERR_FILENO, "Error in getgrgid function: %s\n", strerror(errno));
+        syslog(LOG_ERR, "[t_gid] Error in getgrgid function: %s\n", strerror(errno));
         return EXIT_FAILURE;
     }
     if (strcmp(root_group->gr_name, "root") != 0) {
-        fprintf(STDERR_FILENO, "Error: Expected group name 'root', got '%s'\n", root_group->gr_name);
+        syslog(LOG_ERR, "[t_gid] Error: Expected group name 'root', got '%s'\n", root_group->gr_name);
         return EXIT_FAILURE;
     }
 
     // Get the group information for the group named "root".
     root_group = getgrnam("root");
     if (root_group == NULL) {
-        fprintf(STDERR_FILENO, "Error in getgrnam function: %s\n", strerror(errno));
+        syslog(LOG_ERR, "[t_gid] Error in getgrnam function: %s\n", strerror(errno));
         return EXIT_FAILURE;
     }
     if (root_group->gr_gid != 0) {
-        fprintf(STDERR_FILENO, "Error: Expected GID 0, got %d\n", root_group->gr_gid);
+        syslog(LOG_ERR, "[t_gid] Error: Expected GID 0, got %d\n", root_group->gr_gid);
         return EXIT_FAILURE;
     }
 

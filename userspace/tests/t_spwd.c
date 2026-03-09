@@ -4,15 +4,16 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
+#include <crypt/sha256.h>
+#include <errno.h>
 #include <math.h>
 #include <shadow.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <syslog.h>
 #include <time.h>
 #include <unistd.h>
-
-#include <crypt/sha256.h>
 
 /// @brief Generates a SHA-256 hash for a predefined input string.
 /// @return int EXIT_SUCCESS on success, EXIT_FAILURE on error.
@@ -49,10 +50,10 @@ int test_generate(void)
 
     // Check if both hashes match.
     if (strncmp(output, expected, strlen(expected)) != 0) {
-        fprintf(stderr, "Hashes do not match:\n");
-        fprintf(stderr, "Input    : `%s`\n", input);
-        fprintf(stderr, "Output   : `%s`\n", output);
-        fprintf(stderr, "Expected : `%s`\n", expected);
+        syslog(LOG_ERR, "[t_spwd] Hashes do not match:\n");
+        syslog(LOG_ERR, "[t_spwd] Input    : `%s`\n", input);
+        syslog(LOG_ERR, "[t_spwd] Output   : `%s`\n", output);
+        syslog(LOG_ERR, "[t_spwd] Expected : `%s`\n", expected);
         return EXIT_FAILURE;
     }
 
@@ -68,7 +69,7 @@ int test_getspnam(void)
 
     // Check if the user exists in the shadow password database.
     if (!spbuf) {
-        fprintf(stderr, "Failed to find user '%s' in the shadow password database.\n", username);
+        syslog(LOG_ERR, "[t_spwd] Failed to find user '%s' in the shadow password database.\n", username);
         return EXIT_FAILURE;
     }
 

@@ -3,36 +3,38 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include <stdio.h>
-#include <unistd.h>
+#include <errno.h>
 #include <fcntl.h>
+#include <stdio.h>
+#include <syslog.h>
+#include <unistd.h>
 
 int main(int argc, char *argv[])
 {
     // Test 1: fflush with stdout
-    printf("Testing fflush with stdout...");
+    syslog(LOG_INFO, "[t_fflush] Testing fflush with stdout...");
     if (fflush(STDOUT_FILENO) == 0) {
-        printf(" SUCCESS\n");
+        syslog(LOG_INFO, "[t_fflush]  SUCCESS\n");
     } else {
-        printf(" FAILED\n");
+        syslog(LOG_INFO, "[t_fflush]  FAILED\n");
         return 1;
     }
 
     // Test 2: fflush with stderr
-    printf("Testing fflush with stderr...");
+    syslog(LOG_INFO, "[t_fflush] Testing fflush with stderr...");
     if (fflush(STDERR_FILENO) == 0) {
-        printf(" SUCCESS\n");
+        syslog(LOG_INFO, "[t_fflush]  SUCCESS\n");
     } else {
-        printf(" FAILED\n");
+        syslog(LOG_INFO, "[t_fflush]  FAILED\n");
         return 1;
     }
 
     // Test 3: fflush with negative value (flush all streams)
-    printf("Testing fflush with -1 (all streams)...");
+    syslog(LOG_INFO, "[t_fflush] Testing fflush with -1 (all streams)...");
     if (fflush(-1) == 0) {
-        printf(" SUCCESS\n");
+        syslog(LOG_INFO, "[t_fflush]  SUCCESS\n");
     } else {
-        printf(" FAILED\n");
+        syslog(LOG_INFO, "[t_fflush]  FAILED\n");
         return 1;
     }
 
@@ -45,20 +47,20 @@ int main(int argc, char *argv[])
     }
     if (fd >= 0) {
         write(fd, "test data", 9);
-        printf("Testing fflush with file descriptor...");
+        syslog(LOG_INFO, "[t_fflush] Testing fflush with file descriptor...");
         if (fflush(fd) == 0) {
-            printf(" SUCCESS\n");
+            syslog(LOG_INFO, "[t_fflush]  SUCCESS\n");
         } else {
-            printf(" FAILED\n");
+            syslog(LOG_INFO, "[t_fflush]  FAILED\n");
             close(fd);
             return 1;
         }
         close(fd);
     } else {
         // If we can't create files in either location, that's okay for this test
-        printf("Skipping file descriptor test (no writable directory found).\n");
+        syslog(LOG_INFO, "[t_fflush] Skipping file descriptor test (no writable directory found).\n");
     }
 
-    printf("All fflush tests passed!\n");
+    syslog(LOG_INFO, "[t_fflush] All fflush tests passed!\n");
     return 0;
 }
