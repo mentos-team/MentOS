@@ -17,6 +17,10 @@
 
 int main(int argc, char *argv[])
 {
+    // Skip the test if real-time scheduler support is not available.
+    if (!REALTIME_SCHEDULER_SUPPORT) {
+        return EXIT_SUCCESS;
+    }
     pid_t cpid = getpid();
     struct sched_param param;
 

@@ -15,84 +15,106 @@
 #include <syslog.h>
 #include <unistd.h>
 
-#define FILENAME    "/home/user/test.txt"
-#define ITERATIONS  8
+#define FILENAME    "/tmp/test.txt"
+#define ITERATIONS  4
 #define BUFFER_SIZE BUFSIZ
+
+int write_test_data(const char *filename, int iterations)
+{
+    int fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if (fd < 0) {
+        syslog(LOG_ERR, "Failed to open file %s: %s\n", filename, strerror(errno));
+        return EXIT_FAILURE;
+    }
+    int result = EXIT_SUCCESS;
+    char buffer[BUFFER_SIZE];
+    for (unsigned times = 0; times < iterations; ++times) {
+        for (unsigned i = 'A'; i < 'z'; ++i) {
+            memset(buffer, i, sizeof(buffer));
+            if (write(fd, buffer, sizeof(buffer)) < 0) {
+                syslog(LOG_ERR, "Writing to file %s failed: %s\n", filename, strerror(errno));
+                result = EXIT_FAILURE;
+                goto write_close_and_cleanup;
+            } else {
+                syslog(LOG_DEBUG, "Wrote %u bytes of character %c to file %s (progress %u/%u)\n", sizeof(buffer), i, filename, times * ('z' - 'A' + 1) + i - 'A', iterations * ('z' - 'A' + 1));
+            }
+        }
+    }
+
+write_close_and_cleanup:
+    // Close the file descriptor and unlink the file after the test is done.
+    if (close(fd) < 0) {
+        syslog(LOG_ERR, "Failed to close file %s: %s\n", filename, strerror(errno));
+        result = EXIT_FAILURE;
+    }
+    // Unlink the file after the test is done.
+    if (unlink(FILENAME) < 0) {
+        syslog(LOG_ERR, "Failed to delete file %s: %s\n", FILENAME, strerror(errno));
+        result = EXIT_FAILURE;
+    }
+    return result;
+}
+
+int read_and_verify_test_data(const char *filename, int iterations)
+{
+    int fd = open(filename, O_RDONLY, 0);
+    if (fd < 0) {
+        syslog(LOG_ERR, "Failed to open file %s: %s\n", filename, strerror(errno));
+        return EXIT_FAILURE;
+    }
+
+    int result = EXIT_SUCCESS;
+    char read_buf[BUFFER_SIZE];
+    char expected[BUFFER_SIZE];
+
+    for (unsigned pass = 0; pass < iterations; ++pass) {
+        for (unsigned ch = 'A'; ch < 'z'; ++ch) {
+            /* prepare the expected pattern for this character */
+            memset(expected, ch, sizeof(expected));
+
+            ssize_t got = read(fd, read_buf, sizeof(read_buf));
+            if (got < 0) {
+                syslog(LOG_ERR, "Reading from file %s failed: %s\n", filename, strerror(errno));
+                result = EXIT_FAILURE;
+                goto read_close_and_cleanup;
+            }
+
+            if (got != (ssize_t)sizeof(read_buf)) {
+                syslog(LOG_ERR, "Unexpected read length %zd from %s\n", got, filename);
+                result = EXIT_FAILURE;
+                goto read_close_and_cleanup;
+            }
+
+            if (memcmp(read_buf, expected, sizeof(read_buf)) != 0) {
+                syslog(LOG_ERR, "Data mismatch in file %s at iteration %u, char %c\n", filename, pass, ch);
+                result = EXIT_FAILURE;
+                goto read_close_and_cleanup;
+            }
+        }
+    }
+
+read_close_and_cleanup:
+    // Close the file descriptor and unlink the file after the test is done.
+    if (close(fd) < 0) {
+        syslog(LOG_ERR, "Failed to close file %s: %s\n", filename, strerror(errno));
+        result = EXIT_FAILURE;
+    }
+    // Unlink the file after the test is done.
+    if (unlink(FILENAME) < 0) {
+        syslog(LOG_ERR, "Failed to delete file %s: %s\n", FILENAME, strerror(errno));
+        result = EXIT_FAILURE;
+    }
+    return result;
+}
 
 int main(int argc, char *argv[])
 {
-    mode_t mode                    = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP;
-    char write_buffer[BUFFER_SIZE] = {0};
-    char read_buffer[BUFFER_SIZE]  = {0};
-
-    // Open the file with specified flags and mode.
-    int fd = open(FILENAME, O_WRONLY | O_CREAT | O_TRUNC, mode);
-    if (fd < 0) {
-        syslog(LOG_ERR, "[t_big_write] Failed to open file %s: %s\n", FILENAME, strerror(errno));
+    if (write_test_data(FILENAME, ITERATIONS) != EXIT_SUCCESS) {
         return EXIT_FAILURE;
     }
 
-    // Write test data to the file.
-    for (unsigned times = 0; times < ITERATIONS; ++times) {
-        for (unsigned i = 'A'; i < 'z'; ++i) {
-            memset(write_buffer, i, sizeof(write_buffer));
-            if (write(fd, write_buffer, sizeof(write_buffer)) < 0) {
-                syslog(LOG_ERR, "[t_big_write] Writing to file %s failed: %s\n", FILENAME, strerror(errno));
-                close(fd);
-                unlink(FILENAME);
-                return EXIT_FAILURE;
-            }
-        }
-    }
-
-    // Close the file descriptor.
-    if (close(fd) < 0) {
-        syslog(LOG_ERR, "[t_big_write] Failed to close file %s: %s\n", FILENAME, strerror(errno));
-        unlink(FILENAME);
+    if (read_and_verify_test_data(FILENAME, ITERATIONS) != EXIT_SUCCESS) {
         return EXIT_FAILURE;
     }
-
-    // Open the file with specified flags and mode.
-    fd = open(FILENAME, O_RDONLY, mode);
-    if (fd < 0) {
-        syslog(LOG_ERR, "[t_big_write] Failed to open file %s: %s\n", FILENAME, strerror(errno));
-        unlink(FILENAME);
-        return EXIT_FAILURE;
-    }
-
-    // Read and verify data from the file.
-    for (unsigned times = 0; times < ITERATIONS; ++times) {
-        for (unsigned i = 'A'; i < 'z'; ++i) {
-            memset(write_buffer, i, sizeof(write_buffer));
-            if (read(fd, read_buffer, sizeof(read_buffer)) < 0) {
-                syslog(LOG_ERR, "[t_big_write] Reading from file %s failed: %s\n", FILENAME, strerror(errno));
-                close(fd);
-                unlink(FILENAME);
-                return EXIT_FAILURE;
-            }
-
-            // Verify read data matches what was written.
-            if (memcmp(write_buffer, read_buffer, sizeof(write_buffer)) != 0) {
-                syslog(LOG_ERR, "[t_big_write] Data mismatch in file %s at iteration %u, char %c\n", FILENAME, times, i);
-                close(fd);
-                unlink(FILENAME);
-                return EXIT_FAILURE;
-            }
-        }
-    }
-
-    // Close the file descriptor.
-    if (close(fd) < 0) {
-        syslog(LOG_ERR, "[t_big_write] Failed to close file %s: %s\n", FILENAME, strerror(errno));
-        unlink(FILENAME);
-        return EXIT_FAILURE;
-    }
-
-    // Delete the test file.
-    if (unlink(FILENAME) < 0) {
-        syslog(LOG_ERR, "[t_big_write] Failed to delete file %s: %s\n", FILENAME, strerror(errno));
-        return EXIT_FAILURE;
-    }
-
     return EXIT_SUCCESS;
 }

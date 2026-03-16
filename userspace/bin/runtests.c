@@ -28,12 +28,14 @@ static char *all_tests[] = {
     "t_creat",
     "t_dup",
     "t_environ",
-    "t_exit",
     "t_exec",
+    "t_exit",
+    "t_fflush",
+    "t_fhs",
     "t_fork",
     "t_gid",
-    "t_grp",
     "t_groups",
+    "t_grp",
     "t_hashmap",
     "t_itimer",
     "t_kill",
@@ -42,9 +44,9 @@ static char *all_tests[] = {
     "t_mkdir",
     "t_msgget",
     "t_ndtree",
-    // "t_periodic1",
-    // "t_periodic2",
-    // "t_periodic3",
+    "t_periodic1",
+    "t_periodic2",
+    "t_periodic3",
     "t_pipe_blocking",
     "t_pipe_non_blocking",
     "t_pwd",
@@ -63,7 +65,7 @@ static char *all_tests[] = {
     "t_spwd",
     "t_stopcont",
     "t_syslog",
-    // "t_time",
+    "t_time",
     "t_write_read",
 };
 
@@ -78,12 +80,12 @@ static int test_err_fd;
 
 static int init;
 
-#define append(...)                                                                                                    \
-    do {                                                                                                               \
-        bufpos += sprintf(bufpos, __VA_ARGS__);                                                                        \
-        if (bufpos >= buf + sizeof(buf)) {                                                                             \
-            return -1;                                                                                                 \
-        }                                                                                                              \
+#define append(...)                             \
+    do {                                        \
+        bufpos += sprintf(bufpos, __VA_ARGS__); \
+        if (bufpos >= buf + sizeof(buf)) {      \
+            return -1;                          \
+        }                                       \
     } while (0);
 
 static int test_out_flush(void)

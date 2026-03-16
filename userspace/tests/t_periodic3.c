@@ -20,6 +20,10 @@
 
 int main(int argc, char *argv[])
 {
+    // Skip the test if real-time scheduler support is not available.
+    if (!REALTIME_SCHEDULER_SUPPORT) {
+        return EXIT_SUCCESS;
+    }
     pid_t cpid = getpid(); // Get the process ID of the current process
     sched_param_t param;   // Define a structure to hold scheduling parameters
 
