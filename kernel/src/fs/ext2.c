@@ -382,6 +382,7 @@ static int ext2_fsetattr(vfs_file_t *file, struct iattr *attr);
 static int ext2_mkdir(const char *path, mode_t mode);
 static int ext2_rmdir(const char *path);
 static int ext2_stat(const char *path, stat_t *stat);
+static int ext2_statfs(const char *path, statfs_t *statfs);
 static int ext2_setattr(const char *path, struct iattr *attr);
 static vfs_file_t *ext2_creat(const char *path, mode_t mode);
 static vfs_file_t *ext2_mount(vfs_file_t *block_device, const char *path);
@@ -397,6 +398,7 @@ static vfs_sys_operations_t ext2_sys_operations = {
     .mkdir_f   = ext2_mkdir,
     .rmdir_f   = ext2_rmdir,
     .stat_f    = ext2_stat,
+    .statfs_f  = ext2_statfs,
     .creat_f   = ext2_creat,
     .symlink_f = NULL,
     .setattr_f = ext2_setattr,
@@ -3520,6 +3522,33 @@ static int ext2_stat(const char *path, stat_t *stat)
     }
     // Set the rest of the structure.
     return __ext2_stat(fs, &inode, search.direntry.inode, stat);
+}
+
+static int ext2_statfs(const char *path, statfs_t *statfs)
+{
+    ext2_filesystem_t *fs = get_ext2_filesystem(path);
+    if (fs == NULL) {
+        pr_err("ext2_statfs(path: %s): Failed to get the EXT2 filesystem.\n", path);
+        return -ENOENT;
+    }
+
+    if (statfs == NULL) {
+        return -EINVAL;
+    }
+
+    memset(statfs, 0, sizeof(statfs_t));
+    statfs->f_type    = EXT2_SUPERBLOCK_MAGIC;
+    statfs->f_bsize   = fs->block_size;
+    statfs->f_blocks  = fs->superblock.blocks_count;
+    statfs->f_bfree   = fs->superblock.free_blocks_count;
+    statfs->f_bavail  = (fs->superblock.free_blocks_count > fs->superblock.r_blocks_count)
+                            ? (fs->superblock.free_blocks_count - fs->superblock.r_blocks_count)
+                            : 0;
+    statfs->f_files   = fs->superblock.inodes_count;
+    statfs->f_ffree   = fs->superblock.free_inodes_count;
+    statfs->f_namelen = EXT2_NAME_LEN;
+    statfs->f_frsize  = fs->block_size;
+    return 0;
 }
 
 /// @brief Perform the I/O control operation specified by REQUEST on FD. One

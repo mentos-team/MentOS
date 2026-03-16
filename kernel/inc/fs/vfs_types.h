@@ -6,7 +6,9 @@
 #pragma once
 
 #include "bits/stat.h"
+#include "bits/statfs.h"
 #include "dirent.h"
+#include "limits.h"
 #include "list_head.h"
 #include "stdint.h"
 
@@ -53,6 +55,8 @@ typedef struct vfs_sys_operations {
     int (*rmdir_f)(const char *);
     /// Retrieves file status information.
     int (*stat_f)(const char *, stat_t *);
+    /// Retrieves filesystem status information.
+    int (*statfs_f)(const char *, statfs_t *);
     /// Creates a new file or directory.
     struct vfs_file *(*creat_f)(const char *, mode_t);
     /// Creates a symbolic link.
@@ -137,8 +141,10 @@ typedef struct vfs_file {
 typedef struct super_block {
     /// Name of the superblock.
     char name[NAME_MAX];
-    /// Path of the superblock.
+    /// Mount point path of the superblock.
     char path[PATH_MAX];
+    /// Source (device/file) used to mount the filesystem.
+    char source[PATH_MAX];
     /// Pointer to the root file of the given filesystem.
     struct vfs_file *root;
     /// Pointer to the information regarding the filesystem.
@@ -163,7 +169,13 @@ typedef struct vfs_file_descriptor {
 #define ATTR_CTIME (1 << 5) ///< Flag set to specify the validity of CTIME.
 
 /// Used to initialize an iattr inside the chown function.
-#define IATTR_CHOWN(user, group) {.ia_valid = ATTR_UID | ATTR_GID, .ia_uid = (user), .ia_gid = (group)}
+#define IATTR_CHOWN(user, group)                                             \
+    {                                                                        \
+        .ia_valid = ATTR_UID | ATTR_GID, .ia_uid = (user), .ia_gid = (group) \
+    }
 
 /// Used to initialize an iattr inside the chmod function.
-#define IATTR_CHMOD(mode) {.ia_valid = ATTR_MODE, .ia_mode = (mode)}
+#define IATTR_CHMOD(mode)                        \
+    {                                            \
+        .ia_valid = ATTR_MODE, .ia_mode = (mode) \
+    }
