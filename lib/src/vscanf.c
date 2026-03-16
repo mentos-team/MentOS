@@ -54,8 +54,13 @@ static int __vsscanf(const char *str, const char *s, va_list ap)
             if (*s == 's') {
                 while (isspace(*str))
                     ++str;
-                if (!width) {
-                    width = strcspn(str, " \t\n\r\f\v");
+                // Clamp width to the actual token length so str is never
+                // advanced past the real end of the token. Without this, a
+                // user-supplied width like %4095s would advance str by 4095
+                // bytes even for a short token, reading past the buffer.
+                int token_len = (int)strcspn(str, " \t\n\r\f\v");
+                if (!width || width > token_len) {
+                    width = token_len;
                 }
                 if (!noassign) {
                     char *string = va_arg(ap, char *);
@@ -107,6 +112,13 @@ static int __vsscanf(const char *str, const char *s, va_list ap)
                     } else {
                         char *next_sep = strchr(str, next);
                         width          = next_sep ? (next_sep - str) : strcspn(str, " \t\n\r\f\v");
+                    }
+                } else {
+                    // Clamp user-supplied width to the actual token length to
+                    // avoid advancing str past the end of the token.
+                    int token_len = (int)strcspn(str, " \t\n\r\f\v");
+                    if (width > token_len) {
+                        width = token_len;
                     }
                 }
 
