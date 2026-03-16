@@ -36,15 +36,15 @@ vm_area_create(struct mm_struct *mm, uint32_t vm_start, size_t size, uint32_t pg
 {
     // Validate inputs.
     if (!mm) {
-        pr_crit("Invalid arguments: mm is NULL.");
+        pr_crit("Invalid arguments: mm is NULL.\n");
         return NULL;
     }
     if (!vm_start) {
-        pr_crit("Invalid arguments: vm_start is 0.");
+        pr_crit("Invalid arguments: vm_start is 0.\n");
         return NULL;
     }
     if (!size) {
-        pr_crit("Invalid arguments: size is 0.");
+        pr_crit("Invalid arguments: size is 0.\n");
         return NULL;
     }
 
@@ -128,11 +128,11 @@ uint32_t vm_area_clone(mm_struct_t *mm, vm_area_struct_t *area, int cow, uint32_
 {
     // Validate inputs.
     if (!mm) {
-        pr_crit("Invalid arguments: mm is NULL.");
+        pr_crit("Invalid arguments: mm is NULL.\n");
         return -1;
     }
     if (!area) {
-        pr_crit("Invalid arguments: area is NULL.");
+        pr_crit("Invalid arguments: area is NULL.\n");
         return -1;
     }
 
@@ -295,28 +295,28 @@ int vm_area_is_valid(mm_struct_t *mm, uintptr_t vm_start, uintptr_t vm_end)
 
         // Check if the area is NULL.
         if (!area) {
-            pr_crit("Encountered a NULL area in the list.");
+            pr_crit("Encountered a NULL area in the list.\n");
             return -1;
         }
 
         // Check if the new area overlaps with the current area.
         if ((vm_start > area->vm_start) && (vm_start < area->vm_end)) {
             pr_crit(
-                "Overlap detected at start: %p <= %p <= %p", (void *)area->vm_start, (void *)vm_start,
+                "Overlap detected at start: %p <= %p <= %p\n", (void *)area->vm_start, (void *)vm_start,
                 (void *)area->vm_end);
             return 0;
         }
 
         if ((vm_end > area->vm_start) && (vm_end < area->vm_end)) {
             pr_crit(
-                "Overlap detected at end: %p <= %p <= %p", (void *)area->vm_start, (void *)vm_end,
+                "Overlap detected at end: %p <= %p <= %p\n", (void *)area->vm_start, (void *)vm_end,
                 (void *)area->vm_end);
             return 0;
         }
 
         if ((vm_start < area->vm_start) && (vm_end > area->vm_end)) {
             pr_crit(
-                "Wrap-around detected: %p <= (%p, %p) <= %p", (void *)vm_start, (void *)area->vm_start,
+                "Wrap-around detected: %p <= (%p, %p) <= %p\n", (void *)vm_start, (void *)area->vm_start,
                 (void *)area->vm_end, (void *)vm_end);
             return 0;
         }
@@ -354,7 +354,7 @@ int vm_area_search_free_area(mm_struct_t *mm, size_t length, uintptr_t *vm_start
 {
     // Check for a valid memory descriptor.
     if (!mm || !length || !vm_start) {
-        pr_crit("Invalid arguments: mm or length or vm_start is NULL.");
+        pr_crit("Invalid arguments: mm or length or vm_start is NULL.\n");
         return -1;
     }
 
@@ -369,7 +369,7 @@ int vm_area_search_free_area(mm_struct_t *mm, size_t length, uintptr_t *vm_start
 
         // Check if the current area is NULL.
         if (!area) {
-            pr_crit("Encountered a NULL area in the list.");
+            pr_crit("Encountered a NULL area in the list.\n");
             return -1;
         }
 
@@ -379,7 +379,7 @@ int vm_area_search_free_area(mm_struct_t *mm, size_t length, uintptr_t *vm_start
 
             // Check if the previous area is NULL.
             if (!prev_area) {
-                pr_crit("Encountered a NULL previous area in the list.");
+                pr_crit("Encountered a NULL previous area in the list.\n");
                 return -1;
             }
 
