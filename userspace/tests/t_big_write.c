@@ -21,7 +21,7 @@
 
 int write_test_data(const char *filename, int iterations)
 {
-    int fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
+    int fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC, 0644);
     if (fd < 0) {
         syslog(LOG_ERR, "Failed to open file %s: %s\n", filename, strerror(errno));
         return EXIT_FAILURE;
@@ -35,6 +35,8 @@ int write_test_data(const char *filename, int iterations)
                 syslog(LOG_ERR, "Writing to file %s failed: %s\n", filename, strerror(errno));
                 result = EXIT_FAILURE;
                 goto write_close_and_cleanup;
+            } else {
+                syslog(LOG_DEBUG, "Wrote %u bytes of character %c to file %s (progress %u/%u)\n", sizeof(buffer), i, filename, times * ('z' - 'A' + 1) + i - 'A', iterations * ('z' - 'A' + 1));
             }
         }
     }
