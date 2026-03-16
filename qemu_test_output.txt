@@ -1,8 +1,0 @@
-====================================================
-Starting QEMU test run (timeout: 120s)...
-====================================================
-QEMU started with PID: 216157
-Monitoring test progress...
-Build directory: build
-
-qemu-system-i386: -cdrom build/cdrom_test.iso: Could not open 'build/cdrom_test.iso': No such file or directory
