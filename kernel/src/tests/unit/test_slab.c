@@ -433,6 +433,67 @@ TEST(memory_slab_cache_destruction_safety)
     TEST_SECTION_END();
 }
 
+/// @brief Test cache lifecycle for heterogeneous structure sizes.
+TEST(memory_slab_multi_size_cache_lifecycle)
+{
+    TEST_SECTION_START("Slab multi-size cache lifecycle");
+
+    typedef struct {
+        uint8_t value;
+    } tiny_obj_t;
+
+    typedef struct {
+        uint32_t values[6];
+    } small_obj_t;
+
+    typedef struct {
+        uint32_t values[64];
+    } medium_obj_t;
+
+    typedef struct {
+        uint8_t values[2048];
+    } large_obj_t;
+
+    typedef struct {
+        uint8_t values[8464];
+    } huge_obj_t;
+
+    typedef struct {
+        const char *name;
+        unsigned int size;
+        unsigned int align;
+    } cache_case_t;
+
+    cache_case_t cases[] = {
+        {.name = "test_slab_tiny",   .size = sizeof(tiny_obj_t),   .align = alignof(tiny_obj_t)  },
+        {.name = "test_slab_small",  .size = sizeof(small_obj_t),  .align = alignof(small_obj_t) },
+        {.name = "test_slab_medium", .size = sizeof(medium_obj_t), .align = alignof(medium_obj_t)},
+        {.name = "test_slab_large",  .size = sizeof(large_obj_t),  .align = alignof(large_obj_t) },
+        {.name = "test_slab_huge",   .size = sizeof(huge_obj_t),   .align = alignof(huge_obj_t)  },
+    };
+
+    unsigned long free_before_all = get_zone_free_space(GFP_KERNEL);
+
+    for (unsigned int i = 0; i < count_of(cases); ++i) {
+        kmem_cache_t *cache = kmem_cache_create(cases[i].name, cases[i].size, cases[i].align, GFP_KERNEL, NULL, NULL);
+        ASSERT_MSG(cache != NULL, "kmem_cache_create must succeed for each test size");
+
+        void *obj = kmem_cache_alloc(cache, GFP_KERNEL);
+        ASSERT_MSG(obj != NULL, "kmem_cache_alloc must succeed for each test size");
+
+        memset(obj, 0xA5, cases[i].size);
+        ASSERT_MSG(*(uint8_t *)obj == 0xA5, "allocated object must be writable");
+
+        ASSERT_MSG(kmem_cache_free(obj) == 0, "kmem_cache_free must succeed");
+        ASSERT_MSG(kmem_cache_destroy(cache) == 0, "kmem_cache_destroy must succeed");
+    }
+
+    unsigned long free_after_all = get_zone_free_space(GFP_KERNEL);
+    ASSERT_MSG(free_after_all == free_before_all, "Zone free pages must return to baseline after all cache destroys");
+
+    TEST_SECTION_END();
+}
+
 /// @brief Main test function for slab subsystem.
 void test_slab(void)
 {
@@ -451,4 +512,5 @@ void test_slab(void)
     test_memory_slab_object_reuse();
     test_memory_slab_parallel_caches();
     test_memory_slab_cache_destruction_safety();
+    test_memory_slab_multi_size_cache_lifecycle();
 }
