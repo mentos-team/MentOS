@@ -4,6 +4,7 @@
 /// See LICENSE.md for details.
 
 #include <ctype.h>
+#include <argparse.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
@@ -24,6 +25,52 @@ static void print_help(const char *prog)
     printf("Show filesystem disk usage for mounted filesystems.\n");
     printf("  -h, --human-readable  print sizes in powers of 1024 (e.g., 1023M)\n");
     printf("      --help            display this help and exit\n");
+}
+
+static void print_cli_error(const char *prog, const ap_error_t *error)
+{
+    const char *token = (error->token != NULL) ? error->token : "";
+    printf("%s: %s: %s\n", prog, ap_error_code_to_string(error->code), token);
+}
+
+static int parse_args(int argc, char **argv, bool_t *human)
+{
+    const ap_option_t options[] = {
+        {'h', "human-readable", AP_VALUE_NONE, NULL, "print sizes in powers of 1024"},
+        {'\0', "help", AP_VALUE_NONE, NULL, "display this help and exit"},
+    };
+
+    ap_parser_t parser;
+    ap_event_t event;
+    ap_error_t error;
+
+    ap_parser_init(&parser, argc, argv);
+
+    while (true) {
+        ap_status_t status = ap_parser_next(&parser, options, sizeof(options) / sizeof(options[0]), &event, &error);
+        if (status == AP_STATUS_END) {
+            return 0;
+        }
+        if (status == AP_STATUS_ERROR) {
+            print_cli_error(argv[0], &error);
+            print_help(argv[0]);
+            return 1;
+        }
+
+        if (event.kind == AP_EVENT_POSITIONAL) {
+            printf("%s: unexpected positional argument: %s\n", argv[0], event.positional);
+            print_help(argv[0]);
+            return 1;
+        }
+
+        if (strcmp(event.option->long_name, "help") == 0) {
+            print_help(argv[0]);
+            return 2;
+        }
+        if ((event.option->short_name == 'h') || (strcmp(event.option->long_name, "human-readable") == 0)) {
+            *human = true;
+        }
+    }
 }
 
 static const char *to_human_size(unsigned long bytes)
@@ -81,17 +128,12 @@ int main(int argc, char **argv)
 
     bool_t human = false;
 
-    for (int i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "--help") == 0) {
-            print_help(argv[0]);
-            return 0;
-        } else if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--human-readable") == 0) {
-            human = true;
-        } else {
-            printf("%s: invalid argument '%s'\n", argv[0], argv[i]);
-            print_help(argv[0]);
-            return 1;
-        }
+    int parse_rc = parse_args(argc, argv, &human);
+    if (parse_rc == 2) {
+        return 0;
+    }
+    if (parse_rc != 0) {
+        return 1;
     }
 
     int fd = open("/proc/mounts", O_RDONLY, 0);
