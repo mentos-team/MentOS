@@ -53,11 +53,12 @@ int vfs_unregister_filesystem(file_system_type_t *fs);
 
 /// @brief Register a superblock for the filesystem.
 /// @param name The name of the superblock.
-/// @param path The path associated with the superblock.
+/// @param path The mount point path associated with the superblock.
+/// @param source The mount source (device/file) used for this filesystem.
 /// @param type A pointer to the filesystem type.
 /// @param root A pointer to the root file of the filesystem.
 /// @return 1 on success, 0 on failure.
-int vfs_register_superblock(const char *name, const char *path, file_system_type_t *type, vfs_file_t *root);
+int vfs_register_superblock(const char *name, const char *path, const char *source, file_system_type_t *type, vfs_file_t *root);
 
 /// @brief Unregister a superblock.
 /// @param sb A pointer to the superblock to unregister.
@@ -72,6 +73,18 @@ super_block_t *vfs_get_superblock(const char *absolute_path);
 /// @brief Dumps the list of all superblocks to the log.
 /// @param log_level Logging level to use for the output.
 void vfs_dump_superblocks(int log_level);
+
+/// @brief Callback used for iterating all mounted superblocks.
+/// @param sb Pointer to the current superblock.
+/// @param ctx User-provided context pointer.
+/// @return 0 to continue iteration, non-zero to stop early.
+typedef int (*vfs_superblock_iter_fn)(super_block_t *sb, void *ctx);
+
+/// @brief Iterate over all mounted superblocks.
+/// @param fn Callback to execute for each superblock.
+/// @param ctx User-provided context passed to the callback.
+/// @return 0 if iteration completed, otherwise the non-zero return value from the callback.
+int vfs_superblock_for_each(vfs_superblock_iter_fn fn, void *ctx);
 
 /// @brief Open a file given its absolute path.
 /// @param absolute_path An absolute path to the file.

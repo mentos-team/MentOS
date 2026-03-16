@@ -371,7 +371,7 @@ int mem_devs_initialize(void)
     }
 
     // Mount the /dev/null device.
-    if (!vfs_register_superblock("null", "/dev/null", &null_file_system_type, devnull->file)) {
+    if (!vfs_register_superblock("null", "/dev/null", "/dev/null", &null_file_system_type, devnull->file)) {
         pr_err("mem_devs_initialize: Failed to mount /dev/null\n");
         return 1; // Return error if mounting fails.
     }

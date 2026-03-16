@@ -168,7 +168,7 @@ int vfs_unregister_filesystem(file_system_type_t *fs)
 static inline void __vfs_dump_superblock(int log_level, super_block_t *sb)
 {
     assert(sb && "Received NULL suberblock.");
-    pr_log(log_level, "\tname=%s, path=%s, root=%p, type=%p\n", sb->name, sb->path, (void *)sb->root, (void *)sb->type);
+    pr_log(log_level, "\tname=%s, source=%s, path=%s, root=%p, type=%p\n", sb->name, sb->source, sb->path, (void *)sb->root, (void *)sb->type);
 }
 
 void vfs_dump_superblocks(int log_level)
@@ -178,9 +178,27 @@ void vfs_dump_superblocks(int log_level)
     }
 }
 
-int vfs_register_superblock(const char *name, const char *path, file_system_type_t *type, vfs_file_t *root)
+int vfs_superblock_for_each(vfs_superblock_iter_fn fn, void *ctx)
 {
-    pr_debug("vfs_register_superblock(name: %s, path: %s, type: %s, root: %p)\n", name, path, type->name, root);
+    if (!fn) {
+        return 1;
+    }
+    int result = 0;
+    spinlock_lock(&vfs_spinlock);
+    list_for_each_decl (it, &vfs_super_blocks) {
+        super_block_t *sb = list_entry(it, super_block_t, mounts);
+        result            = fn(sb, ctx);
+        if (result != 0) {
+            break;
+        }
+    }
+    spinlock_unlock(&vfs_spinlock);
+    return result;
+}
+
+int vfs_register_superblock(const char *name, const char *path, const char *source, file_system_type_t *type, vfs_file_t *root)
+{
+    pr_debug("vfs_register_superblock(name: %s, path: %s, source: %s, type: %s, root: %p)\n", name, path, source ? source : "(null)", type->name, root);
     // Validate input parameters.
     if (!name) {
         pr_err("vfs_register_superblock: NULL name provided\n");
@@ -188,6 +206,10 @@ int vfs_register_superblock(const char *name, const char *path, file_system_type
     }
     if (!path) {
         pr_err("vfs_register_superblock: NULL path provided\n");
+        return 0;
+    }
+    if (!source) {
+        pr_err("vfs_register_superblock: NULL source provided\n");
         return 0;
     }
     if (!type) {
@@ -215,6 +237,10 @@ int vfs_register_superblock(const char *name, const char *path, file_system_type
     // Copy the mount path of the superblock.
     strncpy(sb->path, path, sizeof(sb->path) - 1);
     sb->path[sizeof(sb->path) - 1] = '\0';
+
+    // Copy the source of the superblock.
+    strncpy(sb->source, source, sizeof(sb->source) - 1);
+    sb->source[sizeof(sb->source) - 1] = '\0';
 
     // Initialize the root file and file system type.
     sb->root = root;
@@ -879,7 +905,7 @@ int vfs_mount(const char *type, const char *path, const char *args)
         return -ENODEV;
     }
     // Register the proc superblock.
-    if (!vfs_register_superblock(file->name, path, fst, file)) {
+    if (!vfs_register_superblock(file->name, path, args ? args : "", fst, file)) {
         pr_alert("Failed to register %s superblock!\n", file->name);
         return -ENODEV;
     }

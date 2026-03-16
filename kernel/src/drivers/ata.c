@@ -1694,7 +1694,7 @@ static ata_device_type_t ata_device_detect(ata_device_t *dev)
         // Update the filesystem entry with the length of the device.
         dev->fs_root->length = ata_max_offset(dev);
         // Try to mount the drive.
-        if (!vfs_register_superblock(dev->fs_root->name, dev->path, &ata_file_system_type, dev->fs_root)) {
+        if (!vfs_register_superblock(dev->fs_root->name, dev->path, dev->path, &ata_file_system_type, dev->fs_root)) {
             pr_alert("Failed to mount ata device!\n");
             // Free the memory.
             vfs_dealloc_file(dev->fs_root);

@@ -5,6 +5,7 @@
 
 #include "errno.h"
 #include "fs/procfs.h"
+#include "fs/vfs.h"
 #include "hardware/timer.h"
 #include "io/debug.h"
 #include "process/process.h"
@@ -136,11 +137,71 @@ static ssize_t procs_do_version(char *buffer, size_t bufsize)
     return sprintf(buffer, "%s version %s (site: %s) (email: %s)", OS_NAME, OS_VERSION, OS_SITEURL, OS_REF_EMAIL);
 }
 
+/// @brief Context used when generating `/proc/mounts`.
+typedef struct {
+    char *buf;
+    size_t bufsize;
+    size_t pos;
+} procs_mounts_ctx_t;
+
+/// @brief Callback used to build a /proc/mounts line for each mount.
+/// @param sb   The superblock representing a mounted filesystem.
+/// @param ctx  A `procs_mounts_ctx_t` pointer.
+/// @return 0 to continue, non-zero to stop.
+static int procs_do_mounts_cb(super_block_t *sb, void *ctx)
+{
+    if (!sb || !ctx) {
+        return 1;
+    }
+
+    procs_mounts_ctx_t *mounts_ctx = (procs_mounts_ctx_t *)ctx;
+
+    if (mounts_ctx->pos >= mounts_ctx->bufsize) {
+        return 1;
+    }
+
+    const char *source = (sb->source[0] != '\0') ? sb->source : sb->name;
+    const char *mountpoint = sb->path;
+    const char *fstype = (sb->type && sb->type->name) ? sb->type->name : "unknown";
+    const char *options = "rw";
+
+    int written = snprintf(
+        mounts_ctx->buf + mounts_ctx->pos,
+        mounts_ctx->bufsize - mounts_ctx->pos,
+        "%s %s %s %s 0 0\n",
+        source,
+        mountpoint,
+        fstype,
+        options);
+    if (written < 0) {
+        return 1;
+    }
+
+    if ((size_t)written >= mounts_ctx->bufsize - mounts_ctx->pos) {
+        // Buffer filled, stop writing.
+        mounts_ctx->pos = mounts_ctx->bufsize;
+        return 1;
+    }
+
+    mounts_ctx->pos += (size_t)written;
+    return 0;
+}
+
 /// @brief Write the list of mount points inside the buffer.
 /// @param buffer the buffer.
 /// @param bufsize the buffer size.
 /// @return the amount we wrote.
-static ssize_t procs_do_mounts(char *buffer, size_t bufsize) { return 0; }
+static ssize_t procs_do_mounts(char *buffer, size_t bufsize)
+{
+    if (!buffer || bufsize == 0) {
+        return 0;
+    }
+
+    procs_mounts_ctx_t ctx = {.buf = buffer, .bufsize = bufsize, .pos = 0};
+
+    vfs_superblock_for_each(procs_do_mounts_cb, &ctx);
+    return ctx.pos;
+}
 
 /// @brief Write the cpu information inside the buffer.
 /// @param buffer the buffer.
