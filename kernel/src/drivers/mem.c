@@ -83,12 +83,14 @@ static vfs_file_t *find_device_file(const char *path)
 }
 
 static int mem_stat(const char *path, stat_t *stat);
+static int mem_statfs(const char *path, statfs_t *statfs);
 
 /// @brief System operations for the memory device.
 static vfs_sys_operations_t mem_sys_operations = {
     .mkdir_f = NULL,
     .rmdir_f = NULL,
     .stat_f  = mem_stat,
+    .statfs_f = mem_statfs,
 };
 
 static vfs_file_t *null_mount_callback(const char *path, const char *device);
@@ -141,6 +143,21 @@ static int mem_stat(const char *path, stat_t *stat)
     }
     // Return -ENOENT if the file was not found.
     return -ENOENT;
+}
+
+static int mem_statfs(const char *path, statfs_t *statfs)
+{
+    (void)path;
+    if (statfs == NULL) {
+        return -EINVAL;
+    }
+
+    memset(statfs, 0, sizeof(statfs_t));
+    statfs->f_type    = 0;
+    statfs->f_bsize   = 1;
+    statfs->f_namelen = NAME_MAX;
+    statfs->f_frsize  = 1;
+    return 0;
 }
 
 /// @brief The mount callback, which prepares everything and calls the actual

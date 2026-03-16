@@ -6,6 +6,7 @@
 #pragma once
 
 #include "bits/stat.h"
+#include "bits/statfs.h"
 #include "dirent.h"
 #include "limits.h"
 #include "list_head.h"
@@ -54,6 +55,8 @@ typedef struct vfs_sys_operations {
     int (*rmdir_f)(const char *);
     /// Retrieves file status information.
     int (*stat_f)(const char *, stat_t *);
+    /// Retrieves filesystem status information.
+    int (*statfs_f)(const char *, statfs_t *);
     /// Creates a new file or directory.
     struct vfs_file *(*creat_f)(const char *, mode_t);
     /// Creates a symbolic link.

@@ -200,11 +200,23 @@ int vfs_symlink(const char *linkname, const char *path);
 /// @return 0 on success, -errno on failure.
 int vfs_stat(const char *path, stat_t *buf);
 
+/// @brief Retrieve filesystem statistics for the mounted filesystem containing path.
+/// @param path Path used to resolve the target mounted filesystem.
+/// @param buf  Buffer where filesystem statistics are stored.
+/// @return 0 on success, -errno on failure.
+int vfs_statfs(const char *path, statfs_t *buf);
+
 /// @brief Stat the given file.
 /// @param file Pointer to the file for which we are retrieving the statistics.
 /// @param buf  Buffer where we are storing the statistics.
 /// @return 0 on success, -errno on failure.
 int vfs_fstat(vfs_file_t *file, stat_t *buf);
+
+/// @brief Retrieve filesystem statistics for the mounted filesystem containing file.
+/// @param file Pointer to an open file on the target mounted filesystem.
+/// @param buf  Buffer where filesystem statistics are stored.
+/// @return 0 on success, -errno on failure.
+int vfs_fstatfs(vfs_file_t *file, statfs_t *buf);
 
 /// @brief Mount the path as a filesystem of the given type.
 /// @param type The type of filesystem

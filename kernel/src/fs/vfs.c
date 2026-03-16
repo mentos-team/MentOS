@@ -875,6 +875,67 @@ int vfs_fstat(vfs_file_t *file, stat_t *buf)
     return file->fs_operations->stat_f(file, buf);
 }
 
+int vfs_statfs(const char *path, statfs_t *buf)
+{
+    // Allocate a variable for the path.
+    char absolute_path[PATH_MAX];
+    // If the first character is not the '/' then get the absolute path.
+    int resolve_flags = REMOVE_TRAILING_SLASH | FOLLOW_LINKS;
+    int ret           = resolve_path(path, absolute_path, PATH_MAX, resolve_flags);
+    if (ret < 0) {
+        pr_err("vfs_statfs(%s): Cannot get the absolute path.\n", path);
+        return ret;
+    }
+
+    super_block_t *sb = vfs_get_superblock(absolute_path);
+    if (sb == NULL) {
+        pr_err("vfs_statfs(%s): Cannot find the superblock!\n", path);
+        return -ENODEV;
+    }
+    vfs_file_t *sb_root = sb->root;
+    if (sb_root == NULL) {
+        pr_err("vfs_statfs(%s): Cannot find the superblock root.\n", path);
+        return -ENOENT;
+    }
+    if ((sb_root->sys_operations == NULL) || (sb_root->sys_operations->statfs_f == NULL)) {
+        pr_err("vfs_statfs(%s): Function not supported in current filesystem.\n", path);
+        return -ENOSYS;
+    }
+
+    memset(buf, 0, sizeof(statfs_t));
+    return sb_root->sys_operations->statfs_f(absolute_path, buf);
+}
+
+int vfs_fstatfs(vfs_file_t *file, statfs_t *buf)
+{
+    if (!file) {
+        return -EINVAL;
+    }
+
+    super_block_t *target_sb = NULL;
+
+    spinlock_lock(&vfs_spinlock);
+    list_for_each_decl (it, &vfs_super_blocks) {
+        super_block_t *sb = list_entry(it, super_block_t, mounts);
+        if (sb->root == file || sb->root->device == file->device) {
+            target_sb = sb;
+            break;
+        }
+    }
+    spinlock_unlock(&vfs_spinlock);
+
+    if (target_sb == NULL) {
+        return -ENODEV;
+    }
+    if ((target_sb->root == NULL) || (target_sb->root->sys_operations == NULL) ||
+        (target_sb->root->sys_operations->statfs_f == NULL)) {
+        return -ENOSYS;
+    }
+
+    memset(buf, 0, sizeof(statfs_t));
+    return target_sb->root->sys_operations->statfs_f(target_sb->path, buf);
+}
+
 int vfs_mount(const char *type, const char *path, const char *args)
 {
     file_system_type_t *fst = __vfs_find_filesystem(type);

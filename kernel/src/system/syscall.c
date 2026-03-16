@@ -69,6 +69,8 @@ void syscall_init(void)
     sys_call_table[__NR_getuid]         = (SystemCall)sys_getuid;
     sys_call_table[__NR_alarm]          = (SystemCall)sys_alarm;
     sys_call_table[__NR_fstat]          = (SystemCall)sys_fstat;
+    sys_call_table[__NR_statfs]         = (SystemCall)sys_statfs;
+    sys_call_table[__NR_fstatfs]        = (SystemCall)sys_fstatfs;
     sys_call_table[__NR_nice]           = (SystemCall)sys_nice;
     sys_call_table[__NR_kill]           = (SystemCall)sys_kill;
     sys_call_table[__NR_mkdir]          = (SystemCall)sys_mkdir;
