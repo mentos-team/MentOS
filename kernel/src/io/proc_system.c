@@ -63,7 +63,7 @@ static ssize_t __procs_read(vfs_file_t *file, char *buf, off_t offset, size_t nb
     // Perform read.
     ssize_t it = 0;
     if (ret >= 0) {
-        size_t name_len = strlen(buffer);
+        size_t name_len = strnlen(buffer, BUFSIZ);
         size_t read_pos = offset;
         if (read_pos < name_len) {
             while ((it < nbyte) && (read_pos < name_len)) {
@@ -156,7 +156,7 @@ static int procs_do_mounts_cb(super_block_t *sb, void *ctx)
 
     procs_mounts_ctx_t *mounts_ctx = (procs_mounts_ctx_t *)ctx;
 
-    if (mounts_ctx->pos >= mounts_ctx->bufsize) {
+    if (mounts_ctx->pos >= (mounts_ctx->bufsize - 1)) {
         return 1;
     }
 
@@ -179,7 +179,8 @@ static int procs_do_mounts_cb(super_block_t *sb, void *ctx)
 
     if ((size_t)written >= mounts_ctx->bufsize - mounts_ctx->pos) {
         // Buffer filled, stop writing.
-        mounts_ctx->pos = mounts_ctx->bufsize;
+        mounts_ctx->pos = mounts_ctx->bufsize - 1;
+        mounts_ctx->buf[mounts_ctx->pos] = '\0';
         return 1;
     }
 
@@ -200,6 +201,7 @@ static ssize_t procs_do_mounts(char *buffer, size_t bufsize)
     procs_mounts_ctx_t ctx = {.buf = buffer, .bufsize = bufsize, .pos = 0};
 
     vfs_superblock_for_each(procs_do_mounts_cb, &ctx);
+    buffer[ctx.pos] = '\0';
     return ctx.pos;
 }
 
