@@ -7,6 +7,7 @@ set(PROGRAM_LIST
     cp.c
     cpuid.c
     date.c
+    df.c
     echo.c
     edit.c
     env.c
