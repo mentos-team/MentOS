@@ -290,7 +290,7 @@ static inline task_struct *__alloc_task(task_struct *source, task_struct *parent
     proc->exit_code             = 0;
     // Copy the name.
     if (name) {
-        strcpy(proc->name, name);
+        strncpy(proc->name, name, TASK_NAME_MAX_LENGTH);
     }
     // Do not touch the task's segments.
     proc->mm       = NULL;
@@ -298,9 +298,9 @@ static inline task_struct *__alloc_task(task_struct *source, task_struct *parent
     proc->error_no = 0;
     // Initialize the current working directory.
     if (source) {
-        strcpy(proc->cwd, source->cwd);
+        strncpy(proc->cwd, source->cwd, PATH_MAX);
     } else {
-        strcpy(proc->cwd, "/");
+        strncpy(proc->cwd, "/", PATH_MAX);
     }
     // Clear the signal handler.
     memset(&proc->sighand, 0x00, sizeof(sighand_t));
@@ -463,7 +463,7 @@ int sys_chdir(char const *path)
     // Check that the directory exists.
     vfs_file_t *dir = vfs_open(absolute_path, O_RDONLY | O_DIRECTORY, S_IXUSR);
     if (dir) {
-        strcpy(current->cwd, absolute_path);
+        strncpy(current->cwd, absolute_path, PATH_MAX);
         vfs_close(dir);
         return 0;
     }
@@ -495,7 +495,7 @@ int sys_fchdir(int fd)
         pr_err("Cannot get the absolute path for path `%s`.\n", vfd->file_struct->name);
         return -ENOENT;
     }
-    strcpy(current->cwd, absolute_path);
+    strncpy(current->cwd, absolute_path, PATH_MAX);
     return 0;
 }
 
@@ -587,9 +587,9 @@ int sys_execve(pt_regs_t *f)
     }
 
     // Save the name of the process.
-    strcpy(name_buffer, origin_argv[0]);
+    strncpy(name_buffer, origin_argv[0], NAME_MAX);
     // Save the filename.
-    strcpy(saved_filename, filename);
+    strncpy(saved_filename, filename, PATH_MAX);
 
     // == COPY PROGRAM ARGUMENTS ==============================================
     // Copy argv and envp to kernel memory, because all the old process memory will be discarded.
@@ -694,7 +694,7 @@ int sys_execve(pt_regs_t *f)
     // ------------------------------------------------------------------------
 
     // Change the name of the process.
-    strcpy(current->name, name_buffer);
+    strncpy(current->name, name_buffer, TASK_NAME_MAX_LENGTH);
 
     // Free the temporary args memory.
     kfree(args_mem);

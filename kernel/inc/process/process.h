@@ -13,7 +13,7 @@
 #include "system/signal.h"
 
 /// The maximum length of a name for a task_struct.
-#define TASK_NAME_MAX_LENGTH 100
+#define TASK_NAME_MAX_LENGTH NAME_MAX
 
 /// The default dimension of the stack of a process (1 MByte).
 #define DEFAULT_STACK_SIZE (1 * M)
