@@ -527,6 +527,8 @@ static inline int __history_push(rb_history_entry_t *entry)
     if (!rb_history_peek_back(&history, &previous_entry)) {
         // Compare the new entry with the last entry to avoid duplicates.
         if (strcmp(entry->buffer, previous_entry.buffer) == 0) {
+            // Set the history index to the current count, pointing to the end.
+            history_index = history.count;
             // Return 0 if the new entry is the same as the previous one (duplicate).
             return 0;
         }
