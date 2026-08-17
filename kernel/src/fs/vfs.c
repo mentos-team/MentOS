@@ -984,12 +984,8 @@ int vfs_destroy_task(task_struct *task)
     for (int fd = 0; fd < task->max_fd; fd++) {
         // Check if the file descriptor is associated with a file.
         if (task->fd_list[fd].file_struct) {
-            // Decrease the counter.
-            --task->fd_list[fd].file_struct->count;
-            // If counter is zero, close the file.
-            if (task->fd_list[fd].file_struct->count == 0) {
-                task->fd_list[fd].file_struct->fs_operations->close_f(task->fd_list[fd].file_struct);
-            }
+            // Close the file.
+            task->fd_list[fd].file_struct->fs_operations->close_f(task->fd_list[fd].file_struct);
             // Clear the pointer to the file structure.
             task->fd_list[fd].file_struct = NULL;
         }
