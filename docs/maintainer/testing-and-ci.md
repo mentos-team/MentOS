@@ -34,40 +34,61 @@ Verified against `MAIN` = `62c638a` (line refs for `MAIN` unless noted).
   `syslog(LOG_INFO, "Running test (%2d/%2d): %s", ...)`). Write in-guest
   repro/tests with `openlog(..., LOG_CONS|LOG_PID, LOG_USER)` + `syslog`.
 
-## qemu-test behavior — issue #193 (EMPIRICALLY REPRODUCED, 5 runs)
+## qemu-test behavior — FIXED (issue #193)
 
-Four independent reasons a kernel panic looks like success:
+The guest now uses QEMU's `isa-debug-exit` device for explicit failure signaling:
 
-1. `kernel_panic` (kernel/src/system/panic.c:11,20) writes `0x2000` to port
-   `0x604` (QEMU ACPI shutdown) when `runtests` is set → **clean QEMU exit,
-   host exit code 0**. `runtests` itself shuts down the same way on normal
-   completion (runtests.c:231).
-2. CMake `qemu-test` target (CMakeLists.txt:314-319) runs QEMU DIRECTLY —
-   no timeout, no exit-code interpretation, does not use
-   `scripts/run-qemu-test` at all.
-3. `scripts/run-qemu-test` (line 58) accepts BOTH 0 and 1 as success:
-   `if [ "${EXIT_CODE}" -eq 1 ] || [ "${EXIT_CODE}" -eq 0 ]`.
-4. CI (`.github/workflows/ubuntu.yml:101`) swallows tapview's failure exit:
-   `cat build/test.log | scripts/tapview || echo "tapview failed"`.
-   (Test step itself: ubuntu.yml:91 `./scripts/run-qemu-test build 600`.)
+- **Suite completion**: `runtests` writes 0x10 to port 0x501 → host exit 33
+- **Panic**: `kernel_panic()` writes 0x11 to port 0x501 → host exit 35
+- **Encoding**: host_exit = (guest_value << 1) | 1
+- These values avoid collision with generic QEMU exit 1 (startup failure)
 
-`isa-debug-exit` semantics: guest exit value 0 → host exit 1; the script's
-`-eq 1` acceptance was presumably meant for that but 0 (panic path) is also
-accepted.
+### Implementation components
 
-Result: every panicking run ends with `[100%] Built target qemu-test` and
-`$? = 0`. This masked the #192 regression on main (panic at test 10/39 —
-tests 11–39 never run, TAP plan incomplete, CI green).
+1. **Guest signaling** (kernel/src/system/panic.c:18, userspace/bin/runtests.c:235):
+   - Panic path: `outports(0x501, 0x11)` → host exit 35
+   - Completion path: `outports(0x501, 0x10)` → host exit 33
 
-## Reliable completion check (procedure — use this, not exit codes)
+2. **Host wrapper** (scripts/run-qemu-test):
+   - Treats exit 33 as normal suite completion, then validates `test.log` with `tapview`
+   - Returns success only when QEMU completed normally and TAP reports zero failures
+   - Any other QEMU exit code (1, 3, 35, 124, timeout, etc.) is failure
 
-1. Run QEMU capturing serial (see debugging-playbook.md).
-2. `grep -c "PANIC"` serial output — 1 means the guest died.
-3. `grep "Running test" | tail -1` — compare the (n/39) counter against the
-   full list; a stuck counter < total means incomplete run.
-4. For TAP consumers: missing/short plan in `test.log` (tapview flags
-   "Expected N tests but only M ran") — currently only visible if tapview's
-   exit is allowed to propagate.
+3. **CI integration** (.github/workflows/ubuntu.yml:91, 101):
+   - Uses `scripts/run-qemu-test` with proper exit-code handling
+   - `tapview` failure exit propagates (no longer swallowed)
+
+4. **Local development** (CMakeLists.txt:313-317):
+   - `make qemu-test` now uses `scripts/run-qemu-test` wrapper
+   - Wrapper translates guest exit codes and validates TAP before returning success
+   - Consistent with CI pass/fail semantics
+
+### Exit code reference
+
+| Scenario                          | Guest write | Host exit | Recognized as |
+|-----------------------------------|-------------|-----------|---------------|
+| All tests pass                   | 0x10        | 33        | Success after TAP validation |
+| One or more tests fail           | 0x10        | 33        | Failure via `tapview`        |
+| Kernel panic                     | 0x11        | 35        | Failure       |
+| QEMU startup failure             | N/A         | 1         | Failure       |
+| QEMU timeout                     | N/A         | 124       | Failure       |
+| QEMU error/crash                 | N/A         | 0,2,4+    | Failure       |
+
+## Reliable completion check
+
+With the fix applied, failure detection is now automatic:
+
+1. **Local testing with proper signaling**: `./scripts/run-qemu-test build 600`
+   - Exit 0 = QEMU completed normally and all TAP tests passed
+   - Non-zero = test failure, malformed/incomplete TAP, panic, timeout, or QEMU error
+
+2. **Manual inspection (still useful for debugging)**:
+   - `grep -c "PANIC"` serial output — >0 means guest died
+   - `grep "Running test" | tail -1` — compare counter against total
+   - `cat build/test.log | scripts/tapview` — TAP validation
+
+3. **TAP validation**: the wrapper validates `test.log` after normal guest completion,
+   so failed tests and missing/short plans fail both local `qemu-test` and CI.
 
 ## Current known suite state (at `MAIN`)
 
@@ -84,6 +105,6 @@ tests 11–39 never run, TAP plan incomplete, CI green).
 - build job: matrix of compilers; cmake Release build only.
 - test job: Release + `EMULATOR_OUTPUT_TYPE=OUTPUT_LOG`; builds rootfs,
   debugfs sanity-dumps it, builds `cdrom_test.iso`, runs
-  `scripts/run-qemu-test build 600`, then the (swallowed) tapview step;
+  `scripts/run-qemu-test build 600`, then a diagnostic tapview step;
   artifacts test.log/serial.log uploaded `if: always()`.
 - macos.yml exists (issue #124 tracks build problems there; not examined).

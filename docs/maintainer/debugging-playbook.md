@@ -26,6 +26,7 @@ cmake -S . -B /tmp/opencode/build-X -DCMAKE_BUILD_TYPE=Debug
 make -C /tmp/opencode/build-X -j$(nproc)            # everything incl. tests
 make -C /tmp/opencode/build-X kernel.bin            # kernel only
 make -C /tmp/opencode/build-X cdrom_test.iso        # test ISO
+make -C /tmp/opencode/build-X qemu-test            # run tests (canonical)
 ```
 
 ## QEMU invocation that works for serial capture

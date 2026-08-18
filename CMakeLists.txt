@@ -308,11 +308,12 @@ add_custom_target(
 )
 
 # This target runs the emulator, and executes the runtests binary as init process.
-# Additionally it passes the '-device isa-debug-exit' option to shutdown qemu
-# after the tests are done.
+# Uses isa-debug-exit for explicit completion/failure signaling.
+# The wrapper recognizes QEMU exit 33 as normal suite completion, validates the
+# TAP output, and maps only a fully passing run to conventional host success (0).
 add_custom_target(
     qemu-test
-    COMMAND ${EMULATOR} ${EMULATOR_FLAGS} -nographic -device isa-debug-exit -boot d -cdrom ${CMAKE_BINARY_DIR}/cdrom_test.iso
+    COMMAND ${CMAKE_SOURCE_DIR}/scripts/run-qemu-test ${CMAKE_BINARY_DIR} 600
     DEPENDS cdrom_test.iso
 )
 
