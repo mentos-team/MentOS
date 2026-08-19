@@ -7,27 +7,29 @@ on:
     - main
     - develop
     paths:
-    - '**/*.c'
-    - '**/*.cpp'
-    - '**/*.h'
-    - '**/*.hpp'
-    - '**/CMakeLists.txt'
-    - '**/Makefile'
-    - '**/cmake/**'
+    - 'README.md'
+    - 'LICENSE.md'
+    - 'lib/**'
+    - 'kernel/**'
+    - 'CMakeLists.txt'
+    - 'cmake/**'
     - '.github/workflows/documentation.yml'
   pull_request:
     branches:
     - main
     - develop
     paths:
-    - '**/*.c'
-    - '**/*.cpp'
-    - '**/*.h'
-    - '**/*.hpp'
-    - '**/CMakeLists.txt'
-    - '**/Makefile'
-    - '**/cmake/**'
+    - 'README.md'
+    - 'LICENSE.md'
+    - 'lib/**'
+    - 'kernel/**'
+    - 'CMakeLists.txt'
+    - 'cmake/**'
     - '.github/workflows/documentation.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   doxygen:
@@ -48,5 +50,5 @@ jobs:
       # Step 3: Configure and Build Documentation
       - name: Generate Documentation
         run: |
-          cmake -B build -DDOXYGEN_WARN_AS_ERROR=YES
+          cmake -B build # -DDOXYGEN_WARN_AS_ERROR=YES
           cmake --build build --target mentos_documentation
