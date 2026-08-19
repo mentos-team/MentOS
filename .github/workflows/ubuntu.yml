@@ -108,7 +108,7 @@ jobs:
         cat build/test.log || echo "test.log not found"
         echo ""
         echo "=== TAP Results ==="
-        cat build/test.log | scripts/tapview || echo "tapview failed"
+        cat build/test.log | scripts/tapview
 
     - name: Show serial log
       if: always()

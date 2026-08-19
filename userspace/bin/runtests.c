@@ -16,7 +16,9 @@
 #include <syslog.h>
 #include <unistd.h>
 
-#define SHUTDOWN_PORT 0x604
+/// Debug exit port for QEMU isa-debug-exit device (default iobase=0x501)
+/// Exit code encoding: host_exit = (guest_value << 1) | 1
+#define DEBUG_EXIT_PORT 0x501
 /// Second serial port for QEMU.
 #define SERIAL_COM2   0x02F8
 
@@ -220,7 +222,8 @@ int runtests_main(int argc, char **argv)
         testsc = argc - 1;
     }
 
-    test_out("1..%d", testsc);
+    append("1..%d", testsc);
+    test_out_flush();
 
     char *test_argv[32];
     for (int i = 0; i < testsc; i++) {
@@ -230,7 +233,8 @@ int runtests_main(int argc, char **argv)
 
     // We are running as init
     if (init) {
-        outports(SHUTDOWN_PORT, 0x2000);
+        // Signal success via isa-debug-exit (guest write 0x10 → host exit 33)
+        outports(DEBUG_EXIT_PORT, 0x10);
     }
 
     return 0;

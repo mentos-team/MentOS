@@ -5,6 +5,7 @@ set -e
 
 BUILD_DIR="${1:-build}"
 TIMEOUT="${2:-600}"  # 10 minutes default
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 echo "===================================================="
 echo "Starting QEMU test run (timeout: ${TIMEOUT}s)..."
@@ -41,9 +42,17 @@ echo ""
 (tail -F "${BUILD_DIR}/serial.log" 2>/dev/null | sed -u 's/^/[SERIAL] /' &)
 (tail -F "${BUILD_DIR}/test.log" 2>/dev/null | sed -u 's/^/[TEST]   /' &)
 
-# Wait for QEMU to finish
-wait "${QEMU_PID}"
-EXIT_CODE=$?
+# Wait for QEMU to finish and explicitly capture its exit code
+# Note: QEMU returns exit 33 on isa-debug-exit success (guest wrote 0x10),
+#       exit 35 on panic (guest wrote 0x11), etc.
+# We need to capture this without triggering set -e termination.
+if wait "${QEMU_PID}"; then
+    # wait succeeded (exit 0), which shouldn't happen with isa-debug-exit
+    EXIT_CODE=$?
+else
+    # wait captured QEMU's exit code
+    EXIT_CODE=$?
+fi
 
 # Give a moment for final output to flush
 sleep 1
@@ -53,12 +62,21 @@ echo "===================================================="
 echo "QEMU finished with exit code: ${EXIT_CODE}"
 echo "===================================================="
 
-# QEMU with isa-debug-exit returns exit code 1 on success (exit code 0 from guest = 1 from host)
-# Any other exit code is a failure
-if [ "${EXIT_CODE}" -eq 1 ] || [ "${EXIT_CODE}" -eq 0 ]; then
-    echo "Test run completed successfully"
-    exit 0
-else
-    echo "Test run failed or timed out"
+# isa-debug-exit semantics: host_exit = (guest_value << 1) | 1
+# Guest writes 0x10 → host exit 33 (suite completed; TAP still decides pass/fail)
+# Guest writes 0x11 → host exit 35 (panic/failure)
+# Any other exit code is a failure (timeout, QEMU error, etc.)
+if [ "${EXIT_CODE}" -ne 33 ]; then
+    echo "Test run failed or timed out (exit code: ${EXIT_CODE})"
     exit "${EXIT_CODE}"
 fi
+
+# A normal guest completion does not imply that every test passed. Validate the
+# TAP stream so local `make qemu-test` and CI share the same pass/fail semantics.
+if ! "${SCRIPT_DIR}/tapview" < "${BUILD_DIR}/test.log"; then
+    echo "Test run completed, but TAP reported failures"
+    exit 1
+fi
+
+echo "Test run completed successfully"
+exit 0
