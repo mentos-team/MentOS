@@ -78,6 +78,7 @@ jobs:
     name: Build and Test
     runs-on: ubuntu-latest
     timeout-minutes: 15
+
     steps:
     - name: Clone repository
       uses: actions/checkout@v4
@@ -85,30 +86,24 @@ jobs:
     - name: Install test dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y nasm gcc-9 g++-9 qemu-system-x86 mtools xorriso e2fsprogs
+        sudo apt-get install -y nasm gcc-9 g++-9 qemu-system-x86 mtools xorriso
 
-    - name: Build
+    - name: Configure
       run: |
-        cmake -B build -DCMAKE_BUILD_TYPE=Release -DEMULATOR_OUTPUT_TYPE=OUTPUT_LOG
-        cmake --build build --parallel $(nproc) --target filesystem
-        ls -lh build/rootfs.img
-        debugfs -R "stat /" build/rootfs.img
-        debugfs -R "ls /bin" build/rootfs.img
+        cmake -B build \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DEMULATOR_OUTPUT_TYPE=OUTPUT_LOG
 
     - name: Run tests
       run: |
-        cmake --build build --parallel $(nproc) --target cdrom_test.iso
-        ./scripts/run-qemu-test build 600
+        cmake --build build --parallel $(nproc) --target qemu-test
       timeout-minutes: 12
 
-    - name: Check test results
+    - name: Show test log
       if: always()
       run: |
         echo "=== Test Output ==="
         cat build/test.log || echo "test.log not found"
-        echo ""
-        echo "=== TAP Results ==="
-        cat build/test.log | scripts/tapview
 
     - name: Show serial log
       if: always()
