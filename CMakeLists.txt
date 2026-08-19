@@ -365,7 +365,7 @@ if(DOXYGEN_FOUND)
     # FetchContent: Doxygen Awesome CSS
     FetchContent_Declare(doxygenawesome
         GIT_REPOSITORY https://github.com/jothepro/doxygen-awesome-css
-        GIT_TAG main
+        GIT_TAG v2.4.2
     )
     FetchContent_MakeAvailable(doxygenawesome)
 
@@ -414,7 +414,8 @@ if(DOXYGEN_FOUND)
     set(DOXYGEN_WARN_IF_UNDOCUMENTED YES)
     set(DOXYGEN_WARN_IF_DOC_ERROR YES)
     set(DOXYGEN_WARN_NO_PARAMDOC YES)
-    set(DOXYGEN_WARN_AS_ERROR NO)
+    set(DOXYGEN_WARN_AS_ERROR NO CACHE STRING "Treat Doxygen warnings as errors")
+    set_property(CACHE DOXYGEN_WARN_AS_ERROR PROPERTY STRINGS YES NO)
 
     # Add Doxygen documentation target.
     file(GLOB_RECURSE ALL_PROJECT_FILES

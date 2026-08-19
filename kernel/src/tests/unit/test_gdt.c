@@ -1,4 +1,4 @@
-/// @file test_gdt_safe.c
+/// @file test_gdt.c
 /// @brief Refactored GDT unit tests - Non-destructive version.
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
