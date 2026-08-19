@@ -1,0 +1,56 @@
+name: macOS Compatibility
+
+on:
+  schedule:
+    - cron: '0 4 * * 0'
+
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: ${{ matrix.arch }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            arch: Apple Silicon
+
+          - os: macos-15-intel
+            arch: Intel
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        brew update || true
+        brew install nasm cmake i686-elf-gcc
+
+        echo "=== Checking installed tools ==="
+        nasm --version
+        cmake --version
+        i686-elf-gcc --version
+
+    - name: Configure
+      run: |
+        cmake -B build \
+          -DCMAKE_TOOLCHAIN_FILE=tools/toolchain-i686-elf.cmake \
+          -DCMAKE_BUILD_TYPE=Release
+
+    - name: Build
+      run: |
+        cmake --build build --parallel $(sysctl -n hw.ncpu)
+
+    - name: Verify build artifacts
+      run: |
+        ls -lh build/mentos/
+        file build/mentos/bootloader.bin

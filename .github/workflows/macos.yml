@@ -16,6 +16,8 @@ on:
     - '**/CMakeLists.txt'
     - '**/Makefile'
     - '**/cmake/**'
+    - 'scripts/**'
+    - 'tools/**'
     - '**/tools/toolchain-i686-elf.cmake'
     - '.github/workflows/macos.yml'
   pull_request:
@@ -32,21 +34,19 @@ on:
     - '**/CMakeLists.txt'
     - '**/Makefile'
     - '**/cmake/**'
+    - 'scripts/**'
+    - 'tools/**'
     - '**/tools/toolchain-i686-elf.cmake'
     - '.github/workflows/macos.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
     name: Build and Compile (macOS)
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          # macOS runners come with clang, we test with the system clang
-          # i686-elf-gcc is installed via Homebrew for cross-compilation
-          - { os: macos-14, arch: "Intel" }
-          - { os: macos-14-large, arch: "Apple Silicon" }
-    runs-on: ${{ matrix.os }}
+    runs-on: macos-15
     timeout-minutes: 30
     steps:
     - name: Clone repository
@@ -54,17 +54,8 @@ jobs:
 
     - name: Install dependencies via Homebrew
       run: |
-        # Update Homebrew
         brew update || true
-        
-        # Install required tools
-        brew install nasm cmake
-        
-        # Install cross-compiler for i386 (bare-metal)
-        # This is critical - we need i686-elf-gcc, not i686-linux-gnu
-        brew install i686-elf-gcc
-        
-        # Verify installation
+        brew install nasm cmake i686-elf-gcc
         echo "=== Checking installed tools ==="
         nasm --version
         cmake --version
@@ -72,16 +63,9 @@ jobs:
 
     - name: Build with cross-compilation toolchain
       run: |
-        # Create build directory
         mkdir -p build
         cd build
-        
-        # Configure with the i686-elf toolchain file
-        # This is essential for macOS (which is ARM-based)
-        cmake .. -DCMAKE_TOOLCHAIN_FILE=../tools/toolchain-i686-elf.cmake \
-                 -DCMAKE_BUILD_TYPE=Release
-        
-        # Build all targets
+        cmake .. -DCMAKE_TOOLCHAIN_FILE=../tools/toolchain-i686-elf.cmake -DCMAKE_BUILD_TYPE=Release
         cmake --build . --parallel $(sysctl -n hw.ncpu)
 
     - name: Verify build artifacts
