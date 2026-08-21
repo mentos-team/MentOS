@@ -1137,14 +1137,24 @@ static inline int create_pipe_fd(pipe_inode_info_t *pipe_info, int flags, mode_t
     int fd = get_unused_fd();
     if (fd < 0) {
         pr_err("Failed to allocate file descriptor.\n");
-        // Close the file if fd allocation fails.
-        pipe_close(file);
+        // The file never entered the fd table and its end was never
+        // accounted in readers/writers: release only the file structure.
+        // pipe_info stays owned by sys_pipe.
+        vfs_dealloc_file(file);
         return -1;
     }
 
     // Register the file descriptor in the process's file descriptor table.
     task->fd_list[fd].file_struct = file;
     task->fd_list[fd].flags_mask  = file->flags;
+
+    // Account for this end as soon as it exists, so that closing it is
+    // balanced even while sys_pipe is still creating the other end.
+    if ((file->flags & O_ACCMODE) == O_WRONLY) {
+        ++pipe_info->writers;
+    } else {
+        ++pipe_info->readers;
+    }
 
     // Return the created file descriptor.
     return fd;
@@ -1232,12 +1242,14 @@ int sys_pipe(int fds[2])
         if (fd_write >= 0) {
             sys_close(fd_write);
         }
-        __pipe_inode_info_dealloc(pipe_info);
+        // If an end was created, its sys_close above dropped the last
+        // reference and pipe_close already deallocated pipe_info. Only when
+        // no end was created does sys_pipe still own pipe_info.
+        if ((fd_read < 0) && (fd_write < 0)) {
+            __pipe_inode_info_dealloc(pipe_info);
+        }
         return -1;
     }
-
-    pipe_info->readers = 1;
-    pipe_info->writers = 1;
 
     // Assign file descriptors to output array
     fds[0] = fd_read;
