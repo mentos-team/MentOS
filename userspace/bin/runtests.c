@@ -23,6 +23,7 @@
 #define SERIAL_COM2   0x02F8
 
 static char *all_tests[] = {
+    "t_aab_pipe",
     "t_abort",
     "t_alarm",
     // "t_big_write",
