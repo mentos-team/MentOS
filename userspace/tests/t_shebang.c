@@ -5,8 +5,10 @@
 ///          shebang line without a trailing newline (which used to trigger a
 ///          double `vfs_close`), a file whose shebang read fails (sparse
 ///          holes, which used to index the stack buffer with a negative
-///          read result), and short files (which used to be classified
-///          through an uninitialized read).
+///          read result), short files (which used to be classified
+///          through an uninitialized read), and an exec with a large
+///          environment (which used to overflow the kernel heap buffer
+///          that rebuilds argv/envp for the interpreter, #227).
 /// @copyright (c) 2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
@@ -27,6 +29,17 @@
 
 /// Path of the sparse (hole-punched) script staged inside the filesystem image.
 #define SPARSE_SCRIPT SCRIPT_DIR "t_shebang_sparse.sh"
+
+/// Number of variables in the large environment of the #227 regression test.
+#define BIG_ENV_ENTRIES 96
+/// Length of the `AAAA...` value of each large-environment variable.
+#define BIG_ENV_VALUE_LEN 192
+
+/// Storage for the large environment; static so that the forked child
+/// inherits it through fork() without pressing against its stack.
+static char big_env_strings[BIG_ENV_ENTRIES][16 + BIG_ENV_VALUE_LEN];
+/// The environment vector built over `big_env_strings`.
+static char *big_envp[BIG_ENV_ENTRIES + 1];
 
 /// Creates a script file with the given content and mode.
 /// @param name The file name inside SCRIPT_DIR.
@@ -54,12 +67,31 @@ static int create_script(const char *name, const char *content, size_t len, mode
     return 0;
 }
 
-/// Forks, execs the given script and waits for the child.
+/// Builds the large environment for the #227 regression test: BIG_ENV_ENTRIES
+/// variables of ~200 bytes each (~19 KB in total). The values are filled with
+/// 'A' so that any pointer clobbered by an overflow of this data is
+/// recognizable in a panic log.
+/// @return the environment vector, NULL terminated.
+static char **build_big_env(void)
+{
+    for (int i = 0; i < BIG_ENV_ENTRIES; ++i) {
+        char *entry = big_env_strings[i];
+        int n       = snprintf(entry, 12, "V%03d=", i);
+        memset(entry + n, 'A', BIG_ENV_VALUE_LEN);
+        entry[n + BIG_ENV_VALUE_LEN] = '\0';
+        big_envp[i]                  = entry;
+    }
+    big_envp[BIG_ENV_ENTRIES] = NULL;
+    return big_envp;
+}
+
+/// Forks, execs the given script with the given environment and waits for
+/// the child.
 /// @return 0 if execve succeeded and the interpreter exited with status 0,
 ///         the errno if execve returned cleanly in the child,
 ///         -1 if the child was killed by a signal,
 ///         -2 on fork/waitpid failure.
-static int run_script(const char *path)
+static int run_script_env(const char *path, char *envp[])
 {
     pid_t pid = fork();
     if (pid < 0) {
@@ -68,7 +100,6 @@ static int run_script(const char *path)
     }
     if (pid == 0) {
         char *argv[] = { (char *)path, NULL };
-        char *envp[] = { NULL };
         execve(path, argv, envp);
         // execve returned, report the errno through the exit status.
         exit(errno);
@@ -82,6 +113,17 @@ static int run_script(const char *path)
         return WEXITSTATUS(status);
     }
     return -1;
+}
+
+/// Forks, execs the given script and waits for the child.
+/// @return 0 if execve succeeded and the interpreter exited with status 0,
+///         the errno if execve returned cleanly in the child,
+///         -1 if the child was killed by a signal,
+///         -2 on fork/waitpid failure.
+static int run_script(const char *path)
+{
+    char *envp[] = { NULL };
+    return run_script_env(path, envp);
 }
 
 /// Checks the outcome of an exec that is expected to fail after the address
@@ -217,6 +259,26 @@ int main(int argc, char *argv[])
     if (!check_post_teardown_failure(res, EIO, "sparse script")) {
         ++failures;
     }
+
+    // ------------------------------------------------------------------
+    // 9) A valid script executed with a large environment (~19 KB): the
+    //    kernel buffer that rebuilds argv and envp for the interpreter was
+    //    allocated with the size of argv alone, so the whole environment
+    //    was pushed past the end of the allocation, corrupting the kernel
+    //    heap (#227). The environment is large enough that the overflow
+    //    cannot hide inside the allocator's size-class rounding, and the
+    //    interpreter (/bin/env) walks its whole environment, which also
+    //    checks that the rebuilt envp it receives is intact.
+    // ------------------------------------------------------------------
+    if (create_script("t_shebang_bigenv.sh", "#!/bin/env\n", 11, 0755) < 0) {
+        return EXIT_FAILURE;
+    }
+    res = run_script_env(SCRIPT_DIR "t_shebang_bigenv.sh", build_big_env());
+    if (res != 0) {
+        syslog(LOG_ERR, "[t_shebang] big environment: exec failed (%d)", res);
+        ++failures;
+    }
+    unlink(SCRIPT_DIR "t_shebang_bigenv.sh");
 
     return failures ? EXIT_FAILURE : EXIT_SUCCESS;
 }
