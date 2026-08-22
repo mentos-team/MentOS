@@ -19,6 +19,7 @@ set(TEST_LIST
     t_gid.c
     t_grp.c
     t_stopcont.c
+    t_syscall_ni.c
     t_ndtree.c
     t_pwd.c
     t_fflush.c

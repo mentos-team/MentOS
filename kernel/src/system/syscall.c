@@ -47,6 +47,13 @@ static inline int sys_ni_syscall(void) { return -ENOSYS; }
 
 void syscall_init(void)
 {
+    // Plug all the table entries with the "not implemented" system-call, so
+    // that unregistered numbers return -ENOSYS instead of calling a NULL
+    // pointer in ring 0.
+    for (int i = 0; i < SYSCALL_NUMBER; ++i) {
+        sys_call_table[i] = (SystemCall)sys_ni_syscall;
+    }
+
     // Initialize the list of system calls.
     sys_call_table[__NR_exit]           = (SystemCall)sys_exit;
     sys_call_table[__NR_fork]           = (SystemCall)sys_fork;
