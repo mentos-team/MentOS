@@ -645,19 +645,19 @@ char *strdup(const char *s)
     if (new == NULL) {
         return NULL;
     }
-    new[len] = '\0';
     return (char *)memcpy(new, s, len);
 }
 
 char *strndup(const char *s, size_t n)
 {
     size_t len = strnlen(s, n);
-    char *new  = malloc(len);
+    char *new  = malloc(len + 1);
     if (new == NULL) {
         return NULL;
     }
+    memcpy(new, s, len);
     new[len] = '\0';
-    return (char *)memcpy(new, s, len);
+    return new;
 }
 
 char *strsep(char **stringp, const char *delim)
