@@ -465,11 +465,18 @@ vfs_file_descriptor_t *fget(int fd)
 char *sys_getcwd(char *buf, size_t size)
 {
     task_struct *current = scheduler_get_current_process();
-    if ((current != NULL) && (buf != NULL)) {
-        strncpy(buf, current->cwd, size);
-        return buf;
+    if ((current == NULL) || (buf == NULL)) {
+        return (char *)-EACCES;
     }
-    return (char *)-EACCES;
+    if (size == 0) {
+        return (char *)-EINVAL;
+    }
+    size_t len = strnlen(current->cwd, sizeof(current->cwd));
+    if (size < (len + 1)) {
+        return (char *)-ERANGE;
+    }
+    memcpy(buf, current->cwd, len + 1);
+    return buf;
 }
 
 int sys_chdir(char const *path)

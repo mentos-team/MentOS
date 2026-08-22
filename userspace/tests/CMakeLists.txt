@@ -40,6 +40,7 @@ set(TEST_LIST
     t_sleep.c
     t_mem.c
     t_fork.c
+    t_getcwd.c
     t_semflg.c
     t_shebang.c
     t_time.c
