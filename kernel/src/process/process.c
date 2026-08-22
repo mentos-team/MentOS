@@ -122,7 +122,11 @@ static int __reset_process(task_struct *task)
 static int __has_shebang(vfs_file_t *file)
 {
     char buf[2];
-    vfs_read(file, buf, 0, sizeof(buf));
+    // Only classify the file as a script when the whole marker was read,
+    // otherwise the buffer content would be uninitialized.
+    if (vfs_read(file, buf, 0, sizeof(buf)) != (ssize_t)sizeof(buf)) {
+        return 0;
+    }
     return buf[0] == '#' && buf[1] == '!';
 }
 
@@ -134,18 +138,22 @@ static int __has_shebang(vfs_file_t *file)
 static int __load_executable(const char *path, task_struct *task, uint32_t *entry)
 {
     // Return code variable.
-    int ret              = 0;
-    int interpreter_loop = 0;
+    int ret                = 0;
+    int interpreter_loop   = 0;
+    // The duplicated interpreter path, it must be freed on every exit path.
+    char *interpreter_path = NULL;
 start:
     pr_debug("__load_executable(`%s`, %p `%s`, %p)\n", path, task, task->name, entry);
     vfs_file_t *file = vfs_open(path, O_RDONLY, 0);
     if (file == NULL) {
         pr_err("Cannot find executable!\n");
-        return -errno;
+        ret = -errno;
+        goto return_free;
     }
     if (!file->fs_operations || !file->sys_operations) {
         pr_err("Executable has no filesystem operations (unmounted fs?).\n");
-        return -ENOENT;
+        ret = -ENOENT;
+        goto close_and_return;
     }
     // Check that the file has the execute permission set
     if (!vfs_valid_exec_permission(task, file)) {
@@ -185,26 +193,39 @@ start:
         // Disallow interpreter loops
         if (interpreter_loop) {
             ret = -ELOOP;
-            // Free interpreter buffer
-            kfree((void *)path);
             goto close_and_return;
         }
 
-        // Read shebang line
+        // Read the shebang line, keep one byte free for the terminator.
         char buf[PATH_MAX];
-        ssize_t bytes_read = vfs_read(file, buf, 2, sizeof(buf));
-        buf[bytes_read]    = 0;
+        ssize_t bytes_read = vfs_read(file, buf, 2, sizeof(buf) - 1);
+        // The reference to the script file is no longer needed.
         vfs_close(file);
+        file = NULL;
+        // Never use a failed read result as a buffer index.
+        if (bytes_read < 0) {
+            // Do not log `path` here: it may point into the old, already
+            // destroyed user address space (see #208).
+            pr_err("Failed to read the shebang line.\n");
+            ret = -EIO;
+            goto return_free;
+        }
+        buf[bytes_read] = 0;
 
         // Find end of the line
         char *lineend = strchr(buf, '\n');
         if (!lineend) {
             ret = -ENAMETOOLONG;
-            goto close_and_return;
+            goto return_free;
         }
         *lineend = 0;
 
-        path = strdup(buf);
+        interpreter_path = strdup(buf);
+        if (interpreter_path == NULL) {
+            ret = -ENOMEM;
+            goto return_free;
+        }
+        path = interpreter_path;
         interpreter_loop++;
         goto start;
     }
@@ -212,18 +233,21 @@ start:
     // Load the elf file, check if 0 is returned and print the error.
     if (!(ret = elf_load_file(task, file, entry))) {
         pr_err("Failed to load ELF file `%s`!\n", path);
-    }
-
-    // Free potential interpreter path
-    if (interpreter_loop) {
-        // Free interpreter buffer
-        kfree((void *)path);
+    } else if (interpreter_loop) {
+        // An interpreter was loaded.
         ret = 2;
     }
 
 close_and_return:
-    // Close the file.
-    vfs_close(file);
+    // Close the file if it is still open.
+    if (file != NULL) {
+        vfs_close(file);
+    }
+return_free:
+    // Free the duplicated interpreter path.
+    if (interpreter_path != NULL) {
+        kfree(interpreter_path);
+    }
     return ret;
 }
 

@@ -64,6 +64,7 @@ static char *all_tests[] = {
     "t_siginfo",
     "t_sigmask",
     "t_sigusr",
+    "t_shebang",
     "t_sleep",
     "t_spwd",
     "t_stopcont",
