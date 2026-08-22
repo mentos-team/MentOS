@@ -622,7 +622,6 @@ char *strdup(const char *s)
     if (new == NULL) {
         return NULL;
     }
-    // The terminating zero is part of the copied bytes.
     return (char *)memcpy(new, s, len);
 }
 
