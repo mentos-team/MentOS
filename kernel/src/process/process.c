@@ -660,6 +660,8 @@ int sys_execve(pt_regs_t *f)
         char **int_argv = kmalloc((argc + 2) * sizeof(char *));
         if (!int_argv) {
             pr_err("Failed to allocate memory for interpreter argv array.\n");
+            // Free the temporary args memory.
+            kfree(args_mem);
             return -1;
         }
         int_argv[0] = saved_argv[0]; // TODO: pass the path to the interpreter.
@@ -669,14 +671,18 @@ int sys_execve(pt_regs_t *f)
         }
         argc++;
 
-        // Rebuild the saved argv and envp pointers.
+        // Rebuild the saved argv and envp pointers. The buffer must hold both
+        // the new argv and the whole environment (#227).
         int int_argv_bytes = __count_args_bytes(int_argv);
-        void *int_args_mem = kmalloc(int_argv_bytes);
+        void *int_args_mem = kmalloc(int_argv_bytes + envp_bytes);
         if (!int_args_mem) {
             pr_err(
                 "Failed to allocate memory for interpreter arguments and "
                 "environment %d (%d + %d).\n",
                 int_argv_bytes + envp_bytes, int_argv_bytes, envp_bytes);
+            // Free the temporary allocations.
+            kfree(int_argv);
+            kfree(args_mem);
             return -1;
         }
         // Copy the arguments.
@@ -685,7 +691,8 @@ int sys_execve(pt_regs_t *f)
         saved_envp                = __push_args_on_stack(&int_args_mem_ptr, saved_envp);
         // Check the memory pointer.
         assert(int_args_mem_ptr == (uint32_t)int_args_mem);
-        // Free the old argument and environ memory block.
+        // Free the interpreter argv array and the old argument and environ memory block.
+        kfree(int_argv);
         kfree(args_mem);
         args_mem = int_args_mem;
     }
