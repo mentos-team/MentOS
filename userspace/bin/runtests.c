@@ -36,6 +36,7 @@ static char *all_tests[] = {
     "t_fflush",
     "t_fhs",
     "t_fork",
+    "t_getcwd",
     "t_gid",
     "t_groups",
     "t_grp",
