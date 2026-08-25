@@ -72,6 +72,7 @@ static char *all_tests[] = {
     "t_syscall_ni",
     "t_syslog",
     "t_time",
+    "t_wifsignaled",
     "t_write_read",
 };
 
