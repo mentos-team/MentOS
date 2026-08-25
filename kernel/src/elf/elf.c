@@ -405,8 +405,12 @@ int elf_check_file_type(vfs_file_t *file, Elf_Type type)
     elf_header_t header;
     // By default we return failure.
     int ret = 0;
-    // Read the header and check the file type.
-    if (vfs_read(file, &header, 0, sizeof(elf_header_t)) != -1) {
+    // Read the header and check the file type. The header is meaningful
+    // only if the whole header was read: an empty, short, or failed read
+    // leaves (part of) the buffer uninitialized, and the file must be
+    // classified as not being an ELF of the requested type (#224). The
+    // comparison is signed so that any negative errno is rejected as well.
+    if (vfs_read(file, &header, 0, sizeof(elf_header_t)) == (ssize_t)sizeof(elf_header_t)) {
         if (elf_check_file_header(&header)) {
             ret = header.type == type;
         }
