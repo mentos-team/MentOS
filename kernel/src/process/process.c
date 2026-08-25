@@ -18,6 +18,8 @@
 #include "hardware/timer.h"
 #include "klib/stack_helper.h"
 #include "libgen.h"
+#include "mem/mm/mm.h"
+#include "mem/mm/vmem.h"
 #include "process/pid_manager.h"
 #include "process/prio.h"
 #include "process/process.h"
@@ -83,37 +85,31 @@ static inline char **__push_args_on_stack(uintptr_t *stack, char *args[])
     return (char **)(*stack);
 }
 
-/// @brief Resets the process.
-/// @param task the process to reset.
-/// @return 0 on failure, 1 otherwise.
-static int __reset_process(task_struct *task)
+/// @brief Clears the user stack of a freshly created memory descriptor.
+/// @param mm the memory descriptor whose stack must be cleared.
+/// @return 0 on success, -errno on failure.
+static int __clear_user_stack(mm_struct_t *mm)
 {
-    pr_debug("__reset_process(%p `%s`)\n", task, task->name);
-    // Create a new stack segment.
-    task->mm = mm_create_blank(DEFAULT_STACK_SIZE);
-    if (task->mm == NULL) {
-        pr_err("Failed to initialize process mm structure.\n");
-        return 0;
+    // Map the stack of the candidate image inside the kernel virtual mapping
+    // window, so that we can clear it without switching the current page
+    // directory (see #208: the old image must stay active while the new one
+    // is being built).
+    virt_map_page_t *vpage = vmem_map_alloc_virtual(DEFAULT_STACK_SIZE);
+    if (vpage == NULL) {
+        pr_err("Failed to allocate the virtual mapping window for the stack.\n");
+        return -ENOMEM;
     }
-
-    // Save the current page directory.
-    page_directory_t *crtdir = paging_get_current_pgd();
-    // FIXME: Now to clear the stack a pgdir switch is made, it should be a kernel mmapping.
-    paging_switch_pgd(task->mm->pgd);
-
+    uint32_t dst_addr = vmem_map_virtual_address(mm, vpage, mm->start_stack, DEFAULT_STACK_SIZE);
+    if (dst_addr == 0) {
+        pr_err("Failed to map the virtual mapping window for the stack.\n");
+        vmem_unmap_virtual_address_page(vpage);
+        return -ENOMEM;
+    }
     // Clean stack space.
-    memset((char *)task->mm->start_stack, 0, DEFAULT_STACK_SIZE);
-    // Set the base address of the stack.
-    task->thread.regs.ebp     = (uintptr_t)(task->mm->start_stack + DEFAULT_STACK_SIZE);
-    // Set the top address of the stack.
-    task->thread.regs.useresp = task->thread.regs.ebp;
-    // Enable the interrupts.
-    task->thread.regs.eflags  = task->thread.regs.eflags | EFLAG_IF;
-
-    // Restore previous pgdir
-    paging_switch_pgd(crtdir);
-
-    return 1;
+    memset((char *)dst_addr, 0, DEFAULT_STACK_SIZE);
+    // Release the kernel virtual mapping window.
+    vmem_unmap_virtual_address_page(vpage);
+    return 0;
 }
 
 /// @brief Checks if the file starts with a shebang.
@@ -130,25 +126,39 @@ static int __has_shebang(vfs_file_t *file)
     return buf[0] == '#' && buf[1] == '!';
 }
 
-/// @brief Replace the current process with a loaded exectuable
-/// @param path the path to the executable to load.
-/// @param task the task to laod the exectuable.
-/// @param entry
-/// @return -errno or 0 on failure, 1 on success, 2 if a interpreter was loaded
-static int __load_executable(const char *path, task_struct *task, uint32_t *entry)
+/// @brief Builds the memory image of an executable into a candidate mm.
+/// @param path the path of the executable to load.
+/// @param task the task requesting the executable (used for permissions and
+///             for the setuid/setgid handling); it is left untouched until
+///             the image is fully built.
+/// @param entry the output where the entry point is stored (only written on
+///              success).
+/// @param new_mm the output where the candidate memory descriptor is stored
+///               (only written on success). The caller owns it and must
+///               either install it on the task (commit) or destroy it
+///               (rollback).
+/// @return -errno on failure, 1 on success, 2 if an interpreter was loaded.
+static int __load_executable(const char *path, task_struct *task, uint32_t *entry, mm_struct_t **new_mm)
 {
     // Return code variable.
     int ret                = 0;
     int interpreter_loop   = 0;
     // The duplicated interpreter path, it must be freed on every exit path.
     char *interpreter_path = NULL;
+    // The candidate memory image: until the load succeeds it is completely
+    // separate from the running image of the task (#208).
+    mm_struct_t *candidate = NULL;
+    // The credentials are restored if the load fails: a failed execve must
+    // leave the caller exactly as it was.
+    uid_t saved_uid        = task->uid;
+    pid_t saved_gid        = task->gid;
 start:
     pr_debug("__load_executable(`%s`, %p `%s`, %p)\n", path, task, task->name, entry);
     vfs_file_t *file = vfs_open(path, O_RDONLY, 0);
     if (file == NULL) {
         pr_err("Cannot find executable!\n");
         ret = -errno;
-        goto return_free;
+        goto close_and_return;
     }
     if (!file->fs_operations || !file->sys_operations) {
         pr_err("Executable has no filesystem operations (unmounted fs?).\n");
@@ -161,7 +171,8 @@ start:
         ret = -EACCES;
         goto close_and_return;
     }
-    // Check that the file is actually an executable before destroying the `mm`.
+    // Check that the file is actually an executable before building the
+    // candidate image.
     if (!(elf_check_file_type(file, ET_EXEC) || __has_shebang(file))) {
         pr_debug("This is not a valid executable `%s`!\n", path);
         ret = -ENOEXEC;
@@ -175,20 +186,9 @@ start:
     if (bitmask_check(file->mask, S_ISGID)) {
         task->gid = file->gid;
     }
-    // FIXME: When threads will be implemented
-    // they should share the mm, so the destroy_process_image must be called
-    // only when all the threads are terminated. This can be accomplished by using
-    // an internal counter on the mm.
-    if (task->mm) {
-        mm_destroy(task->mm);
-    }
-    // Recreate the memory of the process.
-    if (!__reset_process(task)) {
-        ret = -ENOMEM;
-        goto close_and_return;
-    }
-
-    // Load potential interpreter specified by a shebang line
+    // Load potential interpreter specified by a shebang line. The
+    // interpreter is resolved before anything is allocated, so that a
+    // failing script only costs a file lookup.
     if (__has_shebang(file)) {
         // Disallow interpreter loops
         if (interpreter_loop) {
@@ -202,13 +202,12 @@ start:
         // The reference to the script file is no longer needed.
         vfs_close(file);
         file = NULL;
-        // Never use a failed read result as a buffer index.
+        // Never use a failed read result as a buffer index. Do not log
+        // `path` here: on the first iteration it is a raw user pointer.
         if (bytes_read < 0) {
-            // Do not log `path` here: it may point into the old, already
-            // destroyed user address space (see #208).
             pr_err("Failed to read the shebang line.\n");
             ret = -EIO;
-            goto return_free;
+            goto close_and_return;
         }
         buf[bytes_read] = 0;
 
@@ -216,34 +215,64 @@ start:
         char *lineend = strchr(buf, '\n');
         if (!lineend) {
             ret = -ENAMETOOLONG;
-            goto return_free;
+            goto close_and_return;
         }
         *lineend = 0;
 
         interpreter_path = strdup(buf);
         if (interpreter_path == NULL) {
             ret = -ENOMEM;
-            goto return_free;
+            goto close_and_return;
         }
         path = interpreter_path;
         interpreter_loop++;
         goto start;
     }
 
-    // Load the elf file, check if 0 is returned and print the error.
-    if (!(ret = elf_load_file(task, file, entry))) {
-        pr_err("Failed to load ELF file `%s`!\n", path);
-    } else if (interpreter_loop) {
-        // An interpreter was loaded.
-        ret = 2;
+    // == Build the candidate image ===========================================
+    // From this point on, every failure must destroy the candidate image
+    // and leave the current image of the task untouched.
+    // FIXME: When threads will be implemented
+    // they should share the mm, so the destroy_process_image must be called
+    // only when all the threads are terminated. This can be accomplished by using
+    // an internal counter on the mm.
+    candidate = mm_create_blank(DEFAULT_STACK_SIZE);
+    if (candidate == NULL) {
+        pr_err("Failed to initialize the candidate mm structure.\n");
+        ret = -ENOMEM;
+        goto close_and_return;
     }
+    // Clear the stack of the candidate image through the kernel virtual
+    // mapping window: the current page directory stays on the old image.
+    if ((ret = __clear_user_stack(candidate)) < 0) {
+        goto close_and_return;
+    }
+
+    // Load the elf file into the candidate memory descriptor.
+    if ((ret = elf_load_file(candidate, file, entry)) < 0) {
+        pr_err("Failed to load ELF file `%s`!\n", path);
+        goto close_and_return;
+    }
+    ret = interpreter_loop ? 2 : 1;
 
 close_and_return:
     // Close the file if it is still open.
     if (file != NULL) {
         vfs_close(file);
     }
-return_free:
+    // Rollback: destroy the candidate image and restore the credentials. On
+    // success, hand the candidate over to the caller, which becomes
+    // responsible for committing (or destroying) it.
+    if (ret <= 0) {
+        if (candidate != NULL) {
+            mm_destroy(candidate);
+            candidate = NULL;
+        }
+        task->uid = saved_uid;
+        task->gid = saved_gid;
+    } else {
+        *new_mm = candidate;
+    }
     // Free the duplicated interpreter path.
     if (interpreter_path != NULL) {
         kfree(interpreter_path);
@@ -405,9 +434,11 @@ int process_create_init(const char *path)
     // ------------------------------------------------------------------------
 
     // == INITIALIZE TASK MEMORY ==============================================
-    // Load the executable.
-    if (__load_executable(path, init_process, &init_process->thread.regs.eip) <= 0) {
-        pr_err("Entry for init: %d\n", init_process->thread.regs.eip);
+    // Build the image of the executable into a candidate mm; the task is
+    // not touched until the image is fully built (#208).
+    mm_struct_t *new_mm = NULL;
+    if (__load_executable(path, init_process, &init_process->thread.regs.eip, &new_mm) <= 0) {
+        pr_err("Failed to load the init executable: %s.\n", path);
         return 1;
     }
     // ------------------------------------------------------------------------
@@ -415,8 +446,14 @@ int process_create_init(const char *path)
     // == INITIALIZE PROGRAM ARGUMENTS ========================================
     // Save the current page directory.
     page_directory_t *crtdir = paging_get_current_pgd();
-    // Switch to init page directory.
-    paging_switch_pgd(init_process->mm->pgd);
+    // Switch to the page directory of the candidate image.
+    paging_switch_pgd(new_mm->pgd);
+
+    // Commit: the candidate image becomes the image of the init process
+    // (there is no previous image to destroy).
+    init_process->mm        = new_mm;
+    // The stack of the new image starts at its top.
+    uintptr_t useresp       = new_mm->start_stack + DEFAULT_STACK_SIZE;
 
     // Prepare argv and envp for the init process.
     char **argv_ptr;
@@ -425,21 +462,26 @@ int process_create_init(const char *path)
     static char *argv[]         = {"/bin/init", (char *)NULL};
     static char *envp[]         = {(char *)NULL};
     // Save where the arguments start.
-    init_process->mm->arg_start = init_process->thread.regs.useresp;
+    new_mm->arg_start           = useresp;
     // Push the arguments on the stack.
-    argv_ptr                    = __push_args_on_stack(&init_process->thread.regs.useresp, argv);
+    argv_ptr                    = __push_args_on_stack(&useresp, argv);
     // Save where the arguments end.
-    init_process->mm->arg_end   = init_process->thread.regs.useresp;
+    new_mm->arg_end             = useresp;
     // Save where the environmental variables start.
-    init_process->mm->env_start = init_process->thread.regs.useresp;
+    new_mm->env_start           = useresp;
     // Push the environment on the stack.
-    envp_ptr                    = __push_args_on_stack(&init_process->thread.regs.useresp, envp);
+    envp_ptr                    = __push_args_on_stack(&useresp, envp);
     // Save where the environmental variables end.
-    init_process->mm->env_end   = init_process->thread.regs.useresp;
+    new_mm->env_end             = useresp;
     // Push the `main` arguments on the stack (argc, argv, envp).
-    stack_push_ptr(&init_process->thread.regs.useresp, envp_ptr);
-    stack_push_ptr(&init_process->thread.regs.useresp, argv_ptr);
-    stack_push_s32(&init_process->thread.regs.useresp, argc);
+    stack_push_ptr(&useresp, envp_ptr);
+    stack_push_ptr(&useresp, argv_ptr);
+    stack_push_s32(&useresp, argc);
+
+    // Set the stack registers of the new image, and enable the interrupts.
+    init_process->thread.regs.ebp     = useresp;
+    init_process->thread.regs.useresp = useresp;
+    init_process->thread.regs.eflags  = init_process->thread.regs.eflags | EFLAG_IF;
 
     // Restore previous pgdir
     paging_switch_pgd(crtdir);
@@ -652,7 +694,15 @@ int sys_execve(pt_regs_t *f)
     // ------------------------------------------------------------------------
 
     // == INITIALIZE TASK MEMORY ==============================================
-    int ret = __load_executable(filename, current, &current->thread.regs.eip);
+    // Build the new image inside a candidate mm: until the commit below,
+    // the current image of the process stays fully functional, so any
+    // failure just returns an error to the caller (#208).
+    uint32_t entry      = 0;
+    mm_struct_t *new_mm = NULL;
+    // Credentials are restored if any of the post-load steps fails.
+    uid_t prev_uid      = current->uid;
+    pid_t prev_gid      = current->gid;
+    int ret             = __load_executable(filename, current, &entry, &new_mm);
     if (ret <= 0) {
         pr_err("Failed to load executable!\n");
         // Free the temporary args memory.
@@ -667,9 +717,12 @@ int sys_execve(pt_regs_t *f)
         char **int_argv = kmalloc((argc + 2) * sizeof(char *));
         if (!int_argv) {
             pr_err("Failed to allocate memory for interpreter argv array.\n");
-            // Free the temporary args memory.
+            // Rollback: the old image is still the current one.
+            mm_destroy(new_mm);
+            current->uid = prev_uid;
+            current->gid = prev_gid;
             kfree(args_mem);
-            return -1;
+            return -ENOMEM;
         }
         int_argv[0] = saved_argv[0]; // TODO: pass the path to the interpreter.
         int_argv[1] = saved_filename;
@@ -687,10 +740,13 @@ int sys_execve(pt_regs_t *f)
                 "Failed to allocate memory for interpreter arguments and "
                 "environment %d (%d + %d).\n",
                 int_argv_bytes + envp_bytes, int_argv_bytes, envp_bytes);
-            // Free the temporary allocations.
+            // Rollback: the old image is still the current one.
             kfree(int_argv);
+            mm_destroy(new_mm);
+            current->uid = prev_uid;
+            current->gid = prev_gid;
             kfree(args_mem);
-            return -1;
+            return -ENOMEM;
         }
         // Copy the arguments.
         uint32_t int_args_mem_ptr = (uint32_t)int_args_mem + (int_argv_bytes + envp_bytes);
@@ -709,27 +765,47 @@ int sys_execve(pt_regs_t *f)
     // Save the current page directory.
     page_directory_t *crtdir = paging_get_current_pgd();
 
-    // Change the page directory to point to the newly created process
-    paging_switch_pgd(current->mm->pgd);
+    // Temporarily switch to the page directory of the candidate image to
+    // initialize its stack.
+    paging_switch_pgd(new_mm->pgd);
 
+    // The stack of the new image starts at its top.
+    uintptr_t useresp = new_mm->start_stack + DEFAULT_STACK_SIZE;
     // Save where the arguments start.
-    current->mm->arg_start = current->thread.regs.useresp;
+    new_mm->arg_start = useresp;
     // Push the arguments on the stack.
-    final_argv             = __push_args_on_stack(&current->thread.regs.useresp, saved_argv);
+    final_argv        = __push_args_on_stack(&useresp, saved_argv);
     // Save where the arguments end, and the env starts.
-    current->mm->env_start = current->mm->arg_end = current->thread.regs.useresp;
+    new_mm->env_start = new_mm->arg_end = useresp;
     // Push the environment on the stack.
-    final_envp                                    = __push_args_on_stack(&current->thread.regs.useresp, saved_envp);
+    final_envp                           = __push_args_on_stack(&useresp, saved_envp);
     // Save where the environmental variables end.
-    current->mm->env_end                          = current->thread.regs.useresp;
+    new_mm->env_end                      = useresp;
     // Push the `main` arguments on the stack (argc, argv, envp).
-    stack_push_ptr(&current->thread.regs.useresp, final_envp);
-    stack_push_ptr(&current->thread.regs.useresp, final_argv);
-    stack_push_s32(&current->thread.regs.useresp, argc);
+    stack_push_ptr(&useresp, final_envp);
+    stack_push_ptr(&useresp, final_argv);
+    stack_push_s32(&useresp, argc);
 
     // Restore previous pgdir
     paging_switch_pgd(crtdir);
     // ------------------------------------------------------------------------
+
+    // == COMMIT ===============================================================
+    // The candidate image is complete: install it on the task, destroy the
+    // old image, and set the registers of the new image. Past this point
+    // the syscall cannot fail anymore.
+    mm_struct_t *old_mm     = current->mm;
+    current->mm             = new_mm;
+    if (old_mm != NULL) {
+        mm_destroy(old_mm);
+    }
+    // Set the entry point.
+    current->thread.regs.eip     = entry;
+    // Set the base address and the top of the stack.
+    current->thread.regs.ebp     = useresp;
+    current->thread.regs.useresp = useresp;
+    // Enable the interrupts.
+    current->thread.regs.eflags  = current->thread.regs.eflags | EFLAG_IF;
 
     // Change the name of the process.
     strcpy(current->name, name_buffer);
@@ -741,6 +817,6 @@ int sys_execve(pt_regs_t *f)
     scheduler_restore_context(current, f);
 
     pr_debug("Executing '%s' (pid: %d)...\n", current->name, current->pid);
-    
+
     return 0;
 }

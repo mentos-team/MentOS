@@ -247,12 +247,12 @@ enum StT_Types {
     STT_FUNC   = 2  ///< Methods or functions
 };
 
-/// @brief Loads an ELF file into the memory of task.
-/// @param task  The task for which we load the ELF.
-/// @param file  The ELF file.
+/// @brief Loads an ELF file into the given memory descriptor.
+/// @param mm The memory descriptor where the ELF is loaded.
+/// @param file The ELF file.
 /// @param entry The ELF binary entry.
-/// @return 0 if fails, 1 if succeed.
-int elf_load_file(task_struct *task, vfs_file_t *file, uint32_t *entry);
+/// @return 1 on success, -errno on failure.
+int elf_load_file(mm_struct_t *mm, vfs_file_t *file, uint32_t *entry);
 
 /// @brief Checks if the file is a valid ELF.
 /// @param file The file to check.

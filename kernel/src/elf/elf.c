@@ -11,12 +11,12 @@
 
 #include "assert.h"
 #include "elf/elf.h"
+#include "errno.h"
 #include "fs/vfs.h"
+#include "mem/mm/mm.h"
 #include "mem/paging.h"
 #include "mem/alloc/slab.h"
 #include "mem/mm/vmem.h"
-#include "process/process.h"
-#include "process/scheduler.h"
 #include "stddef.h"
 #include "stdio.h"
 #include "string.h"
@@ -241,11 +241,15 @@ static inline void elf_dump_symbol_table(elf_header_t *header)
 // EXEC-RELATED FUNCTIONS
 // ============================================================================
 
-/// @brief Loads an ELF executable.
-/// @param header  The header of the ELF file.
-/// @param task The task for which we load the ELF.
-/// @return The ELF entry.
-static inline int elf_load_exec(elf_header_t *header, task_struct *task)
+/// @brief Loads an ELF executable into the given address space.
+/// @param header the header of the ELF file.
+/// @param mm the memory descriptor where the executable is loaded; it is
+///           not the address space of a running task while it is being
+///           replaced (see #208).
+/// @param file_size the size of the file the header was read from, used to
+///                  validate the segment descriptors.
+/// @return 1 on success, -errno on failure.
+static inline int elf_load_exec(elf_header_t *header, mm_struct_t *mm, size_t file_size)
 {
     elf_program_header_t *program_header;
     vm_area_struct_t *segment;
@@ -262,36 +266,73 @@ static inline int elf_load_exec(elf_header_t *header, task_struct *task)
             " %-9s | %9s | %9s | 0x%08x - 0x%08x\n", elf_type_to_string(program_header->type),
             to_human_size(program_header->memsz), to_human_size(program_header->filesz), program_header->vaddr,
             program_header->vaddr + program_header->memsz);
-        if (program_header->type == PT_LOAD) {
-            segment = vm_area_create(
-                task->mm, program_header->vaddr, program_header->memsz, MM_USER | MM_RW | MM_PRESENT, GFP_KERNEL);
-            vpage    = vmem_map_alloc_virtual(program_header->memsz);
-            dst_addr = vmem_map_virtual_address(task->mm, vpage, segment->vm_start, program_header->memsz);
-
-            // Load the memory area.
-            memcpy((void *)dst_addr, (void *)((uintptr_t)header + program_header->offset), program_header->filesz);
-
-            if (program_header->memsz > program_header->filesz) {
-                zmem_sz = program_header->memsz - program_header->filesz;
-                memset((void *)(dst_addr + program_header->filesz), 0, zmem_sz);
-            }
-            vmem_unmap_virtual_address_page(vpage);
+        if (program_header->type != PT_LOAD) {
+            continue;
         }
+        // Validate the segment against the actual file content. These checks
+        // run after the execve pre-checks (the header is valid), so without
+        // them a malformed segment would either read past the file buffer or
+        // be mapped blindly (#208).
+        if (program_header->memsz == 0) {
+            pr_err("PT_LOAD segment %u has zero memory size.\n", i);
+            return -ENOEXEC;
+        }
+        if (program_header->filesz > program_header->memsz) {
+            pr_err("PT_LOAD segment %u has filesz larger than memsz.\n", i);
+            return -ENOEXEC;
+        }
+        if (((uint64_t)program_header->offset + program_header->filesz) > (uint64_t)file_size) {
+            pr_err("PT_LOAD segment %u extends past the end of the file.\n", i);
+            return -ENOEXEC;
+        }
+        if ((program_header->vaddr == 0) || (program_header->vaddr >= PROCAREA_END_ADDR) ||
+            (program_header->memsz > (PROCAREA_END_ADDR - program_header->vaddr))) {
+            pr_err("PT_LOAD segment %u has an invalid virtual address range.\n", i);
+            return -ENOEXEC;
+        }
+        segment = vm_area_create(
+            mm, program_header->vaddr, program_header->memsz, MM_USER | MM_RW | MM_PRESENT, GFP_KERNEL);
+        if (segment == NULL) {
+            // The range was validated above, so a failure here is an
+            // allocation failure (e.g., the buddy system is full).
+            pr_err("Failed to allocate the memory area for PT_LOAD segment %u.\n", i);
+            return -ENOMEM;
+        }
+        vpage = vmem_map_alloc_virtual(program_header->memsz);
+        if (vpage == NULL) {
+            pr_err("Failed to allocate the virtual mapping window for PT_LOAD segment %u.\n", i);
+            return -ENOMEM;
+        }
+        dst_addr = vmem_map_virtual_address(mm, vpage, segment->vm_start, program_header->memsz);
+        if (dst_addr == 0) {
+            pr_err("Failed to map the virtual mapping window for PT_LOAD segment %u.\n", i);
+            vmem_unmap_virtual_address_page(vpage);
+            return -ENOMEM;
+        }
+
+        // Load the memory area.
+        memcpy((void *)dst_addr, (void *)((uintptr_t)header + program_header->offset), program_header->filesz);
+
+        if (program_header->memsz > program_header->filesz) {
+            zmem_sz = program_header->memsz - program_header->filesz;
+            memset((void *)(dst_addr + program_header->filesz), 0, zmem_sz);
+        }
+        vmem_unmap_virtual_address_page(vpage);
     }
-    return true;
+    return 1;
 }
 
-int elf_load_file(task_struct *task, vfs_file_t *file, uint32_t *entry)
+int elf_load_file(mm_struct_t *mm, vfs_file_t *file, uint32_t *entry)
 {
     // Open the file.
     if (file == NULL) {
-        return false;
+        return -ENOENT;
     }
     // Get the size of the file.
     stat_t stat_buf;
     if (vfs_fstat(file, &stat_buf) < 0) {
         pr_err("Failed to stat the file `%s`.\n", file->name);
-        return false;
+        return -EIO;
     }
     // Allocate the memory for the file.
     char *buffer = kmalloc(stat_buf.st_size);
@@ -300,7 +341,7 @@ int elf_load_file(task_struct *task, vfs_file_t *file, uint32_t *entry)
             "Failed to allocate %d bytes of memory for reading the file "
             "`%s`.\n",
             stat_buf.st_size, file->name);
-        return false;
+        return -ENOMEM;
     }
     // Clean the memory.
     memset(buffer, 0, stat_buf.st_size);
@@ -319,7 +360,7 @@ int elf_load_file(task_struct *task, vfs_file_t *file, uint32_t *entry)
     pr_debug("Headers count  : %d\n", header->phnum);
     // Check the elf header.
     if (!elf_check_file_header(header)) {
-        pr_err("File %s is not a valid ELF file.\n", stat_buf.st_size, file->name);
+        pr_err("File %s is not a valid ELF file.\n", file->name);
         goto return_error_free_buffer;
     }
     // Check if the elf file is an executable.
@@ -327,7 +368,16 @@ int elf_load_file(task_struct *task, vfs_file_t *file, uint32_t *entry)
         pr_err("Elf file is not an executable.\n");
         goto return_error_free_buffer;
     }
-    if (!elf_load_exec(header, task)) {
+    // Check that the program header table is well-formed and lies inside the
+    // file we just read, otherwise iterating it would read out of the buffer
+    // bounds.
+    if ((header->phentsize != sizeof(elf_program_header_t)) ||
+        (((uint64_t)header->phoff + ((uint64_t)header->phnum * header->phentsize)) > (uint64_t)stat_buf.st_size)) {
+        pr_err("Elf file has an invalid program header table.\n");
+        goto return_error_free_buffer;
+    }
+    int ret = elf_load_exec(header, mm, stat_buf.st_size);
+    if (ret < 0) {
         pr_err("Failed to load the executable.\n");
         goto return_error_free_buffer;
     }
@@ -336,10 +386,10 @@ int elf_load_file(task_struct *task, vfs_file_t *file, uint32_t *entry)
     (*entry) = header->entry;
 
     kfree(buffer);
-    return true;
+    return 1;
 return_error_free_buffer:
     kfree(buffer);
-    return false;
+    return -ENOEXEC;
 }
 
 int elf_check_file_type(vfs_file_t *file, Elf_Type type)
