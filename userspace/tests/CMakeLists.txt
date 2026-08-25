@@ -17,6 +17,7 @@ set(TEST_LIST
     t_shmget.c
     t_exec.c
     t_execve_fail.c
+    t_elf_short.c
     t_gid.c
     t_grp.c
     t_stopcont.c
