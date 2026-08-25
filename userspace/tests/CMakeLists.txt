@@ -50,6 +50,7 @@ set(TEST_LIST
     t_periodic3.c
     t_semop.c
     t_groups.c
+    t_wifsignaled.c
 )
 
 # Set the directory where the compiled binaries will be placed.

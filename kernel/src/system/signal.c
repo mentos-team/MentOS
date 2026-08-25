@@ -572,16 +572,16 @@ int do_signal(struct pt_regs *f)
 
                 continue;
             case SIGQUIT:
-                do_exit(GET_EXIT_STATUS(1));
+                do_exit(GET_EXIT_STATUS(131) | signr);
                 continue;
             case SIGILL:
-                do_exit(GET_EXIT_STATUS(132));
+                do_exit(GET_EXIT_STATUS(132) | signr);
                 continue;
             case SIGTRAP:
-                do_exit(GET_EXIT_STATUS(133));
+                do_exit(GET_EXIT_STATUS(133) | signr);
                 continue;
             case SIGABRT:
-                do_exit(GET_EXIT_STATUS(134));
+                do_exit(GET_EXIT_STATUS(134) | signr);
                 continue;
             case SIGFPE:
                 do_exit(GET_EXIT_STATUS(136) | signr);
