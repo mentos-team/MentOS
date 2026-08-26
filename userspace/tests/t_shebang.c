@@ -250,13 +250,19 @@ int main(int argc, char *argv[])
     unlink(SCRIPT_DIR "t_shebang_loop.sh");
 
     // ------------------------------------------------------------------
-    // 8) A script whose shebang read fails (the staged file has a sparse
-    //    hole inside the first 4098 bytes, so the read at offset 2 fails;
-    //    this depends on the current ext2 sparse-hole behavior of #192).
-    //    The read result used to be used as a buffer index unchecked.
+    // 8) A script with a sparse hole right after the shebang line (the
+    //    staged file is `#!/bin/echo hello\n` followed by a zero tail,
+    //    which mke2fs stores as holes). While #192 made any read touching
+    //    a hole fail (this case used to expect EIO), the shebang read now
+    //    succeeds. The outcome of the exec itself is governed by the open
+    //    #222 bug (the whole shebang line is used as the interpreter
+    //    path, so `/bin/echo hello` yields ENOENT); once #222 is fixed
+    //    the interpreter resolves and the script runs (0). Either way it
+    //    must no longer fail with a read error.
     // ------------------------------------------------------------------
     res = run_script(SPARSE_SCRIPT);
-    if (!check_post_teardown_failure(res, EIO, "sparse script")) {
+    if ((res != 0) && (res != ENOENT)) {
+        syslog(LOG_ERR, "[t_shebang] sparse script: unexpected exec outcome (%d)", res);
         ++failures;
     }
 
