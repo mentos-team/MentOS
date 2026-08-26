@@ -353,10 +353,15 @@ what "identical behaviour" means in practice.
    (`__move_cursor_forward` permits `pointer + 2 <= ADDR + TOTAL_SIZE`). Quirk 3
    then writes two bytes at `0xB8000 + 4000`, an out-of-bounds write landing in
    the invisible second text page, while `__get_x`/`__get_y` report `(0,0)` and
-   the CRTC write clamps to `(79,24)`. Translation: the cursor is an `unsigned`
-   index in `[0, columns*rows]` **inclusive**, and the shadow carries **one
-   guard cell** so the write is in bounds but never flushed. Observably
-   identical; the latent out-of-bounds write disappears.
+   the CRTC write clamps to `(0,24)` (the raw division gives column 0, row 25,
+   and only the row is clamped). Some sequences can push the cursor further out
+   still: `ESC[B` on a parked cursor sees row 0 and adds a whole row.
+   Translation: the cursor is an `unsigned` index in `[0, columns*rows]`
+   **inclusive**, clamped on every assignment, and the shadow carries **one
+   guard cell**. Cell mutations are skipped while parked, because in the
+   original they all landed outside the visible screen. Observably identical --
+   reported position, rendered position and recovery path -- and the latent
+   out-of-bounds writes disappear.
 6. `__get_x`/`__get_y` return `0` for an out-of-range pointer in either
    direction.
 

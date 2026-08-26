@@ -1,7 +1,17 @@
 /// @file video.c
-/// @brief Video functions and constants.
+/// @brief Generic console: cell state, cursor and escape-sequence handling.
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
+///
+/// This layer owns all terminal state and knows nothing about hardware. It
+/// keeps the screen in a cell buffer, does every cursor, erase and scroll
+/// operation in cell coordinates, and pushes the results to whichever backend
+/// was compiled in (see io/video_backend.h). Addresses, memory layout, fonts,
+/// palettes and I/O ports are the backend's business.
+///
+/// The buffer is the source of truth, so every mutation is followed by a
+/// put_cells() call covering the range that changed. Anything that mutates
+/// cells without flushing them will make the display drift out of sync.
 
 // Setup the logging for this file (do this before any other include).
 #include "sys/kernel_levels.h"
@@ -10,24 +20,22 @@
 #include "io/debug.h"
 
 #include "ctype.h"
-#include "io/port_io.h"
 #include "io/video.h"
+#include "io/video_backend.h"
 #include "stdbool.h"
+#include "stddef.h"
 #include "stdio.h"
 #include "string.h"
 
-#define HEIGHT                   25                   ///< The height of the screen (rows).
-#define WIDTH                    80                   ///< The width of the screen (columns).
-#define W2                       (WIDTH * 2)          ///< The width of the screen in bytes.
-#define TOTAL_SIZE               (HEIGHT * WIDTH * 2) ///< The total size of the screen in bytes.
-#define ADDR                     (char *)0xB8000U     ///< The address of the video memory.
-#define STORED_PAGES             10                   ///< The number of stored pages for scrolling.
-#define VGA_CRTC_INDEX           0x3D4                ///< VGA CRTC index register port.
-#define VGA_CRTC_DATA            0x3D5                ///< VGA CRTC data register port.
-#define VGA_CURSOR_START         0x0A                 ///< VGA cursor start register index.
-#define VGA_CURSOR_END           0x0B                 ///< VGA cursor end register index.
-#define VGA_CURSOR_LOCATION_LOW  0x0F                 ///< VGA cursor location low register index.
-#define VGA_CURSOR_LOCATION_HIGH 0x0E                 ///< VGA cursor location high register index.
+/// The number of screen-sized pages of scrollback history we keep.
+#define STORED_PAGES  10
+
+/// Total number of cells on the visible screen.
+#define SCREEN_CELLS  (VIDEO_COLUMNS * VIDEO_ROWS)
+/// Total number of rows in the scrollback history.
+#define HISTORY_ROWS  (STORED_PAGES * VIDEO_ROWS)
+/// Total number of cells in the scrollback history.
+#define HISTORY_CELLS (HISTORY_ROWS * VIDEO_COLUMNS)
 
 /// @brief Stores the association between ANSI colors and pure VIDEO colors.
 typedef struct {
@@ -84,8 +92,36 @@ static uint8_t fg_color_map[108] = {0};
 /// @brief Lookup table for background colors (ANSI codes 0-107).
 static uint8_t bg_color_map[108] = {0};
 
-/// @brief Pointer to the current position of the screen writer.
-char *pointer = ADDR;
+/// @brief The cell an erase operation leaves behind.
+///
+/// Erasing zeroes both halves of the cell rather than writing a space in the
+/// current colour: character 0 with attribute 0 renders as blank. Erase-to-space
+/// (backspace and delete) is a different operation with a different fill; see
+/// __erase_to_space().
+static const video_cell_t blank_cell = {0, 0};
+
+/// @brief The visible screen, plus one guard cell.
+///
+/// The guard cell exists because the cursor is allowed to come to rest one cell
+/// past the end of the screen; see __cursor_is_parked().
+static video_cell_t screen[SCREEN_CELLS + 1];
+
+/// @brief Scrollback history. The most recently scrolled-off line is last.
+static video_cell_t history[HISTORY_CELLS];
+
+/// @brief The live screen, saved while the user is scrolled back into history.
+static video_cell_t original_page[SCREEN_CELLS];
+
+/// @brief Cursor position, as an index into `screen`.
+///
+/// Valid range is [0, SCREEN_CELLS] inclusive: the upper end is the guard cell.
+static unsigned cursor = 0;
+
+/// @brief Where the backend was last told to draw the cursor.
+static unsigned previous_cursor = 0;
+
+/// @brief Cursor position saved by ESC [ s and restored by ESC [ u.
+static unsigned saved_cursor = 0;
 
 /// @brief The current color attribute (foreground and background).
 unsigned char color = 7;
@@ -96,41 +132,101 @@ int escape_index = -1;
 /// @brief Buffer used to store an escape sequence as it's being parsed.
 char escape_buffer[256];
 
-/// @brief Buffer where we store the upper scroll history.
-char upper_buffer[STORED_PAGES * TOTAL_SIZE] = {0};
-
-/// @brief Buffer where we store the original page content during scrolling.
-char original_page[TOTAL_SIZE] = {0};
-
 /// @brief Indicates if the screen is currently scrolled, and by how many lines.
 int scrolled_lines = 0;
 
 /// @brief Flag to batch cursor updates in video_puts to improve performance.
 static int batch_cursor_updates = 0;
 
-/// @brief Saved cursor position for ESC [ s and ESC [ u commands.
-static char *saved_pointer = ADDR;
+/// @brief Whether the cursor sits outside the visible screen.
+/// @return true when the cursor is parked on the guard cell.
+///
+/// Moving forward off the bottom-right corner leaves the cursor one cell past
+/// the screen, and from there some sequences can push it further still. The
+/// original implementation kept writing through such a cursor; those writes
+/// landed in the unused remainder of the VGA text aperture and were never
+/// displayed. Here the cursor is parked on a single guard cell instead and the
+/// invisible writes are skipped, which keeps everything observable identical --
+/// the reported position, the rendered position and the recovery path -- without
+/// ever writing out of bounds.
+static inline bool_t __cursor_is_parked(void) { return cursor >= SCREEN_CELLS; }
+
+/// @brief Moves the cursor, keeping it within the buffer.
+/// @param index The desired cell index.
+static inline void __set_cursor(unsigned index) { cursor = (index > SCREEN_CELLS) ? SCREEN_CELLS : index; }
 
 /// @brief Get the current column number.
 /// @return The column number.
 static inline unsigned __get_x(void)
 {
-    // Validate pointer is within screen bounds.
-    if (pointer < ADDR || pointer >= ADDR + TOTAL_SIZE) {
+    if (__cursor_is_parked()) {
         return 0;
     }
-    return ((pointer - ADDR) % (WIDTH * 2)) / 2;
+    return cursor % VIDEO_COLUMNS;
 }
 
 /// @brief Get the current row number.
 /// @return The row number.
 static inline unsigned __get_y(void)
 {
-    // Validate pointer is within screen bounds.
-    if (pointer < ADDR || pointer >= ADDR + TOTAL_SIZE) {
+    if (__cursor_is_parked()) {
         return 0;
     }
-    return (pointer - ADDR) / (WIDTH * 2);
+    return cursor / VIDEO_COLUMNS;
+}
+
+/// @brief First cell of the row the cursor is on.
+/// @return The cell index of the start of the row.
+static inline unsigned __row_start(void) { return (cursor / VIDEO_COLUMNS) * VIDEO_COLUMNS; }
+
+/// @brief One past the last cell of the row the cursor is on.
+/// @return The cell index just past the end of the row.
+static inline unsigned __row_end(void) { return __row_start() + VIDEO_COLUMNS; }
+
+/// @brief Pushes a range of cells to the backend.
+/// @param first Index of the first cell.
+/// @param count How many cells to push.
+///
+/// Ranges are clipped to the visible screen, so the guard cell is never sent.
+static void __flush(unsigned first, unsigned count)
+{
+    if (first >= SCREEN_CELLS) {
+        return;
+    }
+    if (count > (SCREEN_CELLS - first)) {
+        count = SCREEN_CELLS - first;
+    }
+    if (count == 0) {
+        return;
+    }
+    video_backend.put_cells(first % VIDEO_COLUMNS, first / VIDEO_COLUMNS, &screen[first], count);
+}
+
+/// @brief Pushes the whole screen to the backend.
+///
+/// A full repaint also wipes any cursor a backend drew itself, so the record of
+/// where the cursor was last drawn is reset along with it.
+static void __flush_all(void)
+{
+    __flush(0, SCREEN_CELLS);
+    previous_cursor = cursor;
+}
+
+/// @brief Erases a range of cells.
+/// @param first Index of the first cell.
+/// @param count How many cells to erase.
+static void __erase(unsigned first, unsigned count)
+{
+    if (first >= SCREEN_CELLS) {
+        return;
+    }
+    if (count > (SCREEN_CELLS - first)) {
+        count = SCREEN_CELLS - first;
+    }
+    for (unsigned index = 0; index < count; ++index) {
+        screen[first + index] = blank_cell;
+    }
+    __flush(first, count);
 }
 
 /// @brief Draws the given character at the current cursor position.
@@ -142,101 +238,51 @@ static inline void __draw_char(char c)
         video_scroll_up(scrolled_lines);
     }
 
-    // Calculate the end of the current line.
-    unsigned int current_row = (pointer - ADDR) / W2;
-    char *line_end           = ADDR + ((current_row + 1) * W2);
+    unsigned row_end = __row_end();
 
-    // Shift characters within the current line to make room for insertion.
-    if (pointer < line_end - 2) {
-        size_t bytes_to_shift = (line_end - 2) - pointer;
-        if (bytes_to_shift > 0) {
-            memmove(pointer + 2, pointer, bytes_to_shift);
+    if (!__cursor_is_parked()) {
+        // Writing inserts rather than overwrites: the rest of the line shifts
+        // right and its last cell falls off the end.
+        if (cursor < (row_end - 1)) {
+            memmove(&screen[cursor + 1], &screen[cursor], ((row_end - 1) - cursor) * sizeof(video_cell_t));
         }
+        screen[cursor].character = (uint8_t)c;
+        screen[cursor].attribute = color;
+        // The shift dirtied everything from the cursor to the end of the line.
+        __flush(cursor, row_end - cursor);
     }
 
-    // Write the character and its color attribute.
-    *pointer       = c;
-    *(pointer + 1) = color;
-
-    // Advance the pointer to the next character position.
-    pointer += 2;
-
-    // If we've reached the end of the line, wrap to the next line.
-    if (pointer >= line_end) {
-        pointer = line_end;
+    // Advance, wrapping at the end of the line.
+    __set_cursor(cursor + 1);
+    if (cursor >= row_end) {
+        __set_cursor(row_end);
     }
 
-    // If pointer goes past the end of the screen, scroll up and reset.
-    if (pointer >= ADDR + TOTAL_SIZE) {
+    // If the cursor went past the end of the screen, scroll and sit on the last
+    // line.
+    if (cursor >= SCREEN_CELLS) {
         video_shift_one_line_up();
-        pointer = ADDR + TOTAL_SIZE - W2;
+        __set_cursor(SCREEN_CELLS - VIDEO_COLUMNS);
     }
 }
 
-/// @brief Hides the VGA cursor.
-void __video_hide_cursor(void)
+/// @brief Erases a character by shifting the rest of the line left.
+///
+/// Unlike __erase(), the cell freed at the end of the line is filled with a
+/// space in the *current* colour rather than being zeroed.
+static inline void __erase_to_space(void)
 {
-    outportb(VGA_CRTC_INDEX, VGA_CURSOR_START);
-    unsigned char cursor_start = inportb(VGA_CRTC_DATA);
-    // Set the most significant bit to disable the cursor.
-    outportb(VGA_CRTC_DATA, cursor_start | 0x20);
-}
-
-/// @brief Shows the VGA cursor by clearing the disable bit.
-void __video_show_cursor(void)
-{
-    // Read current cursor start register
-    outportb(VGA_CRTC_INDEX, VGA_CURSOR_START);
-    unsigned char cursor_start = inportb(VGA_CRTC_DATA);
-    // Clear bit 5 to enable cursor, keep other bits
-    outportb(VGA_CRTC_INDEX, VGA_CURSOR_START);
-    outportb(VGA_CRTC_DATA, cursor_start & ~0x20);
-}
-
-/// @brief Sets the VGA cursor shape by specifying the start and end scan lines.
-/// @param start The starting scan line of the cursor (0-15).
-/// @param end The ending scan line of the cursor (0-15).
-void __video_set_cursor_shape(unsigned char start, unsigned char end)
-{
-    // Ensure start is less than or equal to end for visible cursor
-    if (start > end) {
-        start = 0;
-        end   = 15;
+    if (__cursor_is_parked()) {
+        return;
     }
-
-    // Set the cursor's start scan line with cursor enabled (bit 5 = 0)
-    outportb(VGA_CRTC_INDEX, VGA_CURSOR_START);
-    outportb(VGA_CRTC_DATA, start & 0x1F);
-
-    // Set the cursor's end scan line
-    outportb(VGA_CRTC_INDEX, VGA_CURSOR_END);
-    outportb(VGA_CRTC_DATA, end & 0x1F);
-
-    // Explicitly ensure cursor is visible
-    __video_show_cursor();
-}
-
-/// @brief Issues a command to move the cursor to the given position.
-/// @param x The x coordinate.
-/// @param y The y coordinate.
-static inline void __video_set_cursor_position(unsigned int x, unsigned int y)
-{
-    // Clamp coordinates to valid screen bounds.
-    if (x >= WIDTH)
-        x = WIDTH - 1;
-    if (y >= HEIGHT)
-        y = HEIGHT - 1;
-
-    // Calculate linear position from x,y coordinates.
-    uint32_t position = (y * WIDTH) + x;
-
-    // Write low byte of cursor position.
-    outportb(VGA_CRTC_INDEX, VGA_CURSOR_LOCATION_LOW);
-    outportb(VGA_CRTC_DATA, (uint8_t)(position & 0xFFU));
-
-    // Write high byte of cursor position.
-    outportb(VGA_CRTC_INDEX, VGA_CURSOR_LOCATION_HIGH);
-    outportb(VGA_CRTC_DATA, (uint8_t)((position >> 8U) & 0xFFU));
+    unsigned row_end     = __row_end();
+    unsigned cells_after = row_end - (cursor + 1);
+    if (cells_after > 0) {
+        memmove(&screen[cursor], &screen[cursor + 1], cells_after * sizeof(video_cell_t));
+    }
+    screen[row_end - 1].character = ' ';
+    screen[row_end - 1].attribute = color;
+    __flush(cursor, row_end - cursor);
 }
 
 /// @brief Sets the provided ANSI color code.
@@ -291,22 +337,11 @@ static inline void __set_color(uint8_t ansi_code)
 static inline void __move_cursor_backward(int erase, int amount)
 {
     for (int i = 0; i < amount; ++i) {
-        if (pointer - 2 >= ADDR) {
-            // Move pointer back one character position.
-            pointer -= 2;
+        if (cursor >= 1) {
+            // Move back one character position.
+            __set_cursor(cursor - 1);
             if (erase) {
-                // Calculate the end of the current line.
-                unsigned int current_row = (pointer - ADDR) / W2;
-                char *line_end           = ADDR + ((current_row + 1) * W2);
-
-                // Shift characters left on the current line only.
-                size_t bytes_to_move = line_end - (pointer + 2);
-                if (bytes_to_move > 0) {
-                    memmove(pointer, pointer + 2, bytes_to_move);
-                }
-                // Clear the last character position of the line.
-                *(line_end - 2) = ' ';
-                *(line_end - 1) = color;
+                __erase_to_space();
             }
         } else {
             break;
@@ -321,14 +356,15 @@ static inline void __move_cursor_backward(int erase, int amount)
 static inline void __move_cursor_forward(int erase, int amount)
 {
     for (int i = 0; i < amount; ++i) {
-        if (pointer + 2 <= ADDR + TOTAL_SIZE) {
+        if ((cursor + 1) <= SCREEN_CELLS) {
             if (erase) {
                 // Overwrite with space without shifting other characters.
-                *pointer       = ' ';
-                *(pointer + 1) = color;
+                screen[cursor].character = ' ';
+                screen[cursor].attribute = color;
+                __flush(cursor, 1);
             }
-            // Move pointer forward one character position.
-            pointer += 2;
+            // Move forward one character position.
+            __set_cursor(cursor + 1);
         } else {
             break;
         }
@@ -342,23 +378,17 @@ static inline void __parse_cursor_escape_code(int shape)
 {
     switch (shape) {
     case 0: // Default blinking block cursor
-    case 2: // Blinking block cursor
-        __video_set_cursor_shape(0, 15);
-        break;
     case 1: // Steady block cursor
-        __video_set_cursor_shape(0, 15);
+    case 2: // Blinking block cursor
+        video_backend.set_cursor_style(VIDEO_CURSOR_BLOCK);
         break;
     case 3: // Blinking underline cursor
-        __video_set_cursor_shape(13, 15);
-        break;
     case 4: // Steady underline cursor
-        __video_set_cursor_shape(13, 15);
+        video_backend.set_cursor_style(VIDEO_CURSOR_UNDERLINE);
         break;
     case 5: // Blinking vertical bar cursor
-        __video_set_cursor_shape(0, 1);
-        break;
     case 6: // Steady vertical bar cursor
-        __video_set_cursor_shape(0, 1);
+        video_backend.set_cursor_style(VIDEO_CURSOR_BAR);
         break;
     default:
         // Handle any other cases if needed
@@ -382,19 +412,29 @@ void video_init(void)
             }
         }
     }
-    // Clear the screen and set default cursor shape.
+
+    // Bring the hardware up before pushing anything to it. Until this returns,
+    // a backend that cannot use its hardware yet has been ignoring us.
+    if (video_backend.init() < 0) {
+        pr_emerg("Failed to initialize the '%s' video backend.\n", video_backend.name);
+    }
+
+    // The geometry the backend reports and the geometry the console compiled
+    // against come from the same macros, so a mismatch means the build is
+    // inconsistent and every offset computed here would be wrong.
+    if ((video_backend.columns != VIDEO_COLUMNS) || (video_backend.rows != VIDEO_ROWS)) {
+        pr_emerg(
+            "Video backend '%s' reports %ux%u but the console was built for %ux%u.\n", video_backend.name,
+            video_backend.columns, video_backend.rows, (unsigned)VIDEO_COLUMNS, (unsigned)VIDEO_ROWS);
+    }
+
+    // Clearing the screen is what publishes the initialized console. Anything
+    // printed before this point is discarded, which is what has always
+    // happened.
     video_clear();
 
-    // Set up cursor with known good values
-    // Use default blinking block cursor (scan lines 0-15)
-    outportb(VGA_CRTC_INDEX, VGA_CURSOR_START);
-    outportb(VGA_CRTC_DATA, 0x00); // Start at line 0, bit 5 clear (enabled)
-
-    outportb(VGA_CRTC_INDEX, VGA_CURSOR_END);
-    outportb(VGA_CRTC_DATA, 0x0F); // End at line 15
-
-    // Explicitly show cursor
-    __video_show_cursor();
+    // Use the default blinking block cursor.
+    __parse_cursor_escape_code(0);
 }
 
 void video_putc(int c)
@@ -471,9 +511,8 @@ void video_putc(int c)
                 if (amount <= 0)
                     amount = 1;
                 for (int i = 0; i < amount; ++i) {
-                    unsigned int y = __get_y();
-                    if (y > 0) {
-                        pointer -= W2;
+                    if (__get_y() > 0) {
+                        __set_cursor(cursor - VIDEO_COLUMNS);
                     }
                 }
                 video_update_cursor_position();
@@ -484,9 +523,8 @@ void video_putc(int c)
                 if (amount <= 0)
                     amount = 1;
                 for (int i = 0; i < amount; ++i) {
-                    unsigned int y = __get_y();
-                    if (y < HEIGHT - 1) {
-                        pointer += W2;
+                    if (__get_y() < (VIDEO_ROWS - 1)) {
+                        __set_cursor(cursor + VIDEO_COLUMNS);
                     }
                 }
                 video_update_cursor_position();
@@ -513,19 +551,23 @@ void video_putc(int c)
             else if (c == 'J') {
                 int mode = atoi(&escape_buffer[1]);
                 if (mode == 0) {
-                    // Clear from cursor to end of screen.
-                    memset(pointer, 0, (ADDR + TOTAL_SIZE) - pointer);
+                    // Clear from cursor to end of screen. A parked cursor is
+                    // already past the end, so this erases nothing.
+                    __erase(cursor, SCREEN_CELLS - cursor);
                 } else if (mode == 1) {
                     // Clear from start of screen to cursor (inclusive).
-                    memset(ADDR, 0, pointer - ADDR + 2);
+                    __erase(0, cursor + 1);
                 } else if (mode == 3) {
                     // Clear entire screen AND scrollback buffer.
                     video_clear();
                 } else {
                     // Mode 2 or default: Clear entire screen (but preserve scrollback).
-                    memset(ADDR, 0, TOTAL_SIZE);
-                    pointer        = ADDR;
+                    for (unsigned index = 0; index < SCREEN_CELLS; ++index) {
+                        screen[index] = blank_cell;
+                    }
+                    __set_cursor(0);
                     scrolled_lines = 0;
+                    __flush_all();
                     video_update_cursor_position();
                 }
             }
@@ -533,16 +575,19 @@ void video_putc(int c)
             else if ((c == 'H') || (c == 'f')) {
                 char *semicolon = strchr(&escape_buffer[1], ';');
                 if (semicolon != NULL) {
-                    *semicolon     = '\0';
-                    unsigned int y = atoi(&escape_buffer[1]) - 1;
-                    unsigned int x = atoi(semicolon + 1) - 1;
-                    if (x >= WIDTH)
-                        x = WIDTH - 1;
-                    if (y >= HEIGHT)
-                        y = HEIGHT - 1;
-                    pointer = ADDR + (y * WIDTH * 2 + x * 2);
+                    *semicolon              = '\0';
+                    // A zero or absent parameter underflows here and is then
+                    // caught by the clamp below, which lands the cursor on the
+                    // last cell rather than at home.
+                    unsigned int target_row = atoi(&escape_buffer[1]) - 1;
+                    unsigned int target_col = atoi(semicolon + 1) - 1;
+                    if (target_col >= VIDEO_COLUMNS)
+                        target_col = VIDEO_COLUMNS - 1;
+                    if (target_row >= VIDEO_ROWS)
+                        target_row = VIDEO_ROWS - 1;
+                    __set_cursor((target_row * VIDEO_COLUMNS) + target_col);
                 } else {
-                    pointer = ADDR;
+                    __set_cursor(0);
                 }
                 video_update_cursor_position();
             }
@@ -552,31 +597,33 @@ void video_putc(int c)
             }
             // ESC [ <n> K - Erase in line.
             else if (c == 'K') {
-                int mode                 = atoi(&escape_buffer[1]);
-                unsigned int current_row = (pointer - ADDR) / W2;
-                char *line_start         = ADDR + (current_row * W2);
-                char *line_end           = line_start + W2;
-
-                if (mode == 0) {
-                    // Clear from cursor to end of line.
-                    memset(pointer, 0, line_end - pointer);
-                } else if (mode == 1) {
-                    // Clear from start of line to cursor.
-                    memset(line_start, 0, pointer - line_start + 2);
-                } else if (mode == 2) {
-                    // Clear entire line.
-                    memset(line_start, 0, W2);
+                int mode = atoi(&escape_buffer[1]);
+                // A parked cursor sits on no row, so there is nothing visible
+                // to erase.
+                if (!__cursor_is_parked()) {
+                    unsigned row_start = __row_start();
+                    unsigned row_end   = __row_end();
+                    if (mode == 0) {
+                        // Clear from cursor to end of line.
+                        __erase(cursor, row_end - cursor);
+                    } else if (mode == 1) {
+                        // Clear from start of line to cursor.
+                        __erase(row_start, (cursor - row_start) + 1);
+                    } else if (mode == 2) {
+                        // Clear entire line.
+                        __erase(row_start, VIDEO_COLUMNS);
+                    }
                 }
             }
             // ESC [ s - Save cursor position.
             else if (c == 's') {
-                saved_pointer = pointer;
+                saved_cursor = cursor;
             }
             // ESC [ u - Restore cursor position.
             else if (c == 'u') {
-                // Validate saved pointer is within screen bounds.
-                if (saved_pointer >= ADDR && saved_pointer < ADDR + TOTAL_SIZE) {
-                    pointer = saved_pointer;
+                // Validate saved position is within the visible screen.
+                if (saved_cursor < SCREEN_CELLS) {
+                    __set_cursor(saved_cursor);
                 }
                 video_update_cursor_position();
             }
@@ -612,17 +659,7 @@ void video_putc(int c)
         video_cartridge_return();
     } else if (c == 127) {
         // DEL key - delete character at cursor position.
-        unsigned int current_row = (pointer - ADDR) / W2;
-        char *line_end           = ADDR + ((current_row + 1) * W2);
-
-        // Shift characters left on the current line only.
-        size_t bytes_to_move = line_end - (pointer + 2);
-        if (bytes_to_move > 0) {
-            memmove(pointer, pointer + 2, bytes_to_move);
-        }
-        // Clear the last character position of the line.
-        *(line_end - 2) = ' ';
-        *(line_end - 1) = color;
+        __erase_to_space();
 
         // Update cursor position to reflect the deletion.
         if (!batch_cursor_updates) {
@@ -662,25 +699,41 @@ void video_puts(const char *str)
 
 void video_update_cursor_position(void)
 {
-    // Ensure there's a character at the cursor position for VGA hardware cursor visibility.
-    // VGA cursor needs a non-null character cell to display over.
-    if (pointer[0] == 0) {
-        pointer[0] = ' ';   // Character
-        pointer[1] = color; // Attribute
+    // Make sure there is something at the cursor for it to sit on: an empty
+    // cell would leave a hardware cursor with nothing to render over.
+    if (screen[cursor].character == 0) {
+        screen[cursor].character = ' ';
+        screen[cursor].attribute = color;
+        __flush(cursor, 1);
     }
-    // Convert byte pointer to character coordinates (divide by 2 since each char uses 2 bytes).
-    __video_set_cursor_position(((pointer - ADDR) / 2U) % WIDTH, ((pointer - ADDR) / 2U) / WIDTH);
+
+    // Repaint the cell the cursor is leaving, so that a backend drawing its own
+    // cursor has it erased. This writes the buffer's own value back, so it can
+    // never change what is displayed.
+    if (previous_cursor != cursor) {
+        __flush(previous_cursor, 1);
+        previous_cursor = cursor;
+    }
+
+    unsigned column = cursor % VIDEO_COLUMNS;
+    unsigned row    = cursor / VIDEO_COLUMNS;
+    if (column >= VIDEO_COLUMNS) {
+        column = VIDEO_COLUMNS - 1;
+    }
+    if (row >= VIDEO_ROWS) {
+        row = VIDEO_ROWS - 1;
+    }
+    video_backend.set_cursor_position(column, row);
 }
 
 void video_move_cursor(unsigned int x, unsigned int y)
 {
     // Clamp coordinates to screen bounds.
-    if (x >= WIDTH)
-        x = WIDTH - 1;
-    if (y >= HEIGHT)
-        y = HEIGHT - 1;
-    // Calculate pointer position (each character is 2 bytes).
-    pointer = ADDR + ((y * WIDTH * 2) + (x * 2));
+    if (x >= VIDEO_COLUMNS)
+        x = VIDEO_COLUMNS - 1;
+    if (y >= VIDEO_ROWS)
+        y = VIDEO_ROWS - 1;
+    __set_cursor((y * VIDEO_COLUMNS) + x);
     // Update hardware cursor to match.
     video_update_cursor_position();
 }
@@ -701,24 +754,27 @@ void video_get_screen_size(unsigned int *width, unsigned int *height)
 {
     // Return screen width if requested.
     if (width) {
-        *width = WIDTH;
+        *width = VIDEO_COLUMNS;
     }
     // Return screen height if requested.
     if (height) {
-        *height = HEIGHT;
+        *height = VIDEO_ROWS;
     }
 }
 
 void video_clear(void)
 {
     // Clear the scrollback buffer.
-    memset(upper_buffer, 0, STORED_PAGES * TOTAL_SIZE);
+    memset(history, 0, sizeof(history));
     // Clear the visible screen.
-    memset(ADDR, 0, TOTAL_SIZE);
+    for (unsigned index = 0; index < SCREEN_CELLS; ++index) {
+        screen[index] = blank_cell;
+    }
     // Reset cursor to top-left corner.
-    pointer        = ADDR;
+    __set_cursor(0);
     // Reset scrolling state.
     scrolled_lines = 0;
+    __flush_all();
     video_update_cursor_position();
 }
 
@@ -729,14 +785,14 @@ void video_new_line(void)
         video_scroll_up(scrolled_lines);
     }
 
-    // Move pointer to the start of the next line.
-    pointer = ADDR + ((pointer - ADDR) / W2 + 1) * W2;
+    // Move to the start of the next line.
+    __set_cursor(__row_end());
     // Check if we've gone past the bottom of the screen.
-    if (pointer >= ADDR + TOTAL_SIZE) {
+    if (cursor >= SCREEN_CELLS) {
         // Scroll up by one line and move content into scrollback.
         video_shift_one_line_up();
         // Position cursor at the beginning of the last line.
-        pointer = ADDR + TOTAL_SIZE - W2;
+        __set_cursor(SCREEN_CELLS - VIDEO_COLUMNS);
     }
     video_update_cursor_position();
 }
@@ -748,72 +804,82 @@ void video_cartridge_return(void)
         video_scroll_up(scrolled_lines);
     }
 
-    // Calculate which row we're on.
-    unsigned int current_row = (pointer - ADDR) / W2;
-    // Move pointer to the beginning of the current line.
-    pointer                  = ADDR + (current_row * W2);
+    // Move to the beginning of the current line.
+    __set_cursor(__row_start());
     video_update_cursor_position();
 }
 
-/// @brief Shifts the buffer up or down by one line.
+/// @brief Shifts a cell buffer up or down by one line.
 /// @param buffer Pointer to the buffer to shift.
-/// @param lines Number of lines we want to shift.
+/// @param rows Number of rows in the buffer.
 /// @param direction 1 to shift up, -1 to shift down.
-static inline void __shift_buffer(char *buffer, int lines, int direction)
+static inline void __shift_buffer(video_cell_t *buffer, unsigned rows, int direction)
 {
     // Shift up: Move all lines in one operation.
     if (direction == 1) {
-        // Move (lines-1) lines from row 1 to row 0
-        memmove(buffer, buffer + W2, W2 * (lines - 1));
+        // Move (rows-1) lines from row 1 to row 0
+        memmove(buffer, buffer + VIDEO_COLUMNS, VIDEO_COLUMNS * (rows - 1) * sizeof(video_cell_t));
     }
     // Shift down: Move all lines in one operation.
     else if (direction == -1) {
-        // Move (lines-1) lines from row 0 to row 1
-        memmove(buffer + W2, buffer, W2 * (lines - 1));
+        // Move (rows-1) lines from row 0 to row 1
+        memmove(buffer + VIDEO_COLUMNS, buffer, VIDEO_COLUMNS * (rows - 1) * sizeof(video_cell_t));
     }
 }
 
 /// @brief Shifts the screen content up by one line. When not scrolled, moves
-/// the top line into the `upper_buffer`.
+/// the top line into the `history` buffer.
 static void __shift_screen_up(void)
 {
     if (scrolled_lines == 0) {
-        // Move the upper buffer up by one line.
-        __shift_buffer(upper_buffer, STORED_PAGES * HEIGHT, +1);
-        // Copy the first line on the screen inside the last line of the upper buffer.
-        memcpy(upper_buffer + (TOTAL_SIZE * STORED_PAGES - W2), ADDR, W2);
+        // Move the history buffer up by one line.
+        __shift_buffer(history, HISTORY_ROWS, +1);
+        // Copy the first line on the screen into the last line of the history.
+        memcpy(&history[HISTORY_CELLS - VIDEO_COLUMNS], screen, VIDEO_COLUMNS * sizeof(video_cell_t));
     }
     // Move the screen up by one line.
-    __shift_buffer(ADDR, HEIGHT, +1);
+    __shift_buffer(screen, VIDEO_ROWS, +1);
     // Clear the last line of the screen.
-    memset(ADDR + (W2 * (HEIGHT - 1)), 0, W2);
+    for (unsigned index = SCREEN_CELLS - VIDEO_COLUMNS; index < SCREEN_CELLS; ++index) {
+        screen[index] = blank_cell;
+    }
+    // Let the backend move the pixels it already has, then repaint the line
+    // that was uncovered.
+    video_backend.scroll(1);
+    __flush(SCREEN_CELLS - VIDEO_COLUMNS, VIDEO_COLUMNS);
 }
 
 /// @brief Shifts the screen content down by one line. Restores the topmost line
-/// from the `upper_buffer`.
+/// from the `history` buffer.
 static void __shift_screen_down(void)
 {
     // Move the screen content down by one line.
-    __shift_buffer(ADDR, HEIGHT, -1);
-    // Restore from the `upper_buffer`.
-    memcpy(ADDR, upper_buffer + (W2 * (STORED_PAGES * HEIGHT - scrolled_lines)), W2);
+    __shift_buffer(screen, VIDEO_ROWS, -1);
+    // Restore from the history buffer.
+    memcpy(screen, &history[HISTORY_CELLS - ((unsigned)scrolled_lines * VIDEO_COLUMNS)],
+           VIDEO_COLUMNS * sizeof(video_cell_t));
+    video_backend.scroll(-1);
+    __flush(0, VIDEO_COLUMNS);
 }
 
 void video_shift_one_line_up(void)
 {
     // Handle case where cursor is beyond screen (during scrolling operations).
-    if (pointer >= ADDR + TOTAL_SIZE) {
+    if (cursor >= SCREEN_CELLS) {
         // Shift the screen and scrollback buffer up.
         __shift_screen_up();
-        // Adjust pointer to stay on the last line.
-        pointer = ADDR + ((pointer - ADDR) / W2 - 1) * W2;
+        // Adjust cursor to stay on the last line.
+        __set_cursor(((cursor / VIDEO_COLUMNS) - 1) * VIDEO_COLUMNS);
     }
     // Handle case where we're viewing scrollback history and want to scroll to newer content.
     else if (scrolled_lines > 0) {
         // Shift screen up, moving top line into scrollback.
         __shift_screen_up();
         // Restore the bottom line from the original (unscrolled) screen content.
-        memcpy(ADDR + (W2 * (HEIGHT - 1)), original_page + (W2 * (TOTAL_SIZE / W2 - scrolled_lines)), W2);
+        memcpy(&screen[SCREEN_CELLS - VIDEO_COLUMNS],
+               &original_page[SCREEN_CELLS - ((unsigned)scrolled_lines * VIDEO_COLUMNS)],
+               VIDEO_COLUMNS * sizeof(video_cell_t));
+        __flush(SCREEN_CELLS - VIDEO_COLUMNS, VIDEO_COLUMNS);
         // We're now one line less scrolled back.
         --scrolled_lines;
     }
@@ -824,32 +890,34 @@ void video_shift_one_line_up(void)
 void video_shift_one_line_down(void)
 {
     // Check if we haven't scrolled beyond our scrollback buffer limit.
-    if (scrolled_lines < (STORED_PAGES * HEIGHT)) {
+    if (scrolled_lines < (int)HISTORY_ROWS) {
         // Save the current visible screen before first scroll operation.
         if (scrolled_lines == 0) {
-            memcpy(original_page, ADDR, TOTAL_SIZE);
+            memcpy(original_page, screen, SCREEN_CELLS * sizeof(video_cell_t));
         }
         // We're now one line deeper into scrollback history.
         ++scrolled_lines;
         // Shift screen content down, making room at the top.
         __shift_screen_down();
         // Restore the top line from the scrollback buffer.
-        memcpy(ADDR, upper_buffer + (W2 * (STORED_PAGES * HEIGHT - scrolled_lines)), W2);
+        memcpy(screen, &history[HISTORY_CELLS - ((unsigned)scrolled_lines * VIDEO_COLUMNS)],
+               VIDEO_COLUMNS * sizeof(video_cell_t));
+        __flush(0, VIDEO_COLUMNS);
     }
 }
 
 void video_shift_one_page_up(void)
 {
-    // Scroll up by one full page (HEIGHT lines).
-    for (int i = 0; i < HEIGHT; ++i) {
+    // Scroll up by one full page (VIDEO_ROWS lines).
+    for (unsigned i = 0; i < VIDEO_ROWS; ++i) {
         video_shift_one_line_up();
     }
 }
 
 void video_shift_one_page_down(void)
 {
-    // Scroll down by one full page (HEIGHT lines).
-    for (int i = 0; i < HEIGHT; ++i) {
+    // Scroll down by one full page (VIDEO_ROWS lines).
+    for (unsigned i = 0; i < VIDEO_ROWS; ++i) {
         video_shift_one_line_down();
     }
 }
@@ -875,8 +943,8 @@ void video_scroll_down(int lines)
     if (lines < 0) {
         lines = 0;
     }
-    if (lines > STORED_PAGES * HEIGHT) {
-        lines = STORED_PAGES * HEIGHT;
+    if (lines > (int)HISTORY_ROWS) {
+        lines = (int)HISTORY_ROWS;
     }
     // Scroll down by the specified number of lines.
     for (int i = 0; i < lines; ++i) {

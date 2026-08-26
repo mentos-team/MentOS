@@ -1,0 +1,129 @@
+/// @file video_backend.h
+/// @brief Internal interface between the generic console and a video backend.
+/// @copyright (c) 2014-2024 This file is distributed under the MIT License.
+/// See LICENSE.md for details.
+///
+/// The generic console layer (`video.c`) owns all terminal state: the cell
+/// contents, the cursor, the escape-sequence parser and the scrollback. A
+/// backend knows only how to materialize that state on hardware. It is
+/// deliberately write-only and stateless apart from what it needs to draw.
+///
+/// This header is internal. Callers outside the video layer use `io/video.h`.
+
+#pragma once
+
+#include "stdint.h"
+
+/// @brief Path of the geometry header belonging to the selected backend.
+///
+/// Every backend ships a header defining VIDEO_COLUMNS and VIDEO_ROWS. The
+/// build system points this macro at the one being compiled; the generic layer
+/// sizes its static state from those macros and never assumes a value. The
+/// default keeps the VGA text backend usable without any build-system support.
+#ifndef VIDEO_GEOMETRY_HEADER
+#define VIDEO_GEOMETRY_HEADER "io/video/vga_text_geometry.h"
+#endif
+
+#include VIDEO_GEOMETRY_HEADER
+
+#if !defined(VIDEO_COLUMNS) || !defined(VIDEO_ROWS)
+#error "The selected video backend must define VIDEO_COLUMNS and VIDEO_ROWS."
+#endif
+
+/// @brief One console cell.
+///
+/// The attribute is a 4-bit foreground index in the low nibble and a 4-bit
+/// background index in the high nibble, in IBM CGA/VGA order. This is the
+/// console's colour model, shared by every backend, which is what lets the
+/// generic ANSI colour tables stay backend-independent. A backend working in a
+/// different colour space translates inside its own put_cells().
+typedef struct {
+    uint8_t character; ///< The character code.
+    uint8_t attribute; ///< Foreground index | (background index << 4).
+} video_cell_t;
+
+/// @brief Cursor appearance, expressed semantically.
+///
+/// Backends translate these to whatever they have: CRTC scanline registers for
+/// a hardware cursor, or drawn pixels for a software one. The generic layer
+/// deliberately knows nothing about scanlines.
+typedef enum {
+    VIDEO_CURSOR_HIDDEN,    ///< Not drawn at all.
+    VIDEO_CURSOR_BLOCK,     ///< Fills the whole cell.
+    VIDEO_CURSOR_UNDERLINE, ///< A line along the bottom of the cell.
+    VIDEO_CURSOR_BAR,       ///< A thin bar; see the note in the backends.
+} video_cursor_style_t;
+
+/// @brief Operations a video backend must provide.
+///
+/// Exactly one backend is compiled into the kernel and defines the
+/// `video_backend` symbol below. Because that definition is statically
+/// initialized const data, it is already valid during a printf() issued before
+/// video_init() has run: no lazy initialization, no allocation, nothing that
+/// can fail at the point where early diagnostics are printed.
+typedef struct {
+    /// Human-readable backend name, for diagnostics.
+    const char *name;
+
+    /// Console width in cells. Must equal VIDEO_COLUMNS.
+    unsigned columns;
+
+    /// Console height in cells. Must equal VIDEO_ROWS.
+    unsigned rows;
+
+    /// @brief Brings the hardware into a usable state.
+    /// @return 0 on success, a negative value on failure.
+    ///
+    /// Called once, from video_init(), before the console pushes anything. The
+    /// generic layer clears the screen immediately afterwards, so a backend
+    /// need not display anything itself.
+    int (*init)(void);
+
+    /// @brief Writes cells to the display.
+    /// @param column Column of the first cell.
+    /// @param row Row of the first cell.
+    /// @param cells The cells to write.
+    /// @param count How many cells to write.
+    ///
+    /// Cells are written in row-major order starting at (column, row), wrapping
+    /// to the next row at `columns`. Anything past the last row is ignored.
+    ///
+    /// The generic layer always updates its own copy first, so this doubles as
+    /// the universal "flush this range" call: there is deliberately no separate
+    /// fill, clear or draw-character operation.
+    void (*put_cells)(unsigned column, unsigned row, const video_cell_t *cells, unsigned count);
+
+    /// @brief Moves displayed content vertically, preserving it.
+    /// @param rows Positive moves content up, negative moves it down.
+    ///
+    /// This exists because scrolling is the one operation where a backend beats
+    /// a cell-by-cell repaint by orders of magnitude. The rows uncovered at the
+    /// far edge are left undefined; the generic layer always follows up with
+    /// put_cells() for them.
+    void (*scroll)(int rows);
+
+    /// @brief Places the cursor.
+    /// @param column The column, always already in range.
+    /// @param row The row, always already in range.
+    void (*set_cursor_position)(unsigned column, unsigned row);
+
+    /// @brief Selects the cursor appearance.
+    /// @param style The style to adopt.
+    void (*set_cursor_style)(video_cursor_style_t style);
+} video_backend_t;
+
+/// @brief The backend compiled into this kernel.
+///
+/// Defined by exactly one backend source file, selected at build time. The
+/// generic layer never names a concrete backend.
+///
+/// Pre-initialization contract: put_cells(), scroll() and the cursor operations
+/// may be called BEFORE init(). A backend whose hardware is not usable at reset
+/// must ignore those calls. The generic layer records every mutation in its own
+/// copy regardless, so nothing is lost from its point of view.
+///
+/// This gate belongs to the backend, never to the generic layer: the VGA text
+/// adapter is usable straight out of reset, and suppressing writes generically
+/// would silence the early printf() on the invalid-multiboot-magic path, which
+/// panics without ever reaching video_init().
+extern const video_backend_t video_backend;
