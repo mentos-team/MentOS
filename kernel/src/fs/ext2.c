@@ -1783,42 +1783,43 @@ ext2_allocate_inode_block(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t i
 /// @return the amount of data we read, or negative value for an error.
 static ssize_t ext2_read_inode_block(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t block_index, uint8_t *buffer)
 {
-    // Check if inode has no blocks allocated.
-    if (inode->blocks_count == 0) {
-        pr_debug("File has no allocated blocks (inode blocks count is zero)\n");
-        return 0;
+    // Every block covered by the file size is a legitimate data block:
+    // sparse files legally contain holes (a zero block pointer) inside
+    // `inode->size`, which must read as a block of zeros. Rejecting holes
+    // made any read touching them fail entirely (issue #192). Only blocks
+    // beyond the file size are invalid. Note that `inode->blocks_count`
+    // counts allocated blocks only, so it cannot be used as the upper
+    // bound here.
+    uint32_t max_blocks = inode->size / fs->block_size;
+    if ((inode->size % fs->block_size) != 0) {
+        max_blocks += 1;
     }
-
-    // Calculate allocated filesystem blocks from 512-byte sector count.
-    uint32_t allocated_fs_blocks = inode->blocks_count / fs->blocks_per_block_count;
-
     // Check if block index is out of range.
-    if (block_index >= allocated_fs_blocks) {
+    if (block_index >= max_blocks) {
         pr_err(
-            "Invalid block index: %u >= %u allocated blocks (inode->blocks_count=%u sectors, "
-            "blocks_per_block_count=%u, file_size=%u)\n",
-            block_index, allocated_fs_blocks, inode->blocks_count,
-            fs->blocks_per_block_count, inode->size);
+            "Invalid block index: %u >= %u blocks covered by the file size (file_size=%u)\n",
+            block_index, max_blocks, inode->size);
         return -1;
     }
 
     // Get the real block index
     uint32_t real_index = ext2_get_real_block_index(fs, inode, block_index);
 
-    // Note: real_index == 0 may indicate either:
-    // 1. An unallocated block (sparse file)
-    // 2. An actual error reading indirect blocks
-    // We can't distinguish at this point, but we should still try to read block 0
-    // (which is invalid and will fail in ext2_read_block anyway).
-    // This is better than returning -1 for valid sparse files.
+    // A resolved pointer of zero is a sparse hole: it has no block on disk
+    // and must read as zeros. Block zero is never a valid data block in
+    // ext2, and the metadata paths read their blocks through
+    // ext2_read_block directly, so zero here always means hole (#192).
+    if (real_index == 0) {
+        memset(buffer, 0, fs->block_size);
+        return fs->block_size;
+    }
 
     // Log the resolved block index (debug level)
 #ifdef EXT2_FULL_DEBUG
     pr_debug("ext2_read_inode_block(block: %4u, real: %4u)\n", block_index, real_index);
 #endif
 
-    // Read the block and return the result
-    // Note: ext2_read_block() will handle block_index 0 or invalid blocks appropriately
+    // Read the block and return the result.
     return ext2_read_block(fs, real_index, buffer);
 }
 
@@ -1893,11 +1894,28 @@ static ssize_t ext2_read_inode_data(
     size_t nbyte,
     char *buffer)
 {
+    // A read at or beyond the end of the file reads zero bytes: standard
+    // EOF semantics. Without this guard, an offset past `inode->size`
+    // either hit the unallocated tail blocks of the loop below (returning
+    // -1 at a legal EOF) or computed wrapping copy lengths in unsigned
+    // arithmetic (issue #242).
+    if ((uint64_t)offset >= (uint64_t)inode->size) {
+        return 0;
+    }
+    // A zero-length read copies nothing.
+    if (nbyte == 0) {
+        return 0;
+    }
     // Get the offset to the end of the portion we are reading.
     uint32_t end_offset  = (inode->size >= offset + nbyte) ? (offset + nbyte) : (inode->size);
-    // Convert the offset/size to some starting/end iblock numbers.
+    // Convert the offset/size to some starting/end iblock numbers. The end
+    // block is the one containing the last byte to read (end_offset - 1):
+    // when end_offset is an exact multiple of the block size, dividing
+    // end_offset directly would point one block past the data and leave
+    // end_size at zero, wrapping the copy length of the last block
+    // (issue #242).
     uint32_t start_block = offset / fs->block_size;
-    uint32_t end_block   = end_offset / fs->block_size;
+    uint32_t end_block   = (end_offset - 1) / fs->block_size;
     // What's the offset into the start block.
     uint32_t start_off   = offset % fs->block_size;
     // How much bytes to read for the end block.
