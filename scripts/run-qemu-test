@@ -6,6 +6,35 @@ set -e
 BUILD_DIR="${1:-build}"
 TIMEOUT="${2:-600}"  # 10 minutes default
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+QEMU_PID=""
+STREAMER_PGIDS=()
+
+cleanup() {
+    local pgid
+
+    if [ -n "${QEMU_PID}" ] && kill -0 "${QEMU_PID}" 2>/dev/null; then
+        kill "${QEMU_PID}" 2>/dev/null || true
+    fi
+
+    for pgid in "${STREAMER_PGIDS[@]}"; do
+        kill -- "-${pgid}" 2>/dev/null || true
+    done
+
+    if [ -n "${QEMU_PID}" ]; then
+        wait "${QEMU_PID}" 2>/dev/null || true
+        QEMU_PID=""
+    fi
+
+    for pgid in "${STREAMER_PGIDS[@]}"; do
+        wait "${pgid}" 2>/dev/null || true
+    done
+    STREAMER_PGIDS=()
+}
+
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+trap 'exit 129' HUP
 
 echo "===================================================="
 echo "Starting QEMU test run (timeout: ${TIMEOUT}s)..."
@@ -37,10 +66,15 @@ echo "Monitoring test progress..."
 echo "Build directory: ${BUILD_DIR}"
 echo ""
 
-# Stream both logs in real-time using tail -F (follows by name, retries if file doesn't exist)
-# The --pid flag makes tail exit when QEMU dies
-(tail -F "${BUILD_DIR}/serial.log" 2>/dev/null | sed -u 's/^/[SERIAL] /' &)
-(tail -F "${BUILD_DIR}/test.log" 2>/dev/null | sed -u 's/^/[TEST]   /' &)
+# Stream both logs in real time. Briefly enable job control so each async
+# subshell is a process-group leader and $! is also the group's PGID. Cleanup
+# can then stop both tail and sed by signaling the whole process group.
+set -m
+(tail -F "${BUILD_DIR}/serial.log" 2>/dev/null | sed -u 's/^/[SERIAL] /') &
+STREAMER_PGIDS+=("$!")
+(tail -F "${BUILD_DIR}/test.log" 2>/dev/null | sed -u 's/^/[TEST]   /') &
+STREAMER_PGIDS+=("$!")
+set +m
 
 # Wait for QEMU to finish and explicitly capture its exit code
 # Note: QEMU returns exit 33 on isa-debug-exit success (guest wrote 0x10),
@@ -56,6 +90,7 @@ fi
 
 # Give a moment for final output to flush
 sleep 1
+cleanup
 
 echo ""
 echo "===================================================="
