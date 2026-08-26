@@ -42,6 +42,7 @@ static inline int __gethostname(char *name, size_t len)
     ssize_t ret = vfs_read(file, name, 0UL, len);
     if (ret < 0) {
         pr_err("Failed to read `/etc/hostname`.\n");
+        vfs_close(file);
         return ret;
     }
     // Close the file.
