@@ -63,6 +63,16 @@ The guest now uses QEMU's `isa-debug-exit` device for explicit failure signaling
    - Wrapper translates guest exit codes and validates TAP before returning success
    - Consistent with CI pass/fail semantics
 
+### Log streamer lifecycle
+
+`scripts/run-qemu-test` owns the `tail -F | sed -u` pipelines used for live
+`[SERIAL]` and `[TEST]` output. Each pipeline runs in its own process group so
+normal completion, early errors, and INT/TERM/HUP cleanup can terminate both
+pipeline members and reap them before the wrapper exits. The existing 1-second
+post-QEMU drain remains in place so final streamed lines are emitted before
+cleanup. This prevents orphaned streamers from keeping piped callers open or
+following rewritten logs from later runs.
+
 ### Exit code reference
 
 | Scenario                          | Guest write | Host exit | Recognized as |
