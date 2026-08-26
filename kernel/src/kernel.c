@@ -125,6 +125,22 @@ int kmain(boot_info_t *boot_informations)
     dump_multiboot(boot_info.multiboot_header);
 
     //==========================================================================
+    // Detect the test-run mode as early as possible, before any subsystem
+    // that might fail: kernel_panic must know from the very beginning of
+    // the boot whether it has to signal QEMU's isa-debug-exit device,
+    // otherwise a fatal error in the early stages leaves the guest halted
+    // forever and the test wrapper waiting until its timeout (#244).
+    // The detection must only depend on the cmdline being present and equal
+    // to `runtests`: requiring an exact flags word ties the check to the
+    // specific bits the current GRUB happens to set, and any extra or
+    // missing bit would silently disable the test suite (#249).
+    // dump_multiboot above already dereferences the cmdline under the same
+    // flag check, so reading it here is equally safe.
+    runtests = bitmask_check(boot_info.multiboot_header->flags, MULTIBOOT_FLAG_CMDLINE) &&
+               (boot_info.multiboot_header->cmdline != 0) &&
+               (strcmp((char *)boot_info.multiboot_header->cmdline, "runtests") == 0);
+
+    //==========================================================================
     pr_notice("Initialize resource registry...\n");
     resource_register_init();
 
@@ -446,11 +462,10 @@ int kmain(boot_info_t *boot_informations)
     print_ok();
 
     //==========================================================================
-    // TODO: fix the hardcoded check for the flags set by GRUB
-    runtests = boot_info.multiboot_header->flags == 0x1a67 &&
-               bitmask_check(boot_info.multiboot_header->flags, MULTIBOOT_FLAG_CMDLINE) &&
-               strcmp((char *)boot_info.multiboot_header->cmdline, "runtests") == 0;
-
+    // The test-run mode was already detected at the beginning of kmain (see
+    // the comment there): every subsystem initialized above may fail and
+    // panic before reaching this point, and those panics must already know
+    // whether to signal QEMU's isa-debug-exit.
     if (runtests) {
         pr_notice("Creating runtests process...\n");
         printf("Creating runtests process...");
