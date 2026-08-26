@@ -39,6 +39,7 @@
 #include "sys/msg.h"
 #include "sys/sem.h"
 #include "sys/shm.h"
+#include "system/panic.h"
 #include "system/syscall.h"
 #include "version.h"
 
@@ -117,7 +118,10 @@ int kmain(boot_info_t *boot_informations)
     // Am I booted by a Multiboot-compliant boot loader?
     if (boot_info.magic != MULTIBOOT_BOOTLOADER_MAGIC) {
         printf("Invalid magic number: 0x%x\n", boot_info.magic);
-        return 1;
+        // NOTE: the test-run detection has not happened yet (the multiboot
+        // header cannot be trusted), so this panic cannot signal QEMU; it
+        // still beats returning to a garbage address.
+        kernel_panic("Invalid multiboot bootloader magic.");
     }
     // Set the initial esp.
     initial_esp = boot_info.stack_base;
@@ -159,7 +163,7 @@ int kmain(boot_info_t *boot_informations)
     printf("Initialize modules...");
     if (init_modules(boot_info.multiboot_header) < 0) {
         print_fail();
-        return 1;
+        kernel_panic("Failed to initialize the modules.");
     }
     print_ok();
 
@@ -168,7 +172,7 @@ int kmain(boot_info_t *boot_informations)
     printf("Initialize physical memory manager...");
     if (!pmmngr_init(&boot_info)) {
         print_fail();
-        return 1;
+        kernel_panic("Failed to initialize the physical memory manager.");
     }
     print_ok();
 
@@ -177,7 +181,7 @@ int kmain(boot_info_t *boot_informations)
     printf("Initialize slab...");
     if (kmem_cache_init() < 0) {
         print_fail();
-        return 1;
+        kernel_panic("Failed to initialize the slab allocator.");
     }
     print_ok();
 
@@ -210,7 +214,7 @@ int kmain(boot_info_t *boot_informations)
     printf("Relocate modules...");
     if (relocate_modules() < 0) {
         print_fail();
-        return 1;
+        kernel_panic("Failed to relocate the modules.");
     }
     print_ok();
 
@@ -219,7 +223,7 @@ int kmain(boot_info_t *boot_informations)
     printf("Initialize paging...");
     if (paging_init(&boot_info) < 0) {
         print_fail();
-        return 1;
+        kernel_panic("Failed to initialize paging.");
     }
     print_ok();
 
@@ -228,7 +232,7 @@ int kmain(boot_info_t *boot_informations)
     printf("Initialize virtual memory mapping...");
     if (vmem_init() < 0) {
         print_fail();
-        return 1;
+        kernel_panic("Failed to initialize the virtual memory mapping.");
     }
     print_ok();
 
@@ -255,8 +259,7 @@ int kmain(boot_info_t *boot_informations)
     pr_notice("Initialize ATA devices...\n");
     printf("Initialize ATA devices...");
     if (ata_initialize()) {
-        pr_emerg("Failed to initialize ATA devices!\n");
-        return 1;
+        kernel_panic("Failed to initialize the ATA devices.");
     }
     print_ok();
 
@@ -264,8 +267,7 @@ int kmain(boot_info_t *boot_informations)
     pr_notice("Initialize EXT2 filesystem...\n");
     printf("Initialize EXT2 filesystem...");
     if (ext2_initialize()) {
-        pr_emerg("Failed to initialize EXT2 filesystem!\n");
-        return 1;
+        kernel_panic("Failed to initialize the EXT2 filesystem.");
     }
     print_ok();
 
@@ -273,8 +275,7 @@ int kmain(boot_info_t *boot_informations)
     pr_notice("Mount EXT2 filesystem...\n");
     printf("Mount EXT2 filesystem...");
     if (vfs_mount("ext2", "/", "/dev/hda")) {
-        pr_emerg("Failed to mount EXT2 filesystem...\n");
-        return 1;
+        kernel_panic("Failed to mount the EXT2 filesystem.");
     }
     print_ok();
 
@@ -298,8 +299,7 @@ int kmain(boot_info_t *boot_informations)
     printf("    Initialize memory devices...");
     if (mem_devs_initialize()) {
         print_fail();
-        pr_emerg("Failed to initialize memory devices!\n");
-        return 1;
+        kernel_panic("Failed to initialize the memory devices.");
     }
     print_ok();
 
@@ -308,8 +308,7 @@ int kmain(boot_info_t *boot_informations)
     printf("    Initialize 'procfs'...");
     if (procfs_module_init()) {
         print_fail();
-        pr_emerg("Failed to register `procfs`!\n");
-        return 1;
+        kernel_panic("Failed to register `procfs`.");
     }
     print_ok();
 
@@ -317,8 +316,7 @@ int kmain(boot_info_t *boot_informations)
     pr_notice("    Mounting 'procfs'...\n");
     printf("    Mounting 'procfs'...");
     if (vfs_mount("procfs", "/proc", NULL)) {
-        pr_emerg("Failed to mount procfs at `/proc`!\n");
-        return 1;
+        kernel_panic("Failed to mount procfs at `/proc`.");
     }
     print_ok();
 
@@ -327,8 +325,7 @@ int kmain(boot_info_t *boot_informations)
     printf("Initialize video procfs file...");
     if (procv_module_init()) {
         print_fail();
-        pr_emerg("Failed to initialize `/proc/video`!\n");
-        return 1;
+        kernel_panic("Failed to initialize `/proc/video`.");
     }
     print_ok();
 
@@ -337,8 +334,7 @@ int kmain(boot_info_t *boot_informations)
     printf("Initialize system procfs file...");
     if (procs_module_init()) {
         print_fail();
-        pr_emerg("Failed to initialize proc system entries!\n");
-        return 1;
+        kernel_panic("Failed to initialize the proc system entries.");
     }
     print_ok();
 
@@ -347,8 +343,7 @@ int kmain(boot_info_t *boot_informations)
     printf("Initialize IPC information system...");
     if (procipc_module_init()) {
         print_fail();
-        pr_emerg("Failed to initialize the IPC information system!\n");
-        return 1;
+        kernel_panic("Failed to initialize the IPC information system.");
     }
     print_ok();
 
@@ -357,8 +352,7 @@ int kmain(boot_info_t *boot_informations)
     printf("Initialize IPC/SEM system...");
     if (sem_init()) {
         print_fail();
-        pr_emerg("Failed to initialize the IPC/SEM system!\n");
-        return 1;
+        kernel_panic("Failed to initialize the IPC/SEM system.");
     }
     print_ok();
 
@@ -367,8 +361,7 @@ int kmain(boot_info_t *boot_informations)
     printf("Initialize IPC/MSQ system...");
     if (msq_init()) {
         print_fail();
-        pr_emerg("Failed to initialize the IPC/MSQ system!\n");
-        return 1;
+        kernel_panic("Failed to initialize the IPC/MSQ system.");
     }
     print_ok();
 
@@ -377,8 +370,7 @@ int kmain(boot_info_t *boot_informations)
     printf("Initialize IPC/SHM system...");
     if (shm_init()) {
         print_fail();
-        pr_emerg("Failed to initialize the IPC/SHM system!\n");
-        return 1;
+        kernel_panic("Failed to initialize the IPC/SHM system.");
     }
     print_ok();
 
@@ -437,7 +429,7 @@ int kmain(boot_info_t *boot_informations)
     printf("Init process management...");
     if (!init_tasking()) {
         print_fail();
-        return 1;
+        kernel_panic("Failed to initialize process management.");
     }
     print_ok();
 
@@ -447,7 +439,7 @@ int kmain(boot_info_t *boot_informations)
     printf("Initialize scheduler feedback system...");
     if (!scheduler_feedback_init()) {
         print_fail();
-        return 1;
+        kernel_panic("Failed to initialize the scheduler feedback system.");
     }
     print_ok();
 #endif
@@ -457,7 +449,7 @@ int kmain(boot_info_t *boot_informations)
     printf("Initialize scheduler feedback system (2)...");
     if (procfb_module_init()) {
         print_fail();
-        return 1;
+        kernel_panic("Failed to initialize the scheduler feedback system (2).");
     }
     print_ok();
 
@@ -471,14 +463,14 @@ int kmain(boot_info_t *boot_informations)
         printf("Creating runtests process...");
         if (process_create_init("/bin/runtests")) {
             print_fail();
-            return 1;
+            kernel_panic("Failed to create the runtests process.");
         }
     } else {
         pr_notice("Creating init process...\n");
         printf("Creating init process...");
         if (process_create_init("/bin/init")) {
             print_fail();
-            return 1;
+            kernel_panic("Failed to create the init process.");
         }
     }
     print_ok();
@@ -488,7 +480,7 @@ int kmain(boot_info_t *boot_informations)
     printf("Initialize floating point unit...");
     if (!fpu_install()) {
         print_fail();
-        return 1;
+        kernel_panic("Failed to initialize the floating point unit.");
     }
     print_ok();
 
@@ -497,7 +489,7 @@ int kmain(boot_info_t *boot_informations)
     printf("Initialize signals...");
     if (!signals_init()) {
         print_fail();
-        return 1;
+        kernel_panic("Failed to initialize the signals.");
     }
     print_ok();
 
@@ -507,8 +499,7 @@ int kmain(boot_info_t *boot_informations)
 #ifdef ENABLE_KERNEL_TESTS
     extern int kernel_run_tests(void);
     if (kernel_run_tests() != 0) {
-        pr_emerg("Kernel tests failed!\n");
-        return 1;
+        kernel_panic("Kernel tests failed.");
     } else {
         pr_notice("All kernel tests passed!\n");
     }
