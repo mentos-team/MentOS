@@ -334,6 +334,19 @@ int elf_load_file(mm_struct_t *mm, vfs_file_t *file, uint32_t *entry)
         pr_err("Failed to stat the file `%s`.\n", file->name);
         return -EIO;
     }
+    // A file shorter than the ELF header cannot contain one: interpreting
+    // the buffer would read past the end of the allocation (and a
+    // zero-length file would ask kmalloc for zero bytes). The execve
+    // classifier already rejects such files, but the loader must not rely
+    // on its callers (#241).
+    if (stat_buf.st_size < (off_t)sizeof(elf_header_t)) {
+        pr_err(
+            "File `%s` is too short to be an ELF file (%d < %d).\n",
+            file->name,
+            (int)stat_buf.st_size,
+            (int)sizeof(elf_header_t));
+        return -ENOEXEC;
+    }
     // Allocate the memory for the file.
     char *buffer = kmalloc(stat_buf.st_size);
     if (buffer == NULL) {
