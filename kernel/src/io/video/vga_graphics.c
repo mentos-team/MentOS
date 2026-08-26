@@ -13,6 +13,14 @@
 /// exactly one byte per plane at a byte-aligned address, so a cell is drawn with
 /// plain byte stores, with no read-modify-write and no per-pixel loop.
 ///
+/// Every access to the graphics window traps into the emulated adapter and costs
+/// on the order of 580 cycles whatever its width, so the two things that decide
+/// how this performs are how many accesses it makes and how many of them it can
+/// avoid. Drawing therefore batches in both directions at once, plane-major and
+/// four cells to a 32-bit write (see __vga_draw_run), and scrolling makes no
+/// memory accesses at all: video memory is a ring of rows and scrolling moves
+/// the window the display reads from (see vga_graphics_scroll).
+///
 /// Unlike the text backend, this hardware is NOT usable at reset: until init()
 /// has programmed the mode, the adapter is still in text mode and writes to
 /// 0xA0000 would go nowhere useful. Every operation is therefore gated on
@@ -31,7 +39,6 @@
 #include "io/video_backend.h"
 #include "stdbool.h"
 #include "stddef.h"
-#include "string.h"
 
 #include "vga_graphics_font.h"
 #include "vga_graphics_mode.h"
@@ -64,10 +71,24 @@
 
 /// Sequencer register holding the plane write mask.
 #define VGA_SC_MAP_MASK       0x02
-/// Graphics controller register selecting the plane reads come from.
-#define VGA_GC_READ_MAP       0x04
 /// CRT controller register whose bit 7 write-protects registers 0x00-0x07.
 #define VGA_CRTC_PROTECT      0x11
+/// CRT controller register holding the high byte of the display start address.
+#define VGA_CRTC_START_HIGH   0x0C
+/// CRT controller register holding the low byte of the display start address.
+#define VGA_CRTC_START_LOW    0x0D
+/// CRT controller register carrying bit 8 of the line compare, among others.
+#define VGA_CRTC_OVERFLOW     0x07
+/// CRT controller register carrying bit 9 of the line compare, among others.
+#define VGA_CRTC_MAX_SCAN     0x09
+/// CRT controller register holding the low 8 bits of the line compare.
+#define VGA_CRTC_LINE_COMPARE 0x18
+/// Bit of the overflow register that holds line compare bit 8.
+#define VGA_OVERFLOW_LC8      0x10U
+/// Bit of the maximum scan line register that holds line compare bit 9.
+#define VGA_MAX_SCAN_LC9      0x40U
+/// Line compare value that disables the split: the largest the field can hold.
+#define VGA_LINE_COMPARE_OFF  1023U
 
 /// Base address of the graphics window this mode selects.
 #define VGA_GRAPHICS_ADDRESS  0xA0000U
@@ -80,11 +101,18 @@
 #define VGA_HEIGHT            480
 /// Bytes per scan line, per plane: 640 pixels at one bit per pixel.
 #define VGA_BYTES_PER_LINE    (VGA_WIDTH / 8)
-/// Bytes occupied by one plane.
-#define VGA_PLANE_BYTES       (VGA_HEIGHT * VGA_BYTES_PER_LINE)
 
 /// Scan lines occupied by one cell.
 #define VGA_CELL_HEIGHT       VGA_FONT_HEIGHT
+/// Bytes one text row occupies in one plane.
+#define VGA_ROW_BYTES         (VGA_CELL_HEIGHT * VGA_BYTES_PER_LINE)
+/// Whole text rows that fit the 64 KB window the CPU can address.
+///
+/// This is the size of the circular buffer scrolling pans around; 51 rows of
+/// 1280 bytes is 65280, the largest whole number of rows inside 64 KB.
+#define VGA_VIRTUAL_ROWS      (65536U / VGA_ROW_BYTES)
+/// Bytes the circular buffer occupies.
+#define VGA_BUFFER_BYTES      (VGA_VIRTUAL_ROWS * VGA_ROW_BYTES)
 /// Number of scan lines the underline cursor covers.
 #define VGA_CURSOR_UNDERLINE_LINES 3
 /// Pixel mask of the bar cursor: the two leftmost columns of the cell.
@@ -96,6 +124,13 @@
 /// mode ever stop agreeing.
 typedef char vga_graphics_geometry_check
     [((VIDEO_COLUMNS == (VGA_WIDTH / VGA_FONT_WIDTH)) && (VIDEO_ROWS == (VGA_HEIGHT / VGA_CELL_HEIGHT))) ? 1 : -1];
+
+/// @brief Compile-time check that the circular buffer is larger than the screen.
+///
+/// Scrolling pans around VGA_VIRTUAL_ROWS rows while showing VIDEO_ROWS of them,
+/// so the buffer has to be the larger of the two for there to be anywhere to pan
+/// to. Fails the build with a negative array size otherwise.
+typedef char vga_graphics_buffer_check[(VGA_VIRTUAL_ROWS > VIDEO_ROWS) ? 1 : -1];
 
 /// @brief The graphics window, addressed as bytes of the selected plane.
 static uint8_t *const vga_graphics_memory = (uint8_t *)VGA_GRAPHICS_ADDRESS;
@@ -122,19 +157,88 @@ static video_cursor_style_t cursor_style = VIDEO_CURSOR_BLOCK;
 /// cursor does). It is kept up to date by watching put_cells().
 static video_cell_t cursor_cell = {' ', 0x07};
 
-/// @brief Selects the plane that byte accesses read from and write to.
+/// @brief Virtual row currently shown at the top of the screen.
+///
+/// Video memory is treated as a ring of VGA_VIRTUAL_ROWS rows and scrolling
+/// moves this window rather than the pixels; see __vga_program_window().
+static unsigned start_row = 0;
+
+/// @brief Address of a visible row's first byte in the current plane.
+/// @param row The visible row, 0 to VIDEO_ROWS - 1.
+/// @return Pointer to the row's first byte.
+///
+/// A cell never straddles the ring's seam, because rows are the unit the ring
+/// is built from, so this is the only place the wrap has to be considered.
+static inline uint8_t *__vga_row_address(unsigned row)
+{
+    unsigned virtual_row = start_row + row;
+    // start_row and row are both below VGA_VIRTUAL_ROWS, so one fold is enough.
+    if (virtual_row >= VGA_VIRTUAL_ROWS) {
+        virtual_row -= VGA_VIRTUAL_ROWS;
+    }
+    return vga_graphics_memory + (virtual_row * VGA_ROW_BYTES);
+}
+
+/// @brief Points the display at the current window.
+///
+/// Two registers do the work. The start address picks the first byte shown,
+/// which is what makes scrolling free. The line compare then closes the ring: it
+/// is the scan line at which the display abandons the sequential address and
+/// restarts from address 0, so it goes exactly where the window runs off the end
+/// of the buffer.
+///
+/// The split is only programmed when the window actually runs off the end, and
+/// parked at VGA_LINE_COMPARE_OFF otherwise. In principle any value past the
+/// last scan line would be equally inert, but measurement says otherwise: with
+/// the split parked at an intermediate value the display truncates instead of
+/// ignoring it, so "off" means the maximum the field can hold and nothing else.
+static void __vga_program_window(void)
+{
+    unsigned start        = start_row * VGA_ROW_BYTES;
+    unsigned rows_to_end  = VGA_VIRTUAL_ROWS - start_row;
+    unsigned line_compare = rows_to_end * VGA_CELL_HEIGHT;
+    uint8_t register_value;
+
+    if (line_compare >= VGA_HEIGHT) {
+        line_compare = VGA_LINE_COMPARE_OFF;
+    }
+
+    // Line compare goes first. The two values are briefly inconsistent, and in
+    // that window splitting too early shows stale but valid content, whereas
+    // splitting too late would show memory past the end of the buffer.
+    outportb(VGA_CRTC_INDEX, VGA_CRTC_LINE_COMPARE);
+    outportb(VGA_CRTC_DATA, (uint8_t)(line_compare & 0xFFU));
+
+    // The remaining two bits of the line compare live in registers that also
+    // carry vertical timings. Those timings are rebuilt from the mode table
+    // rather than read back, so a scroll can only ever disturb the one bit it
+    // owns, whatever the adapter happens to return on a read.
+    register_value =
+        (uint8_t)((vga_mode_crtc[VGA_CRTC_OVERFLOW] & ~VGA_OVERFLOW_LC8) | (((line_compare >> 8U) & 1U) << 4U));
+    outportb(VGA_CRTC_INDEX, VGA_CRTC_OVERFLOW);
+    outportb(VGA_CRTC_DATA, register_value);
+
+    register_value =
+        (uint8_t)((vga_mode_crtc[VGA_CRTC_MAX_SCAN] & ~VGA_MAX_SCAN_LC9) | (((line_compare >> 9U) & 1U) << 6U));
+    outportb(VGA_CRTC_INDEX, VGA_CRTC_MAX_SCAN);
+    outportb(VGA_CRTC_DATA, register_value);
+
+    outportb(VGA_CRTC_INDEX, VGA_CRTC_START_HIGH);
+    outportb(VGA_CRTC_DATA, (uint8_t)((start >> 8U) & 0xFFU));
+    outportb(VGA_CRTC_INDEX, VGA_CRTC_START_LOW);
+    outportb(VGA_CRTC_DATA, (uint8_t)(start & 0xFFU));
+}
+
+/// @brief Selects the plane that byte writes land in.
 /// @param plane The plane to select, 0-3.
 ///
-/// Both halves matter: the write mask decides which planes a store lands in,
-/// and the read map decides which plane a load comes from. Scrolling moves
-/// memory with memmove(), which does both.
-static inline void __vga_select_plane(unsigned plane)
+/// This backend never reads video memory back, so only the sequencer's write
+/// mask is needed; the graphics controller's read map can be left alone. Index
+/// and data go out as a single 16-bit write, which the VGA splits into the index
+/// register and the data register.
+static inline void __vga_select_write_plane(unsigned plane)
 {
-    plane &= (VGA_PLANES - 1);
-    outportb(VGA_GC_INDEX, VGA_GC_READ_MAP);
-    outportb(VGA_GC_DATA, (uint8_t)plane);
-    outportb(VGA_SC_INDEX, VGA_SC_MAP_MASK);
-    outportb(VGA_SC_DATA, (uint8_t)(1U << plane));
+    outports(VGA_SC_INDEX, (uint16_t)(((1U << (plane & (VGA_PLANES - 1))) << 8U) | VGA_SC_MAP_MASK));
 }
 
 /// @brief Programs the register set for this mode.
@@ -192,38 +296,114 @@ static void __vga_load_palette(void)
     }
 }
 
+/// @brief The byte one cell contributes to one scan line of one plane.
+/// @param cell The cell being drawn.
+/// @param glyph The bitmap to use, which is not always the cell's own.
+/// @param line The scan line within the cell.
+/// @param plane The plane being written.
+/// @return The byte to store.
+///
+/// A scan line is the glyph where the foreground contributes to this plane and
+/// its complement where the background does, so when the two agree the whole
+/// cell is one constant and the glyph is irrelevant.
+static inline uint8_t __vga_cell_byte(video_cell_t cell, const uint8_t *glyph, unsigned line, unsigned plane)
+{
+    unsigned foreground_set = (cell.attribute >> plane) & 1U;
+    unsigned background_set = (cell.attribute >> (4U + plane)) & 1U;
+    if (foreground_set == background_set) {
+        return foreground_set ? 0xFFU : 0x00U;
+    }
+    uint8_t bits = glyph[line];
+    return foreground_set ? bits : (uint8_t)~bits;
+}
+
+/// @brief Glyph bitmap of a cell's character.
+/// @param cell The cell.
+/// @return VGA_CELL_HEIGHT bytes of bitmap, one per scan line.
+static inline const uint8_t *__vga_cell_glyph(video_cell_t cell)
+{
+    return &vga_graphics_font[(unsigned)cell.character * VGA_CELL_HEIGHT];
+}
+
+/// @brief Draws a run of cells lying within a single row.
+/// @param column The column of the first cell.
+/// @param row The row the run lies in.
+/// @param cells The cells to draw.
+/// @param count How many cells the run covers.
+///
+/// Two things make this fast, both of them about batching:
+///
+/// Rendering is plane-major. Each plane is selected once and the entire run is
+/// then written for it, instead of cycling through all four planes per cell, so
+/// a run of N cells costs 4 port accesses rather than 4N. The console flushes
+/// from the cursor to the end of the line on every character, so N is usually
+/// most of a row.
+///
+/// Within a plane the loop is line-major, which makes the destination bytes of
+/// one scan line contiguous and lets four cells go out in a single 32-bit device
+/// access. That matters more than it looks: every access to the graphics window
+/// is a trap into the emulated adapter, and measurements put a byte write at
+/// roughly 580 cycles regardless of width, so quartering the number of accesses
+/// is very nearly a straight 4x. Writes are aligned first, because an unaligned
+/// access would be split back into pieces and give the saving away.
+static void __vga_draw_run(unsigned column, unsigned row, const video_cell_t *cells, unsigned count)
+{
+    uint8_t *const base = __vga_row_address(row) + column;
+
+    for (unsigned plane = 0; plane < VGA_PLANES; ++plane) {
+        __vga_select_write_plane(plane);
+
+        for (unsigned line = 0; line < VGA_CELL_HEIGHT; ++line) {
+            uint8_t *const destination = base + (line * VGA_BYTES_PER_LINE);
+            unsigned cell              = 0;
+
+            // Lead-in, until the destination is word aligned.
+            while ((cell < count) && ((((uintptr_t)(destination + cell)) & 3U) != 0U)) {
+                destination[cell] = __vga_cell_byte(cells[cell], __vga_cell_glyph(cells[cell]), line, plane);
+                ++cell;
+            }
+
+            // Four cells per device access.
+            while ((cell + 4U) <= count) {
+                uint32_t word =
+                    ((uint32_t)__vga_cell_byte(cells[cell], __vga_cell_glyph(cells[cell]), line, plane)) |
+                    ((uint32_t)__vga_cell_byte(cells[cell + 1U], __vga_cell_glyph(cells[cell + 1U]), line, plane)
+                     << 8U) |
+                    ((uint32_t)__vga_cell_byte(cells[cell + 2U], __vga_cell_glyph(cells[cell + 2U]), line, plane)
+                     << 16U) |
+                    ((uint32_t)__vga_cell_byte(cells[cell + 3U], __vga_cell_glyph(cells[cell + 3U]), line, plane)
+                     << 24U);
+                *(volatile uint32_t *)(destination + cell) = word;
+                cell += 4U;
+            }
+
+            // Tail.
+            while (cell < count) {
+                destination[cell] = __vga_cell_byte(cells[cell], __vga_cell_glyph(cells[cell]), line, plane);
+                ++cell;
+            }
+        }
+    }
+}
+
 /// @brief Draws one cell from an explicit glyph.
 /// @param column The column of the cell.
 /// @param row The row of the cell.
 /// @param glyph VGA_CELL_HEIGHT bytes of bitmap, one per scan line.
 /// @param attribute Foreground index in the low nibble, background in the high.
 ///
-/// For each plane, a scan line is foreground where the glyph has a set bit and
-/// background elsewhere, so the byte to store is decided entirely by whether
-/// that plane's bit is set in the foreground and background indices.
+/// Only the cursor needs this, because it draws a glyph that is not the font
+/// entry for any character. Everything else goes through __vga_draw_run(). One
+/// cell is too small for the batching above to be worth the bookkeeping.
 static void __vga_draw_glyph(unsigned column, unsigned row, const uint8_t *glyph, uint8_t attribute)
 {
-    uint8_t *cell     = vga_graphics_memory + (row * VGA_CELL_HEIGHT * VGA_BYTES_PER_LINE) + column;
-    unsigned foreground = attribute & 0x0FU;
-    unsigned background = (attribute >> 4U) & 0x0FU;
+    uint8_t *const cell     = __vga_row_address(row) + column;
+    video_cell_t synthetic = {0, attribute};
 
     for (unsigned plane = 0; plane < VGA_PLANES; ++plane) {
-        __vga_select_plane(plane);
-        bool_t foreground_set = ((foreground >> plane) & 1U) != 0U;
-        bool_t background_set = ((background >> plane) & 1U) != 0U;
-
-        // Both bits equal means the whole cell is one value in this plane.
-        if (foreground_set == background_set) {
-            uint8_t value = foreground_set ? 0xFFU : 0x00U;
-            for (unsigned line = 0; line < VGA_CELL_HEIGHT; ++line) {
-                cell[line * VGA_BYTES_PER_LINE] = value;
-            }
-            continue;
-        }
-
+        __vga_select_write_plane(plane);
         for (unsigned line = 0; line < VGA_CELL_HEIGHT; ++line) {
-            uint8_t bits                    = glyph[line];
-            cell[line * VGA_BYTES_PER_LINE] = foreground_set ? bits : (uint8_t)~bits;
+            cell[line * VGA_BYTES_PER_LINE] = __vga_cell_byte(synthetic, glyph, line, plane);
         }
     }
 }
@@ -234,7 +414,7 @@ static void __vga_draw_glyph(unsigned column, unsigned row, const uint8_t *glyph
 /// @param cell The cell to draw.
 static inline void __vga_draw_cell(unsigned column, unsigned row, video_cell_t cell)
 {
-    __vga_draw_glyph(column, row, &vga_graphics_font[(unsigned)cell.character * VGA_CELL_HEIGHT], cell.attribute);
+    __vga_draw_run(column, row, &cell, 1);
 }
 
 /// @brief Draws the cursor over the cell it sits on.
@@ -273,13 +453,21 @@ static int vga_graphics_init(void)
     __vga_set_mode();
     __vga_load_palette();
 
-    // Start from a blank display. The console clears the screen straight after
-    // this returns, but leaving whatever the text mode had in memory on screen
-    // in the meantime would show as noise.
+    // Blank the whole ring, not just the visible part: scrolling pans into the
+    // rest, and whatever the text mode left there would scroll into view. The
+    // console clears the screen straight after this returns, but that only
+    // covers the 30 rows currently on display.
     for (unsigned plane = 0; plane < VGA_PLANES; ++plane) {
-        __vga_select_plane(plane);
-        memset(vga_graphics_memory, 0, VGA_PLANE_BYTES);
+        __vga_select_write_plane(plane);
+        volatile uint32_t *word = (volatile uint32_t *)vga_graphics_memory;
+        for (unsigned index = 0; index < (VGA_BUFFER_BYTES / 4U); ++index) {
+            word[index] = 0;
+        }
     }
+
+    // Show the ring from the top.
+    start_row = 0;
+    __vga_program_window();
 
     mode_set = true;
     pr_notice("VGA graphics mode set: %dx%d, 16 colours, %ux%u cells.\n", VGA_WIDTH, VGA_HEIGHT,
@@ -300,20 +488,21 @@ static void vga_graphics_put_cells(unsigned column, unsigned row, const video_ce
 
     unsigned next = 0;
     while ((count > 0) && (row < VIDEO_ROWS)) {
-        // Draw as much of this row as the run covers, then wrap.
+        // Split the range at row boundaries and hand each piece over whole, so
+        // that plane selection is paid once per row rather than once per cell.
         unsigned run = VIDEO_COLUMNS - column;
         if (run > count) {
             run = count;
         }
-        for (unsigned offset = 0; offset < run; ++offset) {
-            video_cell_t cell = cells[next + offset];
-            __vga_draw_cell(column + offset, row, cell);
-            // Keep the cached cursor cell current, so that redrawing the cursor
-            // does not resurrect stale content underneath it.
-            if ((row == cursor_row) && ((column + offset) == cursor_column)) {
-                cursor_cell = cell;
-            }
+
+        __vga_draw_run(column, row, &cells[next], run);
+
+        // Keep the cached cursor cell current, so that redrawing the cursor does
+        // not resurrect stale content underneath it.
+        if ((row == cursor_row) && (cursor_column >= column) && (cursor_column < (column + run))) {
+            cursor_cell = cells[next + (cursor_column - column)];
         }
+
         next += run;
         count -= run;
         column = 0;
@@ -323,29 +512,33 @@ static void vga_graphics_put_cells(unsigned column, unsigned row, const video_ce
 
 /// @brief Moves the displayed content vertically.
 /// @param rows Positive moves content up, negative moves it down.
+///
+/// Nothing is copied. Video memory is a ring of VGA_VIRTUAL_ROWS rows and this
+/// only moves the window the display reads from, so a scroll costs a handful of
+/// port writes instead of moving every visible pixel in all four planes.
+///
+/// That is not merely faster, it is what makes scrolling look right. Copying the
+/// planes one after another while the display is scanning them means that, for
+/// the duration of the copy, the four bits of a pixel's colour come from
+/// different scroll generations, which is what produced the coloured and
+/// duplicated text. Moving the window instead is a register change the display
+/// picks up between frames, so no intermediate state is ever shown.
 static void vga_graphics_scroll(int rows)
 {
     if (!mode_set || (rows == 0)) {
         return;
     }
-    unsigned distance = (rows > 0) ? (unsigned)rows : (unsigned)(-rows);
-    // Nothing would survive the move; the caller repaints what it needs.
-    if (distance >= VIDEO_ROWS) {
-        return;
-    }
 
-    unsigned offset = distance * VGA_CELL_HEIGHT * VGA_BYTES_PER_LINE;
-    unsigned moved  = VGA_PLANE_BYTES - offset;
-
-    // One memmove per plane, rather than redrawing thousands of glyphs.
-    for (unsigned plane = 0; plane < VGA_PLANES; ++plane) {
-        __vga_select_plane(plane);
-        if (rows > 0) {
-            memmove(vga_graphics_memory, vga_graphics_memory + offset, moved);
-        } else {
-            memmove(vga_graphics_memory + offset, vga_graphics_memory, moved);
-        }
+    // Panning is modular, so any distance is meaningful: the caller repaints
+    // whatever the move uncovered.
+    int ring     = (int)VGA_VIRTUAL_ROWS;
+    int position = ((int)start_row + (rows % ring)) % ring;
+    if (position < 0) {
+        position += ring;
     }
+    start_row = (unsigned)position;
+
+    __vga_program_window();
 }
 
 /// @brief Places the cursor.
