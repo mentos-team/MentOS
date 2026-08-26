@@ -53,6 +53,13 @@ The guest now uses QEMU's `isa-debug-exit` device for explicit failure signaling
    - Treats exit 33 as normal suite completion, then validates `test.log` with `tapview`
    - Returns success only when QEMU completed normally and TAP reports zero failures
    - Any other QEMU exit code (1, 3, 35, 124, timeout, etc.) is failure
+   - **Streamer lifecycle** (issue #218): the two `tail -F | sed` live-stream
+     pipelines run each in their own process group (`set -m` window around the
+     launch; the subshell PID doubles as the PGID). The normal path kills both
+     groups after QEMU exits (following a 1 s drain so the final lines are still
+     streamed); `EXIT`/`INT`/`TERM`/`HUP` traps run the same cleanup, so no
+     streamer survives any exit path and piped callers always receive EOF.
+     `tail --pid` is deliberately NOT used (GNU-only; absent on BSD/macOS).
 
 3. **CI integration** (.github/workflows/ubuntu.yml:91, 101):
    - Uses `scripts/run-qemu-test` with proper exit-code handling

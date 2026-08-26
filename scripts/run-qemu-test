@@ -7,6 +7,33 @@ BUILD_DIR="${1:-build}"
 TIMEOUT="${2:-600}"  # 10 minutes default
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# PIDs of the log-streaming subshells. Each was started as a background job
+# under a temporary `set -m` window, so each subshell is also its own process
+# group leader: its PID doubles as the PGID of the whole `tail | sed` pipeline.
+# Killing the negative PID takes down tail AND sed together.
+STREAM_PGIDS=" "
+QEMU_PID=""
+
+# Terminate everything this script started. Idempotent and safe to call twice
+# (the normal path already kills the streamers; the trap finds nothing left).
+cleanup() {
+    local pg
+    for pg in ${STREAM_PGIDS}; do
+        kill -- "-${pg}" 2>/dev/null || true
+    done
+    if [ -n "${QEMU_PID}" ]; then
+        kill "${QEMU_PID}" 2>/dev/null || true
+    fi
+    for pg in ${STREAM_PGIDS}; do
+        wait "${pg}" 2>/dev/null || true
+    done
+}
+
+trap cleanup EXIT
+trap 'trap - INT; cleanup; exit 130' INT
+trap 'trap - TERM; cleanup; exit 143' TERM
+trap 'trap - HUP; cleanup; exit 129' HUP
+
 echo "===================================================="
 echo "Starting QEMU test run (timeout: ${TIMEOUT}s)..."
 echo "===================================================="
@@ -37,10 +64,18 @@ echo "Monitoring test progress..."
 echo "Build directory: ${BUILD_DIR}"
 echo ""
 
-# Stream both logs in real-time using tail -F (follows by name, retries if file doesn't exist)
-# The --pid flag makes tail exit when QEMU dies
-(tail -F "${BUILD_DIR}/serial.log" 2>/dev/null | sed -u 's/^/[SERIAL] /' &)
-(tail -F "${BUILD_DIR}/test.log" 2>/dev/null | sed -u 's/^/[TEST]   /' &)
+# Stream both logs in real-time using tail -F (follows by name, retries if file doesn't exist).
+# NOTE: tail has no portable --pid option (GNU-only, absent on BSD/macOS tail),
+# so the script owns the streamers explicitly: each pipeline is a background
+# job in its own process group (subshell = group leader, $! = PGID), and the
+# normal path kills the whole group after QEMU exits; the traps cover
+# interruption and early exit.
+set -m
+(tail -F "${BUILD_DIR}/serial.log" 2>/dev/null | sed -u 's/^/[SERIAL] /') &
+STREAM_PGIDS="${STREAM_PGIDS} $!"
+(tail -F "${BUILD_DIR}/test.log" 2>/dev/null | sed -u 's/^/[TEST]   /') &
+STREAM_PGIDS="${STREAM_PGIDS} $!"
+set +m
 
 # Wait for QEMU to finish and explicitly capture its exit code
 # Note: QEMU returns exit 33 on isa-debug-exit success (guest wrote 0x10),
@@ -54,8 +89,10 @@ else
     EXIT_CODE=$?
 fi
 
-# Give a moment for final output to flush
+# Give a moment for final output to flush, and for the tail -F streamers to
+# pick up the last lines QEMU wrote before exiting; then terminate them.
 sleep 1
+cleanup
 
 echo ""
 echo "===================================================="
