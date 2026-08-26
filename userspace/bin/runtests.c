@@ -198,7 +198,7 @@ static void run_test(int n, char *test_cmd_line)
         test_ok(n, success, NULL);
     } else {
         if (WIFSIGNALED(status)) {
-            test_ok(n, success, "Signal: %d", WSTOPSIG(status));
+            test_ok(n, success, "Signal: %d", WTERMSIG(status));
         } else {
             test_ok(n, success, "Exit: %d", WEXITSTATUS(status));
         }
