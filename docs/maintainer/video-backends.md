@@ -1,6 +1,6 @@
 # Video backends
 
-Verified against `999efd7`. Core files: `kernel/src/io/video.c` (generic),
+Verified against `7c6c77d`. Core files: `kernel/src/io/video.c` (generic),
 `kernel/inc/io/video_backend.h` (interface), `kernel/src/io/video/` (backends).
 
 ## Split of responsibility
@@ -32,8 +32,9 @@ one invariant to respect when editing `video.c`.
   fill, clear or draw-character operation.
 - `scroll(rows)` moves displayed content vertically, positive up. It exists
   because this is the one operation a backend can do far more cheaply than a
-  cell-by-cell repaint: a `memmove` in video memory instead of thousands of
-  glyphs. Uncovered rows are left undefined; the caller always repaints them.
+  cell-by-cell repaint — the text backend does a `memmove`, and the graphical
+  one moves the display window and copies nothing at all. Uncovered rows are
+  left undefined; the caller always repaints them.
 - `set_cursor_style` takes a **semantic** style (`HIDDEN`, `BLOCK`,
   `UNDERLINE`, `BAR`), not scan lines, so a backend with no hardware cursor can
   implement it by drawing. `HIDDEN` is currently unreachable through ANSI.
@@ -147,6 +148,83 @@ glyph byte where the plane's foreground bit is set and its complement where the
 background bit is, so when the two bits are equal the whole cell is one constant
 in that plane.
 
+### Performance, and why it is shaped this way
+
+Every access to the graphics window traps into the emulated adapter and costs
+roughly **580 cycles regardless of width** (measured: 153600 byte writes and the
+same bytes as 38400 dword writes differ by ~3x in total, not in per-access
+cost). So the only two levers are how many accesses are made and how many are
+avoided outright. Both are used:
+
+- `__vga_draw_run` is **plane-major**: each plane is selected once per run
+  rather than four times per cell, turning 4N port accesses into 4.
+- Within a plane it is **line-major**, which makes a scan line's destination
+  bytes contiguous so four cells go out in one aligned 32-bit access. Writes are
+  aligned first; an unaligned access is split back apart and gives the saving
+  away.
+- Scrolling makes **no memory accesses at all** (see below).
+
+Plane-major on its own was worth only ~20%, because port I/O was never the
+bottleneck. Measure before optimising here; the intuition that port writes
+dominate is wrong.
+
+| Operation | Before | After |
+|---|---|---|
+| Full screen repaint | 110 Mcycles | 33 Mcycles |
+| One character typed | 3.3 Mcycles | 1.1 Mcycles |
+| One scroll | 64 Mcycles | 1.5 kcycles |
+
+Note the console flushes **from the cursor to the end of the line** on every
+character, because writing inserts. That is a property of the generic layer, not
+something the backend may narrow.
+
+### Scrolling: the display window, not the pixels
+
+Video memory is a ring of `VGA_VIRTUAL_ROWS` = 51 text rows (65280 bytes, the
+largest whole number of rows inside the 64 KB window the CPU can address), of
+which 30 are visible. Scrolling moves `start_row`, and two CRTC registers follow:
+
+- the **start address** picks the first byte displayed;
+- the **line compare** closes the ring, being the scan line at which the display
+  abandons the sequential address and restarts from address 0.
+
+This is what fixes tearing, not just what makes scrolling fast. Copying four
+planes one after another while the display scans them means that, for the
+duration of the copy, a pixel's four colour bits come from different scroll
+generations — which is exactly the coloured, duplicated text that used to
+appear. Moving the window is a register change the display picks up between
+frames, so no intermediate state is ever shown.
+
+Blanking or vertical-retrace synchronisation could **not** have fixed this: the
+copy took about 18 ms against a vertical blanking interval of roughly 1.4 ms, so
+there was never a window to hide it in.
+
+### Verified register semantics — do not re-derive from documentation
+
+These were established by probing the target, and two of them contradict what
+the documentation would lead you to expect:
+
+1. **The start address is in bytes.** 80 shifts the display exactly one scan
+   line; 1280 exactly one text row. A value of 40 produces no clean shift, which
+   rules out word addressing.
+2. **The address counter does not wrap at 64 KB.** Past the end of the buffer
+   the display reads zeros, so a plain circular buffer is not available. This is
+   why line compare is needed at all.
+3. **Line compare provides the wrap.** With the window at 28160 and the compare
+   at 464, the display shows virtual rows 22 to 50 and then restarts at address
+   0, exactly as predicted.
+4. **The split must be parked at the maximum the field can hold when unused.**
+   Any value past the last scan line ought to be equally inert. It is not: at an
+   intermediate value the display truncates rather than ignoring it. This cost a
+   boot-time regression to find — the screen froze at 19 rows while the kernel
+   ran on happily — so `VGA_LINE_COMPARE_OFF` means 1023 and nothing else.
+
+The two line-compare bits that share registers with vertical timings are rebuilt
+from the mode table rather than read back, so a scroll can only ever disturb the
+bit it owns.
+
+### Cursor
+
 The software cursor keeps **one cell** of state, not a copy of the screen. The
 generic layer repaints the cell the cursor vacates (writing its buffer's own
 value back, so it can never change what is displayed), so the backend only needs
@@ -230,6 +308,11 @@ Asserts through the **public API only**, so it is backend-independent and the
 same assertions validate both backends. Since the public API cannot read screen
 content, it pins the cursor and geometry contract only.
 
+**Long-scroll check** — boot only scrolls 8 times, far too few to exercise the
+51-row ring or the split. To cover them, print ~150 lines and confirm they come
+out in order; 120 scrolls laps the ring more than twice with the split active
+across its range.
+
 **Pixel-exact screendump** — pins the rendered content the API cannot observe.
 Boot headless with a QEMU monitor socket, `screendump`, and `cmp` against a
 baseline captured before the change. Three independent boots produce
@@ -253,3 +336,8 @@ log. Any divergence means a palette or attribute bug.
 
 Plus `make qemu-test` holding at 52 tests / 0 failures with
 `grep -c PANIC build/serial.log` equal to 0.
+
+One trap worth knowing: QEMU **writes to `rootfs.img`**, so repeated boots
+eventually corrupt it and the guest panics mounting ext2 with an ATA
+`PIO failed` error. That is the image, not your change. Run
+`make -C build filesystem` to regenerate it before believing such a failure.
