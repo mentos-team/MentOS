@@ -265,12 +265,17 @@ int kmain(boot_info_t *boot_informations)
     //==========================================================================
     pr_notice("Initialize Filesystem Hierarchy Standard directories...\n");
     printf("Initialize FHS directories...");
+    // FHS initialization is non-critical by design (fhs_initialize keeps
+    // booting even when some directories cannot be created, and currently
+    // always returns 0): report the outcome and continue either way. The
+    // old `return 1` here would have jumped to a garbage return address
+    // (#243) and made a non-critical warning fatal.
     if (fhs_initialize()) {
         print_fail();
         pr_emerg("Failed to initialize FHS directories!\n");
-        return 1;
+    } else {
+        print_ok();
     }
-    print_ok();
 
     //==========================================================================
     pr_notice("    Initialize memory devices...\n");
