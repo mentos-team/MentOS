@@ -151,7 +151,7 @@ static int __load_executable(const char *path, task_struct *task, uint32_t *entr
     // The credentials are restored if the load fails: a failed execve must
     // leave the caller exactly as it was.
     uid_t saved_uid        = task->uid;
-    pid_t saved_gid        = task->gid;
+    gid_t saved_gid        = task->gid;
 start:
     pr_debug("__load_executable(`%s`, %p `%s`, %p)\n", path, task, task->name, entry);
     vfs_file_t *file = vfs_open(path, O_RDONLY, 0);
@@ -701,7 +701,7 @@ int sys_execve(pt_regs_t *f)
     mm_struct_t *new_mm = NULL;
     // Credentials are restored if any of the post-load steps fails.
     uid_t prev_uid      = current->uid;
-    pid_t prev_gid      = current->gid;
+    gid_t prev_gid      = current->gid;
     int ret             = __load_executable(filename, current, &entry, &new_mm);
     if (ret <= 0) {
         pr_err("Failed to load executable!\n");

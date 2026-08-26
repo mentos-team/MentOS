@@ -87,9 +87,9 @@ typedef struct task_struct {
     /// The Process Group Id of the process
     pid_t pgid;
     /// The Group ID (GID) of the process
-    pid_t rgid;
+    gid_t rgid;
     /// The effective Group ID (GID) of the process
-    pid_t gid;
+    gid_t gid;
     /// The User ID (UID) of the user owning the process.
     uid_t ruid;
     /// The effective User ID (UID) of the process.

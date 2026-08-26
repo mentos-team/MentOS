@@ -26,10 +26,6 @@ static inline int __gethostname(char *name, size_t len)
     if (!name) {
         return -EFAULT;
     }
-    // Check if len is negative.
-    if (len < 0) {
-        return -EINVAL;
-    }
     // Open the file.
     vfs_file_t *file = vfs_open("/etc/hostname", O_RDONLY, 0);
     if (file == NULL) {
