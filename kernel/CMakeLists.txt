@@ -22,7 +22,7 @@ option(ENABLE_SCHEDULER_FEEDBACK "Enables scheduling feedback on terminal." OFF)
 # header the generic console sizes its static state from. Resolved here,
 # before the sources are collected, so the unselected backends can be filtered
 # out below.
-set(VIDEO_TYPES VGA_TEXT_MODE)
+set(VIDEO_TYPES VGA_TEXT_MODE VGA_MODE_640_480_16)
 # Add the video backend option.
 set(VIDEO_TYPE "VGA_TEXT_MODE" CACHE STRING "Chose the type of video backend: ${VIDEO_TYPES}")
 # List of video backends.
@@ -34,6 +34,9 @@ if(VIDEO_TYPE_INDEX EQUAL -1)
 elseif(VIDEO_TYPE STREQUAL "VGA_TEXT_MODE")
     set(VIDEO_BACKEND_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/src/io/video/vga_text.c")
     set(VIDEO_GEOMETRY_HEADER "io/video/vga_text_geometry.h")
+elseif(VIDEO_TYPE STREQUAL "VGA_MODE_640_480_16")
+    set(VIDEO_BACKEND_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/src/io/video/vga_graphics.c")
+    set(VIDEO_GEOMETRY_HEADER "io/video/vga_graphics_geometry.h")
 endif()
 # Notify the type of video backend.
 message(STATUS "Setting video type to ${VIDEO_TYPE}.")
