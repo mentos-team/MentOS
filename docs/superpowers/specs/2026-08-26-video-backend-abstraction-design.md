@@ -40,7 +40,7 @@ Callers of the public API are few:
    invalid-multiboot-magic path, which then panics and never reaches
    `video_init()`. Console output must not depend on any initialization having
    run.
-3. `paging.c:117` identity-maps the first 1 MB ("to access video memory and
+3. `paging.c:119` identity-maps the first 1 MB ("to access video memory and
    other BIOS functions"), so both `0xB8000` and the `0xA0000` graphics aperture
    stay reachable before and after paging is enabled.
 4. `kernel_panic` writes only to serial via `pr_emerg`. It reaches video

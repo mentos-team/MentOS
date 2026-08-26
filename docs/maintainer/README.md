@@ -28,6 +28,7 @@ references.
 | [vfs-and-fd-lifetime.md](vfs-and-fd-lifetime.md) | Changing fd lists, `vfs_file_t` lifetime, open/close/dup/destroy paths |
 | [ext2.md](ext2.md) | Changing ext2 inode/block read/write, the image build, or file caching |
 | [procfs.md](procfs.md) | Changing `/proc` generation or any proc-module read handler |
+| [video-backends.md](video-backends.md) | Changing the console, `video.c`, or any video backend; adding a display mode |
 | [pipes.md](pipes.md) | Changing `sys_pipe`, `pipe_close`, pipe create/unlink error paths |
 | [memory-management.md](memory-management.md) | Reasoning about kmalloc/kfree/slab, UAF/double-free analysis |
 | [syscall-boundaries.md](syscall-boundaries.md) | Adding or modifying ANY syscall that takes user pointers |
