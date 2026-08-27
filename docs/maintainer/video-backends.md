@@ -832,17 +832,33 @@ for 1600x900, 1024x600, 1920x1080 and 1280x720 in one session, the console
 following each.
 
 Plus `make qemu-test` holding at 52 tests / 0 failures on **each** backend, with
-`grep -c PANIC build/serial.log` equal to 0. Note that the test script hardcodes
-`-vga std`, so for a `VIRTIO_GPU` build it exercises the **fallback** path —
-promotion refused, VBE still displaying — which is worth having but is not a test
-of virtio.
+`grep -c PANIC build/serial.log` equal to 0.
+
+`make qemu-test` runs on the display device the configured backend needs: CMake
+maps `VIDEO_TYPE` to `-vga std` for the three fixed backends and to `-vga virtio`
+for `VIRTIO_GPU`, and passes the same flags to `make qemu`. A `VIRTIO_GPU` kernel
+under `-vga std` is the trap this closes — it finds no device, keeps its VBE boot
+backend, and passes all 52 tests on the fallback with nothing in the output
+saying so. So for a promoting backend the wrapper also **asserts the hand-over**:
+CMake tells it which backend the console must end up on, and it fails the run if
+the kernel log never says the console got there. Verified both ways at the
+harness commit — green on `-vga virtio`, and the same build rejected with exit 1
+on `-vga std` despite QEMU exiting 33 and all 52 tests passing.
+
+Driving a host resize is deliberately *not* in the wrapper: `-nographic` means
+there is no UI to resize, and the RFB recipe below needs a VNC client that CI has
+no reason to grow. Under `-display none` the device reports its property default
+(1280x800 on QEMU 8.2.2) to `GET_DISPLAY_INFO` and never raises a display-change
+event, so the automated run covers promotion and steady-state drawing, and the
+resize path stays a manual check.
 
 Two traps worth knowing, both of which look like a regression and are not:
 
 1. QEMU **writes to `rootfs.img`**, so repeated boots eventually corrupt it and
    the guest panics mounting ext2 with an ATA `PIO failed` error. That is the
-   image, not your change. Run `make -C build filesystem` to regenerate it, or
-   add `snapshot=on` to the `-drive` option so boots cannot touch it at all.
+   image, not your change. `make qemu-test` opens the disk with `snapshot=on`, so
+   it cannot happen there; `make qemu` still writes, and `make -C build
+   filesystem` regenerates the image.
 2. There is a **pre-existing intermittent mount failure** of roughly 3%:
    `Cannot find the superblock (/dev/hda)` followed by a panic, with a clean
    `e2fsck`-verified image and `snapshot=on`. Measured at 1/34 boots on `d31df9b`
