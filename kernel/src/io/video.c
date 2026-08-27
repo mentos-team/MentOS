@@ -438,6 +438,34 @@ void video_init(void)
     __parse_cursor_escape_code(0);
 }
 
+void video_late_init(void)
+{
+    // Most backends have nothing deferred; there is then nothing to repaint
+    // either, because they have been drawing all along.
+    if (video_backend.late_init == NULL) {
+        return;
+    }
+
+    if (video_backend.late_init() < 0) {
+        pr_emerg("Failed to complete late initialization of the '%s' video backend.\n", video_backend.name);
+        return;
+    }
+
+    // The backend was inert until a moment ago, so the display shows none of
+    // what the console has accumulated. The cell buffer is the source of truth
+    // and has been recording throughout, so one flush of the whole screen is
+    // all it takes to make the display agree with it -- including everything
+    // printed between video_init() and here.
+    __flush_all();
+
+    // The cursor overlay is the backend's, and it has none drawn yet. Placing
+    // it goes through the same path as any other cursor move, so the lifecycle
+    // invariant holds from the very first overlay.
+    video_update_cursor_position();
+
+    pr_notice("Late initialization of the '%s' video backend complete.\n", video_backend.name);
+}
+
 void video_putc(int c)
 {
     // Handle ANSI escape sequence start.

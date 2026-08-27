@@ -93,6 +93,29 @@ typedef struct {
     /// need not display anything itself.
     int (*init)(void);
 
+    /// @brief Finishes initialization once memory management exists.
+    /// @return 0 on success, a negative value on failure.
+    ///
+    /// Optional: NULL when a backend has nothing to defer, which is the case for
+    /// every backend whose hardware is reachable through the first megabyte.
+    ///
+    /// It exists for hardware that cannot be touched at video_init() time at
+    /// all. A linear framebuffer lives high above RAM, in a PCI BAR that the
+    /// bootloader's page directory does not map, and video_init() runs before
+    /// pmmngr_init(), kmem_cache_init() and paging_init(), so there is nothing
+    /// there to map it with -- and paging_init() then switches to a page
+    /// directory of its own, which would drop a hand-built mapping anyway.
+    ///
+    /// Called once from video_late_init(), after paging_init() has succeeded, so
+    /// mem_upd_vm_area() and the page-table cache are both available. A backend
+    /// that defers must stay completely inert until this has returned 0; see the
+    /// pre-initialization contract on `video_backend` below.
+    ///
+    /// The generic layer repaints its whole cell buffer afterwards, so nothing
+    /// printed in between is lost: the buffer is the source of truth and it has
+    /// been recording all along.
+    int (*late_init)(void);
+
     /// @brief Writes cells to the display.
     /// @param column Column of the first cell.
     /// @param row Row of the first cell.
@@ -151,9 +174,12 @@ typedef struct {
 /// generic layer never names a concrete backend.
 ///
 /// Pre-initialization contract: put_cells(), scroll() and the cursor operations
-/// may be called BEFORE init(). A backend whose hardware is not usable at reset
-/// must ignore those calls. The generic layer records every mutation in its own
-/// copy regardless, so nothing is lost from its point of view.
+/// may be called BEFORE init(), and -- for a backend that defers -- before
+/// late_init() too. A backend whose hardware is not usable yet must ignore those
+/// calls, touching no device memory and no device registers. The generic layer
+/// records every mutation in its own copy regardless, so nothing is lost from
+/// its point of view, and the repaint at the end of video_late_init() puts all
+/// of it on the display at once.
 ///
 /// This gate belongs to the backend, never to the generic layer: the VGA text
 /// adapter is usable straight out of reset, and suppressing writes generically

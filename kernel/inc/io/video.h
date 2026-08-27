@@ -11,6 +11,19 @@
 /// @brief Initialize the video.
 void video_init(void);
 
+/// @brief Finishes video initialization once memory management is up.
+///
+/// Called from kmain() after paging_init() has succeeded. Most backends have
+/// nothing to do here and this returns immediately.
+///
+/// It exists for a backend whose hardware is out of reach at video_init() time
+/// -- a linear framebuffer in a high PCI BAR, which nothing has mapped yet and
+/// which there is no allocator to map. Such a backend stays inert until this
+/// runs; the console keeps recording into its cell buffer meanwhile, and this
+/// repaints all of it once the backend reports itself ready, so nothing printed
+/// in between is lost.
+void video_late_init(void);
+
 /// @brief Print the given character on the screen.
 /// @param c The character to print.
 void video_putc(int c);
