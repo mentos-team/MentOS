@@ -23,6 +23,8 @@
 #include "io/video.h"
 #include "io/video_backend.h"
 #include "klib/irqflags.h"
+#include "mem/alloc/zone_allocator.h"
+#include "mem/mm/page.h"
 #include "stdbool.h"
 #include "stddef.h"
 #include "stdio.h"
@@ -145,6 +147,10 @@ static unsigned screen_cells   = BOOT_SCREEN_CELLS;    ///< Cells on the visible
 static unsigned history_rows   = BOOT_HISTORY_ROWS;    ///< Rows of scrollback.
 static unsigned history_cells  = BOOT_HISTORY_CELLS;   ///< Cells of scrollback.
 
+/// Backing allocation of the current storage, or NULL while it is the boot
+/// arrays. What distinguishes "free this" from "this is static and always was".
+static page_t *console_pages       = NULL;
+
 /// The visible screen. Indexed exactly as the array it replaces was.
 static video_cell_t *screen        = boot_screen;
 /// The scrollback history.
@@ -189,6 +195,74 @@ static int batch_cursor_updates = 0;
 /// interrupts, both to say so explicitly and because that critical section is
 /// where more state will be published later.
 static const video_backend_t *video_active = &video_backend;
+
+/// @name Limits on a requested geometry
+/// @brief Deliberately orientation-agnostic: nothing here assumes width >= height.
+///
+/// A host can report a portrait display, and one has been observed to. So the
+/// floors and ceilings are per-dimension and the real limit is a byte budget on
+/// the storage, which is what actually constrains this.
+/// @{
+
+/// Fewest columns that still make a usable terminal.
+///
+/// Not 80. The boot log writes its status markers at `width - 5` and so needs 80,
+/// but that is a property of the *boot* geometry, which is compile-time and
+/// always at least that wide. By the time anything can resize, the boot log is
+/// finished.
+#define CONSOLE_MIN_COLUMNS 32U
+/// Fewest rows that still make a usable terminal.
+#define CONSOLE_MIN_ROWS    8U
+/// Per-dimension ceiling, which also keeps `columns * rows` clear of overflow.
+///
+/// 4096 x 4096 cells is 16.7 million, and the byte budget below multiplies that
+/// by 24, which still fits a 32-bit unsigned comfortably. Checking the dimensions
+/// before the product is what makes the product safe to compute at all.
+#define CONSOLE_MAX_DIMENSION 4096U
+/// Ceiling on the storage a console may occupy.
+///
+/// At 24 bytes per cell this allows about 174000 cells, which at 8x16 is a
+/// display of roughly 2048x1360 -- comfortably past any host window, and far
+/// short of anything that would strain the allocator.
+#define CONSOLE_MAX_BYTES     (4U * 1024U * 1024U)
+/// @}
+
+/// @brief Bytes a console of the given shape needs.
+/// @param columns Width in cells.
+/// @param rows Height in cells.
+/// @return The total, which callers must already have bounded.
+///
+/// Screen plus guard cell, plus STORED_PAGES screens of scrollback, plus one
+/// saved screen. Safe from overflow only because both dimensions are checked
+/// against CONSOLE_MAX_DIMENSION first.
+static inline unsigned __console_bytes(unsigned columns, unsigned rows)
+{
+    unsigned cells = columns * rows;
+    return (unsigned)(((cells + 1U) + (STORED_PAGES * cells) + cells) * sizeof(video_cell_t));
+}
+
+/// @brief Whether a geometry is one the console will accept.
+/// @param columns Width in cells.
+/// @param rows Height in cells.
+/// @return true when it is usable.
+static bool_t __console_geometry_ok(unsigned columns, unsigned rows)
+{
+    if ((columns < CONSOLE_MIN_COLUMNS) || (rows < CONSOLE_MIN_ROWS)) {
+        return false;
+    }
+    if ((columns > CONSOLE_MAX_DIMENSION) || (rows > CONSOLE_MAX_DIMENSION)) {
+        return false;
+    }
+    return __console_bytes(columns, rows) <= CONSOLE_MAX_BYTES;
+}
+
+/// @name A pending resize request
+/// @brief Written from any context, including an interrupt; acted on in one.
+/// @{
+static volatile bool_t resize_pending  = false; ///< Whether a request is waiting.
+static volatile unsigned resize_want_columns = 0; ///< Requested width.
+static volatile unsigned resize_want_rows    = 0; ///< Requested height.
+/// @}
 
 /// @brief Whether the cursor sits outside the visible screen.
 /// @return true when the cursor is parked on the guard cell.
@@ -549,6 +623,261 @@ void video_late_init(void)
         return;
     }
     pr_notice("Late initialization of the '%s' video backend complete.\n", video_backend.name);
+}
+
+/// @brief A console's storage and shape, as one thing that can be built aside.
+typedef struct {
+    page_t *pages;                 ///< Backing allocation, or NULL for the boot arrays.
+    unsigned columns;              ///< Width in cells.
+    unsigned rows;                 ///< Height in cells.
+    unsigned cells;                ///< Cells on the visible screen.
+    unsigned history_rows;         ///< Rows of scrollback.
+    unsigned history_cells;        ///< Cells of scrollback.
+    video_cell_t *screen;          ///< Visible screen, plus one guard cell.
+    video_cell_t *history;         ///< Scrollback, newest row last.
+    video_cell_t *original_page;   ///< Saved live screen.
+} console_storage_t;
+
+/// @brief Allocates storage for a console of the given shape.
+/// @param columns Width in cells.
+/// @param rows Height in cells.
+/// @param[out] out The storage built.
+/// @return 0 on success, -1 when the allocation failed.
+///
+/// One allocation carved into three buffers, so it is all-or-nothing and there
+/// is a single thing to free. Zeroed, which is what makes every cell the new
+/// console does not inherit a blank cell without anything having to write them.
+static int __console_alloc(unsigned columns, unsigned rows, console_storage_t *out)
+{
+    unsigned cells   = columns * rows;
+    unsigned bytes   = __console_bytes(columns, rows);
+    uint32_t order   = find_nearest_order_greater(0, bytes);
+    page_t *pages    = alloc_pages(GFP_KERNEL, order);
+    if (pages == NULL) {
+        pr_err("Failed to allocate %u bytes for a %ux%u console.\n", bytes, columns, rows);
+        return -1;
+    }
+    uint32_t base = get_virtual_address_from_page(pages);
+    if (base == 0) {
+        pr_err("No low-memory address for the new console storage.\n");
+        free_pages(pages);
+        return -1;
+    }
+    memset((void *)base, 0, bytes);
+
+    out->pages         = pages;
+    out->columns       = columns;
+    out->rows          = rows;
+    out->cells         = cells;
+    out->history_rows  = STORED_PAGES * rows;
+    out->history_cells = out->history_rows * columns;
+    out->screen        = (video_cell_t *)base;
+    out->history       = out->screen + (cells + 1U);
+    out->original_page = out->history + out->history_cells;
+    return 0;
+}
+
+/// @brief Copies one row, clipping or blank-padding to the new width.
+static void __console_copy_row(video_cell_t *destination, unsigned new_columns, const video_cell_t *source,
+                               unsigned old_columns)
+{
+    unsigned shared = (old_columns < new_columns) ? old_columns : new_columns;
+    memcpy(destination, source, shared * sizeof(video_cell_t));
+    for (unsigned column = shared; column < new_columns; ++column) {
+        destination[column] = blank_cell;
+    }
+}
+
+/// @brief Moves the console's contents into new storage.
+/// @param next The storage to fill, already zeroed.
+///
+/// Runs with interrupts masked, so it must do nothing but copy and must be
+/// bounded. See video_service_pending() for why the copy belongs inside that
+/// window rather than before it.
+///
+/// The policy, which docs/maintainer/video-backends.md records in full:
+///
+/// - Growing taller keeps the content where it is and leaves the new rows blank
+///   at the **bottom**, which is what a terminal does and what leaves the cursor
+///   where the user left it.
+/// - Growing shrinker -- shrinking -- drops rows off the **top** into scrollback,
+///   because the bottom of the screen is the prompt and the one part anybody is
+///   looking at.
+/// - Width is clipped on the right when narrowing and blank-filled on the right
+///   when widening. There is deliberately no reflow: the cell buffer has no
+///   record of which rows were soft-wrapped, so reflow is not something this
+///   representation can express.
+static void __console_migrate(const console_storage_t *next)
+{
+    unsigned old_rows    = video_rows;
+    unsigned old_columns = video_columns;
+    unsigned dropped     = (old_rows > next->rows) ? (old_rows - next->rows) : 0U;
+    unsigned shared_rows = (old_rows < next->rows) ? old_rows : next->rows;
+
+    // Visible screen. Shrinking takes the bottom `shared_rows`; growing keeps
+    // row 0 at row 0 and leaves the tail blank.
+    for (unsigned row = 0; row < shared_rows; ++row) {
+        __console_copy_row(&next->screen[row * next->columns], next->columns,
+                           &screen[(row + dropped) * old_columns], old_columns);
+    }
+
+    // Scrollback. The rows that just fell off the top of the screen are the
+    // newest history there is, so the logical sequence is the old history
+    // followed by them, and the newest `keep` of that is what fits.
+    unsigned available = history_rows + dropped;
+    unsigned keep      = (available < next->history_rows) ? available : next->history_rows;
+    for (unsigned index = 0; index < keep; ++index) {
+        unsigned logical = (available - keep) + index;
+        const video_cell_t *source = (logical < history_rows)
+                                         ? &history[logical * old_columns]
+                                         : &screen[(logical - history_rows) * old_columns];
+        __console_copy_row(&next->history[((next->history_rows - keep) + index) * next->columns], next->columns, source,
+                           old_columns);
+    }
+
+    // The cursor keeps its cell coordinates, adjusted for the rows that were
+    // dropped, and is then clamped. A parked cursor stays parked: the guard cell
+    // is a position in its own right and losing it would resume writing at a
+    // cell the console deliberately does not write.
+    if (__cursor_is_parked()) {
+        cursor = next->cells;
+    } else {
+        unsigned x = cursor % old_columns;
+        unsigned y = cursor / old_columns;
+        y          = (y >= dropped) ? (y - dropped) : 0U;
+        if (y >= next->rows) {
+            y = next->rows - 1U;
+        }
+        if (x >= next->columns) {
+            x = next->columns - 1U;
+        }
+        cursor = (y * next->columns) + x;
+    }
+
+    // The saved cursor gets the same treatment; ESC [ u after a resize should
+    // land somewhere sane rather than at an offset that means nothing.
+    {
+        unsigned x = saved_cursor % old_columns;
+        unsigned y = saved_cursor / old_columns;
+        y          = (y >= dropped) ? (y - dropped) : 0U;
+        if (y >= next->rows) {
+            y = next->rows - 1U;
+        }
+        if (x >= next->columns) {
+            x = next->columns - 1U;
+        }
+        saved_cursor = (y * next->columns) + x;
+    }
+
+    // Publish. Every value describing the console's shape changes together, and
+    // this is the only place they may.
+    video_columns  = next->columns;
+    video_rows     = next->rows;
+    screen_cells   = next->cells;
+    history_rows   = next->history_rows;
+    history_cells  = next->history_cells;
+    screen         = next->screen;
+    history        = next->history;
+    original_page  = next->original_page;
+    console_pages  = next->pages;
+}
+
+/// @brief Changes the console's shape.
+/// @param columns The new width in cells.
+/// @param rows The new height in cells.
+/// @return 0 on success, a negative value on failure.
+///
+/// Transactional throughout: the new storage is allocated and the backend is
+/// asked to prepare before anything the console is currently using is touched,
+/// and the old storage is only released once the new one is live. Any failure
+/// leaves the console exactly as it was, still displaying.
+static int __console_resize(unsigned columns, unsigned rows)
+{
+    if (!__console_geometry_ok(columns, rows)) {
+        pr_err("Refusing a %ux%u console: outside the supported range.\n", columns, rows);
+        return -1;
+    }
+    if ((columns == video_columns) && (rows == video_rows)) {
+        return 0;
+    }
+    if (video_active->set_geometry == NULL) {
+        pr_err("Backend '%s' cannot change geometry.\n", video_active->name);
+        return -1;
+    }
+
+    // A resize while scrolled back would have to migrate both the visible screen
+    // and the snapshot it is standing in for, at two different geometries. Going
+    // back to the live view first is one line and removes the case entirely; the
+    // documented consequence is that resizing returns the user to the bottom.
+    if (scrolled_lines != 0) {
+        video_scroll_up(scrolled_lines);
+    }
+
+    console_storage_t next;
+    if (__console_alloc(columns, rows, &next) < 0) {
+        return -1;
+    }
+
+    // The backend prepares but does not switch: it keeps displaying the old
+    // geometry until the repaint below gives it content at the new one.
+    if (video_active->set_geometry(columns, rows) < 0) {
+        pr_err("Backend '%s' refused %ux%u.\n", video_active->name, columns, rows);
+        free_pages(next.pages);
+        return -1;
+    }
+
+    // Interrupts are masked for the copy and the publish together. Not just the
+    // publish: output arriving between the two would land in the old buffer
+    // after it had been copied, and would be lost. Bounded by the size of the
+    // console, which CONSOLE_MAX_BYTES caps.
+    page_t *previous = console_pages;
+    uint8_t flags    = irq_disable();
+    __console_migrate(&next);
+    irq_enable(flags);
+
+    // Only now is the old storage unreachable. The boot arrays are static and
+    // are never freed.
+    if (previous != NULL) {
+        free_pages(previous);
+    }
+
+    __republish();
+    pr_notice("Console resized to %ux%u.\n", columns, rows);
+    return 0;
+}
+
+void video_request_resize(unsigned columns, unsigned rows)
+{
+    // Cheap validation only. This may be an interrupt handler, so a bad request
+    // is dropped here rather than being carried to a context that can complain
+    // about it properly.
+    if (!__console_geometry_ok(columns, rows)) {
+        return;
+    }
+    if ((columns == video_columns) && (rows == video_rows)) {
+        return;
+    }
+
+    // Last request wins. A burst of display-change events therefore costs one
+    // resize, to the geometry the host settled on, rather than one per event.
+    resize_want_columns = columns;
+    resize_want_rows    = rows;
+    resize_pending      = true;
+}
+
+void video_service_pending(void)
+{
+    if (!resize_pending) {
+        return;
+    }
+
+    uint8_t flags        = irq_disable();
+    unsigned columns     = resize_want_columns;
+    unsigned rows        = resize_want_rows;
+    resize_pending       = false;
+    irq_enable(flags);
+
+    (void)__console_resize(columns, rows);
 }
 
 int video_promote_backend(const video_backend_t *next)

@@ -111,15 +111,24 @@
 /// @brief The resource id this backend uses. Ids are the driver's to choose.
 #define VIRTIO_GPU_RESOURCE         1U
 
-/// @name Framebuffer geometry, derived from the console and the font
+/// @name The font's cell size
+/// @brief The only place pixels and cells meet.
+///
+/// Everything below derives pixels from cells through these. The generic console
+/// never sees them: it asks for a number of columns and rows, and this backend
+/// works out how many pixels that is. That is also what would make a font change
+/// the same operation as a display change -- a different pair of cell counts --
+/// rather than a new mechanism.
 /// @{
-#define GPU_CELL_WIDTH  VIDEO_FONT_WIDTH                        ///< Pixels a cell occupies across.
-#define GPU_CELL_HEIGHT VIDEO_FONT_HEIGHT                       ///< Scan lines a cell occupies.
-#define GPU_WIDTH       (VIDEO_COLUMNS * GPU_CELL_WIDTH)         ///< Framebuffer width in pixels.
-#define GPU_HEIGHT      (VIDEO_ROWS * GPU_CELL_HEIGHT)           ///< Framebuffer height in scan lines.
-#define GPU_STRIDE      (GPU_WIDTH * 4U)                         ///< Bytes per scan line.
-#define GPU_ROW_BYTES   (GPU_STRIDE * GPU_CELL_HEIGHT)           ///< Bytes one text row occupies.
-#define GPU_FB_BYTES    (GPU_STRIDE * GPU_HEIGHT)                ///< Bytes the whole framebuffer occupies.
+#define GPU_CELL_WIDTH  VIDEO_FONT_WIDTH  ///< Pixels a cell occupies across.
+#define GPU_CELL_HEIGHT VIDEO_FONT_HEIGHT ///< Scan lines a cell occupies.
+/// @}
+
+/// @name Largest framebuffer this backend will build
+/// @brief Bounds the virtual window and the backing-list length.
+/// @{
+#define GPU_MAX_WIDTH   2048U ///< Widest framebuffer, in pixels.
+#define GPU_MAX_HEIGHT  2048U ///< Tallest framebuffer, in scan lines.
 /// @}
 
 /// @brief Kernel virtual base the framebuffer blocks are mapped consecutively at.
@@ -132,10 +141,12 @@
 
 /// @brief Most blocks the framebuffer may be split into.
 ///
-/// Each becomes one memory entry in the backing list. Eight is far more than the
-/// two or three a largest-block-first allocation actually uses, and keeps the
-/// command buffer small.
-#define GPU_FB_MAX_BLOCKS 8U
+/// Each becomes one memory entry in the backing list. A fresh system needs two
+/// or three; measured across repeated resizes, fragmentation pushed it to seven,
+/// so sixteen is the headroom that keeps a resize from failing on a machine that
+/// has been running a while. Sixteen entries is 288 bytes of command, well inside
+/// the command page.
+#define GPU_FB_MAX_BLOCKS 16U
 
 /// @brief Largest allocation order used for a framebuffer block.
 ///
@@ -148,8 +159,8 @@
 /// @brief Pixel mask of the bar cursor: the two leftmost columns of the cell.
 #define GPU_CURSOR_BAR_MASK        0xC0U
 
-/// @brief Compile-time check that the framebuffer fits its virtual window.
-typedef char gpu_window_check[((GPU_FB_BYTES <= GPU_FB_VIRT_SIZE) &&
+/// @brief Compile-time check that the largest framebuffer fits its virtual window.
+typedef char gpu_window_check[(((GPU_MAX_WIDTH * GPU_MAX_HEIGHT * 4U) <= GPU_FB_VIRT_SIZE) &&
                                (GPU_FB_VIRT_BASE >= 0xF8000000U) &&
                                ((GPU_FB_VIRT_BASE + GPU_FB_VIRT_SIZE) <= 0xFEC00000U))
                                   ? 1
@@ -245,6 +256,18 @@ typedef struct {
     uint32_t bytes;   ///< How many bytes of it the framebuffer uses.
 } gpu_block_t;
 
+/// @name The geometry currently materialized
+/// @brief Derived from the console's cell counts and the font, and nothing else.
+/// @{
+static unsigned gpu_columns   = 0; ///< Console width in cells.
+static unsigned gpu_rows      = 0; ///< Console height in cells.
+static unsigned gpu_width     = 0; ///< Framebuffer width in pixels.
+static unsigned gpu_height    = 0; ///< Framebuffer height in scan lines.
+static unsigned gpu_stride    = 0; ///< Bytes per scan line.
+static unsigned gpu_row_bytes = 0; ///< Bytes one text row occupies.
+static unsigned gpu_fb_bytes  = 0; ///< Bytes the framebuffer occupies.
+/// @}
+
 /// @brief Whether the backend can touch the device and the framebuffer.
 static bool_t active                = false;
 /// @brief Whether the scanout has been pointed at our resource yet.
@@ -268,6 +291,23 @@ static uint32_t command_virtual     = 0;
 
 /// @brief Offset of the response within the command page.
 #define GPU_RESPONSE_OFFSET 2048U
+
+/// @brief The resource currently backing the console.
+static uint32_t resource_id         = VIRTIO_GPU_RESOURCE;
+
+/// @name The previous resource, waiting to be released
+/// @brief Kept alive until the next resize, not freed at the switch.
+///
+/// The scanout switch happens in __gpu_publish(), which is reachable from a
+/// `printf` in an interrupt handler, and the page allocator is not
+/// interrupt-safe. So the old resource and its pages are released at the start of
+/// the *next* resize instead. At most two framebuffers are live at once, which is
+/// bounded rather than leaked.
+/// @{
+static uint32_t retired_resource    = 0;
+static gpu_block_t retired_blocks[GPU_FB_MAX_BLOCKS];
+static unsigned retired_count       = 0;
+/// @}
 
 /// @brief The framebuffer's backing blocks.
 static gpu_block_t blocks[GPU_FB_MAX_BLOCKS];
@@ -300,13 +340,44 @@ static video_cell_t cursor_cell     = {' ', 0x07};
 /// @brief Whether an overlay is currently on the display.
 static bool_t cursor_drawn          = false;
 
+/// @brief Works out the pixel geometry a cell geometry implies.
+/// @param columns Width in cells.
+/// @param rows Height in cells.
+/// @return 0 when it is a geometry this backend can build, -1 otherwise.
+///
+/// The single place cells become pixels. Bounded by GPU_MAX_*, which is what the
+/// virtual window and the backing list were sized for, and checked before the
+/// multiplication so the byte count cannot overflow.
+static int __gpu_set_dimensions(unsigned columns, unsigned rows)
+{
+    if ((columns == 0U) || (rows == 0U)) {
+        return -1;
+    }
+    unsigned width  = columns * GPU_CELL_WIDTH;
+    unsigned height = rows * GPU_CELL_HEIGHT;
+    if ((width > GPU_MAX_WIDTH) || (height > GPU_MAX_HEIGHT)) {
+        pr_err("%ux%u cells is %ux%u pixels, past the %ux%u this backend builds.\n", columns, rows, width, height,
+               (unsigned)GPU_MAX_WIDTH, (unsigned)GPU_MAX_HEIGHT);
+        return -1;
+    }
+
+    gpu_columns   = columns;
+    gpu_rows      = rows;
+    gpu_width     = width;
+    gpu_height    = height;
+    gpu_stride    = width * 4U;
+    gpu_row_bytes = gpu_stride * GPU_CELL_HEIGHT;
+    gpu_fb_bytes  = gpu_stride * height;
+    return 0;
+}
+
 /// @brief Marks cell rows as needing to reach the device.
 /// @param first First row.
 /// @param last Last row, inclusive.
 static void __gpu_damage(unsigned first, unsigned last)
 {
-    if (last >= VIDEO_ROWS) {
-        last = VIDEO_ROWS - 1U;
+    if (last >= gpu_rows) {
+        last = gpu_rows - 1U;
     }
     if (first > last) {
         return;
@@ -393,17 +464,17 @@ static void __gpu_publish(void)
 
     uint32_t y      = first * GPU_CELL_HEIGHT;
     uint32_t height = ((last - first) + 1U) * GPU_CELL_HEIGHT;
-    uint32_t offset = first * GPU_ROW_BYTES;
+    uint32_t offset = first * gpu_row_bytes;
 
     gpu_transfer_2d_t *transfer = (gpu_transfer_2d_t *)command_virtual;
     __gpu_header(VIRTIO_GPU_CMD_TRANSFER_TO_HOST_2D);
     transfer->rect.x      = 0;
     transfer->rect.y      = y;
-    transfer->rect.width  = GPU_WIDTH;
+    transfer->rect.width  = gpu_width;
     transfer->rect.height = height;
     transfer->offset_lo   = offset;
     transfer->offset_hi   = 0;
-    transfer->resource_id = VIRTIO_GPU_RESOURCE;
+    transfer->resource_id = resource_id;
     transfer->padding     = 0;
     if (__gpu_command(sizeof(*transfer), VIRTIO_GPU_RESP_OK_NODATA) < 0) {
         // Put the damage back: it never reached the device.
@@ -417,26 +488,27 @@ static void __gpu_publish(void)
         __gpu_header(VIRTIO_GPU_CMD_SET_SCANOUT);
         scanout->rect.x      = 0;
         scanout->rect.y      = 0;
-        scanout->rect.width  = GPU_WIDTH;
-        scanout->rect.height = GPU_HEIGHT;
+        scanout->rect.width  = gpu_width;
+        scanout->rect.height = gpu_height;
         scanout->scanout_id  = VIRTIO_GPU_SCANOUT;
-        scanout->resource_id = VIRTIO_GPU_RESOURCE;
+        scanout->resource_id = resource_id;
         if (__gpu_command(sizeof(*scanout), VIRTIO_GPU_RESP_OK_NODATA) < 0) {
             pr_err("Failed to point the scanout at the resource.\n");
             submit_busy = false;
             return;
         }
         scanout_set = true;
-        pr_notice("Scanout %u now shows resource %u.\n", (unsigned)VIRTIO_GPU_SCANOUT, (unsigned)VIRTIO_GPU_RESOURCE);
+        pr_notice("Scanout %u now shows resource %u (%ux%u).\n", (unsigned)VIRTIO_GPU_SCANOUT, resource_id, gpu_width,
+                  gpu_height);
     }
 
     gpu_flush_t *flush = (gpu_flush_t *)command_virtual;
     __gpu_header(VIRTIO_GPU_CMD_RESOURCE_FLUSH);
     flush->rect.x      = 0;
     flush->rect.y      = y;
-    flush->rect.width  = GPU_WIDTH;
+    flush->rect.width  = gpu_width;
     flush->rect.height = height;
-    flush->resource_id = VIRTIO_GPU_RESOURCE;
+    flush->resource_id = resource_id;
     flush->padding     = 0;
     (void)__gpu_command(sizeof(*flush), VIRTIO_GPU_RESP_OK_NODATA);
 
@@ -458,10 +530,10 @@ static void __gpu_draw_cell(unsigned column, unsigned row, const uint8_t *glyph,
 {
     uint32_t foreground = palette[attribute & 0x0FU];
     uint32_t background = palette[(attribute >> 4U) & 0x0FU];
-    uint8_t *base       = framebuffer + ((size_t)row * GPU_ROW_BYTES) + ((size_t)column * GPU_CELL_WIDTH * 4U);
+    uint8_t *base       = framebuffer + ((size_t)row * gpu_row_bytes) + ((size_t)column * GPU_CELL_WIDTH * 4U);
 
     for (unsigned line = 0; line < GPU_CELL_HEIGHT; ++line) {
-        uint32_t *pixels = (uint32_t *)(base + ((size_t)line * GPU_STRIDE));
+        uint32_t *pixels = (uint32_t *)(base + ((size_t)line * gpu_stride));
         uint8_t bits     = glyph[line];
         for (unsigned x = 0; x < GPU_CELL_WIDTH; ++x) {
             pixels[x] = ((bits & (0x80U >> x)) != 0U) ? foreground : background;
@@ -472,7 +544,7 @@ static void __gpu_draw_cell(unsigned column, unsigned row, const uint8_t *glyph,
 /// @brief Whether the cursor position refers to the visible screen.
 static inline bool_t __gpu_cursor_on_screen(void)
 {
-    return (cursor_column < VIDEO_COLUMNS) && (cursor_row < VIDEO_ROWS);
+    return (cursor_column < gpu_columns) && (cursor_row < gpu_rows);
 }
 
 /// @brief Whether the overlay should be on the display.
@@ -561,6 +633,33 @@ static uint32_t __gpu_order_floor(uint32_t bytes)
     return order;
 }
 
+/// @brief Maps the current blocks consecutively at the framebuffer window.
+/// @return 0 on success, -1 on failure.
+///
+/// Separate from allocation because a failed resize has to put the previous
+/// mapping back: the old blocks are still allocated and still displayed, and the
+/// drawing code has to be able to reach them again.
+static int __gpu_remap_blocks(void)
+{
+    page_directory_t *pgd = paging_get_main_pgd();
+    if (pgd == NULL) {
+        pr_err("No main page directory to map the framebuffer into.\n");
+        return -1;
+    }
+    uint32_t virtual = GPU_FB_VIRT_BASE;
+    for (unsigned index = 0; index < block_count; ++index) {
+        uint32_t span = (blocks[index].bytes + (PAGE_SIZE - 1U)) & ~(PAGE_SIZE - 1U);
+        if (mem_upd_vm_area(pgd, virtual, blocks[index].physical, span,
+                            MM_RW | MM_PRESENT | MM_GLOBAL | MM_UPDADDR) < 0) {
+            pr_err("Failed to map framebuffer block %u at 0x%08x.\n", index, virtual);
+            return -1;
+        }
+        virtual += span;
+    }
+    framebuffer = (uint8_t *)GPU_FB_VIRT_BASE;
+    return 0;
+}
+
 /// @brief Releases the framebuffer's blocks.
 static void __gpu_free_framebuffer(void)
 {
@@ -586,7 +685,7 @@ static int __gpu_alloc_framebuffer(void)
     memset(blocks, 0, sizeof(blocks));
     block_count = 0;
 
-    uint32_t remaining = GPU_FB_BYTES;
+    uint32_t remaining = gpu_fb_bytes;
     while ((remaining > 0U) && (block_count < GPU_FB_MAX_BLOCKS)) {
         uint32_t order = __gpu_order_floor(remaining);
         page_t *pages  = NULL;
@@ -622,28 +721,158 @@ static int __gpu_alloc_framebuffer(void)
 
     // Map the blocks consecutively, so the drawing code sees one flat array
     // while the device is given the list.
-    page_directory_t *pgd = paging_get_main_pgd();
-    if (pgd == NULL) {
-        pr_err("No main page directory to map the framebuffer into.\n");
+    if (__gpu_remap_blocks() < 0) {
         __gpu_free_framebuffer();
         return -1;
     }
-    uint32_t virtual = GPU_FB_VIRT_BASE;
-    for (unsigned index = 0; index < block_count; ++index) {
-        uint32_t span = (blocks[index].bytes + (PAGE_SIZE - 1U)) & ~(PAGE_SIZE - 1U);
-        if (mem_upd_vm_area(pgd, virtual, blocks[index].physical, span,
-                            MM_RW | MM_PRESENT | MM_GLOBAL | MM_UPDADDR) < 0) {
-            pr_err("Failed to map framebuffer block %u at 0x%08x.\n", index, virtual);
-            __gpu_free_framebuffer();
-            return -1;
-        }
-        virtual += span;
+    memset(framebuffer, 0, gpu_fb_bytes);
+    pr_notice("Framebuffer: %u KiB in %u block(s), mapped at 0x%08x.\n", (unsigned)(gpu_fb_bytes / 1024U), block_count,
+              (unsigned)GPU_FB_VIRT_BASE);
+    return 0;
+}
+
+/// @brief Creates a resource at the current geometry and attaches the blocks.
+/// @param id The resource id to create.
+/// @return 0 on success, -1 on failure.
+static int __gpu_create_resource(uint32_t id)
+{
+    gpu_create_2d_t *create = (gpu_create_2d_t *)command_virtual;
+    __gpu_header(VIRTIO_GPU_CMD_RESOURCE_CREATE_2D);
+    create->resource_id = id;
+    create->format      = VIRTIO_GPU_FORMAT_B8G8R8X8_UNORM;
+    create->width       = gpu_width;
+    create->height      = gpu_height;
+    if (__gpu_command(sizeof(*create), VIRTIO_GPU_RESP_OK_NODATA) < 0) {
+        return -1;
     }
 
-    framebuffer = (uint8_t *)GPU_FB_VIRT_BASE;
-    memset(framebuffer, 0, GPU_FB_BYTES);
-    pr_notice("Framebuffer: %u KiB in %u block(s), mapped at 0x%08x.\n", (unsigned)(GPU_FB_BYTES / 1024U), block_count,
-              (unsigned)GPU_FB_VIRT_BASE);
+    gpu_attach_backing_t *attach = (gpu_attach_backing_t *)command_virtual;
+    __gpu_header(VIRTIO_GPU_CMD_RESOURCE_ATTACH_BACKING);
+    attach->resource_id = id;
+    attach->nr_entries  = block_count;
+    for (unsigned index = 0; index < block_count; ++index) {
+        attach->entries[index].addr_lo = blocks[index].physical;
+        attach->entries[index].addr_hi = 0;
+        attach->entries[index].length  = blocks[index].bytes;
+        attach->entries[index].padding = 0;
+    }
+    // Only the entries actually used are sent.
+    uint32_t length = sizeof(gpu_ctrl_hdr_t) + (2U * sizeof(uint32_t)) + (block_count * sizeof(gpu_mem_entry_t));
+    return __gpu_command(length, VIRTIO_GPU_RESP_OK_NODATA);
+}
+
+/// @brief Releases the resource a previous resize left behind.
+///
+/// Deliberately here rather than at the moment of the switch; see the comment on
+/// `retired_resource`.
+static void __gpu_release_retired(void)
+{
+    if (retired_resource != 0U) {
+        gpu_ctrl_hdr_t *unref = (gpu_ctrl_hdr_t *)command_virtual;
+        __gpu_header(VIRTIO_GPU_CMD_RESOURCE_UNREF);
+        // The unref payload is the header followed by the id and padding.
+        *(uint32_t *)(command_virtual + sizeof(gpu_ctrl_hdr_t))      = retired_resource;
+        *(uint32_t *)(command_virtual + sizeof(gpu_ctrl_hdr_t) + 4U) = 0;
+        (void)unref;
+        (void)__gpu_command(sizeof(gpu_ctrl_hdr_t) + 8U, VIRTIO_GPU_RESP_OK_NODATA);
+        retired_resource = 0;
+    }
+    for (unsigned index = 0; index < retired_count; ++index) {
+        if (retired_blocks[index].pages != NULL) {
+            free_pages(retired_blocks[index].pages);
+        }
+    }
+    memset(retired_blocks, 0, sizeof(retired_blocks));
+    retired_count = 0;
+}
+
+/// @brief Prepares to materialize a different cell geometry.
+/// @param columns The new console width in cells.
+/// @param rows The new console height in cells.
+/// @return 0 when ready, -1 on failure.
+///
+/// Builds a whole second framebuffer and a second resource while the first is
+/// still scanning out, and does **not** switch: `scanout_set` is cleared so the
+/// switch happens on the next publish, which the generic layer only reaches
+/// after it has repainted the console at the new geometry. So the display goes
+/// straight from a correct old screen to a correct new one.
+///
+/// Every failure path leaves the current resource, framebuffer and scanout
+/// exactly as they were, so the console keeps working at its old size.
+///
+/// One deliberate imprecision: this adopts the new pixel geometry before the
+/// generic layer publishes the new cell geometry, so for the handful of
+/// instructions in between an interrupt-context `printf` would draw at old
+/// coordinates into the new framebuffer. That is bounded rather than dangerous --
+/// put_cells() clamps to the current geometry, so nothing can be written outside
+/// the framebuffer -- and the repaint that follows immediately overwrites it.
+static int virtio_gpu_set_geometry(unsigned columns, unsigned rows)
+{
+    if (!active) {
+        return -1;
+    }
+
+    // Release whatever the previous resize left behind, before allocating more.
+    __gpu_release_retired();
+
+    // Remember everything needed to put things back.
+    unsigned old_columns = gpu_columns;
+    unsigned old_rows    = gpu_rows;
+    unsigned old_width   = gpu_width;
+    unsigned old_height  = gpu_height;
+    unsigned old_stride  = gpu_stride;
+    unsigned old_rowb    = gpu_row_bytes;
+    unsigned old_bytes   = gpu_fb_bytes;
+    gpu_block_t old_blocks[GPU_FB_MAX_BLOCKS];
+    unsigned old_count = block_count;
+    memcpy(old_blocks, blocks, sizeof(old_blocks));
+
+    if (__gpu_set_dimensions(columns, rows) < 0) {
+        gpu_columns = old_columns; gpu_rows = old_rows; gpu_width = old_width;
+        gpu_height = old_height;   gpu_stride = old_stride; gpu_row_bytes = old_rowb;
+        gpu_fb_bytes = old_bytes;
+        return -1;
+    }
+
+    // A fresh framebuffer, mapped over the same virtual window. The old one is
+    // only read by the device from now on, and the device uses physical
+    // addresses, so replacing the mapping does not disturb what is displayed.
+    block_count = 0;
+    if (__gpu_alloc_framebuffer() < 0) {
+        gpu_columns = old_columns; gpu_rows = old_rows; gpu_width = old_width;
+        gpu_height = old_height;   gpu_stride = old_stride; gpu_row_bytes = old_rowb;
+        gpu_fb_bytes = old_bytes;
+        memcpy(blocks, old_blocks, sizeof(blocks));
+        block_count = old_count;
+        // Put the old mapping back, so drawing keeps reaching the live pixels.
+        (void)__gpu_remap_blocks();
+        return -1;
+    }
+
+    uint32_t next_resource = (resource_id == 1U) ? 2U : 1U;
+    if (__gpu_create_resource(next_resource) < 0) {
+        __gpu_free_framebuffer();
+        gpu_columns = old_columns; gpu_rows = old_rows; gpu_width = old_width;
+        gpu_height = old_height;   gpu_stride = old_stride; gpu_row_bytes = old_rowb;
+        gpu_fb_bytes = old_bytes;
+        memcpy(blocks, old_blocks, sizeof(blocks));
+        block_count = old_count;
+        (void)__gpu_remap_blocks();
+        return -1;
+    }
+
+    // Committed. The old resource stays on the scanout until the next publish.
+    retired_resource = resource_id;
+    memcpy(retired_blocks, old_blocks, sizeof(retired_blocks));
+    retired_count = old_count;
+
+    resource_id  = next_resource;
+    scanout_set  = false;
+    damage_valid = false;
+    cursor_drawn = false;
+
+    pr_notice("Prepared %ux%u cells (%ux%u pixels) as resource %u.\n", columns, rows, gpu_width, gpu_height,
+              resource_id);
     return 0;
 }
 
@@ -672,6 +901,11 @@ static void __gpu_teardown(void)
 /// leaves whichever backend was displaying still displaying.
 static int virtio_gpu_late_init(void)
 {
+    // The console is whatever shape it was compiled as when this first runs.
+    if (__gpu_set_dimensions(VIDEO_COLUMNS, VIDEO_ROWS) < 0) {
+        return -1;
+    }
+
     uint32_t pci_device = 0;
     int found           = virtio_pci_find(VIRTIO_ID_GPU, &pci_device);
     if (found != 0) {
@@ -729,8 +963,8 @@ static int virtio_gpu_late_init(void)
         const gpu_display_info_t *info = (const gpu_display_info_t *)(command_virtual + GPU_RESPONSE_OFFSET);
         pr_notice("Host would like %ux%u (scanout %u, enabled %u); using the compiled %ux%u.\n",
                   info->pmodes[VIRTIO_GPU_SCANOUT].rect.width, info->pmodes[VIRTIO_GPU_SCANOUT].rect.height,
-                  (unsigned)VIRTIO_GPU_SCANOUT, info->pmodes[VIRTIO_GPU_SCANOUT].enabled, (unsigned)GPU_WIDTH,
-                  (unsigned)GPU_HEIGHT);
+                  (unsigned)VIRTIO_GPU_SCANOUT, info->pmodes[VIRTIO_GPU_SCANOUT].enabled, (unsigned)gpu_width,
+                  (unsigned)gpu_height);
     }
 
     if (__gpu_alloc_framebuffer() < 0) {
@@ -738,31 +972,7 @@ static int virtio_gpu_late_init(void)
         return -1;
     }
 
-    gpu_create_2d_t *create = (gpu_create_2d_t *)command_virtual;
-    __gpu_header(VIRTIO_GPU_CMD_RESOURCE_CREATE_2D);
-    create->resource_id = VIRTIO_GPU_RESOURCE;
-    create->format      = VIRTIO_GPU_FORMAT_B8G8R8X8_UNORM;
-    create->width       = GPU_WIDTH;
-    create->height      = GPU_HEIGHT;
-    if (__gpu_command(sizeof(*create), VIRTIO_GPU_RESP_OK_NODATA) < 0) {
-        __gpu_teardown();
-        return -1;
-    }
-
-    gpu_attach_backing_t *attach = (gpu_attach_backing_t *)command_virtual;
-    __gpu_header(VIRTIO_GPU_CMD_RESOURCE_ATTACH_BACKING);
-    attach->resource_id = VIRTIO_GPU_RESOURCE;
-    attach->nr_entries  = block_count;
-    for (unsigned index = 0; index < block_count; ++index) {
-        attach->entries[index].addr_lo = blocks[index].physical;
-        attach->entries[index].addr_hi = 0;
-        attach->entries[index].length  = blocks[index].bytes;
-        attach->entries[index].padding = 0;
-    }
-    // Only the entries actually used are sent.
-    uint32_t attach_length = sizeof(gpu_ctrl_hdr_t) + (2U * sizeof(uint32_t)) +
-                             (block_count * sizeof(gpu_mem_entry_t));
-    if (__gpu_command(attach_length, VIRTIO_GPU_RESP_OK_NODATA) < 0) {
+    if (__gpu_create_resource(resource_id) < 0) {
         __gpu_teardown();
         return -1;
     }
@@ -770,23 +980,22 @@ static int virtio_gpu_late_init(void)
     __gpu_build_palette();
 
     active = true;
-    pr_notice("Ready: %ux%u at 32 bpp, %ux%u cells, resource %u backed by %u block(s).\n", (unsigned)GPU_WIDTH,
-              (unsigned)GPU_HEIGHT, (unsigned)VIDEO_COLUMNS, (unsigned)VIDEO_ROWS, (unsigned)VIRTIO_GPU_RESOURCE,
-              block_count);
+    pr_notice("Ready: %ux%u at 32 bpp, %ux%u cells, resource %u backed by %u block(s).\n", (unsigned)gpu_width,
+              (unsigned)gpu_height, (unsigned)gpu_columns, (unsigned)gpu_rows, resource_id, block_count);
     return 0;
 }
 
 /// @brief Draws cells to the framebuffer and sends the rows that changed.
 static void virtio_gpu_put_cells(unsigned column, unsigned row, const video_cell_t *cells, unsigned count)
 {
-    if (!active || (cells == NULL) || (column >= VIDEO_COLUMNS) || (row >= VIDEO_ROWS)) {
+    if (!active || (cells == NULL) || (column >= gpu_columns) || (row >= gpu_rows)) {
         return;
     }
 
     unsigned next   = 0;
     bool_t touched  = false;
-    while ((count > 0) && (row < VIDEO_ROWS)) {
-        unsigned run = VIDEO_COLUMNS - column;
+    while ((count > 0) && (row < gpu_rows)) {
+        unsigned run = gpu_columns - column;
         if (run > count) {
             run = count;
         }
@@ -836,34 +1045,34 @@ static void virtio_gpu_scroll(int rows)
     // The overlay is pixels like everything else and the move carries it along.
     if (cursor_drawn) {
         int moved = (int)cursor_row - rows;
-        if ((moved < 0) || (moved >= (int)VIDEO_ROWS)) {
+        if ((moved < 0) || (moved >= (int)gpu_rows)) {
             cursor_drawn = false;
         }
         cursor_row = (unsigned)moved;
     }
 
     unsigned distance = (rows > 0) ? (unsigned)rows : (unsigned)(-rows);
-    if (distance < VIDEO_ROWS) {
-        unsigned keep = VIDEO_ROWS - distance;
-        uint8_t *from = framebuffer + ((rows > 0) ? ((size_t)distance * GPU_ROW_BYTES) : 0U);
-        uint8_t *to   = framebuffer + ((rows > 0) ? 0U : ((size_t)distance * GPU_ROW_BYTES));
-        memmove(to, from, (size_t)keep * GPU_ROW_BYTES);
+    if (distance < gpu_rows) {
+        unsigned keep = gpu_rows - distance;
+        uint8_t *from = framebuffer + ((rows > 0) ? ((size_t)distance * gpu_row_bytes) : 0U);
+        uint8_t *to   = framebuffer + ((rows > 0) ? 0U : ((size_t)distance * gpu_row_bytes));
+        memmove(to, from, (size_t)keep * gpu_row_bytes);
     }
 
     // Everything moved, so everything has to be resent. The caller repaints the
     // rows the move uncovered, which will land in the same damage range.
-    __gpu_damage(0, VIDEO_ROWS - 1U);
+    __gpu_damage(0, gpu_rows - 1U);
     __gpu_publish();
 }
 
 /// @brief Places the cursor.
 static void virtio_gpu_set_cursor_position(unsigned column, unsigned row, video_cell_t cell)
 {
-    if (column >= VIDEO_COLUMNS) {
-        column = VIDEO_COLUMNS - 1;
+    if (column >= gpu_columns) {
+        column = gpu_columns - 1;
     }
-    if (row >= VIDEO_ROWS) {
-        row = VIDEO_ROWS - 1;
+    if (row >= gpu_rows) {
+        row = gpu_rows - 1;
     }
 
     __gpu_cursor_hide();
@@ -902,6 +1111,7 @@ static const video_backend_t virtio_gpu_backend = {
     .scroll              = virtio_gpu_scroll,
     .set_cursor_position = virtio_gpu_set_cursor_position,
     .set_cursor_style    = virtio_gpu_set_cursor_style,
+    .set_geometry        = virtio_gpu_set_geometry,
     .cursor_blink        = NULL,
 };
 

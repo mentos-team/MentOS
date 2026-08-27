@@ -156,6 +156,28 @@ typedef struct {
     /// @param style The style to adopt.
     void (*set_cursor_style)(video_cursor_style_t style);
 
+    /// @brief Prepares to materialize a different cell geometry.
+    /// @param columns The new console width in cells.
+    /// @param rows The new console height in cells.
+    /// @return 0 when the backend is ready for that geometry, negative otherwise.
+    ///
+    /// Optional: NULL means the backend cannot change shape, and the generic
+    /// layer then refuses every resize. Both fixed backends leave it NULL and
+    /// are unaffected by any of this.
+    ///
+    /// The currency is **cells**, not pixels. A backend owns its font and works
+    /// out the pixel geometry from these; nothing generic knows a font size.
+    /// That is also what lets a future font change be the same operation as a
+    /// display change: both arrive here as a different pair of cell counts.
+    ///
+    /// Called from process context, and required to be **transactional**: it may
+    /// allocate and talk to its device, but it must not disturb what is
+    /// currently displayed. On success the backend is expected to keep showing
+    /// the old geometry until the generic layer repaints, and to switch on the
+    /// first put_cells() afterwards -- so a failure here, or a failure to
+    /// allocate the new console, leaves a working display either way.
+    int (*set_geometry)(unsigned columns, unsigned rows);
+
     /// @brief Advances a software cursor's blink, once per timer tick.
     ///
     /// Optional: NULL when a backend has nothing to do, which is the case for

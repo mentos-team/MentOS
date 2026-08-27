@@ -54,6 +54,12 @@ static ssize_t procv_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyt
         return -1;
     }
 
+    // A display change is noticed in an interrupt handler, which may not
+    // allocate or migrate the console, so the work is done here instead: this is
+    // process context, and it is where a shell spends its time waiting. See
+    // video_service_pending().
+    video_service_pending();
+
     // Get the currently running process.
     task_struct *process = scheduler_get_current_process();
     // Get a pointer to its keyboard ring buffer.
@@ -226,6 +232,11 @@ static ssize_t procv_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyt
 /// @return ssize_t The number of bytes written.
 static ssize_t procv_write(vfs_file_t *file, const void *buf, off_t offset, size_t nbyte)
 {
+    // The other process-context path into the console; see procv_read(). Done
+    // before the output rather than after, so what is written lands on a console
+    // that is already the right shape.
+    video_service_pending();
+
     for (size_t i = 0; i < nbyte; ++i) {
         video_putc(((char *)buf)[i]);
     }

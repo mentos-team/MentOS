@@ -24,6 +24,31 @@ void video_init(void);
 /// in between is lost.
 void video_late_init(void);
 
+/// @brief Records that the console should change shape.
+/// @param columns The wanted width in cells.
+/// @param rows The wanted height in cells.
+///
+/// Safe to call from an interrupt handler: it validates the request cheaply and
+/// stores it, and does nothing else. No allocation, no device traffic, no
+/// migration. Repeated requests coalesce -- only the most recent one survives,
+/// which is what makes a burst of display-change events cost one resize.
+///
+/// The work happens in video_service_pending().
+void video_request_resize(unsigned columns, unsigned rows);
+
+/// @brief Applies a pending resize, if there is one.
+///
+/// **Process context only.** It allocates, talks to the backend and copies the
+/// console, none of which may happen in an interrupt handler.
+///
+/// Called from the console's own syscall paths, so a resize is serviced the next
+/// time anything reads from or writes to the console. A shell blocked on input
+/// is woken when the request is recorded, which makes that next time
+/// immediate in practice; a guest touching the console not at all leaves the
+/// resize pending, which is the honest consequence of a kernel with no worker
+/// threads.
+void video_service_pending(void);
+
 /// @brief Print the given character on the screen.
 /// @param c The character to print.
 void video_putc(int c);
