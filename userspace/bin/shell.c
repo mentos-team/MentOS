@@ -921,9 +921,14 @@ static inline int __read_command(rb_history_entry_t *entry)
                     printf("\033[%dC", length - index); // Move cursor to the end
                     index = length;                     // Set index to the end
                 }
-                // INSERT
+                // INSERT, and the function keys that share its first digit:
+                // F10 is ESC [ 21 ~, F11 is ESC [ 23 ~ and F12 is ESC [ 24 ~,
+                // so the digit after the '2' is what tells them apart. Reading
+                // it unconditionally also stops F10-F12 from leaving a stray
+                // '~' in the line, which is what used to happen.
                 else if (c == '2') {
-                    if (getchar() == '~') {
+                    c = getchar();
+                    if (c == '~') {
                         // Toggle insert mode.
                         insert_active = !insert_active;
                         if (insert_active) {
@@ -932,6 +937,23 @@ static inline int __read_command(rb_history_entry_t *entry)
                         } else {
                             // Change cursor back to a block cursor (default).
                             printf("\033[0 q");
+                        }
+                    }
+                    // F10, F11, F12: the console's font size. Sent on to the
+                    // console as its own escape sequence, which is how this
+                    // shell already asks for scrollback and cursor shapes --
+                    // the keys belong here, and the console control belongs
+                    // there.
+                    else if ((c == '1') || (c == '3') || (c == '4')) {
+                        int key = c;
+                        if (getchar() == '~') {
+                            if (key == '1') {
+                                printf("\033[0z"); // F10: default size.
+                            } else if (key == '3') {
+                                printf("\033[1z"); // F11: one step smaller.
+                            } else {
+                                printf("\033[2z"); // F12: one step larger.
+                            }
                         }
                     }
                 }

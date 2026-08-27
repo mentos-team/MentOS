@@ -232,14 +232,20 @@ static ssize_t procv_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyt
 /// @return ssize_t The number of bytes written.
 static ssize_t procv_write(vfs_file_t *file, const void *buf, off_t offset, size_t nbyte)
 {
-    // The other process-context path into the console; see procv_read(). Done
-    // before the output rather than after, so what is written lands on a console
-    // that is already the right shape.
+    // The other process-context path into the console; see procv_read(). Before
+    // the output, so what is written lands on a console that is already the right
+    // shape.
     video_service_pending();
 
     for (size_t i = 0; i < nbyte; ++i) {
         video_putc(((char *)buf)[i]);
     }
+
+    // And again after it, because the output can itself ask for a change: a font
+    // escape sequence is only recorded by the parser, and would otherwise wait
+    // for the next read -- which blocks until a key is pressed, so the font would
+    // appear to change only when the user next typed something.
+    video_service_pending();
     return nbyte;
 }
 

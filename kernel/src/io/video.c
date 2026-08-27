@@ -1205,6 +1205,24 @@ void video_putc(int c)
                 escape_index = -1;
                 return;
             }
+            // ESC [ <n> z - Custom: console font size. 0 or absent is the
+            // default size, 1 is one step smaller, 2 is one step larger.
+            //
+            // A private sequence, and legitimately so: ECMA-48 reserves the final
+            // bytes 0x70-0x7E for private use, which is the same range the
+            // cursor-shape 'q' above already sits in. Only recorded here --
+            // changing font allocates and talks to the display, and this parser
+            // runs wherever video_putc() does.
+            else if (c == 'z') {
+                int mode = atoi(&escape_buffer[1]);
+                if (mode == 1) {
+                    video_request_font(VIDEO_FONT_SMALLER);
+                } else if (mode == 2) {
+                    video_request_font(VIDEO_FONT_LARGER);
+                } else {
+                    video_request_font(VIDEO_FONT_DEFAULT);
+                }
+            }
             escape_index = -1;
         }
         return;
