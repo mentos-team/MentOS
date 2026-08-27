@@ -1,9 +1,10 @@
 # Video backends
 
-Verified against `294f5cb`. Core files: `kernel/src/io/video.c` (generic),
+Verified against `42cf8a1`. Core files: `kernel/src/io/video.c` (generic),
 `kernel/inc/io/video_backend.h` (interface), `kernel/src/io/video/` (backends).
-Shared assets: `video_font_8x16.h` (8x16 font), `video_palette_16.h` (the 16
-console colours), both used by every backend that draws text as pixels.
+Shared assets: `kernel/src/io/video_font.c` with
+`kernel/inc/io/video/video_font.h` (the bitmap fonts) and `video_palette_16.h`
+(the 16 console colours), both used by every backend that draws text as pixels.
 
 ## Split of responsibility
 
@@ -26,11 +27,13 @@ one invariant to respect when editing `video.c`.
 
 `video_backend_t` (`kernel/inc/io/video_backend.h`): `init`, `late_init`,
 `put_cells`, `scroll`, `set_cursor_position`, `set_cursor_style`,
-`set_geometry`, `service`, `cursor_blink`, plus `name`/`columns`/`rows`.
+`set_geometry`, `request_font`, `service`, `cursor_blink`, plus
+`name`/`columns`/`rows`.
 
-The last four are all optional. A backend that leaves them NULL — both fixed
-backends do — cannot resize, has nothing to do in process context, and has a
-hardware cursor. Nothing about the runtime-geometry machinery costs it anything.
+The last five are all optional. A backend that leaves them NULL — both fixed
+backends do — cannot resize, cannot change font, has nothing to do in process
+context, and has a hardware cursor. Nothing about the runtime-geometry machinery
+costs it anything.
 
 - `put_cells(column, row, cells, count)` writes cells in row-major order,
   wrapping at `columns` and ignoring anything past the last row. Because the
@@ -61,6 +64,12 @@ hardware cursor. Nothing about the runtime-geometry machinery costs it anything.
   and derives the pixel geometry itself. That is deliberate, and it is what would
   make a future font-size change the same operation as a display change rather
   than a new mechanism. It must be transactional — prepare, do not switch.
+- `request_font(reset, steps)` is **optional**; NULL means the console drops
+  font requests where they are made. It owns the whole transition: choose the
+  font, work out the cell counts its scanout now divides into, and call
+  `video_change_geometry()`. A step count rather than a direction, so that two
+  requests arriving before a service cannot collapse into one. See the runtime
+  font section below.
 - `service` is **optional**; called from `video_service_pending()` in process
   context, for work a backend noticed in an interrupt but could not do there.
 
@@ -579,6 +588,198 @@ rows were continuations of a logical line. Reflow is not something this
 representation can express; adding it means per-row wrap flags and a changed
 write path, which is a terminal-emulator change and not this one.
 
+## Fonts, and runtime font size
+
+### The asset
+
+A font is a `video_font_t` (`kernel/inc/io/video/video_font.h`): a bitmap, the
+size it was drawn at, and an integer magnification. The glyph data lives in one
+translation unit (`kernel/src/io/video_font.c`) so a build with two graphical
+backends links one copy, and the arrays are private — a backend reaches a glyph
+through the descriptor, which is what stops the dimensions and the bitmap they
+belong to from drifting apart.
+
+That file sits beside `video.c` rather than in `src/io/video/` because the build
+filters that whole directory down to the single selected backend. A shared asset
+is not a backend, and keeping it out of there is what lets the filter stay a rule
+about a directory instead of a list of exceptions.
+
+There are deliberately **two** accessors, and the split is about speed:
+
+| accessor | returns | for |
+|---|---|---|
+| `video_font_glyph(font, ch)` | `const uint8_t *`, one byte per scan line | backends drawing at scale 1 |
+| `video_font_scanline(font, ch, line)` | `uint32_t` mask, bit (width−1) leftmost | backends that magnify |
+
+Both fixed graphical backends use the first, and must keep using it. They turn a
+glyph *byte* straight into device words — one byte per plane for the planar
+adapter, a nibble-expanded pair of aligned 32-bit stores for the linear one — and
+both tricks exist only because a glyph is exactly eight pixels wide. The planar
+one has a measured 4x in it (see its performance section). Neither backend can
+change font, so neither needs the general path.
+
+`video_font_scanline` divides to find the asset's scan line and repeats each of
+its pixels across. Unmagnified it returns the byte unchanged, which is the common
+case. A base asset is at most eight pixels wide, because one byte per scan line
+is what makes a glyph cheap; a wider native font would be a change to that header
+and to nothing else.
+
+### The zoom ladder, and what is not on it
+
+| rung | asset | scale | cell | @1024x768 | @1920x1080 |
+|---|---|---|---|---|---|
+| 0 (default) | 8x16 | 1 | 8x16 | 128x48 | 240x67 |
+| 1 | 8x16 | 2 | 16x32 | 64x24 | 120x33 |
+| 2 | 8x16 | 3 | 24x48 | 42x16 | 80x22 |
+
+Font zoom is **proportional**: every step scales both dimensions by the same
+factor, so a smaller font exposes more rows *and* more columns. That is the whole
+point of it, and it is why the ladder is one asset magnified rather than a
+collection of hand-drawn sizes.
+
+It bottoms out at the default because there is nothing to go below it with. A
+proportional half-step would be a 4x8 font; this project has never had one, and
+decimating the 8x16 would not be legible. Commit `ea8957b` removed five fonts
+along with the old VGA graphics drivers, and none of the smaller ones is a
+half-step:
+
+| asset | in | aspect (w/h) | why it is not a zoom step |
+|---|---|---|---|
+| 8x16 | `video_font.c` | 0.50 | this *is* the default |
+| 8x14 | `ea8957b^` | 0.57 | same width — buys rows, no columns |
+| 8x8 | `video_font.c` | 1.00 | same width — buys rows, no columns |
+| 5x6 | `ea8957b^` | 0.83 | smaller in both, but a different aspect; legible, no descenders |
+| 4x6 | `ea8957b^` | 0.67 | smaller in both, but barely legible |
+
+8x8 is restored and described but **not selectable**: it belongs to a separate
+"compact font" choice, not to zoom. 5x6 is the interesting one if such a choice is
+ever added — it genuinely gives more rows and more columns — and the accessor
+already handles its narrower packing, since bit (base_width − 1) is the leftmost
+pixel at any width.
+
+Steps clamp at the ends of the ladder rather than wrapping or failing, so a held
+key settles at the largest or smallest size. A font that is not a rung counts as
+the default for stepping.
+
+### Three quantities, kept apart
+
+The virtio-gpu backend tracks the scanout size it is filling (`gpu_target_*`)
+separately from the cell counts, because the two move independently:
+
+```
+columns = target_width  / font_width
+rows    = target_height / font_height
+```
+
+- a **display change** moves the target, and the cells are recomputed with the
+  current font — so a resize keeps whatever size was chosen;
+- a **font change** leaves the target alone, and the cells are recomputed with
+  the new font — so the scanout does not move.
+
+Before this split the scanout *was* the cell counts multiplied out, which was
+fine with a fixed font and wrong the moment it was not: 1080 scan lines is 67
+cells of 16 but only 33 cells of 32, so a font change would have shrunk the
+display. The framebuffer now covers the union of the cell area and the target,
+which as a side effect means the scanout is exactly the size the host asked for —
+a 1024x600 window used to get a 1024x592 scanout, discarding eight scan lines.
+Damage is tracked in cell rows and cannot describe the leftover margin, so the
+first transfer after a geometry change covers the whole framebuffer.
+
+A sub-cell change in the host window updates the target but does not rebuild, so
+the scanout can lag the window by less than one cell until something acts. That
+is deliberate: rebuilding on every pixel of a window drag would mean an
+allocation, a mapping and a new resource per event.
+
+### The transaction
+
+A font change is a geometry change that the backend drives, because the backend
+is the only thing that knows how big a cell is:
+
+1. `video_request_font(direction)` — accumulates. Called from the escape parser,
+   which runs wherever `video_putc()` does, so it must not allocate.
+2. `video_service_pending()` — process context — calls `backend->service()`, then
+   `backend->request_font(reset, steps)`.
+3. The backend picks the font from the ladder, divides its target, stages the
+   font, and calls `video_change_geometry()`.
+4. `set_geometry` builds a framebuffer for the staged font without switching; the
+   existing atomic publish swaps framebuffer, resource **and** font together.
+5. The staging is cleared whatever the outcome, which is what stops a refused
+   font from leaking into the next display resize.
+
+Failure at any point leaves the old font drawing the old geometry on the same
+scanout — verified for a refused cell count, an injected console-storage
+allocation failure and an injected framebuffer allocation failure, all three
+pixel-identical and all three recovering on the next attempt.
+
+### Two orderings that are load-bearing
+
+**Requests accumulate.** The pending state is a signed step count, not the latest
+direction. Storing a direction would turn two "larger" into one whenever both
+arrived before a service, which is exactly what a repeating key does. A request
+for the default is absolute: it clears the count and raises its own flag.
+
+**A font change is serviced instead of a pending resize, not around one.**
+`backend->service()` runs first, so the display size is re-queried before
+anything divides it; then the font change runs and a pending resize is dropped —
+**only if the font change succeeded**. Both would compute their cell counts from
+the same scanout, so running both would resize twice and show the intermediate
+geometry; and dropping the resize on failure would cost the display its chance to
+catch up with the window. A resize requested directly rather than derived from
+the scanout (there is no such caller outside tests) loses to the font change.
+
+### Which backends support it
+
+| backend | draws through the abstraction | runtime font change |
+|---|---|---|
+| VGA text | no — the font is the hardware's | **no** |
+| planar VGA 640x480 | yes, scale 1 | no |
+| VBE LFB 1024x768 | yes, scale 1 | no |
+| virtio-gpu | yes, any scale | **yes** |
+
+VGA text would need the font RAM reprogrammed and the CRTC maximum-scan-line
+register changed, which is exactly the pixel equivalence this document makes a
+gate. It reports unsupported.
+
+The two fixed graphical backends have fixed modes, so `set_geometry` is NULL and
+a font change has nowhere to put the cells. VBE is the one that could plausibly
+grow the ability, and the concrete obstacle is worth recording: its scroll ring
+is 256 **cell rows**, which at 24x48 is 12288 scan lines against the 8192 that
+8 MiB of video memory at 1024 bytes per line provides. The ring size would have
+to become font-dependent, and the compile-time non-overlap proof
+(`VBE_RING_ROWS >= 3 * VIDEO_ROWS`) would become a runtime one — inside the one
+piece of code here that has a proof attached.
+
+### How the user reaches it
+
+Console control in this kernel already had a shape, and font size follows it:
+
+```
+F12 -> keyboard driver -> "\033[24~" -> shell -> "\033[2z" -> video.c parser
+```
+
+The keyboard turns a key into an escape sequence for userspace, the shell turns
+that into a console escape sequence, and the console's parser acts on it. That is
+exactly how Page Up already reaches the scrollback — the shell answers
+`ESC [ 5 ~` with `ESC [ 25 S`. The keys belong in the shell; the console control
+belongs in the console.
+
+`ESC [ <n> z` selects the size: `0` or absent is the default, `1` one step
+smaller, `2` one step larger. Private, and legitimately so — ECMA-48 reserves the
+final bytes `0x70`–`0x7E` for private use, which is where the existing
+cursor-shape `q` already sits.
+
+F10, F11 and F12 are default, smaller and larger. **Not** Ctrl+Plus and
+Ctrl+Minus: the keyboard driver emits sequences for the function keys already but
+nothing for Ctrl with a punctuation key, so those would need the driver extended
+first. Handling F10–F12 in the shell also stopped them leaving a stray `~` in the
+line — it read the `2` of `ESC [ 21 ~` as Insert and echoed the rest. The login
+prompt has its own parser and still does that; left alone as unrelated.
+
+The console is serviced after a write as well as before it. Otherwise a request
+recorded while parsing output waits for the next read, and reads block on a
+keypress, so the font would appear to change only when the user next typed
+something.
+
 ## Virtio-gpu backend
 
 Never the boot backend. Virtio needs PCI capability walking, page allocation and
@@ -767,9 +968,11 @@ must land exactly where it started. Verified this way at `3592274`:
 | 470 lines paged forward | lines 454-500 again, identical | 4 forward |
 
 Decoding a screendump back into text makes this checkable rather than
-eyeballable: the cells are a fixed 8x16 grid and `video_font_8x16.h` is the only
+eyeballable: the cells are a fixed grid and `video_font.c` is the only
 glyph source, so matching each cell's foreground mask against the font recovers
-the characters exactly. Note that codes 0, 32 and 255 share a blank bitmap, so
+the characters exactly. At a magnified font, sample the top-left pixel of each
+scale x scale block and the base 8x16 bitmap comes straight back, so the same
+font table works at every size. Note that codes 0, 32 and 255 share a blank bitmap, so
 map an all-zero mask to a space rather than trusting a reverse lookup.
 
 **Pixel-exact screendump** — pins the rendered content the API cannot observe.
@@ -799,6 +1002,50 @@ divergence means a palette or attribute bug. Do it on a post-login screen as wel
 as on the boot log -- the boot log only uses three colours, where the shell
 prompt uses six. Verified at `3592274`: identical sets of 3 and of 6 across VGA
 text, planar VGA and VBE.
+
+**Font checks** — everything below was exercised at the font commits, on
+virtio-gpu, by sending the escape sequence and decoding the result. A synthetic
+trigger is the right way to start, before the escape sequence exists: record a
+request and call `video_service_pending()` from a temporary probe.
+
+Cover, at minimum: default -> larger -> larger -> larger (the third must clamp
+with no transition at all) -> smaller -> default; a font change at several display
+sizes including **portrait**; a host resize after a font change, which must keep
+the chosen font; a font change after a host resize; the cursor at the last row and
+the last column; a font change while scrolled back; a size the console refuses;
+and a long run of changes with the free-page count checked at both ends.
+
+Three things are worth checking specifically, because they are the ones that
+would break silently:
+
+- **The scanout must not move.** Decode the capture's *pixel* dimensions, not just
+  the cell counts. At 1024x768 every rung produces a 1024x768 capture: 128x48,
+  64x24, 42x16.
+- **The magnification must be exact.** For every cell, every pixel of each
+  scale x scale block must equal its top-left pixel. A single ragged block means
+  something is interpolating or misaligned.
+- **The cursor scales.** The solid block measures 8x16, 16x32 or 24x48 pixels and
+  stays cell-aligned. Find it geometrically — the block is the largest uniform
+  non-background rectangle — because a decoder that picks the most common colour
+  as the background reads a fully solid cell as blank.
+
+Content preservation is the same bottom-anchor/no-reflow policy as a display
+resize, and is checkable exactly: the new screen's rows must equal the old
+screen's **last** `rows` rows, each **clipped** to the new column count. Verified
+byte-for-byte at 128x48 -> 64x24.
+
+On memory: the free-page count is identical across long runs of changes, but the
+first change costs two one-off amounts that are not a leak — the console leaves
+its static boot arrays for allocated storage, and one retired framebuffer is held
+until the next resize. Measure between two points *after* the first change, or
+the first reading will look like a 3.25 MiB leak at 1024x768.
+
+`t_font` in the userspace suite is a smoke test, not a substitute for the above.
+Userspace cannot ask how many cells the console has — there is no `TIOCGWINSZ` —
+so it asserts only that the sequences are consumed rather than printed and that
+the console survives. On a `VIRTIO_GPU` build it does drive four real font changes
+mid-suite, and the remaining tests then run at the new geometry, which is the part
+worth having.
 
 **Resize checks** — the semantics table above is a pixel property, so drive it
 and decode the result. A synthetic trigger is enough and is the right way to
