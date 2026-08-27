@@ -12,6 +12,7 @@
 
 #pragma once
 
+#include "io/video.h"
 #include "stdbool.h"
 #include "stdint.h"
 
@@ -178,6 +179,27 @@ typedef struct {
     /// allocate the new console, leaves a working display either way.
     int (*set_geometry)(unsigned columns, unsigned rows);
 
+    /// @brief Adopts a different font size and reshapes the console to match.
+    /// @param reset Start from the default size rather than the current one.
+    /// @param steps Signed number of size steps to move; positive is larger.
+    /// @return 0 when the font changed or was already right, negative otherwise.
+    ///
+    /// Optional: NULL means the backend cannot change font, and the generic layer
+    /// then drops such requests where they are made rather than carrying them.
+    /// The VGA text adapter cannot (its font is the hardware's, and changing it
+    /// would mean reprogramming the font RAM and the CRTC), and neither fixed
+    /// graphical backend can, because its mode is fixed and its geometry with it.
+    ///
+    /// Called from video_service_pending(), so process context, and expected to
+    /// own the whole transition: choose the font, work out the cell counts its
+    /// own scanout now divides into, and call video_change_geometry(). The font
+    /// must only become the one being drawn with if that succeeds -- a refused or
+    /// unaffordable geometry has to leave the display exactly as it was.
+    ///
+    /// A step count rather than a direction so that requests cannot be lost: two
+    /// "larger" that arrive before a service get here as one call for two steps.
+    int (*request_font)(bool_t reset, int steps);
+
     /// @brief Gives the backend process context for work it cannot do elsewhere.
     ///
     /// Optional: NULL when a backend has nothing to defer.
@@ -243,3 +265,23 @@ extern const video_backend_t video_backend;
 /// io/video.h because only a backend has any reason to call it, and only this
 /// header defines the type it takes.
 int video_promote_backend(const video_backend_t *next);
+
+/// @brief Reshapes the console, now, from a backend.
+/// @param columns The new width in cells.
+/// @param rows The new height in cells.
+/// @return 0 on success, a negative value on failure.
+///
+/// The same transactional resize video_service_pending() performs, exposed for a
+/// backend that has to drive one itself. That is what a font change is: the
+/// backend is the only thing that knows the new cell size, so it works out the
+/// geometry and asks for it, instead of the generic layer asking for a geometry
+/// the backend then reinterprets.
+///
+/// Unlike a resize request, this does not skip a geometry equal to the current
+/// one: a font change has to repaint even when the cell counts happen to land in
+/// the same place, because the cells are a different size. On failure nothing has
+/// changed and the console is still displaying.
+///
+/// **Process context only**, and never from inside put_cells() or any other
+/// backend operation the console calls: it allocates and it repaints.
+int video_change_geometry(unsigned columns, unsigned rows);

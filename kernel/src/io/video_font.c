@@ -15,6 +15,8 @@
 
 #include "io/video/video_font.h"
 
+#include "stddef.h"
+
 /// @brief 8x16 glyph bitmaps, VIDEO_FONT_DEFAULT_HEIGHT bytes per code.
 ///
 /// 256 glyphs of 16 scan lines, one byte per scan line, indexed directly by
@@ -553,14 +555,6 @@ static const uint8_t video_font_8x8_glyphs[256 * 8] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 255
 };
 
-const video_font_t video_font_8x16 = {
-    .name        = "8x16",
-    .glyphs      = video_font_8x16_glyphs,
-    .base_width  = (uint8_t)VIDEO_FONT_DEFAULT_WIDTH,
-    .base_height = (uint8_t)VIDEO_FONT_DEFAULT_HEIGHT,
-    .scale       = 1U,
-};
-
 const video_font_t video_font_8x8 = {
     .name        = "8x8",
     .glyphs      = video_font_8x8_glyphs,
@@ -569,4 +563,56 @@ const video_font_t video_font_8x8 = {
     .scale       = 1U,
 };
 
-const video_font_t *video_font_default(void) { return &video_font_8x16; }
+/// @brief The proportional zoom ladder, smallest first.
+///
+/// One asset at three magnifications. Every step multiplies both dimensions by
+/// the same factor, which is what makes a step expose more rows and more columns
+/// together; at 1920x1080 the three rungs are 240x67, 120x33 and 80x22 cells.
+///
+/// It bottoms out at the default rather than going below it, because there is no
+/// asset to go below it with. A proportional half-step would be a 4x8 font, this
+/// project has never had one, and manufacturing it by throwing away every other
+/// pixel of the 8x16 would not be legible. The smaller assets that do exist --
+/// 8x8, and 8x14, 5x6 and 4x6 still in ea8957b -- are not halves of the default:
+/// the eight-wide ones buy rows and no columns at all, and the narrow ones have a
+/// different aspect ratio again. Any of them is a reasonable separate "compact
+/// font" choice, and none of them is a zoom step.
+static const video_font_t video_font_ladder[] = {
+    {.name = "8x16", .glyphs = video_font_8x16_glyphs, .base_width = 8U, .base_height = 16U, .scale = 1U},
+    {.name = "16x32", .glyphs = video_font_8x16_glyphs, .base_width = 8U, .base_height = 16U, .scale = 2U},
+    {.name = "24x48", .glyphs = video_font_8x16_glyphs, .base_width = 8U, .base_height = 16U, .scale = 3U},
+};
+
+/// @brief Rung the console starts on, and the one a reset returns to.
+#define VIDEO_FONT_DEFAULT_RUNG 0U
+
+/// @brief Rungs on the ladder.
+#define VIDEO_FONT_RUNGS        (sizeof(video_font_ladder) / sizeof(video_font_ladder[0]))
+
+const video_font_t *video_font_default(void) { return &video_font_ladder[VIDEO_FONT_DEFAULT_RUNG]; }
+
+const video_font_t *video_font_step(const video_font_t *from, bool_t reset, int steps)
+{
+    // Where the current font sits. A font that is not a rung -- a compact font,
+    // say -- has no position to step from, so stepping treats it as the default.
+    int rung = (int)VIDEO_FONT_DEFAULT_RUNG;
+    if (!reset && (from != NULL)) {
+        for (unsigned index = 0; index < VIDEO_FONT_RUNGS; ++index) {
+            if (from == &video_font_ladder[index]) {
+                rung = (int)index;
+                break;
+            }
+        }
+    }
+
+    // Clamp rather than refuse: a held key should settle at an end of the ladder,
+    // not start reporting failures there.
+    rung += steps;
+    if (rung < 0) {
+        rung = 0;
+    }
+    if (rung >= (int)VIDEO_FONT_RUNGS) {
+        rung = (int)VIDEO_FONT_RUNGS - 1;
+    }
+    return &video_font_ladder[rung];
+}

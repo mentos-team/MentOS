@@ -116,8 +116,6 @@
 /// @brief The resource id this backend uses. Ids are the driver's to choose.
 #define VIRTIO_GPU_RESOURCE         1U
 
-/// @brief Font this backend starts with, and the size its geometry is built for.
-#define GPU_DEFAULT_FONT (&video_font_8x16)
 
 /// @name Largest framebuffer this backend will build
 /// @brief Bounds the virtual window and the backing-list length.
@@ -277,6 +275,17 @@ static unsigned gpu_stride    = 0; ///< Bytes per scan line.
 static unsigned gpu_row_bytes = 0; ///< Bytes one text row occupies.
 static unsigned gpu_fb_bytes  = 0; ///< Bytes the framebuffer occupies.
 /// @}
+
+/// @brief Font a geometry change in progress is being built for.
+///
+/// Set only for the duration of one video_change_geometry() call, and cleared
+/// whatever the outcome. A font is staged rather than adopted because the
+/// geometry the console ends up with is not this backend's to decide: the
+/// allocation may fail, or the cell counts may be outside what the console
+/// supports, and the font that is drawn with has to be the one the framebuffer
+/// on the scanout was built for. Clearing it on the way out is what stops a
+/// refused font from leaking into the next display resize.
+static const video_font_t *gpu_pending_font = NULL;
 
 /// @brief Whether the whole framebuffer still has to reach the device.
 ///
@@ -933,6 +942,13 @@ static int virtio_gpu_set_geometry(unsigned columns, unsigned rows)
     unsigned old_count = block_count;
     memcpy(old_blocks, blocks, sizeof(old_blocks));
 
+    // A font change arrives here as a staged font plus the cell counts it
+    // produced; a display change leaves the font alone. Either way what follows
+    // builds a framebuffer for whatever is now current.
+    if (gpu_pending_font != NULL) {
+        __gpu_set_font(gpu_pending_font);
+    }
+
     if (__gpu_set_dimensions(columns, rows) < 0) {
         gpu_columns = old_columns; gpu_rows = old_rows; gpu_width = old_width;
         gpu_height = old_height;   gpu_stride = old_stride; gpu_row_bytes = old_rowb;
@@ -986,6 +1002,60 @@ static int virtio_gpu_set_geometry(unsigned columns, unsigned rows)
     return 0;
 }
 
+/// @brief Changes font size, and reshapes the console to what still fits.
+/// @param reset Start from the default size rather than the current one.
+/// @param steps Signed number of size steps; positive is larger.
+/// @return 0 when the font is now the wanted one, -1 when it could not change.
+///
+/// The scanout is not touched. Its size is what the host asked for and has
+/// nothing to do with how big the glyphs are, so the cell counts are recomputed
+/// by dividing it by the new cell size and the display stays exactly as large as
+/// it was. That is also why a resize arriving afterwards keeps this font: the
+/// division is done with whatever font is current, in both directions.
+///
+/// Transactional by construction, because it is the console's own resize doing
+/// the work: the font is staged, the resize either completes or leaves
+/// everything alone, and the staging is dropped either way. A failure here leaves
+/// the old font drawing the old geometry on the same scanout.
+static int virtio_gpu_request_font(bool_t reset, int steps)
+{
+    if (!active) {
+        return -1;
+    }
+
+    const video_font_t *next = video_font_step(gpu_font, reset, steps);
+    unsigned cell_width      = video_font_width(next);
+    unsigned cell_height     = video_font_height(next);
+    unsigned columns         = gpu_target_width / cell_width;
+    unsigned rows            = gpu_target_height / cell_height;
+
+    if ((columns == 0U) || (rows == 0U)) {
+        pr_err("%s does not fit a %ux%u display at all.\n", next->name, gpu_target_width, gpu_target_height);
+        return -1;
+    }
+
+    // Already there with nothing to redraw. Reported as success: the console is
+    // in the state that was asked for, and a resize waiting on this same scanout
+    // would divide out to these same counts and change nothing either.
+    if ((next == gpu_font) && (columns == gpu_columns) && (rows == gpu_rows)) {
+        return 0;
+    }
+
+    gpu_pending_font = next;
+    int result       = video_change_geometry(columns, rows);
+    gpu_pending_font = NULL;
+
+    if (result < 0) {
+        pr_err("%s would need %ux%u cells, which was refused; keeping %s.\n", next->name, columns, rows,
+               gpu_font->name);
+        return -1;
+    }
+
+    pr_notice("Font is now %s: %ux%u cells on a %ux%u display.\n", gpu_font->name, gpu_columns, gpu_rows, gpu_width,
+              gpu_height);
+    return 0;
+}
+
 /// @brief Tears down everything late_init() built.
 static void __gpu_teardown(void)
 {
@@ -1020,7 +1090,7 @@ static int virtio_gpu_late_init(void)
     // this backend starts with, and the target it fills until the host says
     // otherwise. Nothing here consults the host yet -- promotion must not change
     // what the user is already looking at.
-    __gpu_set_font(GPU_DEFAULT_FONT);
+    __gpu_set_font(video_font_default());
     gpu_target_width  = VIDEO_COLUMNS * gpu_cell_width;
     gpu_target_height = VIDEO_ROWS * gpu_cell_height;
     if (__gpu_set_dimensions(VIDEO_COLUMNS, VIDEO_ROWS) < 0) {
@@ -1350,6 +1420,7 @@ static const video_backend_t virtio_gpu_backend = {
     .set_cursor_position = virtio_gpu_set_cursor_position,
     .set_cursor_style    = virtio_gpu_set_cursor_style,
     .set_geometry        = virtio_gpu_set_geometry,
+    .request_font        = virtio_gpu_request_font,
     .service             = virtio_gpu_service,
     .cursor_blink        = NULL,
 };

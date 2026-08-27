@@ -791,13 +791,16 @@ static void __console_migrate(const console_storage_t *next)
 /// asked to prepare before anything the console is currently using is touched,
 /// and the old storage is only released once the new one is live. Any failure
 /// leaves the console exactly as it was, still displaying.
-static int __console_resize(unsigned columns, unsigned rows)
+static int __console_resize(unsigned columns, unsigned rows, bool_t force)
 {
     if (!__console_geometry_ok(columns, rows)) {
         pr_err("Refusing a %ux%u console: outside the supported range.\n", columns, rows);
         return -1;
     }
-    if ((columns == video_columns) && (rows == video_rows)) {
+    // Nothing to do, unless the caller knows something changed that the cell
+    // counts do not show -- a font of a different size lands on the same counts
+    // often enough, and still has to be redrawn.
+    if (!force && (columns == video_columns) && (rows == video_rows)) {
         return 0;
     }
     if (video_active->set_geometry == NULL) {
@@ -846,6 +849,54 @@ static int __console_resize(unsigned columns, unsigned rows)
     return 0;
 }
 
+/// @name The pending font request
+/// @brief Accumulated, not overwritten.
+///
+/// Storing only the latest direction would turn two "larger" into one whenever
+/// both arrived before a service, which is exactly what happens when a key
+/// repeats. A signed step count cannot lose them. A request for the default is
+/// absolute, so it clears the count and raises its own flag instead of being
+/// folded into it.
+/// @{
+static bool_t font_pending      = false; ///< Whether anything is waiting.
+static bool_t font_want_reset   = false; ///< Whether to start from the default.
+static int font_want_steps      = 0;     ///< Net steps to move; positive is larger.
+/// @}
+
+/// @brief Bound on the accumulated step count.
+///
+/// Steps are clamped at the ladder's ends anyway, so accumulating beyond a small
+/// number changes nothing; this only stops a key held down for a long time from
+/// overflowing the counter.
+#define FONT_MAX_PENDING_STEPS 64
+
+void video_request_font(video_font_request_t request)
+{
+    // Refused here, where the refusal costs nothing, rather than being carried
+    // to a service that would have to discover the same thing and drop it.
+    if (video_active->request_font == NULL) {
+        return;
+    }
+
+    // The parser this arrives from runs wherever video_putc() does, so the
+    // accumulator is updated the same way a resize request is recorded.
+    uint8_t flags = irq_disable();
+    if (request == VIDEO_FONT_DEFAULT) {
+        font_want_reset = true;
+        font_want_steps = 0;
+    } else if (request == VIDEO_FONT_LARGER) {
+        if (font_want_steps < FONT_MAX_PENDING_STEPS) {
+            font_want_steps++;
+        }
+    } else {
+        if (font_want_steps > -FONT_MAX_PENDING_STEPS) {
+            font_want_steps--;
+        }
+    }
+    font_pending = true;
+    irq_enable(flags);
+}
+
 void video_request_resize(unsigned columns, unsigned rows)
 {
     // Cheap validation only. This may be an interrupt handler, so a bad request
@@ -875,6 +926,32 @@ void video_service_pending(void)
         video_active->service();
     }
 
+    // A font change goes first and on its own. Both it and a pending resize work
+    // out cell counts by dividing the same scanout -- which service() has just
+    // brought up to date -- and only the font change knows the new cell size, so
+    // running the resize as well would resize twice and briefly show the
+    // intermediate geometry.
+    if (font_pending) {
+        uint8_t flags   = irq_disable();
+        bool_t reset    = font_want_reset;
+        int steps       = font_want_steps;
+        font_pending    = false;
+        font_want_reset = false;
+        font_want_steps = 0;
+        irq_enable(flags);
+
+        if (video_active->request_font(reset, steps) == 0) {
+            // It reshaped the console from the current scanout, so a resize
+            // waiting on that same scanout has already happened. Dropped only on
+            // success: a font change that could not be afforded must not also
+            // cost the display the chance to catch up with the window.
+            flags          = irq_disable();
+            resize_pending = false;
+            irq_enable(flags);
+            return;
+        }
+    }
+
     if (!resize_pending) {
         return;
     }
@@ -885,8 +962,10 @@ void video_service_pending(void)
     resize_pending       = false;
     irq_enable(flags);
 
-    (void)__console_resize(columns, rows);
+    (void)__console_resize(columns, rows, false);
 }
+
+int video_change_geometry(unsigned columns, unsigned rows) { return __console_resize(columns, rows, true); }
 
 int video_promote_backend(const video_backend_t *next)
 {

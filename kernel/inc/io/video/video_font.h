@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include "io/video.h"
+#include "stdbool.h"
 #include "stdint.h"
 
 /// @name The default font's dimensions
@@ -113,19 +115,32 @@ static inline uint32_t video_font_scanline(const video_font_t *font, uint8_t cha
     return out;
 }
 
-/// @name The available fonts
-/// @{
-/// The default, and the only one any backend draws with today. 8x16 is what
-/// every mode in this project is dimensioned for.
-extern const video_font_t video_font_8x16;
-
+/// @brief The compact font.
+///
 /// An alternate aspect ratio, not a smaller version of the default: it is the
-/// same eight pixels wide, so it buys rows and no columns at all. Kept because
-/// it is the classic compact console font and belongs to a separate "compact
-/// font" choice rather than to font zoom, which is proportional by definition.
+/// same eight pixels wide, so it buys rows and no columns at all. Deliberately
+/// not on the zoom ladder for that reason, and not selectable yet; it is here
+/// for a separate choice of font.
 extern const video_font_t video_font_8x8;
-/// @}
 
 /// @brief The font a console starts with.
 /// @return The default font, never NULL.
 const video_font_t *video_font_default(void);
+
+/// @brief Moves along the zoom ladder.
+/// @param from The font in use, or NULL to start from the default.
+/// @param reset Start from the default rather than from `from`.
+/// @param steps Signed number of steps; positive is larger.
+/// @return The font to adopt, never NULL, possibly the one passed in.
+///
+/// The ladder is **proportional**: every step scales both dimensions by the same
+/// factor, so a smaller font gives more rows *and* more columns. That is the
+/// whole point of font zoom, and it is why the ladder is one asset at three
+/// magnifications rather than a collection of hand-drawn sizes -- the assets this
+/// project has below 8x16 are all eight pixels wide, so they buy rows only and
+/// belong to a separate choice of font, not to zoom.
+///
+/// Steps are clamped to the ends of the ladder rather than wrapping or failing,
+/// so holding a key down settles at the largest or smallest size. A font that is
+/// not on the ladder counts as the default for the purpose of stepping.
+const video_font_t *video_font_step(const video_font_t *from, bool_t reset, int steps);
