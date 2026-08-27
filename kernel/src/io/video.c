@@ -867,6 +867,14 @@ void video_request_resize(unsigned columns, unsigned rows)
 
 void video_service_pending(void)
 {
+    // Give the backend its process context first: this is where it turns "the
+    // display changed" into an actual geometry, which needs to talk to hardware
+    // and so cannot happen where the change was noticed. It may call
+    // video_request_resize(), which the rest of this function then acts on.
+    if (video_active->service != NULL) {
+        video_active->service();
+    }
+
     if (!resize_pending) {
         return;
     }

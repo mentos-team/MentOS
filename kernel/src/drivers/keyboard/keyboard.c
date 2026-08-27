@@ -184,6 +184,8 @@ void keyboard_wait(void)
     sleep_on(&keyboard_wait_queue);
 }
 
+void keyboard_wake_readers(void) { wake_up_all(&keyboard_wait_queue); }
+
 int keyboard_peek_back(void)
 {
     spinlock_lock(&scancodes_lock);

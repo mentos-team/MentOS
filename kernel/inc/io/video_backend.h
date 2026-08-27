@@ -178,6 +178,19 @@ typedef struct {
     /// allocate the new console, leaves a working display either way.
     int (*set_geometry)(unsigned columns, unsigned rows);
 
+    /// @brief Gives the backend process context for work it cannot do elsewhere.
+    ///
+    /// Optional: NULL when a backend has nothing to defer.
+    ///
+    /// Called from video_service_pending(), before a pending resize is applied,
+    /// so a backend that learns of a display change in an interrupt handler can
+    /// do the part that needs to allocate or talk to its device here and then
+    /// call video_request_resize() -- which this same call will then act on.
+    ///
+    /// Process context only, and must therefore never be reached from an
+    /// interrupt handler.
+    void (*service)(void);
+
     /// @brief Advances a software cursor's blink, once per timer tick.
     ///
     /// Optional: NULL when a backend has nothing to do, which is the case for

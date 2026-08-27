@@ -56,12 +56,17 @@
 
 #include "io/video/virtio_gpu.h"
 
+#include "descriptor_tables/isr.h"
+#include "devices/pci.h"
 #include "devices/virtio.h"
+#include "drivers/keyboard/keyboard.h"
+#include "hardware/pic8259.h"
 #include "klib/irqflags.h"
 #include "mem/alloc/zone_allocator.h"
 #include "mem/mm/page.h"
 #include "mem/mm/vm_area.h"
 #include "mem/paging.h"
+#include "io/video.h"
 #include "io/video_backend.h"
 #include "stdbool.h"
 #include "stddef.h"
@@ -329,6 +334,19 @@ static unsigned damage_last         = 0;
 /// @brief Whether a submission is in progress; see the re-entrancy note above.
 static bool_t submit_busy           = false;
 
+/// @name The display-change event path
+/// @{
+/// @brief Set by the interrupt handler; means "the geometry needs re-reading".
+///
+/// A flag rather than a queue of sizes, because the event carries no dimensions
+/// and several can arrive in a burst. Coalescing them into one "stale" condition
+/// and then asking the device once is both simpler and more correct than trying
+/// to replay them.
+static volatile bool_t geometry_stale = false;
+/// @brief The interrupt line the device is wired to, or 0 if not installed.
+static uint8_t gpu_irq_line           = 0;
+/// @}
+
 /// @brief Column the cursor is drawn at.
 static unsigned cursor_column       = 0;
 /// @brief Row the cursor is drawn at.
@@ -370,6 +388,9 @@ static int __gpu_set_dimensions(unsigned columns, unsigned rows)
     gpu_fb_bytes  = gpu_stride * height;
     return 0;
 }
+
+/// @brief Interrupt handler for the device; defined below, needed by teardown.
+static void virtio_gpu_isr(pt_regs_t *registers);
 
 /// @brief Marks cell rows as needing to reach the device.
 /// @param first First row.
@@ -633,6 +654,46 @@ static uint32_t __gpu_order_floor(uint32_t bytes)
     return order;
 }
 
+/// @brief Reserves the whole framebuffer window's page tables.
+/// @return 0 on success, -1 on failure.
+///
+/// **This has to happen before any process exists**, and getting it wrong is a
+/// page fault that looks like a mapping bug when it is not one.
+///
+/// `mm_create_blank()` builds a process page directory with
+/// `memcpy(pdir_cpy, main_pgd, sizeof(page_directory_t))` -- a snapshot. Page
+/// tables that exist at that moment are *shared*, because the copied directory
+/// entries point at the same frames. But a directory entry added to the main
+/// page directory **afterwards** is invisible to every process already created,
+/// and a syscall-serviced resize runs in exactly such a process.
+///
+/// So the whole window's directory entries are created here, at bring-up, while
+/// the main page directory is still the only one. The pages are mapped
+/// not-present -- there is nothing behind most of the window and never will be --
+/// which is enough to get the page tables allocated and the directory entries
+/// populated. Every later remap then only rewrites entries *inside* those shared
+/// tables, which every process sees.
+///
+/// Costs four page tables, 16 KiB, for a 16 MiB window.
+static int __gpu_reserve_window(void)
+{
+    page_directory_t *pgd = paging_get_main_pgd();
+    if (pgd == NULL) {
+        pr_err("No main page directory to reserve the framebuffer window in.\n");
+        return -1;
+    }
+    // Deliberately without MM_PRESENT and without MM_UPDADDR: the point is the
+    // page tables, not the mappings. The entries stay absent until a real block
+    // is mapped over them.
+    if (mem_upd_vm_area(pgd, GPU_FB_VIRT_BASE, 0, GPU_FB_VIRT_SIZE, MM_RW | MM_GLOBAL) < 0) {
+        pr_err("Failed to reserve the framebuffer window at 0x%08x.\n", (unsigned)GPU_FB_VIRT_BASE);
+        return -1;
+    }
+    pr_notice("Reserved %u KiB of address space at 0x%08x for the framebuffer.\n",
+              (unsigned)(GPU_FB_VIRT_SIZE / 1024U), (unsigned)GPU_FB_VIRT_BASE);
+    return 0;
+}
+
 /// @brief Maps the current blocks consecutively at the framebuffer window.
 /// @return 0 on success, -1 on failure.
 ///
@@ -881,6 +942,10 @@ static void __gpu_teardown(void)
 {
     active      = false;
     scanout_set = false;
+    if (gpu_irq_line != 0U) {
+        irq_uninstall_handler(gpu_irq_line, virtio_gpu_isr);
+        gpu_irq_line = 0;
+    }
     virtq_free(&gpu, &controlq);
     virtio_reset(&gpu);
     virtio_pci_release(&gpu);
@@ -967,6 +1032,13 @@ static int virtio_gpu_late_init(void)
                   (unsigned)gpu_height);
     }
 
+    // Before the first framebuffer, and before any process can exist to snapshot
+    // an incomplete page directory. See __gpu_reserve_window().
+    if (__gpu_reserve_window() < 0) {
+        __gpu_teardown();
+        return -1;
+    }
+
     if (__gpu_alloc_framebuffer() < 0) {
         __gpu_teardown();
         return -1;
@@ -978,6 +1050,22 @@ static int virtio_gpu_late_init(void)
     }
 
     __gpu_build_palette();
+
+    // The interrupt line is read straight from configuration space rather than
+    // through pci_get_interrupt(), which resolves it via the PIRQ routing table
+    // that pci_remap() fills in -- and nothing calls pci_remap(), so that table
+    // is all zeroes. What the firmware programmed is what the PIC will deliver.
+    uint8_t line = 0;
+    if (pci_read_8(pci_device, PCI_INTERRUPT_LINE, &line) || (line == 0U) || (line >= 16U)) {
+        pr_warning("No usable interrupt line (read %u); display changes will not be noticed.\n", line);
+    } else if (irq_install_handler(line, virtio_gpu_isr, "virtio-gpu") < 0) {
+        pr_warning("Could not install a handler on IRQ %u; display changes will not be noticed.\n", line);
+    } else {
+        // Every line starts masked, so it has to be let through explicitly.
+        pic8259_irq_enable(line);
+        gpu_irq_line = line;
+        pr_notice("Listening for display changes on IRQ %u.\n", line);
+    }
 
     active = true;
     pr_notice("Ready: %ux%u at 32 bpp, %ux%u cells, resource %u backed by %u block(s).\n", (unsigned)gpu_width,
@@ -1097,6 +1185,90 @@ static void virtio_gpu_set_cursor_style(video_cursor_style_t style)
     __gpu_publish();
 }
 
+/// @brief Interrupt handler for the device.
+///
+/// Deliberately trivial, and it has to be: this may not allocate, may not wait
+/// for a virtqueue completion, and may not migrate the console. So it reads the
+/// interrupt status -- which is what acknowledges it -- notes that the geometry
+/// needs re-reading, acknowledges the event bits, and wakes whatever is blocked
+/// in the console's read path so that a process context comes along promptly.
+///
+/// Everything else happens in virtio_gpu_service().
+static void virtio_gpu_isr(pt_regs_t *registers)
+{
+    (void)registers;
+
+    // Reading clears the register, so the value has to be examined rather than
+    // tested twice.
+    uint8_t status = virtio_read_isr(&gpu);
+    if ((status & VIRTIO_ISR_CONFIG) == 0) {
+        return;
+    }
+
+    // Acknowledge whatever the device is reporting. Writing the bits back is the
+    // protocol's acknowledgement; leaving them set would keep the interrupt
+    // asserted.
+    volatile uint32_t *events_read  = (volatile uint32_t *)(gpu.device_config + VIRTIO_GPU_CFG_EVENTS_READ);
+    volatile uint32_t *events_clear = (volatile uint32_t *)(gpu.device_config + VIRTIO_GPU_CFG_EVENTS_CLEAR);
+    uint32_t events                 = *events_read;
+    if (events != 0U) {
+        *events_clear = events;
+    }
+
+    geometry_stale = true;
+    keyboard_wake_readers();
+}
+
+/// @brief Turns a noticed display change into a resize request.
+///
+/// Runs in process context, from video_service_pending(). Asking the device for
+/// its display info needs a virtqueue round trip, which is exactly what the
+/// interrupt handler could not do.
+///
+/// The scanout geometry is in pixels; the console's is in cells. This is the one
+/// place the two meet, and it is the backend's business precisely because the
+/// backend owns the font.
+static void virtio_gpu_service(void)
+{
+    if (!active || !geometry_stale) {
+        return;
+    }
+    geometry_stale = false;
+
+    __gpu_header(VIRTIO_GPU_CMD_GET_DISPLAY_INFO);
+    if (__gpu_command(sizeof(gpu_ctrl_hdr_t), VIRTIO_GPU_RESP_OK_DISPLAY_INFO) < 0) {
+        pr_err("Could not read the display info after a display-change event.\n");
+        return;
+    }
+
+    const gpu_display_info_t *info = (const gpu_display_info_t *)(command_virtual + GPU_RESPONSE_OFFSET);
+    uint32_t width                 = info->pmodes[VIRTIO_GPU_SCANOUT].rect.width;
+    uint32_t height                = info->pmodes[VIRTIO_GPU_SCANOUT].rect.height;
+    uint32_t enabled               = info->pmodes[VIRTIO_GPU_SCANOUT].enabled;
+
+    // A disabled or zero-sized scanout means "nothing is being displayed", not
+    // "display nothing": keep showing what we have.
+    if ((enabled == 0U) || (width == 0U) || (height == 0U)) {
+        pr_notice("Scanout %u reports %ux%u enabled=%u; keeping %ux%u.\n", (unsigned)VIRTIO_GPU_SCANOUT, width, height,
+                  enabled, gpu_width, gpu_height);
+        return;
+    }
+
+    // Whole cells only; a few leftover pixels at the right or bottom edge are
+    // simply not used. No assumption is made about which dimension is larger.
+    unsigned columns = (unsigned)(width / GPU_CELL_WIDTH);
+    unsigned rows    = (unsigned)(height / GPU_CELL_HEIGHT);
+    if ((columns == gpu_columns) && (rows == gpu_rows)) {
+        return;
+    }
+
+    pr_notice("Display is %ux%u pixels, which is %ux%u cells.\n", width, height, columns, rows);
+
+    // The generic layer decides whether that geometry is acceptable and does the
+    // work; refusing it here would duplicate its limits.
+    video_request_resize(columns, rows);
+}
+
 /// @brief The virtio-gpu backend.
 ///
 /// Not named `video_backend`: this is never the boot backend, and the console
@@ -1112,6 +1284,7 @@ static const video_backend_t virtio_gpu_backend = {
     .set_cursor_position = virtio_gpu_set_cursor_position,
     .set_cursor_style    = virtio_gpu_set_cursor_style,
     .set_geometry        = virtio_gpu_set_geometry,
+    .service             = virtio_gpu_service,
     .cursor_blink        = NULL,
 };
 
