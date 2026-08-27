@@ -70,7 +70,7 @@
 #include "stddef.h"
 #include "string.h"
 
-#include "video_font_8x16.h"
+#include "io/video/video_font.h"
 #include "video_palette_16.h"
 
 /// @name Bochs VBE (DISPI) interface
@@ -144,9 +144,9 @@
 #define VBE_STRIDE              VBE_WIDTH
 
 /// Pixels a cell occupies horizontally.
-#define VBE_CELL_WIDTH          VIDEO_FONT_WIDTH
+#define VBE_CELL_WIDTH          VIDEO_FONT_DEFAULT_WIDTH
 /// Scan lines a cell occupies.
-#define VBE_CELL_HEIGHT         VIDEO_FONT_HEIGHT
+#define VBE_CELL_HEIGHT         VIDEO_FONT_DEFAULT_HEIGHT
 /// Bytes one text row occupies.
 #define VBE_ROW_BYTES           (VBE_CELL_HEIGHT * VBE_STRIDE)
 /// @}
@@ -399,7 +399,7 @@ static void __vbe_load_palette(void)
 /// @return VBE_CELL_HEIGHT bytes of bitmap, one per scan line.
 static inline const uint8_t *__vbe_cell_glyph(video_cell_t cell)
 {
-    return &video_font_8x16[(unsigned)cell.character * VBE_CELL_HEIGHT];
+    return video_font_glyph(video_font_default(), cell.character);
 }
 
 /// @brief Draws one cell from an explicit glyph.

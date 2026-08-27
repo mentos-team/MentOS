@@ -72,7 +72,7 @@
 #include "stddef.h"
 #include "string.h"
 
-#include "video_font_8x16.h"
+#include "io/video/video_font.h"
 #include "video_palette_16.h"
 
 /// @brief Virtio device type of a GPU.
@@ -125,8 +125,8 @@
 /// the same operation as a display change -- a different pair of cell counts --
 /// rather than a new mechanism.
 /// @{
-#define GPU_CELL_WIDTH  VIDEO_FONT_WIDTH  ///< Pixels a cell occupies across.
-#define GPU_CELL_HEIGHT VIDEO_FONT_HEIGHT ///< Scan lines a cell occupies.
+#define GPU_CELL_WIDTH  VIDEO_FONT_DEFAULT_WIDTH  ///< Pixels a cell occupies across.
+#define GPU_CELL_HEIGHT VIDEO_FONT_DEFAULT_HEIGHT ///< Scan lines a cell occupies.
 /// @}
 
 /// @name Largest framebuffer this backend will build
@@ -539,7 +539,7 @@ static void __gpu_publish(void)
 /// @brief Glyph bitmap of a cell's character.
 static inline const uint8_t *__gpu_cell_glyph(video_cell_t cell)
 {
-    return &video_font_8x16[(unsigned)cell.character * GPU_CELL_HEIGHT];
+    return video_font_glyph(video_font_default(), cell.character);
 }
 
 /// @brief Draws one cell from an explicit glyph, into memory only.
