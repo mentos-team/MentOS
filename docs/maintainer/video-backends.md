@@ -1,6 +1,6 @@
 # Video backends
 
-Verified against `7c6c77d`. Core files: `kernel/src/io/video.c` (generic),
+Verified against `a046ee6`. Core files: `kernel/src/io/video.c` (generic),
 `kernel/inc/io/video_backend.h` (interface), `kernel/src/io/video/` (backends).
 
 ## Split of responsibility
@@ -35,9 +35,18 @@ one invariant to respect when editing `video.c`.
   cell-by-cell repaint — the text backend does a `memmove`, and the graphical
   one moves the display window and copies nothing at all. Uncovered rows are
   left undefined; the caller always repaints them.
-- `set_cursor_style` takes a **semantic** style (`HIDDEN`, `BLOCK`,
-  `UNDERLINE`, `BAR`), not scan lines, so a backend with no hardware cursor can
-  implement it by drawing. `HIDDEN` is currently unreachable through ANSI.
+- `set_cursor_position(column, row, cell)` carries the cell the cursor now
+  sits on. A backend that draws its own cursor needs it to be able to take the
+  cursor away again — see the cursor lifecycle below.
+- `set_cursor_style` takes a **semantic** style: a shape (`HIDDEN`, `BLOCK`,
+  `UNDERLINE`, `BAR`) plus a `blinking` flag, not scan lines, so a backend with
+  no hardware cursor can implement it by drawing. `HIDDEN` is currently
+  unreachable through ANSI. Blink is carried separately because a hardware
+  cursor blinks on its own and cannot be told not to, while a drawn one blinks
+  only if something toggles it.
+- `cursor_blink` is **optional** (NULL for a hardware cursor). The PIT handler
+  calls `video_cursor_blink_tick()`, which forwards to it. The rate is the
+  backend's business; this is just the tick.
 
 `video_cell_t.attribute` is `foreground | (background << 4)`, 4 bits each, in
 IBM CGA/VGA order. This is the console's colour model, shared by all backends,
@@ -223,14 +232,59 @@ The two line-compare bits that share registers with vertical timings are rebuilt
 from the mode table rather than read back, so a scroll can only ever disturb the
 bit it owns.
 
-### Cursor
+### Cursor lifecycle — the invariant
 
-The software cursor keeps **one cell** of state, not a copy of the screen. The
-generic layer repaints the cell the cursor vacates (writing its buffer's own
-value back, so it can never change what is displayed), so the backend only needs
-the cell underneath the cursor: to merge the cursor into that cell's glyph, and
-to take the cell's own foreground colour the way the text-mode hardware cursor
-does. It is kept current by watching `put_cells`.
+A software cursor is pixels drawn over a cell, so it has to be taken away again.
+Getting that wrong produces ghosts, trails and vanishing cursors, all of which
+were once separate-looking bugs with one cause. The invariant:
+
+1. The generic cell buffer **never** contains cursor pixels.
+2. The overlay exists only in video memory, and only transiently.
+3. It is removed by **restoring the cell underneath it**.
+4. Only the code that drew it removes it.
+
+That last point is why erasing belongs to the **backend**, not the generic
+layer. The generic layer used to repaint the cell the cursor had vacated, which
+cannot work: `scroll()` moves the overlay's pixels along with the content, so
+after a scroll the generic layer repaints a cell the overlay is no longer on and
+leaves a block behind where it moved to. **That was the ghost.**
+
+The backend therefore keeps four things and nothing more — position, the cell
+underneath, the style, and a flag saying whether an overlay is currently drawn:
+
+| Event | What happens |
+|---|---|
+| `set_cursor_position` | hide → adopt position and cell → show |
+| `set_cursor_style` | hide → adopt style, reset blink phase → show |
+| `put_cells` covering the cursor cell | update cached cell → render the run (which wipes the overlay) → show |
+| `scroll` | the overlay moved with the content, so follow it; if it left the screen, mark it not drawn |
+| blink tick | show or hide according to the new phase |
+
+`hide` and `show` are both idempotent and both gated on the drawn flag, which is
+what keeps them from getting out of step.
+
+Two details worth keeping:
+
+- The cell is **passed in**, not looked up. A drawn glyph is not reversible, and
+  keeping a copy of the screen to look it up in would duplicate the generic
+  layer's state. One cell is enough, so one cell is cached.
+- The overlay takes the cell's own foreground colour, as the hardware cursor
+  does — but a cell erased to attribute 0 would give a black block on black.
+  When foreground and background match, the overlay falls back to the default
+  foreground. **That was the cursor vanishing after backspace and delete.**
+
+### Blinking
+
+The console has no periodic source of its own. Dynamic timers (`add_timer`) are
+`kmalloc`'d and freed by the timer subsystem, so re-arming one per toggle would
+mean a heap allocation several times a second forever. The PIT handler is the
+only other periodic source, so `timer_handler` calls
+`video_cursor_blink_tick()` — the single change this required outside the
+backend. All blink logic and the rate stay in the backend, which counts the
+ticks it is handed.
+
+Because it is timer-driven, the cursor blinks while the machine is idle. Do not
+replace this with a toggle driven by keyboard or video activity.
 
 Geometry is derived from register values, not comments — CRTC `0x13` (offset)
 `= 0x28 = 40` words `= 80` bytes per scan line per plane `= 640` pixels, and
@@ -307,6 +361,14 @@ Two complementary gates. Neither is sufficient alone.
 Asserts through the **public API only**, so it is backend-independent and the
 same assertions validate both backends. Since the public API cannot read screen
 content, it pins the cursor and geometry contract only.
+
+**Cursor-overlay check** — the lifecycle invariant is a pixel property, so the
+public API cannot see it. Drive the console with a probe (type, newline,
+backspace, delete, then a run of ordinary characters), screendump, and count
+cells that are *solidly* filled: there must be exactly one, at the cursor.
+More than one is a ghost or a trail; none, with a steady style, is the vanishing
+cursor. To watch blinking, take a dozen dumps ~120 ms apart while idle and
+confirm the phase alternates.
 
 **Long-scroll check** — boot only scrolls 8 times, far too few to exercise the
 51-row ring or the split. To cover them, print ~150 lines and confirm they come
