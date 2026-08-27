@@ -1,6 +1,6 @@
 # Video backends
 
-Verified against `3592274`. Core files: `kernel/src/io/video.c` (generic),
+Verified against `294f5cb`. Core files: `kernel/src/io/video.c` (generic),
 `kernel/inc/io/video_backend.h` (interface), `kernel/src/io/video/` (backends).
 Shared assets: `video_font_8x16.h` (8x16 font), `video_palette_16.h` (the 16
 console colours), both used by every backend that draws text as pixels.
@@ -25,8 +25,12 @@ one invariant to respect when editing `video.c`.
 ## Interface
 
 `video_backend_t` (`kernel/inc/io/video_backend.h`): `init`, `late_init`,
-`put_cells`, `scroll`, `set_cursor_position`, `set_cursor_style`, plus
-`name`/`columns`/`rows`.
+`put_cells`, `scroll`, `set_cursor_position`, `set_cursor_style`,
+`set_geometry`, `service`, `cursor_blink`, plus `name`/`columns`/`rows`.
+
+The last four are all optional. A backend that leaves them NULL — both fixed
+backends do — cannot resize, has nothing to do in process context, and has a
+hardware cursor. Nothing about the runtime-geometry machinery costs it anything.
 
 - `put_cells(column, row, cells, count)` writes cells in row-major order,
   wrapping at `columns` and ignoring anything past the last row. Because the
@@ -52,6 +56,13 @@ one invariant to respect when editing `video.c`.
   backend's business; this is just the tick.
 - `late_init` is **optional** (NULL unless the backend has something it cannot
   do at `video_init()` time). See the two-stage lifecycle below.
+- `set_geometry(columns, rows)` is **optional**; NULL means the console refuses
+  every resize. Its currency is **cells**, never pixels: a backend owns its font
+  and derives the pixel geometry itself. That is deliberate, and it is what would
+  make a future font-size change the same operation as a display change rather
+  than a new mechanism. It must be transactional — prepare, do not switch.
+- `service` is **optional**; called from `video_service_pending()` in process
+  context, for work a backend noticed in an interrupt but could not do there.
 
 `video_cell_t.attribute` is `foreground | (background << 4)`, 4 bits each, in
 IBM CGA/VGA order. This is the console's colour model, shared by all backends,
@@ -70,6 +81,7 @@ geometry header.
 | `VGA_TEXT_MODE` (default) | `src/io/video/vga_text.c` | 80x25 |
 | `VGA_MODE_640_480_16` | `src/io/video/vga_graphics.c` | 80x30 |
 | `VBE_MODE_1024_768_8` | `src/io/video/vbe_lfb.c` | 128x48 |
+| `VIRTIO_GPU` | boot on `vbe_lfb.c`, promote to `virtio_gpu.c` | 128x48, then whatever the host asks for |
 
 Everything under `src/io/video/` is filtered out of the glob and only the
 selected source is added back: every backend defines the same `video_backend`
@@ -89,10 +101,12 @@ state from those macros and the backend initializes its reported `columns`/`rows
 from the same ones, so the two cannot drift. Nothing generic hardcodes a
 dimension.
 
-Static console storage is `screen` + `history` + `original_page`: 48002 bytes at
-80x25, 57602 at 80x30, 147458 at 128x48 (measured in the object file). It scales
-with the product of the dimensions and with `STORED_PAGES`, so it is the number
-to watch: a console whose geometry is chosen at runtime cannot keep doing this.
+Static console storage is `boot_screen` + `boot_history` + `boot_original_page`:
+48002 bytes at 80x25, 57602 at 80x30, 147458 at 128x48 (measured in the object
+file). That is the **boot** console; once resized, storage is allocated and sized
+from the runtime geometry. The formula is `24 * columns * rows + 2`, of which the
+scrollback is ten twelfths — so capping `STORED_PAGES` is a far cheaper lever
+than capping geometry if the resident cost ever matters.
 
 ### Adding a backend
 
@@ -490,6 +504,176 @@ anything else — `MM_CACHE_DISABLE` exists in the flag enum but
 coherent with the guest's view regardless. Real hardware would want
 write-combining here.
 
+## Runtime geometry
+
+The console's shape is a runtime property. `video_columns`, `video_rows` and the
+three buffer pointers in `video.c` are variables, not macros and arrays.
+
+Storage starts in the static `boot_*` arrays sized by the geometry header, and it
+has to: output exists long before there is an allocator, and the
+pre-`video_init()` panic path must not depend on one. A resize allocates
+replacement storage, migrates into it, and frees the old — except the boot arrays,
+which are static and never freed. `console_pages` being NULL is what distinguishes
+the two.
+
+### Who does what, and in which context
+
+This is the part worth understanding before editing any of it, because the split
+is forced by what this kernel does not have: no kernel threads, no workqueues,
+and `spinlock_lock()` does not mask interrupts, so it cannot guard console state
+against an interrupt-context `printf`.
+
+| step | context | may it allocate? |
+|---|---|---|
+| backend notices a display change | interrupt | **no** — flag it and wake the console's readers |
+| `video_request_resize()` | any, including interrupt | **no** — validates and records, last request wins |
+| `video_service_pending()` -> `backend->service()` | process | yes — this is where `GET_DISPLAY_INFO` happens |
+| allocate new console, `set_geometry()` | process | yes |
+| copy + publish | **interrupts masked** | **no** |
+| free old storage, repaint | process | yes |
+
+`video_service_pending()` is called from `procv_read()` and `procv_write()`,
+which are the console's own syscall paths. `keyboard_wake_readers()` exists so an
+interrupt can get a blocked shell moving again, which is what makes servicing
+feel immediate at a prompt. **The consequence to be honest about:** a guest that
+touches the console not at all leaves a resize pending. Do not fix that by
+inventing a worker subsystem inside the video driver.
+
+Interrupts are masked for the copy **and** the publish together, and nothing
+else. Not just the publish: output arriving between a copy and a swap would land
+in the buffer that had already been read, and would be lost. The masked section
+is one bounded `memcpy` of at most `CONSOLE_MAX_BYTES`.
+
+### Limits
+
+Orientation-agnostic, because a host really does report portrait displays.
+Per-dimension floors and ceilings plus a byte budget, with both dimensions
+checked **before** `columns * rows` is computed so neither the product nor its
+multiple can overflow. The 32-column floor is not 80: the boot log's `width - 5`
+marker needs 80, but that is a property of the compile-time boot geometry, and by
+the time anything can resize the boot log is over.
+
+### Resize semantics
+
+Pinned by measurement, not by intent — verify these from cell contents, not from
+cursor coordinates.
+
+| aspect | behaviour |
+|---|---|
+| grow taller | content stays, new rows blank at the **bottom** |
+| shrink | rows drop off the **top** into scrollback |
+| grow wider | new columns blank on the right |
+| shrink narrower | right-hand columns **clipped and lost** |
+| cursor, saved cursor | cell coordinates kept, adjusted for dropped rows, then clamped; a parked cursor stays parked |
+| scrollback | re-strided per row, rows that fell off the screen appended as newest, oldest dropped to fit |
+| scrolled back during a resize | returns to the live view first |
+| escape parser, current colour | untouched; both are geometry-independent |
+| cursor overlay | backend drops it; the generic repaint re-places it |
+
+The asymmetry is the point: growing keeps the cursor where the user left it,
+shrinking keeps the prompt. Both are what real terminals do.
+
+**There is no reflow, and this is not a simplification.** `screen` and `history`
+are flat cell arrays with no soft-wrap marker, so there is no record of which
+rows were continuations of a logical line. Reflow is not something this
+representation can express; adding it means per-row wrap flags and a changed
+write path, which is a terminal-emulator change and not this one.
+
+## Virtio-gpu backend
+
+Never the boot backend. Virtio needs PCI capability walking, page allocation and
+kernel mappings, none of which exist at `video_init()` time, so the machine boots
+on VBE and `virtio_gpu_promote()` hands the console over once everything is up.
+
+32 bpp `B8G8R8X8_UNORM`, which on a little-endian machine is a `uint32_t` of
+`0x00RRGGBB`. The palette is **quantised to 6 bits** before being widened back,
+reproducing what the VGA DAC does to the same palette in the other two backends —
+because "all backends produce the same set of RGB values" is a verification gate
+below, and an unquantised 32 bpp backend would fail it while looking right.
+
+### The framebuffer is scattered but looks linear
+
+The device accepts a resource backed by a **list** of physical ranges, so the
+framebuffer never has to be one buddy block — 7.9 MiB at 1920x1080 would be a
+fragile thing to demand. It is allocated largest-block-first, stepping down an
+order when an allocation fails, and each block becomes one memory entry.
+
+The blocks are then mapped **consecutively** into a fixed kernel window, so the
+device reads a scattered resource while the drawing code writes one flat array.
+Measured block counts: two on a fresh system, up to seven after repeated resizes,
+which is why the limit is sixteen.
+
+### The page-directory trap — read this before mapping anything late
+
+`__gpu_reserve_window()` maps the whole 16 MiB window **not-present** at
+bring-up, purely to get its page tables allocated. That is not tidiness, it is
+required.
+
+`mm_create_blank()` snapshots the main page directory with `memcpy`. Page tables
+that exist at that moment are shared, so later changes to page-table *entries*
+are visible everywhere — but a page-directory *entry* added afterwards is
+invisible to every process already created, and a syscall-serviced resize runs in
+exactly such a process.
+
+The symptom is nasty: every `mem_upd_vm_area()` call returns 0 and the access
+faults anyway, and it only appears once a mapping crosses into a 4 MiB region
+that did not already have a page table. So it hides until a size threshold is
+crossed. Tracked as issue #271.
+
+### Two things it deliberately does not do
+
+**No cursor blink.** Making a drawn pixel visible needs a transfer and a flush,
+which are device round trips, and those may not happen in the timer interrupt.
+`cursor_blink` is NULL and the cursor is steady; it is still drawn, moved and
+removed exactly as the planar backend's is.
+
+**No cursor queue.** The console draws its own cursor into the framebuffer, as
+both other graphical backends do, so a hardware cursor plane would buy nothing.
+
+### Re-entrancy
+
+`printf` reaches the console from any context, and a polled virtqueue submission
+holding one outstanding chain would be corrupted by being re-entered. Every
+submission is guarded: a re-entrant caller draws into the framebuffer, records the
+damage and returns without touching the device, and the next submission that is
+not re-entered picks it up. Damage is a cell-row range, so a keystroke costs one
+row's transfer.
+
+### Scrolling
+
+Moves pixels and resends everything, because a 2D resource has no pan this
+backend can move cheaply. That makes a scroll the expensive operation in exchange
+for a keystroke costing one row — the opposite trade from the VBE backend, and
+the right one when the framebuffer is ordinary RAM.
+
+### The retired resource
+
+Released at the start of the *next* resize, not at the switch, because the switch
+is reachable from an interrupt and the page allocator is not interrupt-safe. Two
+framebuffers are live at once: bounded, not leaked.
+
+### Host display changes
+
+The event path is `config-change interrupt -> events_read/events_clear -> flag ->
+GET_DISPLAY_INFO -> cells = pixels / font -> video_request_resize()`. The event
+carries **no dimensions**, and several arrive in a burst, so they coalesce into
+one "geometry is stale" condition and the device is asked once.
+
+Only virtio-gpu offers this. Bochs VBE has nothing equivalent: its EDID is
+generated once from device properties and never changes. That is why VBE remains
+the boot path and nothing more.
+
+**The QEMU setting that decides whether any of this is visible:**
+
+| configuration | guest dimensions change? |
+|---|---|
+| `-vga std`, any UI | no, ever |
+| `-vga virtio`, `-display gtk` (default) | **yes** |
+| `-vga virtio`, `-display gtk,zoom-to-fit=on` | no — QEMU scales instead |
+
+`zoom-to-fit` is exactly the switch between "scale the pixels" and "tell the
+guest to grow". A correct guest still looks broken with it on.
+
 ## Preserved quirks — do not "fix" incidentally
 
 These are long-standing behaviours pinned by
@@ -616,8 +800,42 @@ as on the boot log -- the boot log only uses three colours, where the shell
 prompt uses six. Verified at `3592274`: identical sets of 3 and of 6 across VGA
 text, planar VGA and VBE.
 
+**Resize checks** — the semantics table above is a pixel property, so drive it
+and decode the result. A synthetic trigger is enough and is the right way to
+start: `video_request_resize()` followed by `video_service_pending()` from a
+temporary probe exercises the whole console path with no display event involved.
+
+Cover, at minimum: grow to a larger landscape geometry; shrink; **portrait**
+(rows greater than columns — 60x120 works and has been tested); portrait back to
+landscape; repeated grow/shrink cycles; a resize while scrolled back; the cursor
+at the last cell of the screen followed by a shrink; and geometries that must be
+refused. Verified this way at `294f5cb`:
+
+| step | asked | got | what the cells showed |
+|---|---|---|---|
+| grow | 160x50 | 1280x800 px | content unmoved, blanks at the bottom |
+| shrink | 100x30 | 800x480 px | last 27 lines kept at the top, line ends clipped |
+| portrait | 60x120 | 480x1920 px | accepted, content preserved |
+| 80 cycles | 150x44 / 96x30 | all correct | 88 resizes, 0 failures, content still consecutive |
+| refusals | 10x4, 5000x5000, 1000x1000 | all refused | console unchanged |
+| cursor at 127x47, shrink to 64x20 | — | 63x19 | clamped to the new last cell |
+
+Repeated cycling is also the memory-leak check: if resources or framebuffers were
+leaking, allocation fails or block counts climb without bound. 88 resizes with a
+peak of seven blocks is the signature of steady state.
+
+**Host-resize check** — the end-to-end one, and it needs no GUI. Drive QEMU's VNC
+server with a `SetDesktopSize` request; that is the same `dpy_set_ui_info()` path
+its GTK window uses when resized. Then send any keypress, so the console's read
+path runs and services the pending resize, and screendump. Verified at `294f5cb`
+for 1600x900, 1024x600, 1920x1080 and 1280x720 in one session, the console
+following each.
+
 Plus `make qemu-test` holding at 52 tests / 0 failures on **each** backend, with
-`grep -c PANIC build/serial.log` equal to 0.
+`grep -c PANIC build/serial.log` equal to 0. Note that the test script hardcodes
+`-vga std`, so for a `VIRTIO_GPU` build it exercises the **fallback** path —
+promotion refused, VBE still displaying — which is worth having but is not a test
+of virtio.
 
 Two traps worth knowing, both of which look like a regression and are not:
 
