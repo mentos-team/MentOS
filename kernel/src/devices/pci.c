@@ -263,13 +263,13 @@ struct {
 
 /// @brief Extracts the slot ID (device number) from the PCI address.
 /// @details This macro extracts the slot (device) number from bits [15:8] of
-/// the PCI address.
-#define PCI_GET_SLOT(dev) (((dev) >> 11U) & 0x1F)
+/// the PCI address, which is where pci_box_device() puts it.
+#define PCI_GET_SLOT(dev) (((dev) >> 8U) & 0x1F)
 
 /// @brief Extracts the function ID from the PCI address.
 /// @details This macro extracts the function number from bits [7:0] of the PCI
-/// address.
-#define PCI_GET_FUNC(dev) (((dev) >> 8U) & 0x07)
+/// address, which is where pci_box_device() puts it.
+#define PCI_GET_FUNC(dev) ((dev) & 0x07)
 
 /// @brief Constructs the PCI configuration address for a given device and register field.
 ///
@@ -373,8 +373,12 @@ int pci_read_8(uint32_t device, uint32_t field, uint8_t *value)
     }
     // Write the address to the PCI address port
     outportl(PCI_ADDRESS_PORT, addr);
-    // Read the 8-bit value from the PCI data port with the adjusted field offset
-    *value = inports(PCI_VALUE_PORT + (field & 0x03));
+    // Read the 8-bit value from the PCI data port with the adjusted field
+    // offset. The access has to be a byte access: a 16-bit read of the last
+    // byte of the register, which is what an 8-bit field at offset 3 is, runs
+    // off the end of the four-byte data port and leaves the upper half to
+    // whatever answers at 0xD00.
+    *value = inportb(PCI_VALUE_PORT + (field & 0x03));
     return 0;
 }
 
