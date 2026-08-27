@@ -22,7 +22,7 @@ option(ENABLE_SCHEDULER_FEEDBACK "Enables scheduling feedback on terminal." OFF)
 # header the generic console sizes its static state from. Resolved here,
 # before the sources are collected, so the unselected backends can be filtered
 # out below.
-set(VIDEO_TYPES VGA_TEXT_MODE VGA_MODE_640_480_16)
+set(VIDEO_TYPES VGA_TEXT_MODE VGA_MODE_640_480_16 VBE_MODE_1024_768_8)
 # Add the video backend option.
 set(VIDEO_TYPE "VGA_TEXT_MODE" CACHE STRING "Chose the type of video backend: ${VIDEO_TYPES}")
 # List of video backends.
@@ -37,6 +37,23 @@ elseif(VIDEO_TYPE STREQUAL "VGA_TEXT_MODE")
 elseif(VIDEO_TYPE STREQUAL "VGA_MODE_640_480_16")
     set(VIDEO_BACKEND_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/src/io/video/vga_graphics.c")
     set(VIDEO_GEOMETRY_HEADER "io/video/vga_graphics_geometry.h")
+elseif(VIDEO_TYPE STREQUAL "VBE_MODE_1024_768_8")
+    set(VIDEO_BACKEND_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/src/io/video/vbe_lfb.c")
+    set(VIDEO_GEOMETRY_HEADER "io/video/vbe_lfb_geometry.h")
+endif()
+# Every branch above must have named a backend source and a geometry header, and
+# the source has to exist. Checking here rather than trusting the branches means
+# a VIDEO_TYPE added to the list but not given a branch fails the configure step
+# instead of producing a kernel with no `video_backend` symbol and a link error
+# that says nothing about why.
+if(NOT VIDEO_BACKEND_SOURCE OR NOT VIDEO_GEOMETRY_HEADER)
+    message(FATAL_ERROR "Video type ${VIDEO_TYPE} has no backend source or geometry header mapping.")
+endif()
+if(NOT EXISTS "${VIDEO_BACKEND_SOURCE}")
+    message(FATAL_ERROR "Video backend source ${VIDEO_BACKEND_SOURCE} does not exist.")
+endif()
+if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/inc/${VIDEO_GEOMETRY_HEADER}")
+    message(FATAL_ERROR "Video geometry header ${VIDEO_GEOMETRY_HEADER} does not exist.")
 endif()
 # Notify the type of video backend.
 message(STATUS "Setting video type to ${VIDEO_TYPE}.")
@@ -50,10 +67,25 @@ if(NOT ENABLE_KERNEL_TESTS)
 endif()
 # Remove boot.c and boot.S from kernel sources - they only belong in the bootloader
 list(FILTER KERNEL_SOURCES EXCLUDE REGEX ".*boot\\.(c|S)$")
-# Keep only the selected video backend: the others define the same
-# `video_backend` symbol and must not reach the link.
-list(FILTER KERNEL_SOURCES EXCLUDE REGEX ".*/io/video/vga_.*\\.c$")
+# Keep only the selected video backend: every backend defines the same
+# `video_backend` symbol, so two reaching the link is a duplicate definition
+# rather than a silent fallback.
+#
+# The exclusion covers the whole directory and the selected source is then added
+# back explicitly, which is what makes "exactly one" a property of the build
+# rather than of the file names. The previous pattern matched `vga_*.c` only, so
+# a backend named anything else would have been linked in addition to the
+# selected one.
+list(FILTER KERNEL_SOURCES EXCLUDE REGEX "/io/video/[^/]*\\.c$")
 list(APPEND KERNEL_SOURCES ${VIDEO_BACKEND_SOURCE})
+# Prove it: after the filter and the append, exactly one backend source is in
+# the list. Cheap, and it turns any future mistake here into a configure error.
+set(VIDEO_BACKENDS_IN_BUILD ${KERNEL_SOURCES})
+list(FILTER VIDEO_BACKENDS_IN_BUILD INCLUDE REGEX "/io/video/[^/]*\\.c$")
+list(LENGTH VIDEO_BACKENDS_IN_BUILD VIDEO_BACKENDS_COUNT)
+if(NOT VIDEO_BACKENDS_COUNT EQUAL 1)
+    message(FATAL_ERROR "Expected exactly one video backend source, got ${VIDEO_BACKENDS_COUNT}: ${VIDEO_BACKENDS_IN_BUILD}")
+endif()
 # Collect the kernel include directories.
 set(KERNEL_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/inc ${CMAKE_SOURCE_DIR}/lib/inc)
 # Create the kernel static library - explicitly include multiboot.c since it's needed by both kernel and bootloader
