@@ -22,7 +22,7 @@ option(ENABLE_SCHEDULER_FEEDBACK "Enables scheduling feedback on terminal." OFF)
 # header the generic console sizes its static state from. Resolved here,
 # before the sources are collected, so the unselected backends can be filtered
 # out below.
-set(VIDEO_TYPES VGA_TEXT_MODE VGA_MODE_640_480_16 VBE_MODE_1024_768_8)
+set(VIDEO_TYPES VGA_TEXT_MODE VGA_MODE_640_480_16 VBE_MODE_1024_768_8 VIRTIO_GPU)
 # Add the video backend option.
 set(VIDEO_TYPE "VGA_TEXT_MODE" CACHE STRING "Chose the type of video backend: ${VIDEO_TYPES}")
 # List of video backends.
@@ -40,6 +40,14 @@ elseif(VIDEO_TYPE STREQUAL "VGA_MODE_640_480_16")
 elseif(VIDEO_TYPE STREQUAL "VBE_MODE_1024_768_8")
     set(VIDEO_BACKEND_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/src/io/video/vbe_lfb.c")
     set(VIDEO_GEOMETRY_HEADER "io/video/vbe_lfb_geometry.h")
+elseif(VIDEO_TYPE STREQUAL "VIRTIO_GPU")
+    # Two backends: the machine boots on VBE, which needs nothing but port I/O
+    # and a mapping, and is then handed over to virtio-gpu once PCI, the
+    # allocator and paging are all up. The geometry is the same either way, so
+    # the console does not notice the change.
+    set(VIDEO_BACKEND_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/src/io/video/vbe_lfb.c")
+    set(VIDEO_GEOMETRY_HEADER "io/video/vbe_lfb_geometry.h")
+    set(VIDEO_EXTRA_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/io/video/virtio_gpu.c")
 endif()
 # Every branch above must have named a backend source and a geometry header, and
 # the source has to exist. Checking here rather than trusting the branches means
@@ -77,14 +85,22 @@ list(FILTER KERNEL_SOURCES EXCLUDE REGEX ".*boot\\.(c|S)$")
 # a backend named anything else would have been linked in addition to the
 # selected one.
 list(FILTER KERNEL_SOURCES EXCLUDE REGEX "/io/video/[^/]*\\.c$")
-list(APPEND KERNEL_SOURCES ${VIDEO_BACKEND_SOURCE})
-# Prove it: after the filter and the append, exactly one backend source is in
-# the list. Cheap, and it turns any future mistake here into a configure error.
+list(APPEND KERNEL_SOURCES ${VIDEO_BACKEND_SOURCE} ${VIDEO_EXTRA_SOURCES})
+# Prove it. Exactly one source may define `video_backend`, which is the boot
+# backend; anything in VIDEO_EXTRA_SOURCES is a backend the kernel may promote to
+# at runtime and defines its own differently-named symbol, so those are counted
+# separately rather than being allowed to slip past the check.
+list(LENGTH VIDEO_BACKEND_SOURCE VIDEO_BOOT_BACKEND_COUNT)
+if(NOT VIDEO_BOOT_BACKEND_COUNT EQUAL 1)
+    message(FATAL_ERROR "Expected exactly one boot video backend, got ${VIDEO_BOOT_BACKEND_COUNT}: ${VIDEO_BACKEND_SOURCE}")
+endif()
+list(LENGTH VIDEO_EXTRA_SOURCES VIDEO_EXTRA_COUNT)
+math(EXPR VIDEO_EXPECTED_COUNT "1 + ${VIDEO_EXTRA_COUNT}")
 set(VIDEO_BACKENDS_IN_BUILD ${KERNEL_SOURCES})
 list(FILTER VIDEO_BACKENDS_IN_BUILD INCLUDE REGEX "/io/video/[^/]*\\.c$")
 list(LENGTH VIDEO_BACKENDS_IN_BUILD VIDEO_BACKENDS_COUNT)
-if(NOT VIDEO_BACKENDS_COUNT EQUAL 1)
-    message(FATAL_ERROR "Expected exactly one video backend source, got ${VIDEO_BACKENDS_COUNT}: ${VIDEO_BACKENDS_IN_BUILD}")
+if(NOT VIDEO_BACKENDS_COUNT EQUAL VIDEO_EXPECTED_COUNT)
+    message(FATAL_ERROR "Expected ${VIDEO_EXPECTED_COUNT} video source(s), got ${VIDEO_BACKENDS_COUNT}: ${VIDEO_BACKENDS_IN_BUILD}")
 endif()
 # Collect the kernel include directories.
 set(KERNEL_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/inc ${CMAKE_SOURCE_DIR}/lib/inc)
@@ -100,6 +116,10 @@ target_compile_definitions(kernel PUBLIC MENTOS_ROOT="${CMAKE_SOURCE_DIR}")
 # it was built against.
 target_compile_definitions(kernel PUBLIC ${VIDEO_TYPE})
 target_compile_definitions(kernel PUBLIC VIDEO_GEOMETRY_HEADER="${VIDEO_GEOMETRY_HEADER}")
+# Tell kmain whether this build has a backend to promote to after boot.
+if(VIDEO_EXTRA_SOURCES)
+    target_compile_definitions(kernel PUBLIC VIDEO_PROMOTE_VIRTIO_GPU)
+endif()
 # If the emulator is set to output on a log file, tell that to the C code.
 if(${EMULATOR_OUTPUT_TYPE} STREQUAL OUTPUT_LOG)
     target_compile_definitions(kernel PUBLIC EMULATOR_OUTPUT_LOG)

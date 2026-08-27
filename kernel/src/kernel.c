@@ -27,6 +27,7 @@
 #include "hardware/timer.h"
 #include "io/proc_modules.h"
 #include "io/video.h"
+#include "io/video/virtio_gpu.h"
 #include "ipc/ipc.h"
 #include "mem/alloc/zone_allocator.h"
 #include "mem/mm/vmem.h"
@@ -260,6 +261,21 @@ int kmain(boot_info_t *boot_informations)
     printf("Setting up RTC...");
     rtc_initialize();
     print_ok();
+
+    //==========================================================================
+#ifdef VIDEO_PROMOTE_VIRTIO_GPU
+    // Hand the console over to virtio-gpu, now that PCI, the allocator, paging
+    // and the timer are all up. Deliberately not fatal and deliberately late:
+    // the backend the machine booted on keeps displaying if anything here
+    // fails, so this can only improve the console, never lose it.
+    pr_notice("Upgrade the console to virtio-gpu...\n");
+    printf("Upgrade console to virtio-gpu...");
+    if (virtio_gpu_promote() < 0) {
+        print_fail();
+    } else {
+        print_ok();
+    }
+#endif
 
     //==========================================================================
     pr_notice("Initialize the filesystem.\n");
