@@ -116,18 +116,8 @@
 /// @brief The resource id this backend uses. Ids are the driver's to choose.
 #define VIRTIO_GPU_RESOURCE         1U
 
-/// @name The font's cell size
-/// @brief The only place pixels and cells meet.
-///
-/// Everything below derives pixels from cells through these. The generic console
-/// never sees them: it asks for a number of columns and rows, and this backend
-/// works out how many pixels that is. That is also what would make a font change
-/// the same operation as a display change -- a different pair of cell counts --
-/// rather than a new mechanism.
-/// @{
-#define GPU_CELL_WIDTH  VIDEO_FONT_DEFAULT_WIDTH  ///< Pixels a cell occupies across.
-#define GPU_CELL_HEIGHT VIDEO_FONT_DEFAULT_HEIGHT ///< Scan lines a cell occupies.
-/// @}
+/// @brief Font this backend starts with, and the size its geometry is built for.
+#define GPU_DEFAULT_FONT (&video_font_8x16)
 
 /// @name Largest framebuffer this backend will build
 /// @brief Bounds the virtual window and the backing-list length.
@@ -162,7 +152,7 @@
 /// @brief Number of scan lines the underline cursor covers.
 #define GPU_CURSOR_UNDERLINE_LINES 3U
 /// @brief Pixel mask of the bar cursor: the two leftmost columns of the cell.
-#define GPU_CURSOR_BAR_MASK        0xC0U
+#define GPU_CURSOR_BAR_COLUMNS     2U
 
 /// @brief Compile-time check that the largest framebuffer fits its virtual window.
 typedef char gpu_window_check[(((GPU_MAX_WIDTH * GPU_MAX_HEIGHT * 4U) <= GPU_FB_VIRT_SIZE) &&
@@ -261,9 +251,24 @@ typedef struct {
     uint32_t bytes;   ///< How many bytes of it the framebuffer uses.
 } gpu_block_t;
 
-/// @name The geometry currently materialized
-/// @brief Derived from the console's cell counts and the font, and nothing else.
+/// @name The three separate quantities
+/// @brief Kept apart on purpose, because two of them move independently.
+///
+/// The scanout size in pixels is what the host is showing. The font decides how
+/// many pixels a cell takes. The cell counts follow from dividing one by the
+/// other, and they are the only one of the three the generic console knows
+/// about. A display change moves the first, a font change moves the second, and
+/// either way the third is recomputed rather than assumed -- which is what keeps
+/// a font change from disturbing the scanout, and a window resize from
+/// forgetting which font was chosen.
 /// @{
+static unsigned gpu_target_width  = 0; ///< Scanout width the host wants filled.
+static unsigned gpu_target_height = 0; ///< Scanout height the host wants filled.
+
+static const video_font_t *gpu_font = NULL; ///< Font the cells are drawn with.
+static unsigned gpu_cell_width      = 0;    ///< Pixels a cell occupies across.
+static unsigned gpu_cell_height     = 0;    ///< Scan lines a cell occupies.
+
 static unsigned gpu_columns   = 0; ///< Console width in cells.
 static unsigned gpu_rows      = 0; ///< Console height in cells.
 static unsigned gpu_width     = 0; ///< Framebuffer width in pixels.
@@ -272,6 +277,14 @@ static unsigned gpu_stride    = 0; ///< Bytes per scan line.
 static unsigned gpu_row_bytes = 0; ///< Bytes one text row occupies.
 static unsigned gpu_fb_bytes  = 0; ///< Bytes the framebuffer occupies.
 /// @}
+
+/// @brief Whether the whole framebuffer still has to reach the device.
+///
+/// Damage is tracked in cell rows, which cannot describe the margin left over
+/// when the cells do not divide the scanout exactly. After a geometry change
+/// there is a fresh resource and possibly such a margin, so the first transfer
+/// covers everything instead.
+static bool_t transfer_all = false;
 
 /// @brief Whether the backend can touch the device and the framebuffer.
 static bool_t active                = false;
@@ -358,24 +371,41 @@ static video_cell_t cursor_cell     = {' ', 0x07};
 /// @brief Whether an overlay is currently on the display.
 static bool_t cursor_drawn          = false;
 
+/// @brief Adopts a font, caching the cell size it draws at.
+/// @param font The font to draw with.
+static void __gpu_set_font(const video_font_t *font)
+{
+    gpu_font        = font;
+    gpu_cell_width  = video_font_width(font);
+    gpu_cell_height = video_font_height(font);
+}
+
 /// @brief Works out the pixel geometry a cell geometry implies.
 /// @param columns Width in cells.
 /// @param rows Height in cells.
 /// @return 0 when it is a geometry this backend can build, -1 otherwise.
 ///
-/// The single place cells become pixels. Bounded by GPU_MAX_*, which is what the
-/// virtual window and the backing list were sized for, and checked before the
-/// multiplication so the byte count cannot overflow.
+/// The single place cells become pixels. The framebuffer covers the union of the
+/// cell area and the target scanout: normally the cells fit inside the scanout
+/// with at most a cell of margin, and covering the target rather than the cells
+/// is what lets the scanout stay exactly the size the host asked for while the
+/// font changes underneath it. A cell area larger than the target -- which only
+/// a geometry asked for directly can produce -- grows the framebuffer instead.
+///
+/// Bounded by GPU_MAX_*, which is what the virtual window and the backing list
+/// were sized for, and checked before the byte arithmetic so it cannot overflow.
 static int __gpu_set_dimensions(unsigned columns, unsigned rows)
 {
-    if ((columns == 0U) || (rows == 0U)) {
+    if ((columns == 0U) || (rows == 0U) || (gpu_font == NULL)) {
         return -1;
     }
-    unsigned width  = columns * GPU_CELL_WIDTH;
-    unsigned height = rows * GPU_CELL_HEIGHT;
+    unsigned cells_width  = columns * gpu_cell_width;
+    unsigned cells_height = rows * gpu_cell_height;
+    unsigned width        = (cells_width > gpu_target_width) ? cells_width : gpu_target_width;
+    unsigned height       = (cells_height > gpu_target_height) ? cells_height : gpu_target_height;
     if ((width > GPU_MAX_WIDTH) || (height > GPU_MAX_HEIGHT)) {
-        pr_err("%ux%u cells is %ux%u pixels, past the %ux%u this backend builds.\n", columns, rows, width, height,
-               (unsigned)GPU_MAX_WIDTH, (unsigned)GPU_MAX_HEIGHT);
+        pr_err("%ux%u cells of %ux%u is %ux%u pixels, past the %ux%u this backend builds.\n", columns, rows,
+               gpu_cell_width, gpu_cell_height, width, height, (unsigned)GPU_MAX_WIDTH, (unsigned)GPU_MAX_HEIGHT);
         return -1;
     }
 
@@ -384,7 +414,7 @@ static int __gpu_set_dimensions(unsigned columns, unsigned rows)
     gpu_width     = width;
     gpu_height    = height;
     gpu_stride    = width * 4U;
-    gpu_row_bytes = gpu_stride * GPU_CELL_HEIGHT;
+    gpu_row_bytes = gpu_stride * gpu_cell_height;
     gpu_fb_bytes  = gpu_stride * height;
     return 0;
 }
@@ -483,9 +513,18 @@ static void __gpu_publish(void)
     unsigned last  = damage_last;
     damage_valid   = false;
 
-    uint32_t y      = first * GPU_CELL_HEIGHT;
-    uint32_t height = ((last - first) + 1U) * GPU_CELL_HEIGHT;
+    uint32_t y      = first * gpu_cell_height;
+    uint32_t height = ((last - first) + 1U) * gpu_cell_height;
     uint32_t offset = first * gpu_row_bytes;
+
+    // A fresh resource, or cells that do not divide the scanout exactly, leave
+    // pixels no cell row covers. Send the lot once rather than teach damage
+    // tracking about a margin it will only ever describe as "all of it".
+    if (transfer_all) {
+        y      = 0;
+        height = gpu_height;
+        offset = 0;
+    }
 
     gpu_transfer_2d_t *transfer = (gpu_transfer_2d_t *)command_virtual;
     __gpu_header(VIRTIO_GPU_CMD_TRANSFER_TO_HOST_2D);
@@ -503,6 +542,7 @@ static void __gpu_publish(void)
         submit_busy = false;
         return;
     }
+    transfer_all = false;
 
     if (!scanout_set) {
         gpu_set_scanout_t *scanout = (gpu_set_scanout_t *)command_virtual;
@@ -536,28 +576,44 @@ static void __gpu_publish(void)
     submit_busy = false;
 }
 
-/// @brief Glyph bitmap of a cell's character.
-static inline const uint8_t *__gpu_cell_glyph(video_cell_t cell)
-{
-    return video_font_glyph(video_font_default(), cell.character);
-}
-
-/// @brief Draws one cell from an explicit glyph, into memory only.
+/// @brief Draws one cell, into memory only.
 /// @param column The column.
 /// @param row The row.
-/// @param glyph GPU_CELL_HEIGHT bytes of bitmap.
+/// @param character The character to draw.
 /// @param attribute Foreground index in the low nibble, background in the high.
-static void __gpu_draw_cell(unsigned column, unsigned row, const uint8_t *glyph, uint8_t attribute)
+/// @param overlay Cursor shape to draw over the glyph, or VIDEO_CURSOR_HIDDEN.
+///
+/// The overlay is folded in here rather than by handing this function a doctored
+/// bitmap, because at a magnified size the shapes are no longer expressible as
+/// one byte per scan line: an underline is as many scan lines thick as the
+/// magnification, and a bar as many pixels wide.
+static void __gpu_draw_cell(
+    unsigned column,
+    unsigned row,
+    uint8_t character,
+    uint8_t attribute,
+    video_cursor_shape_t overlay)
 {
     uint32_t foreground = palette[attribute & 0x0FU];
     uint32_t background = palette[(attribute >> 4U) & 0x0FU];
-    uint8_t *base       = framebuffer + ((size_t)row * gpu_row_bytes) + ((size_t)column * GPU_CELL_WIDTH * 4U);
+    uint8_t *base       = framebuffer + ((size_t)row * gpu_row_bytes) + ((size_t)column * gpu_cell_width * 4U);
+    uint32_t solid      = (gpu_cell_width >= 32U) ? 0xFFFFFFFFU : ((1U << gpu_cell_width) - 1U);
+    unsigned scale      = gpu_font->scale;
+    unsigned underline  = GPU_CURSOR_UNDERLINE_LINES * scale;
+    unsigned bar        = GPU_CURSOR_BAR_COLUMNS * scale;
 
-    for (unsigned line = 0; line < GPU_CELL_HEIGHT; ++line) {
+    for (unsigned line = 0; line < gpu_cell_height; ++line) {
+        uint32_t bits = video_font_scanline(gpu_font, character, line);
+        if (overlay == VIDEO_CURSOR_BLOCK) {
+            bits = solid;
+        } else if ((overlay == VIDEO_CURSOR_UNDERLINE) && ((line + underline) >= gpu_cell_height)) {
+            bits = solid;
+        } else if (overlay == VIDEO_CURSOR_BAR) {
+            bits |= solid & ~(solid >> bar);
+        }
         uint32_t *pixels = (uint32_t *)(base + ((size_t)line * gpu_stride));
-        uint8_t bits     = glyph[line];
-        for (unsigned x = 0; x < GPU_CELL_WIDTH; ++x) {
-            pixels[x] = ((bits & (0x80U >> x)) != 0U) ? foreground : background;
+        for (unsigned x = 0; x < gpu_cell_width; ++x) {
+            pixels[x] = ((bits & (1U << ((gpu_cell_width - 1U) - x))) != 0U) ? foreground : background;
         }
     }
 }
@@ -582,7 +638,8 @@ static void __gpu_cursor_hide(void)
     }
     cursor_drawn = false;
     if (active && __gpu_cursor_on_screen()) {
-        __gpu_draw_cell(cursor_column, cursor_row, __gpu_cell_glyph(cursor_cell), cursor_cell.attribute);
+        __gpu_draw_cell(cursor_column, cursor_row, cursor_cell.character, cursor_cell.attribute,
+                        VIDEO_CURSOR_HIDDEN);
         __gpu_damage(cursor_row, cursor_row);
     }
 }
@@ -597,21 +654,6 @@ static void __gpu_cursor_show(void)
         return;
     }
 
-    const uint8_t *source = __gpu_cell_glyph(cursor_cell);
-    uint8_t glyph[GPU_CELL_HEIGHT];
-
-    for (unsigned line = 0; line < GPU_CELL_HEIGHT; ++line) {
-        uint8_t overlay = 0x00U;
-        if (cursor_style.shape == VIDEO_CURSOR_BLOCK) {
-            overlay = 0xFFU;
-        } else if (cursor_style.shape == VIDEO_CURSOR_UNDERLINE) {
-            overlay = (line >= (GPU_CELL_HEIGHT - GPU_CURSOR_UNDERLINE_LINES)) ? 0xFFU : 0x00U;
-        } else if (cursor_style.shape == VIDEO_CURSOR_BAR) {
-            overlay = GPU_CURSOR_BAR_MASK;
-        }
-        glyph[line] = (uint8_t)(source[line] | overlay);
-    }
-
     // As the text-mode hardware cursor does, the overlay takes the cell's own
     // foreground colour -- falling back to the default when the cell was erased
     // to attribute 0, which would otherwise be black on black.
@@ -620,7 +662,7 @@ static void __gpu_cursor_show(void)
         attribute = (uint8_t)((attribute & 0xF0U) | 0x07U);
     }
 
-    __gpu_draw_cell(cursor_column, cursor_row, glyph, attribute);
+    __gpu_draw_cell(cursor_column, cursor_row, cursor_cell.character, attribute, cursor_style.shape);
     __gpu_damage(cursor_row, cursor_row);
     cursor_drawn = true;
 }
@@ -877,6 +919,9 @@ static int virtio_gpu_set_geometry(unsigned columns, unsigned rows)
     __gpu_release_retired();
 
     // Remember everything needed to put things back.
+    const video_font_t *old_font = gpu_font;
+    unsigned old_cell_width      = gpu_cell_width;
+    unsigned old_cell_height     = gpu_cell_height;
     unsigned old_columns = gpu_columns;
     unsigned old_rows    = gpu_rows;
     unsigned old_width   = gpu_width;
@@ -892,6 +937,7 @@ static int virtio_gpu_set_geometry(unsigned columns, unsigned rows)
         gpu_columns = old_columns; gpu_rows = old_rows; gpu_width = old_width;
         gpu_height = old_height;   gpu_stride = old_stride; gpu_row_bytes = old_rowb;
         gpu_fb_bytes = old_bytes;
+        gpu_font = old_font; gpu_cell_width = old_cell_width; gpu_cell_height = old_cell_height;
         return -1;
     }
 
@@ -903,6 +949,7 @@ static int virtio_gpu_set_geometry(unsigned columns, unsigned rows)
         gpu_columns = old_columns; gpu_rows = old_rows; gpu_width = old_width;
         gpu_height = old_height;   gpu_stride = old_stride; gpu_row_bytes = old_rowb;
         gpu_fb_bytes = old_bytes;
+        gpu_font = old_font; gpu_cell_width = old_cell_width; gpu_cell_height = old_cell_height;
         memcpy(blocks, old_blocks, sizeof(blocks));
         block_count = old_count;
         // Put the old mapping back, so drawing keeps reaching the live pixels.
@@ -916,6 +963,7 @@ static int virtio_gpu_set_geometry(unsigned columns, unsigned rows)
         gpu_columns = old_columns; gpu_rows = old_rows; gpu_width = old_width;
         gpu_height = old_height;   gpu_stride = old_stride; gpu_row_bytes = old_rowb;
         gpu_fb_bytes = old_bytes;
+        gpu_font = old_font; gpu_cell_width = old_cell_width; gpu_cell_height = old_cell_height;
         memcpy(blocks, old_blocks, sizeof(blocks));
         block_count = old_count;
         (void)__gpu_remap_blocks();
@@ -931,9 +979,10 @@ static int virtio_gpu_set_geometry(unsigned columns, unsigned rows)
     scanout_set  = false;
     damage_valid = false;
     cursor_drawn = false;
+    transfer_all = true;
 
-    pr_notice("Prepared %ux%u cells (%ux%u pixels) as resource %u.\n", columns, rows, gpu_width, gpu_height,
-              resource_id);
+    pr_notice("Prepared %ux%u cells of %s (%ux%u pixels) as resource %u.\n", columns, rows, gpu_font->name, gpu_width,
+              gpu_height, resource_id);
     return 0;
 }
 
@@ -967,6 +1016,13 @@ static void __gpu_teardown(void)
 static int virtio_gpu_late_init(void)
 {
     // The console is whatever shape it was compiled as when this first runs.
+    // The compiled geometry, at the compiled font: that product is the scanout
+    // this backend starts with, and the target it fills until the host says
+    // otherwise. Nothing here consults the host yet -- promotion must not change
+    // what the user is already looking at.
+    __gpu_set_font(GPU_DEFAULT_FONT);
+    gpu_target_width  = VIDEO_COLUMNS * gpu_cell_width;
+    gpu_target_height = VIDEO_ROWS * gpu_cell_height;
     if (__gpu_set_dimensions(VIDEO_COLUMNS, VIDEO_ROWS) < 0) {
         return -1;
     }
@@ -1067,9 +1123,11 @@ static int virtio_gpu_late_init(void)
         pr_notice("Listening for display changes on IRQ %u.\n", line);
     }
 
-    active = true;
-    pr_notice("Ready: %ux%u at 32 bpp, %ux%u cells, resource %u backed by %u block(s).\n", (unsigned)gpu_width,
-              (unsigned)gpu_height, (unsigned)gpu_columns, (unsigned)gpu_rows, resource_id, block_count);
+    active       = true;
+    transfer_all = true;
+    pr_notice("Ready: %ux%u at 32 bpp, %ux%u cells of %s, resource %u backed by %u block(s).\n", (unsigned)gpu_width,
+              (unsigned)gpu_height, (unsigned)gpu_columns, (unsigned)gpu_rows, gpu_font->name, resource_id,
+              block_count);
     return 0;
 }
 
@@ -1099,7 +1157,7 @@ static void virtio_gpu_put_cells(unsigned column, unsigned row, const video_cell
 
         for (unsigned index = 0; index < run; ++index) {
             const video_cell_t cell = cells[next + index];
-            __gpu_draw_cell(column + index, row, __gpu_cell_glyph(cell), cell.attribute);
+            __gpu_draw_cell(column + index, row, cell.character, cell.attribute, VIDEO_CURSOR_HIDDEN);
         }
         __gpu_damage(row, row);
 
@@ -1254,10 +1312,18 @@ static void virtio_gpu_service(void)
         return;
     }
 
+    // Record what the host wants even when it makes no difference to the cell
+    // counts, so that whatever acts next -- a later resize, or a font change --
+    // works from the current window rather than from the last one that happened
+    // to cross a cell boundary. The cost is that the scanout can lag the window
+    // by less than one cell until something does act.
+    gpu_target_width  = (unsigned)width;
+    gpu_target_height = (unsigned)height;
+
     // Whole cells only; a few leftover pixels at the right or bottom edge are
-    // simply not used. No assumption is made about which dimension is larger.
-    unsigned columns = (unsigned)(width / GPU_CELL_WIDTH);
-    unsigned rows    = (unsigned)(height / GPU_CELL_HEIGHT);
+    // margin. No assumption is made about which dimension is larger.
+    unsigned columns = (unsigned)(width / gpu_cell_width);
+    unsigned rows    = (unsigned)(height / gpu_cell_height);
     if ((columns == gpu_columns) && (rows == gpu_rows)) {
         return;
     }

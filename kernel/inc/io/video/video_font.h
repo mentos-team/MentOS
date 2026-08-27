@@ -78,6 +78,41 @@ static inline const uint8_t *video_font_glyph(const video_font_t *font, uint8_t 
     return &font->glyphs[(unsigned)character * (unsigned)font->base_height];
 }
 
+/// @brief One drawn scan line of a character, magnification included.
+/// @param font The font.
+/// @param character The character code.
+/// @param line The scan line, from 0 to video_font_height() - 1.
+/// @return A mask in which bit (video_font_width() - 1) is the leftmost pixel.
+///
+/// For a backend that magnifies, and the only accessor that copes with a scale
+/// above 1: the asset's scan line is chosen by dividing, and each of its pixels
+/// is then repeated across. A mask rather than bytes because a magnified glyph
+/// is wider than a byte, and 32 bits is enough for any size this
+/// representation can produce.
+static inline uint32_t video_font_scanline(const video_font_t *font, uint8_t character, unsigned line)
+{
+    unsigned scale = font->scale;
+    uint8_t bits   = font->glyphs[((unsigned)character * (unsigned)font->base_height) + (line / scale)];
+
+    // Unmagnified, the asset's byte already is the mask, with the same bit
+    // holding the leftmost pixel. This is the overwhelmingly common case.
+    if (scale == 1U) {
+        return bits;
+    }
+
+    unsigned width = video_font_width(font);
+    uint32_t out   = 0;
+    for (unsigned x = 0; x < font->base_width; ++x) {
+        if ((bits & (1U << ((font->base_width - 1U) - x))) == 0U) {
+            continue;
+        }
+        for (unsigned repeat = 0; repeat < scale; ++repeat) {
+            out |= 1U << ((width - 1U) - ((x * scale) + repeat));
+        }
+    }
+    return out;
+}
+
 /// @name The available fonts
 /// @{
 /// The default, and the only one any backend draws with today. 8x16 is what
