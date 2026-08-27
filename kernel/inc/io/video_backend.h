@@ -12,6 +12,7 @@
 
 #pragma once
 
+#include "stdbool.h"
 #include "stdint.h"
 
 /// @brief Path of the geometry header belonging to the selected backend.
@@ -52,6 +53,19 @@ typedef enum {
     VIDEO_CURSOR_BLOCK,     ///< Fills the whole cell.
     VIDEO_CURSOR_UNDERLINE, ///< A line along the bottom of the cell.
     VIDEO_CURSOR_BAR,       ///< A thin bar; see the note in the backends.
+} video_cursor_shape_t;
+
+/// @brief A cursor style: a shape, and whether it blinks.
+///
+/// Blink is carried separately rather than folded into the shape because the
+/// two backends need it differently. A hardware text cursor blinks on its own
+/// and cannot be told not to, so the VGA text backend ignores this and keeps
+/// behaving exactly as it always has. A software cursor is drawn pixels and
+/// blinks only if something toggles it, so a graphical backend does need to
+/// know which was asked for.
+typedef struct {
+    video_cursor_shape_t shape; ///< The shape to draw.
+    bool_t blinking;            ///< Whether it should blink.
 } video_cursor_style_t;
 
 /// @brief Operations a video backend must provide.
@@ -105,11 +119,30 @@ typedef struct {
     /// @brief Places the cursor.
     /// @param column The column, always already in range.
     /// @param row The row, always already in range.
-    void (*set_cursor_position)(unsigned column, unsigned row);
+    /// @param cell The cell the cursor now sits on.
+    ///
+    /// The cell is passed because a backend that draws its own cursor has to be
+    /// able to take it away again, and restoring what was underneath is the only
+    /// way to do that. It cannot recover the cell from the display -- a drawn
+    /// glyph is not reversible -- and keeping a copy of the whole screen to look
+    /// it up in would duplicate state the generic layer already owns. One cell
+    /// is all that is needed, so one cell is what it is given.
+    void (*set_cursor_position)(unsigned column, unsigned row, video_cell_t cell);
 
     /// @brief Selects the cursor appearance.
     /// @param style The style to adopt.
     void (*set_cursor_style)(video_cursor_style_t style);
+
+    /// @brief Advances a software cursor's blink, once per timer tick.
+    ///
+    /// Optional: NULL when a backend has nothing to do, which is the case for
+    /// any backend whose cursor blinks in hardware. Called from the timer
+    /// interrupt via video_cursor_blink_tick(), so it must be cheap and must not
+    /// sleep, allocate or take locks.
+    ///
+    /// The rate is the backend's business, not the console's; this is simply the
+    /// tick it counts.
+    void (*cursor_blink)(void);
 } video_backend_t;
 
 /// @brief The backend compiled into this kernel.

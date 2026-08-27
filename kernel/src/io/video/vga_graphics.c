@@ -35,6 +35,7 @@
 #define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
 #include "io/debug.h"                    // Include debugging functions.
 
+#include "hardware/timer.h"
 #include "io/port_io.h"
 #include "io/video_backend.h"
 #include "stdbool.h"
@@ -117,6 +118,9 @@
 #define VGA_CURSOR_UNDERLINE_LINES 3
 /// Pixel mask of the bar cursor: the two leftmost columns of the cell.
 #define VGA_CURSOR_BAR_MASK   0xC0U
+/// Timer ticks between blink toggles, giving a toggle about three times a
+/// second, which is the usual terminal cursor rate.
+#define VGA_CURSOR_BLINK_TICKS (TICKS_PER_SECOND / 3U)
 
 /// @brief Compile-time check that the geometry matches the mode and the font.
 ///
@@ -145,17 +149,35 @@ static unsigned cursor_column = 0;
 /// @brief Row the cursor is drawn at.
 static unsigned cursor_row = 0;
 /// @brief Current cursor style.
-static video_cursor_style_t cursor_style = VIDEO_CURSOR_BLOCK;
+static video_cursor_style_t cursor_style = {VIDEO_CURSOR_BLOCK, true};
 
 /// @brief The cell underneath the cursor.
 ///
 /// This is the only state duplicated from the generic console, and it is one
-/// cell rather than a copy of the screen. Drawing the cursor means drawing that
-/// cell with the cursor merged into its glyph, which needs both its character
-/// (so an underline or bar cursor does not erase it) and its attribute (so the
-/// cursor takes the cell's own foreground colour, as the text-mode hardware
-/// cursor does). It is kept up to date by watching put_cells().
+/// cell rather than a copy of the screen. It is what makes the cursor removable:
+/// the overlay is drawn over the cell, so putting the cell back is how the
+/// overlay is taken away. Drawing needs both halves -- the character, so that an
+/// underline or bar cursor does not erase it, and the attribute, so the cursor
+/// takes the cell's own foreground colour the way the text-mode hardware cursor
+/// does.
+///
+/// It is updated from two places: set_cursor_position(), when the cursor moves
+/// onto a different cell, and put_cells(), when a run repaints the cell it is
+/// sitting on. It never contains cursor pixels.
 static video_cell_t cursor_cell = {' ', 0x07};
+
+/// @brief Whether an overlay is currently on the display.
+///
+/// The whole lifecycle turns on this flag. Nothing may draw the overlay while it
+/// is set, and nothing may restore the cell underneath while it is clear, or the
+/// two get out of step and a stale block is left behind.
+static bool_t cursor_drawn = false;
+
+/// @brief Blink phase: whether the overlay should be shown at this instant.
+static bool_t cursor_blink_phase = true;
+
+/// @brief Ticks counted towards the next blink toggle.
+static unsigned cursor_blink_ticks = 0;
 
 /// @brief Virtual row currently shown at the top of the screen.
 ///
@@ -408,23 +430,57 @@ static void __vga_draw_glyph(unsigned column, unsigned row, const uint8_t *glyph
     }
 }
 
-/// @brief Draws one cell using the font glyph for its character.
-/// @param column The column of the cell.
-/// @param row The row of the cell.
-/// @param cell The cell to draw.
-static inline void __vga_draw_cell(unsigned column, unsigned row, video_cell_t cell)
+/// @brief Whether the cursor position currently refers to the visible screen.
+/// @return true when it does.
+///
+/// Scrolling can carry the cursor row out of view before the console gets round
+/// to placing it again, and nothing may be drawn or restored there meanwhile.
+static inline bool_t __vga_cursor_on_screen(void)
 {
-    __vga_draw_run(column, row, &cell, 1);
+    return (cursor_column < VIDEO_COLUMNS) && (cursor_row < VIDEO_ROWS);
 }
 
-/// @brief Draws the cursor over the cell it sits on.
-///
-/// The cursor is merged into the glyph rather than drawn on top of it, so the
-/// whole cell is still written with plain byte stores. A block cursor fills the
-/// cell; underline and bar leave the character visible around them.
-static void __vga_draw_cursor(void)
+/// @brief Whether the overlay should be on the display at this instant.
+/// @return true when it should.
+static inline bool_t __vga_cursor_should_show(void)
 {
-    if (cursor_style == VIDEO_CURSOR_HIDDEN) {
+    if (cursor_style.shape == VIDEO_CURSOR_HIDDEN) {
+        return false;
+    }
+    // A steady cursor ignores the blink phase entirely.
+    return cursor_style.blinking ? cursor_blink_phase : true;
+}
+
+/// @brief Takes the overlay off the display, restoring the cell underneath.
+///
+/// Idempotent: it does nothing unless an overlay is actually drawn. Every path
+/// that is about to move the cursor, change its appearance, or repaint the cell
+/// it sits on goes through here first, which is what keeps stale blocks from
+/// being left behind.
+static void __vga_cursor_hide(void)
+{
+    if (!cursor_drawn) {
+        return;
+    }
+    // Clear the flag first: the restore is an ordinary cell render, and leaving
+    // the flag set through it would let a re-entrant call restore twice.
+    cursor_drawn = false;
+    if (mode_set && __vga_cursor_on_screen()) {
+        __vga_draw_run(cursor_column, cursor_row, &cursor_cell, 1);
+    }
+}
+
+/// @brief Puts the overlay on the display, if it belongs there now.
+///
+/// The cursor is merged into the cell's glyph rather than drawn on top of it, so
+/// the whole cell is still written with plain byte stores. A block cursor fills
+/// the cell; underline and bar leave the character visible around them.
+static void __vga_cursor_show(void)
+{
+    if (cursor_drawn || !mode_set) {
+        return;
+    }
+    if (!__vga_cursor_should_show() || !__vga_cursor_on_screen()) {
         return;
     }
 
@@ -433,17 +489,27 @@ static void __vga_draw_cursor(void)
 
     for (unsigned line = 0; line < VGA_CELL_HEIGHT; ++line) {
         uint8_t overlay = 0x00U;
-        if (cursor_style == VIDEO_CURSOR_BLOCK) {
+        if (cursor_style.shape == VIDEO_CURSOR_BLOCK) {
             overlay = 0xFFU;
-        } else if (cursor_style == VIDEO_CURSOR_UNDERLINE) {
+        } else if (cursor_style.shape == VIDEO_CURSOR_UNDERLINE) {
             overlay = (line >= (VGA_CELL_HEIGHT - VGA_CURSOR_UNDERLINE_LINES)) ? 0xFFU : 0x00U;
-        } else if (cursor_style == VIDEO_CURSOR_BAR) {
+        } else if (cursor_style.shape == VIDEO_CURSOR_BAR) {
             overlay = VGA_CURSOR_BAR_MASK;
         }
         glyph[line] = (uint8_t)(source[line] | overlay);
     }
 
-    __vga_draw_glyph(cursor_column, cursor_row, glyph, cursor_cell.attribute);
+    // The cursor takes the cell's own foreground colour, as the text-mode
+    // hardware cursor does. A cell erased to attribute 0 would give a black
+    // block on black, so fall back to the default foreground to keep the cursor
+    // visible -- which is what makes it survive backspace and delete.
+    uint8_t attribute = cursor_cell.attribute;
+    if ((attribute & 0x0FU) == ((attribute >> 4U) & 0x0FU)) {
+        attribute = (uint8_t)((attribute & 0xF0U) | 0x07U);
+    }
+
+    __vga_draw_glyph(cursor_column, cursor_row, glyph, attribute);
+    cursor_drawn = true;
 }
 
 /// @brief Brings up the mode.
@@ -486,7 +552,8 @@ static void vga_graphics_put_cells(unsigned column, unsigned row, const video_ce
         return;
     }
 
-    unsigned next = 0;
+    unsigned next  = 0;
+    bool_t touched = false;
     while ((count > 0) && (row < VIDEO_ROWS)) {
         // Split the range at row boundaries and hand each piece over whole, so
         // that plane selection is paid once per row rather than once per cell.
@@ -495,18 +562,26 @@ static void vga_graphics_put_cells(unsigned column, unsigned row, const video_ce
             run = count;
         }
 
-        __vga_draw_run(column, row, &cells[next], run);
-
-        // Keep the cached cursor cell current, so that redrawing the cursor does
-        // not resurrect stale content underneath it.
+        // A run that covers the cursor's cell replaces what the overlay is
+        // sitting on, so refresh the cache first, then let the render wipe the
+        // overlay: it is redrawn once the whole range is on screen.
         if ((row == cursor_row) && (cursor_column >= column) && (cursor_column < (column + run))) {
-            cursor_cell = cells[next + (cursor_column - column)];
+            cursor_cell  = cells[next + (cursor_column - column)];
+            cursor_drawn = false;
+            touched      = true;
         }
+
+        __vga_draw_run(column, row, &cells[next], run);
 
         next += run;
         count -= run;
         column = 0;
         ++row;
+    }
+
+    // Put the cursor back on top of whatever was just drawn under it.
+    if (touched) {
+        __vga_cursor_show();
     }
 }
 
@@ -529,6 +604,19 @@ static void vga_graphics_scroll(int rows)
         return;
     }
 
+    // The overlay is pixels like everything else, so the move carries it along.
+    // Follow it, or the next hide would restore the cell at the wrong row and
+    // leave a block behind at the right one. If it lands off screen there is
+    // nothing to take away: the console repaints every row it uncovers before
+    // that row can come back into view.
+    if (cursor_drawn) {
+        int moved = (int)cursor_row - rows;
+        if ((moved < 0) || (moved >= (int)VIDEO_ROWS)) {
+            cursor_drawn = false;
+        }
+        cursor_row = (unsigned)moved;
+    }
+
     // Panning is modular, so any distance is meaningful: the caller repaints
     // whatever the move uncovered.
     int ring     = (int)VGA_VIRTUAL_ROWS;
@@ -547,7 +635,7 @@ static void vga_graphics_scroll(int rows)
 ///
 /// The generic console repaints the cell the cursor is leaving before calling
 /// this, so there is no old cursor to erase here.
-static void vga_graphics_set_cursor_position(unsigned column, unsigned row)
+static void vga_graphics_set_cursor_position(unsigned column, unsigned row, video_cell_t cell)
 {
     if (column >= VIDEO_COLUMNS) {
         column = VIDEO_COLUMNS - 1;
@@ -555,12 +643,16 @@ static void vga_graphics_set_cursor_position(unsigned column, unsigned row)
     if (row >= VIDEO_ROWS) {
         row = VIDEO_ROWS - 1;
     }
+
+    // Take the old overlay away before forgetting where it was, then adopt the
+    // new position and the cell it sits on, then draw. Hiding first is the whole
+    // point: doing it in any other order is what leaves a block behind on the
+    // line the cursor just left.
+    __vga_cursor_hide();
     cursor_column = column;
     cursor_row    = row;
-    if (!mode_set) {
-        return;
-    }
-    __vga_draw_cursor();
+    cursor_cell   = cell;
+    __vga_cursor_show();
 }
 
 /// @brief Selects the cursor appearance.
@@ -571,19 +663,39 @@ static void vga_graphics_set_cursor_position(unsigned column, unsigned row)
 /// asks for and what VGA text mode is unable to produce.
 static void vga_graphics_set_cursor_style(video_cursor_style_t style)
 {
-    if (cursor_style == style) {
+    if ((cursor_style.shape == style.shape) && (cursor_style.blinking == style.blinking)) {
         return;
     }
-    video_cursor_style_t previous = cursor_style;
-    cursor_style                  = style;
-    if (!mode_set) {
+    // Same shape as every other transition: whatever the old style drew comes
+    // off before the new one goes on.
+    __vga_cursor_hide();
+    cursor_style = style;
+    // Start a fresh blink cycle visible, so a style change always shows.
+    cursor_blink_phase = true;
+    cursor_blink_ticks = 0;
+    __vga_cursor_show();
+}
+
+/// @brief Advances the blink, once per timer tick.
+///
+/// Counting ticks here rather than asking for a periodic callback keeps the rate
+/// the backend's own business and costs nothing on the ticks that do not toggle.
+/// A steady cursor still counts but never changes what is displayed.
+static void vga_graphics_cursor_blink(void)
+{
+    if (!mode_set || !cursor_style.blinking || (cursor_style.shape == VIDEO_CURSOR_HIDDEN)) {
         return;
     }
-    // Repaint the cell first, to clear whatever the old style drew.
-    if (previous != VIDEO_CURSOR_HIDDEN) {
-        __vga_draw_cell(cursor_column, cursor_row, cursor_cell);
+    if (++cursor_blink_ticks < VGA_CURSOR_BLINK_TICKS) {
+        return;
     }
-    __vga_draw_cursor();
+    cursor_blink_ticks = 0;
+    cursor_blink_phase = !cursor_blink_phase;
+    if (cursor_blink_phase) {
+        __vga_cursor_show();
+    } else {
+        __vga_cursor_hide();
+    }
 }
 
 /// @brief The graphical VGA backend.
@@ -596,4 +708,5 @@ const video_backend_t video_backend = {
     .scroll              = vga_graphics_scroll,
     .set_cursor_position = vga_graphics_set_cursor_position,
     .set_cursor_style    = vga_graphics_set_cursor_style,
+    .cursor_blink        = vga_graphics_cursor_blink,
 };

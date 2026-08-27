@@ -117,9 +117,6 @@ static video_cell_t original_page[SCREEN_CELLS];
 /// Valid range is [0, SCREEN_CELLS] inclusive: the upper end is the guard cell.
 static unsigned cursor = 0;
 
-/// @brief Where the backend was last told to draw the cursor.
-static unsigned previous_cursor = 0;
-
 /// @brief Cursor position saved by ESC [ s and restored by ESC [ u.
 static unsigned saved_cursor = 0;
 
@@ -203,14 +200,7 @@ static void __flush(unsigned first, unsigned count)
 }
 
 /// @brief Pushes the whole screen to the backend.
-///
-/// A full repaint also wipes any cursor a backend drew itself, so the record of
-/// where the cursor was last drawn is reset along with it.
-static void __flush_all(void)
-{
-    __flush(0, SCREEN_CELLS);
-    previous_cursor = cursor;
-}
+static void __flush_all(void) { __flush(0, SCREEN_CELLS); }
 
 /// @brief Erases a range of cells.
 /// @param first Index of the first cell.
@@ -376,24 +366,35 @@ static inline void __move_cursor_forward(int erase, int amount)
 /// @param shape The integer representing the cursor shape code.
 static inline void __parse_cursor_escape_code(int shape)
 {
+    video_cursor_style_t style;
+
     switch (shape) {
-    case 0: // Default blinking block cursor
-    case 1: // Steady block cursor
-    case 2: // Blinking block cursor
-        video_backend.set_cursor_style(VIDEO_CURSOR_BLOCK);
+    case 0: // Default: blinking block.
+        style.shape = VIDEO_CURSOR_BLOCK, style.blinking = true;
         break;
-    case 3: // Blinking underline cursor
-    case 4: // Steady underline cursor
-        video_backend.set_cursor_style(VIDEO_CURSOR_UNDERLINE);
+    case 1: // Blinking block.
+        style.shape = VIDEO_CURSOR_BLOCK, style.blinking = true;
         break;
-    case 5: // Blinking vertical bar cursor
-    case 6: // Steady vertical bar cursor
-        video_backend.set_cursor_style(VIDEO_CURSOR_BAR);
+    case 2: // Steady block.
+        style.shape = VIDEO_CURSOR_BLOCK, style.blinking = false;
+        break;
+    case 3: // Blinking underline.
+        style.shape = VIDEO_CURSOR_UNDERLINE, style.blinking = true;
+        break;
+    case 4: // Steady underline.
+        style.shape = VIDEO_CURSOR_UNDERLINE, style.blinking = false;
+        break;
+    case 5: // Blinking bar.
+        style.shape = VIDEO_CURSOR_BAR, style.blinking = true;
+        break;
+    case 6: // Steady bar.
+        style.shape = VIDEO_CURSOR_BAR, style.blinking = false;
         break;
     default:
-        // Handle any other cases if needed
-        break;
+        // Anything else is ignored, as it always has been.
+        return;
     }
+    video_backend.set_cursor_style(style);
 }
 
 void video_init(void)
@@ -707,14 +708,6 @@ void video_update_cursor_position(void)
         __flush(cursor, 1);
     }
 
-    // Repaint the cell the cursor is leaving, so that a backend drawing its own
-    // cursor has it erased. This writes the buffer's own value back, so it can
-    // never change what is displayed.
-    if (previous_cursor != cursor) {
-        __flush(previous_cursor, 1);
-        previous_cursor = cursor;
-    }
-
     unsigned column = cursor % VIDEO_COLUMNS;
     unsigned row    = cursor / VIDEO_COLUMNS;
     if (column >= VIDEO_COLUMNS) {
@@ -723,7 +716,22 @@ void video_update_cursor_position(void)
     if (row >= VIDEO_ROWS) {
         row = VIDEO_ROWS - 1;
     }
-    video_backend.set_cursor_position(column, row);
+
+    // Hand over the cell the cursor now sits on. Erasing whatever a backend drew
+    // at the previous position is the backend's own business: it is the only
+    // party that knows whether it drew anything, and scrolling moves its overlay
+    // under it, so the generic layer cannot track where the pixels ended up.
+    // Note the cell comes from the buffer, which never contains cursor pixels.
+    video_backend.set_cursor_position(column, row, screen[cursor]);
+}
+
+void video_cursor_blink_tick(void)
+{
+    // Backends with a hardware cursor leave this NULL: there is nothing for the
+    // console to drive.
+    if (video_backend.cursor_blink != NULL) {
+        video_backend.cursor_blink();
+    }
 }
 
 void video_move_cursor(unsigned int x, unsigned int y)

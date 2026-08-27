@@ -137,8 +137,13 @@ static void vga_text_scroll(int rows)
 /// @brief Places the hardware cursor.
 /// @param column The column.
 /// @param row The row.
-static void vga_text_set_cursor_position(unsigned column, unsigned row)
+static void vga_text_set_cursor_position(unsigned column, unsigned row, video_cell_t cell)
 {
+    // The hardware cursor is drawn by the CRTC over whatever the cell already
+    // holds, so this backend never touches the cell and never has an overlay to
+    // take away again.
+    (void)cell;
+
     if (column >= VIDEO_COLUMNS) {
         column = VIDEO_COLUMNS - 1;
     }
@@ -158,9 +163,13 @@ static void vga_text_set_cursor_position(unsigned column, unsigned row)
 /// thin horizontal sliver across the top of the cell: VGA text mode cannot draw
 /// a vertical bar at all. That approximation is preserved deliberately, so text
 /// mode keeps rendering exactly as before.
+///
+/// The blink request is deliberately ignored. The CRTC cursor blinks in hardware
+/// and offers no way to stop it, so honouring a steady request is not possible
+/// and pretending otherwise would change long-standing behaviour.
 static void vga_text_set_cursor_style(video_cursor_style_t style)
 {
-    switch (style) {
+    switch (style.shape) {
     case VIDEO_CURSOR_HIDDEN:
         __vga_text_hide_cursor();
         break;
@@ -187,4 +196,7 @@ const video_backend_t video_backend = {
     .scroll              = vga_text_scroll,
     .set_cursor_position = vga_text_set_cursor_position,
     .set_cursor_style    = vga_text_set_cursor_style,
+    // No blink op: the CRTC cursor blinks in hardware, so there is nothing for
+    // the console to drive.
+    .cursor_blink        = NULL,
 };

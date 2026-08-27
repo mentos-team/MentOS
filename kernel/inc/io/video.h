@@ -22,6 +22,14 @@ void video_puts(const char *str);
 /// @brief When something is written in another position, update the cursor.
 void video_update_cursor_position(void);
 
+/// @brief Drives a software cursor's blink; called once per timer tick.
+///
+/// The console has no periodic source of its own, and a cursor drawn in software
+/// only blinks if something toggles it. This is that something: the timer
+/// interrupt calls it, and it forwards to the backend when the backend has a
+/// cursor to blink. Backends whose cursor blinks in hardware make it a no-op.
+void video_cursor_blink_tick(void);
+
 /// @brief Move the cursor at the position x, y on the screen.
 /// @param x The x coordinate.
 /// @param y The y coordinate.
