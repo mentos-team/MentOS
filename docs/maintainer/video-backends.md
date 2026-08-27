@@ -1,7 +1,9 @@
 # Video backends
 
-Verified against `a046ee6`. Core files: `kernel/src/io/video.c` (generic),
+Verified against `3592274`. Core files: `kernel/src/io/video.c` (generic),
 `kernel/inc/io/video_backend.h` (interface), `kernel/src/io/video/` (backends).
+Shared assets: `video_font_8x16.h` (8x16 font), `video_palette_16.h` (the 16
+console colours), both used by every backend that draws text as pixels.
 
 ## Split of responsibility
 
@@ -22,8 +24,9 @@ one invariant to respect when editing `video.c`.
 
 ## Interface
 
-`video_backend_t` (`kernel/inc/io/video_backend.h`): `init`, `put_cells`,
-`scroll`, `set_cursor_position`, `set_cursor_style`, plus `name`/`columns`/`rows`.
+`video_backend_t` (`kernel/inc/io/video_backend.h`): `init`, `late_init`,
+`put_cells`, `scroll`, `set_cursor_position`, `set_cursor_style`, plus
+`name`/`columns`/`rows`.
 
 - `put_cells(column, row, cells, count)` writes cells in row-major order,
   wrapping at `columns` and ignoring anything past the last row. Because the
@@ -47,6 +50,8 @@ one invariant to respect when editing `video.c`.
 - `cursor_blink` is **optional** (NULL for a hardware cursor). The PIT handler
   calls `video_cursor_blink_tick()`, which forwards to it. The rate is the
   backend's business; this is just the tick.
+- `late_init` is **optional** (NULL unless the backend has something it cannot
+  do at `video_init()` time). See the two-stage lifecycle below.
 
 `video_cell_t.attribute` is `foreground | (background << 4)`, 4 bits each, in
 IBM CGA/VGA order. This is the console's colour model, shared by all backends,
@@ -64,10 +69,18 @@ geometry header.
 |---|---|---|
 | `VGA_TEXT_MODE` (default) | `src/io/video/vga_text.c` | 80x25 |
 | `VGA_MODE_640_480_16` | `src/io/video/vga_graphics.c` | 80x30 |
+| `VBE_MODE_1024_768_8` | `src/io/video/vbe_lfb.c` | 128x48 |
 
-All backend sources are filtered out of the glob and only the selected one is
-added back: every backend defines the same `video_backend` symbol, so two
-reaching the link is a duplicate definition, not a silent fallback.
+Everything under `src/io/video/` is filtered out of the glob and only the
+selected source is added back: every backend defines the same `video_backend`
+symbol, so two reaching the link is a duplicate definition, not a silent
+fallback. The filter covers the **whole directory** rather than a file-name
+pattern -- it used to match `vga_*.c`, which meant a backend named anything else
+was linked *in addition to* the selected one. After the filter and the append,
+CMake asserts that exactly one backend source is in the list, so "exactly one"
+is a property of the build and not of the naming. A `VIDEO_TYPE` in the list
+without a branch mapping it to a source and a geometry header now fails the
+configure step instead of the link.
 
 Geometry is a compile-time property of the selected backend. CMake passes
 `-DVIDEO_GEOMETRY_HEADER=...`; `video_backend.h` includes it and `#error`s if
@@ -77,16 +90,18 @@ from the same ones, so the two cannot drift. Nothing generic hardcodes a
 dimension.
 
 Static console storage is `screen` + `history` + `original_page`: 48002 bytes at
-80x25, 57602 at 80x30.
+80x25, 57602 at 80x30, 147458 at 128x48 (measured in the object file). It scales
+with the product of the dimensions and with `STORED_PAGES`, so it is the number
+to watch: a console whose geometry is chosen at runtime cannot keep doing this.
 
 ### Adding a backend
 
 1. Add `kernel/inc/io/video/<name>_geometry.h` defining `VIDEO_COLUMNS` and
    `VIDEO_ROWS`.
-2. Add `kernel/src/io/video/vga_<name>.c` defining `video_backend` (the glob
-   filter matches `.*/io/video/vga_.*\.c$`).
+2. Add `kernel/src/io/video/<name>.c` defining `video_backend`. Any name works;
+   the filter excludes the whole directory.
 3. Add the name to `VIDEO_TYPES` and a branch mapping it to its source and
-   geometry header.
+   geometry header. Forgetting the branch is now a configure error.
 
 ## Early boot — the constraint that shapes all of this
 
@@ -104,6 +119,13 @@ fail.
 
 `paging.c:119` identity-maps the first 1 MB, so `0xB8000` and the `0xA0000`
 graphics window stay reachable before and after paging is enabled.
+
+Anything **outside** that first megabyte is not reachable at `video_init()` time
+and cannot be made reachable there. The bootloader's page directory identity-maps
+only the 896 MB of low memory `boot/src/boot.c` admits, there is no allocator to
+build a mapping with, and `paging_init()` later switches to a page directory of
+its own that would drop a hand-built mapping anyway. A backend for such hardware
+needs the two-stage lifecycle below.
 
 `kernel_panic` itself writes only to serial via `pr_emerg`; it reaches video
 indirectly, through the `printf`/`print_fail()` that usually precedes it.
@@ -125,6 +147,32 @@ Anything printed earlier is discarded, which is what has always happened.
 **Documented limitation:** in a graphical build, a panic before `video_init()`
 leaves nothing on screen, because the mode was never programmed. The serial log
 still has it.
+
+### Two-stage lifecycle
+
+`video_late_init()` is called from `kmain()` immediately after `paging_init()`
+succeeds, and forwards to the backend's optional `late_init`. It exists for
+hardware that the section above puts out of reach at `video_init()` time.
+
+By then `mem_upd_vm_area()` and the page-table cache are available, so a backend
+can map a PCI BAR into kernel virtual space -- which is exactly what the VBE
+backend does.
+
+The window between the two calls spans about nine boot steps, and a deferring
+backend must be **completely inert** across it: no device memory, no device
+registers, nothing. The generic layer keeps recording into its cell buffer, and
+on success `video_late_init()` flushes the whole buffer and places the cursor. So
+nothing is lost -- the display comes up showing every line printed since
+`video_init()`, early ones included, not just the ones after the mapping.
+
+`video_late_init()` prints **only to serial**. Do not make it print to the
+console: the VGA text pixel baseline is a verification gate and an extra line
+would break it.
+
+**Documented limitation:** for a deferring backend, a panic anywhere between
+`video_init()` and `video_late_init()` reaches serial only. This is the same
+trade the graphical backends already make before `video_init()`, extended by
+those nine steps.
 
 ## VGA text backend
 
@@ -234,6 +282,9 @@ bit it owns.
 
 ### Cursor lifecycle — the invariant
 
+**This section applies to both graphical backends.** `vbe_lfb.c` implements the
+same lifecycle with the same four pieces of state; only the drawing differs.
+
 A software cursor is pixels drawn over a cell, so it has to be taken away again.
 Getting that wrong produces ghosts, trails and vanishing cursors, all of which
 were once separate-looking bugs with one cause. The invariant:
@@ -317,6 +368,128 @@ Do not reintroduce these when porting more legacy modes:
 `__write_font` reads the font *out of* video memory despite its name. Derive
 geometry from mode registers and font dimensions.
 
+## VBE linear-framebuffer backend
+
+1024x768, 8 bits per pixel, 8x16 font, exactly 128x48 cells (both divisions
+exact). This is the backend that answers the original request: the same font on a
+larger mode shows **more** of the terminal, rather than showing the same 80x30
+terminal scaled up to fill the window.
+
+One byte per pixel indexes the DAC, and the console's attribute nibbles are
+already palette indices, so no colour translation is needed. It loads the same
+`video_palette_16` entries as the planar backend, which is what makes the
+histogram cross-check below meaningful.
+
+### The device, and how it is found
+
+The Bochs VBE (DISPI) extension, which QEMU's `-vga std` -- what this project
+already launches with -- provides, as do `-vga virtio` and `-device
+bochs-display`. Verified on QEMU 8.2.2:
+
+| | `-vga std` | `-vga virtio` |
+|---|---|---|
+| PCI id | `1234:1111` at `00:02.0` | `1af4:1050` at `00:02.0` |
+| DISPI revision | `0xB0C5` | `0xB0C5` |
+| framebuffer (BAR0) | `0xFD000000`, 16 MiB | `0xFE000000`, 8 MiB |
+
+Discovery matches on the PCI **class** (3/0/0, a VGA-compatible controller) and
+not on a vendor/device pair, which is why one backend covers all three devices.
+The class alone is not sufficient -- `cirrus-vga` is the same class and has none
+of these registers -- so the **DISPI interface revision is the real gate**, and
+it is checked first.
+
+The mode is programmed through the legacy I/O ports `0x01CE`/`0x01CF`
+deliberately. The same registers are also available through an MMIO window in
+BAR2, which would need a mapping; the ports do not, and that is what lets
+discovery happen at `video_init()` time.
+
+`-vga std` survives `-nodefaults` — verified, the device is still at `00:02.0`.
+
+### Performance — it is faster than the planar backend, not slower
+
+The framebuffer is a plain RAM region behind a PCI BAR (`info mtree` shows
+`vga.vram (prio 1, ram)`), **not** a trapped aperture like `0xA0000`. So none of
+the trap-avoidance shape the planar backend needs applies here. Measured on the
+target:
+
+| Operation | planar 640x480 (80x30) | VBE 1024x768 (128x48) |
+|---|---|---|
+| Full repaint | 33 Mcycles | 2.0 Mcycles |
+| One character typed | 1.1 Mcycles | 0.085 Mcycles |
+| One cell, warm | ~13.7 kcycles | 310 cycles |
+| One scroll | 1.5 kcycles | 787 cycles |
+
+For contrast, the same 32 dword stores through the `0xA0000` window cost 45730
+cycles. That two-orders-of-magnitude gap is why banking the framebuffer through
+the low window -- the one approach that *would* work before paging -- was
+rejected.
+
+A cell's scan line is eight consecutive bytes at an eight-byte-aligned address,
+so it is two aligned 32-bit stores selected between a replicated foreground and
+background byte, with no read-modify-write and no per-pixel loop. `vbe_nibble_mask`
+does the selection; its values are written out rather than computed because the
+highest bit of a glyph nibble has to select the **lowest** byte of the word, and
+getting that backwards mirrors every glyph.
+
+The run loop is line-major purely for locality — one pass writes one scan line
+across the whole run, walking forward through consecutive addresses. There are no
+plane selects to amortise, so this is a cache concern, not a port-I/O one.
+
+### Scrolling: panning, and the rebase at both ends
+
+Video memory is treated as 256 text rows (4 MiB, which is the mapped window), of
+which 48 are visible. Scrolling moves `start_row` and reprograms one register,
+the DISPI vertical pan, so it copies nothing.
+
+Unlike the planar backend there is **no line compare and no wrap**: the display
+reads forward from the pan offset and past the end of video memory it would read
+whatever is there. So `start_row` is kept inside `[0, 256-48]` and, when a scroll
+would leave that range, `__vbe_rebase()` copies the rows that are still going to
+be visible to the opposite end and the pan restarts there.
+
+**Both ends are reachable and both are handled.** Forward scrolling runs off the
+far end; paging back through scrollback runs off the near end just as readily,
+and the generic layer will do 480 backward scrolls without pausing. A rebase
+happens once per 208 scrolls in one direction and costs one copy of at most a
+screenful, about 1.3 Mcycles.
+
+A rebase cannot tear, and the reason is worth keeping. Nothing is copied out of
+the region the display is currently reading, and nothing is copied into it, and
+the pan is reprogrammed only once the copy is finished. That disjointness is what
+`vbe_ring_headroom_check` guarantees, and it is why the buffer is **three**
+screens rather than merely two: a rebase downwards copies from as high as row
+`2*VIDEO_ROWS-2` into a destination starting at `VBE_RING_ROWS-VIDEO_ROWS`, so
+two screens would let the two regions meet.
+
+### The BAR is validated, not assumed
+
+`__vbe_bar_address()` rejects an I/O BAR and a 64-bit BAR with a diagnostic
+rather than masking and using them, and requires the address to be non-zero and
+page aligned. A 64-bit BAR with a zero upper half would happen to work on a
+32-bit kernel, which is exactly why it is refused rather than silently accepted.
+
+The discovered physical address and the kernel virtual address are kept
+**separate**. The mapping goes at `VBE_FB_VIRT_BASE` = `0xF9000000`, so where the
+firmware puts the BAR does not move it. That window is free by construction: the
+kernel's linear map starts at `0xC0000000` and covers at most 896 MB, so it
+cannot reach `0xF8000000`, which is where the linker script's unused
+`KERNEL_HIGHMEM` region begins; `vmem`'s area is `0xE8000000`-`0xEFFFFFFF`, below
+it. `vbe_virt_window_check` pins both ends of the window against those facts, and
+the upper end against the I/O APIC at `0xFEC00000`.
+
+### Failure mode, and limitations
+
+If discovery fails the backend stays inert for the whole boot and the console is
+serial-only. There is no fallback to text mode, and there cannot be: the geometry
+is compile-time 128x48 and the text adapter is 80x25. The diagnostics say which
+check failed.
+
+The mapping is write-back cacheable. `mem_upd_vm_area()` has no way to ask for
+anything else — `MM_CACHE_DISABLE` exists in the flag enum but
+`__set_pg_table_flags()` does not implement it — and under QEMU the region is
+coherent with the guest's view regardless. Real hardware would want
+write-combining here.
+
 ## Preserved quirks — do not "fix" incidentally
 
 These are long-standing behaviours pinned by
@@ -359,8 +532,10 @@ Two complementary gates. Neither is sufficient alone.
 **Characterization suite** — `kernel/src/tests/unit/test_video.c`, registered in
 `kernel/src/tests/runner.c`, built with `-DENABLE_KERNEL_TESTS=ON` (off in CI).
 Asserts through the **public API only**, so it is backend-independent and the
-same assertions validate both backends. Since the public API cannot read screen
-content, it pins the cursor and geometry contract only.
+same assertions validate every backend. Since the public API cannot read screen
+content, it pins the cursor and geometry contract only. It is module 16 of 16 in
+the runner; the pass line to look for is
+`Kernel tests completed: 16/16 passed`.
 
 **Cursor-overlay check** — the lifecycle invariant is a pixel property, so the
 public API cannot see it. Drive the console with a probe (type, newline,
@@ -370,20 +545,62 @@ More than one is a ghost or a trail; none, with a steady style, is the vanishing
 cursor. To watch blinking, take a dozen dumps ~120 ms apart while idle and
 confirm the phase alternates.
 
-**Long-scroll check** — boot only scrolls 8 times, far too few to exercise the
-51-row ring or the split. To cover them, print ~150 lines and confirm they come
-out in order; 120 scrolls laps the ring more than twice with the split active
-across its range.
+Two practical notes on the solid-cell count:
+
+- It only means "exactly one" on a screen with no coloured **backgrounds**. A
+  space with a non-black background is solidly filled too, and the shell's
+  post-login banner has several. Past the login prompt, look for the one solid
+  cell that *moves with typing* and ignore the ones that stay put; on the boot
+  screen the plain count works.
+- Blink makes the count alternate between one and zero. That alternation is the
+  pass condition, not a flake. The whole frame should differ **only** by that
+  cell -- hash the frames and confirm there are exactly two distinct hashes,
+  which is a stronger statement than counting, because it also proves the
+  overlay is removed by restoring exactly the cell underneath.
+
+Credentials for driving an interactive probe are `root`/`root` (the shadow hashes
+are SHA-256 of the password repeated 100000 times; see `userspace/bin/login.c`).
+Keys go in through the QEMU monitor's `sendkey`.
+
+**Long-scroll check** — boot scrolls far too few times to exercise either
+backend's virtual buffer. In a 128x48 build the boot log does not fill the screen
+at all, so it never scrolls once.
+
+For the planar backend, print ~150 lines and confirm they come out in order; 120
+scrolls laps the 51-row ring more than twice with the split active across its
+range.
+
+For the VBE backend the boundary is 208 scrolls **in each direction**, and both
+directions must be covered — a forward-only test says nothing about the rebase
+that scrollback triggers. Print ~500 lines, then page back ~470, then page
+forward ~470 again. That is 4 forward and 2 backward rebases, and the round trip
+must land exactly where it started. Verified this way at `3592274`:
+
+| after | screen shows | rebases so far |
+|---|---|---|
+| 500 lines printed | lines 454-500, rows 0-46, consecutive | 2 forward |
+| 470 lines paged back | boot log above, lines 1-31 below, consecutive | 2 backward |
+| 470 lines paged forward | lines 454-500 again, identical | 4 forward |
+
+Decoding a screendump back into text makes this checkable rather than
+eyeballable: the cells are a fixed 8x16 grid and `video_font_8x16.h` is the only
+glyph source, so matching each cell's foreground mask against the font recovers
+the characters exactly. Note that codes 0, 32 and 255 share a blank bitmap, so
+map an all-zero mask to a space rather than trusting a reverse lookup.
 
 **Pixel-exact screendump** — pins the rendered content the API cannot observe.
 Boot headless with a QEMU monitor socket, `screendump`, and `cmp` against a
-baseline captured before the change. Three independent boots produce
-byte-identical captures, so a difference is a real change, not noise. The VGA
-text baseline is 720x400; the graphical one is 640x480.
+baseline captured before the change. Independent boots produce byte-identical
+captures, so a difference is a real change, not noise. Capture sizes: VGA text
+720x400, planar 640x480, VBE 1024x768.
+
+The cheapest way to get a trustworthy baseline is a detached worktree at the
+commit before the change (`git worktree add --detach <dir> <rev>`), built and
+booted the same way. That leaves the working checkout alone.
 
 ```sh
 qemu-system-i386 -vga std -m 1096M -nodefaults -serial file:/dev/null \
-  -drive file=build/rootfs.img,format=raw,if=ide,index=0,media=disk \
+  -drive file=build/rootfs.img,format=raw,if=ide,index=0,media=disk,snapshot=on \
   -monitor unix:/tmp/mon.sock,server,nowait -display none \
   -kernel build/mentos/bootloader.bin &
 sleep 15
@@ -392,14 +609,25 @@ printf 'screendump /tmp/shot.ppm\nquit\n' | nc -U /tmp/mon.sock
 
 Note the AF_UNIX 108-byte path limit: keep the socket path short.
 
-A useful cross-check on colour: histogram both captures. The text and graphical
-backends must produce **exactly the same set of RGB values** for the same boot
-log. Any divergence means a palette or attribute bug.
+A useful cross-check on colour: histogram the captures. **All three** backends
+must produce exactly the same set of RGB values for the same console output. Any
+divergence means a palette or attribute bug. Do it on a post-login screen as well
+as on the boot log -- the boot log only uses three colours, where the shell
+prompt uses six. Verified at `3592274`: identical sets of 3 and of 6 across VGA
+text, planar VGA and VBE.
 
-Plus `make qemu-test` holding at 52 tests / 0 failures with
+Plus `make qemu-test` holding at 52 tests / 0 failures on **each** backend, with
 `grep -c PANIC build/serial.log` equal to 0.
 
-One trap worth knowing: QEMU **writes to `rootfs.img`**, so repeated boots
-eventually corrupt it and the guest panics mounting ext2 with an ATA
-`PIO failed` error. That is the image, not your change. Run
-`make -C build filesystem` to regenerate it before believing such a failure.
+Two traps worth knowing, both of which look like a regression and are not:
+
+1. QEMU **writes to `rootfs.img`**, so repeated boots eventually corrupt it and
+   the guest panics mounting ext2 with an ATA `PIO failed` error. That is the
+   image, not your change. Run `make -C build filesystem` to regenerate it, or
+   add `snapshot=on` to the `-drive` option so boots cannot touch it at all.
+2. There is a **pre-existing intermittent mount failure** of roughly 3%:
+   `Cannot find the superblock (/dev/hda)` followed by a panic, with a clean
+   `e2fsck`-verified image and `snapshot=on`. Measured at 1/34 boots on `d31df9b`
+   and 1/32 on `3592274`, so the rate is unchanged. Before blaming a change for
+   it, reproduce it on a pristine baseline; a single failure in a handful of boots
+   is not evidence of anything.
