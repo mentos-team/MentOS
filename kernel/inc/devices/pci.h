@@ -241,6 +241,28 @@ typedef enum {
 /// @brief Constant used when no PCI device is found.
 #define PCI_NONE 0xFFFF ///< No PCI device present.
 
+/// @name PCI capability IDs
+/// @brief The capability IDs this kernel has a use for.
+/// @{
+#define PCI_CAP_ID_MSI    0x05 ///< Message Signalled Interrupts.
+#define PCI_CAP_ID_VENDOR 0x09 ///< Vendor-specific; how virtio publishes its structures.
+#define PCI_CAP_ID_MSIX   0x11 ///< MSI-X.
+/// @}
+
+/// @name PCI capability list layout
+/// @brief Every capability starts with an ID byte and a next-offset byte.
+/// @{
+#define PCI_CAP_LIST_ID   0x00 ///< Offset of the capability ID, from the capability.
+#define PCI_CAP_LIST_NEXT 0x01 ///< Offset of the next-capability pointer.
+/// @}
+
+/// @brief Lowest offset a capability may live at.
+///
+/// The list may only occupy configuration space past the 64-byte standard
+/// header. Anything below that is a malformed pointer, and following it would
+/// reinterpret the header as a capability.
+#define PCI_CAP_MIN_OFFSET 0x40
+
 /// @brief PIC scan function.
 typedef int (*pci_scan_func_t)(uint32_t device, uint16_t vendor_id, uint16_t device_id, void *extra);
 
@@ -285,6 +307,22 @@ int pci_read_16(uint32_t device, uint32_t field, uint16_t *value);
 /// @param[out] value Pointer to store the read value.
 /// @return 0 on success, non-zero on error.
 int pci_read_32(uint32_t device, uint32_t field, uint32_t *value);
+
+/// @brief Finds a capability in a device's capability list.
+/// @param device The PCI device identifier.
+/// @param id The capability ID to look for, e.g. PCI_CAP_ID_VENDOR.
+/// @param from Where to resume from: 0 starts at the head of the list, otherwise
+///             the offset of a capability already found, whose successor the
+///             search starts at.
+/// @param[out] offset Where the offset of the capability found is stored.
+/// @return 0 when a matching capability was found, 1 when there are no more,
+///         -1 on error.
+///
+/// The `from` parameter is what makes this usable for devices that publish
+/// several capabilities with the same ID. Virtio does exactly that: its five
+/// structures are five vendor-specific capabilities, so they are found by
+/// calling this repeatedly, passing back the offset of the previous one.
+int pci_find_capability(uint32_t device, uint8_t id, uint8_t from, uint8_t *offset);
 
 /// @brief Scans for the given type of device.
 /// @param f the function to call once we have found the device.
