@@ -29,14 +29,20 @@
 #include "string.h"
 
 /// The number of screen-sized pages of scrollback history we keep.
-#define STORED_PAGES  10
+#define STORED_PAGES       10
 
-/// Total number of cells on the visible screen.
-#define SCREEN_CELLS  (VIDEO_COLUMNS * VIDEO_ROWS)
-/// Total number of rows in the scrollback history.
-#define HISTORY_ROWS  (STORED_PAGES * VIDEO_ROWS)
-/// Total number of cells in the scrollback history.
-#define HISTORY_CELLS (HISTORY_ROWS * VIDEO_COLUMNS)
+/// @name Boot console dimensions
+/// @brief The compile-time geometry, which sizes the static storage below.
+///
+/// These are the *boot* console's dimensions, not necessarily the console's.
+/// Everything past initialization works from the runtime values, so that the
+/// console can one day be a different shape than the one it started as. Only the
+/// static arrays and the backend geometry check use these.
+/// @{
+#define BOOT_SCREEN_CELLS  (VIDEO_COLUMNS * VIDEO_ROWS)
+#define BOOT_HISTORY_ROWS  (STORED_PAGES * VIDEO_ROWS)
+#define BOOT_HISTORY_CELLS (BOOT_HISTORY_ROWS * VIDEO_COLUMNS)
+/// @}
 
 /// @brief Stores the association between ANSI colors and pure VIDEO colors.
 typedef struct {
@@ -101,21 +107,55 @@ static uint8_t bg_color_map[108] = {0};
 /// __erase_to_space().
 static const video_cell_t blank_cell = {0, 0};
 
-/// @brief The visible screen, plus one guard cell.
+/// @name The boot console's storage
+/// @brief Static, sized at compile time, and used from the very first printf.
+///
+/// It has to be static: output exists long before there is an allocator, and the
+/// pre-video_init() panic path must not depend on one. So the console starts
+/// here and only moves to allocated storage if something ever asks it to.
+/// @{
+
+/// The visible screen, plus one guard cell.
 ///
 /// The guard cell exists because the cursor is allowed to come to rest one cell
 /// past the end of the screen; see __cursor_is_parked().
-static video_cell_t screen[SCREEN_CELLS + 1];
+static video_cell_t boot_screen[BOOT_SCREEN_CELLS + 1];
+/// Scrollback history. The most recently scrolled-off line is last.
+static video_cell_t boot_history[BOOT_HISTORY_CELLS];
+/// The live screen, saved while the user is scrolled back into history.
+static video_cell_t boot_original_page[BOOT_SCREEN_CELLS];
+/// @}
 
-/// @brief Scrollback history. The most recently scrolled-off line is last.
-static video_cell_t history[HISTORY_CELLS];
+/// @name The console's live shape and storage
+/// @brief What every operation below actually works from.
+///
+/// Separate from the compile-time macros so the console's dimensions are a
+/// runtime property. They start as the boot console's and, for a backend that
+/// cannot resize, stay that way for the whole life of the machine -- which is
+/// why this costs nothing in the fixed builds.
+///
+/// The counts are stored rather than recomputed from columns and rows because
+/// they appear in inner loops, and because keeping them together with the
+/// pointers means the whole shape of the console is one group of values that
+/// change together.
+/// @{
+static unsigned video_columns  = VIDEO_COLUMNS;        ///< Visible width in cells.
+static unsigned video_rows     = VIDEO_ROWS;           ///< Visible height in cells.
+static unsigned screen_cells   = BOOT_SCREEN_CELLS;    ///< Cells on the visible screen.
+static unsigned history_rows   = BOOT_HISTORY_ROWS;    ///< Rows of scrollback.
+static unsigned history_cells  = BOOT_HISTORY_CELLS;   ///< Cells of scrollback.
 
-/// @brief The live screen, saved while the user is scrolled back into history.
-static video_cell_t original_page[SCREEN_CELLS];
+/// The visible screen. Indexed exactly as the array it replaces was.
+static video_cell_t *screen        = boot_screen;
+/// The scrollback history.
+static video_cell_t *history       = boot_history;
+/// The saved live screen, used while scrolled back.
+static video_cell_t *original_page = boot_original_page;
+/// @}
 
 /// @brief Cursor position, as an index into `screen`.
 ///
-/// Valid range is [0, SCREEN_CELLS] inclusive: the upper end is the guard cell.
+/// Valid range is [0, screen_cells] inclusive: the upper end is the guard cell.
 static unsigned cursor = 0;
 
 /// @brief Cursor position saved by ESC [ s and restored by ESC [ u.
@@ -161,11 +201,11 @@ static const video_backend_t *video_active = &video_backend;
 /// invisible writes are skipped, which keeps everything observable identical --
 /// the reported position, the rendered position and the recovery path -- without
 /// ever writing out of bounds.
-static inline bool_t __cursor_is_parked(void) { return cursor >= SCREEN_CELLS; }
+static inline bool_t __cursor_is_parked(void) { return cursor >= screen_cells; }
 
 /// @brief Moves the cursor, keeping it within the buffer.
 /// @param index The desired cell index.
-static inline void __set_cursor(unsigned index) { cursor = (index > SCREEN_CELLS) ? SCREEN_CELLS : index; }
+static inline void __set_cursor(unsigned index) { cursor = (index > screen_cells) ? screen_cells : index; }
 
 /// @brief Get the current column number.
 /// @return The column number.
@@ -174,7 +214,7 @@ static inline unsigned __get_x(void)
     if (__cursor_is_parked()) {
         return 0;
     }
-    return cursor % VIDEO_COLUMNS;
+    return cursor % video_columns;
 }
 
 /// @brief Get the current row number.
@@ -184,16 +224,16 @@ static inline unsigned __get_y(void)
     if (__cursor_is_parked()) {
         return 0;
     }
-    return cursor / VIDEO_COLUMNS;
+    return cursor / video_columns;
 }
 
 /// @brief First cell of the row the cursor is on.
 /// @return The cell index of the start of the row.
-static inline unsigned __row_start(void) { return (cursor / VIDEO_COLUMNS) * VIDEO_COLUMNS; }
+static inline unsigned __row_start(void) { return (cursor / video_columns) * video_columns; }
 
 /// @brief One past the last cell of the row the cursor is on.
 /// @return The cell index just past the end of the row.
-static inline unsigned __row_end(void) { return __row_start() + VIDEO_COLUMNS; }
+static inline unsigned __row_end(void) { return __row_start() + video_columns; }
 
 /// @brief Pushes a range of cells to the backend.
 /// @param first Index of the first cell.
@@ -202,31 +242,31 @@ static inline unsigned __row_end(void) { return __row_start() + VIDEO_COLUMNS; }
 /// Ranges are clipped to the visible screen, so the guard cell is never sent.
 static void __flush(unsigned first, unsigned count)
 {
-    if (first >= SCREEN_CELLS) {
+    if (first >= screen_cells) {
         return;
     }
-    if (count > (SCREEN_CELLS - first)) {
-        count = SCREEN_CELLS - first;
+    if (count > (screen_cells - first)) {
+        count = screen_cells - first;
     }
     if (count == 0) {
         return;
     }
-    video_active->put_cells(first % VIDEO_COLUMNS, first / VIDEO_COLUMNS, &screen[first], count);
+    video_active->put_cells(first % video_columns, first / video_columns, &screen[first], count);
 }
 
 /// @brief Pushes the whole screen to the backend.
-static void __flush_all(void) { __flush(0, SCREEN_CELLS); }
+static void __flush_all(void) { __flush(0, screen_cells); }
 
 /// @brief Erases a range of cells.
 /// @param first Index of the first cell.
 /// @param count How many cells to erase.
 static void __erase(unsigned first, unsigned count)
 {
-    if (first >= SCREEN_CELLS) {
+    if (first >= screen_cells) {
         return;
     }
-    if (count > (SCREEN_CELLS - first)) {
-        count = SCREEN_CELLS - first;
+    if (count > (screen_cells - first)) {
+        count = screen_cells - first;
     }
     for (unsigned index = 0; index < count; ++index) {
         screen[first + index] = blank_cell;
@@ -265,9 +305,9 @@ static inline void __draw_char(char c)
 
     // If the cursor went past the end of the screen, scroll and sit on the last
     // line.
-    if (cursor >= SCREEN_CELLS) {
+    if (cursor >= screen_cells) {
         video_shift_one_line_up();
-        __set_cursor(SCREEN_CELLS - VIDEO_COLUMNS);
+        __set_cursor(screen_cells - video_columns);
     }
 }
 
@@ -361,7 +401,7 @@ static inline void __move_cursor_backward(int erase, int amount)
 static inline void __move_cursor_forward(int erase, int amount)
 {
     for (int i = 0; i < amount; ++i) {
-        if ((cursor + 1) <= SCREEN_CELLS) {
+        if ((cursor + 1) <= screen_cells) {
             if (erase) {
                 // Overwrite with space without shifting other characters.
                 screen[cursor].character = ' ';
@@ -435,13 +475,13 @@ void video_init(void)
         pr_emerg("Failed to initialize the '%s' video backend.\n", video_backend.name);
     }
 
-    // The geometry the backend reports and the geometry the console compiled
-    // against come from the same macros, so a mismatch means the build is
+    // At this point the console's geometry is still the compile-time one, and
+    // the backend's comes from the same macros, so a mismatch means the build is
     // inconsistent and every offset computed here would be wrong.
-    if ((video_backend.columns != VIDEO_COLUMNS) || (video_backend.rows != VIDEO_ROWS)) {
+    if ((video_backend.columns != video_columns) || (video_backend.rows != video_rows)) {
         pr_emerg(
             "Video backend '%s' reports %ux%u but the console was built for %ux%u.\n", video_backend.name,
-            video_backend.columns, video_backend.rows, (unsigned)VIDEO_COLUMNS, (unsigned)VIDEO_ROWS);
+            video_backend.columns, video_backend.rows, (unsigned)video_columns, (unsigned)video_rows);
     }
 
     // Clearing the screen is what publishes the initialized console. Anything
@@ -521,14 +561,13 @@ int video_promote_backend(const video_backend_t *next)
         return 0;
     }
 
-    // The console's geometry is fixed at compile time, so a backend can only
-    // take over a console of exactly that shape. Runtime geometry is a separate
-    // change; until it lands, a mismatch here would put every offset the
-    // console computes in the wrong place.
-    if ((next->columns != VIDEO_COLUMNS) || (next->rows != VIDEO_ROWS)) {
+    // A backend may only take over a console of the shape it can materialize.
+    // Compared against the console's current geometry rather than the
+    // compile-time one, so this stays correct once the console can be resized.
+    if ((next->columns != video_columns) || (next->rows != video_rows)) {
         pr_emerg(
             "Cannot promote '%s': it reports %ux%u but the console is %ux%u.\n", next->name, next->columns, next->rows,
-            (unsigned)VIDEO_COLUMNS, (unsigned)VIDEO_ROWS);
+            (unsigned)video_columns, (unsigned)video_rows);
         return -1;
     }
 
@@ -617,7 +656,7 @@ void video_putc(int c)
                     amount = 1;
                 for (int i = 0; i < amount; ++i) {
                     if (__get_y() > 0) {
-                        __set_cursor(cursor - VIDEO_COLUMNS);
+                        __set_cursor(cursor - video_columns);
                     }
                 }
                 video_update_cursor_position();
@@ -628,8 +667,8 @@ void video_putc(int c)
                 if (amount <= 0)
                     amount = 1;
                 for (int i = 0; i < amount; ++i) {
-                    if (__get_y() < (VIDEO_ROWS - 1)) {
-                        __set_cursor(cursor + VIDEO_COLUMNS);
+                    if (__get_y() < (video_rows - 1)) {
+                        __set_cursor(cursor + video_columns);
                     }
                 }
                 video_update_cursor_position();
@@ -658,7 +697,7 @@ void video_putc(int c)
                 if (mode == 0) {
                     // Clear from cursor to end of screen. A parked cursor is
                     // already past the end, so this erases nothing.
-                    __erase(cursor, SCREEN_CELLS - cursor);
+                    __erase(cursor, screen_cells - cursor);
                 } else if (mode == 1) {
                     // Clear from start of screen to cursor (inclusive).
                     __erase(0, cursor + 1);
@@ -667,7 +706,7 @@ void video_putc(int c)
                     video_clear();
                 } else {
                     // Mode 2 or default: Clear entire screen (but preserve scrollback).
-                    for (unsigned index = 0; index < SCREEN_CELLS; ++index) {
+                    for (unsigned index = 0; index < screen_cells; ++index) {
                         screen[index] = blank_cell;
                     }
                     __set_cursor(0);
@@ -686,11 +725,11 @@ void video_putc(int c)
                     // last cell rather than at home.
                     unsigned int target_row = atoi(&escape_buffer[1]) - 1;
                     unsigned int target_col = atoi(semicolon + 1) - 1;
-                    if (target_col >= VIDEO_COLUMNS)
-                        target_col = VIDEO_COLUMNS - 1;
-                    if (target_row >= VIDEO_ROWS)
-                        target_row = VIDEO_ROWS - 1;
-                    __set_cursor((target_row * VIDEO_COLUMNS) + target_col);
+                    if (target_col >= video_columns)
+                        target_col = video_columns - 1;
+                    if (target_row >= video_rows)
+                        target_row = video_rows - 1;
+                    __set_cursor((target_row * video_columns) + target_col);
                 } else {
                     __set_cursor(0);
                 }
@@ -716,7 +755,7 @@ void video_putc(int c)
                         __erase(row_start, (cursor - row_start) + 1);
                     } else if (mode == 2) {
                         // Clear entire line.
-                        __erase(row_start, VIDEO_COLUMNS);
+                        __erase(row_start, video_columns);
                     }
                 }
             }
@@ -727,7 +766,7 @@ void video_putc(int c)
             // ESC [ u - Restore cursor position.
             else if (c == 'u') {
                 // Validate saved position is within the visible screen.
-                if (saved_cursor < SCREEN_CELLS) {
+                if (saved_cursor < screen_cells) {
                     __set_cursor(saved_cursor);
                 }
                 video_update_cursor_position();
@@ -812,13 +851,13 @@ void video_update_cursor_position(void)
         __flush(cursor, 1);
     }
 
-    unsigned column = cursor % VIDEO_COLUMNS;
-    unsigned row    = cursor / VIDEO_COLUMNS;
-    if (column >= VIDEO_COLUMNS) {
-        column = VIDEO_COLUMNS - 1;
+    unsigned column = cursor % video_columns;
+    unsigned row    = cursor / video_columns;
+    if (column >= video_columns) {
+        column = video_columns - 1;
     }
-    if (row >= VIDEO_ROWS) {
-        row = VIDEO_ROWS - 1;
+    if (row >= video_rows) {
+        row = video_rows - 1;
     }
 
     // Hand over the cell the cursor now sits on. Erasing whatever a backend drew
@@ -841,11 +880,11 @@ void video_cursor_blink_tick(void)
 void video_move_cursor(unsigned int x, unsigned int y)
 {
     // Clamp coordinates to screen bounds.
-    if (x >= VIDEO_COLUMNS)
-        x = VIDEO_COLUMNS - 1;
-    if (y >= VIDEO_ROWS)
-        y = VIDEO_ROWS - 1;
-    __set_cursor((y * VIDEO_COLUMNS) + x);
+    if (x >= video_columns)
+        x = video_columns - 1;
+    if (y >= video_rows)
+        y = video_rows - 1;
+    __set_cursor((y * video_columns) + x);
     // Update hardware cursor to match.
     video_update_cursor_position();
 }
@@ -866,20 +905,20 @@ void video_get_screen_size(unsigned int *width, unsigned int *height)
 {
     // Return screen width if requested.
     if (width) {
-        *width = VIDEO_COLUMNS;
+        *width = video_columns;
     }
     // Return screen height if requested.
     if (height) {
-        *height = VIDEO_ROWS;
+        *height = video_rows;
     }
 }
 
 void video_clear(void)
 {
     // Clear the scrollback buffer.
-    memset(history, 0, sizeof(history));
+    memset(history, 0, history_cells * sizeof(video_cell_t));
     // Clear the visible screen.
-    for (unsigned index = 0; index < SCREEN_CELLS; ++index) {
+    for (unsigned index = 0; index < screen_cells; ++index) {
         screen[index] = blank_cell;
     }
     // Reset cursor to top-left corner.
@@ -900,11 +939,11 @@ void video_new_line(void)
     // Move to the start of the next line.
     __set_cursor(__row_end());
     // Check if we've gone past the bottom of the screen.
-    if (cursor >= SCREEN_CELLS) {
+    if (cursor >= screen_cells) {
         // Scroll up by one line and move content into scrollback.
         video_shift_one_line_up();
         // Position cursor at the beginning of the last line.
-        __set_cursor(SCREEN_CELLS - VIDEO_COLUMNS);
+        __set_cursor(screen_cells - video_columns);
     }
     video_update_cursor_position();
 }
@@ -930,12 +969,12 @@ static inline void __shift_buffer(video_cell_t *buffer, unsigned rows, int direc
     // Shift up: Move all lines in one operation.
     if (direction == 1) {
         // Move (rows-1) lines from row 1 to row 0
-        memmove(buffer, buffer + VIDEO_COLUMNS, VIDEO_COLUMNS * (rows - 1) * sizeof(video_cell_t));
+        memmove(buffer, buffer + video_columns, video_columns * (rows - 1) * sizeof(video_cell_t));
     }
     // Shift down: Move all lines in one operation.
     else if (direction == -1) {
         // Move (rows-1) lines from row 0 to row 1
-        memmove(buffer + VIDEO_COLUMNS, buffer, VIDEO_COLUMNS * (rows - 1) * sizeof(video_cell_t));
+        memmove(buffer + video_columns, buffer, video_columns * (rows - 1) * sizeof(video_cell_t));
     }
 }
 
@@ -945,20 +984,20 @@ static void __shift_screen_up(void)
 {
     if (scrolled_lines == 0) {
         // Move the history buffer up by one line.
-        __shift_buffer(history, HISTORY_ROWS, +1);
+        __shift_buffer(history, history_rows, +1);
         // Copy the first line on the screen into the last line of the history.
-        memcpy(&history[HISTORY_CELLS - VIDEO_COLUMNS], screen, VIDEO_COLUMNS * sizeof(video_cell_t));
+        memcpy(&history[history_cells - video_columns], screen, video_columns * sizeof(video_cell_t));
     }
     // Move the screen up by one line.
-    __shift_buffer(screen, VIDEO_ROWS, +1);
+    __shift_buffer(screen, video_rows, +1);
     // Clear the last line of the screen.
-    for (unsigned index = SCREEN_CELLS - VIDEO_COLUMNS; index < SCREEN_CELLS; ++index) {
+    for (unsigned index = screen_cells - video_columns; index < screen_cells; ++index) {
         screen[index] = blank_cell;
     }
     // Let the backend move the pixels it already has, then repaint the line
     // that was uncovered.
     video_active->scroll(1);
-    __flush(SCREEN_CELLS - VIDEO_COLUMNS, VIDEO_COLUMNS);
+    __flush(screen_cells - video_columns, video_columns);
 }
 
 /// @brief Shifts the screen content down by one line. Restores the topmost line
@@ -966,32 +1005,32 @@ static void __shift_screen_up(void)
 static void __shift_screen_down(void)
 {
     // Move the screen content down by one line.
-    __shift_buffer(screen, VIDEO_ROWS, -1);
+    __shift_buffer(screen, video_rows, -1);
     // Restore from the history buffer.
-    memcpy(screen, &history[HISTORY_CELLS - ((unsigned)scrolled_lines * VIDEO_COLUMNS)],
-           VIDEO_COLUMNS * sizeof(video_cell_t));
+    memcpy(screen, &history[history_cells - ((unsigned)scrolled_lines * video_columns)],
+           video_columns * sizeof(video_cell_t));
     video_active->scroll(-1);
-    __flush(0, VIDEO_COLUMNS);
+    __flush(0, video_columns);
 }
 
 void video_shift_one_line_up(void)
 {
     // Handle case where cursor is beyond screen (during scrolling operations).
-    if (cursor >= SCREEN_CELLS) {
+    if (cursor >= screen_cells) {
         // Shift the screen and scrollback buffer up.
         __shift_screen_up();
         // Adjust cursor to stay on the last line.
-        __set_cursor(((cursor / VIDEO_COLUMNS) - 1) * VIDEO_COLUMNS);
+        __set_cursor(((cursor / video_columns) - 1) * video_columns);
     }
     // Handle case where we're viewing scrollback history and want to scroll to newer content.
     else if (scrolled_lines > 0) {
         // Shift screen up, moving top line into scrollback.
         __shift_screen_up();
         // Restore the bottom line from the original (unscrolled) screen content.
-        memcpy(&screen[SCREEN_CELLS - VIDEO_COLUMNS],
-               &original_page[SCREEN_CELLS - ((unsigned)scrolled_lines * VIDEO_COLUMNS)],
-               VIDEO_COLUMNS * sizeof(video_cell_t));
-        __flush(SCREEN_CELLS - VIDEO_COLUMNS, VIDEO_COLUMNS);
+        memcpy(&screen[screen_cells - video_columns],
+               &original_page[screen_cells - ((unsigned)scrolled_lines * video_columns)],
+               video_columns * sizeof(video_cell_t));
+        __flush(screen_cells - video_columns, video_columns);
         // We're now one line less scrolled back.
         --scrolled_lines;
     }
@@ -1002,34 +1041,34 @@ void video_shift_one_line_up(void)
 void video_shift_one_line_down(void)
 {
     // Check if we haven't scrolled beyond our scrollback buffer limit.
-    if (scrolled_lines < (int)HISTORY_ROWS) {
+    if (scrolled_lines < (int)history_rows) {
         // Save the current visible screen before first scroll operation.
         if (scrolled_lines == 0) {
-            memcpy(original_page, screen, SCREEN_CELLS * sizeof(video_cell_t));
+            memcpy(original_page, screen, screen_cells * sizeof(video_cell_t));
         }
         // We're now one line deeper into scrollback history.
         ++scrolled_lines;
         // Shift screen content down, making room at the top.
         __shift_screen_down();
         // Restore the top line from the scrollback buffer.
-        memcpy(screen, &history[HISTORY_CELLS - ((unsigned)scrolled_lines * VIDEO_COLUMNS)],
-               VIDEO_COLUMNS * sizeof(video_cell_t));
-        __flush(0, VIDEO_COLUMNS);
+        memcpy(screen, &history[history_cells - ((unsigned)scrolled_lines * video_columns)],
+               video_columns * sizeof(video_cell_t));
+        __flush(0, video_columns);
     }
 }
 
 void video_shift_one_page_up(void)
 {
-    // Scroll up by one full page (VIDEO_ROWS lines).
-    for (unsigned i = 0; i < VIDEO_ROWS; ++i) {
+    // Scroll up by one full page (video_rows lines).
+    for (unsigned i = 0; i < video_rows; ++i) {
         video_shift_one_line_up();
     }
 }
 
 void video_shift_one_page_down(void)
 {
-    // Scroll down by one full page (VIDEO_ROWS lines).
-    for (unsigned i = 0; i < VIDEO_ROWS; ++i) {
+    // Scroll down by one full page (video_rows lines).
+    for (unsigned i = 0; i < video_rows; ++i) {
         video_shift_one_line_down();
     }
 }
@@ -1055,8 +1094,8 @@ void video_scroll_down(int lines)
     if (lines < 0) {
         lines = 0;
     }
-    if (lines > (int)HISTORY_ROWS) {
-        lines = (int)HISTORY_ROWS;
+    if (lines > (int)history_rows) {
+        lines = (int)history_rows;
     }
     // Scroll down by the specified number of lines.
     for (int i = 0; i < lines; ++i) {
