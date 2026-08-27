@@ -137,6 +137,12 @@ static inline void keyboard_push_back_sequence(char *sequence)
 
     // Unlock the buffer after the operation is complete.
     spinlock_unlock(&scancodes_lock);
+
+    /* wake any readers waiting for input, exactly as the single-character
+       pushes do: a sequence is input too, and leaving readers asleep here
+       stalls every key that reports itself as an escape sequence until some
+       unrelated event happens to wake them. */
+    wake_up_all(&keyboard_wait_queue);
 }
 
 /// @brief Pushes a sequence of characters (scancodes) into the keyboard buffer.
@@ -153,6 +159,9 @@ static inline void keyboard_push_front_sequence(char *sequence)
 
     // Unlock the buffer after the operation is complete.
     spinlock_unlock(&scancodes_lock);
+
+    /* wake readers as well; front or back both add data */
+    wake_up_all(&keyboard_wait_queue);
 }
 
 /// @brief Pops a value from the ring buffer.
