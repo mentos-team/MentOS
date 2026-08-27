@@ -186,3 +186,25 @@ typedef struct {
 /// would silence the early printf() on the invalid-multiboot-magic path, which
 /// panics without ever reaching video_init().
 extern const video_backend_t video_backend;
+
+/// @brief Hands the console over to a different backend.
+/// @param next The backend to promote.
+/// @return 0 on success, a negative value on failure.
+///
+/// Exists for a display that becomes available only after the one the machine
+/// booted on: the boot backend keeps working while the better one is brought up,
+/// and only takes a back seat once that has succeeded.
+///
+/// The promotion is transactional. `next->late_init()` runs first and the active
+/// backend is only changed once it has returned successfully, so a failure
+/// anywhere in bringing up the new hardware leaves the previous backend still
+/// displaying a working console. On success the whole console is repainted
+/// through the new backend, so it shows the content the user was already
+/// looking at rather than coming up blank.
+///
+/// `next` must report the console's current geometry; a mismatch is refused.
+///
+/// This is internal to the video layer. It is declared here rather than in
+/// io/video.h because only a backend has any reason to call it, and only this
+/// header defines the type it takes.
+int video_promote_backend(const video_backend_t *next);

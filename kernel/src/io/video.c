@@ -22,6 +22,7 @@
 #include "ctype.h"
 #include "io/video.h"
 #include "io/video_backend.h"
+#include "klib/irqflags.h"
 #include "stdbool.h"
 #include "stddef.h"
 #include "stdio.h"
@@ -135,6 +136,20 @@ int scrolled_lines = 0;
 /// @brief Flag to batch cursor updates in video_puts to improve performance.
 static int batch_cursor_updates = 0;
 
+/// @brief The backend currently materializing the console.
+///
+/// Starts as the compile-time backend and stays there unless something promotes
+/// a different one; see video_promote_backend(). The indirection exists because
+/// a handoff needs two materializations alive at once -- one still displaying
+/// while the other is built -- which a single compile-time symbol cannot
+/// express.
+///
+/// Read from interrupt context, by video_cursor_blink_tick(). A single aligned
+/// pointer store is atomic on this architecture, but the publish still masks
+/// interrupts, both to say so explicitly and because that critical section is
+/// where more state will be published later.
+static const video_backend_t *video_active = &video_backend;
+
 /// @brief Whether the cursor sits outside the visible screen.
 /// @return true when the cursor is parked on the guard cell.
 ///
@@ -196,7 +211,7 @@ static void __flush(unsigned first, unsigned count)
     if (count == 0) {
         return;
     }
-    video_backend.put_cells(first % VIDEO_COLUMNS, first / VIDEO_COLUMNS, &screen[first], count);
+    video_active->put_cells(first % VIDEO_COLUMNS, first / VIDEO_COLUMNS, &screen[first], count);
 }
 
 /// @brief Pushes the whole screen to the backend.
@@ -394,7 +409,7 @@ static inline void __parse_cursor_escape_code(int shape)
         // Anything else is ignored, as it always has been.
         return;
     }
-    video_backend.set_cursor_style(style);
+    video_active->set_cursor_style(style);
 }
 
 void video_init(void)
@@ -438,6 +453,51 @@ void video_init(void)
     __parse_cursor_escape_code(0);
 }
 
+/// @brief Puts the whole console on the display and places the cursor.
+///
+/// Used whenever a backend starts materializing a console it has not been
+/// drawing. The cell buffer is the source of truth and has been recording all
+/// along, so one flush of the whole screen is all it takes to make the display
+/// agree with it.
+///
+/// The cursor is placed afterwards rather than left to chance: the overlay
+/// belongs to the backend, a backend that has just taken over has none drawn,
+/// and going through the ordinary cursor path is what keeps the lifecycle
+/// invariant true from the very first overlay.
+static void __republish(void)
+{
+    __flush_all();
+    video_update_cursor_position();
+}
+
+/// @brief Runs a backend's deferred initialization and makes it the active one.
+/// @param next The backend to bring up and publish.
+/// @return 0 on success, a negative value on failure.
+///
+/// Ordered so that failure is harmless: the deferred initialization runs
+/// first, and `video_active` is only moved once it has succeeded. A backend that
+/// fails half way through bringing up its hardware therefore leaves whichever
+/// backend was displaying still displaying.
+static int __publish_backend(const video_backend_t *next)
+{
+    if ((next->late_init != NULL) && (next->late_init() < 0)) {
+        pr_emerg("Failed to complete late initialization of the '%s' video backend.\n", next->name);
+        return -1;
+    }
+
+    // Interrupts are masked for the publish alone. The pointer is read from the
+    // timer interrupt, and although a single aligned store is atomic here, this
+    // is the critical section that later has more state to publish at once, so
+    // it is written as a critical section from the start. Nothing expensive may
+    // move inside it.
+    uint8_t flags = irq_disable();
+    video_active  = next;
+    irq_enable(flags);
+
+    __republish();
+    return 0;
+}
+
 void video_late_init(void)
 {
     // Most backends have nothing deferred; there is then nothing to repaint
@@ -445,25 +505,41 @@ void video_late_init(void)
     if (video_backend.late_init == NULL) {
         return;
     }
-
-    if (video_backend.late_init() < 0) {
-        pr_emerg("Failed to complete late initialization of the '%s' video backend.\n", video_backend.name);
+    if (__publish_backend(&video_backend) < 0) {
         return;
     }
-
-    // The backend was inert until a moment ago, so the display shows none of
-    // what the console has accumulated. The cell buffer is the source of truth
-    // and has been recording throughout, so one flush of the whole screen is
-    // all it takes to make the display agree with it -- including everything
-    // printed between video_init() and here.
-    __flush_all();
-
-    // The cursor overlay is the backend's, and it has none drawn yet. Placing
-    // it goes through the same path as any other cursor move, so the lifecycle
-    // invariant holds from the very first overlay.
-    video_update_cursor_position();
-
     pr_notice("Late initialization of the '%s' video backend complete.\n", video_backend.name);
+}
+
+int video_promote_backend(const video_backend_t *next)
+{
+    if (next == NULL) {
+        pr_emerg("Cannot promote a null video backend.\n");
+        return -1;
+    }
+    if (next == video_active) {
+        return 0;
+    }
+
+    // The console's geometry is fixed at compile time, so a backend can only
+    // take over a console of exactly that shape. Runtime geometry is a separate
+    // change; until it lands, a mismatch here would put every offset the
+    // console computes in the wrong place.
+    if ((next->columns != VIDEO_COLUMNS) || (next->rows != VIDEO_ROWS)) {
+        pr_emerg(
+            "Cannot promote '%s': it reports %ux%u but the console is %ux%u.\n", next->name, next->columns, next->rows,
+            (unsigned)VIDEO_COLUMNS, (unsigned)VIDEO_ROWS);
+        return -1;
+    }
+
+    const char *previous = video_active->name;
+    if (__publish_backend(next) < 0) {
+        pr_emerg("Promotion to '%s' failed; '%s' is still displaying.\n", next->name, previous);
+        return -1;
+    }
+
+    pr_notice("Video backend promoted from '%s' to '%s'.\n", previous, next->name);
+    return 0;
 }
 
 void video_putc(int c)
@@ -750,15 +826,15 @@ void video_update_cursor_position(void)
     // party that knows whether it drew anything, and scrolling moves its overlay
     // under it, so the generic layer cannot track where the pixels ended up.
     // Note the cell comes from the buffer, which never contains cursor pixels.
-    video_backend.set_cursor_position(column, row, screen[cursor]);
+    video_active->set_cursor_position(column, row, screen[cursor]);
 }
 
 void video_cursor_blink_tick(void)
 {
     // Backends with a hardware cursor leave this NULL: there is nothing for the
     // console to drive.
-    if (video_backend.cursor_blink != NULL) {
-        video_backend.cursor_blink();
+    if (video_active->cursor_blink != NULL) {
+        video_active->cursor_blink();
     }
 }
 
@@ -881,7 +957,7 @@ static void __shift_screen_up(void)
     }
     // Let the backend move the pixels it already has, then repaint the line
     // that was uncovered.
-    video_backend.scroll(1);
+    video_active->scroll(1);
     __flush(SCREEN_CELLS - VIDEO_COLUMNS, VIDEO_COLUMNS);
 }
 
@@ -894,7 +970,7 @@ static void __shift_screen_down(void)
     // Restore from the history buffer.
     memcpy(screen, &history[HISTORY_CELLS - ((unsigned)scrolled_lines * VIDEO_COLUMNS)],
            VIDEO_COLUMNS * sizeof(video_cell_t));
-    video_backend.scroll(-1);
+    video_active->scroll(-1);
     __flush(0, VIDEO_COLUMNS);
 }
 
