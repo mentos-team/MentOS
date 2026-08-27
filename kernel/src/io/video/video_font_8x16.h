@@ -1,5 +1,5 @@
-/// @file vga_graphics_font.h
-/// @brief 8x16 bitmap font for the graphical VGA backend.
+/// @file video_font_8x16.h
+/// @brief 8x16 bitmap font, shared by every backend that draws text as pixels.
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 ///
@@ -7,10 +7,11 @@
 /// character code. Bit 7 is the leftmost pixel. Glyphs occupy bits 7..1, which
 /// leaves the rightmost column clear as inter-character spacing.
 ///
-/// The width being exactly 8 is what makes this font a good fit for planar VGA
-/// modes: one glyph scan line is exactly one byte per plane, at a byte-aligned
-/// address, so a cell can be drawn with plain byte stores and no
-/// read-modify-write.
+/// The width being exactly 8 is what makes this font a good fit for the modes
+/// the graphical backends use. In a planar VGA mode one glyph scan line is
+/// exactly one byte per plane at a byte-aligned address; in an 8-bit linear
+/// framebuffer it is exactly eight bytes, which is two aligned 32-bit stores.
+/// Either way a cell is drawn with plain stores and no read-modify-write.
 ///
 /// Codes 0 and 32 are both blank, so an erased cell renders as pure background.
 
@@ -19,13 +20,13 @@
 #include "stdint.h"
 
 /// @brief Height of a glyph, in scan lines.
-#define VGA_FONT_HEIGHT 16
+#define VIDEO_FONT_HEIGHT 16
 
 /// @brief Width of a glyph, in pixels.
-#define VGA_FONT_WIDTH  8
+#define VIDEO_FONT_WIDTH  8
 
-/// @brief Glyph bitmaps, VGA_FONT_HEIGHT bytes per character code.
-static const uint8_t vga_graphics_font[256 * VGA_FONT_HEIGHT] = {
+/// @brief Glyph bitmaps, VIDEO_FONT_HEIGHT bytes per character code.
+static const uint8_t video_font_8x16[256 * VIDEO_FONT_HEIGHT] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, //   0
     0x00, 0x00, 0x7E, 0x81, 0xA5, 0x81, 0x81, 0xBD, 0x99, 0x81, 0x81, 0x7E, 0x00, 0x00, 0x00, 0x00, //   1
     0x00, 0x00, 0x7C, 0xFE, 0xFE, 0xD6, 0xFE, 0xFE, 0xBA, 0xC6, 0xFE, 0x7C, 0x00, 0x00, 0x00, 0x00, //   2

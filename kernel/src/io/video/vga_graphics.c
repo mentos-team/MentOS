@@ -41,9 +41,9 @@
 #include "stdbool.h"
 #include "stddef.h"
 
-#include "vga_graphics_font.h"
+#include "video_font_8x16.h"
 #include "vga_graphics_mode.h"
-#include "vga_graphics_palette.h"
+#include "video_palette_16.h"
 
 /// Attribute controller index and write port.
 #define VGA_AC_INDEX          0x03C0
@@ -104,7 +104,7 @@
 #define VGA_BYTES_PER_LINE    (VGA_WIDTH / 8)
 
 /// Scan lines occupied by one cell.
-#define VGA_CELL_HEIGHT       VGA_FONT_HEIGHT
+#define VGA_CELL_HEIGHT       VIDEO_FONT_HEIGHT
 /// Bytes one text row occupies in one plane.
 #define VGA_ROW_BYTES         (VGA_CELL_HEIGHT * VGA_BYTES_PER_LINE)
 /// Whole text rows that fit the 64 KB window the CPU can address.
@@ -127,7 +127,7 @@
 /// Fails the build with a negative array size if the geometry header and the
 /// mode ever stop agreeing.
 typedef char vga_graphics_geometry_check
-    [((VIDEO_COLUMNS == (VGA_WIDTH / VGA_FONT_WIDTH)) && (VIDEO_ROWS == (VGA_HEIGHT / VGA_CELL_HEIGHT))) ? 1 : -1];
+    [((VIDEO_COLUMNS == (VGA_WIDTH / VIDEO_FONT_WIDTH)) && (VIDEO_ROWS == (VGA_HEIGHT / VGA_CELL_HEIGHT))) ? 1 : -1];
 
 /// @brief Compile-time check that the circular buffer is larger than the screen.
 ///
@@ -309,12 +309,12 @@ static void __vga_load_palette(void)
 {
     outportb(VGA_DAC_MASK, 0xFF);
     outportb(VGA_DAC_WRITE_INDEX, 0x00);
-    for (unsigned index = 0; index < count_of(vga_graphics_palette); ++index) {
+    for (unsigned index = 0; index < count_of(video_palette_16); ++index) {
         // The DAC takes 6 bits per component, so drop the low two bits of each
         // 8-bit value rather than letting the hardware truncate the high ones.
-        outportb(VGA_DAC_DATA, (uint8_t)(vga_graphics_palette[index].red >> 2U));
-        outportb(VGA_DAC_DATA, (uint8_t)(vga_graphics_palette[index].green >> 2U));
-        outportb(VGA_DAC_DATA, (uint8_t)(vga_graphics_palette[index].blue >> 2U));
+        outportb(VGA_DAC_DATA, (uint8_t)(video_palette_16[index].red >> 2U));
+        outportb(VGA_DAC_DATA, (uint8_t)(video_palette_16[index].green >> 2U));
+        outportb(VGA_DAC_DATA, (uint8_t)(video_palette_16[index].blue >> 2U));
     }
 }
 
@@ -344,7 +344,7 @@ static inline uint8_t __vga_cell_byte(video_cell_t cell, const uint8_t *glyph, u
 /// @return VGA_CELL_HEIGHT bytes of bitmap, one per scan line.
 static inline const uint8_t *__vga_cell_glyph(video_cell_t cell)
 {
-    return &vga_graphics_font[(unsigned)cell.character * VGA_CELL_HEIGHT];
+    return &video_font_8x16[(unsigned)cell.character * VGA_CELL_HEIGHT];
 }
 
 /// @brief Draws a run of cells lying within a single row.
@@ -484,7 +484,7 @@ static void __vga_cursor_show(void)
         return;
     }
 
-    const uint8_t *source = &vga_graphics_font[(unsigned)cursor_cell.character * VGA_CELL_HEIGHT];
+    const uint8_t *source = &video_font_8x16[(unsigned)cursor_cell.character * VGA_CELL_HEIGHT];
     uint8_t glyph[VGA_CELL_HEIGHT];
 
     for (unsigned line = 0; line < VGA_CELL_HEIGHT; ++line) {
