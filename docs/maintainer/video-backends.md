@@ -564,55 +564,101 @@ the time anything can resize the boot log is over.
 
 ### Resize semantics
 
-Pinned by measurement, not by intent — verify these from cell contents, not from
-cursor coordinates.
+Pinned by measurement, not by intent — verify these from cell contents and row
+identities, not from cursor coordinates.
+
+**The console is a sequence of rows, and the screen is a window onto it.** The
+sequence is the used part of the scrollback followed by the used part of the
+screen; the window sits at its newest end. A resize moves that window and does
+nothing else. Everything in the table below is a consequence of that one sentence,
+which is the point: the previous implementation transformed the screen *array*
+instead, and its two directions did not agree.
 
 | aspect | behaviour |
 |---|---|
-| grow taller | rows a shrink displaced come back at the **top**, oldest first; only genuinely new area is blank, at the bottom |
-| shrink | rows drop off the **top** into scrollback |
+| grow taller | the window widens **upwards**, revealing older rows; it pads at the bottom only once the sequence runs out |
+| shrink | the window narrows upwards; rows that no longer fit go back to being scrollback |
 | grow wider | new columns blank on the right |
 | shrink narrower | right-hand columns **clipped and lost** |
-| cursor, saved cursor | cell coordinates kept, adjusted for dropped and restored rows, then clamped; a parked cursor stays parked |
-| scrollback | re-strided per row, rows that fell off the screen appended as newest, restored rows removed from the newest end, oldest dropped to fit |
+| cursor, saved cursor | move with the row they are on, then clamp; a parked cursor stays parked |
+| scrollback | exactly the rows the window no longer covers, re-strided per row, newest last, oldest dropped to fit |
 | scrolled back during a resize | returns to the live view first |
 | escape parser, current colour | untouched; both are geometry-independent |
 | cursor overlay | backend drops it; the generic repaint re-places it |
 
-Shrinking keeps the prompt, which is the part anybody is looking at.
+The bottom edge of the window stays put, so shrinking keeps the prompt — the part
+anybody is looking at.
 
-**Growing restores what shrinking displaced.** "Grow exposes blanks" was true
-until human testing found the consequence: dragging a window edge passes through
-intermediate sizes, so every dip during a drag moved rows into scrollback and the
-regrowth replaced them with blanks. The data was still there, but the screen ate
-itself a little at a time, and to a user that is indistinguishable from a clear.
+#### The invariant
 
-The invariant is now: **if a shrink removed visible rows only because they no
-longer fit, and nothing has been printed since, growing back restores exactly
-those rows.**
+**A geometry-only change does not mutate the console's contents; it changes the
+window they are seen through.** With no intervening output, scrollback
+navigation, font change or clear, a round trip `A → B → A` — or `A → B → C → B →
+A`, or forty alternations — returns the *identical* visible cells, row ordering,
+history and saved cursor.
 
-What makes that safe is `displaced_rows`, the only new state: a count of rows at
-the newest end of the scrollback that a shrink put there. It is *not* a guess
-about the newest rows.
+This is stronger than what came before it, and it had to be. The first attempt
+made `shrink → grow` reversible by remembering how many rows a shrink had
+displaced, and that repaired one ordering only. `grow → shrink` was still broken,
+and worse than merely lossy: growing pinned the content to the top and put the
+new blank rows at the *bottom*, so the shrink that followed dropped real rows off
+the *top* and kept the blanks. Measured, on a full 80x30 screen: `80x30 → 160x60
+→ 80x30` ended with **all thirty rows in scrollback and a blank screen**, the
+cursor twenty-nine rows above where it belonged. A count of displaced rows cannot
+fix that, because at the moment of the grow nothing has been displaced yet — the
+grow is what creates the state the shrink then destroys. The two operations have
+to be inverses, which means they have to be the same operation with the sign
+flipped, which is what a window over a sequence gives you for free.
 
-| event | effect on `displaced_rows` |
+#### The state that makes it work
+
+One counter, `history_used`: how many rows at the newest end of the scrollback
+hold real content. It exists because the history arrives blank and fills from its
+newest end, so a blank row there is either a blank line the terminal produced or
+padding nothing ever wrote, and a grow must reveal the first and not the second.
+
+| event | effect on `history_used` |
 |---|---|
-| shrink drops N rows | `+= N` (capped at the new scrollback depth) |
-| grow restores N rows | `-= N`, and those rows leave the scrollback |
-| output scrolls the screen | `= 0` |
-| `video_clear()`, `ESC [ 2 J`, `ESC [ 3 J` | `= 0` |
+| output scrolls the screen | `+= 1` (capped at the scrollback depth) |
+| resize | `=` the rows the new window leaves above itself, capped at the new depth |
+| `video_clear()`, `ESC [ 3 J` | `= 0` |
+| `ESC [ 2 J` | unchanged — the scrollback survives, so a later grow reveals it |
 | scrollback navigation, font change, column-only resize | unchanged |
 
-The invalidation point needs no timing and no heuristic: `__shift_screen_up()`
-appends to the history in exactly one place, under `if (scrolled_lines == 0)`,
-and that is the only way output can displace a row. Once output occupies the
-newest end of the scrollback, the rows a shrink displaced are no longer the ones
-immediately above the viewport, and restoring them would duplicate and reorder
-text — so they are given up. Scrollback *navigation* reads the history without
-modifying it, which is why paging back and forth does not invalidate anything.
+There is deliberately no notion of a row being *eligible* or not. Output extends
+the sequence at its live end and the window is always at that end, so a revealed
+row is always the correct predecessor of the row below it — including after
+`shrink → output → grow`, which reveals what output pushed into the scrollback
+rather than what the shrink did. Nothing has to be invalidated, so nothing needs
+timing or a heuristic. The old `displaced_rows` and its invalidation hook in
+`__shift_screen_up()` are gone.
 
-So: shrink then grow with nothing printed in between is reversible. Shrink,
-print something that scrolls, then grow leaves blanks, by design.
+How much of the screen counts as "used" is derived, not tracked:
+`__console_live_rows()` is the cursor's row or the last non-blank row, whichever
+is lower down. A blank cell *is* the zeroed storage the console starts from, so
+the screen already says where its content ends, and this is what keeps a grow from
+dragging scrollback in above a screen that had room to spare — and a shrink from
+scrolling anything away when all it removed was empty space.
+
+#### What is not reversible, and why
+
+Two residuals, both measured, neither a consequence of the model:
+
+- **Horizontal round trips are lossy.** Narrowing clips the right-hand columns
+  and they are gone; widening again blank-fills. `240x67 → 128x37 → 240x67`
+  returns every row in the right order with its left 128 columns intact and the
+  rest blank. Vertical reversibility is exact; horizontal is not, and saying
+  "resize is reversible" without that qualifier is wrong.
+- **A cursor whose row is pushed above the window is clamped, and the clamp does
+  not come back.** Shrink far enough that the cursor's row is no longer in the
+  window and it lands on the top row; growing back moves it with the top row, not
+  back to the row it named, because that cell stopped existing at the intermediate
+  size. Measured: cursor at row 0 of 80x30, `→ 80x10 → 80x30`, cursor returns at
+  row 20 — while every cell of content returns exactly. The same applies to the
+  saved cursor, including the row-0 default nobody has set, so `ESC [ u` after a
+  deep shrink and regrowth can land lower than it would have. Fixing this needs
+  the cursor to carry a logical row of its own, which is state the rest of the
+  console does not need; it is recorded here instead.
 
 **There is no reflow, and this is not a simplification.** `screen` and `history`
 are flat cell arrays with no soft-wrap marker, so there is no record of which
@@ -979,7 +1025,7 @@ The residual race, stated rather than hidden: if something touches `/proc/video`
 between our SET_SCANOUT and the echo's arrival, the one-shot disarms first and the
 echo gets through. There is no way to close that without timing, and it is now
 benign rather than destructive — the shrink it causes is recoverable, because
-growing restores what shrinking displaced.
+growing reveals what shrinking pushed back into the scrollback.
 
 Only virtio-gpu offers this. Bochs VBE has nothing equivalent: its EDID is
 generated once from device properties and never changes. That is why VBE remains
@@ -1135,6 +1181,44 @@ as on the boot log -- the boot log only uses three colours, where the shell
 prompt uses six. Verified at `3592274`: identical sets of 3 and of 6 across VGA
 text, planar VGA and VBE.
 
+**Resize reversibility check** — the round-trip invariant is a property of row
+*identity*, and pixels are the wrong instrument for it: a blank screen and a
+correctly scrolled one are both "plausible" pictures. Check it from the cell
+buffer instead.
+
+The measurement that found the grow/shrink asymmetry, and the one to repeat after
+any change to `__console_migrate()`:
+
+1. A temporary dump at both ends of the migration, logging the geometry, the
+   ordered identity and hash of every visible row, the same for the scrollback
+   tail, the cursor and saved cursor as `x,y`, `scrolled_lines` and
+   `history_used`. Put a stable identity at the **start** of each row — narrowing
+   destroys the right-hand end, and an identity that can be clipped away cannot
+   distinguish "row lost" from "row narrowed".
+2. A temporary private escape that calls `video_request_resize()` with exact cell
+   counts, so the transitions are scripted rather than dragged. A userspace test
+   registered in `runtests` then drives the whole matrix in one boot, with no
+   output between transitions, and the assertions run offline against the serial
+   log.
+
+Cover, at minimum: `small → large → small` (the case that was broken — do not
+test only `large → small → large`, which the displaced-rows implementation
+passed), `A → B → C → B → A`, twenty-plus alternations for accumulated drift, the
+cursor on the first, middle and last visible row, a grow with less scrollback
+than the rows gained, empty rows mixed with non-empty ones, a resize while
+scrolled back, and a portrait/landscape swap. Then, separately,
+`shrink → output → grow`, which must reveal what *output* pushed into the
+scrollback — in order, with nothing duplicated — rather than what the shrink did.
+
+Verified this way at the round-trip commit: every geometry-only case exact in
+cells, row order, scrollback tail, cursor and saved cursor, including forty
+alternations; the two documented residuals (clipped columns, a clamped cursor
+row) are the only differences. The real host path was then confirmed separately
+with VNC `SetDesktopSize`, since a scripted request and a display-change event
+reach `__console_resize()` by different routes: `1024x768 → 1024x600 → 1024x768 →
+1024x900 → 1024x768` returned identical cells, scrollback and cursor at each
+return.
+
 **Font checks** — everything below was exercised at the font commits, on
 virtio-gpu, by sending the escape sequence and decoding the result. A synthetic
 trigger is the right way to start, before the escape sequence exists: record a
@@ -1161,10 +1245,11 @@ would break silently:
   non-background rectangle — because a decoder that picks the most common colour
   as the background reads a fully solid cell as blank.
 
-Content preservation is the same bottom-anchor/no-reflow policy as a display
-resize, and is checkable exactly: the new screen's rows must equal the old
-screen's **last** `rows` rows, each **clipped** to the new column count. Verified
-byte-for-byte at 128x48 -> 64x24.
+Content preservation is the same window-over-a-sequence policy as a display
+resize, and is checkable exactly: a font change that shrinks the cell counts must
+leave the old screen's **last** `rows` rows, each **clipped** to the new column
+count, and one that grows them must reveal the scrollback immediately above.
+The shrink direction was verified byte-for-byte at 128x48 -> 64x24.
 
 On memory: the free-page count is identical across long runs of changes, but the
 first change costs two one-off amounts that are not a leak — the console leaves
