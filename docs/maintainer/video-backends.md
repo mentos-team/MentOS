@@ -1,6 +1,6 @@
 # Video backends
 
-Verified against `507ad5d`. Core files: `kernel/src/io/video.c` (generic),
+Verified against `fb95af2`. Core files: `kernel/src/io/video.c` (generic),
 `kernel/inc/io/video_backend.h` (interface), `kernel/src/io/video/` (backends).
 Shared assets: `kernel/src/io/video_font.c` with
 `kernel/inc/io/video/video_font.h` (the bitmap fonts) and `video_palette_16.h`
@@ -569,18 +569,50 @@ cursor coordinates.
 
 | aspect | behaviour |
 |---|---|
-| grow taller | content stays, new rows blank at the **bottom** |
+| grow taller | rows a shrink displaced come back at the **top**, oldest first; only genuinely new area is blank, at the bottom |
 | shrink | rows drop off the **top** into scrollback |
 | grow wider | new columns blank on the right |
 | shrink narrower | right-hand columns **clipped and lost** |
-| cursor, saved cursor | cell coordinates kept, adjusted for dropped rows, then clamped; a parked cursor stays parked |
-| scrollback | re-strided per row, rows that fell off the screen appended as newest, oldest dropped to fit |
+| cursor, saved cursor | cell coordinates kept, adjusted for dropped and restored rows, then clamped; a parked cursor stays parked |
+| scrollback | re-strided per row, rows that fell off the screen appended as newest, restored rows removed from the newest end, oldest dropped to fit |
 | scrolled back during a resize | returns to the live view first |
 | escape parser, current colour | untouched; both are geometry-independent |
 | cursor overlay | backend drops it; the generic repaint re-places it |
 
-The asymmetry is the point: growing keeps the cursor where the user left it,
-shrinking keeps the prompt. Both are what real terminals do.
+Shrinking keeps the prompt, which is the part anybody is looking at.
+
+**Growing restores what shrinking displaced.** "Grow exposes blanks" was true
+until human testing found the consequence: dragging a window edge passes through
+intermediate sizes, so every dip during a drag moved rows into scrollback and the
+regrowth replaced them with blanks. The data was still there, but the screen ate
+itself a little at a time, and to a user that is indistinguishable from a clear.
+
+The invariant is now: **if a shrink removed visible rows only because they no
+longer fit, and nothing has been printed since, growing back restores exactly
+those rows.**
+
+What makes that safe is `displaced_rows`, the only new state: a count of rows at
+the newest end of the scrollback that a shrink put there. It is *not* a guess
+about the newest rows.
+
+| event | effect on `displaced_rows` |
+|---|---|
+| shrink drops N rows | `+= N` (capped at the new scrollback depth) |
+| grow restores N rows | `-= N`, and those rows leave the scrollback |
+| output scrolls the screen | `= 0` |
+| `video_clear()`, `ESC [ 2 J`, `ESC [ 3 J` | `= 0` |
+| scrollback navigation, font change, column-only resize | unchanged |
+
+The invalidation point needs no timing and no heuristic: `__shift_screen_up()`
+appends to the history in exactly one place, under `if (scrolled_lines == 0)`,
+and that is the only way output can displace a row. Once output occupies the
+newest end of the scrollback, the rows a shrink displaced are no longer the ones
+immediately above the viewport, and restoring them would duplicate and reorder
+text — so they are given up. Scrollback *navigation* reads the history without
+modifying it, which is why paging back and forth does not invalidate anything.
+
+So: shrink then grow with nothing printed in between is reversible. Shrink,
+print something that scrolls, then grow leaves blanks, by design.
 
 **There is no reflow, and this is not a simplification.** `screen` and `history`
 are flat cell arrays with no soft-wrap marker, so there is no record of which
@@ -894,6 +926,35 @@ The event path is `config-change interrupt -> events_read/events_clear -> flag -
 GET_DISPLAY_INFO -> cells = pixels / font -> video_request_resize()`. The event
 carries **no dimensions**, and several arrive in a burst, so they coalesce into
 one "geometry is stale" condition and the device is asked once.
+
+**The hand-over provokes an event of its own, and it must not be obeyed.** Taking
+the console over replaces the surface the host was showing, and QEMU answers with
+a display change. Measured under `-display gtk`: bring-up reads the host's
+preference as 1280x800 and deliberately keeps the compiled 1024x768; then, right
+after the first SET_SCANOUT and with nobody having touched the window, the host
+reports **640x480**. Obeyed, that shrank the console 128x48 -> 80x30 and took 18
+rows of the boot log off the screen — undoing, a moment later, the decision not to
+change what the user was already looking at. Under VNC it never happens, because
+there every reported size is an explicit client request; that is precisely why
+scripted testing never saw it, and why a human did.
+
+`promotion_echo_pending` swallows exactly that one event. It is armed where the
+event is *caused* — the first time the scanout is pointed at one of our resources
+— and consumed by the first display change serviced afterwards, deliberately
+without reading the size out of it. A one-shot tied to the transition, not a
+window of time: there is nothing to tune and nothing that can fire twice.
+
+It also disarms when a service call finds no event pending, and that part is
+load-bearing: on a host that sends no echo, the one-shot would otherwise mistake
+the user's *first genuine* resize for it and swallow that instead. Under VNC the
+empty-service path always runs first, which is what keeps the first real resize
+working.
+
+The residual race, stated rather than hidden: if something touches `/proc/video`
+between our SET_SCANOUT and the echo's arrival, the one-shot disarms first and the
+echo gets through. There is no way to close that without timing, and it is now
+benign rather than destructive — the shrink it causes is recoverable, because
+growing restores what shrinking displaced.
 
 Only virtio-gpu offers this. Bochs VBE has nothing equivalent: its EDID is
 generated once from device properties and never changes. That is why VBE remains

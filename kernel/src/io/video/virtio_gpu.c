@@ -311,6 +311,24 @@ static unsigned gpu_row_bytes = 0; ///< Bytes one text row occupies.
 static unsigned gpu_fb_bytes  = 0; ///< Bytes the framebuffer occupies.
 /// @}
 
+/// @brief Whether the scanout has ever been pointed at one of our resources.
+static bool_t scanout_ever_set        = false;
+
+/// @brief Whether the display change the hand-over provokes is still expected.
+///
+/// Taking the console over replaces the surface the host was showing, and QEMU
+/// answers that with a display-change event of its own. Under `-display gtk` it
+/// reported 640x480 while the console was displaying 1024x768 -- once, right
+/// after the first SET_SCANOUT, with nobody having touched the window. Acting on
+/// it undoes the decision made moments earlier to carry the compiled geometry
+/// through the hand-over, and it does so destructively.
+///
+/// Set where that event is caused, which is the first time the scanout is
+/// pointed at us, and consumed by the first display change serviced afterwards.
+/// A one-shot tied to the transition rather than a window of time: there is
+/// nothing to tune and nothing that can fire twice.
+static bool_t promotion_echo_pending  = false;
+
 /// @brief Font a geometry change in progress is being built for.
 ///
 /// Set only for the duration of one video_change_geometry() call, and cleared
@@ -622,6 +640,10 @@ static void __gpu_publish(void)
             return;
         }
         scanout_set = true;
+        if (!scanout_ever_set) {
+            scanout_ever_set       = true;
+            promotion_echo_pending = true;
+        }
         pr_notice("Scanout %u now shows resource %u (%ux%u).\n", (unsigned)VIRTIO_GPU_SCANOUT, resource_id, gpu_width,
                   gpu_height);
     }
@@ -1412,10 +1434,26 @@ static void virtio_gpu_isr(pt_regs_t *registers)
 /// backend owns the font.
 static void virtio_gpu_service(void)
 {
-    if (!active || !geometry_stale) {
+    if (!active) {
+        return;
+    }
+    if (!geometry_stale) {
+        // Nothing pending, so the hand-over's echo never materialised -- this
+        // host does not send one. Disarm, or the next genuine resize would be
+        // mistaken for it and swallowed. Under VNC, where the only events are
+        // explicit client requests, this is the path that always runs first.
+        promotion_echo_pending = false;
         return;
     }
     geometry_stale = false;
+
+    // The hand-over's own echo. Dropped without even reading the size out of it,
+    // because none of it is anything the user asked for.
+    if (promotion_echo_pending) {
+        promotion_echo_pending = false;
+        pr_notice("Ignoring the display change the hand-over caused; keeping %ux%u.\n", gpu_width, gpu_height);
+        return;
+    }
 
     __gpu_header(VIRTIO_GPU_CMD_GET_DISPLAY_INFO);
     if (__gpu_command(sizeof(gpu_ctrl_hdr_t), VIRTIO_GPU_RESP_OK_DISPLAY_INFO) < 0) {

@@ -147,6 +147,22 @@ static unsigned screen_cells   = BOOT_SCREEN_CELLS;    ///< Cells on the visible
 static unsigned history_rows   = BOOT_HISTORY_ROWS;    ///< Rows of scrollback.
 static unsigned history_cells  = BOOT_HISTORY_CELLS;   ///< Cells of scrollback.
 
+/// @brief Rows at the newest end of the scrollback that a shrink displaced.
+///
+/// A resize is the one thing that can push a row off the screen without the
+/// terminal having produced anything: shrinking has nowhere else to put the rows
+/// that no longer fit. Those rows are still logically the ones immediately above
+/// the viewport, so growing again can put them back and make the round trip
+/// reversible -- which is what a window drag needs, since dragging passes through
+/// intermediate sizes and would otherwise eat the screen a little at a time.
+///
+/// This counter is what separates them from ordinary history. It is **not** a
+/// guess about the newest rows: it is only ever increased by a shrink, only ever
+/// decreased by a grow restoring rows, and dropped to zero the moment new output
+/// appends to the history, because from then on the newest rows are output and
+/// putting them back on the screen would duplicate and reorder text.
+static unsigned displaced_rows = 0;
+
 /// Backing allocation of the current storage, or NULL while it is the boot
 /// arrays. What distinguishes "free this" from "this is static and always was".
 static page_t *console_pages       = NULL;
@@ -697,9 +713,13 @@ static void __console_copy_row(video_cell_t *destination, unsigned new_columns, 
 ///
 /// The policy, which docs/maintainer/video-backends.md records in full:
 ///
-/// - Growing taller keeps the content where it is and leaves the new rows blank
-///   at the **bottom**, which is what a terminal does and what leaves the cursor
-///   where the user left it.
+/// - Growing taller puts back whatever a previous shrink displaced, oldest of
+///   them first, and only then leaves blank rows at the **bottom**. That is what
+///   makes a shrink followed by a grow reversible, which matters because dragging
+///   a window edge passes through intermediate sizes: without it, every dip
+///   during a drag would eat rows that growing back could not return. Only rows
+///   a resize displaced qualify, and only while nothing has been printed since;
+///   see displaced_rows.
 /// - Growing shrinker -- shrinking -- drops rows off the **top** into scrollback,
 ///   because the bottom of the screen is the prompt and the one part anybody is
 ///   looking at.
@@ -712,25 +732,43 @@ static void __console_migrate(const console_storage_t *next)
     unsigned old_rows    = video_rows;
     unsigned old_columns = video_columns;
     unsigned dropped     = (old_rows > next->rows) ? (old_rows - next->rows) : 0U;
+    unsigned gained      = (next->rows > old_rows) ? (next->rows - old_rows) : 0U;
     unsigned shared_rows = (old_rows < next->rows) ? old_rows : next->rows;
 
-    // Visible screen. Shrinking takes the bottom `shared_rows`; growing keeps
-    // row 0 at row 0 and leaves the tail blank.
-    for (unsigned row = 0; row < shared_rows; ++row) {
+    // How many of the rows that are about to be exposed can be filled from the
+    // scrollback instead of being left blank. Bounded three ways: by the space
+    // there is, by what a shrink actually displaced, and by the history that
+    // exists to read it from.
+    unsigned restored = (gained < displaced_rows) ? gained : displaced_rows;
+    if (restored > history_rows) {
+        restored = history_rows;
+    }
+
+    // Visible screen, top to bottom: the restored rows, then the rows that
+    // survive from the old screen, then nothing -- the storage arrived zeroed, so
+    // any row past these is already blank. Growing and shrinking cannot both
+    // happen, so `restored` and `dropped` are never both non-zero.
+    for (unsigned row = 0; row < restored; ++row) {
         __console_copy_row(&next->screen[row * next->columns], next->columns,
+                           &history[((history_rows - restored) + row) * old_columns], old_columns);
+    }
+    for (unsigned row = 0; row < shared_rows; ++row) {
+        __console_copy_row(&next->screen[(restored + row) * next->columns], next->columns,
                            &screen[(row + dropped) * old_columns], old_columns);
     }
 
     // Scrollback. The rows that just fell off the top of the screen are the
     // newest history there is, so the logical sequence is the old history
-    // followed by them, and the newest `keep` of that is what fits.
-    unsigned available = history_rows + dropped;
+    // followed by them, and the newest `keep` of that is what fits. Rows just
+    // restored to the screen leave the history, which is what stops them being
+    // in both places at once.
+    unsigned carried   = history_rows - restored;
+    unsigned available = carried + dropped;
     unsigned keep      = (available < next->history_rows) ? available : next->history_rows;
     for (unsigned index = 0; index < keep; ++index) {
         unsigned logical = (available - keep) + index;
-        const video_cell_t *source = (logical < history_rows)
-                                         ? &history[logical * old_columns]
-                                         : &screen[(logical - history_rows) * old_columns];
+        const video_cell_t *source = (logical < carried) ? &history[logical * old_columns]
+                                                         : &screen[(logical - carried) * old_columns];
         __console_copy_row(&next->history[((next->history_rows - keep) + index) * next->columns], next->columns, source,
                            old_columns);
     }
@@ -744,7 +782,7 @@ static void __console_migrate(const console_storage_t *next)
     } else {
         unsigned x = cursor % old_columns;
         unsigned y = cursor / old_columns;
-        y          = (y >= dropped) ? (y - dropped) : 0U;
+        y          = ((y >= dropped) ? (y - dropped) : 0U) + restored;
         if (y >= next->rows) {
             y = next->rows - 1U;
         }
@@ -759,7 +797,7 @@ static void __console_migrate(const console_storage_t *next)
     {
         unsigned x = saved_cursor % old_columns;
         unsigned y = saved_cursor / old_columns;
-        y          = (y >= dropped) ? (y - dropped) : 0U;
+        y          = ((y >= dropped) ? (y - dropped) : 0U) + restored;
         if (y >= next->rows) {
             y = next->rows - 1U;
         }
@@ -771,6 +809,10 @@ static void __console_migrate(const console_storage_t *next)
 
     // Publish. Every value describing the console's shape changes together, and
     // this is the only place they may.
+    displaced_rows = (displaced_rows - restored) + dropped;
+    if (displaced_rows > next->history_rows) {
+        displaced_rows = next->history_rows;
+    }
     video_columns  = next->columns;
     video_rows     = next->rows;
     screen_cells   = next->cells;
@@ -1122,6 +1164,10 @@ void video_putc(int c)
                     video_clear();
                 } else {
                     // Mode 2 or default: Clear entire screen (but preserve scrollback).
+                    // Displaced rows are given up even though the history stays:
+                    // the screen they sat above no longer exists, so putting them
+                    // back on a grow would stack old output over a cleared screen.
+                    displaced_rows = 0;
                     for (unsigned index = 0; index < screen_cells; ++index) {
                         screen[index] = blank_cell;
                     }
@@ -1349,6 +1395,8 @@ void video_get_screen_size(unsigned int *width, unsigned int *height)
 
 void video_clear(void)
 {
+    // Nothing is left for a grow to restore once the history is gone.
+    displaced_rows = 0;
     // Clear the scrollback buffer.
     memset(history, 0, history_cells * sizeof(video_cell_t));
     // Clear the visible screen.
@@ -1421,6 +1469,11 @@ static void __shift_screen_up(void)
         __shift_buffer(history, history_rows, +1);
         // Copy the first line on the screen into the last line of the history.
         memcpy(&history[history_cells - video_columns], screen, video_columns * sizeof(video_cell_t));
+        // New output now occupies the newest end of the history, so whatever a
+        // shrink displaced is no longer what sits immediately above the screen.
+        // This is the only place history grows from output, which is exactly why
+        // the invalidation belongs here and needs no timing or heuristics.
+        displaced_rows = 0;
     }
     // Move the screen up by one line.
     __shift_buffer(screen, video_rows, +1);
