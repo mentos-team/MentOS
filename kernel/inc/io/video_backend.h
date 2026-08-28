@@ -140,6 +140,24 @@ typedef struct {
     /// put_cells() for them.
     void (*scroll)(int rows);
 
+    /// @brief Optional: begins a run of updates that may be shown all at once.
+    /// @brief Optional: ends it, and shows what the run changed.
+    ///
+    /// Both may be NULL, and are for a backend where making a change *visible*
+    /// costs a device round trip -- put_cells() into video memory is already as
+    /// cheap as it gets, and such a backend wants neither hook. Between the two
+    /// calls the backend may draw as it likes but need not present anything; at
+    /// end_batch() the display must show every change the run made, and be
+    /// identical to what a run of unbatched calls would have produced.
+    ///
+    /// The generic layer brackets each run of output it knows to be one unit --
+    /// one write() to the console, one video_puts() -- and counts nesting, so a
+    /// backend sees one outermost pair. Nothing else is promised: a backend that
+    /// implements them must still present eventually if they are never called,
+    /// which is what keeps single-character output prompt.
+    void (*begin_batch)(void);
+    void (*end_batch)(void);
+
     /// @brief Places the cursor.
     /// @param column The column, always already in range.
     /// @param row The row, always already in range.

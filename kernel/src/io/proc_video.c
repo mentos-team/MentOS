@@ -237,9 +237,14 @@ static ssize_t procv_write(vfs_file_t *file, const void *buf, off_t offset, size
     // shape.
     video_service_pending();
 
+    // One write() is one run of output: the console changes cell by cell as it
+    // always has, and the display is brought up to date once at the end. A
+    // single-character write is its own batch, so typing stays immediate.
+    video_begin_batch();
     for (size_t i = 0; i < nbyte; ++i) {
         video_putc(((char *)buf)[i]);
     }
+    video_end_batch();
 
     // And again after it, because the output can itself ask for a change: a font
     // escape sequence is only recorded by the parser, and would otherwise wait

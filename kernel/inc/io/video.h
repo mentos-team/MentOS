@@ -84,6 +84,20 @@ void video_request_font(video_font_request_t request);
 /// change knows the new cell size.
 void video_service_pending(void);
 
+/// @brief Begins a run of output that may be shown all at once.
+///
+/// A hint, not a mode: the cell buffer changes exactly as it would without it,
+/// and every change is visible by the time the matching video_end_batch()
+/// returns. What it buys is on backends where *presenting* costs a device round
+/// trip, which without this happens once per character.
+///
+/// Nesting is counted, so it is safe to bracket a caller that brackets its own
+/// callees. Every begin must have an end; there is no timer that will end one.
+void video_begin_batch(void);
+
+/// @brief Ends a run of output and shows everything it changed.
+void video_end_batch(void);
+
 /// @brief Print the given character on the screen.
 /// @param c The character to print.
 void video_putc(int c);

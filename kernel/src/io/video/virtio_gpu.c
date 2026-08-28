@@ -75,6 +75,7 @@
 #include "io/video/video_font.h"
 #include "video_palette_16.h"
 
+
 /// @brief Virtio device type of a GPU.
 #define VIRTIO_ID_GPU                     16U
 
@@ -575,8 +576,34 @@ static void __gpu_header(uint32_t type)
 ///
 /// Skips the device entirely if a submission is already in progress, leaving the
 /// damage pending for the next call; see the re-entrancy note at the top.
+/// @brief Depth of the output batch, zero when none.
+///
+/// While it is non-zero the damage keeps accumulating and nothing is sent: the
+/// framebuffer is guest RAM, so drawing into it costs nothing a device round trip
+/// would not cost far more of.
+static unsigned gpu_batch_depth = 0;
+
+static void virtio_gpu_begin_batch(void) { ++gpu_batch_depth; }
+
+static void __gpu_publish(void);
+
+static void virtio_gpu_end_batch(void)
+{
+    if (gpu_batch_depth > 0) {
+        --gpu_batch_depth;
+    }
+    if (gpu_batch_depth == 0) {
+        __gpu_publish();
+    }
+}
+
 static void __gpu_publish(void)
 {
+    // Inside a batch the damage is recorded and left for its end. Nothing is
+    // lost: __gpu_damage() has already merged it.
+    if (gpu_batch_depth > 0) {
+        return;
+    }
     if (!active || !damage_valid) {
         return;
     }
@@ -637,7 +664,7 @@ static void __gpu_publish(void)
         if (__gpu_command(sizeof(*scanout), VIRTIO_GPU_RESP_OK_NODATA) < 0) {
             pr_err("Failed to point the scanout at the resource.\n");
             submit_busy = false;
-            return;
+                return;
         }
         scanout_set = true;
         if (!scanout_ever_set) {
@@ -1509,6 +1536,8 @@ static const video_backend_t virtio_gpu_backend = {
     .late_init           = virtio_gpu_late_init,
     .put_cells           = virtio_gpu_put_cells,
     .scroll              = virtio_gpu_scroll,
+    .begin_batch         = virtio_gpu_begin_batch,
+    .end_batch           = virtio_gpu_end_batch,
     .set_cursor_position = virtio_gpu_set_cursor_position,
     .set_cursor_style    = virtio_gpu_set_cursor_style,
     .set_geometry        = virtio_gpu_set_geometry,

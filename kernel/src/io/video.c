@@ -408,6 +408,7 @@ static inline unsigned __row_start(void) { return (cursor / video_columns) * vid
 /// @return The cell index just past the end of the row.
 static inline unsigned __row_end(void) { return __row_start() + video_columns; }
 
+
 /// @brief Pushes a range of cells to the backend.
 /// @param first Index of the first cell.
 /// @param count How many cells to push.
@@ -1243,6 +1244,38 @@ void video_request_resize(unsigned columns, unsigned rows)
     resize_pending      = true;
 }
 
+/// @brief Depth of the output batch the console is inside, zero when none.
+///
+/// Touched from process context and from an interrupt -- a kernel printf can
+/// happen anywhere -- so the changes are made with interrupts masked. The
+/// alternative, a lost increment, would leave a batch open and output invisible
+/// until the next one closed it.
+static unsigned batch_depth = 0;
+
+void video_begin_batch(void)
+{
+    uint8_t flags   = irq_disable();
+    bool_t outermost = (batch_depth == 0);
+    ++batch_depth;
+    irq_enable(flags);
+    if (outermost && (video_active->begin_batch != NULL)) {
+        video_active->begin_batch();
+    }
+}
+
+void video_end_batch(void)
+{
+    uint8_t flags    = irq_disable();
+    bool_t outermost = false;
+    if (batch_depth > 0) {
+        outermost = (--batch_depth == 0);
+    }
+    irq_enable(flags);
+    if (outermost && (video_active->end_batch != NULL)) {
+        video_active->end_batch();
+    }
+}
+
 void video_service_pending(void)
 {
     // Output has been through the console by now, so a retained wide console that
@@ -1614,6 +1647,8 @@ void video_puts(const char *str)
     }
     // Batch cursor updates for efficiency.
     batch_cursor_updates = 1;
+    // And the display work, for the same reason: this is one run of output.
+    video_begin_batch();
     // Output each character in the string.
     while ((*str) != 0) {
         video_putc((*str++));
@@ -1621,6 +1656,7 @@ void video_puts(const char *str)
     // Re-enable cursor updates and sync position.
     batch_cursor_updates = 0;
     video_update_cursor_position();
+    video_end_batch();
 }
 
 void video_update_cursor_position(void)

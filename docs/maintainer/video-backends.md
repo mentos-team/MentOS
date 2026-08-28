@@ -778,6 +778,54 @@ rows were continuations of a logical line. Reflow is not something this
 representation can express; adding it means per-row wrap flags and a changed
 write path, which is a terminal-emulator change and not this one.
 
+## Output batching
+
+Making a change *visible* costs nothing on a backend that writes into video
+memory, and a device round trip on one that does not. The generic layer therefore
+brackets each run of output it knows to be one unit and lets the backend present
+once at the end:
+
+| hook | who calls it |
+|---|---|
+| `begin_batch` / `end_batch` (both optional) | `video_begin_batch()` / `video_end_batch()`, from `procv_write()` around one `write()` and from `video_puts()` around one string |
+
+It is a hint, not a mode. The cell buffer changes exactly as it did before, cell
+by cell, and everything is visible by the time `video_end_batch()` returns. A
+single-character write is its own batch, so typing is as prompt as it ever was,
+and nothing waits on a timer. Nesting is counted so a caller may bracket a callee
+that brackets itself; the depth is changed with interrupts masked, because a
+kernel `printf()` can happen in an interrupt and a lost increment would leave a
+batch open. The fixed-geometry backends leave both hooks NULL and are unaffected.
+
+**Why it was needed.** `__draw_char()` preserves insert semantics by dirtying
+from the cursor to the end of the row, and the cursor is re-placed after every
+character. On virtio-gpu each of those published: a `TRANSFER_TO_HOST_2D` and a
+`RESOURCE_FLUSH`, each a synchronous virtqueue round trip. Measured on the real
+path -- one 79-byte `write()` to `/proc/video` at 128x48 on 1024x768:
+
+| | before | after |
+|---|---|---|
+| TRANSFER_TO_HOST_2D | 158 | **1** |
+| RESOURCE_FLUSH | 158 | **1** |
+| virtqueue submissions | 316 | **2** |
+| bytes transferred | 10112 KiB | **64 KiB** |
+| cycles in submission | 50 ms | **0.18 ms** |
+| wall | 78 ms | **20 ms** |
+
+`ls -l /bin` -- 2043 printable characters, 44 scrolls -- went from 4.16 s to
+3.16 s, with device submissions down 87% (8612 to 1154) and 401 MiB of transfers
+down to 165 MiB.
+
+**What dominates now, measured after the change:** scrolling, at 1.37 s of the
+3.16 s. `virtio_gpu_scroll()` memmoves the whole framebuffer up one cell row --
+about 3 MiB at 1024x768 -- and 44 of those is 132 MiB of guest-RAM copying, which
+under TCG runs at roughly 100 MB/s. Batching cannot help: each scroll is in its
+own `write()`. The fix is the one the VBE backend already uses, panning a taller
+resource instead of moving pixels, which is a backend change of its own.
+Rasterization is second at 0.62 s: `put_cells()` redraws from the cursor to the
+end of the row for every character, so a line costs O(columns^2) glyph draws.
+Neither is device synchronization, which is now 0.33 s of the 3.16 s.
+
 ## Fonts, and runtime font size
 
 ### The asset
