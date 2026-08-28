@@ -1835,8 +1835,12 @@ void video_shift_one_line_up(void)
 
 void video_shift_one_line_down(void)
 {
-    // Check if we haven't scrolled beyond our scrollback buffer limit.
-    if (scrolled_lines < (int)history_rows) {
+    // Only as far back as the scrollback actually goes. Bounded by what has been
+    // written, not by the capacity: the buffer is allocated blank and fills from
+    // its newest end, so paging past history_used would scroll padding onto the
+    // screen and let the user keep going for ten screens of it, which looks like
+    // the console has lost its content rather than like the top of the buffer.
+    if (scrolled_lines < (int)history_used) {
         // Save the current visible screen before first scroll operation.
         if (scrolled_lines == 0) {
             memcpy(original_page, screen, screen_cells * sizeof(video_cell_t));
@@ -1889,8 +1893,8 @@ void video_scroll_down(int lines)
     if (lines < 0) {
         lines = 0;
     }
-    if (lines > (int)history_rows) {
-        lines = (int)history_rows;
+    if (lines > (int)history_used) {
+        lines = (int)history_used;
     }
     // Scroll down by the specified number of lines.
     for (int i = 0; i < lines; ++i) {

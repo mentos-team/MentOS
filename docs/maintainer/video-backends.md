@@ -662,6 +662,13 @@ hold real content. It exists because the history arrives blank and fills from it
 newest end, so a blank row there is either a blank line the terminal produced or
 padding nothing ever wrote, and a grow must reveal the first and not the second.
 
+It is also what bounds scrollback navigation. Paging back stops at
+`history_used`, not at the depth of the buffer: the buffer is allocated blank and
+fills from its newest end, so a bound of the capacity let the user page 480 rows
+into a scrollback holding 53 and watch the console fill with padding, which looks
+like lost content rather than the top of the buffer. Measured with 53 rows of real
+scrollback: `ESC [ 900 S` reached row 480 before, and reaches 53 now.
+
 | event | effect on `history_used` |
 |---|---|
 | output scrolls the screen | `+= 1` (capped at the scrollback depth) |
