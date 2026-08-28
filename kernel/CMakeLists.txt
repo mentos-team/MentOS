@@ -12,6 +12,7 @@ option(ENABLE_PAGE_TRACE "Enables page allocation tracing." OFF)
 option(ENABLE_EXT2_TRACE "Enables EXT2 allocation tracing." OFF)
 option(ENABLE_FILE_TRACE "Enables vfs_file allocation tracing." OFF)
 option(ENABLE_KERNEL_TESTS "Enable kernel-side unit and integration tests" OFF)
+option(ENABLE_PERF "Enables the perf counter facility (klib/perf.h)." OFF)
 option(ENABLE_SCHEDULER_FEEDBACK "Enables scheduling feedback on terminal." OFF)
 
 # =============================================================================
@@ -125,6 +126,10 @@ if(${EMULATOR_OUTPUT_TYPE} STREQUAL OUTPUT_LOG)
     target_compile_definitions(kernel PUBLIC EMULATOR_OUTPUT_LOG)
 endif()
 # If we enabled the tests, tell that to the C code.
+if(ENABLE_PERF)
+    target_compile_definitions(kernel PUBLIC ENABLE_PERF)
+endif()
+
 if(ENABLE_KERNEL_TESTS)
     target_compile_definitions(kernel PUBLIC ENABLE_KERNEL_TESTS)
 endif()

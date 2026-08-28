@@ -20,6 +20,7 @@
 #include "mem/paging.h"
 #include "stddef.h"
 #include "string.h"
+#include "klib/perf.h"
 
 /// @brief PCI vendor ID assigned to virtio devices.
 #define VIRTIO_PCI_VENDOR      0x1AF4U
@@ -652,8 +653,22 @@ void virtq_free(virtio_device_t *dev, virtq_t *vq)
     memset(vq, 0, sizeof(*vq));
 }
 
+/// @name Virtqueue metrics
+/// @brief See klib/perf.h. Off unless ENABLE_PERF.
+///
+/// One submission is one round trip to the device, and the poll rounds are how
+/// long the processor sat waiting for it -- which is the part a caller can only
+/// reduce by asking for less.
+/// @{
+PERF_COUNTER(perf_submits, "virtqueue.submit.calls", "calls");
+PERF_COUNTER(perf_rounds, "virtqueue.submit.poll_rounds", "rounds");
+PERF_COUNTER(perf_submit_cycles, "virtqueue.submit.cycles", PERF_UNIT_CYCLES);
+/// @}
+
 int virtq_submit_sync(virtq_t *vq, const virtq_buffer_t *buffers, unsigned count, uint32_t *written)
 {
+    PERF_INC(perf_submits);
+    perf_scope_t scope = PERF_SCOPE_BEGIN();
     if ((vq == NULL) || (vq->desc == NULL) || (buffers == NULL) || (count == 0)) {
         pr_err("Invalid arguments to virtq_submit_sync.\n");
         return -1;
@@ -695,16 +710,20 @@ int virtq_submit_sync(virtq_t *vq, const virtq_buffer_t *buffers, unsigned count
             ++vq->used_seen;
             if (id != 0) {
                 pr_err("Queue %u completed descriptor %u, expected 0.\n", vq->index, id);
+                PERF_SCOPE_END(perf_submit_cycles, scope);
                 return -1;
             }
             if (written != NULL) {
                 *written = length;
             }
+            PERF_SCOPE_END(perf_submit_cycles, scope);
             return 0;
         }
         cpu_relax();
+        PERF_INC(perf_rounds);
     }
 
     pr_err("Queue %u did not complete a request within %u rounds.\n", vq->index, (unsigned)VIRTQ_POLL_ROUNDS);
+    PERF_SCOPE_END(perf_submit_cycles, scope);
     return -2;
 }

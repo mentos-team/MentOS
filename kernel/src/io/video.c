@@ -23,6 +23,7 @@
 #include "io/video.h"
 #include "io/video_backend.h"
 #include "klib/irqflags.h"
+#include "klib/perf.h"
 #include "mem/alloc/zone_allocator.h"
 #include "mem/mm/page.h"
 #include "stdbool.h"
@@ -409,6 +410,28 @@ static inline unsigned __row_start(void) { return (cursor / video_columns) * vid
 static inline unsigned __row_end(void) { return __row_start() + video_columns; }
 
 
+/// @name Console metrics
+/// @brief What the console did, for klib/perf.h. Off unless ENABLE_PERF.
+///
+/// Chosen to answer the question this console keeps raising: how much work does
+/// one character cost, and where does it go. Cells and calls together give the
+/// amplification -- one character dirtying a whole row shows up as cells per
+/// call -- and the cycle counters say which layer spent the time.
+/// @{
+PERF_COUNTER(perf_putc, "video.putc.calls", "calls");
+PERF_COUNTER(perf_putc_cycles, "video.putc.cycles", PERF_UNIT_CYCLES);
+PERF_COUNTER(perf_flush, "video.put_cells.calls", "calls");
+PERF_COUNTER(perf_flush_cells, "video.put_cells.cells", "cells");
+PERF_COUNTER(perf_flush_cycles, "video.put_cells.cycles", PERF_UNIT_CYCLES);
+PERF_COUNTER(perf_cursor, "video.set_cursor.calls", "calls");
+PERF_COUNTER(perf_cursor_cycles, "video.set_cursor.cycles", PERF_UNIT_CYCLES);
+PERF_COUNTER(perf_scroll, "video.scroll.calls", "calls");
+PERF_COUNTER(perf_scroll_cycles, "video.scroll.cycles", PERF_UNIT_CYCLES);
+PERF_COUNTER(perf_batch, "video.batch.runs", "runs");
+PERF_COUNTER(perf_resize, "video.resize.calls", "calls");
+PERF_COUNTER(perf_resize_cycles, "video.resize.cycles", PERF_UNIT_CYCLES);
+/// @}
+
 /// @brief Pushes a range of cells to the backend.
 /// @param first Index of the first cell.
 /// @param count How many cells to push.
@@ -425,7 +448,11 @@ static void __flush(unsigned first, unsigned count)
     if (count == 0) {
         return;
     }
+    PERF_INC(perf_flush);
+    PERF_ADD(perf_flush_cells, count);
+    perf_scope_t scope = PERF_SCOPE_BEGIN();
     video_active->put_cells(first % video_columns, first / video_columns, &screen[first], count);
+    PERF_SCOPE_END(perf_flush_cycles, scope);
 }
 
 /// @brief Pushes the whole screen to the backend.
@@ -1116,6 +1143,8 @@ static void __console_retain(const console_previous_t *previous, unsigned new_co
 
 static int __console_resize(unsigned columns, unsigned rows, bool_t force)
 {
+    PERF_INC(perf_resize);
+    perf_scope_t resize_scope = PERF_SCOPE_BEGIN();
     if (!__console_geometry_ok(columns, rows)) {
         pr_err("Refusing a %ux%u console: outside the supported range.\n", columns, rows);
         return -1;
@@ -1173,6 +1202,7 @@ static int __console_resize(unsigned columns, unsigned rows, bool_t force)
     __console_retain(&previous, columns);
 
     __republish();
+    PERF_SCOPE_END(perf_resize_cycles, resize_scope);
     pr_notice("Console resized to %ux%u.\n", columns, rows);
     return 0;
 }
@@ -1258,8 +1288,11 @@ void video_begin_batch(void)
     bool_t outermost = (batch_depth == 0);
     ++batch_depth;
     irq_enable(flags);
-    if (outermost && (video_active->begin_batch != NULL)) {
-        video_active->begin_batch();
+    if (outermost) {
+        PERF_INC(perf_batch);
+        if (video_active->begin_batch != NULL) {
+            video_active->begin_batch();
+        }
     }
 }
 
@@ -1365,7 +1398,7 @@ int video_promote_backend(const video_backend_t *next)
     return 0;
 }
 
-void video_putc(int c)
+static void __video_putc(int c)
 {
     // Handle ANSI escape sequence start.
     if (c == '\033') {
@@ -1639,6 +1672,14 @@ void video_putc(int c)
     }
 }
 
+void video_putc(int c)
+{
+    PERF_INC(perf_putc);
+    perf_scope_t scope = PERF_SCOPE_BEGIN();
+    __video_putc(c);
+    PERF_SCOPE_END(perf_putc_cycles, scope);
+}
+
 void video_puts(const char *str)
 {
     // Validate input string.
@@ -1683,7 +1724,10 @@ void video_update_cursor_position(void)
     // party that knows whether it drew anything, and scrolling moves its overlay
     // under it, so the generic layer cannot track where the pixels ended up.
     // Note the cell comes from the buffer, which never contains cursor pixels.
+    PERF_INC(perf_cursor);
+    perf_scope_t scope = PERF_SCOPE_BEGIN();
     video_active->set_cursor_position(column, row, screen[cursor]);
+    PERF_SCOPE_END(perf_cursor_cycles, scope);
 }
 
 void video_cursor_blink_tick(void)
@@ -1827,7 +1871,10 @@ static void __shift_screen_up(void)
     }
     // Let the backend move the pixels it already has, then repaint the line
     // that was uncovered.
+    PERF_INC(perf_scroll);
+    perf_scope_t scroll_scope = PERF_SCOPE_BEGIN();
     video_active->scroll(1);
+    PERF_SCOPE_END(perf_scroll_cycles, scroll_scope);
     __flush(screen_cells - video_columns, video_columns);
 }
 
@@ -1840,7 +1887,10 @@ static void __shift_screen_down(void)
     // Restore from the history buffer.
     memcpy(screen, &history[history_cells - ((unsigned)scrolled_lines * video_columns)],
            video_columns * sizeof(video_cell_t));
+    PERF_INC(perf_scroll);
+    perf_scope_t scroll_scope = PERF_SCOPE_BEGIN();
     video_active->scroll(-1);
+    PERF_SCOPE_END(perf_scroll_cycles, scroll_scope);
     __flush(0, video_columns);
 }
 

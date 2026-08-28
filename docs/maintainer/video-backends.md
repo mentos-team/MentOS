@@ -816,6 +816,11 @@ path -- one 79-byte `write()` to `/proc/video` at 128x48 on 1024x768:
 3.16 s, with device submissions down 87% (8612 to 1154) and 401 MiB of transfers
 down to 165 MiB.
 
+The counters these figures come from are not throwaway: they live on the generic
+facility in [perf-counters.md](perf-counters.md), off unless `ENABLE_PERF=ON`, so
+the same measurement can be repeated with `echo reset > /proc/perf`, the workload,
+and `cat /proc/perf`.
+
 **What dominates now, measured after the change:** scrolling, at 1.37 s of the
 3.16 s. `virtio_gpu_scroll()` memmoves the whole framebuffer up one cell row --
 about 3 MiB at 1024x768 -- and 44 of those is 132 MiB of guest-RAM copying, which

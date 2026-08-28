@@ -68,6 +68,23 @@
 #include "mem/paging.h"
 #include "io/video.h"
 #include "io/video_backend.h"
+#include "klib/perf.h"
+
+/// @name Backend metrics
+/// @brief See klib/perf.h. Off unless ENABLE_PERF.
+///
+/// The device counters are the ones that matter here: a transfer and a flush are
+/// each a synchronous round trip, so their *count* is the cost, and the bytes say
+/// how much the host had to copy for them.
+/// @{
+PERF_COUNTER(perf_cells, "virtio_gpu.draw_cell.cells", "cells");
+PERF_COUNTER(perf_publish, "virtio_gpu.publish.calls", "calls");
+PERF_COUNTER(perf_publish_cycles, "virtio_gpu.publish.cycles", PERF_UNIT_CYCLES);
+PERF_COUNTER(perf_transfer, "virtio_gpu.transfer.calls", "calls");
+PERF_COUNTER(perf_transfer_bytes, "virtio_gpu.transfer.bytes256", "bytes256");
+PERF_COUNTER(perf_flush_cmd, "virtio_gpu.resource_flush.calls", "calls");
+/// @}
+
 #include "stdbool.h"
 #include "stddef.h"
 #include "string.h"
@@ -607,6 +624,8 @@ static void __gpu_publish(void)
     if (!active || !damage_valid) {
         return;
     }
+    PERF_INC(perf_publish);
+    perf_scope_t scope = PERF_SCOPE_BEGIN();
 
     // Claim the submission path, or give up and leave the damage recorded.
     uint8_t flags = irq_disable();
@@ -648,8 +667,12 @@ static void __gpu_publish(void)
         // Put the damage back: it never reached the device.
         __gpu_damage(first, last);
         submit_busy = false;
+        PERF_SCOPE_END(perf_publish_cycles, scope);
         return;
     }
+    PERF_INC(perf_transfer);
+    /* In units of 256 bytes, which keeps a long run clear of a 32-bit wrap. */
+    PERF_ADD(perf_transfer_bytes, ((gpu_width * height) / 64U));
     transfer_all = false;
 
     if (!scanout_set) {
@@ -684,8 +707,10 @@ static void __gpu_publish(void)
     flush->resource_id = resource_id;
     flush->padding     = 0;
     (void)__gpu_command(sizeof(*flush), VIRTIO_GPU_RESP_OK_NODATA);
+    PERF_INC(perf_flush_cmd);
 
     submit_busy = false;
+    PERF_SCOPE_END(perf_publish_cycles, scope);
 }
 
 /// @brief Draws one cell, into memory only.
@@ -706,6 +731,7 @@ static void __gpu_draw_cell(
     uint8_t attribute,
     video_cursor_shape_t overlay)
 {
+    PERF_INC(perf_cells);
     uint32_t foreground = palette[attribute & 0x0FU];
     uint32_t background = palette[(attribute >> 4U) & 0x0FU];
     uint8_t *base       = framebuffer + ((size_t)row * gpu_row_bytes) + ((size_t)column * gpu_cell_width * 4U);
