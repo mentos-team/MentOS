@@ -580,7 +580,7 @@ instead, and its two directions did not agree.
 | shrink | the window narrows upwards; rows that no longer fit go back to being scrollback |
 | grow wider | new columns blank on the right |
 | shrink narrower | right-hand columns **clipped and lost** |
-| cursor, saved cursor | move with the row they are on, then clamp; a parked cursor stays parked |
+| cursor, saved cursor | move with the logical cell they are on; the *rendered* position is clamped into the window, the logical one is not |
 | scrollback | exactly the rows the window no longer covers, re-strided per row, newest last, oldest dropped to fit |
 | scrolled back during a resize | returns to the live view first |
 | escape parser, current colour | untouched; both are geometry-independent |
@@ -609,6 +609,48 @@ fix that, because at the moment of the grow nothing has been displaced yet — t
 grow is what creates the state the shrink then destroys. The two operations have
 to be inverses, which means they have to be the same operation with the sign
 flipped, which is what a window over a sequence gives you for free.
+
+#### A cursor has two positions
+
+`cursor` and `saved_cursor` are **rendered** positions: an index into `screen`
+that always names a cell that exists, which is what the backend is given and
+where output is written. The cell the cursor was actually placed on is its
+**logical** position, and a resize can put that outside the window -- above the
+top when a shrink hides its row, past the right edge when narrowing clips its
+column. Clamping the rendered position is what keeps rendering possible; the part
+the clamp cannot express is kept beside it, as a bias:
+
+| | meaning | sign |
+|---|---|---|
+| `cursor_bias.rows` | logical row minus rendered row | only ever negative -- a row can only be hidden *above* the window |
+| `cursor_bias.columns` | logical column minus rendered column | only ever positive -- a column can only be clipped on the *right* |
+
+Migration folds the bias in, moves the logical position by the same `delta` the
+rows move by, and re-derives the bias from whatever the new clamp could not
+represent. So a shrink that hides the cursor and a grow that reveals it again are
+inverses, and nothing is compensated separately -- there is one logical position
+and it is what moves.
+
+**Invalidation has exactly one site, and a resize is deliberately not it.**
+`__set_cursor()` clears the bias, and it is the only function in the file that
+moves the cursor: output, typing, `ESC [ H`, `ESC [ A`-`D`, newline and the
+scroll paths all arrive there. Placing a cursor *establishes* a logical position,
+so any memory of a hidden one is then wrong. `__console_migrate()` assigns
+`cursor` directly, on purpose: migration transforms the bias and must never
+discard it, which is what makes `A -> B -> C -> B -> A` return the cursor rather
+than merely a plausible cursor.
+
+`ESC [ s` copies the bias with the position and `ESC [ u` restores it, so saving a
+cursor that a resize is currently hiding and restoring it later gives back the
+cell that was saved. Note that `ESC [ u` has to put the bias back *after*
+`__set_cursor()`, which cleared it.
+
+Measured, 80 columns throughout, no output between transitions: cursor on row 0,
+`80x30 -> 80x10 -> 80x30` holds `bias.rows = -20` while hidden and returns the
+cursor to row 0. `100x25 -> 60x40 -> 100x25` holds `bias.columns = 40` and returns
+the column. On the real virtio path, `128x48 -> 128x37 -> 128x48` returns the
+saved cursor exactly -- it used to drift, because its row-0 default is precisely
+the case a shrink hides.
 
 #### The state that makes it work
 
@@ -642,23 +684,15 @@ scrolling anything away when all it removed was empty space.
 
 #### What is not reversible, and why
 
-Two residuals, both measured, neither a consequence of the model:
+One residual, measured, and not a consequence of the model:
 
-- **Horizontal round trips are lossy.** Narrowing clips the right-hand columns
-  and they are gone; widening again blank-fills. `240x67 → 128x37 → 240x67`
-  returns every row in the right order with its left 128 columns intact and the
-  rest blank. Vertical reversibility is exact; horizontal is not, and saying
-  "resize is reversible" without that qualifier is wrong.
-- **A cursor whose row is pushed above the window is clamped, and the clamp does
-  not come back.** Shrink far enough that the cursor's row is no longer in the
-  window and it lands on the top row; growing back moves it with the top row, not
-  back to the row it named, because that cell stopped existing at the intermediate
-  size. Measured: cursor at row 0 of 80x30, `→ 80x10 → 80x30`, cursor returns at
-  row 20 — while every cell of content returns exactly. The same applies to the
-  saved cursor, including the row-0 default nobody has set, so `ESC [ u` after a
-  deep shrink and regrowth can land lower than it would have. Fixing this needs
-  the cursor to carry a logical row of its own, which is state the rest of the
-  console does not need; it is recorded here instead.
+- **Horizontal cell data is lost.** Narrowing clips the right-hand columns of the
+  stored rows and widening blank-fills them. `240x67 → 128x37 → 240x67` returns
+  every row in the right order with its left 128 columns intact and the rest
+  blank. The cursor's *column* does come back — that is what the bias is for —
+  but the characters it lands among do not. Vertical reversibility is exact;
+  horizontal is not, and saying "resize is reversible" without that qualifier is
+  wrong.
 
 **There is no reflow, and this is not a simplification.** `screen` and `history`
 are flat cell arrays with no soft-wrap marker, so there is no record of which

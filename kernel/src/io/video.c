@@ -178,6 +178,30 @@ static unsigned cursor = 0;
 /// @brief Cursor position saved by ESC [ s and restored by ESC [ u.
 static unsigned saved_cursor = 0;
 
+/// @brief How far a cursor's logical cell lies from the cell it is drawn in.
+///
+/// A cursor has two positions, and only one of them can be an index into the
+/// screen. The **rendered** position is `cursor` itself: always a cell that
+/// exists, which is what the backend is given and what output is written to. The
+/// **logical** position is the cell the cursor was actually placed on, which a
+/// resize can put outside the window -- above the top when a shrink hides its
+/// row, or past the right edge when narrowing clips its column. Clamping the
+/// rendered position is what keeps rendering possible; this is where the part the
+/// clamp could not express is kept, so that growing back can undo it.
+///
+/// Zero in every ordinary state. `rows` is only ever negative and `columns` only
+/// ever positive, because a row can only be hidden above the window and a column
+/// only clipped on the right.
+typedef struct {
+    int rows;    ///< Logical row minus rendered row.
+    int columns; ///< Logical column minus rendered column.
+} console_bias_t;
+
+/// @brief The live cursor's bias. Cleared by __set_cursor(), never by a resize.
+static console_bias_t cursor_bias = {0, 0};
+/// @brief The saved cursor's bias, carried by ESC [ s and ESC [ u with it.
+static console_bias_t saved_bias  = {0, 0};
+
 /// @brief The current color attribute (foreground and background).
 unsigned char color = 7;
 
@@ -290,7 +314,18 @@ static inline bool_t __cursor_is_parked(void) { return cursor >= screen_cells; }
 
 /// @brief Moves the cursor, keeping it within the buffer.
 /// @param index The desired cell index.
-static inline void __set_cursor(unsigned index) { cursor = (index > screen_cells) ? screen_cells : index; }
+static inline void __set_cursor(unsigned index)
+{
+    // Placing the cursor establishes a new logical position, so whatever a
+    // resize was remembering about the old one is now wrong. This is the only
+    // function that moves the cursor -- output, escape sequences and typing all
+    // arrive here -- which is what makes it the one place this has to be said.
+    // A resize deliberately does not come through here: migration transforms the
+    // bias, it must never discard it.
+    cursor_bias.rows    = 0;
+    cursor_bias.columns = 0;
+    cursor              = (index > screen_cells) ? screen_cells : index;
+}
 
 /// @brief Get the current column number.
 /// @return The column number.
@@ -726,31 +761,41 @@ static unsigned __console_live_rows(void)
     return live;
 }
 
-/// @brief Moves a cell position by a number of rows and into a new geometry.
-/// @param position The position, as an index into the old screen.
-/// @param old_columns The width the position is expressed in.
+/// @brief Moves a cursor by a number of rows and into a new geometry.
+/// @param position The rendered position, as an index into the old screen.
+/// @param old_columns The width that position is expressed in.
 /// @param next The storage the result must index.
 /// @param delta Rows to move by, positive downwards.
-/// @return The position in the new screen.
+/// @param[in,out] bias The cursor's bias, updated to match the result.
+/// @return The rendered position in the new screen.
 ///
-/// The clamps are the one place a position can lose information, and only ever
-/// because the cell it named no longer exists: a row pushed past the top of the
-/// sequence, or a column a narrower console does not have.
-static unsigned __console_move_position(unsigned position, unsigned old_columns, const console_storage_t *next,
-                                        int delta)
+/// Works in logical coordinates throughout: the bias is folded in on the way in
+/// and re-derived on the way out, so the cursor's logical cell is carried across
+/// unchanged and only its *rendered* stand-in is clamped. That is what makes the
+/// move reversible -- a later grow folds the same bias back in and lands on the
+/// cell the cursor named all along.
+static unsigned __console_move_cursor(unsigned position, unsigned old_columns, const console_storage_t *next, int delta,
+                                      console_bias_t *bias)
 {
-    int row         = (int)(position / old_columns) + delta;
-    unsigned column = position % old_columns;
-    if (row < 0) {
-        row = 0;
+    int row             = (int)(position / old_columns) + bias->rows + delta;
+    int column          = (int)(position % old_columns) + bias->columns;
+    int rendered_row    = row;
+    int rendered_column = column;
+    if (rendered_row < 0) {
+        rendered_row = 0;
     }
-    if ((unsigned)row >= next->rows) {
-        row = (int)next->rows - 1;
+    if (rendered_row >= (int)next->rows) {
+        rendered_row = (int)next->rows - 1;
     }
-    if (column >= next->columns) {
-        column = next->columns - 1U;
+    if (rendered_column < 0) {
+        rendered_column = 0;
     }
-    return ((unsigned)row * next->columns) + column;
+    if (rendered_column >= (int)next->columns) {
+        rendered_column = (int)next->columns - 1;
+    }
+    bias->rows    = row - rendered_row;
+    bias->columns = column - rendered_column;
+    return ((unsigned)rendered_row * next->columns) + (unsigned)rendered_column;
 }
 
 /// @brief Moves the console's contents into new storage.
@@ -831,11 +876,11 @@ static void __console_migrate(const console_storage_t *next)
     if (__cursor_is_parked()) {
         cursor = next->cells;
     } else {
-        cursor = __console_move_position(cursor, old_columns, next, delta);
+        cursor = __console_move_cursor(cursor, old_columns, next, delta, &cursor_bias);
     }
     // The saved cursor gets the same move, for the same reason: ESC [ u after a
     // resize should land on the cell it was told to remember.
-    saved_cursor = __console_move_position(saved_cursor, old_columns, next, delta);
+    saved_cursor = __console_move_cursor(saved_cursor, old_columns, next, delta, &saved_bias);
 
     // Publish. Every value describing the console's shape changes together, and
     // this is the only place they may.
@@ -860,6 +905,7 @@ static void __console_migrate(const console_storage_t *next)
 /// asked to prepare before anything the console is currently using is touched,
 /// and the old storage is only released once the new one is live. Any failure
 /// leaves the console exactly as it was, still displaying.
+
 
 static int __console_resize(unsigned columns, unsigned rows, bool_t force)
 {
@@ -1250,13 +1296,22 @@ void video_putc(int c)
             }
             // ESC [ s - Save cursor position.
             else if (c == 's') {
+                // The logical cell is what is being remembered, so the bias is
+                // part of the position and travels with it. Saving a cursor a
+                // resize is currently hiding and restoring it later has to give
+                // back the cell that was saved, not the clamp that stood in.
                 saved_cursor = cursor;
+                saved_bias   = cursor_bias;
             }
             // ESC [ u - Restore cursor position.
             else if (c == 'u') {
                 // Validate saved position is within the visible screen.
                 if (saved_cursor < screen_cells) {
                     __set_cursor(saved_cursor);
+                    // __set_cursor() cleared the bias, as it must for every
+                    // ordinary move; this one is not ordinary, because the
+                    // position it was given carries one.
+                    cursor_bias = saved_bias;
                 }
                 video_update_cursor_position();
             }
