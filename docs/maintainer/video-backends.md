@@ -579,7 +579,7 @@ instead, and its two directions did not agree.
 | grow taller | the window widens **upwards**, revealing older rows; it pads at the bottom only once the sequence runs out |
 | shrink | the window narrows upwards; rows that no longer fit go back to being scrollback |
 | grow wider | new columns blank on the right |
-| shrink narrower | right-hand columns **clipped and lost** |
+| shrink narrower | right-hand columns leave the viewport; the storage they were clipped from is retained, so widening brings them back |
 | cursor, saved cursor | move with the logical cell they are on; the *rendered* position is clamped into the window, the logical one is not |
 | scrollback | exactly the rows the window no longer covers, re-strided per row, newest last, oldest dropped to fit |
 | scrolled back during a resize | returns to the live view first |
@@ -592,10 +592,13 @@ anybody is looking at.
 #### The invariant
 
 **A geometry-only change does not mutate the console's contents; it changes the
-window they are seen through.** With no intervening output, scrollback
-navigation, font change or clear, a round trip `A → B → A` — or `A → B → C → B →
-A`, or forty alternations — returns the *identical* visible cells, row ordering,
-history and saved cursor.
+window they are seen through.** With no intervening output, scrollback navigation
+or clear, a geometry sequence that returns to a geometry it has been at returns
+*everything*: the identical visible cells including columns a narrower viewport
+had clipped, row ordering, scrollback, the cursor and the saved cursor. Verified
+for `A → B → A` on either axis and on both at once, `A → B → C → B → A`, forty
+alternations, and a font round trip — which is a geometry change on both axes and
+is held to the same standard.
 
 This is stronger than what came before it, and it had to be. The first attempt
 made `shrink → grow` reversible by remembering how many rows a shrink had
@@ -682,17 +685,85 @@ the screen already says where its content ends, and this is what keeps a grow fr
 dragging scrollback in above a screen that had room to spare — and a shrink from
 scrolling anything away when all it removed was empty space.
 
+#### The retained wide console
+
+Narrowing has nowhere in a console of the new width to put the columns it clips.
+But the storage they were clipped *from* is a complete console the resize was
+about to release anyway, so instead of copying the tails somewhere it is simply
+kept: while it is held, migration reads its rows from there rather than from the
+live buffers, and a later widen gets the columns back. Nothing is allocated and
+nothing is copied to make this work.
+
+It holds the same logical row sequence the live console does -- this much of its
+history, then this much of its screen -- which is why a *vertical* resize in
+between changes nothing about it: that moves the window, not the sequence. Only
+two things have to be tracked. A crop, when the sequence outgrows the new
+scrollback depth, drops rows from the oldest end and the retained console must
+lose exactly the same ones. And its sequence length must still match the live
+one -- which is not merely a defensive check: a newline that does not scroll
+changes no cell, so nothing invalidates, but it does extend the sequence, and a
+mismatch is exactly the right answer to that.
+
+**The retained console is the widest still-valid truth, not the most recent
+one.** Across `240 -> 128 -> 100 -> 200 -> 240` the 240-column storage is held the
+whole way through and restores progressively: at 200 columns 128-199 come back,
+and at 240 the rest does. Adopting either intermediate would throw away the
+columns the round trip has to return to, and each intermediate is itself a clipped
+copy of what is already held. Widening *past* the retained width restores
+everything it has and leaves the genuinely new columns blank, and then releases
+it, because the live buffers now hold everything it did.
+
+#### What counts as a content mutation
+
+**Any** change to what the terminal is showing gives up every hidden column at
+once. This is deliberately coarse. The guarantee being bought is for geometry-only
+transitions; paying for it per row would mean a dirty bit per logical row plus the
+bookkeeping to keep those keys aligned across scrolling and cropping, and blank is
+always a safe answer here where stale text never is.
+
+The list, which is the thing to extend rather than bypass:
+
+| operation | where |
+|---|---|
+| writing a character, and the insert that shifts the row for it | `__draw_char()` |
+| erasing a character by shifting the row left | `__erase_to_space()` |
+| either erase — `ESC [ K`, `ESC [ J` | `__erase()` |
+| clearing the screen | the `ESC [ 2 J` branch |
+| clearing screen and scrollback | `video_clear()` |
+| scrolling the screen, which is also how output extends the sequence | `__shift_screen_up()` |
+
+One deliberate exclusion, and it is load-bearing:
+`video_update_cursor_position()` materializes a space in the cursor's cell when
+that cell is empty. That is rendering bookkeeping — it changes nothing visible —
+and it runs after every repaint *including a resize's own*, so counting it would
+release the retained console immediately after every resize and the preservation
+would never once take effect.
+
+Invalidation only raises a flag, because output happens wherever `printf()` does,
+including an interrupt, and handing pages back is not something to do there. The
+pages are released in process context: at the top of `__console_resize()`, before
+migration can read from something it is not allowed to trust, and in
+`video_service_pending()`, which is where output has just been through the
+console.
+
+#### Memory, while narrowed
+
+The retained console is not a new allocation class: it is one that already existed
+and has not been given back yet. Each console is separately bounded by
+`CONSOLE_MAX_BYTES`, so a narrowed state can occupy up to twice that — which is
+what to expect when reading a free-page count, and the reason a count taken while
+narrowed is not comparable with one taken while not. Measured across forty width
+transitions at 240x40 with retention on every one of them, `MemFree` is identical
+before and after: `1059168.00 Kb`.
+
 #### What is not reversible, and why
 
-One residual, measured, and not a consequence of the model:
-
-- **Horizontal cell data is lost.** Narrowing clips the right-hand columns of the
-  stored rows and widening blank-fills them. `240x67 → 128x37 → 240x67` returns
-  every row in the right order with its left 128 columns intact and the rest
-  blank. The cursor's *column* does come back — that is what the bias is for —
-  but the characters it lands among do not. Vertical reversibility is exact;
-  horizontal is not, and saying "resize is reversible" without that qualifier is
-  wrong.
+Nothing, for a geometry-only sequence, on either axis. What remains is the
+consequence of the mutation policy, and it is a choice rather than a limitation:
+once the terminal has changed any content, the columns a narrower viewport was
+hiding are gone, and widening shows blanks. That is the trade the coarse
+invalidation buys — no mutation, exact restoration; mutation, no stale cell ever
+resurrected.
 
 **There is no reflow, and this is not a simplification.** `screen` and `history`
 are flat cell arrays with no soft-wrap marker, so there is no record of which
@@ -1238,20 +1309,38 @@ any change to `__console_migrate()`:
 Cover, at minimum: `small → large → small` (the case that was broken — do not
 test only `large → small → large`, which the displaced-rows implementation
 passed), `A → B → C → B → A`, twenty-plus alternations for accumulated drift, the
-cursor on the first, middle and last visible row, a grow with less scrollback
-than the rows gained, empty rows mixed with non-empty ones, a resize while
-scrolled back, and a portrait/landscape swap. Then, separately,
-`shrink → output → grow`, which must reveal what *output* pushed into the
-scrollback — in order, with nothing duplicated — rather than what the shrink did.
+cursor on the first, middle and last visible row, a cursor and a saved cursor
+hidden entirely by a shrink, a grow with less scrollback than the rows gained,
+empty rows mixed with non-empty ones, a resize while scrolled back, a
+portrait/landscape swap, width-only round trips through more than one narrower
+width, and a font round trip.
 
-Verified this way at the round-trip commit: every geometry-only case exact in
-cells, row order, scrollback tail, cursor and saved cursor, including forty
-alternations; the two documented residuals (clipped columns, a clamped cursor
-row) are the only differences. The real host path was then confirmed separately
-with VNC `SetDesktopSize`, since a scripted request and a display-change event
-reach `__console_resize()` by different routes: `1024x768 → 1024x600 → 1024x768 →
-1024x900 → 1024x768` returned identical cells, scrollback and cursor at each
-return.
+Then the two things that must **not** be preserved. `shrink → output → grow` must
+reveal what *output* pushed into the scrollback — in order, with nothing
+duplicated — rather than what the shrink did. And a content mutation while
+narrowed must leave the hidden columns gone: check an ordinary character, a
+backspace, a `DEL`, a newline, `ESC [ K` and `ESC [ 2 J` each on its own, and
+assert that no clipped cell from before the mutation reappears. A right-hand
+identity in the fixture is what makes that checkable at a glance.
+
+Verified this way across the three commits: every geometry-only case exact in
+cells, row order, scrollback, cursor and saved cursor, including forty
+alternations, a cursor hidden entirely by a shrink, `240 → 128 → 100 → 200 → 240`
+with the clipped columns coming back progressively, and a font round trip. The
+real host path was confirmed separately with VNC `SetDesktopSize`, since a
+scripted request and a display-change event reach `__console_resize()` by
+different routes: `1024x768 → 800x600 → 640x480 → 1024x768` — 128x48 → 100x37 →
+80x30 → 128x48 cells — returned identical cells, scrollback, cursor and saved
+cursor.
+
+**Two ways this measurement can lie, both of which it did before being fixed.**
+An identity sampled from the row must be a single token in the log: a row whose
+sample contains a space breaks a whitespace-delimited parser, which silently
+dropped *every* row of the widest dumps and turned the comparison into "two empty
+lists are equal". Assert that the number of rows parsed equals the number of rows
+the console had. And filler has to be positional — a row of one repeated
+character cannot distinguish a restored column from a clipped one, so fill with
+something that says which column it came from.
 
 **Font checks** — everything below was exercised at the font commits, on
 virtio-gpu, by sending the escape sequence and decoding the result. A synthetic

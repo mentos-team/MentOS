@@ -162,6 +162,59 @@ static unsigned history_used = 0;
 /// arrays. What distinguishes "free this" from "this is static and always was".
 static page_t *console_pages       = NULL;
 
+/// @name The retained wide console
+/// @brief The full-width truth for columns the viewport is no longer showing.
+///
+/// Narrowing clips the right-hand columns of every row, and there is nowhere in a
+/// console of the new width to put them. But the storage they were clipped from
+/// is a complete console that the resize was about to release anyway, so instead
+/// of copying the tails somewhere it is simply kept: while it is held, migration
+/// reads its rows from here rather than from the live buffers, and a later widen
+/// gets the columns back.
+///
+/// It holds the same logical row sequence the live console does -- this much of
+/// its history, then this much of its screen -- which is why a *vertical* resize
+/// in between changes nothing about it: that moves the window, not the sequence.
+///
+/// Retained only while it is wider than the console, and only until the terminal
+/// changes any content. See __console_wide_invalidate() for what counts.
+/// @{
+static page_t *wide_pages               = NULL; ///< Its allocation, or NULL for the boot arrays.
+static const video_cell_t *wide_screen  = NULL; ///< Its screen.
+static const video_cell_t *wide_history = NULL; ///< Its scrollback.
+static unsigned wide_columns            = 0;    ///< Its width. Zero means nothing is retained.
+static unsigned wide_history_rows       = 0;    ///< Depth of its scrollback.
+static unsigned wide_history_used       = 0;    ///< Sequence rows in its scrollback.
+static unsigned wide_live               = 0;    ///< Sequence rows on its screen.
+/// Set the moment the terminal changes content, cleared when the pages are
+/// released. Written from wherever output happens, including an interrupt, which
+/// is why it only raises a flag: releasing pages belongs in process context.
+static volatile bool_t wide_stale       = false;
+/// @}
+
+/// @brief Gives up the retained wide console's hidden columns.
+///
+/// Called from every operation that changes what the terminal is showing, and
+/// deliberately coarse: one changed cell anywhere gives up every hidden column.
+/// The guarantee being bought is for geometry-only transitions, and paying for it
+/// per row would mean a dirty bit per logical row plus the bookkeeping to keep
+/// those keys aligned across scrolling and cropping. Blank is always a safe
+/// answer here; stale text never is.
+///
+/// **The operations that count as a content change**, which is the list to add to
+/// rather than bypass: writing a character (and the insert that shifts a row for
+/// it), deleting a character, either erase (`ESC [ K`, `ESC [ J`), clearing the
+/// screen or the screen and scrollback, and scrolling the screen -- which is also
+/// how output extends the row sequence.
+///
+/// Deliberately **not** on that list: video_update_cursor_position(), which
+/// materializes a space in the cursor's cell when that cell is empty. That is
+/// rendering bookkeeping -- it changes nothing visible, and it runs after every
+/// repaint including a resize's own, so counting it would drop the retained
+/// console immediately after every resize and the preservation would never once
+/// take effect.
+static inline void __console_wide_invalidate(void) { wide_stale = true; }
+
 /// The visible screen. Indexed exactly as the array it replaces was.
 static video_cell_t *screen        = boot_screen;
 /// The scrollback history.
@@ -382,6 +435,9 @@ static void __flush_all(void) { __flush(0, screen_cells); }
 /// @param count How many cells to erase.
 static void __erase(unsigned first, unsigned count)
 {
+    // Any change to the content gives up the retained wide console's hidden
+    // columns; see __console_wide_invalidate().
+    __console_wide_invalidate();
     if (first >= screen_cells) {
         return;
     }
@@ -398,6 +454,9 @@ static void __erase(unsigned first, unsigned count)
 /// @param c The character to draw.
 static inline void __draw_char(char c)
 {
+    // Any change to the content gives up the retained wide console's hidden
+    // columns; see __console_wide_invalidate().
+    __console_wide_invalidate();
     // If we are scrolled, unscroll first to show current content.
     if (scrolled_lines) {
         video_scroll_up(scrolled_lines);
@@ -437,6 +496,9 @@ static inline void __draw_char(char c)
 /// space in the *current* colour rather than being zeroed.
 static inline void __erase_to_space(void)
 {
+    // Any change to the content gives up the retained wide console's hidden
+    // columns; see __console_wide_invalidate().
+    __console_wide_invalidate();
     if (__cursor_is_parked()) {
         return;
     }
@@ -684,6 +746,21 @@ typedef struct {
     video_cell_t *original_page;   ///< Saved live screen.
 } console_storage_t;
 
+/// @brief What the console was, so that a resize can decide whether to keep it.
+///
+/// Filled by __console_migrate() from the state it has just finished reading,
+/// because that is the only moment both the old geometry and how much of it the
+/// sequence occupied are still known.
+typedef struct {
+    page_t *pages;                 ///< Its allocation, or NULL for the boot arrays.
+    const video_cell_t *screen;    ///< Its screen.
+    const video_cell_t *history;   ///< Its scrollback.
+    unsigned columns;              ///< Its width.
+    unsigned history_rows;         ///< Depth of its scrollback.
+    unsigned history_used;         ///< Sequence rows in its scrollback.
+    unsigned live;                 ///< Sequence rows on its screen.
+} console_previous_t;
+
 /// @brief Allocates storage for a console of the given shape.
 /// @param columns Width in cells.
 /// @param rows Height in cells.
@@ -732,6 +809,43 @@ static void __console_copy_row(video_cell_t *destination, unsigned new_columns, 
     for (unsigned column = shared; column < new_columns; ++column) {
         destination[column] = blank_cell;
     }
+}
+
+/// @brief Releases the retained wide console.
+/// @details Frees pages, so process context only.
+static void __console_wide_release(void)
+{
+    if (wide_pages != NULL) {
+        free_pages(wide_pages);
+    }
+    wide_pages        = NULL;
+    wide_screen       = NULL;
+    wide_history      = NULL;
+    wide_columns      = 0;
+    wide_history_rows = 0;
+    wide_history_used = 0;
+    wide_live         = 0;
+    wide_stale        = false;
+}
+
+/// @brief Whether the retained wide console may still be read from.
+/// @param length The live console's sequence length, which its own must match.
+///
+/// The length check is not only defensive. A newline that does not scroll changes
+/// no cell, so nothing invalidates, but it does extend the sequence by a row --
+/// and that shows up here as a mismatch, which is exactly the right answer.
+static bool_t __console_wide_usable(unsigned length)
+{
+    return (wide_columns != 0U) && !wide_stale && ((wide_history_used + wide_live) == length);
+}
+
+/// @brief The retained wide console's cells for one row of the sequence.
+static const video_cell_t *__console_wide_row(unsigned logical)
+{
+    if (logical < wide_history_used) {
+        return &wide_history[((wide_history_rows - wide_history_used) + logical) * wide_columns];
+    }
+    return &wide_screen[(logical - wide_history_used) * wide_columns];
 }
 
 /// @brief Rows of the screen the console has actually used.
@@ -827,7 +941,7 @@ static unsigned __console_move_cursor(unsigned position, unsigned old_columns, c
 ///   record of which rows were soft-wrapped, so reflow is not something this
 ///   representation can express. Clipped cells are gone -- horizontal round trips
 ///   are lossy in a way vertical ones are not.
-static void __console_migrate(const console_storage_t *next)
+static void __console_migrate(const console_storage_t *next, console_previous_t *previous)
 {
     unsigned old_columns = video_columns;
     unsigned live        = __console_live_rows();
@@ -842,17 +956,26 @@ static void __console_migrate(const console_storage_t *next)
     unsigned start  = length - take;
     int delta       = (int)history_used - (int)start;
 
+    // Where the cells come from. The retained wide console holds the same rows at
+    // a width the live buffers no longer have, so when it is usable it is the
+    // better source for every one of them -- which is what puts clipped columns
+    // back on a widen, and what keeps them across a vertical resize in between.
+    bool_t from_wide     = __console_wide_usable(length);
+    unsigned source_width = from_wide ? wide_columns : old_columns;
+
     // Visible screen, top to bottom. Rows are read from the history while the
     // window reaches above where the old screen began, and from the old screen
     // after that. Anything past the sequence is left as the zeroed storage
     // arrived: blank, and at the bottom, which is where a console with room to
     // spare keeps its slack.
     for (unsigned row = 0; row < take; ++row) {
-        unsigned logical           = start + row;
-        const video_cell_t *source = (logical < history_used)
-                                         ? &history[((history_rows - history_used) + logical) * old_columns]
-                                         : &screen[(logical - history_used) * old_columns];
-        __console_copy_row(&next->screen[row * next->columns], next->columns, source, old_columns);
+        unsigned logical = start + row;
+        const video_cell_t *source =
+            from_wide ? __console_wide_row(logical)
+                      : ((logical < history_used)
+                             ? &history[((history_rows - history_used) + logical) * old_columns]
+                             : &screen[(logical - history_used) * old_columns]);
+        __console_copy_row(&next->screen[row * next->columns], next->columns, source, source_width);
     }
 
     // Scrollback: exactly the rows the window no longer covers, newest last,
@@ -862,12 +985,14 @@ static void __console_migrate(const console_storage_t *next)
     // geometry could have brought back anyway.
     unsigned keep = (start < next->history_rows) ? start : next->history_rows;
     for (unsigned index = 0; index < keep; ++index) {
-        unsigned logical           = (start - keep) + index;
-        const video_cell_t *source = (logical < history_used)
-                                         ? &history[((history_rows - history_used) + logical) * old_columns]
-                                         : &screen[(logical - history_used) * old_columns];
+        unsigned logical = (start - keep) + index;
+        const video_cell_t *source =
+            from_wide ? __console_wide_row(logical)
+                      : ((logical < history_used)
+                             ? &history[((history_rows - history_used) + logical) * old_columns]
+                             : &screen[(logical - history_used) * old_columns]);
         __console_copy_row(&next->history[((next->history_rows - keep) + index) * next->columns], next->columns, source,
-                           old_columns);
+                           source_width);
     }
 
     // The cursor moves with its row. A parked cursor stays parked: the guard cell
@@ -881,6 +1006,32 @@ static void __console_migrate(const console_storage_t *next)
     // The saved cursor gets the same move, for the same reason: ESC [ u after a
     // resize should land on the cell it was told to remember.
     saved_cursor = __console_move_cursor(saved_cursor, old_columns, next, delta, &saved_bias);
+
+    // What the console was, for the caller to keep or release. Reported before the
+    // publish below overwrites the pointers it names.
+    previous->pages        = console_pages;
+    previous->screen       = screen;
+    previous->history      = history;
+    previous->columns      = old_columns;
+    previous->history_rows = history_rows;
+    previous->history_used = history_used;
+    previous->live         = live;
+
+    // Cropping drops rows from the *oldest* end of the sequence, so a retained
+    // wide console has to lose exactly the same ones or its rows would no longer
+    // line up with the live console's. If the crop reaches past its scrollback --
+    // which needs a sequence far longer than either console can hold -- it is
+    // given up rather than guessed at.
+    if (keep < start) {
+        unsigned cropped = start - keep;
+        if (wide_columns != 0U) {
+            if (cropped <= wide_history_used) {
+                wide_history_used -= cropped;
+            } else {
+                __console_wide_invalidate();
+            }
+        }
+    }
 
     // Publish. Every value describing the console's shape changes together, and
     // this is the only place they may.
@@ -896,6 +1047,60 @@ static void __console_migrate(const console_storage_t *next)
     console_pages  = next->pages;
 }
 
+/// @brief Keeps or releases the console the resize has just replaced.
+/// @param previous What it was, as __console_migrate() reported it.
+/// @param new_columns The width the console now has.
+///
+/// The rule is that the retained console is the **widest still-valid** truth, not
+/// the most recent one. Across `240 -> 128 -> 100 -> 200 -> 240` the 240-column
+/// storage is what is held the whole way through: adopting the 128- or
+/// 100-column intermediate would throw away the columns the round trip has to
+/// come back to, and each of those intermediates is itself a clipped copy of the
+/// one being held.
+///
+/// Nothing is allocated and nothing is copied here. The storage kept is the
+/// storage the resize was about to release, so the cost is that it is not given
+/// back yet: while narrowed, the console occupies its own allocation plus this
+/// one. Each is separately bounded by CONSOLE_MAX_BYTES; the total during a
+/// narrowed state is the sum, which is worth knowing when reading a free-page
+/// count.
+static void __console_retain(const console_previous_t *previous, unsigned new_columns)
+{
+    // Migration may have found it unusable, and output may have invalidated it
+    // while the resize was in flight.
+    if (wide_stale) {
+        __console_wide_release();
+    }
+
+    unsigned widest = (wide_columns > previous->columns) ? wide_columns : previous->columns;
+
+    // Nothing is hidden any more: the console is at least as wide as anything
+    // either of them could tell it, and migration has already read whatever the
+    // retained one had to give.
+    if (new_columns >= widest) {
+        __console_wide_release();
+        if (previous->pages != NULL) {
+            free_pages(previous->pages);
+        }
+        return;
+    }
+
+    // Otherwise keep the wider of the two and release the other.
+    if (previous->columns > wide_columns) {
+        __console_wide_release();
+        wide_pages        = previous->pages;
+        wide_screen       = previous->screen;
+        wide_history      = previous->history;
+        wide_columns      = previous->columns;
+        wide_history_rows = previous->history_rows;
+        wide_history_used = previous->history_used;
+        wide_live         = previous->live;
+        wide_stale        = false;
+    } else if (previous->pages != NULL) {
+        free_pages(previous->pages);
+    }
+}
+
 /// @brief Changes the console's shape.
 /// @param columns The new width in cells.
 /// @param rows The new height in cells.
@@ -905,6 +1110,7 @@ static void __console_migrate(const console_storage_t *next)
 /// asked to prepare before anything the console is currently using is touched,
 /// and the old storage is only released once the new one is live. Any failure
 /// leaves the console exactly as it was, still displaying.
+
 
 
 static int __console_resize(unsigned columns, unsigned rows, bool_t force)
@@ -932,6 +1138,13 @@ static int __console_resize(unsigned columns, unsigned rows, bool_t force)
         video_scroll_up(scrolled_lines);
     }
 
+    // Process context, which is where the pages of a wide console that output has
+    // already invalidated are given back. Before the migration, so that it never
+    // reads from one it is not allowed to trust.
+    if (wide_stale) {
+        __console_wide_release();
+    }
+
     console_storage_t next;
     if (__console_alloc(columns, rows, &next) < 0) {
         return -1;
@@ -949,16 +1162,14 @@ static int __console_resize(unsigned columns, unsigned rows, bool_t force)
     // publish: output arriving between the two would land in the old buffer
     // after it had been copied, and would be lost. Bounded by the size of the
     // console, which CONSOLE_MAX_BYTES caps.
-    page_t *previous = console_pages;
-    uint8_t flags    = irq_disable();
-    __console_migrate(&next);
+    console_previous_t previous;
+    uint8_t flags = irq_disable();
+    __console_migrate(&next, &previous);
     irq_enable(flags);
 
-    // Only now is the old storage unreachable. The boot arrays are static and
-    // are never freed.
-    if (previous != NULL) {
-        free_pages(previous);
-    }
+    // Only now is the old storage unreachable, and either released or kept as the
+    // truth for the columns this geometry cannot show.
+    __console_retain(&previous, columns);
 
     __republish();
     pr_notice("Console resized to %ux%u.\n", columns, rows);
@@ -1034,6 +1245,14 @@ void video_request_resize(unsigned columns, unsigned rows)
 
 void video_service_pending(void)
 {
+    // Output has been through the console by now, so a retained wide console that
+    // it invalidated is dead weight. This is process context, which is what it
+    // takes to hand the pages back; the flag is all the invalidation itself can
+    // safely do.
+    if (wide_stale) {
+        __console_wide_release();
+    }
+
     // Give the backend its process context first: this is where it turns "the
     // display changed" into an actual geometry, which needs to talk to hardware
     // and so cannot happen where the change was noticed. It may call
@@ -1241,6 +1460,7 @@ void video_putc(int c)
                     // The scrollback stays part of the sequence, so a later grow
                     // reveals it above the cleared screen, exactly as it would
                     // above a screen the terminal had scrolled.
+                    __console_wide_invalidate();
                     for (unsigned index = 0; index < screen_cells; ++index) {
                         screen[index] = blank_cell;
                     }
@@ -1477,8 +1697,10 @@ void video_get_screen_size(unsigned int *width, unsigned int *height)
 
 void video_clear(void)
 {
-    // The sequence is emptied along with the buffer that held it.
+    // The sequence is emptied along with the buffer that held it, and with it
+    // anything a narrower viewport was hiding.
     history_used = 0;
+    __console_wide_invalidate();
     // Clear the scrollback buffer.
     memset(history, 0, history_cells * sizeof(video_cell_t));
     // Clear the visible screen.
@@ -1546,6 +1768,9 @@ static inline void __shift_buffer(video_cell_t *buffer, unsigned rows, int direc
 /// the top line into the `history` buffer.
 static void __shift_screen_up(void)
 {
+    // Any change to the content gives up the retained wide console's hidden
+    // columns; see __console_wide_invalidate().
+    __console_wide_invalidate();
     if (scrolled_lines == 0) {
         // Move the history buffer up by one line.
         __shift_buffer(history, history_rows, +1);
