@@ -1,6 +1,6 @@
 # Video backends
 
-Verified against `fb95af2`. Core files: `kernel/src/io/video.c` (generic),
+Verified against `820b2b6`. Core files: `kernel/src/io/video.c` (generic),
 `kernel/inc/io/video_backend.h` (interface), `kernel/src/io/video/` (backends).
 Shared assets: `kernel/src/io/video_font.c` with
 `kernel/inc/io/video/video_font.h` (the bitmap fonts) and `video_palette_16.h`
@@ -800,12 +800,37 @@ smaller, `2` one step larger. Private, and legitimately so — ECMA-48 reserves 
 final bytes `0x70`–`0x7E` for private use, which is where the existing
 cursor-shape `q` already sits.
 
-F10, F11 and F12 are default, smaller and larger. **Not** Ctrl+Plus and
-Ctrl+Minus: the keyboard driver emits sequences for the function keys already but
-nothing for Ctrl with a punctuation key, so those would need the driver extended
-first. Handling F10–F12 in the shell also stopped them leaving a stray `~` in the
-line — it read the `2` of `ESC [ 21 ~` as Insert and echoed the rest. The login
-prompt has its own parser and still does that; left alone as unrelated.
+Two sets of keys reach it, and both arrive at the shell as the same three
+sequences: **Ctrl+Plus / Ctrl+Minus / Ctrl+0**, and **F12 / F11 / F10**. The
+keyboard driver aliases the first onto the second, so userspace and the console
+know only one spelling, and the function keys keep working by construction.
+
+The Ctrl combinations are decided from the **character the active layout would
+produce**, not from a scancode, and that is not a stylistic choice — the three
+layouts disagree:
+
+| | `+` | `-` | `0` |
+|---|---|---|---|
+| `KEYMAP_US` | `0x0D` (the `=` key) **with Shift** | `0x0C` | `0x0B` |
+| `KEYMAP_IT` | `0x1B` unshifted | `0x35` | `0x0B` |
+| `KEYMAP_DE` | `0x1B` unshifted | `0x35` | `0x0B` |
+
+A scancode-keyed shortcut would therefore be wrong on at least one layout, and
+`KEY_MINUS` (`0x35`) is not even the minus key on US — it is `/`. Testing the
+character instead also makes the keypad's own `+`, `-` and `0` aliases without a
+line of code for them: they carry those characters in every layout.
+
+Ctrl is claimed before the ordinary mapping, which is necessary rather than tidy,
+because this driver tests Shift *before* Ctrl — otherwise Ctrl+Shift+`=` on a US
+layout would simply type `+`. "Shifted" is computed with the same expression the
+ordinary mapping uses, so the word means one thing throughout the driver. Keys the
+driver resolves by scancode earlier, Insert among them, never reach the check, so
+Ctrl+Shift+Insert is untouched; and only `+`, `-` and `0` are claimed, so every
+other Ctrl combination behaves exactly as before.
+
+Handling F10–F12 in the shell also stopped them leaving a stray `~` in the line —
+it read the `2` of `ESC [ 21 ~` as Insert and echoed the rest. The login prompt
+has its own parser and still does that; left alone as unrelated.
 
 The console is serviced after a write as well as before it. Otherwise a request
 recorded while parsing output waits for the next read, and reads block on a
