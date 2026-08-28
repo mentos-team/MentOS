@@ -972,7 +972,18 @@ eyeballable: the cells are a fixed grid and `video_font.c` is the only
 glyph source, so matching each cell's foreground mask against the font recovers
 the characters exactly. At a magnified font, sample the top-left pixel of each
 scale x scale block and the base 8x16 bitmap comes straight back, so the same
-font table works at every size. Note that codes 0, 32 and 255 share a blank bitmap, so
+font table works at every size.
+
+**Do not assume a screendump's rows are `3 * width` bytes.** QEMU pads each PPM
+row up to a four-byte boundary, so any width that is not a multiple of four has a
+longer stride than the naive one -- at 1366, `1366 * 3` is 4098 and the row is
+actually 4100. A decoder that assumes the tight stride shears the image by two
+bytes per row, which produces a convincing diagonal smear, blended-looking
+colours and glyphs that no longer match the font: it looks exactly like a
+rendering bug in the guest. Measure the stride as `payload_size / height`
+instead. Every geometry used before the widescreen pass happened to have a
+width divisible by four (1024, 1280, 1920, 640, 600, 768), which is why this
+never showed up until 1366. Note that codes 0, 32 and 255 share a blank bitmap, so
 map an all-zero mask to a space rather than trusting a reverse lookup.
 
 **Pixel-exact screendump** — pins the rendered content the API cannot observe.
