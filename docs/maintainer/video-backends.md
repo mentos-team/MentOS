@@ -1,6 +1,6 @@
 # Video backends
 
-Verified against `42cf8a1`. Core files: `kernel/src/io/video.c` (generic),
+Verified against `507ad5d`. Core files: `kernel/src/io/video.c` (generic),
 `kernel/inc/io/video_backend.h` (interface), `kernel/src/io/video/` (backends).
 Shared assets: `kernel/src/io/video_font.c` with
 `kernel/inc/io/video/video_font.h` (the bitmap fonts) and `video_palette_16.h`
@@ -801,12 +801,47 @@ order when an allocation fails, and each block becomes one memory entry.
 
 The blocks are then mapped **consecutively** into a fixed kernel window, so the
 device reads a scattered resource while the drawing code writes one flat array.
-Measured block counts: two on a fresh system, up to seven after repeated resizes,
-which is why the limit is sixteen.
+Measured block counts: two for 1024x768 on a fresh system, up to seven after
+repeated resizes at that size, and twelve for a 3840x2160 framebuffer where eight
+4 MiB blocks would do if memory were unfragmented. The limit is thirty-two.
+
+### How large a mode can be, and why
+
+Two bounds, applied in this order and for different reasons.
+
+`GPU_MAX_DIMENSION` (3840) caps each axis. It is **one bound for both axes on
+purpose**: a per-axis pair would accept 3840x2160 and refuse a portrait
+2160x3840, which is an orientation restriction wearing a resource limit's
+clothes. Its actual job is overflow safety — the target size comes from the
+device and is not otherwise bounded, so it has to be rejected before it is ever
+squared, and 3840x3840x4 is 56 MiB, well inside 32 bits.
+
+`GPU_FB_VIRT_SIZE` (32 MiB) is the real limit, checked as a **byte count**,
+because that is what a framebuffer consumes. Per-axis pixel bounds cannot express
+it: they would let through a mode no window could hold and refuse a portrait one
+that fits perfectly.
+
+| mode | bytes | fits 32 MiB |
+|---|---|---|
+| 2560x1440 | 14.1 MiB | yes |
+| 2560x1600 | 15.6 MiB | yes |
+| 3440x1440 | 18.9 MiB | yes |
+| 3840x2160 | 31.6 MiB | yes, with 1.8 MiB spare |
+| 3840x2400 | 35.2 MiB | no — refused by the byte bound |
+| 4096x2160 | — | no — refused by the axis bound |
+
+Four things are asserted at compile time, and each has been checked by breaking
+it deliberately: the window starts above the virtio register window, it ends at
+or below the I/O APIC, the largest claimed mode fits in it, and the axis bound
+keeps the byte arithmetic inside 32 bits. A fifth holds the backing list inside
+the command page, which is what `GPU_FB_MAX_BLOCKS` is bounded by.
+
+The window is 0xFB000000 and nothing may be mapped at or past 0xFEC00000, so the
+region would take 60 MiB. 32 MiB is what the modes above need, not what fits.
 
 ### The page-directory trap — read this before mapping anything late
 
-`__gpu_reserve_window()` maps the whole 16 MiB window **not-present** at
+`__gpu_reserve_window()` maps the whole 32 MiB window **not-present** at
 bring-up, purely to get its page tables allocated. That is not tidiness, it is
 required.
 

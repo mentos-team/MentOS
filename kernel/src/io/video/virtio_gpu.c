@@ -117,29 +117,52 @@
 #define VIRTIO_GPU_RESOURCE         1U
 
 
-/// @name Largest framebuffer this backend will build
-/// @brief Bounds the virtual window and the backing-list length.
-/// @{
-#define GPU_MAX_WIDTH   2048U ///< Widest framebuffer, in pixels.
-#define GPU_MAX_HEIGHT  2048U ///< Tallest framebuffer, in scan lines.
-/// @}
+/// @brief Largest width or height this backend will build, in pixels.
+///
+/// One bound for both axes on purpose. A per-axis pair would refuse a portrait
+/// 2160x3840 while accepting 3840x2160, which is an orientation restriction
+/// wearing a resource limit's clothes. What actually limits a framebuffer is how
+/// many bytes it needs against the window mapped below, and that is checked
+/// separately and on its own terms.
+///
+/// This bound's job is to keep the byte arithmetic from overflowing. It is
+/// applied before width and height are ever multiplied together, and
+/// 3840 * 3840 * 4 is 56 MiB -- comfortably inside 32 bits -- so the
+/// multiplication that follows it cannot wrap whatever the device reports.
+#define GPU_MAX_DIMENSION 3840U
+
+/// @brief The largest mode this backend is expected to be able to build.
+///
+/// 4K at 32 bpp. Not a limit -- GPU_MAX_DIMENSION and the window are the limits
+/// -- but a statement of intent that the check below holds the window to.
+#define GPU_LARGEST_MODE_BYTES (3840U * 2160U * 4U)
 
 /// @brief Kernel virtual base the framebuffer blocks are mapped consecutively at.
 ///
 /// A third window in the unused KERNEL_HIGHMEM region; see the map in
-/// devices/virtio.h. 16 MiB is room for a 2048x2048x32 console and then some.
+/// devices/virtio.h.
 #define GPU_FB_VIRT_BASE  0xFB000000U
 /// @brief Size of that window.
-#define GPU_FB_VIRT_SIZE  0x01000000U
+///
+/// 32 MiB, which holds 3840x2160 at 32 bpp (31.6 MiB) and therefore every
+/// common widescreen and high-DPI mode below it: 2560x1440 needs 14.1 MiB,
+/// 2560x1600 15.6 MiB and 3440x1440 18.9 MiB.
+///
+/// The region would take considerably more. This base is 0xFB000000 and nothing
+/// may be mapped at or past the I/O APIC at 0xFEC00000, which leaves room for 60
+/// MiB; the check below pins both ends. 32 MiB is what the modes above need, not
+/// what fits.
+#define GPU_FB_VIRT_SIZE  0x02000000U
 
 /// @brief Most blocks the framebuffer may be split into.
 ///
-/// Each becomes one memory entry in the backing list. A fresh system needs two
-/// or three; measured across repeated resizes, fragmentation pushed it to seven,
-/// so sixteen is the headroom that keeps a resize from failing on a machine that
-/// has been running a while. Sixteen entries is 288 bytes of command, well inside
-/// the command page.
-#define GPU_FB_MAX_BLOCKS 16U
+/// Each becomes one memory entry in the backing list. A 4 MiB block is the
+/// largest this takes, so a 32 MiB framebuffer needs eight of them when memory
+/// is unfragmented. It is not: at 1024x768, where three would do, fragmentation
+/// was measured pushing it to seven. Scaling that ratio to the largest supported
+/// mode is where thirty-two comes from. The compile-time check below keeps the
+/// resulting backing list inside the command page.
+#define GPU_FB_MAX_BLOCKS 32U
 
 /// @brief Largest allocation order used for a framebuffer block.
 ///
@@ -152,12 +175,24 @@
 /// @brief Pixel mask of the bar cursor: the two leftmost columns of the cell.
 #define GPU_CURSOR_BAR_COLUMNS     2U
 
-/// @brief Compile-time check that the largest framebuffer fits its virtual window.
-typedef char gpu_window_check[(((GPU_MAX_WIDTH * GPU_MAX_HEIGHT * 4U) <= GPU_FB_VIRT_SIZE) &&
-                               (GPU_FB_VIRT_BASE >= 0xF8000000U) &&
-                               ((GPU_FB_VIRT_BASE + GPU_FB_VIRT_SIZE) <= 0xFEC00000U))
-                                  ? 1
-                                  : -1];
+/// @brief Compile-time checks on the window and the bound that guards it.
+///
+/// Four separate claims, all of which have to hold:
+///
+///  - the window starts above the virtio register window, which is the nearest
+///    thing mapped below it, so the two cannot overlap;
+///  - it ends at or below the I/O APIC, which nothing may be mapped at or past;
+///  - the largest mode this backend claims to support actually fits in it;
+///  - and GPU_MAX_DIMENSION is small enough that squaring it and multiplying by
+///    four stays inside 32 bits, which is what makes the runtime size arithmetic
+///    safe once that bound has been applied.
+typedef char gpu_window_check
+    [((GPU_FB_VIRT_BASE >= (VIRTIO_MMIO_VIRT_BASE + (VIRTIO_MMIO_SLOTS * VIRTIO_MMIO_WINDOW))) &&
+      ((GPU_FB_VIRT_BASE + GPU_FB_VIRT_SIZE) <= 0xFEC00000U) &&
+      (GPU_LARGEST_MODE_BYTES <= GPU_FB_VIRT_SIZE) &&
+      (GPU_MAX_DIMENSION <= ((0xFFFFFFFFU / 4U) / GPU_MAX_DIMENSION)))
+         ? 1
+         : -1];
 
 /// @brief One header, shared by every control command and response.
 typedef struct {
@@ -319,6 +354,14 @@ static uint32_t command_virtual     = 0;
 /// @brief Offset of the response within the command page.
 #define GPU_RESPONSE_OFFSET 2048U
 
+/// @brief Compile-time check that the longest request still fits before it.
+///
+/// The backing list is the longest command this backend sends, and it grows with
+/// GPU_FB_MAX_BLOCKS. Requests are written at the start of the command page and
+/// the response is read from GPU_RESPONSE_OFFSET, so a request that reached that
+/// far would be overwritten by the answer to it.
+typedef char gpu_request_fits_check[(sizeof(gpu_attach_backing_t) <= GPU_RESPONSE_OFFSET) ? 1 : -1];
+
 /// @brief The resource currently backing the console.
 static uint32_t resource_id         = VIRTIO_GPU_RESOURCE;
 
@@ -401,8 +444,13 @@ static void __gpu_set_font(const video_font_t *font)
 /// font changes underneath it. A cell area larger than the target -- which only
 /// a geometry asked for directly can produce -- grows the framebuffer instead.
 ///
-/// Bounded by GPU_MAX_*, which is what the virtual window and the backing list
-/// were sized for, and checked before the byte arithmetic so it cannot overflow.
+/// Two bounds, in this order and for different reasons. GPU_MAX_DIMENSION is
+/// applied first and is what makes the multiplication that follows it safe: the
+/// target comes from the device and is not otherwise bounded, so it has to be
+/// rejected before it is ever squared. The window size is the real limit, and it
+/// is a byte count because that is what a framebuffer actually consumes -- one
+/// bound per axis would let a mode through that no window could hold, and would
+/// refuse a portrait mode that fits perfectly.
 static int __gpu_set_dimensions(unsigned columns, unsigned rows)
 {
     if ((columns == 0U) || (rows == 0U) || (gpu_font == NULL)) {
@@ -412,9 +460,15 @@ static int __gpu_set_dimensions(unsigned columns, unsigned rows)
     unsigned cells_height = rows * gpu_cell_height;
     unsigned width        = (cells_width > gpu_target_width) ? cells_width : gpu_target_width;
     unsigned height       = (cells_height > gpu_target_height) ? cells_height : gpu_target_height;
-    if ((width > GPU_MAX_WIDTH) || (height > GPU_MAX_HEIGHT)) {
-        pr_err("%ux%u cells of %ux%u is %ux%u pixels, past the %ux%u this backend builds.\n", columns, rows,
-               gpu_cell_width, gpu_cell_height, width, height, (unsigned)GPU_MAX_WIDTH, (unsigned)GPU_MAX_HEIGHT);
+    if ((width > GPU_MAX_DIMENSION) || (height > GPU_MAX_DIMENSION)) {
+        pr_err("%ux%u cells of %ux%u is %ux%u pixels, past the %u this backend builds in either axis.\n", columns,
+               rows, gpu_cell_width, gpu_cell_height, width, height, (unsigned)GPU_MAX_DIMENSION);
+        return -1;
+    }
+    unsigned bytes = (width * 4U) * height;
+    if (bytes > GPU_FB_VIRT_SIZE) {
+        pr_err("%ux%u pixels needs %u KiB, past the %u KiB this backend can map.\n", width, height, bytes / 1024U,
+               (unsigned)(GPU_FB_VIRT_SIZE / 1024U));
         return -1;
     }
 

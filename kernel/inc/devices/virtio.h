@@ -42,9 +42,13 @@
 /// script's KERNEL_HIGHMEM region begins and where no section is placed. The
 /// windows carved out of it so far:
 ///
+///     0xF8000000 - 0xF87FFFFF   DMA zone (see zone_allocator.c)
 ///     0xF9000000 - 0xF93FFFFF   VBE linear framebuffer (see vbe_lfb.c)
 ///     0xFA000000 - 0xFA03FFFF   virtio device registers (here)
+///     0xFB000000 - 0xFCFFFFFF   virtio-gpu framebuffer (see virtio_gpu.c)
 ///     0xFEC00000                I/O APIC; nothing may be mapped at or past it
+///
+/// That leaves 0xFD000000 - 0xFEBFFFFF, 28 MiB, unclaimed.
 /// @{
 
 /// Base of the virtio register window.
