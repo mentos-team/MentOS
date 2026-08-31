@@ -263,13 +263,13 @@ struct {
 
 /// @brief Extracts the slot ID (device number) from the PCI address.
 /// @details This macro extracts the slot (device) number from bits [15:8] of
-/// the PCI address.
-#define PCI_GET_SLOT(dev) (((dev) >> 11U) & 0x1F)
+/// the PCI address, which is where pci_box_device() puts it.
+#define PCI_GET_SLOT(dev) (((dev) >> 8U) & 0x1F)
 
 /// @brief Extracts the function ID from the PCI address.
 /// @details This macro extracts the function number from bits [7:0] of the PCI
-/// address.
-#define PCI_GET_FUNC(dev) (((dev) >> 8U) & 0x07)
+/// address, which is where pci_box_device() puts it.
+#define PCI_GET_FUNC(dev) ((dev) & 0x07)
 
 /// @brief Constructs the PCI configuration address for a given device and register field.
 ///
@@ -373,8 +373,12 @@ int pci_read_8(uint32_t device, uint32_t field, uint8_t *value)
     }
     // Write the address to the PCI address port
     outportl(PCI_ADDRESS_PORT, addr);
-    // Read the 8-bit value from the PCI data port with the adjusted field offset
-    *value = inports(PCI_VALUE_PORT + (field & 0x03));
+    // Read the 8-bit value from the PCI data port with the adjusted field
+    // offset. The access has to be a byte access: a 16-bit read of the last
+    // byte of the register, which is what an 8-bit field at offset 3 is, runs
+    // off the end of the four-byte data port and leaves the upper half to
+    // whatever answers at 0xD00.
+    *value = inportb(PCI_VALUE_PORT + (field & 0x03));
     return 0;
 }
 
@@ -557,6 +561,89 @@ static inline int pci_scan_hit(pci_scan_func_t f, uint32_t device, void *extra)
     // Call the provided function with the device information.
     f(device, vendor_id, device_id, extra);
     return 0;
+}
+
+int pci_find_capability(uint32_t device, uint8_t id, uint8_t from, uint8_t *offset)
+{
+    // Check if the output pointer is valid.
+    if (offset == NULL) {
+        pr_err("Output parameter 'offset' is NULL.\n");
+        return -1;
+    }
+    *offset = 0;
+
+    // A device only has a capability list if it says so. Walking the pointer
+    // without checking would follow whatever byte happens to be at 0x34 on a
+    // device that does not implement the field at all.
+    uint16_t status;
+    if (pci_read_16(device, PCI_STATUS, &status)) {
+        pr_err("Failed to read the status register of device 0x%08x.\n", device);
+        return -1;
+    }
+    if ((status & (1U << pci_status_capabilities_list)) == 0) {
+        return 1;
+    }
+
+    // Where to start: the head of the list, or the successor of a capability
+    // the caller already has.
+    uint8_t position;
+    if (from == 0) {
+        if (pci_read_8(device, PCI_CAPABILITY_LIST, &position)) {
+            pr_err("Failed to read the capability list pointer of device 0x%08x.\n", device);
+            return -1;
+        }
+    } else {
+        if (pci_read_8(device, (uint32_t)from + PCI_CAP_LIST_NEXT, &position)) {
+            pr_err("Failed to read the next-capability pointer at 0x%02x.\n", from);
+            return -1;
+        }
+    }
+
+    // The bottom two bits of every pointer in the list are reserved.
+    position &= 0xFCU;
+
+    // Bound the walk. A malformed or looping list must not hang the boot, and
+    // configuration space is 256 bytes, so there cannot be more capabilities
+    // than that many 4-byte slots.
+    for (unsigned steps = 0; steps < 64; ++steps) {
+        // Zero terminates the list. Anything inside the standard header is a
+        // malformed pointer rather than a capability.
+        if (position == 0) {
+            return 1;
+        }
+        if (position < PCI_CAP_MIN_OFFSET) {
+            pr_err("Capability pointer 0x%02x of device 0x%08x is inside the standard header.\n", position, device);
+            return -1;
+        }
+
+        uint8_t found;
+        if (pci_read_8(device, (uint32_t)position + PCI_CAP_LIST_ID, &found)) {
+            pr_err("Failed to read the capability ID at 0x%02x.\n", position);
+            return -1;
+        }
+        if (found == id) {
+            *offset = position;
+            return 0;
+        }
+
+        uint8_t next;
+        if (pci_read_8(device, (uint32_t)position + PCI_CAP_LIST_NEXT, &next)) {
+            pr_err("Failed to read the next-capability pointer at 0x%02x.\n", position);
+            return -1;
+        }
+        next &= 0xFCU;
+
+        // A pointer that does not advance is a loop, and the step bound alone
+        // would hide it behind a "no more capabilities" result.
+        if (next == position) {
+            pr_err("Capability list of device 0x%08x loops at 0x%02x.\n", device, position);
+            return -1;
+        }
+        position = next;
+    }
+
+    pr_err("Capability list of device 0x%08x is longer than configuration space allows.\n", device);
+    return -1;
 }
 
 /// @brief Scans for the given type of device.

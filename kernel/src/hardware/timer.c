@@ -101,6 +101,10 @@ void timer_handler(pt_regs_t *reg)
     ++timer_ticks;
     // Update all timers
     run_timer_softirq();
+    // Drive the console cursor blink. The console has no periodic source of its
+    // own, and a software-drawn cursor has to be toggled by something; this is
+    // a no-op for backends whose cursor blinks in hardware.
+    video_cursor_blink_tick();
     // Perform the schedule only if the interrupt came from user mode.
     if ((reg->cs & 0x3) == 0x3) {
         scheduler_run(reg);

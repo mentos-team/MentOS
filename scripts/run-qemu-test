@@ -5,6 +5,15 @@ set -e
 
 BUILD_DIR="${1:-build}"
 TIMEOUT="${2:-600}"  # 10 minutes default
+# QEMU display device for the video backend this kernel was built for, as one
+# argument holding an option and its value (e.g. "-vga std"). Deliberately
+# word-split below. CMake derives it from VIDEO_TYPE and is the only place that
+# knows which device each backend needs.
+VGA_ARGS="${3:--vga std}"
+# Name of the video backend the console must have ended up on, as the kernel
+# reports it. Empty when the backend the kernel boots on is also the one under
+# test, which is the case for every backend that needs no promotion.
+REQUIRE_BACKEND="${4:-}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # PIDs of the log-streaming subshells. Each was started as a background job
@@ -36,6 +45,7 @@ trap 'trap - HUP; cleanup; exit 129' HUP
 
 echo "===================================================="
 echo "Starting QEMU test run (timeout: ${TIMEOUT}s)..."
+echo "Display device: ${VGA_ARGS}"
 echo "===================================================="
 
 # Remove old logs to ensure fresh start
@@ -44,13 +54,17 @@ rm -f "${BUILD_DIR}/test.log" "${BUILD_DIR}/serial.log"
 # Run QEMU with timeout
 # Note: First -serial goes to serial.log (kernel messages)
 #       Second -serial goes to test.log (test output from runtests)
+# The disk is opened in snapshot mode: writes land in a temporary overlay that
+# QEMU discards on exit. Tests still see their own writes, but every run starts
+# from the same image, so a run cannot leave the filesystem in a state that
+# makes the next one fail.
 timeout --foreground "${TIMEOUT}" \
     qemu-system-i386 \
-    -vga std \
+    ${VGA_ARGS} \
     -m 1096M \
     -nodefaults \
     -serial file:${BUILD_DIR}/serial.log \
-    -drive file=${BUILD_DIR}/rootfs.img,format=raw,if=ide,index=0,media=disk \
+    -drive file=${BUILD_DIR}/rootfs.img,format=raw,if=ide,index=0,media=disk,snapshot=on \
     -serial file:${BUILD_DIR}/test.log \
     -nographic \
     -device isa-debug-exit \
@@ -106,6 +120,20 @@ echo "===================================================="
 if [ "${EXIT_CODE}" -ne 33 ]; then
     echo "Test run failed or timed out (exit code: ${EXIT_CODE})"
     exit "${EXIT_CODE}"
+fi
+
+# Neither a clean exit nor a green suite proves that the backend under test was
+# the one that was built. A kernel whose display device is absent falls back to
+# the backend it booted on and passes every test on the wrong hardware, so where
+# there is a backend-specific claim to make, check it before believing the rest.
+if [ -n "${REQUIRE_BACKEND}" ]; then
+    if ! grep -F "Video backend promoted" "${BUILD_DIR}/serial.log" |
+        grep -Fq "'${REQUIRE_BACKEND}'"; then
+        echo "The kernel never handed the console to '${REQUIRE_BACKEND}'."
+        echo "This run tested the backend the kernel booted on, not the one that was built."
+        exit 1
+    fi
+    echo "The console was handed to '${REQUIRE_BACKEND}', as expected."
 fi
 
 # A normal guest completion does not imply that every test passed. Validate the

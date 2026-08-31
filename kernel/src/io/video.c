@@ -1,7 +1,17 @@
 /// @file video.c
-/// @brief Video functions and constants.
+/// @brief Generic console: cell state, cursor and escape-sequence handling.
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
+///
+/// This layer owns all terminal state and knows nothing about hardware. It
+/// keeps the screen in a cell buffer, does every cursor, erase and scroll
+/// operation in cell coordinates, and pushes the results to whichever backend
+/// was compiled in (see io/video_backend.h). Addresses, memory layout, fonts,
+/// palettes and I/O ports are the backend's business.
+///
+/// The buffer is the source of truth, so every mutation is followed by a
+/// put_cells() call covering the range that changed. Anything that mutates
+/// cells without flushing them will make the display drift out of sync.
 
 // Setup the logging for this file (do this before any other include).
 #include "sys/kernel_levels.h"
@@ -10,24 +20,32 @@
 #include "io/debug.h"
 
 #include "ctype.h"
-#include "io/port_io.h"
 #include "io/video.h"
+#include "io/video_backend.h"
+#include "klib/irqflags.h"
+#include "klib/perf.h"
+#include "mem/alloc/zone_allocator.h"
+#include "mem/mm/page.h"
 #include "stdbool.h"
+#include "stddef.h"
 #include "stdio.h"
 #include "string.h"
 
-#define HEIGHT                   25                   ///< The height of the screen (rows).
-#define WIDTH                    80                   ///< The width of the screen (columns).
-#define W2                       (WIDTH * 2)          ///< The width of the screen in bytes.
-#define TOTAL_SIZE               (HEIGHT * WIDTH * 2) ///< The total size of the screen in bytes.
-#define ADDR                     (char *)0xB8000U     ///< The address of the video memory.
-#define STORED_PAGES             10                   ///< The number of stored pages for scrolling.
-#define VGA_CRTC_INDEX           0x3D4                ///< VGA CRTC index register port.
-#define VGA_CRTC_DATA            0x3D5                ///< VGA CRTC data register port.
-#define VGA_CURSOR_START         0x0A                 ///< VGA cursor start register index.
-#define VGA_CURSOR_END           0x0B                 ///< VGA cursor end register index.
-#define VGA_CURSOR_LOCATION_LOW  0x0F                 ///< VGA cursor location low register index.
-#define VGA_CURSOR_LOCATION_HIGH 0x0E                 ///< VGA cursor location high register index.
+/// The number of screen-sized pages of scrollback history we keep.
+#define STORED_PAGES       10
+
+/// @name Boot console dimensions
+/// @brief The compile-time geometry, which sizes the static storage below.
+///
+/// These are the *boot* console's dimensions, not necessarily the console's.
+/// Everything past initialization works from the runtime values, so that the
+/// console can one day be a different shape than the one it started as. Only the
+/// static arrays and the backend geometry check use these.
+/// @{
+#define BOOT_SCREEN_CELLS  (VIDEO_COLUMNS * VIDEO_ROWS)
+#define BOOT_HISTORY_ROWS  (STORED_PAGES * VIDEO_ROWS)
+#define BOOT_HISTORY_CELLS (BOOT_HISTORY_ROWS * VIDEO_COLUMNS)
+/// @}
 
 /// @brief Stores the association between ANSI colors and pure VIDEO colors.
 typedef struct {
@@ -84,8 +102,159 @@ static uint8_t fg_color_map[108] = {0};
 /// @brief Lookup table for background colors (ANSI codes 0-107).
 static uint8_t bg_color_map[108] = {0};
 
-/// @brief Pointer to the current position of the screen writer.
-char *pointer = ADDR;
+/// @brief The cell an erase operation leaves behind.
+///
+/// Erasing zeroes both halves of the cell rather than writing a space in the
+/// current colour: character 0 with attribute 0 renders as blank. Erase-to-space
+/// (backspace and delete) is a different operation with a different fill; see
+/// __erase_to_space().
+static const video_cell_t blank_cell = {0, 0};
+
+/// @name The boot console's storage
+/// @brief Static, sized at compile time, and used from the very first printf.
+///
+/// It has to be static: output exists long before there is an allocator, and the
+/// pre-video_init() panic path must not depend on one. So the console starts
+/// here and only moves to allocated storage if something ever asks it to.
+/// @{
+
+/// The visible screen, plus one guard cell.
+///
+/// The guard cell exists because the cursor is allowed to come to rest one cell
+/// past the end of the screen; see __cursor_is_parked().
+static video_cell_t boot_screen[BOOT_SCREEN_CELLS + 1];
+/// Scrollback history. The most recently scrolled-off line is last.
+static video_cell_t boot_history[BOOT_HISTORY_CELLS];
+/// The live screen, saved while the user is scrolled back into history.
+static video_cell_t boot_original_page[BOOT_SCREEN_CELLS];
+/// @}
+
+/// @name The console's live shape and storage
+/// @brief What every operation below actually works from.
+///
+/// Separate from the compile-time macros so the console's dimensions are a
+/// runtime property. They start as the boot console's and, for a backend that
+/// cannot resize, stay that way for the whole life of the machine -- which is
+/// why this costs nothing in the fixed builds.
+///
+/// The counts are stored rather than recomputed from columns and rows because
+/// they appear in inner loops, and because keeping them together with the
+/// pointers means the whole shape of the console is one group of values that
+/// change together.
+/// @{
+static unsigned video_columns  = VIDEO_COLUMNS;        ///< Visible width in cells.
+static unsigned video_rows     = VIDEO_ROWS;           ///< Visible height in cells.
+static unsigned screen_cells   = BOOT_SCREEN_CELLS;    ///< Cells on the visible screen.
+static unsigned history_rows   = BOOT_HISTORY_ROWS;    ///< Rows of scrollback.
+static unsigned history_cells  = BOOT_HISTORY_CELLS;   ///< Cells of scrollback.
+
+/// @brief Rows at the newest end of the scrollback that hold real content.
+///
+/// The history arrives blank and fills from the newest end as output scrolls off
+/// the screen, so a blank row there can be either a blank line the terminal
+/// produced or padding nothing has ever written. This counter is the boundary
+/// between the two, and it is the only thing that makes the console's logical row
+/// sequence -- this much history, followed by the used part of the screen --
+/// something a resize can take a slice of. Without it a grow could not tell an
+/// older row it ought to reveal from padding it must not.
+static unsigned history_used = 0;
+
+/// Backing allocation of the current storage, or NULL while it is the boot
+/// arrays. What distinguishes "free this" from "this is static and always was".
+static page_t *console_pages       = NULL;
+
+/// @name The retained wide console
+/// @brief The full-width truth for columns the viewport is no longer showing.
+///
+/// Narrowing clips the right-hand columns of every row, and there is nowhere in a
+/// console of the new width to put them. But the storage they were clipped from
+/// is a complete console that the resize was about to release anyway, so instead
+/// of copying the tails somewhere it is simply kept: while it is held, migration
+/// reads its rows from here rather than from the live buffers, and a later widen
+/// gets the columns back.
+///
+/// It holds the same logical row sequence the live console does -- this much of
+/// its history, then this much of its screen -- which is why a *vertical* resize
+/// in between changes nothing about it: that moves the window, not the sequence.
+///
+/// Retained only while it is wider than the console, and only until the terminal
+/// changes any content. See __console_wide_invalidate() for what counts.
+/// @{
+static page_t *wide_pages               = NULL; ///< Its allocation, or NULL for the boot arrays.
+static const video_cell_t *wide_screen  = NULL; ///< Its screen.
+static const video_cell_t *wide_history = NULL; ///< Its scrollback.
+static unsigned wide_columns            = 0;    ///< Its width. Zero means nothing is retained.
+static unsigned wide_history_rows       = 0;    ///< Depth of its scrollback.
+static unsigned wide_history_used       = 0;    ///< Sequence rows in its scrollback.
+static unsigned wide_live               = 0;    ///< Sequence rows on its screen.
+/// Set the moment the terminal changes content, cleared when the pages are
+/// released. Written from wherever output happens, including an interrupt, which
+/// is why it only raises a flag: releasing pages belongs in process context.
+static volatile bool_t wide_stale       = false;
+/// @}
+
+/// @brief Gives up the retained wide console's hidden columns.
+///
+/// Called from every operation that changes what the terminal is showing, and
+/// deliberately coarse: one changed cell anywhere gives up every hidden column.
+/// The guarantee being bought is for geometry-only transitions, and paying for it
+/// per row would mean a dirty bit per logical row plus the bookkeeping to keep
+/// those keys aligned across scrolling and cropping. Blank is always a safe
+/// answer here; stale text never is.
+///
+/// **The operations that count as a content change**, which is the list to add to
+/// rather than bypass: writing a character (and the insert that shifts a row for
+/// it), deleting a character, either erase (`ESC [ K`, `ESC [ J`), clearing the
+/// screen or the screen and scrollback, and scrolling the screen -- which is also
+/// how output extends the row sequence.
+///
+/// Deliberately **not** on that list: video_update_cursor_position(), which
+/// materializes a space in the cursor's cell when that cell is empty. That is
+/// rendering bookkeeping -- it changes nothing visible, and it runs after every
+/// repaint including a resize's own, so counting it would drop the retained
+/// console immediately after every resize and the preservation would never once
+/// take effect.
+static inline void __console_wide_invalidate(void) { wide_stale = true; }
+
+/// The visible screen. Indexed exactly as the array it replaces was.
+static video_cell_t *screen        = boot_screen;
+/// The scrollback history.
+static video_cell_t *history       = boot_history;
+/// The saved live screen, used while scrolled back.
+static video_cell_t *original_page = boot_original_page;
+/// @}
+
+/// @brief Cursor position, as an index into `screen`.
+///
+/// Valid range is [0, screen_cells] inclusive: the upper end is the guard cell.
+static unsigned cursor = 0;
+
+/// @brief Cursor position saved by ESC [ s and restored by ESC [ u.
+static unsigned saved_cursor = 0;
+
+/// @brief How far a cursor's logical cell lies from the cell it is drawn in.
+///
+/// A cursor has two positions, and only one of them can be an index into the
+/// screen. The **rendered** position is `cursor` itself: always a cell that
+/// exists, which is what the backend is given and what output is written to. The
+/// **logical** position is the cell the cursor was actually placed on, which a
+/// resize can put outside the window -- above the top when a shrink hides its
+/// row, or past the right edge when narrowing clips its column. Clamping the
+/// rendered position is what keeps rendering possible; this is where the part the
+/// clamp could not express is kept, so that growing back can undo it.
+///
+/// Zero in every ordinary state. `rows` is only ever negative and `columns` only
+/// ever positive, because a row can only be hidden above the window and a column
+/// only clipped on the right.
+typedef struct {
+    int rows;    ///< Logical row minus rendered row.
+    int columns; ///< Logical column minus rendered column.
+} console_bias_t;
+
+/// @brief The live cursor's bias. Cleared by __set_cursor(), never by a resize.
+static console_bias_t cursor_bias = {0, 0};
+/// @brief The saved cursor's bias, carried by ESC [ s and ESC [ u with it.
+static console_bias_t saved_bias  = {0, 0};
 
 /// @brief The current color attribute (foreground and background).
 unsigned char color = 7;
@@ -96,147 +265,279 @@ int escape_index = -1;
 /// @brief Buffer used to store an escape sequence as it's being parsed.
 char escape_buffer[256];
 
-/// @brief Buffer where we store the upper scroll history.
-char upper_buffer[STORED_PAGES * TOTAL_SIZE] = {0};
-
-/// @brief Buffer where we store the original page content during scrolling.
-char original_page[TOTAL_SIZE] = {0};
-
 /// @brief Indicates if the screen is currently scrolled, and by how many lines.
 int scrolled_lines = 0;
 
 /// @brief Flag to batch cursor updates in video_puts to improve performance.
 static int batch_cursor_updates = 0;
 
-/// @brief Saved cursor position for ESC [ s and ESC [ u commands.
-static char *saved_pointer = ADDR;
+/// @brief The backend currently materializing the console.
+///
+/// Starts as the compile-time backend and stays there unless something promotes
+/// a different one; see video_promote_backend(). The indirection exists because
+/// a handoff needs two materializations alive at once -- one still displaying
+/// while the other is built -- which a single compile-time symbol cannot
+/// express.
+///
+/// Read from interrupt context, by video_cursor_blink_tick(). A single aligned
+/// pointer store is atomic on this architecture, but the publish still masks
+/// interrupts, both to say so explicitly and because that critical section is
+/// where more state will be published later.
+static const video_backend_t *video_active = &video_backend;
+
+/// @name Limits on a requested geometry
+/// @brief Deliberately orientation-agnostic: nothing here assumes width >= height.
+///
+/// A host can report a portrait display, and one has been observed to. So the
+/// floors and ceilings are per-dimension and the real limit is a byte budget on
+/// the storage, which is what actually constrains this.
+/// @{
+
+/// Fewest columns that still make a usable terminal.
+///
+/// Not 80. The boot log writes its status markers at `width - 5` and so needs 80,
+/// but that is a property of the *boot* geometry, which is compile-time and
+/// always at least that wide. By the time anything can resize, the boot log is
+/// finished.
+#define CONSOLE_MIN_COLUMNS 32U
+/// Fewest rows that still make a usable terminal.
+#define CONSOLE_MIN_ROWS    8U
+/// Per-dimension ceiling, which also keeps `columns * rows` clear of overflow.
+///
+/// 4096 x 4096 cells is 16.7 million, and the byte budget below multiplies that
+/// by 24, which still fits a 32-bit unsigned comfortably. Checking the dimensions
+/// before the product is what makes the product safe to compute at all.
+#define CONSOLE_MAX_DIMENSION 4096U
+/// Ceiling on the storage a console may occupy.
+///
+/// At 24 bytes per cell this allows about 174000 cells, which at 8x16 is a
+/// display of roughly 2048x1360 -- comfortably past any host window, and far
+/// short of anything that would strain the allocator.
+#define CONSOLE_MAX_BYTES     (4U * 1024U * 1024U)
+/// @}
+
+/// @brief Bytes a console of the given shape needs.
+/// @param columns Width in cells.
+/// @param rows Height in cells.
+/// @return The total, which callers must already have bounded.
+///
+/// Screen plus guard cell, plus STORED_PAGES screens of scrollback, plus one
+/// saved screen. Safe from overflow only because both dimensions are checked
+/// against CONSOLE_MAX_DIMENSION first.
+static inline unsigned __console_bytes(unsigned columns, unsigned rows)
+{
+    unsigned cells = columns * rows;
+    return (unsigned)(((cells + 1U) + (STORED_PAGES * cells) + cells) * sizeof(video_cell_t));
+}
+
+/// @brief Whether a geometry is one the console will accept.
+/// @param columns Width in cells.
+/// @param rows Height in cells.
+/// @return true when it is usable.
+static bool_t __console_geometry_ok(unsigned columns, unsigned rows)
+{
+    if ((columns < CONSOLE_MIN_COLUMNS) || (rows < CONSOLE_MIN_ROWS)) {
+        return false;
+    }
+    if ((columns > CONSOLE_MAX_DIMENSION) || (rows > CONSOLE_MAX_DIMENSION)) {
+        return false;
+    }
+    return __console_bytes(columns, rows) <= CONSOLE_MAX_BYTES;
+}
+
+/// @name A pending resize request
+/// @brief Written from any context, including an interrupt; acted on in one.
+/// @{
+static volatile bool_t resize_pending  = false; ///< Whether a request is waiting.
+static volatile unsigned resize_want_columns = 0; ///< Requested width.
+static volatile unsigned resize_want_rows    = 0; ///< Requested height.
+/// @}
+
+/// @brief Whether the cursor sits outside the visible screen.
+/// @return true when the cursor is parked on the guard cell.
+///
+/// Moving forward off the bottom-right corner leaves the cursor one cell past
+/// the screen, and from there some sequences can push it further still. The
+/// original implementation kept writing through such a cursor; those writes
+/// landed in the unused remainder of the VGA text aperture and were never
+/// displayed. Here the cursor is parked on a single guard cell instead and the
+/// invisible writes are skipped, which keeps everything observable identical --
+/// the reported position, the rendered position and the recovery path -- without
+/// ever writing out of bounds.
+static inline bool_t __cursor_is_parked(void) { return cursor >= screen_cells; }
+
+/// @brief Moves the cursor, keeping it within the buffer.
+/// @param index The desired cell index.
+static inline void __set_cursor(unsigned index)
+{
+    // Placing the cursor establishes a new logical position, so whatever a
+    // resize was remembering about the old one is now wrong. This is the only
+    // function that moves the cursor -- output, escape sequences and typing all
+    // arrive here -- which is what makes it the one place this has to be said.
+    // A resize deliberately does not come through here: migration transforms the
+    // bias, it must never discard it.
+    cursor_bias.rows    = 0;
+    cursor_bias.columns = 0;
+    cursor              = (index > screen_cells) ? screen_cells : index;
+}
 
 /// @brief Get the current column number.
 /// @return The column number.
 static inline unsigned __get_x(void)
 {
-    // Validate pointer is within screen bounds.
-    if (pointer < ADDR || pointer >= ADDR + TOTAL_SIZE) {
+    if (__cursor_is_parked()) {
         return 0;
     }
-    return ((pointer - ADDR) % (WIDTH * 2)) / 2;
+    return cursor % video_columns;
 }
 
 /// @brief Get the current row number.
 /// @return The row number.
 static inline unsigned __get_y(void)
 {
-    // Validate pointer is within screen bounds.
-    if (pointer < ADDR || pointer >= ADDR + TOTAL_SIZE) {
+    if (__cursor_is_parked()) {
         return 0;
     }
-    return (pointer - ADDR) / (WIDTH * 2);
+    return cursor / video_columns;
+}
+
+/// @brief First cell of the row the cursor is on.
+/// @return The cell index of the start of the row.
+static inline unsigned __row_start(void) { return (cursor / video_columns) * video_columns; }
+
+/// @brief One past the last cell of the row the cursor is on.
+/// @return The cell index just past the end of the row.
+static inline unsigned __row_end(void) { return __row_start() + video_columns; }
+
+
+/// @name Console metrics
+/// @brief What the console did, for klib/perf.h. Off unless ENABLE_PERF.
+///
+/// Chosen to answer the question this console keeps raising: how much work does
+/// one character cost, and where does it go. Cells and calls together give the
+/// amplification -- one character dirtying a whole row shows up as cells per
+/// call -- and the cycle counters say which layer spent the time.
+/// @{
+PERF_COUNTER(perf_putc, "video.putc.calls", "calls");
+PERF_COUNTER(perf_putc_cycles, "video.putc.cycles", PERF_UNIT_CYCLES);
+PERF_COUNTER(perf_flush, "video.put_cells.calls", "calls");
+PERF_COUNTER(perf_flush_cells, "video.put_cells.cells", "cells");
+PERF_COUNTER(perf_flush_cycles, "video.put_cells.cycles", PERF_UNIT_CYCLES);
+PERF_COUNTER(perf_cursor, "video.set_cursor.calls", "calls");
+PERF_COUNTER(perf_cursor_cycles, "video.set_cursor.cycles", PERF_UNIT_CYCLES);
+PERF_COUNTER(perf_scroll, "video.scroll.calls", "calls");
+PERF_COUNTER(perf_scroll_cycles, "video.scroll.cycles", PERF_UNIT_CYCLES);
+PERF_COUNTER(perf_batch, "video.batch.runs", "runs");
+PERF_COUNTER(perf_resize, "video.resize.calls", "calls");
+PERF_COUNTER(perf_resize_cycles, "video.resize.cycles", PERF_UNIT_CYCLES);
+/// @}
+
+/// @brief Pushes a range of cells to the backend.
+/// @param first Index of the first cell.
+/// @param count How many cells to push.
+///
+/// Ranges are clipped to the visible screen, so the guard cell is never sent.
+static void __flush(unsigned first, unsigned count)
+{
+    if (first >= screen_cells) {
+        return;
+    }
+    if (count > (screen_cells - first)) {
+        count = screen_cells - first;
+    }
+    if (count == 0) {
+        return;
+    }
+    PERF_INC(perf_flush);
+    PERF_ADD(perf_flush_cells, count);
+    perf_scope_t scope = PERF_SCOPE_BEGIN();
+    video_active->put_cells(first % video_columns, first / video_columns, &screen[first], count);
+    PERF_SCOPE_END(perf_flush_cycles, scope);
+}
+
+/// @brief Pushes the whole screen to the backend.
+static void __flush_all(void) { __flush(0, screen_cells); }
+
+/// @brief Erases a range of cells.
+/// @param first Index of the first cell.
+/// @param count How many cells to erase.
+static void __erase(unsigned first, unsigned count)
+{
+    // Any change to the content gives up the retained wide console's hidden
+    // columns; see __console_wide_invalidate().
+    __console_wide_invalidate();
+    if (first >= screen_cells) {
+        return;
+    }
+    if (count > (screen_cells - first)) {
+        count = screen_cells - first;
+    }
+    for (unsigned index = 0; index < count; ++index) {
+        screen[first + index] = blank_cell;
+    }
+    __flush(first, count);
 }
 
 /// @brief Draws the given character at the current cursor position.
 /// @param c The character to draw.
 static inline void __draw_char(char c)
 {
+    // Any change to the content gives up the retained wide console's hidden
+    // columns; see __console_wide_invalidate().
+    __console_wide_invalidate();
     // If we are scrolled, unscroll first to show current content.
     if (scrolled_lines) {
         video_scroll_up(scrolled_lines);
     }
 
-    // Calculate the end of the current line.
-    unsigned int current_row = (pointer - ADDR) / W2;
-    char *line_end           = ADDR + ((current_row + 1) * W2);
+    unsigned row_end = __row_end();
 
-    // Shift characters within the current line to make room for insertion.
-    if (pointer < line_end - 2) {
-        size_t bytes_to_shift = (line_end - 2) - pointer;
-        if (bytes_to_shift > 0) {
-            memmove(pointer + 2, pointer, bytes_to_shift);
+    if (!__cursor_is_parked()) {
+        // Writing inserts rather than overwrites: the rest of the line shifts
+        // right and its last cell falls off the end.
+        if (cursor < (row_end - 1)) {
+            memmove(&screen[cursor + 1], &screen[cursor], ((row_end - 1) - cursor) * sizeof(video_cell_t));
         }
+        screen[cursor].character = (uint8_t)c;
+        screen[cursor].attribute = color;
+        // The shift dirtied everything from the cursor to the end of the line.
+        __flush(cursor, row_end - cursor);
     }
 
-    // Write the character and its color attribute.
-    *pointer       = c;
-    *(pointer + 1) = color;
-
-    // Advance the pointer to the next character position.
-    pointer += 2;
-
-    // If we've reached the end of the line, wrap to the next line.
-    if (pointer >= line_end) {
-        pointer = line_end;
+    // Advance, wrapping at the end of the line.
+    __set_cursor(cursor + 1);
+    if (cursor >= row_end) {
+        __set_cursor(row_end);
     }
 
-    // If pointer goes past the end of the screen, scroll up and reset.
-    if (pointer >= ADDR + TOTAL_SIZE) {
+    // If the cursor went past the end of the screen, scroll and sit on the last
+    // line.
+    if (cursor >= screen_cells) {
         video_shift_one_line_up();
-        pointer = ADDR + TOTAL_SIZE - W2;
+        __set_cursor(screen_cells - video_columns);
     }
 }
 
-/// @brief Hides the VGA cursor.
-void __video_hide_cursor(void)
+/// @brief Erases a character by shifting the rest of the line left.
+///
+/// Unlike __erase(), the cell freed at the end of the line is filled with a
+/// space in the *current* colour rather than being zeroed.
+static inline void __erase_to_space(void)
 {
-    outportb(VGA_CRTC_INDEX, VGA_CURSOR_START);
-    unsigned char cursor_start = inportb(VGA_CRTC_DATA);
-    // Set the most significant bit to disable the cursor.
-    outportb(VGA_CRTC_DATA, cursor_start | 0x20);
-}
-
-/// @brief Shows the VGA cursor by clearing the disable bit.
-void __video_show_cursor(void)
-{
-    // Read current cursor start register
-    outportb(VGA_CRTC_INDEX, VGA_CURSOR_START);
-    unsigned char cursor_start = inportb(VGA_CRTC_DATA);
-    // Clear bit 5 to enable cursor, keep other bits
-    outportb(VGA_CRTC_INDEX, VGA_CURSOR_START);
-    outportb(VGA_CRTC_DATA, cursor_start & ~0x20);
-}
-
-/// @brief Sets the VGA cursor shape by specifying the start and end scan lines.
-/// @param start The starting scan line of the cursor (0-15).
-/// @param end The ending scan line of the cursor (0-15).
-void __video_set_cursor_shape(unsigned char start, unsigned char end)
-{
-    // Ensure start is less than or equal to end for visible cursor
-    if (start > end) {
-        start = 0;
-        end   = 15;
+    // Any change to the content gives up the retained wide console's hidden
+    // columns; see __console_wide_invalidate().
+    __console_wide_invalidate();
+    if (__cursor_is_parked()) {
+        return;
     }
-
-    // Set the cursor's start scan line with cursor enabled (bit 5 = 0)
-    outportb(VGA_CRTC_INDEX, VGA_CURSOR_START);
-    outportb(VGA_CRTC_DATA, start & 0x1F);
-
-    // Set the cursor's end scan line
-    outportb(VGA_CRTC_INDEX, VGA_CURSOR_END);
-    outportb(VGA_CRTC_DATA, end & 0x1F);
-
-    // Explicitly ensure cursor is visible
-    __video_show_cursor();
-}
-
-/// @brief Issues a command to move the cursor to the given position.
-/// @param x The x coordinate.
-/// @param y The y coordinate.
-static inline void __video_set_cursor_position(unsigned int x, unsigned int y)
-{
-    // Clamp coordinates to valid screen bounds.
-    if (x >= WIDTH)
-        x = WIDTH - 1;
-    if (y >= HEIGHT)
-        y = HEIGHT - 1;
-
-    // Calculate linear position from x,y coordinates.
-    uint32_t position = (y * WIDTH) + x;
-
-    // Write low byte of cursor position.
-    outportb(VGA_CRTC_INDEX, VGA_CURSOR_LOCATION_LOW);
-    outportb(VGA_CRTC_DATA, (uint8_t)(position & 0xFFU));
-
-    // Write high byte of cursor position.
-    outportb(VGA_CRTC_INDEX, VGA_CURSOR_LOCATION_HIGH);
-    outportb(VGA_CRTC_DATA, (uint8_t)((position >> 8U) & 0xFFU));
+    unsigned row_end     = __row_end();
+    unsigned cells_after = row_end - (cursor + 1);
+    if (cells_after > 0) {
+        memmove(&screen[cursor], &screen[cursor + 1], cells_after * sizeof(video_cell_t));
+    }
+    screen[row_end - 1].character = ' ';
+    screen[row_end - 1].attribute = color;
+    __flush(cursor, row_end - cursor);
 }
 
 /// @brief Sets the provided ANSI color code.
@@ -291,22 +592,11 @@ static inline void __set_color(uint8_t ansi_code)
 static inline void __move_cursor_backward(int erase, int amount)
 {
     for (int i = 0; i < amount; ++i) {
-        if (pointer - 2 >= ADDR) {
-            // Move pointer back one character position.
-            pointer -= 2;
+        if (cursor >= 1) {
+            // Move back one character position.
+            __set_cursor(cursor - 1);
             if (erase) {
-                // Calculate the end of the current line.
-                unsigned int current_row = (pointer - ADDR) / W2;
-                char *line_end           = ADDR + ((current_row + 1) * W2);
-
-                // Shift characters left on the current line only.
-                size_t bytes_to_move = line_end - (pointer + 2);
-                if (bytes_to_move > 0) {
-                    memmove(pointer, pointer + 2, bytes_to_move);
-                }
-                // Clear the last character position of the line.
-                *(line_end - 2) = ' ';
-                *(line_end - 1) = color;
+                __erase_to_space();
             }
         } else {
             break;
@@ -321,14 +611,15 @@ static inline void __move_cursor_backward(int erase, int amount)
 static inline void __move_cursor_forward(int erase, int amount)
 {
     for (int i = 0; i < amount; ++i) {
-        if (pointer + 2 <= ADDR + TOTAL_SIZE) {
+        if ((cursor + 1) <= screen_cells) {
             if (erase) {
                 // Overwrite with space without shifting other characters.
-                *pointer       = ' ';
-                *(pointer + 1) = color;
+                screen[cursor].character = ' ';
+                screen[cursor].attribute = color;
+                __flush(cursor, 1);
             }
-            // Move pointer forward one character position.
-            pointer += 2;
+            // Move forward one character position.
+            __set_cursor(cursor + 1);
         } else {
             break;
         }
@@ -340,30 +631,35 @@ static inline void __move_cursor_forward(int erase, int amount)
 /// @param shape The integer representing the cursor shape code.
 static inline void __parse_cursor_escape_code(int shape)
 {
+    video_cursor_style_t style;
+
     switch (shape) {
-    case 0: // Default blinking block cursor
-    case 2: // Blinking block cursor
-        __video_set_cursor_shape(0, 15);
+    case 0: // Default: blinking block.
+        style.shape = VIDEO_CURSOR_BLOCK, style.blinking = true;
         break;
-    case 1: // Steady block cursor
-        __video_set_cursor_shape(0, 15);
+    case 1: // Blinking block.
+        style.shape = VIDEO_CURSOR_BLOCK, style.blinking = true;
         break;
-    case 3: // Blinking underline cursor
-        __video_set_cursor_shape(13, 15);
+    case 2: // Steady block.
+        style.shape = VIDEO_CURSOR_BLOCK, style.blinking = false;
         break;
-    case 4: // Steady underline cursor
-        __video_set_cursor_shape(13, 15);
+    case 3: // Blinking underline.
+        style.shape = VIDEO_CURSOR_UNDERLINE, style.blinking = true;
         break;
-    case 5: // Blinking vertical bar cursor
-        __video_set_cursor_shape(0, 1);
+    case 4: // Steady underline.
+        style.shape = VIDEO_CURSOR_UNDERLINE, style.blinking = false;
         break;
-    case 6: // Steady vertical bar cursor
-        __video_set_cursor_shape(0, 1);
+    case 5: // Blinking bar.
+        style.shape = VIDEO_CURSOR_BAR, style.blinking = true;
+        break;
+    case 6: // Steady bar.
+        style.shape = VIDEO_CURSOR_BAR, style.blinking = false;
         break;
     default:
-        // Handle any other cases if needed
-        break;
+        // Anything else is ignored, as it always has been.
+        return;
     }
+    video_active->set_cursor_style(style);
 }
 
 void video_init(void)
@@ -382,22 +678,727 @@ void video_init(void)
             }
         }
     }
-    // Clear the screen and set default cursor shape.
+
+    // Bring the hardware up before pushing anything to it. Until this returns,
+    // a backend that cannot use its hardware yet has been ignoring us.
+    if (video_backend.init() < 0) {
+        pr_emerg("Failed to initialize the '%s' video backend.\n", video_backend.name);
+    }
+
+    // At this point the console's geometry is still the compile-time one, and
+    // the backend's comes from the same macros, so a mismatch means the build is
+    // inconsistent and every offset computed here would be wrong.
+    if ((video_backend.columns != video_columns) || (video_backend.rows != video_rows)) {
+        pr_emerg(
+            "Video backend '%s' reports %ux%u but the console was built for %ux%u.\n", video_backend.name,
+            video_backend.columns, video_backend.rows, (unsigned)video_columns, (unsigned)video_rows);
+    }
+
+    // Clearing the screen is what publishes the initialized console. Anything
+    // printed before this point is discarded, which is what has always
+    // happened.
     video_clear();
 
-    // Set up cursor with known good values
-    // Use default blinking block cursor (scan lines 0-15)
-    outportb(VGA_CRTC_INDEX, VGA_CURSOR_START);
-    outportb(VGA_CRTC_DATA, 0x00); // Start at line 0, bit 5 clear (enabled)
-
-    outportb(VGA_CRTC_INDEX, VGA_CURSOR_END);
-    outportb(VGA_CRTC_DATA, 0x0F); // End at line 15
-
-    // Explicitly show cursor
-    __video_show_cursor();
+    // Use the default blinking block cursor.
+    __parse_cursor_escape_code(0);
 }
 
-void video_putc(int c)
+/// @brief Puts the whole console on the display and places the cursor.
+///
+/// Used whenever a backend starts materializing a console it has not been
+/// drawing. The cell buffer is the source of truth and has been recording all
+/// along, so one flush of the whole screen is all it takes to make the display
+/// agree with it.
+///
+/// The cursor is placed afterwards rather than left to chance: the overlay
+/// belongs to the backend, a backend that has just taken over has none drawn,
+/// and going through the ordinary cursor path is what keeps the lifecycle
+/// invariant true from the very first overlay.
+static void __republish(void)
+{
+    __flush_all();
+    video_update_cursor_position();
+}
+
+/// @brief Runs a backend's deferred initialization and makes it the active one.
+/// @param next The backend to bring up and publish.
+/// @return 0 on success, a negative value on failure.
+///
+/// Ordered so that failure is harmless: the deferred initialization runs
+/// first, and `video_active` is only moved once it has succeeded. A backend that
+/// fails half way through bringing up its hardware therefore leaves whichever
+/// backend was displaying still displaying.
+static int __publish_backend(const video_backend_t *next)
+{
+    if ((next->late_init != NULL) && (next->late_init() < 0)) {
+        pr_emerg("Failed to complete late initialization of the '%s' video backend.\n", next->name);
+        return -1;
+    }
+
+    // Interrupts are masked for the publish alone. The pointer is read from the
+    // timer interrupt, and although a single aligned store is atomic here, this
+    // is the critical section that later has more state to publish at once, so
+    // it is written as a critical section from the start. Nothing expensive may
+    // move inside it.
+    uint8_t flags = irq_disable();
+    video_active  = next;
+    irq_enable(flags);
+
+    __republish();
+    return 0;
+}
+
+void video_late_init(void)
+{
+    // Most backends have nothing deferred; there is then nothing to repaint
+    // either, because they have been drawing all along.
+    if (video_backend.late_init == NULL) {
+        return;
+    }
+    if (__publish_backend(&video_backend) < 0) {
+        return;
+    }
+    pr_notice("Late initialization of the '%s' video backend complete.\n", video_backend.name);
+}
+
+/// @brief A console's storage and shape, as one thing that can be built aside.
+typedef struct {
+    page_t *pages;                 ///< Backing allocation, or NULL for the boot arrays.
+    unsigned columns;              ///< Width in cells.
+    unsigned rows;                 ///< Height in cells.
+    unsigned cells;                ///< Cells on the visible screen.
+    unsigned history_rows;         ///< Rows of scrollback.
+    unsigned history_cells;        ///< Cells of scrollback.
+    video_cell_t *screen;          ///< Visible screen, plus one guard cell.
+    video_cell_t *history;         ///< Scrollback, newest row last.
+    video_cell_t *original_page;   ///< Saved live screen.
+} console_storage_t;
+
+/// @brief What the console was, so that a resize can decide whether to keep it.
+///
+/// Filled by __console_migrate() from the state it has just finished reading,
+/// because that is the only moment both the old geometry and how much of it the
+/// sequence occupied are still known.
+typedef struct {
+    page_t *pages;                 ///< Its allocation, or NULL for the boot arrays.
+    const video_cell_t *screen;    ///< Its screen.
+    const video_cell_t *history;   ///< Its scrollback.
+    unsigned columns;              ///< Its width.
+    unsigned history_rows;         ///< Depth of its scrollback.
+    unsigned history_used;         ///< Sequence rows in its scrollback.
+    unsigned live;                 ///< Sequence rows on its screen.
+} console_previous_t;
+
+/// @brief Allocates storage for a console of the given shape.
+/// @param columns Width in cells.
+/// @param rows Height in cells.
+/// @param[out] out The storage built.
+/// @return 0 on success, -1 when the allocation failed.
+///
+/// One allocation carved into three buffers, so it is all-or-nothing and there
+/// is a single thing to free. Zeroed, which is what makes every cell the new
+/// console does not inherit a blank cell without anything having to write them.
+static int __console_alloc(unsigned columns, unsigned rows, console_storage_t *out)
+{
+    unsigned cells   = columns * rows;
+    unsigned bytes   = __console_bytes(columns, rows);
+    uint32_t order   = find_nearest_order_greater(0, bytes);
+    page_t *pages    = alloc_pages(GFP_KERNEL, order);
+    if (pages == NULL) {
+        pr_err("Failed to allocate %u bytes for a %ux%u console.\n", bytes, columns, rows);
+        return -1;
+    }
+    uint32_t base = get_virtual_address_from_page(pages);
+    if (base == 0) {
+        pr_err("No low-memory address for the new console storage.\n");
+        free_pages(pages);
+        return -1;
+    }
+    memset((void *)base, 0, bytes);
+
+    out->pages         = pages;
+    out->columns       = columns;
+    out->rows          = rows;
+    out->cells         = cells;
+    out->history_rows  = STORED_PAGES * rows;
+    out->history_cells = out->history_rows * columns;
+    out->screen        = (video_cell_t *)base;
+    out->history       = out->screen + (cells + 1U);
+    out->original_page = out->history + out->history_cells;
+    return 0;
+}
+
+/// @brief Copies one row, clipping or blank-padding to the new width.
+static void __console_copy_row(video_cell_t *destination, unsigned new_columns, const video_cell_t *source,
+                               unsigned old_columns)
+{
+    unsigned shared = (old_columns < new_columns) ? old_columns : new_columns;
+    memcpy(destination, source, shared * sizeof(video_cell_t));
+    for (unsigned column = shared; column < new_columns; ++column) {
+        destination[column] = blank_cell;
+    }
+}
+
+/// @brief Releases the retained wide console.
+/// @details Frees pages, so process context only.
+static void __console_wide_release(void)
+{
+    if (wide_pages != NULL) {
+        free_pages(wide_pages);
+    }
+    wide_pages        = NULL;
+    wide_screen       = NULL;
+    wide_history      = NULL;
+    wide_columns      = 0;
+    wide_history_rows = 0;
+    wide_history_used = 0;
+    wide_live         = 0;
+    wide_stale        = false;
+}
+
+/// @brief Whether the retained wide console may still be read from.
+/// @param length The live console's sequence length, which its own must match.
+///
+/// The length check is not only defensive. A newline that does not scroll changes
+/// no cell, so nothing invalidates, but it does extend the sequence by a row --
+/// and that shows up here as a mismatch, which is exactly the right answer.
+static bool_t __console_wide_usable(unsigned length)
+{
+    return (wide_columns != 0U) && !wide_stale && ((wide_history_used + wide_live) == length);
+}
+
+/// @brief The retained wide console's cells for one row of the sequence.
+static const video_cell_t *__console_wide_row(unsigned logical)
+{
+    if (logical < wide_history_used) {
+        return &wide_history[((wide_history_rows - wide_history_used) + logical) * wide_columns];
+    }
+    return &wide_screen[(logical - wide_history_used) * wide_columns];
+}
+
+/// @brief Rows of the screen the console has actually used.
+/// @return At least one, and never more than the number of visible rows.
+///
+/// Everything below this is slack the viewport happens to have room for rather
+/// than content: nothing has been written there and the cursor is not on it.
+/// Telling the two apart is what stops a grow from pulling scrollback in above a
+/// screen that already has room to spare, and what stops a shrink from scrolling
+/// rows away when all it removed was empty space.
+///
+/// Derived rather than tracked, because there is nothing to track: a blank cell
+/// is exactly the zeroed storage the console starts from, so the screen already
+/// says where its content ends. The cursor's own row counts as used even when it
+/// is empty -- that is where the next character goes.
+static unsigned __console_live_rows(void)
+{
+    unsigned live = __cursor_is_parked() ? video_rows : ((cursor / video_columns) + 1U);
+    for (unsigned row = video_rows; row > live; --row) {
+        const video_cell_t *cells = &screen[(row - 1U) * video_columns];
+        for (unsigned column = 0; column < video_columns; ++column) {
+            if ((cells[column].character != 0U) || (cells[column].attribute != 0U)) {
+                return row;
+            }
+        }
+    }
+    return live;
+}
+
+/// @brief Moves a cursor by a number of rows and into a new geometry.
+/// @param position The rendered position, as an index into the old screen.
+/// @param old_columns The width that position is expressed in.
+/// @param next The storage the result must index.
+/// @param delta Rows to move by, positive downwards.
+/// @param[in,out] bias The cursor's bias, updated to match the result.
+/// @return The rendered position in the new screen.
+///
+/// Works in logical coordinates throughout: the bias is folded in on the way in
+/// and re-derived on the way out, so the cursor's logical cell is carried across
+/// unchanged and only its *rendered* stand-in is clamped. That is what makes the
+/// move reversible -- a later grow folds the same bias back in and lands on the
+/// cell the cursor named all along.
+static unsigned __console_move_cursor(unsigned position, unsigned old_columns, const console_storage_t *next, int delta,
+                                      console_bias_t *bias)
+{
+    int row             = (int)(position / old_columns) + bias->rows + delta;
+    int column          = (int)(position % old_columns) + bias->columns;
+    int rendered_row    = row;
+    int rendered_column = column;
+    if (rendered_row < 0) {
+        rendered_row = 0;
+    }
+    if (rendered_row >= (int)next->rows) {
+        rendered_row = (int)next->rows - 1;
+    }
+    if (rendered_column < 0) {
+        rendered_column = 0;
+    }
+    if (rendered_column >= (int)next->columns) {
+        rendered_column = (int)next->columns - 1;
+    }
+    bias->rows    = row - rendered_row;
+    bias->columns = column - rendered_column;
+    return ((unsigned)rendered_row * next->columns) + (unsigned)rendered_column;
+}
+
+/// @brief Moves the console's contents into new storage.
+/// @param next The storage to fill, already zeroed.
+///
+/// Runs with interrupts masked, so it must do nothing but copy and must be
+/// bounded. See video_service_pending() for why the copy belongs inside that
+/// window rather than before it.
+///
+/// The model, which docs/maintainer/video-backends.md records in full: the
+/// console is an ordered sequence of logical rows -- the used part of the
+/// scrollback, followed by the used part of the screen -- and the screen is a
+/// window onto the newest end of it. A resize moves that window and nothing else.
+/// Everything else follows from that:
+///
+/// - Growing taller widens the window upwards, revealing older rows, and only
+///   pads at the **bottom** once the sequence runs out. Shrinking narrows it
+///   upwards again, so the rows that no longer fit go back to being scrollback.
+///   The two are inverses, which is what makes a geometry round trip reversible:
+///   dragging a window edge passes through intermediate sizes, and every dip has
+///   to be recoverable by the rise that follows it.
+/// - The bottom edge of the window stays put, because the bottom of the screen is
+///   the prompt and the one part anybody is looking at.
+/// - The cursor belongs to a cell of the sequence, not to a row of the window, so
+///   it moves exactly as far as the row it sits on. Nothing compensates it
+///   separately; there would be nothing to compensate.
+/// - Width is clipped on the right when narrowing and blank-filled on the right
+///   when widening. There is deliberately no reflow: the cell buffer has no
+///   record of which rows were soft-wrapped, so reflow is not something this
+///   representation can express. Clipped cells are gone -- horizontal round trips
+///   are lossy in a way vertical ones are not.
+static void __console_migrate(const console_storage_t *next, console_previous_t *previous)
+{
+    unsigned old_columns = video_columns;
+    unsigned live        = __console_live_rows();
+
+    // The window, in sequence terms: `length` rows exist, the newest `take` of
+    // them are on screen, and `start` stay above it as scrollback. `delta` is how
+    // far the content has to move for that to be true, and is the only quantity
+    // the rest of this function needs -- one number, applied to the rows and to
+    // the cursor alike, which is what keeps them from drifting apart.
+    unsigned length = history_used + live;
+    unsigned take   = (length < next->rows) ? length : next->rows;
+    unsigned start  = length - take;
+    int delta       = (int)history_used - (int)start;
+
+    // Where the cells come from. The retained wide console holds the same rows at
+    // a width the live buffers no longer have, so when it is usable it is the
+    // better source for every one of them -- which is what puts clipped columns
+    // back on a widen, and what keeps them across a vertical resize in between.
+    bool_t from_wide     = __console_wide_usable(length);
+    unsigned source_width = from_wide ? wide_columns : old_columns;
+
+    // Visible screen, top to bottom. Rows are read from the history while the
+    // window reaches above where the old screen began, and from the old screen
+    // after that. Anything past the sequence is left as the zeroed storage
+    // arrived: blank, and at the bottom, which is where a console with room to
+    // spare keeps its slack.
+    for (unsigned row = 0; row < take; ++row) {
+        unsigned logical = start + row;
+        const video_cell_t *source =
+            from_wide ? __console_wide_row(logical)
+                      : ((logical < history_used)
+                             ? &history[((history_rows - history_used) + logical) * old_columns]
+                             : &screen[(logical - history_used) * old_columns]);
+        __console_copy_row(&next->screen[row * next->columns], next->columns, source, source_width);
+    }
+
+    // Scrollback: exactly the rows the window no longer covers, newest last,
+    // cropped to what the new history can hold. Read from the same sequence by
+    // the same rule, so a row is in the history or on the screen and never in
+    // both. Cropping only ever loses the oldest rows, which are the ones no
+    // geometry could have brought back anyway.
+    unsigned keep = (start < next->history_rows) ? start : next->history_rows;
+    for (unsigned index = 0; index < keep; ++index) {
+        unsigned logical = (start - keep) + index;
+        const video_cell_t *source =
+            from_wide ? __console_wide_row(logical)
+                      : ((logical < history_used)
+                             ? &history[((history_rows - history_used) + logical) * old_columns]
+                             : &screen[(logical - history_used) * old_columns]);
+        __console_copy_row(&next->history[((next->history_rows - keep) + index) * next->columns], next->columns, source,
+                           source_width);
+    }
+
+    // The cursor moves with its row. A parked cursor stays parked: the guard cell
+    // is a position in its own right and losing it would resume writing at a cell
+    // the console deliberately does not write.
+    if (__cursor_is_parked()) {
+        cursor = next->cells;
+    } else {
+        cursor = __console_move_cursor(cursor, old_columns, next, delta, &cursor_bias);
+    }
+    // The saved cursor gets the same move, for the same reason: ESC [ u after a
+    // resize should land on the cell it was told to remember.
+    saved_cursor = __console_move_cursor(saved_cursor, old_columns, next, delta, &saved_bias);
+
+    // What the console was, for the caller to keep or release. Reported before the
+    // publish below overwrites the pointers it names.
+    previous->pages        = console_pages;
+    previous->screen       = screen;
+    previous->history      = history;
+    previous->columns      = old_columns;
+    previous->history_rows = history_rows;
+    previous->history_used = history_used;
+    previous->live         = live;
+
+    // Cropping drops rows from the *oldest* end of the sequence, so a retained
+    // wide console has to lose exactly the same ones or its rows would no longer
+    // line up with the live console's. If the crop reaches past its scrollback --
+    // which needs a sequence far longer than either console can hold -- it is
+    // given up rather than guessed at.
+    if (keep < start) {
+        unsigned cropped = start - keep;
+        if (wide_columns != 0U) {
+            if (cropped <= wide_history_used) {
+                wide_history_used -= cropped;
+            } else {
+                __console_wide_invalidate();
+            }
+        }
+    }
+
+    // Publish. Every value describing the console's shape changes together, and
+    // this is the only place they may.
+    history_used   = keep;
+    video_columns  = next->columns;
+    video_rows     = next->rows;
+    screen_cells   = next->cells;
+    history_rows   = next->history_rows;
+    history_cells  = next->history_cells;
+    screen         = next->screen;
+    history        = next->history;
+    original_page  = next->original_page;
+    console_pages  = next->pages;
+}
+
+/// @brief Keeps or releases the console the resize has just replaced.
+/// @param previous What it was, as __console_migrate() reported it.
+/// @param new_columns The width the console now has.
+///
+/// The rule is that the retained console is the **widest still-valid** truth, not
+/// the most recent one. Across `240 -> 128 -> 100 -> 200 -> 240` the 240-column
+/// storage is what is held the whole way through: adopting the 128- or
+/// 100-column intermediate would throw away the columns the round trip has to
+/// come back to, and each of those intermediates is itself a clipped copy of the
+/// one being held.
+///
+/// Nothing is allocated and nothing is copied here. The storage kept is the
+/// storage the resize was about to release, so the cost is that it is not given
+/// back yet: while narrowed, the console occupies its own allocation plus this
+/// one. Each is separately bounded by CONSOLE_MAX_BYTES; the total during a
+/// narrowed state is the sum, which is worth knowing when reading a free-page
+/// count.
+static void __console_retain(const console_previous_t *previous, unsigned new_columns)
+{
+    // Migration may have found it unusable, and output may have invalidated it
+    // while the resize was in flight.
+    if (wide_stale) {
+        __console_wide_release();
+    }
+
+    unsigned widest = (wide_columns > previous->columns) ? wide_columns : previous->columns;
+
+    // Nothing is hidden any more: the console is at least as wide as anything
+    // either of them could tell it, and migration has already read whatever the
+    // retained one had to give.
+    if (new_columns >= widest) {
+        __console_wide_release();
+        if (previous->pages != NULL) {
+            free_pages(previous->pages);
+        }
+        return;
+    }
+
+    // Otherwise keep the wider of the two and release the other.
+    if (previous->columns > wide_columns) {
+        __console_wide_release();
+        wide_pages        = previous->pages;
+        wide_screen       = previous->screen;
+        wide_history      = previous->history;
+        wide_columns      = previous->columns;
+        wide_history_rows = previous->history_rows;
+        wide_history_used = previous->history_used;
+        wide_live         = previous->live;
+        wide_stale        = false;
+    } else if (previous->pages != NULL) {
+        free_pages(previous->pages);
+    }
+}
+
+/// @brief Changes the console's shape.
+/// @param columns The new width in cells.
+/// @param rows The new height in cells.
+/// @return 0 on success, a negative value on failure.
+///
+/// Transactional throughout: the new storage is allocated and the backend is
+/// asked to prepare before anything the console is currently using is touched,
+/// and the old storage is only released once the new one is live. Any failure
+/// leaves the console exactly as it was, still displaying.
+
+
+
+static int __console_resize(unsigned columns, unsigned rows, bool_t force)
+{
+    PERF_INC(perf_resize);
+    perf_scope_t resize_scope = PERF_SCOPE_BEGIN();
+    if (!__console_geometry_ok(columns, rows)) {
+        pr_err("Refusing a %ux%u console: outside the supported range.\n", columns, rows);
+        return -1;
+    }
+    // Nothing to do, unless the caller knows something changed that the cell
+    // counts do not show -- a font of a different size lands on the same counts
+    // often enough, and still has to be redrawn.
+    if (!force && (columns == video_columns) && (rows == video_rows)) {
+        return 0;
+    }
+    if (video_active->set_geometry == NULL) {
+        pr_err("Backend '%s' cannot change geometry.\n", video_active->name);
+        return -1;
+    }
+
+    // A resize while scrolled back would have to migrate both the visible screen
+    // and the snapshot it is standing in for, at two different geometries. Going
+    // back to the live view first is one line and removes the case entirely; the
+    // documented consequence is that resizing returns the user to the bottom.
+    if (scrolled_lines != 0) {
+        video_scroll_up(scrolled_lines);
+    }
+
+    // Process context, which is where the pages of a wide console that output has
+    // already invalidated are given back. Before the migration, so that it never
+    // reads from one it is not allowed to trust.
+    if (wide_stale) {
+        __console_wide_release();
+    }
+
+    console_storage_t next;
+    if (__console_alloc(columns, rows, &next) < 0) {
+        return -1;
+    }
+
+    // The backend prepares but does not switch: it keeps displaying the old
+    // geometry until the repaint below gives it content at the new one.
+    if (video_active->set_geometry(columns, rows) < 0) {
+        pr_err("Backend '%s' refused %ux%u.\n", video_active->name, columns, rows);
+        free_pages(next.pages);
+        return -1;
+    }
+
+    // Interrupts are masked for the copy and the publish together. Not just the
+    // publish: output arriving between the two would land in the old buffer
+    // after it had been copied, and would be lost. Bounded by the size of the
+    // console, which CONSOLE_MAX_BYTES caps.
+    console_previous_t previous;
+    uint8_t flags = irq_disable();
+    __console_migrate(&next, &previous);
+    irq_enable(flags);
+
+    // Only now is the old storage unreachable, and either released or kept as the
+    // truth for the columns this geometry cannot show.
+    __console_retain(&previous, columns);
+
+    __republish();
+    PERF_SCOPE_END(perf_resize_cycles, resize_scope);
+    pr_notice("Console resized to %ux%u.\n", columns, rows);
+    return 0;
+}
+
+/// @name The pending font request
+/// @brief Accumulated, not overwritten.
+///
+/// Storing only the latest direction would turn two "larger" into one whenever
+/// both arrived before a service, which is exactly what happens when a key
+/// repeats. A signed step count cannot lose them. A request for the default is
+/// absolute, so it clears the count and raises its own flag instead of being
+/// folded into it.
+/// @{
+static bool_t font_pending      = false; ///< Whether anything is waiting.
+static bool_t font_want_reset   = false; ///< Whether to start from the default.
+static int font_want_steps      = 0;     ///< Net steps to move; positive is larger.
+/// @}
+
+/// @brief Bound on the accumulated step count.
+///
+/// Steps are clamped at the ladder's ends anyway, so accumulating beyond a small
+/// number changes nothing; this only stops a key held down for a long time from
+/// overflowing the counter.
+#define FONT_MAX_PENDING_STEPS 64
+
+void video_request_font(video_font_request_t request)
+{
+    // Refused here, where the refusal costs nothing, rather than being carried
+    // to a service that would have to discover the same thing and drop it.
+    if (video_active->request_font == NULL) {
+        return;
+    }
+
+    // The parser this arrives from runs wherever video_putc() does, so the
+    // accumulator is updated the same way a resize request is recorded.
+    uint8_t flags = irq_disable();
+    if (request == VIDEO_FONT_DEFAULT) {
+        font_want_reset = true;
+        font_want_steps = 0;
+    } else if (request == VIDEO_FONT_LARGER) {
+        if (font_want_steps < FONT_MAX_PENDING_STEPS) {
+            font_want_steps++;
+        }
+    } else {
+        if (font_want_steps > -FONT_MAX_PENDING_STEPS) {
+            font_want_steps--;
+        }
+    }
+    font_pending = true;
+    irq_enable(flags);
+}
+
+void video_request_resize(unsigned columns, unsigned rows)
+{
+    // Cheap validation only. This may be an interrupt handler, so a bad request
+    // is dropped here rather than being carried to a context that can complain
+    // about it properly.
+    if (!__console_geometry_ok(columns, rows)) {
+        return;
+    }
+    if ((columns == video_columns) && (rows == video_rows)) {
+        return;
+    }
+
+    // Last request wins. A burst of display-change events therefore costs one
+    // resize, to the geometry the host settled on, rather than one per event.
+    resize_want_columns = columns;
+    resize_want_rows    = rows;
+    resize_pending      = true;
+}
+
+/// @brief Depth of the output batch the console is inside, zero when none.
+///
+/// Touched from process context and from an interrupt -- a kernel printf can
+/// happen anywhere -- so the changes are made with interrupts masked. The
+/// alternative, a lost increment, would leave a batch open and output invisible
+/// until the next one closed it.
+static unsigned batch_depth = 0;
+
+void video_begin_batch(void)
+{
+    uint8_t flags   = irq_disable();
+    bool_t outermost = (batch_depth == 0);
+    ++batch_depth;
+    irq_enable(flags);
+    if (outermost) {
+        PERF_INC(perf_batch);
+        if (video_active->begin_batch != NULL) {
+            video_active->begin_batch();
+        }
+    }
+}
+
+void video_end_batch(void)
+{
+    uint8_t flags    = irq_disable();
+    bool_t outermost = false;
+    if (batch_depth > 0) {
+        outermost = (--batch_depth == 0);
+    }
+    irq_enable(flags);
+    if (outermost && (video_active->end_batch != NULL)) {
+        video_active->end_batch();
+    }
+}
+
+void video_service_pending(void)
+{
+    // Output has been through the console by now, so a retained wide console that
+    // it invalidated is dead weight. This is process context, which is what it
+    // takes to hand the pages back; the flag is all the invalidation itself can
+    // safely do.
+    if (wide_stale) {
+        __console_wide_release();
+    }
+
+    // Give the backend its process context first: this is where it turns "the
+    // display changed" into an actual geometry, which needs to talk to hardware
+    // and so cannot happen where the change was noticed. It may call
+    // video_request_resize(), which the rest of this function then acts on.
+    if (video_active->service != NULL) {
+        video_active->service();
+    }
+
+    // A font change goes first and on its own. Both it and a pending resize work
+    // out cell counts by dividing the same scanout -- which service() has just
+    // brought up to date -- and only the font change knows the new cell size, so
+    // running the resize as well would resize twice and briefly show the
+    // intermediate geometry.
+    if (font_pending) {
+        uint8_t flags   = irq_disable();
+        bool_t reset    = font_want_reset;
+        int steps       = font_want_steps;
+        font_pending    = false;
+        font_want_reset = false;
+        font_want_steps = 0;
+        irq_enable(flags);
+
+        if (video_active->request_font(reset, steps) == 0) {
+            // It reshaped the console from the current scanout, so a resize
+            // waiting on that same scanout has already happened. Dropped only on
+            // success: a font change that could not be afforded must not also
+            // cost the display the chance to catch up with the window.
+            flags          = irq_disable();
+            resize_pending = false;
+            irq_enable(flags);
+            return;
+        }
+    }
+
+    if (!resize_pending) {
+        return;
+    }
+
+    uint8_t flags        = irq_disable();
+    unsigned columns     = resize_want_columns;
+    unsigned rows        = resize_want_rows;
+    resize_pending       = false;
+    irq_enable(flags);
+
+    (void)__console_resize(columns, rows, false);
+}
+
+int video_change_geometry(unsigned columns, unsigned rows) { return __console_resize(columns, rows, true); }
+
+int video_promote_backend(const video_backend_t *next)
+{
+    if (next == NULL) {
+        pr_emerg("Cannot promote a null video backend.\n");
+        return -1;
+    }
+    if (next == video_active) {
+        return 0;
+    }
+
+    // A backend may only take over a console of the shape it can materialize.
+    // Compared against the console's current geometry rather than the
+    // compile-time one, so this stays correct once the console can be resized.
+    if ((next->columns != video_columns) || (next->rows != video_rows)) {
+        pr_emerg(
+            "Cannot promote '%s': it reports %ux%u but the console is %ux%u.\n", next->name, next->columns, next->rows,
+            (unsigned)video_columns, (unsigned)video_rows);
+        return -1;
+    }
+
+    const char *previous = video_active->name;
+    if (__publish_backend(next) < 0) {
+        pr_emerg("Promotion to '%s' failed; '%s' is still displaying.\n", next->name, previous);
+        return -1;
+    }
+
+    pr_notice("Video backend promoted from '%s' to '%s'.\n", previous, next->name);
+    return 0;
+}
+
+static void __video_putc(int c)
 {
     // Handle ANSI escape sequence start.
     if (c == '\033') {
@@ -471,9 +1472,8 @@ void video_putc(int c)
                 if (amount <= 0)
                     amount = 1;
                 for (int i = 0; i < amount; ++i) {
-                    unsigned int y = __get_y();
-                    if (y > 0) {
-                        pointer -= W2;
+                    if (__get_y() > 0) {
+                        __set_cursor(cursor - video_columns);
                     }
                 }
                 video_update_cursor_position();
@@ -484,9 +1484,8 @@ void video_putc(int c)
                 if (amount <= 0)
                     amount = 1;
                 for (int i = 0; i < amount; ++i) {
-                    unsigned int y = __get_y();
-                    if (y < HEIGHT - 1) {
-                        pointer += W2;
+                    if (__get_y() < (video_rows - 1)) {
+                        __set_cursor(cursor + video_columns);
                     }
                 }
                 video_update_cursor_position();
@@ -513,19 +1512,27 @@ void video_putc(int c)
             else if (c == 'J') {
                 int mode = atoi(&escape_buffer[1]);
                 if (mode == 0) {
-                    // Clear from cursor to end of screen.
-                    memset(pointer, 0, (ADDR + TOTAL_SIZE) - pointer);
+                    // Clear from cursor to end of screen. A parked cursor is
+                    // already past the end, so this erases nothing.
+                    __erase(cursor, screen_cells - cursor);
                 } else if (mode == 1) {
                     // Clear from start of screen to cursor (inclusive).
-                    memset(ADDR, 0, pointer - ADDR + 2);
+                    __erase(0, cursor + 1);
                 } else if (mode == 3) {
                     // Clear entire screen AND scrollback buffer.
                     video_clear();
                 } else {
                     // Mode 2 or default: Clear entire screen (but preserve scrollback).
-                    memset(ADDR, 0, TOTAL_SIZE);
-                    pointer        = ADDR;
+                    // The scrollback stays part of the sequence, so a later grow
+                    // reveals it above the cleared screen, exactly as it would
+                    // above a screen the terminal had scrolled.
+                    __console_wide_invalidate();
+                    for (unsigned index = 0; index < screen_cells; ++index) {
+                        screen[index] = blank_cell;
+                    }
+                    __set_cursor(0);
                     scrolled_lines = 0;
+                    __flush_all();
                     video_update_cursor_position();
                 }
             }
@@ -533,16 +1540,19 @@ void video_putc(int c)
             else if ((c == 'H') || (c == 'f')) {
                 char *semicolon = strchr(&escape_buffer[1], ';');
                 if (semicolon != NULL) {
-                    *semicolon     = '\0';
-                    unsigned int y = atoi(&escape_buffer[1]) - 1;
-                    unsigned int x = atoi(semicolon + 1) - 1;
-                    if (x >= WIDTH)
-                        x = WIDTH - 1;
-                    if (y >= HEIGHT)
-                        y = HEIGHT - 1;
-                    pointer = ADDR + (y * WIDTH * 2 + x * 2);
+                    *semicolon              = '\0';
+                    // A zero or absent parameter underflows here and is then
+                    // caught by the clamp below, which lands the cursor on the
+                    // last cell rather than at home.
+                    unsigned int target_row = atoi(&escape_buffer[1]) - 1;
+                    unsigned int target_col = atoi(semicolon + 1) - 1;
+                    if (target_col >= video_columns)
+                        target_col = video_columns - 1;
+                    if (target_row >= video_rows)
+                        target_row = video_rows - 1;
+                    __set_cursor((target_row * video_columns) + target_col);
                 } else {
-                    pointer = ADDR;
+                    __set_cursor(0);
                 }
                 video_update_cursor_position();
             }
@@ -552,31 +1562,42 @@ void video_putc(int c)
             }
             // ESC [ <n> K - Erase in line.
             else if (c == 'K') {
-                int mode                 = atoi(&escape_buffer[1]);
-                unsigned int current_row = (pointer - ADDR) / W2;
-                char *line_start         = ADDR + (current_row * W2);
-                char *line_end           = line_start + W2;
-
-                if (mode == 0) {
-                    // Clear from cursor to end of line.
-                    memset(pointer, 0, line_end - pointer);
-                } else if (mode == 1) {
-                    // Clear from start of line to cursor.
-                    memset(line_start, 0, pointer - line_start + 2);
-                } else if (mode == 2) {
-                    // Clear entire line.
-                    memset(line_start, 0, W2);
+                int mode = atoi(&escape_buffer[1]);
+                // A parked cursor sits on no row, so there is nothing visible
+                // to erase.
+                if (!__cursor_is_parked()) {
+                    unsigned row_start = __row_start();
+                    unsigned row_end   = __row_end();
+                    if (mode == 0) {
+                        // Clear from cursor to end of line.
+                        __erase(cursor, row_end - cursor);
+                    } else if (mode == 1) {
+                        // Clear from start of line to cursor.
+                        __erase(row_start, (cursor - row_start) + 1);
+                    } else if (mode == 2) {
+                        // Clear entire line.
+                        __erase(row_start, video_columns);
+                    }
                 }
             }
             // ESC [ s - Save cursor position.
             else if (c == 's') {
-                saved_pointer = pointer;
+                // The logical cell is what is being remembered, so the bias is
+                // part of the position and travels with it. Saving a cursor a
+                // resize is currently hiding and restoring it later has to give
+                // back the cell that was saved, not the clamp that stood in.
+                saved_cursor = cursor;
+                saved_bias   = cursor_bias;
             }
             // ESC [ u - Restore cursor position.
             else if (c == 'u') {
-                // Validate saved pointer is within screen bounds.
-                if (saved_pointer >= ADDR && saved_pointer < ADDR + TOTAL_SIZE) {
-                    pointer = saved_pointer;
+                // Validate saved position is within the visible screen.
+                if (saved_cursor < screen_cells) {
+                    __set_cursor(saved_cursor);
+                    // __set_cursor() cleared the bias, as it must for every
+                    // ordinary move; this one is not ordinary, because the
+                    // position it was given carries one.
+                    cursor_bias = saved_bias;
                 }
                 video_update_cursor_position();
             }
@@ -598,6 +1619,24 @@ void video_putc(int c)
                 escape_index = -1;
                 return;
             }
+            // ESC [ <n> z - Custom: console font size. 0 or absent is the
+            // default size, 1 is one step smaller, 2 is one step larger.
+            //
+            // A private sequence, and legitimately so: ECMA-48 reserves the final
+            // bytes 0x70-0x7E for private use, which is the same range the
+            // cursor-shape 'q' above already sits in. Only recorded here --
+            // changing font allocates and talks to the display, and this parser
+            // runs wherever video_putc() does.
+            else if (c == 'z') {
+                int mode = atoi(&escape_buffer[1]);
+                if (mode == 1) {
+                    video_request_font(VIDEO_FONT_SMALLER);
+                } else if (mode == 2) {
+                    video_request_font(VIDEO_FONT_LARGER);
+                } else {
+                    video_request_font(VIDEO_FONT_DEFAULT);
+                }
+            }
             escape_index = -1;
         }
         return;
@@ -612,17 +1651,7 @@ void video_putc(int c)
         video_cartridge_return();
     } else if (c == 127) {
         // DEL key - delete character at cursor position.
-        unsigned int current_row = (pointer - ADDR) / W2;
-        char *line_end           = ADDR + ((current_row + 1) * W2);
-
-        // Shift characters left on the current line only.
-        size_t bytes_to_move = line_end - (pointer + 2);
-        if (bytes_to_move > 0) {
-            memmove(pointer, pointer + 2, bytes_to_move);
-        }
-        // Clear the last character position of the line.
-        *(line_end - 2) = ' ';
-        *(line_end - 1) = color;
+        __erase_to_space();
 
         // Update cursor position to reflect the deletion.
         if (!batch_cursor_updates) {
@@ -643,6 +1672,14 @@ void video_putc(int c)
     }
 }
 
+void video_putc(int c)
+{
+    PERF_INC(perf_putc);
+    perf_scope_t scope = PERF_SCOPE_BEGIN();
+    __video_putc(c);
+    PERF_SCOPE_END(perf_putc_cycles, scope);
+}
+
 void video_puts(const char *str)
 {
     // Validate input string.
@@ -651,6 +1688,8 @@ void video_puts(const char *str)
     }
     // Batch cursor updates for efficiency.
     batch_cursor_updates = 1;
+    // And the display work, for the same reason: this is one run of output.
+    video_begin_batch();
     // Output each character in the string.
     while ((*str) != 0) {
         video_putc((*str++));
@@ -658,29 +1697,56 @@ void video_puts(const char *str)
     // Re-enable cursor updates and sync position.
     batch_cursor_updates = 0;
     video_update_cursor_position();
+    video_end_batch();
 }
 
 void video_update_cursor_position(void)
 {
-    // Ensure there's a character at the cursor position for VGA hardware cursor visibility.
-    // VGA cursor needs a non-null character cell to display over.
-    if (pointer[0] == 0) {
-        pointer[0] = ' ';   // Character
-        pointer[1] = color; // Attribute
+    // Make sure there is something at the cursor for it to sit on: an empty
+    // cell would leave a hardware cursor with nothing to render over.
+    if (screen[cursor].character == 0) {
+        screen[cursor].character = ' ';
+        screen[cursor].attribute = color;
+        __flush(cursor, 1);
     }
-    // Convert byte pointer to character coordinates (divide by 2 since each char uses 2 bytes).
-    __video_set_cursor_position(((pointer - ADDR) / 2U) % WIDTH, ((pointer - ADDR) / 2U) / WIDTH);
+
+    unsigned column = cursor % video_columns;
+    unsigned row    = cursor / video_columns;
+    if (column >= video_columns) {
+        column = video_columns - 1;
+    }
+    if (row >= video_rows) {
+        row = video_rows - 1;
+    }
+
+    // Hand over the cell the cursor now sits on. Erasing whatever a backend drew
+    // at the previous position is the backend's own business: it is the only
+    // party that knows whether it drew anything, and scrolling moves its overlay
+    // under it, so the generic layer cannot track where the pixels ended up.
+    // Note the cell comes from the buffer, which never contains cursor pixels.
+    PERF_INC(perf_cursor);
+    perf_scope_t scope = PERF_SCOPE_BEGIN();
+    video_active->set_cursor_position(column, row, screen[cursor]);
+    PERF_SCOPE_END(perf_cursor_cycles, scope);
+}
+
+void video_cursor_blink_tick(void)
+{
+    // Backends with a hardware cursor leave this NULL: there is nothing for the
+    // console to drive.
+    if (video_active->cursor_blink != NULL) {
+        video_active->cursor_blink();
+    }
 }
 
 void video_move_cursor(unsigned int x, unsigned int y)
 {
     // Clamp coordinates to screen bounds.
-    if (x >= WIDTH)
-        x = WIDTH - 1;
-    if (y >= HEIGHT)
-        y = HEIGHT - 1;
-    // Calculate pointer position (each character is 2 bytes).
-    pointer = ADDR + ((y * WIDTH * 2) + (x * 2));
+    if (x >= video_columns)
+        x = video_columns - 1;
+    if (y >= video_rows)
+        y = video_rows - 1;
+    __set_cursor((y * video_columns) + x);
     // Update hardware cursor to match.
     video_update_cursor_position();
 }
@@ -701,24 +1767,31 @@ void video_get_screen_size(unsigned int *width, unsigned int *height)
 {
     // Return screen width if requested.
     if (width) {
-        *width = WIDTH;
+        *width = video_columns;
     }
     // Return screen height if requested.
     if (height) {
-        *height = HEIGHT;
+        *height = video_rows;
     }
 }
 
 void video_clear(void)
 {
+    // The sequence is emptied along with the buffer that held it, and with it
+    // anything a narrower viewport was hiding.
+    history_used = 0;
+    __console_wide_invalidate();
     // Clear the scrollback buffer.
-    memset(upper_buffer, 0, STORED_PAGES * TOTAL_SIZE);
+    memset(history, 0, history_cells * sizeof(video_cell_t));
     // Clear the visible screen.
-    memset(ADDR, 0, TOTAL_SIZE);
+    for (unsigned index = 0; index < screen_cells; ++index) {
+        screen[index] = blank_cell;
+    }
     // Reset cursor to top-left corner.
-    pointer        = ADDR;
+    __set_cursor(0);
     // Reset scrolling state.
     scrolled_lines = 0;
+    __flush_all();
     video_update_cursor_position();
 }
 
@@ -729,14 +1802,14 @@ void video_new_line(void)
         video_scroll_up(scrolled_lines);
     }
 
-    // Move pointer to the start of the next line.
-    pointer = ADDR + ((pointer - ADDR) / W2 + 1) * W2;
+    // Move to the start of the next line.
+    __set_cursor(__row_end());
     // Check if we've gone past the bottom of the screen.
-    if (pointer >= ADDR + TOTAL_SIZE) {
+    if (cursor >= screen_cells) {
         // Scroll up by one line and move content into scrollback.
         video_shift_one_line_up();
         // Position cursor at the beginning of the last line.
-        pointer = ADDR + TOTAL_SIZE - W2;
+        __set_cursor(screen_cells - video_columns);
     }
     video_update_cursor_position();
 }
@@ -748,72 +1821,97 @@ void video_cartridge_return(void)
         video_scroll_up(scrolled_lines);
     }
 
-    // Calculate which row we're on.
-    unsigned int current_row = (pointer - ADDR) / W2;
-    // Move pointer to the beginning of the current line.
-    pointer                  = ADDR + (current_row * W2);
+    // Move to the beginning of the current line.
+    __set_cursor(__row_start());
     video_update_cursor_position();
 }
 
-/// @brief Shifts the buffer up or down by one line.
+/// @brief Shifts a cell buffer up or down by one line.
 /// @param buffer Pointer to the buffer to shift.
-/// @param lines Number of lines we want to shift.
+/// @param rows Number of rows in the buffer.
 /// @param direction 1 to shift up, -1 to shift down.
-static inline void __shift_buffer(char *buffer, int lines, int direction)
+static inline void __shift_buffer(video_cell_t *buffer, unsigned rows, int direction)
 {
     // Shift up: Move all lines in one operation.
     if (direction == 1) {
-        // Move (lines-1) lines from row 1 to row 0
-        memmove(buffer, buffer + W2, W2 * (lines - 1));
+        // Move (rows-1) lines from row 1 to row 0
+        memmove(buffer, buffer + video_columns, video_columns * (rows - 1) * sizeof(video_cell_t));
     }
     // Shift down: Move all lines in one operation.
     else if (direction == -1) {
-        // Move (lines-1) lines from row 0 to row 1
-        memmove(buffer + W2, buffer, W2 * (lines - 1));
+        // Move (rows-1) lines from row 0 to row 1
+        memmove(buffer + video_columns, buffer, video_columns * (rows - 1) * sizeof(video_cell_t));
     }
 }
 
 /// @brief Shifts the screen content up by one line. When not scrolled, moves
-/// the top line into the `upper_buffer`.
+/// the top line into the `history` buffer.
 static void __shift_screen_up(void)
 {
+    // Any change to the content gives up the retained wide console's hidden
+    // columns; see __console_wide_invalidate().
+    __console_wide_invalidate();
     if (scrolled_lines == 0) {
-        // Move the upper buffer up by one line.
-        __shift_buffer(upper_buffer, STORED_PAGES * HEIGHT, +1);
-        // Copy the first line on the screen inside the last line of the upper buffer.
-        memcpy(upper_buffer + (TOTAL_SIZE * STORED_PAGES - W2), ADDR, W2);
+        // Move the history buffer up by one line.
+        __shift_buffer(history, history_rows, +1);
+        // Copy the first line on the screen into the last line of the history.
+        memcpy(&history[history_cells - video_columns], screen, video_columns * sizeof(video_cell_t));
+        // The sequence just got one row longer at its live end, and that row is
+        // now the newest scrollback there is. This is the only place the history
+        // grows from output, so it is the only place this has to be said.
+        if (history_used < history_rows) {
+            ++history_used;
+        }
     }
     // Move the screen up by one line.
-    __shift_buffer(ADDR, HEIGHT, +1);
+    __shift_buffer(screen, video_rows, +1);
     // Clear the last line of the screen.
-    memset(ADDR + (W2 * (HEIGHT - 1)), 0, W2);
+    for (unsigned index = screen_cells - video_columns; index < screen_cells; ++index) {
+        screen[index] = blank_cell;
+    }
+    // Let the backend move the pixels it already has, then repaint the line
+    // that was uncovered.
+    PERF_INC(perf_scroll);
+    perf_scope_t scroll_scope = PERF_SCOPE_BEGIN();
+    video_active->scroll(1);
+    PERF_SCOPE_END(perf_scroll_cycles, scroll_scope);
+    __flush(screen_cells - video_columns, video_columns);
 }
 
 /// @brief Shifts the screen content down by one line. Restores the topmost line
-/// from the `upper_buffer`.
+/// from the `history` buffer.
 static void __shift_screen_down(void)
 {
     // Move the screen content down by one line.
-    __shift_buffer(ADDR, HEIGHT, -1);
-    // Restore from the `upper_buffer`.
-    memcpy(ADDR, upper_buffer + (W2 * (STORED_PAGES * HEIGHT - scrolled_lines)), W2);
+    __shift_buffer(screen, video_rows, -1);
+    // Restore from the history buffer.
+    memcpy(screen, &history[history_cells - ((unsigned)scrolled_lines * video_columns)],
+           video_columns * sizeof(video_cell_t));
+    PERF_INC(perf_scroll);
+    perf_scope_t scroll_scope = PERF_SCOPE_BEGIN();
+    video_active->scroll(-1);
+    PERF_SCOPE_END(perf_scroll_cycles, scroll_scope);
+    __flush(0, video_columns);
 }
 
 void video_shift_one_line_up(void)
 {
     // Handle case where cursor is beyond screen (during scrolling operations).
-    if (pointer >= ADDR + TOTAL_SIZE) {
+    if (cursor >= screen_cells) {
         // Shift the screen and scrollback buffer up.
         __shift_screen_up();
-        // Adjust pointer to stay on the last line.
-        pointer = ADDR + ((pointer - ADDR) / W2 - 1) * W2;
+        // Adjust cursor to stay on the last line.
+        __set_cursor(((cursor / video_columns) - 1) * video_columns);
     }
     // Handle case where we're viewing scrollback history and want to scroll to newer content.
     else if (scrolled_lines > 0) {
         // Shift screen up, moving top line into scrollback.
         __shift_screen_up();
         // Restore the bottom line from the original (unscrolled) screen content.
-        memcpy(ADDR + (W2 * (HEIGHT - 1)), original_page + (W2 * (TOTAL_SIZE / W2 - scrolled_lines)), W2);
+        memcpy(&screen[screen_cells - video_columns],
+               &original_page[screen_cells - ((unsigned)scrolled_lines * video_columns)],
+               video_columns * sizeof(video_cell_t));
+        __flush(screen_cells - video_columns, video_columns);
         // We're now one line less scrolled back.
         --scrolled_lines;
     }
@@ -823,33 +1921,39 @@ void video_shift_one_line_up(void)
 
 void video_shift_one_line_down(void)
 {
-    // Check if we haven't scrolled beyond our scrollback buffer limit.
-    if (scrolled_lines < (STORED_PAGES * HEIGHT)) {
+    // Only as far back as the scrollback actually goes. Bounded by what has been
+    // written, not by the capacity: the buffer is allocated blank and fills from
+    // its newest end, so paging past history_used would scroll padding onto the
+    // screen and let the user keep going for ten screens of it, which looks like
+    // the console has lost its content rather than like the top of the buffer.
+    if (scrolled_lines < (int)history_used) {
         // Save the current visible screen before first scroll operation.
         if (scrolled_lines == 0) {
-            memcpy(original_page, ADDR, TOTAL_SIZE);
+            memcpy(original_page, screen, screen_cells * sizeof(video_cell_t));
         }
         // We're now one line deeper into scrollback history.
         ++scrolled_lines;
         // Shift screen content down, making room at the top.
         __shift_screen_down();
         // Restore the top line from the scrollback buffer.
-        memcpy(ADDR, upper_buffer + (W2 * (STORED_PAGES * HEIGHT - scrolled_lines)), W2);
+        memcpy(screen, &history[history_cells - ((unsigned)scrolled_lines * video_columns)],
+               video_columns * sizeof(video_cell_t));
+        __flush(0, video_columns);
     }
 }
 
 void video_shift_one_page_up(void)
 {
-    // Scroll up by one full page (HEIGHT lines).
-    for (int i = 0; i < HEIGHT; ++i) {
+    // Scroll up by one full page (video_rows lines).
+    for (unsigned i = 0; i < video_rows; ++i) {
         video_shift_one_line_up();
     }
 }
 
 void video_shift_one_page_down(void)
 {
-    // Scroll down by one full page (HEIGHT lines).
-    for (int i = 0; i < HEIGHT; ++i) {
+    // Scroll down by one full page (video_rows lines).
+    for (unsigned i = 0; i < video_rows; ++i) {
         video_shift_one_line_down();
     }
 }
@@ -875,8 +1979,8 @@ void video_scroll_down(int lines)
     if (lines < 0) {
         lines = 0;
     }
-    if (lines > STORED_PAGES * HEIGHT) {
-        lines = STORED_PAGES * HEIGHT;
+    if (lines > (int)history_used) {
+        lines = (int)history_used;
     }
     // Scroll down by the specified number of lines.
     for (int i = 0; i < lines; ++i) {

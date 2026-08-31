@@ -54,6 +54,12 @@ static ssize_t procv_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyt
         return -1;
     }
 
+    // A display change is noticed in an interrupt handler, which may not
+    // allocate or migrate the console, so the work is done here instead: this is
+    // process context, and it is where a shell spends its time waiting. See
+    // video_service_pending().
+    video_service_pending();
+
     // Get the currently running process.
     task_struct *process = scheduler_get_current_process();
     // Get a pointer to its keyboard ring buffer.
@@ -226,9 +232,25 @@ static ssize_t procv_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyt
 /// @return ssize_t The number of bytes written.
 static ssize_t procv_write(vfs_file_t *file, const void *buf, off_t offset, size_t nbyte)
 {
+    // The other process-context path into the console; see procv_read(). Before
+    // the output, so what is written lands on a console that is already the right
+    // shape.
+    video_service_pending();
+
+    // One write() is one run of output: the console changes cell by cell as it
+    // always has, and the display is brought up to date once at the end. A
+    // single-character write is its own batch, so typing stays immediate.
+    video_begin_batch();
     for (size_t i = 0; i < nbyte; ++i) {
         video_putc(((char *)buf)[i]);
     }
+    video_end_batch();
+
+    // And again after it, because the output can itself ask for a change: a font
+    // escape sequence is only recorded by the parser, and would otherwise wait
+    // for the next read -- which blocks until a key is pressed, so the font would
+    // appear to change only when the user next typed something.
+    video_service_pending();
     return nbyte;
 }
 

@@ -8,6 +8,7 @@
 #include "fs/vfs.h"
 #include "hardware/timer.h"
 #include "io/debug.h"
+#include "klib/perf.h"
 #include "process/process.h"
 #include "stdio.h"
 #include "string.h"
@@ -24,6 +25,8 @@ static ssize_t procs_do_cpuinfo(char *buffer, size_t bufsize);
 static ssize_t procs_do_meminfo(char *buffer, size_t bufsize);
 
 static ssize_t procs_do_stat(char *buffer, size_t bufsize);
+
+static ssize_t procs_do_perf(char *buffer, size_t bufsize);
 
 /// @brief Read function for the proc system.
 /// @param file The file.
@@ -59,6 +62,8 @@ static ssize_t __procs_read(vfs_file_t *file, char *buf, off_t offset, size_t nb
         ret = procs_do_meminfo(buffer, BUFSIZ);
     } else if (strcmp(entry->name, "stat") == 0) {
         ret = procs_do_stat(buffer, BUFSIZ);
+    } else if (strcmp(entry->name, "perf") == 0) {
+        ret = procs_do_perf(buffer, BUFSIZ);
     }
     // Perform read.
     ssize_t it = 0;
@@ -76,6 +81,35 @@ static ssize_t __procs_read(vfs_file_t *file, char *buf, off_t offset, size_t nb
     return it;
 }
 
+/// @brief Write function for the proc system: resets the perf counters.
+/// @param file The file.
+/// @param buf Ignored; anything written means "reset".
+/// @param offset Ignored.
+/// @param nbyte How much was written, which is what is reported as consumed.
+/// @return The number of bytes taken, or a negative error.
+///
+/// Only /proc/perf accepts a write, and only to start a new measurement window:
+/// write, run the workload, read. Everything else here is read-only and says so.
+static ssize_t __procs_write(vfs_file_t *file, const void *buf, off_t offset, size_t nbyte)
+{
+    (void)buf;
+    (void)offset;
+    if (!file) {
+        pr_err("We received a NULL file pointer.\n");
+        return -EFAULT;
+    }
+    proc_dir_entry_t *entry = (proc_dir_entry_t *)file->device;
+    if (entry == NULL) {
+        pr_err("The file is not a valid proc entry.\n");
+        return -EFAULT;
+    }
+    if (strcmp(entry->name, "perf") != 0) {
+        return -EACCES;
+    }
+    perf_reset();
+    return (ssize_t)nbyte;
+}
+
 /// Filesystem general operations.
 static vfs_sys_operations_t procs_sys_operations = {
     .mkdir_f   = NULL,
@@ -91,7 +125,7 @@ static vfs_file_operations_t procs_fs_operations = {
     .unlink_f   = NULL,
     .close_f    = NULL,
     .read_f     = __procs_read,
-    .write_f    = NULL,
+    .write_f    = __procs_write,
     .lseek_f    = NULL,
     .stat_f     = NULL,
     .ioctl_f    = NULL,
@@ -102,7 +136,7 @@ static vfs_file_operations_t procs_fs_operations = {
 int procs_module_init(void)
 {
     proc_dir_entry_t *system_entry;
-    char *entry_names[] = {"uptime", "version", "mounts", "cpuinfo", "meminfo", "stat"};
+    char *entry_names[] = {"uptime", "version", "mounts", "cpuinfo", "meminfo", "stat", "perf"};
     for (int i = 0; i < count_of(entry_names); i++) {
         char *entry_name = entry_names[i];
         if ((system_entry = proc_create_entry(entry_name, NULL)) == NULL) {
@@ -215,6 +249,21 @@ static ssize_t procs_do_cpuinfo(char *buffer, size_t bufsize) { return 0; }
 /// @param buffer the buffer.
 /// @param bufsize the buffer size.
 /// @return the amount we wrote.
+/// @brief Reports the perf counters.
+/// @param buffer Where the acknowledgement goes.
+/// @param bufsize Its size.
+/// @return How much was written into it.
+///
+/// The counters themselves go to the kernel log, not into this buffer: there can
+/// be any number of them, and a procfs read here is bounded by one BUFSIZ. What
+/// comes back is only confirmation, so that a script can tell a report was taken.
+/// Writing to this file starts a new window; see __procs_write().
+static ssize_t procs_do_perf(char *buffer, size_t bufsize)
+{
+    perf_report("proc");
+    return snprintf(buffer, bufsize, "Counters reported to the kernel log.\n");
+}
+
 static ssize_t procs_do_meminfo(char *buffer, size_t bufsize)
 {
     double total_space            = get_zone_total_space(GFP_KERNEL) + get_zone_total_space(GFP_HIGHUSER);

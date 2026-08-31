@@ -191,8 +191,41 @@ add_custom_target(filesystem
 
 # Set the emulator.
 set(EMULATOR qemu-system-i386)
-# Set the type of video.
-set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -vga std)
+
+# Set the display device the selected video backend needs.
+#
+# The backend is picked at configure time and each one drives different
+# hardware, so one fixed device cannot serve all of them: a VIRTIO_GPU kernel
+# started with `-vga std` finds no virtio device at all, keeps the VBE backend
+# it booted on and runs perfectly well -- on the fallback path, not the one that
+# was built. The device therefore follows VIDEO_TYPE.
+#
+# VIDEO_TYPE lives in the kernel's cache entry, which only exists once
+# add_subdirectory(kernel) has run; fail loudly rather than quietly defaulting
+# if this section is ever moved above it.
+if(NOT VIDEO_TYPE)
+    message(FATAL_ERROR "VIDEO_TYPE is not set: the emulator configuration must come after add_subdirectory(kernel).")
+endif()
+if(VIDEO_TYPE STREQUAL "VIRTIO_GPU")
+    # `virtio-vga`, not `virtio-gpu-pci`: it is a virtio-gpu that also exposes
+    # the VGA and Bochs VBE compatibility registers. The kernel boots on the VBE
+    # backend and only promotes to virtio once paging and PCI are up, so the
+    # compatibility half is what puts a console on screen in between.
+    set(EMULATOR_VGA_ARGS -vga virtio)
+    # A passing boot is not proof that virtio was under test, because the
+    # fallback is silent and complete. Name the backend the console has to end
+    # up on and let the wrapper look for the hand-over. A bare name, not a
+    # pattern: it has to survive being passed through a generated makefile and a
+    # shell, so it must contain nothing either of them would touch.
+    set(EMULATOR_REQUIRE_BACKEND "virtio-gpu-2d")
+else()
+    set(EMULATOR_VGA_ARGS -vga std)
+    set(EMULATOR_REQUIRE_BACKEND "")
+endif()
+set(EMULATOR_FLAGS ${EMULATOR_FLAGS} ${EMULATOR_VGA_ARGS})
+# The test wrapper builds its own command line, so it needs the same flags as
+# one shell word.
+string(REPLACE ";" " " EMULATOR_VGA_STRING "${EMULATOR_VGA_ARGS}")
 # Set the amount of memory.
 set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -m 1096M)
 # Set the RTC to use local time.
@@ -313,7 +346,7 @@ add_custom_target(
 # TAP output, and maps only a fully passing run to conventional host success (0).
 add_custom_target(
     qemu-test
-    COMMAND ${CMAKE_SOURCE_DIR}/scripts/run-qemu-test ${CMAKE_BINARY_DIR} 600
+    COMMAND ${CMAKE_SOURCE_DIR}/scripts/run-qemu-test ${CMAKE_BINARY_DIR} 600 "${EMULATOR_VGA_STRING}" "${EMULATOR_REQUIRE_BACKEND}"
     DEPENDS cdrom_test.iso
 )
 

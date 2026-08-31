@@ -12,7 +12,7 @@ Coding style, commit format, and branch/release workflow:
 | `kernel/src/process/` | process.c (alloc/fork/execve), scheduler.c (waitpid/exit), wait.c |
 | `kernel/src/mem/` | paging, page_fault, mm, slab/buddy/zone allocators |
 | `kernel/src/elf/` | ELF loader |
-| `kernel/src/io/` | console + `/proc` module generators (proc_running.c etc.) |
+| `kernel/src/io/` | console (video.c + `video/` backends) + `/proc` module generators |
 | `kernel/src/system/` | syscall dispatch, signals, panic, printk |
 | `lib/` | shared freestanding libc (kernel AND userspace) |
 | `userspace/bin/` | shell, init, runtests.c (test driver), utilities |
@@ -71,6 +71,7 @@ make -C build filesystem          # rebuild pristine rootfs.img (QEMU writes to 
 | fd lists, open/close/dup, file lifetime | `docs/maintainer/vfs-and-fd-lifetime.md` |
 | ext2 or the disk image | `docs/maintainer/ext2.md` |
 | /proc generation or read handlers | `docs/maintainer/procfs.md` |
+| console / video.c / video backends | `docs/maintainer/video-backends.md` |
 | pipes | `docs/maintainer/pipes.md` |
 | allocators, UAF/double-free analysis | `docs/maintainer/memory-management.md` |
 | any syscall | `docs/maintainer/syscall-boundaries.md` |

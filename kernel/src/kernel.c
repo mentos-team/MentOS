@@ -27,6 +27,7 @@
 #include "hardware/timer.h"
 #include "io/proc_modules.h"
 #include "io/video.h"
+#include "io/video/virtio_gpu.h"
 #include "ipc/ipc.h"
 #include "mem/alloc/zone_allocator.h"
 #include "mem/mm/vmem.h"
@@ -228,6 +229,19 @@ int kmain(boot_info_t *boot_informations)
     print_ok();
 
     //==========================================================================
+    // Give the video backend the second chance it may need. A backend whose
+    // hardware lives outside the first megabyte -- a linear framebuffer in a
+    // high PCI BAR -- cannot be touched at video_init() time: that runs before
+    // there is any allocator to build a mapping with, and paging_init() has only
+    // just installed the page directory such a mapping has to go into. Until
+    // this point such a backend has been inert and the console has been
+    // accumulating output in its cell buffer; this maps the framebuffer and
+    // repaints all of it. Backends that need nothing return immediately, and
+    // nothing is printed here either way, so the console output is unchanged.
+    pr_notice("Complete video initialization.\n");
+    video_late_init();
+
+    //==========================================================================
     pr_notice("Initialize virtual memory mapping.\n");
     printf("Initialize virtual memory mapping...");
     if (vmem_init() < 0) {
@@ -247,6 +261,21 @@ int kmain(boot_info_t *boot_informations)
     printf("Setting up RTC...");
     rtc_initialize();
     print_ok();
+
+    //==========================================================================
+#ifdef VIDEO_PROMOTE_VIRTIO_GPU
+    // Hand the console over to virtio-gpu, now that PCI, the allocator, paging
+    // and the timer are all up. Deliberately not fatal and deliberately late:
+    // the backend the machine booted on keeps displaying if anything here
+    // fails, so this can only improve the console, never lose it.
+    pr_notice("Upgrade the console to virtio-gpu...\n");
+    printf("Upgrade console to virtio-gpu...");
+    if (virtio_gpu_promote() < 0) {
+        print_fail();
+    } else {
+        print_ok();
+    }
+#endif
 
     //==========================================================================
     pr_notice("Initialize the filesystem.\n");

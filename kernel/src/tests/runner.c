@@ -43,6 +43,7 @@ extern void test_memory_adversarial(void);
 extern void test_dma(void);
 extern void test_fpu(void);
 extern void test_vfs(void);
+extern void test_video(void);
 
 /// @brief Test registry - one entry per subsystem.
 static const test_entry_t test_functions[] = {
@@ -61,6 +62,7 @@ static const test_entry_t test_functions[] = {
     {test_dma,                 "DMA Zone/Allocation Tests"    },
     {test_memory_adversarial,  "Memory Adversarial/Error Tests"},
     {test_fpu,                 "FPU Subsystem"                },
+    {test_video,               "Console/Video Subsystem"      },
 };
 
 static const int num_tests = sizeof(test_functions) / sizeof(test_entry_t);

@@ -81,6 +81,21 @@ static wait_queue_head_t keyboard_wait_queue = {
 #define SEQ_F11              "\033[23~"  ///< Escape sequence for the F11 key.
 #define SEQ_F12              "\033[24~"  ///< Escape sequence for the F12 key.
 
+/// @name Console font zoom
+/// @brief Deliberately the very sequences the function keys already send.
+///
+/// Ctrl with `+`, `-` or `0` is an alias for F12, F11 and F10, and aliasing them
+/// here rather than downstream is what keeps the rest of the path untouched: the
+/// shell already turns these three into the console's private font sequences, so
+/// nothing in userspace or in the console needs to learn a second spelling. The
+/// cost is that a program cannot tell Ctrl+Plus from F12, which nothing here
+/// needs to.
+/// @{
+#define SEQ_FONT_DEFAULT     SEQ_F10 ///< Ctrl+0: back to the default size.
+#define SEQ_FONT_SMALLER     SEQ_F11 ///< Ctrl+Minus: one step smaller.
+#define SEQ_FONT_LARGER      SEQ_F12 ///< Ctrl+Plus: one step larger.
+/// @}
+
 #if USE_XTERM_SEQUENCES
 #define SEQ_HOME "\033[1~" ///< Escape sequence for the Home key in xterm.
 #define SEQ_END  "\033[4~" ///< Escape sequence for the End key in xterm.
@@ -137,6 +152,12 @@ static inline void keyboard_push_back_sequence(char *sequence)
 
     // Unlock the buffer after the operation is complete.
     spinlock_unlock(&scancodes_lock);
+
+    /* wake any readers waiting for input, exactly as the single-character
+       pushes do: a sequence is input too, and leaving readers asleep here
+       stalls every key that reports itself as an escape sequence until some
+       unrelated event happens to wake them. */
+    wake_up_all(&keyboard_wait_queue);
 }
 
 /// @brief Pushes a sequence of characters (scancodes) into the keyboard buffer.
@@ -153,6 +174,9 @@ static inline void keyboard_push_front_sequence(char *sequence)
 
     // Unlock the buffer after the operation is complete.
     spinlock_unlock(&scancodes_lock);
+
+    /* wake readers as well; front or back both add data */
+    wake_up_all(&keyboard_wait_queue);
 }
 
 /// @brief Pops a value from the ring buffer.
@@ -174,6 +198,8 @@ void keyboard_wait(void)
 {
     sleep_on(&keyboard_wait_queue);
 }
+
+void keyboard_wake_readers(void) { wake_up_all(&keyboard_wait_queue); }
 
 int keyboard_peek_back(void)
 {
@@ -399,8 +425,34 @@ void keyboard_isr(pt_regs_t *f)
         // Get the current keymap.
         const keymap_t *keymap = get_keymap(scancode);
         pr_debug("scancode : %04x (%c)\n", scancode, keymap->normal);
+        // Console font zoom, before the ordinary mapping so that Ctrl claims the
+        // combination. Keyed on the character the active layout would produce and
+        // not on a scancode, because the layouts disagree about where these
+        // characters live: `+` is Shift and scancode 0x0D on US but unshifted
+        // 0x1B on IT and DE, and `-` is 0x0C on US against 0x35 on the other two.
+        // Deciding by character also makes the keypad's own `+`, `-` and `0`
+        // aliases without a line of code for them.
+        //
+        // The shifted column is chosen with the same expression the mapping below
+        // uses, so "shifted" means here exactly what it means everywhere else in
+        // this driver -- which is what lets Ctrl+Shift+`=` reach `+` on a US
+        // layout without a second notion of the word.
+        char *font_sequence = NULL;
+        if (ctrl_pressed) {
+            int produced = ((!shift_pressed != !caps_lock_pressed) ? keymap->shift : keymap->normal) & 0xFF;
+            if (produced == '+') {
+                font_sequence = SEQ_FONT_LARGER;
+            } else if (produced == '-') {
+                font_sequence = SEQ_FONT_SMALLER;
+            } else if (produced == '0') {
+                font_sequence = SEQ_FONT_DEFAULT;
+            }
+        }
         // Get the specific keymap.
-        if (!shift_pressed != !caps_lock_pressed) {
+        if (font_sequence != NULL) {
+            pr_debug("Press(CTRL + font zoom)\n");
+            keyboard_push_front_sequence(font_sequence);
+        } else if (!shift_pressed != !caps_lock_pressed) {
             keyboard_push_front(keymap->shift);
         } else if ((get_keymap_type() == KEYMAP_IT) && right_alt_pressed && shift_pressed) {
             keyboard_push_front(keymap->alt);
