@@ -633,7 +633,7 @@ int sys_execve(pt_regs_t *f)
     char *filename = (char *)f->ebx;
     if (filename == NULL) {
         pr_err("Received NULL filename.\n");
-        return -1;
+        return -EFAULT;
     }
     // Get the arguments
     origin_argv = (char **)f->ecx;
@@ -642,11 +642,11 @@ int sys_execve(pt_regs_t *f)
     // Check the argument, the environment, and that at least the name is provided.
     if (origin_argv == NULL) {
         pr_err("sys_execve failed: must provide argv.\n");
-        return -1;
+        return -EFAULT;
     }
     if (origin_argv[0] == NULL) {
         pr_err("sys_execve failed: must provide the name.\n");
-        return -1;
+        return -EINVAL;
     }
     if (origin_envp == NULL) {
         // We allow a NULL environment, using a default, for macOS compatibility
@@ -675,7 +675,7 @@ int sys_execve(pt_regs_t *f)
             "Failed to count required memory to store arguments and "
             "environment (%d + %d).\n",
             argv_bytes, envp_bytes);
-        return -1;
+        return -E2BIG;
     }
     void *args_mem = kmalloc(argv_bytes + envp_bytes);
     if (!args_mem) {
@@ -683,7 +683,7 @@ int sys_execve(pt_regs_t *f)
             "Failed to allocate memory for arguments and environment %d (%d + "
             "%d).\n",
             argv_bytes + envp_bytes, argv_bytes, envp_bytes);
-        return -1;
+        return -ENOMEM;
     }
     // Copy the arguments.
     uint32_t args_mem_ptr = (uint32_t)args_mem + (argv_bytes + envp_bytes);

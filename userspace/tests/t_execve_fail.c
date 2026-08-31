@@ -123,6 +123,42 @@ static int check_early_failures(pid_t expected_pid)
     char *argv_foo[2]  = {"t_execve_fail", NULL};
     char *envp_none[1] = {NULL};
 
+    // A NULL filename must give EFAULT (#238: used to be EPERM).
+    errno = 0;
+    if (execve(NULL, argv_foo, envp_none) != -1) {
+        syslog(LOG_ERR, "[t_execve_fail] execve of NULL filename unexpectedly succeeded");
+        return -1;
+    }
+    if (errno != EFAULT) {
+        syslog(LOG_ERR, "[t_execve_fail] execve of NULL filename: expected EFAULT, got %s", strerror(errno));
+        return -1;
+    }
+
+    // A NULL argv must give EFAULT (#238: used to be EPERM).
+    errno = 0;
+    if (execve("/bin/echo", NULL, envp_none) != -1) {
+        syslog(LOG_ERR, "[t_execve_fail] execve with NULL argv unexpectedly succeeded");
+        return -1;
+    }
+    if (errno != EFAULT) {
+        syslog(LOG_ERR, "[t_execve_fail] execve with NULL argv: expected EFAULT, got %s", strerror(errno));
+        return -1;
+    }
+
+    // An argv with no entries at all (argv[0] == NULL) must give EINVAL
+    // (#238: used to be EPERM): the address is valid and readable, but this
+    // kernel requires at least the program name.
+    char *argv_empty[1] = {NULL};
+    errno               = 0;
+    if (execve("/bin/echo", argv_empty, envp_none) != -1) {
+        syslog(LOG_ERR, "[t_execve_fail] execve with empty argv unexpectedly succeeded");
+        return -1;
+    }
+    if (errno != EINVAL) {
+        syslog(LOG_ERR, "[t_execve_fail] execve with empty argv: expected EINVAL, got %s", strerror(errno));
+        return -1;
+    }
+
     // A file that does not exist must give ENOENT.
     errno = 0;
     if (execve("/no/such/file", argv_foo, envp_none) != -1) {
