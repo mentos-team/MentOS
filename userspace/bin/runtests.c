@@ -52,6 +52,7 @@ static char *all_tests[] = {
     "t_msgget",
     "t_ndtree",
     "t_periodic1",
+    "t_procfs_read",
     "t_periodic2",
     "t_periodic3",
     "t_pipe_blocking",
