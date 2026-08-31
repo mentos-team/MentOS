@@ -119,6 +119,12 @@ echo "===================================================="
 # Any other exit code is a failure (timeout, QEMU error, etc.)
 if [ "${EXIT_CODE}" -ne 33 ]; then
     echo "Test run failed or timed out (exit code: ${EXIT_CODE})"
+    # QEMU also exits 0 on a graceful SIGINT shutdown (an interrupted run), and
+    # 0 must not become this script's success code. Map only that corner to 1;
+    # the informative codes (35 panic, 124 timeout, ...) pass through as they are.
+    if [ "${EXIT_CODE}" -eq 0 ]; then
+        EXIT_CODE=1
+    fi
     exit "${EXIT_CODE}"
 fi
 
