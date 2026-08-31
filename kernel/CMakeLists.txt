@@ -167,7 +167,7 @@ set(SCHEDULER_TYPE "SCHEDULER_RR" CACHE STRING "Chose the type of scheduler: ${S
 set_property(CACHE SCHEDULER_TYPE PROPERTY STRINGS ${SCHEDULER_TYPES})
 # Check which scheduler is currently active and export the related macro.
 list(FIND SCHEDULER_TYPES ${SCHEDULER_TYPE} INDEX)
-if(index EQUAL -1)
+if(INDEX EQUAL -1)
     message(FATAL_ERROR "Scheduler type ${SCHEDULER_TYPE} is not valid.")
 else()
     # Add the define stating which scheduler is currently active.
@@ -185,7 +185,7 @@ set(KEYMAP_TYPE "KEYMAP_US" CACHE STRING "Chose the type of keyboard mapping: ${
 set_property(CACHE KEYMAP_TYPE PROPERTY STRINGS ${KEYMAP_TYPES})
 # Check which keyboard mapping is currently active and export the related macro.
 list(FIND KEYMAP_TYPES ${KEYMAP_TYPE} INDEX)
-if(index EQUAL -1)
+if(INDEX EQUAL -1)
     message(FATAL_ERROR "keyboard mapping ${KEYMAP_TYPE} is not valid.")
 else()
     # Add the define stating which keyboard mapping is currently active.

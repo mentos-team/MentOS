@@ -79,7 +79,7 @@ set(EMULATOR_OUTPUT_TYPE "OUTPUT_STDIO" CACHE STRING "Chose the type of emulator
 set_property(CACHE EMULATOR_OUTPUT_TYPE PROPERTY STRINGS ${EMULATOR_OUTPUT_TYPES})
 # Check which emulator output option is currently active.
 list(FIND EMULATOR_OUTPUT_TYPES ${EMULATOR_OUTPUT_TYPE} INDEX)
-if(index EQUAL -1)
+if(INDEX EQUAL -1)
     message(FATAL_ERROR "Emulator output type ${EMULATOR_OUTPUT_TYPE} is not valid.")
 else()
     message(STATUS "Setting emulator output type to ${EMULATOR_OUTPUT_TYPE}.")
