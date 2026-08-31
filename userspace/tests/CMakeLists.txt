@@ -3,6 +3,7 @@ set(TEST_LIST
     t_aab_pipe.c
     t_dup.c
     t_hashmap.c
+    t_procfs_read.c
     t_list.c
     t_msgget.c
     t_pipe_blocking.c
