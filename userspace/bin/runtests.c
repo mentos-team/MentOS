@@ -32,6 +32,7 @@ static char *all_tests[] = {
     "t_dup",
     "t_environ",
     "t_exec",
+    "t_execve_bounds",
     "t_execve_fail",
     "t_elf_short",
     "t_exit",

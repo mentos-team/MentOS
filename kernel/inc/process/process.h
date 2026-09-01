@@ -8,12 +8,15 @@
 #include "bits/termios-struct.h"
 #include "devices/fpu.h"
 #include "drivers/keyboard/keyboard.h"
+#include "limits.h"
 #include "mem/paging.h"
 #include "stdbool.h"
 #include "system/signal.h"
 
 /// The maximum length of a name for a task_struct.
-#define TASK_NAME_MAX_LENGTH 100
+/// NAME_MAX is the same bound sys_execve already applies to the argv[0] copy
+/// buffer, so a name that survives execve always fits this field.
+#define TASK_NAME_MAX_LENGTH NAME_MAX
 
 /// The default dimension of the stack of a process (1 MByte).
 #define DEFAULT_STACK_SIZE (1 * M)

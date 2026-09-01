@@ -341,9 +341,12 @@ static inline task_struct *__alloc_task(task_struct *source, task_struct *parent
     proc->se.utilization_factor = 0;
     // Initialize the exit code of the process.
     proc->exit_code             = 0;
-    // Copy the name.
+    // Copy the name, bounded to the field: sources are kernel literals and
+    // parent names already bounded by sys_execve, this keeps the copy safe
+    // even if a future caller grows the name.
     if (name) {
-        strcpy(proc->name, name);
+        strncpy(proc->name, name, sizeof(proc->name) - 1);
+        proc->name[sizeof(proc->name) - 1] = '\0';
     }
     // Do not touch the task's segments.
     proc->mm       = NULL;
@@ -659,9 +662,22 @@ int sys_execve(pt_regs_t *f)
         origin_envp = default_env;
     }
 
-    // Save the name of the process.
-    strcpy(name_buffer, origin_argv[0]);
-    // Save the filename.
+    // A filename that does not fit a PATH_MAX buffer cannot name any file,
+    // and truncating it would target the wrong executable: reject it instead
+    // of copying it. The strnlen walk is bounded to PATH_MAX.
+    if (strnlen(filename, PATH_MAX) >= PATH_MAX) {
+        pr_err("sys_execve failed: filename is longer than PATH_MAX.\n");
+        return -ENAMETOOLONG;
+    }
+    // Save the name of the process. argv[0] is a raw user string: copy at
+    // most what name_buffer can hold minus its terminator, truncating like
+    // Linux truncates comm, so a long argv[0] neither fails the exec nor
+    // overflows kernel state.
+    size_t name_len = strnlen(origin_argv[0], sizeof(name_buffer) - 1);
+    memcpy(name_buffer, origin_argv[0], name_len);
+    name_buffer[name_len] = '\0';
+    // Save the filename: the check above bounds it to PATH_MAX - 1
+    // characters, so it always fits with its terminator.
     strcpy(saved_filename, filename);
 
     // == COPY PROGRAM ARGUMENTS ==============================================
@@ -807,8 +823,10 @@ int sys_execve(pt_regs_t *f)
     // Enable the interrupts.
     current->thread.regs.eflags  = current->thread.regs.eflags | EFLAG_IF;
 
-    // Change the name of the process.
-    strcpy(current->name, name_buffer);
+    // Change the name of the process. name_buffer is bounded and terminated
+    // above; the bounded copy keeps this safe even if that ever changes.
+    strncpy(current->name, name_buffer, sizeof(current->name) - 1);
+    current->name[sizeof(current->name) - 1] = '\0';
 
     // Free the temporary args memory.
     kfree(args_mem);
