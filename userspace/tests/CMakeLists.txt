@@ -18,6 +18,7 @@ set(TEST_LIST
     t_shmget.c
     t_exec.c
     t_execve_bounds.c
+    t_execve_bigargv.c
     t_execve_fail.c
     t_elf_short.c
     t_gid.c
