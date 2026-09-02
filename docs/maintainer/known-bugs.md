@@ -53,13 +53,23 @@ reviewed against `BASE` = `82f4314`.
 
 ### #196 — sys_execve argv >256 entries overflows kernel stack; unbounded
 user-string walks
-- **Status**: open. **Severity**: high (security).
+- **Status**: FIXED (in-guest reproduced pre-fix and post-fix). **Severity**:
+  high (security).
 - **Proven root cause (CODE-PROVEN)**: `char *args_location[256]` indexed
   by user argc (`__push_args_on_stack`, process.c:70/75 @`MAIN`);
   `__count_args` unbounded walk; `__count_args_bytes` raw `strlen`s.
-- **Reproduction**: NOT yet executed in-guest (test sketch in the issue);
-  code path is unambiguous. Host libc passes vectors through unvalidated.
+- **Reproduction**: in-guest via `t_execve_bigargv` — on the unfixed kernel
+  the suite panics with an `Assertion failed` in `sys_execve` during the
+  257-entry case (the stack smash corrupts the accounting before the
+  assert trips); with the fix, 257/300/1024-entry vectors exec correctly
+  and 1025 entries, a 8192-byte string, or a vector above `ARG_MAX` return
+  `E2BIG` (`56/56` tests, Debug and Release, 0 panics).
+- **Fix**: bounded counts (`MAX_ARG_COUNT`/`MAX_ARG_STRLEN`/`ARG_MAX`,
+  `lib/inc/limits.h`), caller-owned position arrays sized from the
+  validated counts, `strnlen`-bounded pushes of user strings, `ARG_MAX`
+  re-check on the interpreter rebuild.
 - **Related**: #190 (complementary, same function), #191, #121.
+
 
 ## Open PR
 

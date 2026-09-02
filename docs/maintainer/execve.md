@@ -105,7 +105,13 @@ is fully loaded, or must not return to userspace on failure.**
 - PR #190 fixes the write-overflow (name/filename copies) but not
   termination and not the argv helpers → verdict REQUEST_CHANGES at review
   time; #196 was filed for the `args_location[256]` + unbounded-walk class.
-- Any fix here should: bound argc/bytes with an ARG_MAX-style limit and
-  `-E2BIG`; replace `args_location[256]` with a sized allocation; use
-  `strnlen` per string; force NUL termination on all copies; include
-  `limits.h` in process.h.
+- The #196 fix (in `sys_execve`): counts are bounded (`MAX_ARG_COUNT`
+  entries, `MAX_ARG_STRLEN` bytes per string, `ARG_MAX` bytes per vector,
+  all in `lib/inc/limits.h`, enforced with `-E2BIG`); the fixed
+  `args_location[256]` is replaced by caller-owned arrays sized from the
+  validated counts (`argv_locations`/`envp_locations`); user strings are
+  copied through `strnlen`-bounded pushes (`__push_user_strings_on_stack`),
+  kernel copies through trusted pushes; the interpreter rebuild re-checks
+  its combined budget against `ARG_MAX`. The libc `execve()` wrapper passes
+  vectors through unchanged, so userspace sees the same `E2BIG` the kernel
+  returns.
