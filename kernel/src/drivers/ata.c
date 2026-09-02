@@ -631,6 +631,28 @@ static inline int ata_status_wait_for(ata_device_t *dev, long mask, long timeout
     return ata_status_wait(dev, (uint8_t)mask, __cond_status_missing_bits, timeout);
 }
 
+/// @brief Waits until the device is idle and ready (RDY set, BSY clear).
+/// @param dev The ATA device to poll.
+/// @param timeout Maximum poll iterations before timing out.
+/// @return 0 on success, 1 on timeout.
+/// @details The condition for issuing a new command is RDY set and BSY clear.
+/// DRQ must NOT be part of an idle wait: it only sets while a data transfer is
+/// pending, so requiring it makes the wait depend on the transfer state left
+/// behind by previous commands (#245).
+static inline int ata_status_wait_idle_ready(ata_device_t *dev, long timeout)
+{
+    // Use volatile local copy to prevent compiler optimization of timeout loop.
+    volatile long volatile_timeout = timeout;
+    uint8_t status;
+    do {
+        status = inportb(dev->io_reg.status);
+        if ((status & ata_status_rdy) && !(status & ata_status_bsy)) {
+            return 0;
+        }
+    } while (--volatile_timeout > 0);
+    return 1;
+}
+
 /// @brief Prints the status and error information about the device.
 /// @param dev the device for which we print the information.
 static inline void ata_print_status_error(ata_device_t *dev)
@@ -710,11 +732,14 @@ static inline void ata_soft_reset(ata_device_t *dev)
     inportb(dev->io_control);
 
     // Waiting until the device is ready
-    // Waits until the device is no longer busy (BSY bit cleared) and no data
-    // request (DRQ bit cleared), indicating the reset is complete and the
-    // device is ready.
-    if (ata_status_wait_not(dev, ata_status_bsy | ata_status_drq, 100000)) {
-        pr_err("Soft reset failed. Device did not become ready.");
+    // Waits for the idle-ready condition (RDY set, BSY clear). Waiting only
+    // for BSY and DRQ to clear is not enough: while the reset is still
+    // propagating, the status register reads 0x00, which satisfies every
+    // "bits clear" wait while the bus is not actually usable yet (#245).
+    // Logged at debug level on purpose: absent devices never become ready,
+    // and the callers already report those skips.
+    if (ata_status_wait_idle_ready(dev, 100000)) {
+        pr_debug("[%s] Soft reset failed. Device did not become ready.\n", ata_get_device_settings_str(dev));
         return;
     }
 }
@@ -1025,10 +1050,15 @@ static inline ata_device_type_t ata_detect_device_type(ata_device_t *dev)
     // Request the device identity by sending the IDENTIFY command.
     outportb(dev->io_reg.command, ata_command_pata_ident);
 
-    // Wait for the device to become non-busy and ready.
-    // if (ata_status_wait_not(dev, ata_status_bsy & ~(ata_status_drq | ata_status_rdy), 100000)) {
-    if (ata_status_wait_not(dev, ata_status_bsy, 100000)) {
-        ata_print_status_error(dev);
+    // Wait for the device to enter the data phase: DRQ set means the
+    // IDENTIFY data is ready to be read. Waiting only for BSY to clear is not
+    // enough — the command may not have taken effect yet (e.g. issued while
+    // the bus was still resetting) and the drain below would then read
+    // zeroes and a bogus signature (#245).
+    if (ata_status_wait_for(dev, ata_status_drq, 100000)) {
+        pr_warning(
+            "[%-16s] IDENTIFY did not enter the data phase (status 0x%02x, error 0x%02x).\n",
+            ata_get_device_settings_str(dev), inportb(dev->io_reg.status), inportb(dev->io_reg.error));
         return ata_dev_type_unknown;
     }
 
@@ -1076,10 +1106,17 @@ static bool_t ata_device_init(ata_device_t *dev)
         ata_get_device_type_str(dev->type));
 
     // Check the status of the device to ensure it's ready for initialization.
-    if (ata_status_wait_for(dev, ata_status_drq | ata_status_rdy, 100000)) {
-        // pr_crit("[%-16s, %-9s] Device not ready after waiting.\n",
-        //         ata_get_device_settings_str(dev), ata_get_device_type_str(dev->type));
-        ata_print_status_error(dev);
+    // Wait for the idle-ready condition (RDY set, BSY clear): waiting for
+    // DRQ|RDY here tied boot to whether the IDENTIFY transfer from the
+    // detection phase had fully completed, which is a race (#245). Report the
+    // raw registers on timeout: the old failure was silent, because the
+    // message was commented out and ata_print_status_error prints nothing
+    // when the error register is zero.
+    if (ata_status_wait_idle_ready(dev, 100000)) {
+        pr_warning(
+            "[%-16s, %-9s] Device not idle/ready after waiting (status 0x%02x, error 0x%02x).\n",
+            ata_get_device_settings_str(dev), ata_get_device_type_str(dev->type), inportb(dev->io_reg.status),
+            inportb(dev->io_reg.error));
         return 1;
     }
 
@@ -1093,11 +1130,12 @@ static bool_t ata_device_init(ata_device_t *dev)
     }
 
     // Check the status of the device.
-    if (ata_status_wait_for(dev, ata_status_drq | ata_status_rdy, 100000)) {
+    if (ata_status_wait_idle_ready(dev, 100000)) {
         pr_crit(
-            "[%-16s, %-9s] Device not ready after bus mastering "
-            "initialization.\n",
-            ata_get_device_settings_str(dev), ata_get_device_type_str(dev->type));
+            "[%-16s, %-9s] Device not idle/ready after bus mastering "
+            "initialization (status 0x%02x, error 0x%02x).\n",
+            ata_get_device_settings_str(dev), ata_get_device_type_str(dev->type), inportb(dev->io_reg.status),
+            inportb(dev->io_reg.error));
         ata_print_status_error(dev);
         return 1;
     }
@@ -1782,7 +1820,22 @@ int ata_initialize(void)
     // Enable bus mastering.
     ata_dma_enable_bus_mastering();
 
-    ata_device_detect(&ata_primary_master);
+    // The primary master is the disk the system boots from (`/dev/hda`): its
+    // detection can intermittently lose the race with the (emulated) drive's
+    // reset state, and a silent skip here used to surface only later, as the
+    // misleading "Cannot find the superblock" panic at the ext2 mount (#245).
+    // Retry it once, and make a persistent failure fatal and loud at this
+    // step instead.
+    ata_device_type_t pm_type = ata_device_detect(&ata_primary_master);
+    if ((pm_type != ata_dev_type_pata) && (pm_type != ata_dev_type_sata)) {
+        pr_warning(
+            "Primary Master not detected (%s), retrying once...\n", ata_get_device_type_str(pm_type));
+        pm_type = ata_device_detect(&ata_primary_master);
+        if ((pm_type != ata_dev_type_pata) && (pm_type != ata_dev_type_sata)) {
+            pr_err("Failed to detect the primary master ATA device.\n");
+            return 1;
+        }
+    }
     ata_device_detect(&ata_primary_slave);
     ata_device_detect(&ata_secondary_master);
     ata_device_detect(&ata_secondary_slave);
