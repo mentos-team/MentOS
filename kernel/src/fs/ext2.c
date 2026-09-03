@@ -2113,9 +2113,23 @@ ext2_direntry_iterator_t ext2_direntry_iterator_begin(ext2_filesystem_t *fs, uin
 /// @param it the iterator.
 void ext2_direntry_iterator_next(ext2_direntry_iterator_t *it)
 {
+    uint32_t rec_len = it->direntry->rec_len;
+    // A record length of zero leaves the offsets where they are, so the walk
+    // never reaches the end of the directory and never returns: one lookup on
+    // a directory whose block reads as zeros would hang the kernel, which is
+    // not preemptible. A length that is not a multiple of four, or one that
+    // runs past the end of the block, cannot be walked either. Stop the walk
+    // instead, and let the caller report that the entry was not found (#304).
+    if ((rec_len == 0) || ((rec_len % 4) != 0) || ((it->block_offset + rec_len) > it->fs->block_size)) {
+        pr_err(
+            "Corrupt directory entry: rec_len %u at offset %u of block %u.\n", rec_len, it->block_offset,
+            it->block_index);
+        it->direntry = NULL;
+        return;
+    }
     // Advance the offsets.
-    it->block_offset += it->direntry->rec_len;
-    it->total_offset += it->direntry->rec_len;
+    it->block_offset += rec_len;
+    it->total_offset += rec_len;
     // If we reached the end of the inode, stop.
     if (it->total_offset >= it->inode->size) {
         // The iterator is not valid anymore.
