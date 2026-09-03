@@ -60,9 +60,17 @@ alloc/free pairs and resource tracking (used by `register_resource` /
 - `paging_switch_pgd` used when loading init and during exec; user stack
   pointers (`thread.regs.useresp`) are then re-based by pushing args.
 - Page-fault handler (mem/page_fault.c): prints decode
-  `ERR(user rw present)` as `(%d%d%d)`; user-mode fault with non-present
-  directory entry → SIGSEGV + scheduler_run; kernel-mode fault →
-  `__page_fault_panic` → `kernel_panic`.
+  `ERR(user rw present)` as `(%d%d%d)`; **any** user-mode fault the kernel
+  cannot resolve → SIGSEGV + scheduler_run via
+  `__send_sigsegv_to_current` (non-present directory entry, kernel mapping
+  window, failed copy-on-write handling, present non-CoW page); kernel-mode
+  fault → `__page_fault_panic` → `kernel_panic`. Before #237 only the
+  non-present-directory and the user+write+present CoW cases signalled, so
+  a null dereference (PDE 0 is present and supervisor-only) panicked the
+  kernel; `t_userfault` is the regression test.
+- Caveat: a process whose SIGSEGV handler returns normally resumes at the
+  faulting instruction and faults again; the kernel does not reset the
+  handler to the default action the way Linux `force_sig_info` does.
 - Kernel heap/virtual layout observations: kernel EIP ~0xc00026f9, kernel
   ESP ~0xf75eec48, user stack top ~0xbfffxxxx in the repro runs (useful
   sanity anchors when reading panic logs).

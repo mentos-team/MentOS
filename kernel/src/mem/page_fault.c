@@ -150,6 +150,32 @@ static int __page_handle_cow(page_table_entry_t *entry)
     return 1;
 }
 
+/// @brief Delivers SIGSEGV to the current user task, if any.
+/// @param f the interrupt stack frame of the fault.
+/// @return 0 if the signal was queued and the context switch was performed,
+///         1 if there is no current task (the caller must panic).
+/// @details A user-mode fault the kernel cannot resolve must kill the
+///          faulting process, not the kernel: sys_kill queues the signal,
+///          and scheduler_run delivers it through the stored frame (running
+///          the handler or the default terminating action) before this
+///          task runs again.
+static int __send_sigsegv_to_current(pt_regs_t *f)
+{
+    task_struct *task = scheduler_get_current_process();
+    if (task) {
+        pr_err("User-mode fault: delivering SIGSEGV to pid %d.\n", task->pid);
+        // Notifies current process.
+        sys_kill(task->pid, SIGSEGV);
+        // Now, we know the process needs to be removed from the list of
+        // running processes. We pushed the SEGV signal in the queues of
+        // signal to send to the process. To properly handle the signal,
+        // just run scheduler.
+        scheduler_run(f);
+        return 0;
+    }
+    return 1;
+}
+
 int init_page_fault(void)
 {
     // Install the page fault interrupt service routine (ISR) handler.
@@ -253,17 +279,10 @@ void page_fault_handler(pt_regs_t *f)
 
         // If the fault was caused by a user process, send a SIGSEGV signal.
         if (err_user) {
-            task_struct *task = scheduler_get_current_process();
-            if (task) {
-                // Notifies current process.
-                sys_kill(task->pid, SIGSEGV);
-                // Now, we know the process needs to be removed from the list of
-                // running processes. We pushed the SEGV signal in the queues of
-                // signal to send to the process. To properly handle the signal,
-                // just run scheduler.
-                scheduler_run(f);
+            if (__send_sigsegv_to_current(f) == 0) {
                 return;
             }
+            pr_crit("No task found for current process, unable to send SIGSEGV.\n");
         }
         pr_crit("ERR(0): So, it is not present, and it was not the user.\n");
         __page_fault_panic(f, faulting_addr);
@@ -299,6 +318,14 @@ void page_fault_handler(pt_regs_t *f)
     // There was a page fault on a virtual mapped address, so we must first
     // update the original mapped page
     if (is_valid_virtual_address(faulting_addr)) {
+        // The mapping window belongs to the kernel: a user-mode fault inside
+        // it is a protection violation to signal, not something the kernel
+        // demand paging should service (#237).
+        if (err_user) {
+            if (__send_sigsegv_to_current(f) == 0) {
+                return;
+            }
+        }
         // Get the original page table entry from the virtually mapped one.
         page_table_entry_t *orig_entry = (page_table_entry_t *)(*(uint32_t *)entry);
         if (!orig_entry) {
@@ -328,22 +355,12 @@ void page_fault_handler(pt_regs_t *f)
                     "rw=%d, present=%d\n",
                     err_user, err_rw, err_present);
 
-                // Handle based on fault context
-                // For user-mode faults with write access to present pages: send SIGSEGV
-                if (err_user && err_rw && err_present) {
-                    // Get the current process.
-                    task_struct *task = scheduler_get_current_process();
-                    if (task) {
-                        // Notifies current process.
-                        sys_kill(task->pid, SIGSEGV);
-                        // Now, we know the process needs to be removed from the list of
-                        // running processes. We pushed the SEGV signal in the queues of
-                        // signal to send to the process. To properly handle the signal,
-                        // just run scheduler.
-                        scheduler_run(f);
+                // Any user-mode fault we cannot resolve (the CoW handling
+                // failed) kills the process, not the kernel (#237).
+                if (err_user) {
+                    if (__send_sigsegv_to_current(f) == 0) {
                         return;
                     }
-                    pr_crit("No task found for current process, unable to send SIGSEGV.\n");
                 } else {
                     // For kernel-mode or non-write faults, log and continue
                     // The page might not be CoW but still valid for this fault pattern
@@ -355,7 +372,16 @@ void page_fault_handler(pt_regs_t *f)
                 __page_fault_panic(f, faulting_addr);
             }
         } else {
-            // Page is not marked as CoW, this is a different fault type (e.g., demand paging)
+            // Page is not marked as CoW: if the fault comes from user mode
+            // (a present, privileged page: null dereferences and wild
+            // pointers into any kernel-mapped region land here), the
+            // process dies with SIGSEGV; only kernel-mode faults panic
+            // (#237).
+            if (err_user) {
+                if (__send_sigsegv_to_current(f) == 0) {
+                    return;
+                }
+            }
             pr_debug("Page fault is not Copy-on-Write, likely demand paging or other fault type.\n");
             __page_fault_panic(f, faulting_addr);
         }
