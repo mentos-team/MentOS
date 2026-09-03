@@ -730,7 +730,7 @@ vfs_file_t *vfs_creat(const char *path, mode_t mode)
     int ret           = resolve_path(path, absolute_path, PATH_MAX, resolve_flags);
     if (ret < 0) {
         pr_err("vfs_creat(%s): Cannot get the absolute path.\n", path);
-        errno = ret;
+        errno = -ret;
         return NULL;
     }
     super_block_t *sb = vfs_get_superblock(absolute_path);
