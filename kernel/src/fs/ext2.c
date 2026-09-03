@@ -2045,6 +2045,9 @@ static ssize_t ext2_write_inode_data(
         pr_err("Integer overflow: offset + nbyte exceeds UINT32_MAX\n");
         return -1;
     }
+    // Keep the size the file had, so that a write which cannot store every
+    // block does not leave the inode claiming bytes that were never written.
+    uint32_t original_size = inode->size;
     if ((offset + nbyte) > inode->size) {
         inode->size = offset + nbyte;
         if (ext2_write_inode(fs, inode, inode_index) == -1) {
@@ -2072,7 +2075,9 @@ static ssize_t ext2_write_inode_data(
     uint32_t curr_off = 0;
     uint32_t left;
     uint32_t right;
-    uint32_t ret = end_offset - offset;
+    // Bytes actually stored, and the error to report if nothing could be.
+    ssize_t written = 0;
+    int failure     = 0;
 
     for (uint32_t block_index = start_block; block_index <= end_block; ++block_index) {
         // Recalculate on each iteration because ext2_write_inode_block may allocate new blocks.
@@ -2096,7 +2101,7 @@ static ssize_t ext2_write_inode_data(
             // Read existing block for partial write (preserve unmodified portions).
             if (ext2_read_inode_block(fs, inode, block_index, cache) < 0) {
                 pr_err("Failed to read block %u of inode %u for partial write\n", block_index, inode_index);
-                ret = -1;
+                failure = -EIO;
                 break;
             }
         } else if (!block_exists) {
@@ -2109,16 +2114,40 @@ static ssize_t ext2_write_inode_data(
         memcpy(cache + left, buffer + curr_off, (right - left + 1));
         // Move the offset.
         curr_off += (right - left + 1);
-        // Write the block back.
-        if (!ext2_write_inode_block(fs, inode, inode_index, block_index, cache)) {
+        // Write the block back. This returns -1 when the block could not be
+        // allocated, and the number of bytes written otherwise: testing it as
+        // a boolean let every failure through, so a full filesystem discarded
+        // the data while reporting success (#303).
+        if (ext2_write_inode_block(fs, inode, inode_index, block_index, cache) == -1) {
             pr_err("Failed to write the inode block %u of inode %u\n", block_index, inode_index);
-            ret = -1;
+            failure = -ENOSPC;
             break;
         }
+        // The block is on the device: count what it stored.
+        written += (right - left + 1);
     }
     // Free the cache.
     ext2_dealloc_cache(cache);
-    return ret;
+
+    if (failure) {
+        // Shrink the size back to what is actually stored, keeping whatever
+        // the file held before this call. A call that stored nothing leaves
+        // the file exactly as it was, offset included.
+        uint32_t stored_end = (written > 0) ? ((uint32_t)offset + (uint32_t)written) : original_size;
+        uint32_t real_size  = (stored_end > original_size) ? stored_end : original_size;
+        if (inode->size != real_size) {
+            inode->size = real_size;
+            if (ext2_write_inode(fs, inode, inode_index) == -1) {
+                pr_err("Failed to restore the size of inode `%d`\n", inode_index);
+            }
+        }
+        // A write that stored nothing is an error, one that stored part of
+        // the data reports how much, as write(2) requires.
+        if (written == 0) {
+            return failure;
+        }
+    }
+    return written;
 }
 
 // ============================================================================

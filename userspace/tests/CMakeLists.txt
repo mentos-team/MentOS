@@ -22,7 +22,7 @@ set(TEST_LIST
     t_execve_bigargv.c
     t_userfault.c
     t_path_bounds.c
-    t_mkdir_nospace.c
+    t_nospace.c
     t_execve_fail.c
     t_elf_short.c
     t_gid.c
