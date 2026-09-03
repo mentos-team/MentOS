@@ -40,6 +40,7 @@ static char *all_tests[] = {
     "t_elf_short",
     "t_exit",
     "t_fflush",
+    "t_file_blocks",
     "t_fhs",
     "t_font",
     "t_fork",
