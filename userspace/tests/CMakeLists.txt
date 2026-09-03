@@ -30,6 +30,7 @@ set(TEST_LIST
     t_ndtree.c
     t_pwd.c
     t_fflush.c
+    t_file_blocks.c
     t_font.c
     t_sigusr.c
     t_kill.c

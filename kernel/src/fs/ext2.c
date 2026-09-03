@@ -1529,16 +1529,19 @@ static int ext2_set_real_block_index(
     // Result of the operation.
     int ret = 0;
 
-    // Are we setting a DIRECT block pointer.
+    // Are we setting a DIRECT block pointer. The comparison has to match the
+    // one in ext2_get_real_block_index: with `<= 0` the first index of each
+    // region was stored one element past the end of the region before it,
+    // where the reader never looks (#301).
     a = ((int)block_index) - EXT2_DIRECT_BLOCKS;
-    if (a <= 0) {
+    if (a < 0) {
         inode->data.blocks.dir_blocks[block_index] = real_index;
     } else {
         // Allocate the cache.
         uint8_t *cache = ext2_alloc_cache(fs);
         // Are we setting an INDIRECT block pointer.
         b              = a - p;
-        if (b <= 0) {
+        if (b < 0) {
             // Check that the indirect block points to a valid block.
             if (__ext2_allocate_indexing_block_for_inode(fs, &inode->data.blocks.indir_block)) {
                 ret = -1;
@@ -1554,7 +1557,7 @@ static int ext2_set_real_block_index(
         } else {
             // Are we setting a DOUBLY-INDIRECT block.
             c = b - p * p;
-            if (c <= 0) {
+            if (c < 0) {
                 c = b / p;
                 d = b - c * p;
                 // Check that the indirect block points to a valid block.
@@ -1578,7 +1581,7 @@ static int ext2_set_real_block_index(
 
             } else {
                 d = c - p * p * p;
-                if (d <= 0) {
+                if (d < 0) {
                     e = c / (p * p);
                     f = (c - e * p * p) / p;
                     g = (c - e * p * p - f * p);
