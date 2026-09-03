@@ -42,6 +42,7 @@ static char *all_tests[] = {
     "t_fflush",
     "t_file_blocks",
     "t_fhs",
+    "t_file_blocks_free",
     "t_font",
     "t_fork",
     "t_getcwd",

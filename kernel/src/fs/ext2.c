@@ -1394,6 +1394,68 @@ static void ext2_free_block(ext2_filesystem_t *fs, uint32_t block_index)
 /// @param inode the inode we free.
 /// @param inode_index its index.
 /// @return 0 on success, otherwise it is a failure.
+/// @brief Frees the blocks that hold the block pointers of an inode.
+/// @param fs the filesystem.
+/// @param inode the inode whose index blocks are freed.
+/// @details The data blocks of a file are reached through these, so they must
+///          be freed after the data blocks, and they belong to the file just
+///          as much: leaving them behind lost a block per indirection level on
+///          every deletion (#302).
+static void __ext2_free_index_blocks(ext2_filesystem_t *fs, ext2_inode_t *inode)
+{
+    uint32_t pointers = fs->pointers_per_block;
+    uint8_t *outer    = ext2_alloc_cache(fs);
+    uint8_t *inner    = ext2_alloc_cache(fs);
+    if ((outer == NULL) || (inner == NULL)) {
+        pr_err("Failed to allocate the cache to free the index blocks.\n");
+        ext2_dealloc_cache(outer);
+        ext2_dealloc_cache(inner);
+        return;
+    }
+    // The single-indirect block holds pointers only.
+    if (inode->data.blocks.indir_block != 0) {
+        ext2_free_block(fs, inode->data.blocks.indir_block);
+        inode->data.blocks.indir_block = 0;
+    }
+    // The doubly-indirect block points at a level of index blocks.
+    if (inode->data.blocks.doubly_indir_block != 0) {
+        if (ext2_read_block(fs, inode->data.blocks.doubly_indir_block, outer) != -1) {
+            for (uint32_t index = 0; index < pointers; ++index) {
+                uint32_t block = ((uint32_t *)outer)[index];
+                if (block != 0) {
+                    ext2_free_block(fs, block);
+                }
+            }
+        }
+        ext2_free_block(fs, inode->data.blocks.doubly_indir_block);
+        inode->data.blocks.doubly_indir_block = 0;
+    }
+    // The trebly-indirect block points at two levels of index blocks.
+    if (inode->data.blocks.trebly_indir_block != 0) {
+        if (ext2_read_block(fs, inode->data.blocks.trebly_indir_block, outer) != -1) {
+            for (uint32_t index = 0; index < pointers; ++index) {
+                uint32_t middle = ((uint32_t *)outer)[index];
+                if (middle == 0) {
+                    continue;
+                }
+                if (ext2_read_block(fs, middle, inner) != -1) {
+                    for (uint32_t inner_index = 0; inner_index < pointers; ++inner_index) {
+                        uint32_t block = ((uint32_t *)inner)[inner_index];
+                        if (block != 0) {
+                            ext2_free_block(fs, block);
+                        }
+                    }
+                }
+                ext2_free_block(fs, middle);
+            }
+        }
+        ext2_free_block(fs, inode->data.blocks.trebly_indir_block);
+        inode->data.blocks.trebly_indir_block = 0;
+    }
+    ext2_dealloc_cache(outer);
+    ext2_dealloc_cache(inner);
+}
+
 static int ext2_free_inode(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t inode_index)
 {
     // Retrieve the group index.
@@ -1418,6 +1480,9 @@ static int ext2_free_inode(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t 
         }
         ext2_free_block(fs, real_index);
     }
+
+    // Free the blocks that held the pointers to those data blocks.
+    __ext2_free_index_blocks(fs, inode);
 
     // Allocate the cache.
     uint8_t *cache = ext2_alloc_cache(fs);
