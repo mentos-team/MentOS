@@ -2442,47 +2442,51 @@ static inline int ext2_create_new_direntry(
         pr_err("Failed to read the parent inode `%u`.\n", parent_inode_index);
         return 0;
     }
-    // Prepare iterator.
-    ext2_direntry_iterator_t it = ext2_direntry_iterator_begin(fs, cache, &parent_inode);
-    // Find the last entry.
-    while (ext2_direntry_iterator_valid(&it)) {
-        ext2_direntry_iterator_next(&it);
-    }
-    // Allocate a new block.
-    if (ext2_allocate_inode_block(fs, &parent_inode, parent_inode_index, it.block_index) == -1) {
+    // The new block goes after the ones the directory already has. Walking
+    // the entries to find it does not work: the iterator stops as soon as it
+    // reaches the size of the directory, so its block index is the last block
+    // in use rather than the first free one, and allocating there replaced
+    // the block holding every existing entry (#309).
+    uint32_t old_size    = parent_inode.size;
+    uint32_t block_index = parent_inode.size / fs->block_size;
+    uint32_t real_index  = 0;
+
+    // Allocate the new block and map it at that index.
+    if (ext2_allocate_inode_block(fs, &parent_inode, parent_inode_index, block_index) == -1) {
         pr_err("Failed to allocate a new block for an inode.\n");
         return 0;
     }
-    // Update the inode block.
-    if (ext2_write_inode_block(fs, &parent_inode, parent_inode_index, it.block_index, cache) == -1) {
-        pr_err("Failed to update the block of the father directory.\n");
-        return 0;
-    }
-    // Move to new block inted.
-    it.block_index += 1;
-    // Update the inode size.
-    parent_inode.size = it.block_index * fs->block_size;
-    // Update the inode.
+    // The directory now covers one block more.
+    parent_inode.size = (block_index + 1) * fs->block_size;
     if (ext2_write_inode(fs, &parent_inode, parent_inode_index) == -1) {
         pr_err("Failed to update the inode of the father directory.\n");
-        return 0;
+        goto free_block_and_fail;
     }
-    // Initialize the iterato once again, with the new block..
-    it              = ext2_direntry_iterator_begin(fs, cache, &parent_inode);
-    // Move back at the beginning of the block.
-    it.block_offset = 0;
-    // Set the iterator pointer to the new free location.
-    it.direntry     = ext2_direntry_iterator_get(&it);
-    // Initialize the new directory entry.
-    ext2_initialize_direntry(it.direntry, name, inode_index, fs->block_size - it.block_offset, file_type);
-    // Update the inode block.
-    if (ext2_write_inode_block(fs, &parent_inode, parent_inode_index, it.block_index, cache) == -1) {
+    // The new block holds one entry, spanning the whole block: the next
+    // append splits it, the same way the first block of a directory works.
+    memset(cache, 0, fs->block_size);
+    ext2_initialize_direntry((ext2_dirent_t *)cache, name, inode_index, fs->block_size, file_type);
+    // Write the new block.
+    if (ext2_write_inode_block(fs, &parent_inode, parent_inode_index, block_index, cache) == -1) {
         pr_err("Failed to update the block of the father directory.\n");
-        return 0;
+        goto free_block_and_fail;
     }
     pr_debug("Created new directory entry:\n");
-    ext2_dump_dirent(it.direntry);
+    ext2_dump_dirent((ext2_dirent_t *)cache);
     return 1;
+
+free_block_and_fail:
+    // Give the block back and leave the directory the size it had, so a
+    // failed append changes nothing.
+    real_index = ext2_get_real_block_index(fs, &parent_inode, block_index);
+    if (real_index != 0) {
+        ext2_free_block(fs, real_index);
+    }
+    parent_inode.size = old_size;
+    if (ext2_write_inode(fs, &parent_inode, parent_inode_index) == -1) {
+        pr_err("Failed to restore the inode of the father directory.\n");
+    }
+    return 0;
 }
 
 /// @brief Allocates a directory entry.

@@ -1,6 +1,7 @@
 # List of programs.
 set(TEST_LIST
     t_aab_pipe.c
+    t_dir_entries.c
     t_dup.c
     t_hashmap.c
     t_procfs_read.c
