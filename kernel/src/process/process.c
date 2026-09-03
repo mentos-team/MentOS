@@ -100,19 +100,26 @@ static inline void __push_strings_on_stack(uintptr_t *stack, char *args[], int a
 }
 
 /// @brief Pushes the strings of a user-controlled vector on the stack, with
-///        a per-string bound.
+///        a per-string bound and a total-budget floor.
 /// @param stack pointer to the stack location.
 /// @param args the list of arguments, straight from user memory.
 /// @param argc the number of arguments, already validated by __count_args.
 /// @param locations array of at least `argc` entries, caller-owned.
+/// @param floor the lowest address the pushes may reach: the strings were
+///        counted before, and a string that grew since then must fail with
+///        -E2BIG here rather than push more bytes than were accounted for
+///        (which would write below the allocation).
 /// @return 0 on success, -E2BIG when a string is not NUL-terminated within
-///         MAX_ARG_STRLEN bytes: it either grew after the counting, or the
-///         counting never validated it.
-static inline int __push_user_strings_on_stack(uintptr_t *stack, char *args[], int argc, char *locations[])
+///         MAX_ARG_STRLEN bytes, or the pushes would cross `floor`.
+static inline int
+__push_user_strings_on_stack(uintptr_t *stack, char *args[], int argc, char *locations[], uintptr_t floor)
 {
     for (int i = argc - 1; i >= 0; --i) {
         size_t len = strnlen(args[i], MAX_ARG_STRLEN);
         if (len >= MAX_ARG_STRLEN) {
+            return -E2BIG;
+        }
+        if ((*stack - (len + 1)) < floor) {
             return -E2BIG;
         }
         for (int j = (int)len; j >= 0; --j) {
@@ -792,10 +799,12 @@ int sys_execve(pt_regs_t *f)
         kfree(args_mem);
         return -ENOMEM;
     }
-    // Copy the arguments (raw user strings, bounded per string: one that
-    // grew after the counting fails here instead of overflowing).
+    // Copy the arguments (raw user strings, bounded per string and against
+    // the total budget: one that grew after the counting fails here instead
+    // of pushing more bytes than were accounted for). The argv pushes must
+    // stay above the environment region of the block.
     uint32_t args_mem_ptr = (uint32_t)args_mem + (argv_bytes + envp_bytes);
-    if (__push_user_strings_on_stack(&args_mem_ptr, origin_argv, argc, argv_locations) < 0) {
+    if (__push_user_strings_on_stack(&args_mem_ptr, origin_argv, argc, argv_locations, (uint32_t)args_mem + envp_bytes) < 0) {
         pr_err("sys_execve failed: an argument is not terminated within the limit.\n");
         kfree(argv_locations);
         kfree(envp_locations);
@@ -803,7 +812,7 @@ int sys_execve(pt_regs_t *f)
         return -E2BIG;
     }
     saved_argv = __push_vector_on_stack(&args_mem_ptr, argv_locations, argc);
-    if (__push_user_strings_on_stack(&args_mem_ptr, origin_envp, envc, envp_locations) < 0) {
+    if (__push_user_strings_on_stack(&args_mem_ptr, origin_envp, envc, envp_locations, (uint32_t)args_mem) < 0) {
         pr_err("sys_execve failed: an environment entry is not terminated within the limit.\n");
         kfree(argv_locations);
         kfree(envp_locations);
