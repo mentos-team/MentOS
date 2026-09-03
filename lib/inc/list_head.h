@@ -14,6 +14,11 @@ typedef struct list_head {
     struct list_head *next; ///< The subsequent element.
 } list_head_t;
 
+#define LIST_HEAD_INIT(name) \
+    {                        \
+        &(name), &(name)     \
+    }
+
 /// @brief Get the struct for this entry.
 /// @param ptr    The &list_head pointer.
 /// @param type   The type of the struct this is embedded in.
@@ -29,7 +34,7 @@ typedef struct list_head {
 /// @param pos the name of the iterator used to visit the list.
 /// @param store another list iterator to use as temporary storage.
 /// @param head the head for your list.
-#define list_for_each_safe(pos, store, head)                                                                           \
+#define list_for_each_safe(pos, store, head) \
     for ((pos) = (head)->next, (store) = (pos)->next; (pos) != (head); (pos) = (store), (store) = (pos)->next)
 
 /// @brief Iterates over a list, but declares the iterator.
@@ -41,8 +46,8 @@ typedef struct list_head {
 /// @param pos the name of the iterator used to visit the list.
 /// @param store another list iterator to use as temporary storage.
 /// @param head the head for your list.
-#define list_for_each_safe_decl(pos, store, head)                                                                      \
-    for (list_head_t * (pos) = (head)->next, *(store) = (pos)->next; (pos) != (head);                                  \
+#define list_for_each_safe_decl(pos, store, head)                                     \
+    for (list_head_t * (pos) = (head)->next, *(store) = (pos)->next; (pos) != (head); \
          (pos) = (store), (store) = (pos)->next)
 
 /// @brief Iterates over a list backwards.
@@ -53,7 +58,7 @@ typedef struct list_head {
 /// @brief Iterates over a list backwards, but declares the iterator.
 /// @param pos the name of the iterator used to visit the list.
 /// @param head the head for your list.
-#define list_for_each_prev_decl(pos, head)                                                                             \
+#define list_for_each_prev_decl(pos, head) \
     for (list_head_t * (pos) = (head)->prev; (pos) != (head); (pos) = (pos)->prev)
 
 /// @brief Ensures that the given list is valid.

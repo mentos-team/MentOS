@@ -21,6 +21,7 @@
 #include <sys/stat.h>
 #include <sys/utsname.h>
 #include <sys/wait.h>
+#include <syslog.h>
 #include <termios.h>
 #include <unistd.h>
 
@@ -43,10 +44,6 @@ DECLARE_FIXED_SIZE_2D_RING_BUFFER(char, history, HISTORY_MAX, CMD_LEN, 0)
 static rb_history_t history;
 // History reading index.
 static unsigned history_index;
-// Store the last command status
-static int status         = 0;
-// Store the last command status as string
-static char status_buf[4] = {0};
 
 static sigset_t oldmask;
 
@@ -164,11 +161,17 @@ static inline int __search_in_path(const char *entry, dirent_t *result)
     char token[NAME_MAX] = {0}; // Buffer to hold each token (directory).
     size_t offset        = 0;   // Offset for the tokenizer.
     // Iterate through each directory in the PATH.
-    while (tokenize(PATH_VAR, ":", &offset, token, NAME_MAX)) {
+    int tokens;
+    while ((tokens = tokenize(PATH_VAR, ":", &offset, token, NAME_MAX)) > 0) {
         // Search for the entry in the current directory (tokenized directory).
         if (__folder_contains(token, entry, DT_REG, result)) {
             return 1; // Return 1 if the entry is found.
         }
+    }
+    // An entry of PATH longer than the token buffer is skipped, and the rest
+    // of the variable cannot be parsed after the error.
+    if (tokens < 0) {
+        fprintf(stderr, "__search_in_path: a PATH entry is too long.\n");
     }
     return 0; // Return 0 if the entry was not found.
 }
@@ -242,9 +245,12 @@ static char *__getenv(const char *var)
     }
     // Handle special variables like `$?`, which represents the status of the last command.
     if (var[0] == '?') {
-        // Assuming 'status' is a global or accessible variable containing the last command status.
-        sprintf(status_buf, "%d", status); // Convert the status to a string.
-        return status_buf;                 // Return the status as a string.
+        // Get the 'status' environment variable, which should have been set by the last command execution.
+        char *status_str = getenv("status");
+        if (status_str == NULL) {
+            return "0"; // Default to "0" if the status variable is not set.
+        }
+        return status_str; // Return the status as a string.
     }
     // TODO: Implement access to `argv` for positional parameters (e.g., $1, $2).
 #if 0
@@ -824,7 +830,7 @@ static inline int __read_command(rb_history_entry_t *entry)
 
         // Handle newline character to finish input
         if (c == '\n') {
-            putchar('\n'); // Display a newline
+            putchar('\n');                    // Display a newline
             return buffer_full ? -2 : length; // Return -2 if buffer was full
         }
 
@@ -923,9 +929,14 @@ static inline int __read_command(rb_history_entry_t *entry)
                     printf("\033[%dC", length - index); // Move cursor to the end
                     index = length;                     // Set index to the end
                 }
-                // INSERT
+                // INSERT, and the function keys that share its first digit:
+                // F10 is ESC [ 21 ~, F11 is ESC [ 23 ~ and F12 is ESC [ 24 ~,
+                // so the digit after the '2' is what tells them apart. Reading
+                // it unconditionally also stops F10-F12 from leaving a stray
+                // '~' in the line, which is what used to happen.
                 else if (c == '2') {
-                    if (getchar() == '~') {
+                    c = getchar();
+                    if (c == '~') {
                         // Toggle insert mode.
                         insert_active = !insert_active;
                         if (insert_active) {
@@ -934,6 +945,23 @@ static inline int __read_command(rb_history_entry_t *entry)
                         } else {
                             // Change cursor back to a block cursor (default).
                             printf("\033[0 q");
+                        }
+                    }
+                    // F10, F11, F12: the console's font size. Sent on to the
+                    // console as its own escape sequence, which is how this
+                    // shell already asks for scrollback and cursor shapes --
+                    // the keys belong here, and the console control belongs
+                    // there.
+                    else if ((c == '1') || (c == '3') || (c == '4')) {
+                        int key = c;
+                        if (getchar() == '~') {
+                            if (key == '1') {
+                                printf("\033[0z"); // F10: default size.
+                            } else if (key == '3') {
+                                printf("\033[1z"); // F11: one step smaller.
+                            } else {
+                                printf("\033[2z"); // F12: one step larger.
+                            }
                         }
                     }
                 }
@@ -1207,7 +1235,10 @@ static void __setup_redirects(int *argcp, char ***argvp)
 /// @return Returns the exit status of the command.
 static int __execute_command(rb_history_entry_t *entry)
 {
-    int _status = 0;
+    syslog(LOG_DEBUG, "==========\n");
+    syslog(LOG_DEBUG, "shell: executing command: %s\n", entry->buffer);
+
+    int status = 0; // Variable to store the exit status of the command.
 
     // Retrieve the arguments from the command buffer.
     int _argc = 1; // Initialize the argument count.
@@ -1247,8 +1278,10 @@ static int __execute_command(rb_history_entry_t *entry)
         __block_sigchld();
         // Fork the current process to create a child process.
         pid_t cpid = fork();
+        syslog(LOG_DEBUG, "shell: fork() returned cpid=%d\n", cpid);
         if (cpid == 0) {
             // Child process: Execute the command.
+            syslog(LOG_DEBUG, "shell: child process, executing: %s\n", _argv[0]);
             pid_t pid = getpid();
             setpgid(cpid, pid);  // Make the new process a group leader.
             __unblock_sigchld(); // Unblock SIGCHLD signals in the child process.
@@ -1262,20 +1295,23 @@ static int __execute_command(rb_history_entry_t *entry)
         }
         if (blocking) {
             // Parent process: Wait for the child process to finish, retrying on EINTR.
+            syslog(LOG_DEBUG, "shell: parent blocking in waitpid for cpid=%d\n", cpid);
             int ret;
             do {
-                ret = waitpid(cpid, &_status, 0);
+                ret = waitpid(cpid, &status, 0);
+                syslog(LOG_DEBUG, "shell: waitpid returned ret=%d errno=%d\n", ret, errno);
             } while (ret == -1 && errno == EINTR);
+            syslog(LOG_DEBUG, "shell: waitpid finished, status=%d\n", status);
             // Handle different exit statuses of the child process.
-            if (WIFSIGNALED(_status)) {
+            if (WIFSIGNALED(status)) {
                 printf(
-                    FG_RED "\nExit status %d, killed by signal %d\n" FG_RESET, WEXITSTATUS(_status), WTERMSIG(_status));
-            } else if (WIFSTOPPED(_status)) {
+                    FG_RED "\nExit status %d, killed by signal %d\n" FG_RESET, WEXITSTATUS(status), WTERMSIG(status));
+            } else if (WIFSTOPPED(status)) {
                 printf(
-                    FG_YELLOW "\nExit status %d, stopped by signal %d\n" FG_RESET, WEXITSTATUS(_status),
-                    WSTOPSIG(_status));
-            } else if (WEXITSTATUS(_status) != 0) {
-                printf(FG_RED "\nExit status %d\n" FG_RESET, WEXITSTATUS(_status));
+                    FG_YELLOW "\nExit status %d, stopped by signal %d\n" FG_RESET, WEXITSTATUS(status),
+                    WSTOPSIG(status));
+            } else if (WEXITSTATUS(status) != 0) {
+                printf(FG_RED "\nExit status %d\n" FG_RESET, WEXITSTATUS(status));
             }
         }
         __unblock_sigchld(); // Unblock SIGCHLD signals after command execution.
@@ -1283,12 +1319,13 @@ static int __execute_command(rb_history_entry_t *entry)
     // Free the memory allocated for the argument list.
     __free_argv(_argc, _argv);
     // Update the global status variable with the exit status of the command.
-    status = WEXITSTATUS(_status);
+    status = WEXITSTATUS(status);
     return status; // Return the exit status of the command.
 }
 
 static int __execute_file(char *path)
 {
+    int status = 0;
     rb_history_entry_t entry;
     rb_history_init_entry(&entry);
     int fd;
@@ -1361,20 +1398,44 @@ static void __interactive_mode(void)
         }
 
         // Execute the command.
-        __execute_command(&entry);
+        int status = __execute_command(&entry);
+
+        // Set in the environment the variable "status" with the exit status of the last command.
+        char status_str[4];
+        snprintf(status_str, sizeof(status_str), "%d", status);
+        setenv("status", status_str, 1);
     }
 #pragma clang diagnostic pop
 }
 
 void wait_for_child(int signum)
 {
+    int status = 0;
+    pid_t child_pid;
     // Reap all terminated children without blocking.
-    while (waitpid(-1, NULL, WNOHANG) > 0) {
+    while ((child_pid = waitpid(-1, &status, WNOHANG)) > 0) {
+        syslog(LOG_DEBUG, "shell: SIGCHLD handler reaped child pid=%d, status=%d\n", child_pid, status);
     }
+    syslog(LOG_DEBUG, "shell: SIGCHLD handler finished reaping children, last waitpid returned pid=%d, errno=%d, status=%d\n", child_pid, errno, status);
+
+    // Set in the environment the variable "status" with the exit status of the last command.
+    char status_str[4];
+    snprintf(status_str, sizeof(status_str), "%d", status);
+    setenv("status", status_str, 1);
 }
 
 int main(int argc, char *argv[])
 {
+    // Initialize syslog for debugging
+    openlog("shell", LOG_CONS | LOG_PID, LOG_USER);
+
+    // Set log mask to include info messages.
+    setlogmask(LOG_UPTO(LOG_INFO));
+
+    syslog(LOG_INFO, "shell: starting, pid=%d\n", getpid());
+
+    int status = 0; // Variable to store the exit status of commands.
+
     setsid();
     // Initialize the history.
     rb_history_init(&history, rb_history_entry_copy);

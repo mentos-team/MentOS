@@ -82,6 +82,7 @@ procfs_t fs;
 static int procfs_mkdir(const char *path, mode_t mode);
 static int procfs_rmdir(const char *path);
 static int procfs_stat(const char *path, stat_t *stat);
+static int procfs_statfs(const char *path, statfs_t *statfs);
 
 static vfs_file_t *procfs_open(const char *path, int flags, mode_t mode);
 static int procfs_unlink(const char *path);
@@ -102,6 +103,7 @@ static vfs_sys_operations_t procfs_sys_operations = {
     .mkdir_f   = procfs_mkdir,
     .rmdir_f   = procfs_rmdir,
     .stat_f    = procfs_stat,
+    .statfs_f  = procfs_statfs,
     .creat_f   = NULL,
     .symlink_f = NULL,
 };
@@ -841,6 +843,21 @@ static inline ssize_t procfs_getdents(vfs_file_t *file, dirent_t *dirp, off_t do
         }
     }
     return written_size;
+}
+
+static int procfs_statfs(const char *path, statfs_t *statfs)
+{
+    (void)path;
+    if (!statfs) {
+        return -EINVAL;
+    }
+
+    memset(statfs, 0, sizeof(statfs_t));
+    statfs->f_type    = 0x9fa0;
+    statfs->f_bsize   = 1024;
+    statfs->f_namelen = PROCFS_NAME_MAX;
+    statfs->f_frsize  = 1024;
+    return 0;
 }
 
 /// @brief Mounts the block device as a procfs filesystem.

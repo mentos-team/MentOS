@@ -7,6 +7,8 @@
 #include "sys/types.h"
 #include "time.h"
 
+#define REALTIME_SCHEDULER_SUPPORT !SCHEDULER_RR
+
 /// @brief Structure that describes scheduling parameters.
 typedef struct sched_param {
     /// Static execution priority.

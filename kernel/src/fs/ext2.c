@@ -382,6 +382,7 @@ static int ext2_fsetattr(vfs_file_t *file, struct iattr *attr);
 static int ext2_mkdir(const char *path, mode_t mode);
 static int ext2_rmdir(const char *path);
 static int ext2_stat(const char *path, stat_t *stat);
+static int ext2_statfs(const char *path, statfs_t *statfs);
 static int ext2_setattr(const char *path, struct iattr *attr);
 static vfs_file_t *ext2_creat(const char *path, mode_t mode);
 static vfs_file_t *ext2_mount(vfs_file_t *block_device, const char *path);
@@ -397,6 +398,7 @@ static vfs_sys_operations_t ext2_sys_operations = {
     .mkdir_f   = ext2_mkdir,
     .rmdir_f   = ext2_rmdir,
     .stat_f    = ext2_stat,
+    .statfs_f  = ext2_statfs,
     .creat_f   = ext2_creat,
     .symlink_f = NULL,
     .setattr_f = ext2_setattr,
@@ -1527,16 +1529,19 @@ static int ext2_set_real_block_index(
     // Result of the operation.
     int ret = 0;
 
-    // Are we setting a DIRECT block pointer.
+    // Are we setting a DIRECT block pointer. The comparison has to match the
+    // one in ext2_get_real_block_index: with `<= 0` the first index of each
+    // region was stored one element past the end of the region before it,
+    // where the reader never looks (#301).
     a = ((int)block_index) - EXT2_DIRECT_BLOCKS;
-    if (a <= 0) {
+    if (a < 0) {
         inode->data.blocks.dir_blocks[block_index] = real_index;
     } else {
         // Allocate the cache.
         uint8_t *cache = ext2_alloc_cache(fs);
         // Are we setting an INDIRECT block pointer.
         b              = a - p;
-        if (b <= 0) {
+        if (b < 0) {
             // Check that the indirect block points to a valid block.
             if (__ext2_allocate_indexing_block_for_inode(fs, &inode->data.blocks.indir_block)) {
                 ret = -1;
@@ -1552,7 +1557,7 @@ static int ext2_set_real_block_index(
         } else {
             // Are we setting a DOUBLY-INDIRECT block.
             c = b - p * p;
-            if (c <= 0) {
+            if (c < 0) {
                 c = b / p;
                 d = b - c * p;
                 // Check that the indirect block points to a valid block.
@@ -1576,7 +1581,7 @@ static int ext2_set_real_block_index(
 
             } else {
                 d = c - p * p * p;
-                if (d <= 0) {
+                if (d < 0) {
                     e = c / (p * p);
                     f = (c - e * p * p) / p;
                     g = (c - e * p * p - f * p);
@@ -1781,42 +1786,43 @@ ext2_allocate_inode_block(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t i
 /// @return the amount of data we read, or negative value for an error.
 static ssize_t ext2_read_inode_block(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t block_index, uint8_t *buffer)
 {
-    // Check if inode has no blocks allocated.
-    if (inode->blocks_count == 0) {
-        pr_debug("File has no allocated blocks (inode blocks count is zero)\n");
-        return 0;
+    // Every block covered by the file size is a legitimate data block:
+    // sparse files legally contain holes (a zero block pointer) inside
+    // `inode->size`, which must read as a block of zeros. Rejecting holes
+    // made any read touching them fail entirely (issue #192). Only blocks
+    // beyond the file size are invalid. Note that `inode->blocks_count`
+    // counts allocated blocks only, so it cannot be used as the upper
+    // bound here.
+    uint32_t max_blocks = inode->size / fs->block_size;
+    if ((inode->size % fs->block_size) != 0) {
+        max_blocks += 1;
     }
-
-    // Calculate allocated filesystem blocks from 512-byte sector count.
-    uint32_t allocated_fs_blocks = inode->blocks_count / fs->blocks_per_block_count;
-
     // Check if block index is out of range.
-    if (block_index >= allocated_fs_blocks) {
+    if (block_index >= max_blocks) {
         pr_err(
-            "Invalid block index: %u >= %u allocated blocks (inode->blocks_count=%u sectors, "
-            "blocks_per_block_count=%u, file_size=%u)\n",
-            block_index, allocated_fs_blocks, inode->blocks_count,
-            fs->blocks_per_block_count, inode->size);
+            "Invalid block index: %u >= %u blocks covered by the file size (file_size=%u)\n",
+            block_index, max_blocks, inode->size);
         return -1;
     }
 
     // Get the real block index
     uint32_t real_index = ext2_get_real_block_index(fs, inode, block_index);
 
-    // Note: real_index == 0 may indicate either:
-    // 1. An unallocated block (sparse file)
-    // 2. An actual error reading indirect blocks
-    // We can't distinguish at this point, but we should still try to read block 0
-    // (which is invalid and will fail in ext2_read_block anyway).
-    // This is better than returning -1 for valid sparse files.
+    // A resolved pointer of zero is a sparse hole: it has no block on disk
+    // and must read as zeros. Block zero is never a valid data block in
+    // ext2, and the metadata paths read their blocks through
+    // ext2_read_block directly, so zero here always means hole (#192).
+    if (real_index == 0) {
+        memset(buffer, 0, fs->block_size);
+        return fs->block_size;
+    }
 
     // Log the resolved block index (debug level)
 #ifdef EXT2_FULL_DEBUG
     pr_debug("ext2_read_inode_block(block: %4u, real: %4u)\n", block_index, real_index);
 #endif
 
-    // Read the block and return the result
-    // Note: ext2_read_block() will handle block_index 0 or invalid blocks appropriately
+    // Read the block and return the result.
     return ext2_read_block(fs, real_index, buffer);
 }
 
@@ -1891,11 +1897,28 @@ static ssize_t ext2_read_inode_data(
     size_t nbyte,
     char *buffer)
 {
+    // A read at or beyond the end of the file reads zero bytes: standard
+    // EOF semantics. Without this guard, an offset past `inode->size`
+    // either hit the unallocated tail blocks of the loop below (returning
+    // -1 at a legal EOF) or computed wrapping copy lengths in unsigned
+    // arithmetic (issue #242).
+    if ((uint64_t)offset >= (uint64_t)inode->size) {
+        return 0;
+    }
+    // A zero-length read copies nothing.
+    if (nbyte == 0) {
+        return 0;
+    }
     // Get the offset to the end of the portion we are reading.
     uint32_t end_offset  = (inode->size >= offset + nbyte) ? (offset + nbyte) : (inode->size);
-    // Convert the offset/size to some starting/end iblock numbers.
+    // Convert the offset/size to some starting/end iblock numbers. The end
+    // block is the one containing the last byte to read (end_offset - 1):
+    // when end_offset is an exact multiple of the block size, dividing
+    // end_offset directly would point one block past the data and leave
+    // end_size at zero, wrapping the copy length of the last block
+    // (issue #242).
     uint32_t start_block = offset / fs->block_size;
-    uint32_t end_block   = end_offset / fs->block_size;
+    uint32_t end_block   = (end_offset - 1) / fs->block_size;
     // What's the offset into the start block.
     uint32_t start_off   = offset % fs->block_size;
     // How much bytes to read for the end block.
@@ -2762,11 +2785,18 @@ static int ext2_resolve_path(vfs_file_t *directory, const char *path, ext2_diren
     ino_t ino            = directory->ino;
     char token[NAME_MAX] = {0};
     size_t offset        = 0;
-    while (tokenize(path, "/", &offset, token, NAME_MAX)) {
+    int tokens;
+    while ((tokens = tokenize(path, "/", &offset, token, NAME_MAX)) > 0) {
         if (ext2_find_direntry(fs, ino, token, search)) {
             return -1;
         }
         ino = search->direntry.inode;
+    }
+    // A component that does not fit the token buffer is rejected, never
+    // truncated: a truncated component would resolve to a different name.
+    if (tokens < 0) {
+        pr_err("Path component too long in `%s`.\n", path);
+        return -1;
     }
     pr_debug(
         "ext2_resolve_path(directory: %s, path: %s) -> (%s, %d)\n", directory->name, path, search->direntry.name,
@@ -2819,7 +2849,21 @@ static ext2_filesystem_t *get_ext2_filesystem(const char *absolute_path)
 /// @param name the name of the file.
 /// @param name_len the length of the name.
 /// @return 0 on success, -errno on failure.
-static int ext2_init_vfs_file(
+/// @brief Copies into the VFS file the properties that describe the on-disk
+///        object, leaving every field that tracks the life of the open file
+///        (`count`, `refcount`, `f_pos`, the sibling links) untouched.
+/// @param fs a pointer to the filesystem.
+/// @param file the file we want to update.
+/// @param inode the inode we take the properties from.
+/// @param inode_index the inode index.
+/// @param name the name of the file.
+/// @param name_len the length of the name.
+/// @details This is also used to refresh an entry found in the list of open
+///          files: that list is keyed by inode number, and a freed inode can
+///          be reused by an unrelated file, whose name and permissions would
+///          otherwise be those of the file that held the number before it
+///          (#297).
+static void __ext2_set_vfs_file_properties(
     ext2_filesystem_t *fs,
     vfs_file_t *file,
     ext2_inode_t *inode,
@@ -2827,9 +2871,10 @@ static int ext2_init_vfs_file(
     const char *name,
     size_t name_len)
 {
-    // Copy the name
-    memcpy(file->name, name, name_len);
-    file->name[name_len] = 0;
+    // Copy the name, keeping room for the terminator inside the field.
+    size_t copy_len = (name_len < NAME_MAX) ? name_len : (NAME_MAX - 1);
+    memcpy(file->name, name, copy_len);
+    file->name[copy_len] = 0;
     // Set the device.
     file->device         = (void *)fs;
     // Set the mask.
@@ -2861,10 +2906,6 @@ static int ext2_init_vfs_file(
     file->ino            = inode_index;
     // Set the size of the file.
     file->length         = inode->size;
-    //uint32_t impl;
-    //uint32_t open_flags;
-    // Set the open count.
-    file->count          = 0;
     // Set the timing information.
     file->atime          = inode->atime;
     file->mtime          = inode->mtime;
@@ -2872,10 +2913,34 @@ static int ext2_init_vfs_file(
     // Set the FS specific operations.
     file->sys_operations = &ext2_sys_operations;
     file->fs_operations  = &ext2_fs_operations;
-    // Set the read offest.
-    file->f_pos          = 0;
     // Set the number of links.
     file->nlink          = inode->links_count;
+}
+
+/// @brief Initializes the VFS file.
+/// @param fs a pointer to the filesystem.
+/// @param file the file we want to initialize.
+/// @param inode the inode we use to initialize the VFS file.
+/// @param inode_index the inode index.
+/// @param name the name of the file.
+/// @param name_len the length of the name.
+/// @return 0 on success, -errno on failure.
+static int ext2_init_vfs_file(
+    ext2_filesystem_t *fs,
+    vfs_file_t *file,
+    ext2_inode_t *inode,
+    uint32_t inode_index,
+    const char *name,
+    size_t name_len)
+{
+    // Set everything that comes from the inode.
+    __ext2_set_vfs_file_properties(fs, file, inode, inode_index, name, name_len);
+    //uint32_t impl;
+    //uint32_t open_flags;
+    // Set the open count.
+    file->count = 0;
+    // Set the read offest.
+    file->f_pos = 0;
     // Initialize the list of siblings.
     list_head_init(&file->siblings);
     // Set the refcount to zero.
@@ -2933,6 +2998,9 @@ static int ext2_create_inode(ext2_filesystem_t *fs, ext2_inode_t *inode, mode_t 
     // Get the inode associated with the directory entry.
     if (ext2_read_inode(fs, inode, inode_index) == -1) {
         pr_err("Failed to read the newly created inode.\n");
+        // The inode is already marked as used on disk: give it back, it owns
+        // no block yet, so a zeroed inode is enough to free it (#264).
+        ext2_free_inode(fs, inode, inode_index);
         return -1;
     }
     // Get the UID and GID.
@@ -3039,6 +3107,12 @@ static vfs_file_t *ext2_creat(const char *path, mode_t mode)
             }
             // Add the vfs_file to the list of associated files.
             list_head_insert_before(&file->siblings, &fs->opened_files);
+        } else {
+            // The list of open files is keyed by inode number, and the entry
+            // may describe a file that was deleted while its number got
+            // reused: refresh it from the inode we just read (#297).
+            __ext2_set_vfs_file_properties(
+                fs, file, &inode, search.direntry.inode, search.direntry.name, search.direntry.name_len);
         }
         return file;
     }
@@ -3169,6 +3243,13 @@ static vfs_file_t *ext2_open(const char *path, int flags, mode_t mode)
     }
 
     vfs_file_t *file = ext2_find_vfs_file_with_inode(fs, search.direntry.inode);
+    if (file != NULL) {
+        // The list of open files is keyed by inode number, and the entry may
+        // describe a file that was deleted while its number got reused:
+        // refresh it from the inode we just read (#297).
+        __ext2_set_vfs_file_properties(
+            fs, file, &inode, search.direntry.inode, search.direntry.name, search.direntry.name_len);
+    }
     if (file == NULL) {
         // Allocate the memory for the file.
         file = vfs_alloc_file();
@@ -3522,6 +3603,33 @@ static int ext2_stat(const char *path, stat_t *stat)
     return __ext2_stat(fs, &inode, search.direntry.inode, stat);
 }
 
+static int ext2_statfs(const char *path, statfs_t *statfs)
+{
+    ext2_filesystem_t *fs = get_ext2_filesystem(path);
+    if (fs == NULL) {
+        pr_err("ext2_statfs(path: %s): Failed to get the EXT2 filesystem.\n", path);
+        return -ENOENT;
+    }
+
+    if (statfs == NULL) {
+        return -EINVAL;
+    }
+
+    memset(statfs, 0, sizeof(statfs_t));
+    statfs->f_type    = EXT2_SUPERBLOCK_MAGIC;
+    statfs->f_bsize   = fs->block_size;
+    statfs->f_blocks  = fs->superblock.blocks_count;
+    statfs->f_bfree   = fs->superblock.free_blocks_count;
+    statfs->f_bavail  = (fs->superblock.free_blocks_count > fs->superblock.r_blocks_count)
+                            ? (fs->superblock.free_blocks_count - fs->superblock.r_blocks_count)
+                            : 0;
+    statfs->f_files   = fs->superblock.inodes_count;
+    statfs->f_ffree   = fs->superblock.free_inodes_count;
+    statfs->f_namelen = EXT2_NAME_LEN;
+    statfs->f_frsize  = fs->block_size;
+    return 0;
+}
+
 /// @brief Perform the I/O control operation specified by REQUEST on FD. One
 /// argument may follow; its presence and type depend on REQUEST.
 /// @param file the file on which we perform the operations.
@@ -3652,6 +3760,49 @@ static ssize_t ext2_readlink(const char *path, char *buffer, size_t bufsize)
 /// @param path The path of the new directory.
 /// @param mode The mode with which we create the directory.
 /// @return Returns a negative value on failure.
+/// @brief Clears the directory entry of an incomplete directory.
+/// @param fs the filesystem.
+/// @param path the path of the directory being created.
+/// @return 0 on success, -1 on failure.
+/// @details Used when mkdir cannot finish: the entry it added to the parent
+///          must go away before the inode is freed, otherwise the parent
+///          keeps a name pointing at a free inode (#264).
+static int __ext2_clear_direntry_for_path(ext2_filesystem_t *fs, const char *path)
+{
+    ext2_direntry_search_t search;
+    memset(&search, 0, sizeof(ext2_direntry_search_t));
+    // Locate the entry we added, so we know which block holds it.
+    if (ext2_resolve_path(fs->root, path, &search)) {
+        pr_err("Failed to locate the directory entry of `%s`.\n", path);
+        return -1;
+    }
+    ext2_inode_t parent;
+    if (ext2_read_inode(fs, &parent, search.parent_inode) == -1) {
+        pr_err("Failed to read the parent inode of `%s`.\n", path);
+        return -1;
+    }
+    // Allocate the cache.
+    uint8_t *cache = ext2_alloc_cache(fs);
+    // Read the block where the entry resides.
+    if (ext2_read_inode_block(fs, &parent, search.block_index, cache) == -1) {
+        pr_err("Failed to read block `%u` of inode `%u`.\n", search.block_index, (uint32_t)search.parent_inode);
+        ext2_dealloc_cache(cache);
+        return -1;
+    }
+    // An entry pointing at inode 0 is a free entry.
+    ext2_dirent_t *dirent = (ext2_dirent_t *)((uintptr_t)cache + search.block_offset);
+    dirent->inode         = 0;
+    // Write the block back.
+    int ret               = 0;
+    if (ext2_write_inode_block(fs, &parent, search.parent_inode, search.block_index, cache) == -1) {
+        pr_err("Failed to write block `%u` of inode `%u`.\n", search.block_index, (uint32_t)search.parent_inode);
+        ret = -1;
+    }
+    // Free the cache.
+    ext2_dealloc_cache(cache);
+    return ret;
+}
+
 static int ext2_mkdir(const char *path, mode_t mode)
 {
     pr_debug("ext2_mkdir(path: %s, mode: %u)\n", path, mode);
@@ -3672,7 +3823,7 @@ static int ext2_mkdir(const char *path, mode_t mode)
     ext2_filesystem_t *fs = get_ext2_filesystem(path);
     if (fs == NULL) {
         pr_err("ext2_mkdir(path: %s): Failed to get the EXT2 filesystem.\n", path);
-        return -ENOENT;
+        return -ENODEV;
     }
     // Prepare the structure for the search.
     ext2_direntry_search_t search;
@@ -3695,14 +3846,21 @@ static int ext2_mkdir(const char *path, mode_t mode)
             "ext2_mkdir(path: %s): Failed to create a new inode (group index: "
             "%d).\n",
             path, group_index);
-        return -ENOENT;
+        return -ENOSPC;
     }
+    // The inode bitmap and the group counters are on disk from here on, so
+    // every failure below has to undo them: the directory does not exist for
+    // the caller, and nothing of it may survive on the filesystem (#264).
+    int ret           = 0;
+    int has_direntry  = 0;
+    int parent_bumped = 0;
     // Increase the number of directories inside the group.
     fs->block_groups[group_index].used_dirs_count += 1;
     // Write the inode.
     if (ext2_write_inode(fs, &inode, inode_index) == -1) {
         pr_err("Failed to write the newly created inode.\n");
-        return -ENOENT;
+        ret = -EIO;
+        goto rollback;
     }
     // Get the directory name.
     const char *directory_name = basename(path);
@@ -3712,15 +3870,18 @@ static int ext2_mkdir(const char *path, mode_t mode)
             "ext2_mkdir(path: %s): Failed to allocate the new direntry `%s` "
             "for the inode.\n",
             path, directory_name);
-        return -ENOENT;
+        ret = -ENOSPC;
+        goto rollback;
     }
+    has_direntry = 1;
     // Allocate a new block.
     if (!ext2_initialize_new_direntry_block(fs, inode_index, 0)) {
         pr_err(
             "ext2_mkdir(path: %s): Failed to allocate a new block for an "
             "inode.\n",
             path);
-        return 0;
+        ret = -ENOSPC;
+        goto rollback;
     }
     // Create a directory entry, inside the new directory, pointing to itself.
     if (ext2_allocate_direntry(fs, inode_index, inode_index, ".", ext2_file_type_directory) == -1) {
@@ -3728,17 +3889,64 @@ static int ext2_mkdir(const char *path, mode_t mode)
             "ext2_mkdir(path: %s): Failed to allocate a new direntry for the "
             "inode.\n",
             path);
-        return -ENOENT;
+        ret = -ENOSPC;
+        goto rollback;
     }
     // Create a directory entry, inside the new directory, pointing to its parent.
+    // This one adds a link to the parent, which the rollback has to remove.
+    parent_bumped = 1;
     if (ext2_allocate_direntry(fs, inode_index, search.parent_inode, "..", ext2_file_type_directory) == -1) {
         pr_err(
             "ext2_mkdir(path: %s): Failed to allocate a new direntry for the "
             "inode.\n",
             path);
-        return -ENOENT;
+        ret = -ENOSPC;
+        goto rollback;
     }
     return 0;
+
+rollback:
+    // The `..` entry counts as a link to the parent, and the link is added
+    // before the entry is placed: assume it went through, since the only way
+    // it did not is a failed inode write, which already left the parent
+    // untouched on disk.
+    if (parent_bumped) {
+        ext2_inode_t parent_inode;
+        if (ext2_read_inode(fs, &parent_inode, search.parent_inode) != -1) {
+            if (parent_inode.links_count > 0) {
+                parent_inode.links_count -= 1;
+                if (ext2_write_inode(fs, &parent_inode, search.parent_inode) == -1) {
+                    pr_err("ext2_mkdir(path: %s): Failed to restore the links of the parent.\n", path);
+                }
+            }
+        }
+    }
+    // Take the name out of the parent before the inode goes away, so no entry
+    // is left pointing at a free inode.
+    if (has_direntry && (__ext2_clear_direntry_for_path(fs, path) < 0)) {
+        pr_err("ext2_mkdir(path: %s): Failed to remove the incomplete directory entry.\n", path);
+    }
+    // Re-read the inode: initializing its entry block may have given it a
+    // data block, and freeing the inode has to free that block as well.
+    ext2_inode_t stale;
+    if (ext2_read_inode(fs, &stale, inode_index) != -1) {
+        stale.links_count = 0;
+        stale.dtime       = sys_time(NULL);
+        if (ext2_write_inode(fs, &stale, inode_index) == -1) {
+            pr_err("ext2_mkdir(path: %s): Failed to update the inode being freed.\n", path);
+        }
+        if (ext2_free_inode(fs, &stale, inode_index) < 0) {
+            pr_err("ext2_mkdir(path: %s): Failed to free the inode.\n", path);
+        }
+    }
+    // Give back the directory count taken above.
+    if (fs->block_groups[group_index].used_dirs_count > 0) {
+        fs->block_groups[group_index].used_dirs_count -= 1;
+    }
+    if (ext2_write_bgdt_for_group(fs, group_index) < 0) {
+        pr_warning("ext2_mkdir(path: %s): Failed to write BGDT for group %u.\n", path, group_index);
+    }
+    return ret;
 }
 
 /// @brief Removes the given directory.

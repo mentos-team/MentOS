@@ -156,6 +156,11 @@ void remove_timer(struct timer_list *timer);
 /// the process.
 int sys_nanosleep(const struct timespec *req, struct timespec *rem);
 
+/// @brief Cancels nanosleep timer for a task interrupted by a signal.
+/// @param task The task whose sleep timer should be canceled.
+/// @return 0 on success, -1 if no sleep timer exists.
+int cancel_sleep_timer(struct task_struct *task);
+
 /// @brief Send signal to calling thread after desired seconds.
 /// @param seconds The number of seconds in the interval
 /// @return the number of seconds remaining until any previously scheduled

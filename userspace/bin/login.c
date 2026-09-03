@@ -75,8 +75,12 @@ static inline int __read_input(char *buffer, size_t size, int show)
     do {
         c = getchar(); // Read a character from input
 
-        // Ignore EOF and null or tab characters
-        if (c == EOF || c == 0 || c == '\t') {
+        // Detect error/EOF and abort early so caller can handle it.
+        if (c == EOF) {
+            return -1;
+        }
+        // Ignore null or tab characters
+        if (c == 0 || c == '\t') {
             continue;
         }
 

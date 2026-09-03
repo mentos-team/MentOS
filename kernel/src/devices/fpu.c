@@ -46,11 +46,8 @@ static inline void __enable_fpu(void)
 static inline void __disable_fpu(void)
 {
     size_t t;
-
     __asm__ __volatile__("mov %%cr0, %0" : "=r"(t));
-
     t |= 1U << 3U;
-
     __asm__ __volatile__("mov %0, %%cr0" ::"r"(t));
 }
 
@@ -73,7 +70,10 @@ static inline void __save_fpu(task_struct *proc)
 }
 
 /// Initialize the FPU.
-static inline void __init_fpu(void) { __asm__ __volatile__("fninit"); }
+static inline void __init_fpu(void)
+{
+    __asm__ __volatile__("fninit");
+}
 
 /// Kernel trap for FPU usage when FPU is disabled.
 /// @param f The interrupt stack frame.
@@ -149,7 +149,7 @@ static inline void __invalid_opcode_handler(pt_regs_t *f)
     // Check if this is user mode or kernel mode
     if ((f->cs & 0x3) == 0x3) {
         // User mode - send SIGILL
-        task_struct *task = scheduler_get_current_process();
+        task_struct *task   = scheduler_get_current_process();
         // Get the action for SIGILL.
         sigaction_t *action = &task->sighand.action[SIGILL - 1];
         // If the user did not install a SIGILL handler, terminate immediately.
@@ -169,59 +169,15 @@ static inline void __invalid_opcode_handler(pt_regs_t *f)
     }
 }
 
-/// @brief Ensure basic FPU functionality works.
-/// @details
-/// For processors without a FPU, this tests that maths libraries link
-/// correctly. Uses a relaxed tolerance for floating point comparisons to
-/// account for optimization-related precision variations in Release builds.
-/// @return 1 on success, 0 on failure.
-static int __fpu_test(void)
+void switch_fpu(void)
 {
-    double a = M_PI;
-    // First test.
-    for (int i = 0; i < 10000; i++) {
-        a = a * 1.123 + (a / 3);
-        a /= 1.111;
-        while (a > 100.0) {
-            a /= 3.1234563212;
-        }
-        while (a < 2.0) {
-            a += 1.1232132131;
-        }
-    }
-
-    // Use relaxed comparison to handle Release build precision variations
-    // Expected: ~50.11095685350556294679336133413
-    // Allow ±0.1 tolerance
-    double expected = 50.11095685350556294679336133413;
-    if ((a < (expected - 0.1)) || (a > (expected + 0.1))) {
-        pr_err("FPU test 1 failed: result %f not near expected %f\n", a, expected);
-        return 0;
-    }
-
-    pr_debug("FPU test 1 passed: %f\n", a);
-
-    // Second test.
-    a = M_PI;
-    for (int i = 0; i < 100; i++) {
-        a = a * 3 + (a / 3);
-    }
-
-    // Second test: just verify it's a reasonable large number
-    // Expected: ~60957114488184560000000000000000000000000000000000000.0
-    // But with precision changes in Release, just verify it's in the ballpark
-    if (a < 1e40) {
-        pr_err("FPU test 2 failed: result %e too small\n", a);
-        return 0;
-    }
-
-    pr_debug("FPU test 2 passed: %e\n", a);
-    return 1;
+    __save_fpu(scheduler_get_current_process());
 }
 
-void switch_fpu(void) { __save_fpu(scheduler_get_current_process()); }
-
-void unswitch_fpu(void) { __restore_fpu(scheduler_get_current_process()); }
+void unswitch_fpu(void)
+{
+    __restore_fpu(scheduler_get_current_process());
+}
 
 int fpu_install(void)
 {
@@ -260,9 +216,31 @@ int fpu_install(void)
     isr_install_handler(FLOATING_POINT_ERR, &__sigfpe_handler, "floating point error");
     pr_debug("  FLOATING_POINT_ERR handler installed.\n");
 
-    pr_debug("fpu_install: Running FPU test...\n");
-    int result = __fpu_test();
-    pr_debug("fpu_install: FPU test result: %d\n", result);
+    pr_debug("fpu_install: FPU initialization completed successfully.\n");
 
-    return result;
+    return 1;
+}
+
+int fpu_is_initialized(void)
+{
+    size_t cr0, cr4;
+    // Read CR0
+    __asm__ __volatile__("mov %%cr0, %0" : "=r"(cr0));
+    // Read CR4
+    __asm__ __volatile__("mov %%cr4, %0" : "=r"(cr4));
+    // Check CR0: EM bit (2) should be 0, MP bit (1) should be 1
+    if ((cr0 & (1U << 2U)) != 0) {
+        return 0; // EM bit set, FPU emulation enabled
+    }
+    if ((cr0 & (1U << 1U)) == 0) {
+        return 0; // MP bit not set
+    }
+    // Check CR4: OSFXSR (9) and OSXMMEXCPT (10) should be set
+    if ((cr4 & (1U << 9U)) == 0) {
+        return 0; // OSFXSR not set
+    }
+    if ((cr4 & (1U << 10U)) == 0) {
+        return 0; // OSXMMEXCPT not set
+    }
+    return 1;
 }

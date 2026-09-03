@@ -57,7 +57,19 @@
 #define PATH_MAX 4096
 
 /// Maximum length of arguments provided to exec function.
-#define ARG_MAX 256
+/// The maximum total size, in bytes, of one argv or envp vector passed to
+/// exec: the sum of the string bytes (each including its terminator) plus
+/// the pointer array. A vector above this limit fails with `E2BIG`.
+#define ARG_MAX 65536
+
+/// Maximum number of entries in an argv or envp vector passed to exec.
+/// A vector that is not NULL-terminated within this many entries fails
+/// with `E2BIG`.
+#define MAX_ARG_COUNT 1024
+
+/// Maximum length, in bytes including the terminator, of a single argv or
+/// envp string. A longer (or non-terminated) string fails with `E2BIG`.
+#define MAX_ARG_STRLEN 8192
 
 /// Maximum pid number.
 #define PID_MAX_LIMIT 32768

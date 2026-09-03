@@ -61,10 +61,9 @@
 
 /// @brief Head of the waiting queue.
 typedef struct wait_queue_head {
-    /// Locking element for the waiting queque.
-    spinlock_t lock;
-    /// Head of the waiting queue, it contains wait_queue_entry_t elements.
-    struct list_head task_list;
+    const char *name;           ///< Name of the wait queue (Added for debug purpose).
+    spinlock_t lock;            ///< Locking element for the waiting queque.
+    struct list_head task_list; ///< Head of the waiting queue, it contains wait_queue_entry_t elements.
 } wait_queue_head_t;
 
 /// @brief Entry of the waiting queue.
@@ -123,3 +122,32 @@ int default_wake_function(wait_queue_entry_t *entry, unsigned mode, int sync);
 /// @return Pointer to the entry inside the wq representing the
 ///         sleeping process.
 wait_queue_entry_t *sleep_on(wait_queue_head_t *head);
+
+/// @brief Sets the state of the current process to TASK_INTERRUPTIBLE
+///        and inserts it into the specified wait queue.
+///
+/// @param head Waitqueue where to sleep.
+/// @return Pointer to the entry inside the wq representing the
+///         sleeping process.
+wait_queue_entry_t *sleep_on_interruptible(wait_queue_head_t *head);
+
+/// @brief Wake all tasks waiting on the queue.
+///
+/// Calls each entry's wake function and removes entries whose function
+/// returns non‑zero.  This is the generic helper used by drivers when
+/// data arrives.
+void wake_up_all(wait_queue_head_t *head);
+
+/// @brief Wake up a specific process if it is waiting on the given queue.
+/// @param head The wait queue head to search.
+/// @param task The specific task to wake up.
+/// @return 1 if the task was found and woken up, 0 otherwise.
+int wake_up_process_on_queue(wait_queue_head_t *head, struct task_struct *task);
+
+/// @brief Wake a specific wait queue entry.
+/// @param head The wait queue head that owns the entry.
+/// @param entry The wait queue entry to evaluate and wake.
+/// @param mode Wake mode passed to the entry wake function.
+/// @param sync Wake sync flag passed to the entry wake function.
+/// @return 1 if the task was woken, 0 otherwise.
+int wake_up_wait_queue_entry(wait_queue_head_t *head, wait_queue_entry_t *entry, unsigned mode, int sync);

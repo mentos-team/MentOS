@@ -220,6 +220,18 @@ int sys_stat(const char *path, stat_t *buf);
 /// @return Returns a negative value on failure.
 int sys_fstat(int fd, stat_t *buf);
 
+/// @brief Retrieve filesystem statistics for the mounted filesystem containing path.
+/// @param path A path on the target mounted filesystem.
+/// @param buf A structure where filesystem statistics will be stored.
+/// @return Returns a negative value on failure.
+int sys_statfs(const char *path, statfs_t *buf);
+
+/// @brief Retrieve filesystem statistics for an open file descriptor.
+/// @param fd  The file descriptor of a file on the target mounted filesystem.
+/// @param buf A structure where filesystem statistics will be stored.
+/// @return Returns a negative value on failure.
+int sys_fstatfs(int fd, statfs_t *buf);
+
 /// @brief Creates a new directory at the given path.
 /// @param path The path of the new directory.
 /// @param mode The permission of the new directory.

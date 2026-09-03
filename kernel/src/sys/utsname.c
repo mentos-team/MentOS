@@ -26,10 +26,6 @@ static inline int __gethostname(char *name, size_t len)
     if (!name) {
         return -EFAULT;
     }
-    // Check if len is negative.
-    if (len < 0) {
-        return -EINVAL;
-    }
     // Open the file.
     vfs_file_t *file = vfs_open("/etc/hostname", O_RDONLY, 0);
     if (file == NULL) {
@@ -38,10 +34,13 @@ static inline int __gethostname(char *name, size_t len)
     }
     // Clear the buffer.
     memset(name, 0, len);
-    // Read the content of the file.
-    ssize_t ret = vfs_read(file, name, 0UL, len);
+    // Read the content of the file. Read at most len - 1 bytes so that the
+    // buffer always keeps its NUL terminator: a hostname of SYS_LEN bytes
+    // or more must not fill every byte of the destination field (#256).
+    ssize_t ret = vfs_read(file, name, 0UL, len - 1);
     if (ret < 0) {
         pr_err("Failed to read `/etc/hostname`.\n");
+        vfs_close(file);
         return ret;
     }
     // Close the file.

@@ -3,12 +3,14 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
+#include <errno.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <strerror.h>
 #include <string.h>
 #include <sys/wait.h>
+#include <syslog.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -16,7 +18,7 @@
 /// @param sig The signal number.
 void alarm_handler(int sig)
 {
-    printf("handler(%d) : Starting handler.\n", sig);
+    syslog(LOG_INFO, "[t_alarm] handler(%d) : Starting handler.\n", sig);
     if (sig == SIGALRM) {
         // Set an alarm to go off after 1 seconds.
         alarm(1);
@@ -25,7 +27,7 @@ void alarm_handler(int sig)
         unsigned int rest = alarm(1);
 
         // Expected value:  1 (since the previous alarm was just set to 1 seconds).
-        printf("handler(%d) : alarm(1) result: %d.\n", sig, rest);
+        syslog(LOG_INFO, "[t_alarm] handler(%d) : alarm(1) result: %d.\n", sig, rest);
 
         // Cancel the alarm and get the remaining time of the previous alarm.
         rest = alarm(0);
@@ -35,13 +37,13 @@ void alarm_handler(int sig)
         // you see the value 4 instead of 1. The exact value can vary slightly
         // depending on the system’s execution speed and the time taken to
         // execute the intermediate code.
-        printf("handler(%d) : alarm(0) result: %d.\n", sig, rest);
+        syslog(LOG_INFO, "[t_alarm] handler(%d) : alarm(0) result: %d.\n", sig, rest);
 
         exit(EXIT_SUCCESS);
     } else {
-        printf("handler(%d) : Wrong signal.\n", sig);
+        syslog(LOG_INFO, "[t_alarm] handler(%d) : Wrong signal.\n", sig);
     }
-    printf("handler(%d) : Ending handler.\n", sig);
+    syslog(LOG_INFO, "[t_alarm] handler(%d) : Ending handler.\n", sig);
 }
 
 int main(int argc, char *argv[])
@@ -52,7 +54,7 @@ int main(int argc, char *argv[])
 
     // Set up the signal handler for SIGALRM.
     if (sigaction(SIGALRM, &action, NULL) < 0) {
-        perror("signal setup failed");
+        syslog(LOG_ERR, "[t_alarm] signal setup failed: %s", strerror(errno));
         exit(EXIT_FAILURE);
     }
 

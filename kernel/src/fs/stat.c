@@ -40,3 +40,26 @@ int sys_fstat(int fd, stat_t *buf)
 
     return vfs_fstat(vfd->file_struct, buf);
 }
+
+int sys_statfs(const char *path, statfs_t *buf) { return vfs_statfs(path, buf); }
+
+int sys_fstatfs(int fd, statfs_t *buf)
+{
+    // Get the current task.
+    task_struct *task = scheduler_get_current_process();
+
+    // Check the current FD.
+    if (fd < 0 || fd >= task->max_fd) {
+        return -EMFILE;
+    }
+
+    // Get the file descriptor.
+    vfs_file_descriptor_t *vfd = &task->fd_list[fd];
+
+    // Check the file.
+    if (vfd->file_struct == NULL) {
+        return -ENOSYS;
+    }
+
+    return vfs_fstatfs(vfd->file_struct, buf);
+}

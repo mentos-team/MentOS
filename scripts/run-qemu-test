@@ -5,9 +5,47 @@ set -e
 
 BUILD_DIR="${1:-build}"
 TIMEOUT="${2:-600}"  # 10 minutes default
+# QEMU display device for the video backend this kernel was built for, as one
+# argument holding an option and its value (e.g. "-vga std"). Deliberately
+# word-split below. CMake derives it from VIDEO_TYPE and is the only place that
+# knows which device each backend needs.
+VGA_ARGS="${3:--vga std}"
+# Name of the video backend the console must have ended up on, as the kernel
+# reports it. Empty when the backend the kernel boots on is also the one under
+# test, which is the case for every backend that needs no promotion.
+REQUIRE_BACKEND="${4:-}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# PIDs of the log-streaming subshells. Each was started as a background job
+# under a temporary `set -m` window, so each subshell is also its own process
+# group leader: its PID doubles as the PGID of the whole `tail | sed` pipeline.
+# Killing the negative PID takes down tail AND sed together.
+STREAM_PGIDS=" "
+QEMU_PID=""
+
+# Terminate everything this script started. Idempotent and safe to call twice
+# (the normal path already kills the streamers; the trap finds nothing left).
+cleanup() {
+    local pg
+    for pg in ${STREAM_PGIDS}; do
+        kill -- "-${pg}" 2>/dev/null || true
+    done
+    if [ -n "${QEMU_PID}" ]; then
+        kill "${QEMU_PID}" 2>/dev/null || true
+    fi
+    for pg in ${STREAM_PGIDS}; do
+        wait "${pg}" 2>/dev/null || true
+    done
+}
+
+trap cleanup EXIT
+trap 'trap - INT; cleanup; exit 130' INT
+trap 'trap - TERM; cleanup; exit 143' TERM
+trap 'trap - HUP; cleanup; exit 129' HUP
 
 echo "===================================================="
 echo "Starting QEMU test run (timeout: ${TIMEOUT}s)..."
+echo "Display device: ${VGA_ARGS}"
 echo "===================================================="
 
 # Remove old logs to ensure fresh start
@@ -16,13 +54,17 @@ rm -f "${BUILD_DIR}/test.log" "${BUILD_DIR}/serial.log"
 # Run QEMU with timeout
 # Note: First -serial goes to serial.log (kernel messages)
 #       Second -serial goes to test.log (test output from runtests)
+# The disk is opened in snapshot mode: writes land in a temporary overlay that
+# QEMU discards on exit. Tests still see their own writes, but every run starts
+# from the same image, so a run cannot leave the filesystem in a state that
+# makes the next one fail.
 timeout --foreground "${TIMEOUT}" \
     qemu-system-i386 \
-    -vga std \
+    ${VGA_ARGS} \
     -m 1096M \
     -nodefaults \
     -serial file:${BUILD_DIR}/serial.log \
-    -drive file=${BUILD_DIR}/rootfs.img,format=raw,if=ide,index=0,media=disk \
+    -drive file=${BUILD_DIR}/rootfs.img,format=raw,if=ide,index=0,media=disk,snapshot=on \
     -serial file:${BUILD_DIR}/test.log \
     -nographic \
     -device isa-debug-exit \
@@ -36,29 +78,76 @@ echo "Monitoring test progress..."
 echo "Build directory: ${BUILD_DIR}"
 echo ""
 
-# Stream both logs in real-time using tail -F (follows by name, retries if file doesn't exist)
-# The --pid flag makes tail exit when QEMU dies
-(tail -F "${BUILD_DIR}/serial.log" 2>/dev/null | sed -u 's/^/[SERIAL] /' &)
-(tail -F "${BUILD_DIR}/test.log" 2>/dev/null | sed -u 's/^/[TEST]   /' &)
+# Stream both logs in real-time using tail -F (follows by name, retries if file doesn't exist).
+# NOTE: tail has no portable --pid option (GNU-only, absent on BSD/macOS tail),
+# so the script owns the streamers explicitly: each pipeline is a background
+# job in its own process group (subshell = group leader, $! = PGID), and the
+# normal path kills the whole group after QEMU exits; the traps cover
+# interruption and early exit.
+set -m
+(tail -F "${BUILD_DIR}/serial.log" 2>/dev/null | sed -u 's/^/[SERIAL] /') &
+STREAM_PGIDS="${STREAM_PGIDS} $!"
+(tail -F "${BUILD_DIR}/test.log" 2>/dev/null | sed -u 's/^/[TEST]   /') &
+STREAM_PGIDS="${STREAM_PGIDS} $!"
+set +m
 
-# Wait for QEMU to finish
-wait "${QEMU_PID}"
-EXIT_CODE=$?
+# Wait for QEMU to finish and explicitly capture its exit code
+# Note: QEMU returns exit 33 on isa-debug-exit success (guest wrote 0x10),
+#       exit 35 on panic (guest wrote 0x11), etc.
+# We need to capture this without triggering set -e termination.
+if wait "${QEMU_PID}"; then
+    # wait succeeded (exit 0), which shouldn't happen with isa-debug-exit
+    EXIT_CODE=$?
+else
+    # wait captured QEMU's exit code
+    EXIT_CODE=$?
+fi
 
-# Give a moment for final output to flush
+# Give a moment for final output to flush, and for the tail -F streamers to
+# pick up the last lines QEMU wrote before exiting; then terminate them.
 sleep 1
+cleanup
 
 echo ""
 echo "===================================================="
 echo "QEMU finished with exit code: ${EXIT_CODE}"
 echo "===================================================="
 
-# QEMU with isa-debug-exit returns exit code 1 on success (exit code 0 from guest = 1 from host)
-# Any other exit code is a failure
-if [ "${EXIT_CODE}" -eq 1 ] || [ "${EXIT_CODE}" -eq 0 ]; then
-    echo "Test run completed successfully"
-    exit 0
-else
-    echo "Test run failed or timed out"
+# isa-debug-exit semantics: host_exit = (guest_value << 1) | 1
+# Guest writes 0x10 → host exit 33 (suite completed; TAP still decides pass/fail)
+# Guest writes 0x11 → host exit 35 (panic/failure)
+# Any other exit code is a failure (timeout, QEMU error, etc.)
+if [ "${EXIT_CODE}" -ne 33 ]; then
+    echo "Test run failed or timed out (exit code: ${EXIT_CODE})"
+    # QEMU also exits 0 on a graceful SIGINT shutdown (an interrupted run), and
+    # 0 must not become this script's success code. Map only that corner to 1;
+    # the informative codes (35 panic, 124 timeout, ...) pass through as they are.
+    if [ "${EXIT_CODE}" -eq 0 ]; then
+        EXIT_CODE=1
+    fi
     exit "${EXIT_CODE}"
 fi
+
+# Neither a clean exit nor a green suite proves that the backend under test was
+# the one that was built. A kernel whose display device is absent falls back to
+# the backend it booted on and passes every test on the wrong hardware, so where
+# there is a backend-specific claim to make, check it before believing the rest.
+if [ -n "${REQUIRE_BACKEND}" ]; then
+    if ! grep -F "Video backend promoted" "${BUILD_DIR}/serial.log" |
+        grep -Fq "'${REQUIRE_BACKEND}'"; then
+        echo "The kernel never handed the console to '${REQUIRE_BACKEND}'."
+        echo "This run tested the backend the kernel booted on, not the one that was built."
+        exit 1
+    fi
+    echo "The console was handed to '${REQUIRE_BACKEND}', as expected."
+fi
+
+# A normal guest completion does not imply that every test passed. Validate the
+# TAP stream so local `make qemu-test` and CI share the same pass/fail semantics.
+if ! "${SCRIPT_DIR}/tapview" < "${BUILD_DIR}/test.log"; then
+    echo "Test run completed, but TAP reported failures"
+    exit 1
+fi
+
+echo "Test run completed successfully"
+exit 0

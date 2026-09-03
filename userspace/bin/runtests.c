@@ -16,11 +16,14 @@
 #include <syslog.h>
 #include <unistd.h>
 
-#define SHUTDOWN_PORT 0x604
+/// Debug exit port for QEMU isa-debug-exit device (default iobase=0x501)
+/// Exit code encoding: host_exit = (guest_value << 1) | 1
+#define DEBUG_EXIT_PORT 0x501
 /// Second serial port for QEMU.
 #define SERIAL_COM2   0x02F8
 
 static char *all_tests[] = {
+    "t_aab_pipe",
     "t_abort",
     "t_alarm",
     // "t_big_write",
@@ -28,23 +31,39 @@ static char *all_tests[] = {
     "t_creat",
     "t_dup",
     "t_environ",
-    "t_exit",
     "t_exec",
+    "t_execve_bounds",
+    "t_execve_bigargv",
+    "t_userfault",
+    "t_path_bounds",
+    "t_execve_fail",
+    "t_elf_short",
+    "t_exit",
+    "t_fflush",
+    "t_file_blocks",
+    "t_fhs",
+    "t_font",
     "t_fork",
+    "t_getcwd",
     "t_gid",
-    "t_grp",
     "t_groups",
+    "t_grp",
     "t_hashmap",
     "t_itimer",
     "t_kill",
     "t_list",
     "t_mem",
     "t_mkdir",
+    // Skipped on purpose: filling the image to make the allocation fail takes
+    // about two minutes of guest time, too much for every CI run. Run it by
+    // hand when touching the ext2 allocation paths (#264).
+    // "t_mkdir_nospace",
     "t_msgget",
     "t_ndtree",
-    // "t_periodic1",
-    // "t_periodic2",
-    // "t_periodic3",
+    "t_periodic1",
+    "t_procfs_read",
+    "t_periodic2",
+    "t_periodic3",
     "t_pipe_blocking",
     "t_pipe_non_blocking",
     "t_pwd",
@@ -59,11 +78,14 @@ static char *all_tests[] = {
     "t_siginfo",
     "t_sigmask",
     "t_sigusr",
+    "t_shebang",
     "t_sleep",
     "t_spwd",
     "t_stopcont",
+    "t_syscall_ni",
     "t_syslog",
-    // "t_time",
+    "t_time",
+    "t_wifsignaled",
     "t_write_read",
 };
 
@@ -78,12 +100,12 @@ static int test_err_fd;
 
 static int init;
 
-#define append(...)                                                                                                    \
-    do {                                                                                                               \
-        bufpos += sprintf(bufpos, __VA_ARGS__);                                                                        \
-        if (bufpos >= buf + sizeof(buf)) {                                                                             \
-            return -1;                                                                                                 \
-        }                                                                                                              \
+#define append(...)                             \
+    do {                                        \
+        bufpos += sprintf(bufpos, __VA_ARGS__); \
+        if (bufpos >= buf + sizeof(buf)) {      \
+            return -1;                          \
+        }                                       \
     } while (0);
 
 static int test_out_flush(void)
@@ -187,7 +209,7 @@ static void run_test(int n, char *test_cmd_line)
         test_ok(n, success, NULL);
     } else {
         if (WIFSIGNALED(status)) {
-            test_ok(n, success, "Signal: %d", WSTOPSIG(status));
+            test_ok(n, success, "Signal: %d", WTERMSIG(status));
         } else {
             test_ok(n, success, "Exit: %d", WEXITSTATUS(status));
         }
@@ -218,7 +240,8 @@ int runtests_main(int argc, char **argv)
         testsc = argc - 1;
     }
 
-    test_out("1..%d", testsc);
+    append("1..%d", testsc);
+    test_out_flush();
 
     char *test_argv[32];
     for (int i = 0; i < testsc; i++) {
@@ -228,7 +251,8 @@ int runtests_main(int argc, char **argv)
 
     // We are running as init
     if (init) {
-        outports(SHUTDOWN_PORT, 0x2000);
+        // Signal success via isa-debug-exit (guest write 0x10 → host exit 33)
+        outports(DEBUG_EXIT_PORT, 0x10);
     }
 
     return 0;

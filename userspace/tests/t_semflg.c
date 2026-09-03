@@ -17,6 +17,7 @@
 #include <sys/ipc.h>
 #include <sys/sem.h>
 #include <sys/stat.h>
+#include <syslog.h>
 #include <unistd.h>
 
 int main(int argc, char *argv[])
@@ -30,29 +31,29 @@ int main(int argc, char *argv[])
     // Create a semaphore set with one semaphore.
     semid = semget(IPC_PRIVATE, 1, IPC_CREAT | IPC_EXCL | S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
     if (semid < 0) {
-        perror("Failed to create semaphore set");
+        syslog(LOG_ERR, "[t_semflg] Failed to create semaphore set: %s", strerror(errno));
         return EXIT_FAILURE;
     }
-    printf("[parent] Created semaphore set (semid: %ld)\n", semid);
+    syslog(LOG_INFO, "[t_semflg] [parent] Created semaphore set (semid: %ld)\n", semid);
 
     // ========================================================================
     // Set the value of the semaphore to 1.
     arg.val = 1;
     ret     = semctl(semid, 0, SETVAL, &arg);
     if (ret < 0) {
-        perror("Failed to set value of semaphore");
+        syslog(LOG_ERR, "[t_semflg] Failed to set value of semaphore: %s", strerror(errno));
         return EXIT_FAILURE;
     }
-    printf("[parent] Set semaphore value to 1 (semid: %ld)\n", semid);
+    syslog(LOG_INFO, "[t_semflg] [parent] Set semaphore value to 1 (semid: %ld)\n", semid);
 
     // ========================================================================
     // Get and verify the semaphore value.
     ret = semctl(semid, 0, GETVAL, NULL);
     if (ret < 0) {
-        perror("Failed to get value of semaphore");
+        syslog(LOG_ERR, "[t_semflg] Failed to get value of semaphore: %s", strerror(errno));
         return EXIT_FAILURE;
     }
-    printf("[parent] Semaphore value is %ld (expected: 1)\n", ret);
+    syslog(LOG_INFO, "[t_semflg] [parent] Semaphore value is %ld (expected: 1)\n", ret);
 
     // ========================================================================
     // Fork a child process to manipulate the semaphore.
@@ -69,19 +70,19 @@ int main(int argc, char *argv[])
 
         // Perform the increment operation on the semaphore.
         if (semop(semid, &op_child, 1) < 0) {
-            perror("[child] Failed to perform semaphore operation");
+            syslog(LOG_ERR, "[t_semflg] [child] Failed to perform semaphore operation: %s", strerror(errno));
             return EXIT_FAILURE;
         }
-        printf("[child] Successfully incremented semaphore (semid: %ld)\n", semid);
+        syslog(LOG_INFO, "[t_semflg] [child] Successfully incremented semaphore (semid: %ld)\n", semid);
 
         // Check the updated value of the semaphore.
         ret = semctl(semid, 0, GETVAL, NULL);
         if (ret < 0) {
-            perror("[child] Failed to get value of semaphore");
+            syslog(LOG_ERR, "[t_semflg] [child] Failed to get value of semaphore: %s", strerror(errno));
             return EXIT_FAILURE;
         }
-        printf("[child] Semaphore value is %ld (expected: 2)\n", ret);
-        printf("[child] Exiting now.\n");
+        syslog(LOG_INFO, "[t_semflg] [child] Semaphore value is %ld (expected: 2)\n", ret);
+        syslog(LOG_INFO, "[t_semflg] [child] Exiting now.\n");
         return EXIT_SUCCESS;
     }
 
@@ -93,28 +94,28 @@ int main(int argc, char *argv[])
     // ========================================================================
     // Perform the decrement operation on the semaphore.
     if (semop(semid, op, 1) < 0) {
-        perror("[parent] Failed to perform semaphore operation");
+        syslog(LOG_ERR, "[t_semflg] [parent] Failed to perform semaphore operation: %s", strerror(errno));
         return EXIT_FAILURE;
     }
-    printf("[parent] Successfully performed semaphore operations (semid: %ld)\n", semid);
+    syslog(LOG_INFO, "[t_semflg] [parent] Successfully performed semaphore operations (semid: %ld)\n", semid);
 
     // ========================================================================
     // Get and verify the final value of the semaphore.
     ret = semctl(semid, 0, GETVAL, NULL);
     if (ret < 0) {
-        perror("[parent] Failed to get value of semaphore");
+        syslog(LOG_ERR, "[t_semflg] [parent] Failed to get value of semaphore: %s", strerror(errno));
         return EXIT_FAILURE;
     }
-    printf("[parent] Semaphore value is %ld (expected: 0)\n", ret);
+    syslog(LOG_INFO, "[t_semflg] [parent] Semaphore value is %ld (expected: 0)\n", ret);
 
     // ========================================================================
     // Remove the semaphore set.
     ret = semctl(semid, 0, IPC_RMID, 0);
     if (ret < 0) {
-        perror("[parent] Failed to remove semaphore set");
+        syslog(LOG_ERR, "[t_semflg] [parent] Failed to remove semaphore set: %s", strerror(errno));
         return EXIT_FAILURE;
     }
-    printf("[parent] Successfully removed semaphore set (semid: %ld)\n", semid);
+    syslog(LOG_INFO, "[t_semflg] [parent] Successfully removed semaphore set (semid: %ld)\n", semid);
 
     return EXIT_SUCCESS;
 }

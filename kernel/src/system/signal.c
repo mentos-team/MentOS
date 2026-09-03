@@ -13,6 +13,7 @@
 
 #include "assert.h"
 #include "errno.h"
+#include "hardware/timer.h"
 #include "klib/irqflags.h"
 #include "klib/stack_helper.h"
 #include "process/process.h"
@@ -25,9 +26,6 @@
 
 /// SLAB caches for signal bits.
 static kmem_cache_t *sigqueue_cachep;
-
-/// Contains all stopped process waiting for a continue signal
-static wait_queue_head_t stopped_queue;
 
 /// @brief The list of signal names.
 static const char *sys_siglist[] = {
@@ -198,6 +196,28 @@ static int __send_signal(int sig, siginfo_t *info, struct task_struct *t)
     pr_debug(
         "Added pending signal (%2d:%s) to task (%2d:%s), pending `%d, %d`.\n", sig, strsignal(sig), t->pid, t->name,
         t->pending.signal.sig[0], t->pending.signal.sig[1]);
+
+    // If the task is in an interruptible sleep, wake it so the signal can be
+    // processed at the next return-to-user boundary.
+    if ((t->state == TASK_INTERRUPTIBLE) && (t->waiting_on != NULL)) {
+        // If task is sleeping in nanosleep, cancel its timer before waking.
+        if (t->sleep_timer != NULL) {
+            cancel_sleep_timer(t);
+        }
+
+        if (!wake_up_process_on_queue(t->waiting_on, t)) {
+            wake_up_process(t);
+        }
+    }
+
+    // SIGKILL cannot be caught or ignored, so stopped tasks must be woken
+    // to process it. Note that SIGCONT already wakes stopped tasks via
+    // handle_stop_signal() which is called before __send_signal().
+    if ((sig == SIGKILL) && (t->state == TASK_STOPPED)) {
+        pr_debug("SIGKILL: waking stopped process %d (%s) so it can be killed\n", t->pid, t->name);
+        t->state = TASK_RUNNING;
+    }
+
     __unlock_task_sighand(t);
     return 0;
 }
@@ -428,37 +448,6 @@ static void __rm_from_queue(sigset_t *mask, sigpending_t *q)
     }
 }
 
-/// @brief Wakes up a task that is waiting for a signal.
-/// @param entry the entry to wake up.
-/// @param mode the mode to set.
-/// @param sync the sync flag.
-/// @return 1 on success, 0 on failure.
-int stop_wake_function(wait_queue_entry_t *entry, unsigned mode, int sync)
-{
-    // Validate the input.
-    if (!entry) {
-        pr_err("Variable entry is NULL.\n");
-        return 0;
-    }
-    if (!entry->task) {
-        pr_err("Variable entry->task is NULL.\n");
-        return 0;
-    }
-    // Only wake up tasks in TASK_STOPPED state.
-    if (entry->task->state == TASK_STOPPED) {
-        // Set the task state to the specified mode.
-        entry->task->state = mode;
-
-        // Optionally handle sync-specific operations here if needed.
-        // For now, sync is unused.
-
-        return 1;
-    }
-
-    // Task is not in a wakeable state.
-    return 0;
-}
-
 /// @brief We do not consider group stopping because for now we don't have thread groups.
 /// @param current the current process.
 /// @param f the stack frame.
@@ -474,13 +463,11 @@ static void __do_signal_stop(struct task_struct *current, struct pt_regs *f, int
         }
     }
 
-    // The state is now TASK_UNINTERRUPTABLE
-    wait_queue_entry_t *entry = sleep_on(&stopped_queue);
-    entry->task->state        = TASK_STOPPED;
-    entry->task->exit_code    = signr;
-    entry->func               = stop_wake_function;
+    // Mark task as stopped (stays on runqueue, scheduler will skip it).
+    current->state     = TASK_STOPPED;
+    current->exit_code = signr;
 
-    // Call the scheduler.
+    // Call the scheduler to pick next runnable task.
     scheduler_run(f);
 }
 
@@ -585,16 +572,16 @@ int do_signal(struct pt_regs *f)
 
                 continue;
             case SIGQUIT:
-                do_exit(GET_EXIT_STATUS(1));
+                do_exit(GET_EXIT_STATUS(131) | signr);
                 continue;
             case SIGILL:
-                do_exit(GET_EXIT_STATUS(132));
+                do_exit(GET_EXIT_STATUS(132) | signr);
                 continue;
             case SIGTRAP:
-                do_exit(GET_EXIT_STATUS(133));
+                do_exit(GET_EXIT_STATUS(133) | signr);
                 continue;
             case SIGABRT:
-                do_exit(GET_EXIT_STATUS(134));
+                do_exit(GET_EXIT_STATUS(134) | signr);
                 continue;
             case SIGFPE:
                 do_exit(GET_EXIT_STATUS(136) | signr);
@@ -640,8 +627,6 @@ int signals_init(void)
         pr_emerg("Failed to allocate cache for signals.\n");
         return 0;
     }
-    // Initialize wait queue.
-    wait_queue_head_init(&stopped_queue);
     return 1;
 }
 
@@ -679,24 +664,11 @@ void handle_stop_signal(int sig, siginfo_t *info, struct task_struct *p)
 
         __rm_from_queue(&mask, &p->pending);
 
-        list_for_each_safe_decl(it, store, &stopped_queue.task_list)
-        {
-            wait_queue_entry_t *entry = list_entry(it, wait_queue_entry_t, task_list);
-
-            // Select only the waiting entry for the timer task pid.
-            if (entry->task->pid == p->pid) {
-                // Executed entry's wakeup test function
-                if (entry->func(entry, TASK_RUNNING, 0)) {
-                    // Removes entry from list and memory
-                    remove_wait_queue(&stopped_queue, entry);
-                    // Free its memory.
-                    wait_queue_entry_dealloc(entry);
-                    pr_debug("Restored process (%d) from stop.\n", p->pid);
-                } else {
-                    pr_err("Failed to restore process (%d) from stop.\n", p->pid);
-                }
-                break;
-            }
+        // If process is stopped, transition it back to running.
+        // Stopped tasks stay on runqueue but scheduler skips them.
+        if (p->state == TASK_STOPPED) {
+            pr_debug("SIGCONT: resuming stopped process %d\n", p->pid);
+            p->state = TASK_RUNNING;
         }
     }
 }
@@ -764,7 +736,9 @@ int sys_kill(pid_t pid, int sig)
     info.si_addr            = NULL;
     info.si_status          = 0;
     info.si_band            = 0;
-    return __send_sig_info(sig, &info, process);
+    int ret                 = __send_sig_info(sig, &info, process);
+
+    return ret;
 }
 
 sighandler_t sys_signal(int signum, sighandler_t handler, uint32_t sigreturn_addr)

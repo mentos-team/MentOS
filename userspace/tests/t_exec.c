@@ -1,12 +1,15 @@
 /// @file t_exec.c
-/// @brief
+/// @brief Test program for the exec system call.
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <strerror.h>
 #include <string.h>
 #include <sys/wait.h>
+#include <syslog.h>
 #include <unistd.h>
 
 int main(int argc, char *argv[])
@@ -19,7 +22,7 @@ int main(int argc, char *argv[])
 
     if (pid < 0) {
         // Error in forking
-        perror("fork");
+        syslog(LOG_ERR, "[t_exec] fork: %s", strerror(errno));
         return EXIT_FAILURE;
     }
 
@@ -31,12 +34,12 @@ int main(int argc, char *argv[])
         execl("/bin/echo", "echo", "Exec test successful", NULL);
 
         // If exec fails, print an error and exit
-        perror("execl");
+        syslog(LOG_ERR, "[t_exec] execl: %s", strerror(errno));
         exit(EXIT_FAILURE);
     } else {
         // Parent process: Wait for the child process to complete
         if (waitpid(pid, &status, 0) == -1) {
-            perror("waitpid");
+            syslog(LOG_ERR, "[t_exec] waitpid: %s", strerror(errno));
             return EXIT_FAILURE;
         }
 

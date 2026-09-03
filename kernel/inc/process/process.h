@@ -8,12 +8,15 @@
 #include "bits/termios-struct.h"
 #include "devices/fpu.h"
 #include "drivers/keyboard/keyboard.h"
+#include "limits.h"
 #include "mem/paging.h"
 #include "stdbool.h"
 #include "system/signal.h"
 
 /// The maximum length of a name for a task_struct.
-#define TASK_NAME_MAX_LENGTH 100
+/// NAME_MAX is the same bound sys_execve already applies to the argv[0] copy
+/// buffer, so a name that survives execve always fits this field.
+#define TASK_NAME_MAX_LENGTH NAME_MAX
 
 /// The default dimension of the stack of a process (1 MByte).
 #define DEFAULT_STACK_SIZE (1 * M)
@@ -87,9 +90,9 @@ typedef struct task_struct {
     /// The Process Group Id of the process
     pid_t pgid;
     /// The Group ID (GID) of the process
-    pid_t rgid;
+    gid_t rgid;
     /// The effective Group ID (GID) of the process
-    pid_t gid;
+    gid_t gid;
     /// The User ID (UID) of the user owning the process.
     uid_t ruid;
     /// The effective User ID (UID) of the process.
@@ -139,6 +142,8 @@ typedef struct task_struct {
 
     /// Timer for alarm syscall.
     struct timer_list *real_timer;
+    /// Timer for nanosleep syscall (cancelled on signal delivery).
+    struct timer_list *sleep_timer;
 
     /// Next value for the real timer (ITIMER_REAL).
     unsigned long it_real_incr;
@@ -157,6 +162,9 @@ typedef struct task_struct {
     termios_t termios;
     /// Buffer for managing inputs from keyboard.
     rb_keybuffer_t keyboard_rb;
+
+    /// Wait queue this task is currently sleeping on (NULL if not sleeping).
+    struct wait_queue_head *waiting_on;
 
     //==== Future work =========================================================
     // - task's attributes:

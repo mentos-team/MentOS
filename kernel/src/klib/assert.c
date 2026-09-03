@@ -16,10 +16,10 @@
 void __assert_fail(const char *assertion, const char *file, const char *function, unsigned int line)
 {
     pr_emerg(
-        "\n=== ASSERTION FAILED ===\n"
+        "=== ASSERTION FAILED ===\n"
         "Assertion: %s\n"
         "Location : %s:%d\n"
-        "Function : %s\n\n",
+        "Function : %s\n",
         assertion, file, line, (function ? function : "Unknown function"));
     kernel_panic("Assertion failed.");
 }

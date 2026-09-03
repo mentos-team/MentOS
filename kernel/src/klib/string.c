@@ -221,35 +221,45 @@ char *strpbrk(const char *string, const char *control)
 
 int tokenize(const char *string, const char *separators, size_t *offset, char *buffer, ssize_t buflen)
 {
-    // If we reached the end of the parsed string, stop.
-    if ((*offset >= buflen) || (string[*offset] == 0)) {
+    // We need room for at least one character and the terminator.
+    if ((buffer == NULL) || (buflen <= 1)) {
+        return -1;
+    }
+    // If we reached the end of the parsed string, stop. The buffer length
+    // bounds the token only: using it on the offset would stop the parse in
+    // the middle of a long string and silently drop its tail.
+    if (string[*offset] == 0) {
         return 0;
     }
     // Skip any leading (multiple) separators.
-    while (string[*offset] != 0 && strchr(separators, string[*offset])) {
+    while ((string[*offset] != 0) && strchr(separators, string[*offset])) {
         ++(*offset);
     }
     // If we reach the end after skipping, return 0.
     if (string[*offset] == 0) {
         return 0;
     }
-    // Keep copying character until we either reach 1) the end of the buffer, 2) a
-    // separator, or 3) the end of the string we are parsing.
-    do {
-        // Check if the character is a separator.
-        if (strchr(separators, string[*offset])) {
-            // Skip the character.
-            ++(*offset);
-            // Close the buffer.
+    // Room left in the buffer, keeping one byte for the terminator.
+    ssize_t available = buflen - 1;
+    // Keep copying characters until we either reach a separator or the end of
+    // the string we are parsing.
+    while ((string[*offset] != 0) && (strchr(separators, string[*offset]) == NULL)) {
+        // The token does not fit the buffer: report it instead of truncating,
+        // since a truncated token names something else than what was asked.
+        if (available == 0) {
             *buffer = '\0';
-            return 1;
+            return -1;
         }
         // Save the character.
         *buffer = string[*offset];
-        // Advance the offset, decrese the available size in the buffer, and advance
-        // the buffer.
-        ++(*offset), --buflen, ++buffer;
-    } while ((buflen > 0) && (string[*offset] != 0));
+        // Advance the offset, decrease the available size in the buffer, and
+        // advance the buffer.
+        ++(*offset), --available, ++buffer;
+    }
+    // Consume the separator that closed the token, if any.
+    if (string[*offset] != 0) {
+        ++(*offset);
+    }
     // Close the buffer.
     *buffer = '\0';
     return 1;
@@ -260,9 +270,7 @@ void *memmove(void *dst, const void *src, size_t n)
     void *ret = dst;
 
     if (dst <= src || (char *)dst >= ((char *)src + n)) {
-        /* Non-overlapping buffers; copy from lower addresses to higher
-         * addresses.
-         */
+        // Non-overlapping buffers; copy from lower addresses to higher addresses.
         while (n--) {
             *(char *)dst = *(char *)src;
             dst          = (char *)dst + 1;
@@ -387,29 +395,23 @@ char *strtok_r(char *str, const char *delim, char **saveptr)
         map[*ctrl >> 3] |= (char)(1 << (*ctrl & 7));
     } while (*ctrl++);
 
-    /* Initialize s. If str is NULL, set s to the saved
-     * pointer (i.e., continue breaking tokens out of the str
-     * from the last strtok call).
-     */
+    // Initialize s. If str is NULL, set s to the saved pointer (i.e., continue breaking tokens out of the str from the
+    // last strtok call).
     if (str) {
         s = str;
     } else {
         s = *saveptr;
     }
 
-    /* Find beginning of token (skip over leading delimiters). Note that
-     * there is no token iff this loop sets s to point to the terminal
-     * null (*s == '\0').
-     */
+    // Find beginning of token (skip over leading delimiters). Note that there is no token iff this loop sets s to point
+    // to the terminal null (*s == '\0').
     while ((map[*s >> 3] & (1 << (*s & 7))) && *s) {
         s++;
     }
 
     str = s;
 
-    /* Find the end of the token. If it is not the end of the str,
-     * put a null there.
-     */
+    // Find the end of the token. If it is not the end of the str, put a null there.
     for (; *s; s++) {
         if (map[*s >> 3] & (1 << (*s & 7))) {
             *s++ = '\0';
@@ -427,19 +429,6 @@ char *strtok_r(char *str, const char *delim, char **saveptr)
     }
     return str;
 }
-
-// Intrinsic functions.
-
-/*
- * #pragma function(memset)
- * #pragma function(memcmp)
- * #pragma function(memcpy)
- * #pragma function(strcpy)
- * #pragma function(strlen)
- * #pragma function(strcat)
- * #pragma function(strcmp)
- * #pragma function(strset)
- */
 
 void *memset(void *ptr, int value, size_t num)
 {
@@ -609,9 +598,7 @@ char *trim(char *str)
     len  = strlen(str);
     endp = str + len;
 
-    /* Move the front and back pointers to address the first non-whitespace
-     * characters from each end.
-     */
+    // Move the front and back pointers to address the first non-whitespace characters from each end.
     while (isspace((unsigned char)*frontp)) {
         ++frontp;
     }
@@ -624,10 +611,9 @@ char *trim(char *str)
     } else if (frontp != str && endp == frontp) {
         *str = '\0';
     }
-    /* Shift the string so that it starts at str so that if it's dynamically
-     * allocated, we can still free it on the returned pointer.  Note the reuse
-     * of endp to mean the front of the string buffer now.
-     */
+
+    // Shift the string so that it starts at str so that if it's dynamically allocated, we can still free it on the
+    // returned pointer. Note the reuse of endp to mean the front of the string buffer now.
     endp = str;
     if (frontp != str) {
         while (*frontp) {
@@ -646,19 +632,19 @@ char *strdup(const char *s)
     if (new == NULL) {
         return NULL;
     }
-    new[len] = '\0';
     return (char *)memcpy(new, s, len);
 }
 
 char *strndup(const char *s, size_t n)
 {
     size_t len = strnlen(s, n);
-    char *new  = kmalloc(len);
+    char *new  = kmalloc(len + 1);
     if (new == NULL) {
         return NULL;
     }
+    memcpy(new, s, len);
     new[len] = '\0';
-    return (char *)memcpy(new, s, len);
+    return new;
 }
 
 char *strsep(char **stringp, const char *delim)

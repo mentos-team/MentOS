@@ -223,17 +223,15 @@ static int __compute_size_and_order(kmem_cache_t *cachep)
         return -1;
     }
 
-    // Compute the `gfp_order` based on the total object size and page size.
-    // The `gfp_order` determines how many contiguous pages will be allocated
-    // for the slab.
-    unsigned int size = round_up(cachep->aligned_object_size, PAGE_SIZE) / PAGE_SIZE;
+    // Compute how many pages are needed for at least one object.
+    unsigned int pages_needed = round_up(cachep->aligned_object_size, PAGE_SIZE) / PAGE_SIZE;
 
     // Reset `gfp_order` to 0 before calculating.
     cachep->gfp_order = 0;
 
-    // Calculate the order by determining how many divisions by 2 the size
-    // undergoes until it becomes smaller than or equal to 1.
-    while ((size /= 2) > 0) {
+    // Use ceil(log2(pages_needed)) so the slab is always large enough.
+    // Example: pages_needed = 3 requires order 2 (4 pages), not order 1 (2 pages).
+    while ((1U << cachep->gfp_order) < pages_needed) {
         cachep->gfp_order++;
     }
 
@@ -460,7 +458,7 @@ int kmem_cache_init(void)
     list_head_init(&kmem_caches_list);
 
 #ifdef ENABLE_KMEM_TRACE
-    ENABLE_EXT2_TRACE = register_resource("kmem");
+    resource_id = register_resource("kmem");
 #endif
 
     // Create a cache to store metadata about kmem_cache_t structures.

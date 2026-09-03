@@ -1,3 +1,16 @@
+# Host compiler flags must not leak into the bare-metal cross toolchain.
+foreach(_env_var
+    ARCHFLAGS
+    CFLAGS
+    CPPFLAGS
+    CXXFLAGS
+    LDFLAGS
+    SDKROOT
+    MACOSX_DEPLOYMENT_TARGET
+)
+    set(ENV{${_env_var}} "")
+endforeach()
+
 set(CMAKE_SYSTEM_NAME Generic)
 set(CMAKE_SYSTEM_PROCESSOR i386)
 

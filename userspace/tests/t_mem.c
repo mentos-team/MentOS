@@ -6,9 +6,11 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/wait.h>
+#include <syslog.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -21,7 +23,7 @@ int main(int argc, char *argv[])
     // Allocate memory for an array of row pointers (rows x cols matrix).
     int **M = (int **)malloc(rows * sizeof(int *));
     if (M == NULL) {
-        fprintf(stderr, "Failed to allocate memory for row pointers.\n");
+        syslog(LOG_ERR, "[t_mem] Failed to allocate memory for row pointers.\n");
         return EXIT_FAILURE;
     }
 
@@ -29,7 +31,7 @@ int main(int argc, char *argv[])
     for (int i = 0; i < rows; ++i) {
         M[i] = (int *)malloc(cols * sizeof(int));
         if (M[i] == NULL) {
-            fprintf(stderr, "Failed to allocate memory for row %d.\n", i);
+            syslog(LOG_ERR, "[t_mem] Failed to allocate memory for row %d.\n", i);
 
             // Free any previously allocated memory to prevent memory leaks.
             for (int j = 0; j < i; ++j) {

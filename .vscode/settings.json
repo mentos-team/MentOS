@@ -4,5 +4,11 @@
         "*.h": "c",
         "*.tcc": "c",
         "functional": "c"
-    }
+    },
+    "editor.wordWrapColumn": 80,
+    "rewrap.wrappingColumn": 80,
+    "editor.rulers": [
+        80,
+        120
+    ],
 }

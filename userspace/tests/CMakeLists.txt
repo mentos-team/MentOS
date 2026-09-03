@@ -1,56 +1,66 @@
 # List of programs.
 set(TEST_LIST
-    t_exit.c
-    # t_time.c  # Temporarily disabled
-    t_chdir.c
-    t_grp.c
-    t_pwd.c
-    t_mkdir.c
+    t_aab_pipe.c
     t_dup.c
-    t_creat.c
-    t_write_read.c
-    t_gid.c
-    t_alarm.c
-    t_periodic3.c
-    t_environ.c
-    t_itimer.c
-    t_fork.c
-    t_semget.c
-    t_exec.c
-    t_sleep.c
-    t_periodic2.c
-    t_pipe_blocking.c
-    t_pipe_non_blocking.c
-    t_sigfpe.c
-    t_sigmask.c
-    t_sigusr.c
-    t_shmget.c
-    t_stopcont.c
-    t_semop.c
-    t_sigaction.c
-    t_schedfb.c
-    t_siginfo.c
-    t_groups.c
-    t_semflg.c
-    t_abort.c
-    t_msgget.c
-    t_periodic1.c
-    t_kill.c
-    t_shm.c
-    t_mem.c
-    t_spwd.c
-    t_big_write.c
-    t_syslog.c
-    t_ndtree.c
-    t_list.c
     t_hashmap.c
-    t_scanf.c
+    t_procfs_read.c
+    t_list.c
+    t_msgget.c
+    t_pipe_blocking.c
+    t_syslog.c
+    t_periodic2.c
+    t_sigfpe.c
+    t_creat.c
+    t_itimer.c
+    t_schedfb.c
+    t_write_read.c
+    t_abort.c
+    t_shmget.c
+    t_exec.c
+    t_execve_bounds.c
+    t_execve_bigargv.c
+    t_userfault.c
+    t_path_bounds.c
+    t_mkdir_nospace.c
+    t_execve_fail.c
+    t_elf_short.c
+    t_gid.c
+    t_grp.c
+    t_stopcont.c
+    t_syscall_ni.c
+    t_ndtree.c
+    t_pwd.c
     t_fflush.c
+    t_file_blocks.c
+    t_font.c
+    t_sigusr.c
+    t_kill.c
+    t_periodic1.c
+    t_chdir.c
     t_fhs.c
-    t_ext2_audit_write_boundary.c
-    t_ext2_audit_overflow.c
-    t_ext2_audit_read_failure.c
-    t_ext2_audit_mount_cache.c
+    t_spwd.c
+    t_shm.c
+    t_semget.c
+    t_mkdir.c
+    t_alarm.c
+    t_exit.c
+    t_environ.c
+    t_siginfo.c
+    t_pipe_non_blocking.c
+    t_sleep.c
+    t_mem.c
+    t_fork.c
+    t_getcwd.c
+    t_semflg.c
+    t_shebang.c
+    t_time.c
+    t_big_write.c
+    t_sigmask.c
+    t_sigaction.c
+    t_periodic3.c
+    t_semop.c
+    t_groups.c
+    t_wifsignaled.c
 )
 
 # Set the directory where the compiled binaries will be placed.
@@ -90,12 +100,19 @@ foreach(FILE_NAME ${TEST_LIST})
     target_link_libraries(${TARGET_NAME} libc)
     # We need to specify the name of the entry function.
     target_compile_options(${TARGET_NAME} PRIVATE -u_start)
+    # Add the define stating which scheduler is currently active.
+    target_compile_definitions(${TARGET_NAME} PRIVATE ${SCHEDULER_TYPE})
     # Add the linking properties.
     set_target_properties(${TARGET_NAME} PROPERTIES LINK_FLAGS "-Wl,-Ttext=${TEXT_ADDR},-e_start,-melf_i386")
     # Set the output directory.
     set_target_properties(${TARGET_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${MENTOS_TESTS_DIR}")
     # Set the output name.
     set_target_properties(${TARGET_NAME} PROPERTIES OUTPUT_NAME "${EXECUTABLE_NAME}")
+    # Make sure the tests folder exists.
+    add_custom_command(
+        TARGET ${TARGET_NAME} PRE_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${MENTOS_TESTS_DIR}
+    )
 
     # Append the program name to the list of all the executables.
     list(APPEND ALL_EXECUTABLES ${TARGET_NAME})

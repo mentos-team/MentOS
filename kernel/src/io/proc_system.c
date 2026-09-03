@@ -5,8 +5,10 @@
 
 #include "errno.h"
 #include "fs/procfs.h"
+#include "fs/vfs.h"
 #include "hardware/timer.h"
 #include "io/debug.h"
+#include "klib/perf.h"
 #include "process/process.h"
 #include "stdio.h"
 #include "string.h"
@@ -23,6 +25,8 @@ static ssize_t procs_do_cpuinfo(char *buffer, size_t bufsize);
 static ssize_t procs_do_meminfo(char *buffer, size_t bufsize);
 
 static ssize_t procs_do_stat(char *buffer, size_t bufsize);
+
+static ssize_t procs_do_perf(char *buffer, size_t bufsize);
 
 /// @brief Read function for the proc system.
 /// @param file The file.
@@ -58,11 +62,13 @@ static ssize_t __procs_read(vfs_file_t *file, char *buf, off_t offset, size_t nb
         ret = procs_do_meminfo(buffer, BUFSIZ);
     } else if (strcmp(entry->name, "stat") == 0) {
         ret = procs_do_stat(buffer, BUFSIZ);
+    } else if (strcmp(entry->name, "perf") == 0) {
+        ret = procs_do_perf(buffer, BUFSIZ);
     }
     // Perform read.
     ssize_t it = 0;
     if (ret >= 0) {
-        size_t name_len = strlen(buffer);
+        size_t name_len = strnlen(buffer, BUFSIZ);
         size_t read_pos = offset;
         if (read_pos < name_len) {
             while ((it < nbyte) && (read_pos < name_len)) {
@@ -73,6 +79,35 @@ static ssize_t __procs_read(vfs_file_t *file, char *buf, off_t offset, size_t nb
         }
     }
     return it;
+}
+
+/// @brief Write function for the proc system: resets the perf counters.
+/// @param file The file.
+/// @param buf Ignored; anything written means "reset".
+/// @param offset Ignored.
+/// @param nbyte How much was written, which is what is reported as consumed.
+/// @return The number of bytes taken, or a negative error.
+///
+/// Only /proc/perf accepts a write, and only to start a new measurement window:
+/// write, run the workload, read. Everything else here is read-only and says so.
+static ssize_t __procs_write(vfs_file_t *file, const void *buf, off_t offset, size_t nbyte)
+{
+    (void)buf;
+    (void)offset;
+    if (!file) {
+        pr_err("We received a NULL file pointer.\n");
+        return -EFAULT;
+    }
+    proc_dir_entry_t *entry = (proc_dir_entry_t *)file->device;
+    if (entry == NULL) {
+        pr_err("The file is not a valid proc entry.\n");
+        return -EFAULT;
+    }
+    if (strcmp(entry->name, "perf") != 0) {
+        return -EACCES;
+    }
+    perf_reset();
+    return (ssize_t)nbyte;
 }
 
 /// Filesystem general operations.
@@ -90,7 +125,7 @@ static vfs_file_operations_t procs_fs_operations = {
     .unlink_f   = NULL,
     .close_f    = NULL,
     .read_f     = __procs_read,
-    .write_f    = NULL,
+    .write_f    = __procs_write,
     .lseek_f    = NULL,
     .stat_f     = NULL,
     .ioctl_f    = NULL,
@@ -101,7 +136,7 @@ static vfs_file_operations_t procs_fs_operations = {
 int procs_module_init(void)
 {
     proc_dir_entry_t *system_entry;
-    char *entry_names[] = {"uptime", "version", "mounts", "cpuinfo", "meminfo", "stat"};
+    char *entry_names[] = {"uptime", "version", "mounts", "cpuinfo", "meminfo", "stat", "perf"};
     for (int i = 0; i < count_of(entry_names); i++) {
         char *entry_name = entry_names[i];
         if ((system_entry = proc_create_entry(entry_name, NULL)) == NULL) {
@@ -136,11 +171,73 @@ static ssize_t procs_do_version(char *buffer, size_t bufsize)
     return sprintf(buffer, "%s version %s (site: %s) (email: %s)", OS_NAME, OS_VERSION, OS_SITEURL, OS_REF_EMAIL);
 }
 
+/// @brief Context used when generating `/proc/mounts`.
+typedef struct {
+    char *buf;
+    size_t bufsize;
+    size_t pos;
+} procs_mounts_ctx_t;
+
+/// @brief Callback used to build a /proc/mounts line for each mount.
+/// @param sb   The superblock representing a mounted filesystem.
+/// @param ctx  A `procs_mounts_ctx_t` pointer.
+/// @return 0 to continue, non-zero to stop.
+static int procs_do_mounts_cb(super_block_t *sb, void *ctx)
+{
+    if (!sb || !ctx) {
+        return 1;
+    }
+
+    procs_mounts_ctx_t *mounts_ctx = (procs_mounts_ctx_t *)ctx;
+
+    if (mounts_ctx->pos >= (mounts_ctx->bufsize - 1)) {
+        return 1;
+    }
+
+    const char *source = (sb->source[0] != '\0') ? sb->source : sb->name;
+    const char *mountpoint = sb->path;
+    const char *fstype = (sb->type && sb->type->name) ? sb->type->name : "unknown";
+    const char *options = "rw";
+
+    int written = snprintf(
+        mounts_ctx->buf + mounts_ctx->pos,
+        mounts_ctx->bufsize - mounts_ctx->pos,
+        "%s %s %s %s 0 0\n",
+        source,
+        mountpoint,
+        fstype,
+        options);
+    if (written < 0) {
+        return 1;
+    }
+
+    if ((size_t)written >= mounts_ctx->bufsize - mounts_ctx->pos) {
+        // Buffer filled, stop writing.
+        mounts_ctx->pos = mounts_ctx->bufsize - 1;
+        mounts_ctx->buf[mounts_ctx->pos] = '\0';
+        return 1;
+    }
+
+    mounts_ctx->pos += (size_t)written;
+    return 0;
+}
+
 /// @brief Write the list of mount points inside the buffer.
 /// @param buffer the buffer.
 /// @param bufsize the buffer size.
 /// @return the amount we wrote.
-static ssize_t procs_do_mounts(char *buffer, size_t bufsize) { return 0; }
+static ssize_t procs_do_mounts(char *buffer, size_t bufsize)
+{
+    if (!buffer || bufsize == 0) {
+        return 0;
+    }
+
+    procs_mounts_ctx_t ctx = {.buf = buffer, .bufsize = bufsize, .pos = 0};
+
+    vfs_superblock_for_each(procs_do_mounts_cb, &ctx);
+    buffer[ctx.pos] = '\0';
+    return ctx.pos;
+}
 
 /// @brief Write the cpu information inside the buffer.
 /// @param buffer the buffer.
@@ -152,6 +249,21 @@ static ssize_t procs_do_cpuinfo(char *buffer, size_t bufsize) { return 0; }
 /// @param buffer the buffer.
 /// @param bufsize the buffer size.
 /// @return the amount we wrote.
+/// @brief Reports the perf counters.
+/// @param buffer Where the acknowledgement goes.
+/// @param bufsize Its size.
+/// @return How much was written into it.
+///
+/// The counters themselves go to the kernel log, not into this buffer: there can
+/// be any number of them, and a procfs read here is bounded by one BUFSIZ. What
+/// comes back is only confirmation, so that a script can tell a report was taken.
+/// Writing to this file starts a new window; see __procs_write().
+static ssize_t procs_do_perf(char *buffer, size_t bufsize)
+{
+    perf_report("proc");
+    return snprintf(buffer, bufsize, "Counters reported to the kernel log.\n");
+}
+
 static ssize_t procs_do_meminfo(char *buffer, size_t bufsize)
 {
     double total_space            = get_zone_total_space(GFP_KERNEL) + get_zone_total_space(GFP_HIGHUSER);

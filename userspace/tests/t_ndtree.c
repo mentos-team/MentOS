@@ -3,10 +3,11 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "ndtree.h"
-
+#include <errno.h>
+#include <ndtree.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <syslog.h>
 #include <unistd.h>
 
 // Custom allocator for tree nodes
@@ -26,7 +27,7 @@ void custom_free_node(ndtree_node_t *node) { free(node); }
 int compare_node(void *lhs, void *rhs) { return (*(int *)lhs) - (*(int *)rhs); }
 
 // Function to print node values (assuming integer values for simplicity)
-void print_node(ndtree_node_t *node) { printf("Node value: %d\n", *(int *)(node->value)); }
+void print_node(ndtree_node_t *node) { syslog(LOG_INFO, "[t_ndtree] Node value: %d\n", *(int *)(node->value)); }
 
 int main(void)
 {
@@ -38,7 +39,7 @@ int main(void)
     int root_value      = 1;
     ndtree_node_t *root = ndtree_create_root(&tree, &root_value);
     if (!root) {
-        fprintf(stderr, "Error: Failed to create root node\n");
+        syslog(LOG_ERR, "[t_ndtree] Error: Failed to create root node\n");
         return 1;
     }
 
@@ -50,7 +51,7 @@ int main(void)
     ndtree_node_t *child2 = ndtree_create_child_of_node(&tree, root, &child2_value);
     ndtree_node_t *child3 = ndtree_create_child_of_node(&tree, root, &child3_value);
     if (!child1 || !child2 || !child3) {
-        fprintf(stderr, "Error: Failed to create one or more child nodes for root\n");
+        syslog(LOG_ERR, "[t_ndtree] Error: Failed to create one or more child nodes for root\n");
         return 1;
     }
 
@@ -59,7 +60,7 @@ int main(void)
     int child1_2_value = 6;
     if (!ndtree_create_child_of_node(&tree, child1, &child1_1_value) ||
         !ndtree_create_child_of_node(&tree, child1, &child1_2_value)) {
-        fprintf(stderr, "Error: Failed to create one or more child nodes for child1\n");
+        syslog(LOG_ERR, "[t_ndtree] Error: Failed to create one or more child nodes for child1\n");
         return 1;
     }
 
@@ -68,7 +69,7 @@ int main(void)
     int child2_2_value = 8;
     if (!ndtree_create_child_of_node(&tree, child2, &child2_1_value) ||
         !ndtree_create_child_of_node(&tree, child2, &child2_2_value)) {
-        fprintf(stderr, "Error: Failed to create one or more child nodes for child2\n");
+        syslog(LOG_ERR, "[t_ndtree] Error: Failed to create one or more child nodes for child2\n");
         return 1;
     }
 
@@ -77,25 +78,25 @@ int main(void)
     int child3_2_value = 10;
     if (!ndtree_create_child_of_node(&tree, child3, &child3_1_value) ||
         !ndtree_create_child_of_node(&tree, child3, &child3_2_value)) {
-        fprintf(stderr, "Error: Failed to create one or more child nodes for child3\n");
+        syslog(LOG_ERR, "[t_ndtree] Error: Failed to create one or more child nodes for child3\n");
         return 1;
     }
 
     // Verify the number of children at each level
     if (ndtree_node_count_children(root) != 3) {
-        fprintf(stderr, "Error: Expected root to have 3 children\n");
+        syslog(LOG_ERR, "[t_ndtree] Error: Expected root to have 3 children\n");
         return 1;
     }
     if (ndtree_node_count_children(child1) != 2) {
-        fprintf(stderr, "Error: Expected child1 to have 2 children\n");
+        syslog(LOG_ERR, "[t_ndtree] Error: Expected child1 to have 2 children\n");
         return 1;
     }
     if (ndtree_node_count_children(child2) != 2) {
-        fprintf(stderr, "Error: Expected child2 to have 2 children\n");
+        syslog(LOG_ERR, "[t_ndtree] Error: Expected child2 to have 2 children\n");
         return 1;
     }
     if (ndtree_node_count_children(child3) != 2) {
-        fprintf(stderr, "Error: Expected child3 to have 2 children\n");
+        syslog(LOG_ERR, "[t_ndtree] Error: Expected child3 to have 2 children\n");
         return 1;
     }
 
@@ -105,7 +106,7 @@ int main(void)
     // Test removing a node with children and verify
     ndtree_tree_remove_node(&tree, child2, NULL);
     if (ndtree_node_count_children(root) != 2) {
-        fprintf(stderr, "Error: Expected root to have 2 children after removing child2\n");
+        syslog(LOG_ERR, "[t_ndtree] Error: Expected root to have 2 children after removing child2\n");
         return 1;
     }
 

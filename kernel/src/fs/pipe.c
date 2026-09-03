@@ -496,17 +496,13 @@ int pipe_read_wake_function(wait_queue_entry_t *wait, unsigned mode, int sync)
 
     // Validate that data is available in the pipe for reading.
     if ((pipe_info_has_data(pipe_info) > 0) || (pipe_info->writers == 0)) {
-        // Check if the task is in an appropriate sleep state to be woken up.
-        if ((wait->task->state == TASK_UNINTERRUPTIBLE) || (wait->task->state == TASK_STOPPED)) {
-            // Set the task's state to the specified wake-up mode.
-            wait->task->state = mode;
-
-            // Signal that the task has been woken up.
+        // Check if the task is in uninterruptible sleep state (the state it
+        // entered when starting the pipe read operation).
+        if (wait->task->state == TASK_UNINTERRUPTIBLE) {
             pr_debug("Data available or no more writers, waking up reader %d.\n", wait->task->pid);
             return 1;
         }
         pr_debug("Reader %d not in the correct state for wake-up.\n", wait->task->pid);
-
     } else {
         pr_debug("No data available, reader %d should continue waiting.\n", wait->task->pid);
     }
@@ -533,17 +529,13 @@ int pipe_write_wake_function(wait_queue_entry_t *wait, unsigned mode, int sync)
 
     // Check if there is available space in the pipe for writing.
     if (pipe_info_has_space(pipe_info) > 0) {
-        // Only tasks in the state TASK_UNINTERRUPTIBLE or TASK_STOPPED can be woken up.
-        if ((wait->task->state == TASK_UNINTERRUPTIBLE) || (wait->task->state == TASK_STOPPED)) {
-            // Set the wake-up mode for the task.
-            wait->task->state = mode;
-
-            // Signal that the task has been woken up.
+        // Check if the task is in uninterruptible sleep state (the state it
+        // entered when starting the pipe write operation).
+        if (wait->task->state == TASK_UNINTERRUPTIBLE) {
             pr_debug("Space available, waking up writer %d.\n", wait->task->pid);
             return 1;
         }
         pr_debug("Writer %d not in the correct state for wake-up.\n", wait->task->pid);
-
     } else {
         pr_debug("No space available, writer %d should continue waiting.\n", wait->task->pid);
     }
@@ -566,15 +558,10 @@ static void pipe_wake_up_tasks(wait_queue_head_t *wait_queue, const char *debug_
     list_for_each_safe_decl(it, store, &wait_queue->task_list)
     {
         wait_queue_entry_t *wait_queue_entry = list_entry(it, wait_queue_entry_t, task_list);
+        int target_pid                     = wait_queue_entry->task ? wait_queue_entry->task->pid : -1;
 
-        // Run the wakeup test function for the waiting task.
-        if (wait_queue_entry->func(wait_queue_entry, TASK_RUNNING, 0)) {
-            // Task is ready, remove from the wait queue.
-            remove_wait_queue(wait_queue, wait_queue_entry);
-
-            // Log and free the memory associated with the wait entry.
-            pr_debug("%s: Process %d woken up.\n", debug_msg, wait_queue_entry->task->pid);
-            wait_queue_entry_dealloc(wait_queue_entry);
+        if (wake_up_wait_queue_entry(wait_queue, wait_queue_entry, TASK_RUNNING, 0)) {
+            pr_debug("%s: waking up process %d\n", debug_msg, target_pid);
         }
     }
 }
@@ -1150,14 +1137,24 @@ static inline int create_pipe_fd(pipe_inode_info_t *pipe_info, int flags, mode_t
     int fd = get_unused_fd();
     if (fd < 0) {
         pr_err("Failed to allocate file descriptor.\n");
-        // Close the file if fd allocation fails.
-        pipe_close(file);
+        // The file never entered the fd table and its end was never
+        // accounted in readers/writers: release only the file structure.
+        // pipe_info stays owned by sys_pipe.
+        vfs_dealloc_file(file);
         return -1;
     }
 
     // Register the file descriptor in the process's file descriptor table.
     task->fd_list[fd].file_struct = file;
     task->fd_list[fd].flags_mask  = file->flags;
+
+    // Account for this end as soon as it exists, so that closing it is
+    // balanced even while sys_pipe is still creating the other end.
+    if ((file->flags & O_ACCMODE) == O_WRONLY) {
+        ++pipe_info->writers;
+    } else {
+        ++pipe_info->readers;
+    }
 
     // Return the created file descriptor.
     return fd;
@@ -1245,12 +1242,14 @@ int sys_pipe(int fds[2])
         if (fd_write >= 0) {
             sys_close(fd_write);
         }
-        __pipe_inode_info_dealloc(pipe_info);
+        // If an end was created, its sys_close above dropped the last
+        // reference and pipe_close already deallocated pipe_info. Only when
+        // no end was created does sys_pipe still own pipe_info.
+        if ((fd_read < 0) && (fd_write < 0)) {
+            __pipe_inode_info_dealloc(pipe_info);
+        }
         return -1;
     }
-
-    pipe_info->readers = 1;
-    pipe_info->writers = 1;
 
     // Assign file descriptors to output array
     fds[0] = fd_read;

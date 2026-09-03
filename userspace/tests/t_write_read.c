@@ -3,6 +3,7 @@
 /// @copyright (c) 2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
+#include <errno.h>
 #include <fcntl.h>
 #include <math.h>
 #include <stdio.h>
@@ -10,6 +11,7 @@
 #include <strerror.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <syslog.h>
 #include <unistd.h>
 
 /// @brief Creates a file with the specified name and mode.
@@ -20,7 +22,7 @@ int create_file(const char *filename, mode_t mode)
 {
     int fd = creat(filename, mode);
     if (fd < 0) {
-        printf("Failed to create file %s: %s\n", filename, strerror(errno));
+        syslog(LOG_INFO, "[t_write_read] Failed to create file %s: %s\n", filename, strerror(errno));
         return EXIT_FAILURE;
     }
     close(fd);
@@ -41,20 +43,20 @@ int check_content(const char *filename, const char *content, int length)
     // Open the file for reading.
     int fd = open(filename, O_RDONLY, 0);
     if (fd < 0) {
-        printf("Failed to open file %s: %s\n", filename, strerror(errno));
+        syslog(LOG_INFO, "[t_write_read] Failed to open file %s: %s\n", filename, strerror(errno));
         return EXIT_FAILURE;
     }
 
     // Read the content from the file.
     if (read(fd, &buffer, max(min(length, 256), 0)) < 0) { // Ensure not to exceed buffer size.
-        printf("Reading from file %s failed: %s\n", filename, strerror(errno));
+        syslog(LOG_INFO, "[t_write_read] Reading from file %s failed: %s\n", filename, strerror(errno));
         close(fd);
         return EXIT_FAILURE;
     }
 
     // Compare the read content with the expected content.
     if (strcmp(buffer, content) != 0) {
-        printf("Unexpected file content `%s`, expecting `%s`.\n", buffer, content);
+        syslog(LOG_INFO, "[t_write_read] Unexpected file content `%s`, expecting `%s`.\n", buffer, content);
         close(fd);
         return EXIT_FAILURE;
     }
@@ -84,13 +86,13 @@ int write_content(const char *filename, const char *content, int length, int tru
     // Open the file with the specified flags.
     int fd = open(filename, flags, 0);
     if (fd < 0) {
-        printf("Failed to open file %s: %s\n", filename, strerror(errno));
+        syslog(LOG_INFO, "[t_write_read] Failed to open file %s: %s\n", filename, strerror(errno));
         return EXIT_FAILURE;
     }
 
     // Write the content to the file.
     if (write(fd, content, length) < 0) {
-        printf("Writing on file %s failed: %s\n", filename, strerror(errno));
+        syslog(LOG_INFO, "[t_write_read] Writing on file %s failed: %s\n", filename, strerror(errno));
         close(fd);
         return EXIT_FAILURE;
     }
@@ -115,18 +117,18 @@ int test_write_read(const char *filename)
     // Open the file for writing.
     int fd = open(filename, O_WRONLY, 0);
     if (fd < 0) {
-        printf("Failed to open file %s: %s\n", filename, strerror(errno));
+        syslog(LOG_INFO, "[t_write_read] Failed to open file %s: %s\n", filename, strerror(errno));
         return EXIT_FAILURE;
     }
 
     // Write content to the file.
     if (write(fd, "foo", 3) != 3) {
-        printf("First write to %s failed: %s\n", filename, strerror(errno));
+        syslog(LOG_INFO, "[t_write_read] First write to %s failed: %s\n", filename, strerror(errno));
         close(fd);
         return EXIT_FAILURE;
     }
     if (write(fd, "bar", 3) != 3) {
-        printf("Second write to %s failed: %s\n", filename, strerror(errno));
+        syslog(LOG_INFO, "[t_write_read] Second write to %s failed: %s\n", filename, strerror(errno));
         close(fd);
         return EXIT_FAILURE;
     }
@@ -219,7 +221,7 @@ int main(int argc, char *argv[])
     char *filename = "/home/user/t_write_read.txt";
 
     // Test write and read operations.
-    printf("Running `test_write_read`...\n");
+    syslog(LOG_INFO, "[t_write_read] Running `test_write_read`...\n");
     if (test_write_read(filename)) {
         // Clean up if there was an error.
         unlink(filename);
@@ -229,7 +231,7 @@ int main(int argc, char *argv[])
     unlink(filename);
 
     // Test truncating and overwriting content.
-    printf("Running `test_truncate`...\n");
+    syslog(LOG_INFO, "[t_write_read] Running `test_truncate`...\n");
     if (test_truncate(filename)) {
         // Clean up if there was an error.
         unlink(filename);
@@ -239,7 +241,7 @@ int main(int argc, char *argv[])
     unlink(filename);
 
     // Test appending content.
-    printf("Running `test_append`...\n");
+    syslog(LOG_INFO, "[t_write_read] Running `test_append`...\n");
     if (test_append(filename)) {
         // Clean up if there was an error.
         unlink(filename);
