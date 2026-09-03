@@ -2998,6 +2998,9 @@ static int ext2_create_inode(ext2_filesystem_t *fs, ext2_inode_t *inode, mode_t 
     // Get the inode associated with the directory entry.
     if (ext2_read_inode(fs, inode, inode_index) == -1) {
         pr_err("Failed to read the newly created inode.\n");
+        // The inode is already marked as used on disk: give it back, it owns
+        // no block yet, so a zeroed inode is enough to free it (#264).
+        ext2_free_inode(fs, inode, inode_index);
         return -1;
     }
     // Get the UID and GID.
@@ -3757,6 +3760,49 @@ static ssize_t ext2_readlink(const char *path, char *buffer, size_t bufsize)
 /// @param path The path of the new directory.
 /// @param mode The mode with which we create the directory.
 /// @return Returns a negative value on failure.
+/// @brief Clears the directory entry of an incomplete directory.
+/// @param fs the filesystem.
+/// @param path the path of the directory being created.
+/// @return 0 on success, -1 on failure.
+/// @details Used when mkdir cannot finish: the entry it added to the parent
+///          must go away before the inode is freed, otherwise the parent
+///          keeps a name pointing at a free inode (#264).
+static int __ext2_clear_direntry_for_path(ext2_filesystem_t *fs, const char *path)
+{
+    ext2_direntry_search_t search;
+    memset(&search, 0, sizeof(ext2_direntry_search_t));
+    // Locate the entry we added, so we know which block holds it.
+    if (ext2_resolve_path(fs->root, path, &search)) {
+        pr_err("Failed to locate the directory entry of `%s`.\n", path);
+        return -1;
+    }
+    ext2_inode_t parent;
+    if (ext2_read_inode(fs, &parent, search.parent_inode) == -1) {
+        pr_err("Failed to read the parent inode of `%s`.\n", path);
+        return -1;
+    }
+    // Allocate the cache.
+    uint8_t *cache = ext2_alloc_cache(fs);
+    // Read the block where the entry resides.
+    if (ext2_read_inode_block(fs, &parent, search.block_index, cache) == -1) {
+        pr_err("Failed to read block `%u` of inode `%u`.\n", search.block_index, (uint32_t)search.parent_inode);
+        ext2_dealloc_cache(cache);
+        return -1;
+    }
+    // An entry pointing at inode 0 is a free entry.
+    ext2_dirent_t *dirent = (ext2_dirent_t *)((uintptr_t)cache + search.block_offset);
+    dirent->inode         = 0;
+    // Write the block back.
+    int ret               = 0;
+    if (ext2_write_inode_block(fs, &parent, search.parent_inode, search.block_index, cache) == -1) {
+        pr_err("Failed to write block `%u` of inode `%u`.\n", search.block_index, (uint32_t)search.parent_inode);
+        ret = -1;
+    }
+    // Free the cache.
+    ext2_dealloc_cache(cache);
+    return ret;
+}
+
 static int ext2_mkdir(const char *path, mode_t mode)
 {
     pr_debug("ext2_mkdir(path: %s, mode: %u)\n", path, mode);
@@ -3777,7 +3823,7 @@ static int ext2_mkdir(const char *path, mode_t mode)
     ext2_filesystem_t *fs = get_ext2_filesystem(path);
     if (fs == NULL) {
         pr_err("ext2_mkdir(path: %s): Failed to get the EXT2 filesystem.\n", path);
-        return -ENOENT;
+        return -ENODEV;
     }
     // Prepare the structure for the search.
     ext2_direntry_search_t search;
@@ -3800,14 +3846,21 @@ static int ext2_mkdir(const char *path, mode_t mode)
             "ext2_mkdir(path: %s): Failed to create a new inode (group index: "
             "%d).\n",
             path, group_index);
-        return -ENOENT;
+        return -ENOSPC;
     }
+    // The inode bitmap and the group counters are on disk from here on, so
+    // every failure below has to undo them: the directory does not exist for
+    // the caller, and nothing of it may survive on the filesystem (#264).
+    int ret           = 0;
+    int has_direntry  = 0;
+    int parent_bumped = 0;
     // Increase the number of directories inside the group.
     fs->block_groups[group_index].used_dirs_count += 1;
     // Write the inode.
     if (ext2_write_inode(fs, &inode, inode_index) == -1) {
         pr_err("Failed to write the newly created inode.\n");
-        return -ENOENT;
+        ret = -EIO;
+        goto rollback;
     }
     // Get the directory name.
     const char *directory_name = basename(path);
@@ -3817,15 +3870,18 @@ static int ext2_mkdir(const char *path, mode_t mode)
             "ext2_mkdir(path: %s): Failed to allocate the new direntry `%s` "
             "for the inode.\n",
             path, directory_name);
-        return -ENOENT;
+        ret = -ENOSPC;
+        goto rollback;
     }
+    has_direntry = 1;
     // Allocate a new block.
     if (!ext2_initialize_new_direntry_block(fs, inode_index, 0)) {
         pr_err(
             "ext2_mkdir(path: %s): Failed to allocate a new block for an "
             "inode.\n",
             path);
-        return 0;
+        ret = -ENOSPC;
+        goto rollback;
     }
     // Create a directory entry, inside the new directory, pointing to itself.
     if (ext2_allocate_direntry(fs, inode_index, inode_index, ".", ext2_file_type_directory) == -1) {
@@ -3833,17 +3889,64 @@ static int ext2_mkdir(const char *path, mode_t mode)
             "ext2_mkdir(path: %s): Failed to allocate a new direntry for the "
             "inode.\n",
             path);
-        return -ENOENT;
+        ret = -ENOSPC;
+        goto rollback;
     }
     // Create a directory entry, inside the new directory, pointing to its parent.
+    // This one adds a link to the parent, which the rollback has to remove.
+    parent_bumped = 1;
     if (ext2_allocate_direntry(fs, inode_index, search.parent_inode, "..", ext2_file_type_directory) == -1) {
         pr_err(
             "ext2_mkdir(path: %s): Failed to allocate a new direntry for the "
             "inode.\n",
             path);
-        return -ENOENT;
+        ret = -ENOSPC;
+        goto rollback;
     }
     return 0;
+
+rollback:
+    // The `..` entry counts as a link to the parent, and the link is added
+    // before the entry is placed: assume it went through, since the only way
+    // it did not is a failed inode write, which already left the parent
+    // untouched on disk.
+    if (parent_bumped) {
+        ext2_inode_t parent_inode;
+        if (ext2_read_inode(fs, &parent_inode, search.parent_inode) != -1) {
+            if (parent_inode.links_count > 0) {
+                parent_inode.links_count -= 1;
+                if (ext2_write_inode(fs, &parent_inode, search.parent_inode) == -1) {
+                    pr_err("ext2_mkdir(path: %s): Failed to restore the links of the parent.\n", path);
+                }
+            }
+        }
+    }
+    // Take the name out of the parent before the inode goes away, so no entry
+    // is left pointing at a free inode.
+    if (has_direntry && (__ext2_clear_direntry_for_path(fs, path) < 0)) {
+        pr_err("ext2_mkdir(path: %s): Failed to remove the incomplete directory entry.\n", path);
+    }
+    // Re-read the inode: initializing its entry block may have given it a
+    // data block, and freeing the inode has to free that block as well.
+    ext2_inode_t stale;
+    if (ext2_read_inode(fs, &stale, inode_index) != -1) {
+        stale.links_count = 0;
+        stale.dtime       = sys_time(NULL);
+        if (ext2_write_inode(fs, &stale, inode_index) == -1) {
+            pr_err("ext2_mkdir(path: %s): Failed to update the inode being freed.\n", path);
+        }
+        if (ext2_free_inode(fs, &stale, inode_index) < 0) {
+            pr_err("ext2_mkdir(path: %s): Failed to free the inode.\n", path);
+        }
+    }
+    // Give back the directory count taken above.
+    if (fs->block_groups[group_index].used_dirs_count > 0) {
+        fs->block_groups[group_index].used_dirs_count -= 1;
+    }
+    if (ext2_write_bgdt_for_group(fs, group_index) < 0) {
+        pr_warning("ext2_mkdir(path: %s): Failed to write BGDT for group %u.\n", path, group_index);
+    }
+    return ret;
 }
 
 /// @brief Removes the given directory.

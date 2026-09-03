@@ -23,8 +23,11 @@ Verified against `MAIN` = `62c638a` (line refs for `MAIN` unless noted).
 
 1. `userspace/tests/CMakeLists.txt` → `TEST_LIST`.
 2. `userspace/bin/runtests.c` → `all_tests[]` (order = execution order).
-   Intentionally skipped there: `t_big_write`, `t_periodic1/2/3`;
-   `t_time` disabled in CMake TEST_LIST.
+   Intentionally skipped there: `t_big_write`, `t_periodic1/2/3`,
+   `t_mkdir_nospace`; `t_time` disabled in CMake TEST_LIST.
+   `t_mkdir_nospace` fills the image to force an allocation failure, which
+   costs about two minutes of guest time: run it by hand when touching the
+   ext2 allocation paths.
 
 ## Guest output routing (critical for debugging)
 

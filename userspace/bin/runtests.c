@@ -54,6 +54,10 @@ static char *all_tests[] = {
     "t_list",
     "t_mem",
     "t_mkdir",
+    // Skipped on purpose: filling the image to make the allocation fail takes
+    // about two minutes of guest time, too much for every CI run. Run it by
+    // hand when touching the ext2 allocation paths (#264).
+    // "t_mkdir_nospace",
     "t_msgget",
     "t_ndtree",
     "t_periodic1",
