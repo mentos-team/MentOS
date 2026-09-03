@@ -35,6 +35,7 @@ static char *all_tests[] = {
     "t_execve_bounds",
     "t_execve_bigargv",
     "t_userfault",
+    "t_path_bounds",
     "t_execve_fail",
     "t_elf_short",
     "t_exit",

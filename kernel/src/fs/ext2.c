@@ -2782,11 +2782,18 @@ static int ext2_resolve_path(vfs_file_t *directory, const char *path, ext2_diren
     ino_t ino            = directory->ino;
     char token[NAME_MAX] = {0};
     size_t offset        = 0;
-    while (tokenize(path, "/", &offset, token, NAME_MAX)) {
+    int tokens;
+    while ((tokens = tokenize(path, "/", &offset, token, NAME_MAX)) > 0) {
         if (ext2_find_direntry(fs, ino, token, search)) {
             return -1;
         }
         ino = search->direntry.inode;
+    }
+    // A component that does not fit the token buffer is rejected, never
+    // truncated: a truncated component would resolve to a different name.
+    if (tokens < 0) {
+        pr_err("Path component too long in `%s`.\n", path);
+        return -1;
     }
     pr_debug(
         "ext2_resolve_path(directory: %s, path: %s) -> (%s, %d)\n", directory->name, path, search->direntry.name,
@@ -2839,7 +2846,21 @@ static ext2_filesystem_t *get_ext2_filesystem(const char *absolute_path)
 /// @param name the name of the file.
 /// @param name_len the length of the name.
 /// @return 0 on success, -errno on failure.
-static int ext2_init_vfs_file(
+/// @brief Copies into the VFS file the properties that describe the on-disk
+///        object, leaving every field that tracks the life of the open file
+///        (`count`, `refcount`, `f_pos`, the sibling links) untouched.
+/// @param fs a pointer to the filesystem.
+/// @param file the file we want to update.
+/// @param inode the inode we take the properties from.
+/// @param inode_index the inode index.
+/// @param name the name of the file.
+/// @param name_len the length of the name.
+/// @details This is also used to refresh an entry found in the list of open
+///          files: that list is keyed by inode number, and a freed inode can
+///          be reused by an unrelated file, whose name and permissions would
+///          otherwise be those of the file that held the number before it
+///          (#297).
+static void __ext2_set_vfs_file_properties(
     ext2_filesystem_t *fs,
     vfs_file_t *file,
     ext2_inode_t *inode,
@@ -2847,9 +2868,10 @@ static int ext2_init_vfs_file(
     const char *name,
     size_t name_len)
 {
-    // Copy the name
-    memcpy(file->name, name, name_len);
-    file->name[name_len] = 0;
+    // Copy the name, keeping room for the terminator inside the field.
+    size_t copy_len = (name_len < NAME_MAX) ? name_len : (NAME_MAX - 1);
+    memcpy(file->name, name, copy_len);
+    file->name[copy_len] = 0;
     // Set the device.
     file->device         = (void *)fs;
     // Set the mask.
@@ -2881,10 +2903,6 @@ static int ext2_init_vfs_file(
     file->ino            = inode_index;
     // Set the size of the file.
     file->length         = inode->size;
-    //uint32_t impl;
-    //uint32_t open_flags;
-    // Set the open count.
-    file->count          = 0;
     // Set the timing information.
     file->atime          = inode->atime;
     file->mtime          = inode->mtime;
@@ -2892,10 +2910,34 @@ static int ext2_init_vfs_file(
     // Set the FS specific operations.
     file->sys_operations = &ext2_sys_operations;
     file->fs_operations  = &ext2_fs_operations;
-    // Set the read offest.
-    file->f_pos          = 0;
     // Set the number of links.
     file->nlink          = inode->links_count;
+}
+
+/// @brief Initializes the VFS file.
+/// @param fs a pointer to the filesystem.
+/// @param file the file we want to initialize.
+/// @param inode the inode we use to initialize the VFS file.
+/// @param inode_index the inode index.
+/// @param name the name of the file.
+/// @param name_len the length of the name.
+/// @return 0 on success, -errno on failure.
+static int ext2_init_vfs_file(
+    ext2_filesystem_t *fs,
+    vfs_file_t *file,
+    ext2_inode_t *inode,
+    uint32_t inode_index,
+    const char *name,
+    size_t name_len)
+{
+    // Set everything that comes from the inode.
+    __ext2_set_vfs_file_properties(fs, file, inode, inode_index, name, name_len);
+    //uint32_t impl;
+    //uint32_t open_flags;
+    // Set the open count.
+    file->count = 0;
+    // Set the read offest.
+    file->f_pos = 0;
     // Initialize the list of siblings.
     list_head_init(&file->siblings);
     // Set the refcount to zero.
@@ -3059,6 +3101,12 @@ static vfs_file_t *ext2_creat(const char *path, mode_t mode)
             }
             // Add the vfs_file to the list of associated files.
             list_head_insert_before(&file->siblings, &fs->opened_files);
+        } else {
+            // The list of open files is keyed by inode number, and the entry
+            // may describe a file that was deleted while its number got
+            // reused: refresh it from the inode we just read (#297).
+            __ext2_set_vfs_file_properties(
+                fs, file, &inode, search.direntry.inode, search.direntry.name, search.direntry.name_len);
         }
         return file;
     }
@@ -3189,6 +3237,13 @@ static vfs_file_t *ext2_open(const char *path, int flags, mode_t mode)
     }
 
     vfs_file_t *file = ext2_find_vfs_file_with_inode(fs, search.direntry.inode);
+    if (file != NULL) {
+        // The list of open files is keyed by inode number, and the entry may
+        // describe a file that was deleted while its number got reused:
+        // refresh it from the inode we just read (#297).
+        __ext2_set_vfs_file_properties(
+            fs, file, &inode, search.direntry.inode, search.direntry.name, search.direntry.name_len);
+    }
     if (file == NULL) {
         // Allocate the memory for the file.
         file = vfs_alloc_file();

@@ -221,35 +221,45 @@ char *strpbrk(const char *string, const char *control)
 
 int tokenize(const char *string, const char *separators, size_t *offset, char *buffer, ssize_t buflen)
 {
-    // If we reached the end of the parsed string, stop.
-    if ((*offset >= buflen) || (string[*offset] == 0)) {
+    // We need room for at least one character and the terminator.
+    if ((buffer == NULL) || (buflen <= 1)) {
+        return -1;
+    }
+    // If we reached the end of the parsed string, stop. The buffer length
+    // bounds the token only: using it on the offset would stop the parse in
+    // the middle of a long string and silently drop its tail.
+    if (string[*offset] == 0) {
         return 0;
     }
     // Skip any leading (multiple) separators.
-    while (string[*offset] != 0 && strchr(separators, string[*offset])) {
+    while ((string[*offset] != 0) && strchr(separators, string[*offset])) {
         ++(*offset);
     }
     // If we reach the end after skipping, return 0.
     if (string[*offset] == 0) {
         return 0;
     }
-    // Keep copying character until we either reach 1) the end of the buffer, 2) a
-    // separator, or 3) the end of the string we are parsing.
-    do {
-        // Check if the character is a separator.
-        if (strchr(separators, string[*offset])) {
-            // Skip the character.
-            ++(*offset);
-            // Close the buffer.
+    // Room left in the buffer, keeping one byte for the terminator.
+    ssize_t available = buflen - 1;
+    // Keep copying characters until we either reach a separator or the end of
+    // the string we are parsing.
+    while ((string[*offset] != 0) && (strchr(separators, string[*offset]) == NULL)) {
+        // The token does not fit the buffer: report it instead of truncating,
+        // since a truncated token names something else than what was asked.
+        if (available == 0) {
             *buffer = '\0';
-            return 1;
+            return -1;
         }
         // Save the character.
         *buffer = string[*offset];
-        // Advance the offset, decrese the available size in the buffer, and advance
-        // the buffer.
-        ++(*offset), --buflen, ++buffer;
-    } while ((buflen > 0) && (string[*offset] != 0));
+        // Advance the offset, decrease the available size in the buffer, and
+        // advance the buffer.
+        ++(*offset), --available, ++buffer;
+    }
+    // Consume the separator that closed the token, if any.
+    if (string[*offset] != 0) {
+        ++(*offset);
+    }
     // Close the buffer.
     *buffer = '\0';
     return 1;

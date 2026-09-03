@@ -171,13 +171,21 @@ char *strtok(char *str, const char *delim);
 char *strtok_r(char *str, const char *delim, char **saveptr);
 
 /// @brief Parses the string using the separator, and at each call it saves the
-/// parsed token in buffer. The pointer `string` will be modified.
-/// @param string cursor used to parse the string, it will be modified.
+/// parsed token in buffer.
+/// @param string the string we are parsing, it is not modified.
 /// @param separators the list of separators we are using.
 /// @param offset the offset character from which we start extracting the next token.
 /// @param buffer the buffer where we save the parsed token.
-/// @param buflen the length of the buffer.
-/// @return 1 if we still have things to parse, 0 if we finished parsing.
+/// @param buflen the length of the buffer, it bounds the token only and never
+///        the offset into `string`.
+/// @return 1 if we still have things to parse, 0 if we finished parsing, -1 if
+///         the next token does not fit in `buffer`.
+/// @details A token longer than `buflen - 1` characters is reported with -1
+///          rather than truncated, because a truncated token names something
+///          else than what the caller asked for. Callers must therefore test
+///          the result against 0 explicitly, since a plain `while (tokenize(...))`
+///          treats the error as another token. The parse state is undefined
+///          after an error.
 int tokenize(const char *string, const char *separators, size_t *offset, char *buffer, ssize_t buflen);
 
 /// @brief Copies the values of num bytes from the location pointed by source

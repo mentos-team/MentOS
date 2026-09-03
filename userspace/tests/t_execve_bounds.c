@@ -169,9 +169,13 @@ static int check_filename_too_long(void)
     return 0;
 }
 
-/// @brief A filename of exactly PATH_MAX - 1 characters fits: it must be
-/// walked safely and fail with ENOENT (it cannot exist), not with a crash
-/// or a memory error.
+/// @brief A filename of exactly PATH_MAX - 1 characters fits the buffer, but
+/// its single component is far longer than NAME_MAX: it must be walked safely
+/// and rejected with ENAMETOOLONG, not with a crash or a memory error.
+/// @details Until #284 the resolver truncated the component to NAME_MAX
+/// characters and looked that up instead, so this case reported ENOENT: the
+/// truncated name happened not to exist. A name that does exist at the
+/// truncation point would have been executed in its place.
 /// @return 0 on success, -1 on failure.
 static int check_filename_longest_valid(void)
 {
@@ -183,8 +187,8 @@ static int check_filename_longest_valid(void)
         syslog(LOG_ERR, "[t_execve_bounds] execve of a 4095-char filename unexpectedly succeeded");
         return -1;
     }
-    if (errno != ENOENT) {
-        syslog(LOG_ERR, "[t_execve_bounds] 4095-char filename: expected ENOENT, got %s", strerror(errno));
+    if (errno != ENAMETOOLONG) {
+        syslog(LOG_ERR, "[t_execve_bounds] 4095-char filename: expected ENAMETOOLONG, got %s", strerror(errno));
         return -1;
     }
     return 0;
