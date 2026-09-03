@@ -2782,11 +2782,18 @@ static int ext2_resolve_path(vfs_file_t *directory, const char *path, ext2_diren
     ino_t ino            = directory->ino;
     char token[NAME_MAX] = {0};
     size_t offset        = 0;
-    while (tokenize(path, "/", &offset, token, NAME_MAX)) {
+    int tokens;
+    while ((tokens = tokenize(path, "/", &offset, token, NAME_MAX)) > 0) {
         if (ext2_find_direntry(fs, ino, token, search)) {
             return -1;
         }
         ino = search->direntry.inode;
+    }
+    // A component that does not fit the token buffer is rejected, never
+    // truncated: a truncated component would resolve to a different name.
+    if (tokens < 0) {
+        pr_err("Path component too long in `%s`.\n", path);
+        return -1;
     }
     pr_debug(
         "ext2_resolve_path(directory: %s, path: %s) -> (%s, %d)\n", directory->name, path, search->direntry.name,

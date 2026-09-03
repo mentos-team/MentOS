@@ -20,7 +20,7 @@ investigation touched)
 | `write` | buf | passed to fs `write_f`; authorized by per-fd `flags_mask` ONLY (read_write.c:63) |
 | `pipe` | fds[2] | written directly (kernel writes two ints to user pointer) |
 | `waitpid` | status | `*status = child->exit_code` direct store (not deeply audited) |
-| open/close/chdir/etc. | path strings | `resolve_path` copies into kernel `PATH_MAX` buffers (bounded), but the SOURCE `path` is walked unbounded by tokenizers/strlen inside resolve and fs layers (INFERENCE: same class, not separately reproduced) |
+| open/close/chdir/etc. | path strings | `resolve_path` copies into kernel `PATH_MAX` buffers (bounded), but the SOURCE `path` is walked unbounded by tokenizers/strlen inside resolve and fs layers (INFERENCE: same class, not separately reproduced). Since #284 the walk no longer truncates: a component longer than `NAME_MAX - 1` characters, or a token that does not fit the caller buffer, fails with `-ENAMETOOLONG` instead of resolving to a shorter name |
 
 ## Contracts a future syscall must NOT assume exist
 

@@ -147,7 +147,8 @@ int __resolve_path(const char *path, char *abspath, size_t buflen, int flags, in
         pr_debug("|%-32s|%-32s| (INIT)\n", path, buffer);
     }
 
-    while (tokenize(path, "/", &offset, token, NAME_MAX)) {
+    int tokens;
+    while ((tokens = tokenize(path, "/", &offset, token, NAME_MAX)) > 0) {
         tokenlen = strlen(token);
         if ((strcmp(token, "..") == 0) && (tokenlen == 2)) {
             // Handle parent directory token "..".
@@ -201,6 +202,12 @@ int __resolve_path(const char *path, char *abspath, size_t buflen, int flags, in
                 }
             }
         }
+    }
+    // A component that does not fit the token buffer is rejected, never
+    // truncated: a truncated component would resolve to a different name.
+    if (tokens < 0) {
+        pr_err("Path component too long while resolving a path.\n");
+        return -ENAMETOOLONG;
     }
     if (contains_links) {
         pr_debug("|%-32s|%-32s| (RECU)\n", path, buffer);

@@ -161,11 +161,17 @@ static inline int __search_in_path(const char *entry, dirent_t *result)
     char token[NAME_MAX] = {0}; // Buffer to hold each token (directory).
     size_t offset        = 0;   // Offset for the tokenizer.
     // Iterate through each directory in the PATH.
-    while (tokenize(PATH_VAR, ":", &offset, token, NAME_MAX)) {
+    int tokens;
+    while ((tokens = tokenize(PATH_VAR, ":", &offset, token, NAME_MAX)) > 0) {
         // Search for the entry in the current directory (tokenized directory).
         if (__folder_contains(token, entry, DT_REG, result)) {
             return 1; // Return 1 if the entry is found.
         }
+    }
+    // An entry of PATH longer than the token buffer is skipped, and the rest
+    // of the variable cannot be parsed after the error.
+    if (tokens < 0) {
+        fprintf(stderr, "__search_in_path: a PATH entry is too long.\n");
     }
     return 0; // Return 0 if the entry was not found.
 }
