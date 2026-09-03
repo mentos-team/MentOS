@@ -1,4 +1,20 @@
-# MentOS (Mentoring Operating System)
+<!--
+  Relative path, not a raw.githubusercontent URL. An earlier version of this README
+  pointed at the website repository's raw content; that link is now dead, because the
+  website repository was rebuilt with a different default branch and no longer serves
+  that file. A path inside this repository survives renames and rebuilds elsewhere.
+
+  The banner carries its own black plate and green border. Its lettering is cream, and
+  cream measures 1.05:1 on GitHub's light background, so a bare wordmark would lose the
+  word "Ment" entirely and leave "OS" floating.
+-->
+<p align="center">
+  <img src=".github/assets/mentos_banner.png" alt="MentOS" width="560">
+</p>
+
+<p align="center"><strong>Mentoring Operating System</strong> — an educational 32-bit Linux-like operating system</p>
+
+<p align="center"><em>Learn the kernel. Understand the system. Shape it.</em></p>
 
 [![forthebadge](https://forthebadge.com/images/badges/built-with-love.svg)](https://forthebadge.com)
 [![forthebadge](https://forthebadge.com/images/badges/made-with-c.svg)](https://forthebadge.com)
