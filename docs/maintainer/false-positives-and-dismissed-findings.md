@@ -77,11 +77,17 @@ Baselines: `BASE` 82f4314 / `MAIN` 62c638a.
 
 ## 7. Tests skipped in runtests / TEST_LIST
 
-- `t_big_write`, `t_periodic1/2/3` commented out of `all_tests[]`;
-  `t_time` disabled in CMake TEST_LIST.
+- `t_big_write`, `t_periodic1/2/3`, `t_mkdir_nospace` commented out of
+  `all_tests[]`; `t_time` disabled in CMake TEST_LIST.
 - **Verdict**: INTENTIONAL (explicit comments), not infrastructure rot.
   Do not "fix" silently; re-enabling changes CI meaning (and t_big_write
   predates the #192 panic boundary anyway — it sorts after t_gid).
+- `t_mkdir_nospace` (#264) is the one skipped for runtime rather than
+  meaning: it fills the 32 MB image block by block to force an allocation
+  failure, ~2 min of guest time, because ext2 rewrites the block bitmap,
+  the group descriptor and the superblock per allocated block and
+  `ext2_find_free_block` rescans from the start each time. Run it by hand
+  when touching the ext2 allocation paths.
 
 ## 8. Byte-identical `debugfs dump` of t_gid "disproving" the hole
 
