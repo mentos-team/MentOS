@@ -156,6 +156,14 @@ static int __ext2_setattr(ext2_inode_t *inode, struct iattr *attr)
 static int __ext2_check_setattr_permission(uid_t file_owner)
 {
     task_struct *task = scheduler_get_current_process();
+    // There is no current process during kernel initialization: fhs_initialize
+    // runs at kernel.c:319 and scheduler_initialize at :453. The kernel is not
+    // a user and has nothing to prove, and dereferencing the null task here
+    // would have faulted the moment anything in early boot tried to set an
+    // attribute — which is what fixing #263 needed it to do.
+    if (task == NULL) {
+        return 1;
+    }
     return task->uid == 0 || task->uid == file_owner;
 }
 

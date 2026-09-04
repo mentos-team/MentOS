@@ -65,8 +65,13 @@ int main(int argc, char *argv[])
                     syslog(LOG_INFO, "[t_fhs] [PASS] %s (%s) - Mode: 0%o\n", test->path, test->description, actual_mode);
                     passed_tests++;
                 } else {
-                    syslog(LOG_INFO, "[t_fhs] [WARN] %s (%s) - Expected mode 0%o, got 0%o\n", test->path, test->description, expected_mode, actual_mode);
-                    passed_tests++; // Still count as pass since directory exists
+                    // A mode mismatch is a failure, not a warning. It used to
+                    // be counted as a pass "since the directory exists",
+                    // which let /tmp and /var/tmp sit world-writable without
+                    // their sticky bit, and /root at 0755 instead of 0700, on
+                    // every boot with the suite reporting `ok` (#263).
+                    syslog(LOG_ERR, "[t_fhs] [FAIL] %s (%s) - Expected mode 0%o, got 0%o\n", test->path, test->description, expected_mode, actual_mode);
+                    failed_tests++;
                 }
             } else {
                 syslog(LOG_INFO, "[t_fhs] [FAIL] %s - Exists but is not a directory\n", test->path);
