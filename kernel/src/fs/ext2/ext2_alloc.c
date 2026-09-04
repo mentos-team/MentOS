@@ -241,7 +241,12 @@ uint32_t ext2_allocate_block(ext2_filesystem_t *fs)
 /// @brief Frees a block.
 /// @param fs the filesystem.
 /// @param block_index the index of the block we are freeing.
-void ext2_free_block(ext2_filesystem_t *fs, uint32_t block_index)
+/// @return 0 on success, -1 when the block could not be released.
+/// @details A block that cannot be freed is a leak. A group whose bitmap is
+///          wrongly rewritten is corruption, and the allocator will hand out
+///          blocks that are in use. Leaking is by far the lesser harm, so
+///          nothing is written unless the bitmap was read first (#342).
+int ext2_free_block(ext2_filesystem_t *fs, uint32_t block_index)
 {
     uint32_t group_index  = ext2_block_index_to_group_index(fs, block_index);
     uint32_t group_offset = ext2_block_index_to_group_offset(fs, block_index);
@@ -253,13 +258,25 @@ void ext2_free_block(ext2_filesystem_t *fs, uint32_t block_index)
 
     // Allocate the cache.
     uint8_t *cache = ext2_alloc_cache(fs);
-    // Read the bitmap.
-    ext2_read_block(fs, block_bitmap, cache);
+    if (cache == NULL) {
+        pr_err("Failed to allocate the cache to free block %u.\n", block_index);
+        return -1;
+    }
+    // Read the bitmap. `ext2_alloc_cache` zeroes what it returns, so a failed
+    // read leaves an all-zero bitmap rather than a stale one: writing that
+    // back would mark every block in the group free.
+    if (ext2_read_block(fs, block_bitmap, cache) < 0) {
+        pr_err("Failed to read the block bitmap %u; block %u stays allocated.\n", block_bitmap, block_index);
+        ext2_dealloc_cache(cache);
+        return -1;
+    }
     // Set it as free.
     ext2_bitmap_clear(cache, group_offset);
-    // Write back the inode bitmap.
+    // Write back the block bitmap.
     if (ext2_write_block(fs, block_bitmap, cache) < 0) {
         pr_err("We failed to write back the block_bitmap.\n");
+        ext2_dealloc_cache(cache);
+        return -1;
     }
     // Free the cache.
     ext2_dealloc_cache(cache);
@@ -276,16 +293,18 @@ void ext2_free_block(ext2_filesystem_t *fs, uint32_t block_index)
     if (ext2_write_superblock(fs) < 0) {
         pr_warning("Failed to write superblock.\n");
     }
+    return 0;
 }
 
 /// @brief Frees the blocks that hold the block pointers of an inode.
 /// @param fs the filesystem.
 /// @param inode the inode whose index blocks are freed.
+/// @return 0 when every block was released, -1 when any was kept.
 /// @details The data blocks of a file are reached through these, so they must
 ///          be freed after the data blocks, and they belong to the file just
 ///          as much: leaving them behind lost a block per indirection level on
 ///          every deletion (#302).
-static void __ext2_free_index_blocks(ext2_filesystem_t *fs, ext2_inode_t *inode)
+static int __ext2_free_index_blocks(ext2_filesystem_t *fs, ext2_inode_t *inode)
 {
     uint32_t pointers = fs->pointers_per_block;
     uint8_t *outer    = ext2_alloc_cache(fs);
@@ -294,60 +313,99 @@ static void __ext2_free_index_blocks(ext2_filesystem_t *fs, ext2_inode_t *inode)
         pr_err("Failed to allocate the cache to free the index blocks.\n");
         ext2_dealloc_cache(outer);
         ext2_dealloc_cache(inner);
-        return;
+        return -1;
     }
+    // An index block is the only record of which blocks it points at, so
+    // freeing one whose contents could not be read loses that record for good:
+    // the blocks under it stay marked used with nothing naming them, and no
+    // later pass can find them. Every level below therefore keeps the index
+    // block when its read fails, and reports it. A leak that is still
+    // described on disk can be recovered by a checker; one whose description
+    // has been released cannot (#343).
+    int failure = 0;
+
     // The single-indirect block holds pointers only.
     if (inode->data.blocks.indir_block != 0) {
-        ext2_free_block(fs, inode->data.blocks.indir_block);
-        inode->data.blocks.indir_block = 0;
+        if (ext2_free_block(fs, inode->data.blocks.indir_block) < 0) {
+            failure = -1;
+        } else {
+            inode->data.blocks.indir_block = 0;
+        }
     }
     // The doubly-indirect block points at a level of index blocks.
     if (inode->data.blocks.doubly_indir_block != 0) {
-        if (ext2_read_block(fs, inode->data.blocks.doubly_indir_block, outer) != -1) {
+        if (ext2_read_block(fs, inode->data.blocks.doubly_indir_block, outer) == -1) {
+            pr_err(
+                "Cannot read the doubly-indirect block %u: keeping it, so what it points at stays findable.\n",
+                inode->data.blocks.doubly_indir_block);
+            failure = -1;
+        } else {
             for (uint32_t index = 0; index < pointers; ++index) {
                 uint32_t block = ((uint32_t *)outer)[index];
-                if (block != 0) {
-                    ext2_free_block(fs, block);
+                if ((block != 0) && (ext2_free_block(fs, block) < 0)) {
+                    failure = -1;
                 }
             }
+            if (ext2_free_block(fs, inode->data.blocks.doubly_indir_block) < 0) {
+                failure = -1;
+            } else {
+                inode->data.blocks.doubly_indir_block = 0;
+            }
         }
-        ext2_free_block(fs, inode->data.blocks.doubly_indir_block);
-        inode->data.blocks.doubly_indir_block = 0;
     }
     // The trebly-indirect block points at two levels of index blocks.
     if (inode->data.blocks.trebly_indir_block != 0) {
-        if (ext2_read_block(fs, inode->data.blocks.trebly_indir_block, outer) != -1) {
+        if (ext2_read_block(fs, inode->data.blocks.trebly_indir_block, outer) == -1) {
+            pr_err(
+                "Cannot read the trebly-indirect block %u: keeping it, so what it points at stays findable.\n",
+                inode->data.blocks.trebly_indir_block);
+            failure = -1;
+        } else {
             for (uint32_t index = 0; index < pointers; ++index) {
                 uint32_t middle = ((uint32_t *)outer)[index];
                 if (middle == 0) {
                     continue;
                 }
-                if (ext2_read_block(fs, middle, inner) != -1) {
-                    for (uint32_t inner_index = 0; inner_index < pointers; ++inner_index) {
-                        uint32_t block = ((uint32_t *)inner)[inner_index];
-                        if (block != 0) {
-                            ext2_free_block(fs, block);
-                        }
+                if (ext2_read_block(fs, middle, inner) == -1) {
+                    pr_err("Cannot read the index block %u: keeping it, so what it points at stays findable.\n", middle);
+                    failure = -1;
+                    continue;
+                }
+                for (uint32_t inner_index = 0; inner_index < pointers; ++inner_index) {
+                    uint32_t block = ((uint32_t *)inner)[inner_index];
+                    if ((block != 0) && (ext2_free_block(fs, block) < 0)) {
+                        failure = -1;
                     }
                 }
-                ext2_free_block(fs, middle);
+                if (ext2_free_block(fs, middle) < 0) {
+                    failure = -1;
+                }
+            }
+            // Only release the top of the tree once every level under it is
+            // accounted for, for the same reason.
+            if (failure == 0) {
+                if (ext2_free_block(fs, inode->data.blocks.trebly_indir_block) < 0) {
+                    failure = -1;
+                } else {
+                    inode->data.blocks.trebly_indir_block = 0;
+                }
             }
         }
-        ext2_free_block(fs, inode->data.blocks.trebly_indir_block);
-        inode->data.blocks.trebly_indir_block = 0;
     }
     ext2_dealloc_cache(outer);
     ext2_dealloc_cache(inner);
+    return failure;
 }
 
 /// @brief Frees every block that belongs to an inode, data and index alike.
 /// @param fs a pointer to the filesystem.
 /// @param inode the inode whose blocks are released.
+/// @return 0 when every block was released, -1 when any was kept.
 /// @details The block pointers and the sector count are cleared, so the inode
 ///          is left describing a file with no blocks at all. `size` is the
 ///          caller's: releasing the blocks of a file and declaring it empty
 ///          are two different things, and only truncation does both.
-void ext2_free_inode_blocks(ext2_filesystem_t *fs, ext2_inode_t *inode)
+int ext2_free_inode_blocks(ext2_filesystem_t *fs, ext2_inode_t *inode)
 {
     // How many blocks the size says the file holds. Sparse files legally
     // contain holes, so a null pointer inside that range is skipped rather
@@ -356,26 +414,37 @@ void ext2_free_inode_blocks(ext2_filesystem_t *fs, ext2_inode_t *inode)
 
     // Free the data blocks first: they are reached through the index blocks,
     // which the next step releases.
+    int failure = 0;
     for (uint32_t block_index = 0; block_index < block_number; ++block_index) {
         // Get the real index.
         uint32_t real_index = ext2_get_real_block_index(fs, inode, block_index);
         if (real_index == 0) {
             continue;
         }
-        ext2_free_block(fs, real_index);
+        if (ext2_free_block(fs, real_index) < 0) {
+            failure = -1;
+        }
     }
 
     // Free the blocks that held the pointers to those data blocks (#302).
-    __ext2_free_index_blocks(fs, inode);
+    if (__ext2_free_index_blocks(fs, inode) < 0) {
+        failure = -1;
+    }
 
     // Nothing points anywhere any more, and the inode owns no sector. The
     // write path derives the blocks it still has to allocate from
     // `blocks_count`, so leaving it set would make it skip allocating the
     // blocks it just gave back.
-    for (uint32_t index = 0; index < EXT2_DIRECT_BLOCKS; ++index) {
-        inode->data.blocks.dir_blocks[index] = 0;
+    // Only claim the inode owns nothing when it really owns nothing. Clearing
+    // the pointers after a block was kept would lose the record of it, which
+    // is the mistake #343 is about one level down.
+    if (failure == 0) {
+        for (uint32_t index = 0; index < EXT2_DIRECT_BLOCKS; ++index) {
+            inode->data.blocks.dir_blocks[index] = 0;
+        }
+        inode->blocks_count = 0;
     }
-    inode->blocks_count = 0;
+    return failure;
 }
 
 /// @brief Frees the given inode.
@@ -396,18 +465,36 @@ int ext2_free_inode(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t inode_i
     pr_debug(
         "ext2_free_inode(group: %4u, inode_index: %4u, group_offset: %4u)\n", group_index, inode_index, group_offset);
 
-    // Give back every block the inode owns, data and index alike.
-    ext2_free_inode_blocks(fs, inode);
+    // Give back every block the inode owns, data and index alike. A block that
+    // stays behind is a leak, and the inode is being freed either way, so this
+    // is reported rather than aborted: stopping here would leave the inode
+    // marked in use as well as the blocks.
+    if (ext2_free_inode_blocks(fs, inode) < 0) {
+        pr_err("Failed to release every block of inode %u; they stay allocated.\n", inode_index);
+    }
 
     // Allocate the cache.
     uint8_t *cache = ext2_alloc_cache(fs);
-    // Read the bitmap.
-    ext2_read_block(fs, inode_bitmap, cache);
+    if (cache == NULL) {
+        pr_err("Failed to allocate the cache to free inode %u.\n", inode_index);
+        return -1;
+    }
+    // Read the bitmap. As in ext2_free_block: the cache comes back zeroed, so
+    // writing it after a failed read would mark every inode in the group free
+    // (#342). An inode that stays allocated is a leak; a group wrongly marked
+    // free lets the allocator reuse inodes that are in use.
+    if (ext2_read_block(fs, inode_bitmap, cache) < 0) {
+        pr_err("Failed to read the inode bitmap %u; inode %u stays allocated.\n", inode_bitmap, inode_index);
+        ext2_dealloc_cache(cache);
+        return -1;
+    }
     // Set it as free.
     ext2_bitmap_clear(cache, group_offset);
     // Write back the inode bitmap.
     if (ext2_write_block(fs, inode_bitmap, cache) < 0) {
         pr_err("We failed to write back the inode_bitmap.\n");
+        ext2_dealloc_cache(cache);
+        return -1;
     }
     // Free the cache.
     ext2_dealloc_cache(cache);

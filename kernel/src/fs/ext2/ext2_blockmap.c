@@ -40,8 +40,15 @@ static int __ext2_allocate_indexing_block_for_inode(ext2_filesystem_t *fs, uint3
 static int
 __ext2_read_and_allocate_indexing_block(ext2_filesystem_t *fs, uint32_t indexing_block, uint8_t *cache, uint32_t index)
 {
-    // Read the doubly-indirect block (which contains pointers to indirect blocks).
-    ext2_read_block(fs, indexing_block, cache);
+    // Read the doubly-indirect block (which contains pointers to indirect
+    // blocks). The result cannot be discarded here: the cache comes back
+    // zeroed, so a failed read makes every slot look empty, and the check
+    // below would then allocate a new block over a pointer that already
+    // existed — orphaning whatever it referenced (#344).
+    if (ext2_read_block(fs, indexing_block, cache) < 0) {
+        pr_err("Cannot read the indexing block %u; not allocating over it.\n", indexing_block);
+        return -1;
+    }
     // Check if we need to allocate a new block.
     if (!((uint32_t *)cache)[index]) {
         // Allocate a new block.
@@ -111,11 +118,23 @@ static int ext2_set_real_block_index(
                 goto early_exit;
             }
             // Read the indirect block (which contains pointers to the next set of blocks).
-            ext2_read_block(fs, inode->data.blocks.indir_block, cache);
+            // One pointer is patched into a block that holds up to
+            // pointers_per_block of them, so a failed read must not be
+            // written back: the cache comes back zeroed, and writing zeroes
+            // would lose every other pointer in the block (#344).
+            if (ext2_read_block(fs, inode->data.blocks.indir_block, cache) < 0) {
+                pr_err("Cannot read the indirect block %u to set an index in it.\n", inode->data.blocks.indir_block);
+                ret = -1;
+                goto early_exit;
+            }
             // Write the index inside the final block.
             ((uint32_t *)cache)[a] = real_index;
             // Write back the indirect block.
-            ext2_write_block(fs, inode->data.blocks.indir_block, cache);
+            if (ext2_write_block(fs, inode->data.blocks.indir_block, cache) < 0) {
+                pr_err("Cannot write back the indirect block %u.\n", inode->data.blocks.indir_block);
+                ret = -1;
+                goto early_exit;
+            }
 
         } else {
             // Are we setting a DOUBLY-INDIRECT block.
@@ -135,12 +154,21 @@ static int ext2_set_real_block_index(
                 }
                 // Save the index.
                 index_save = ((uint32_t *)cache)[c];
-                // Compute the index inside the indirect block.
-                ext2_read_block(fs, index_save, cache);
+                // Compute the index inside the indirect block. As above: a
+                // failed read here would be written back as zeroes (#344).
+                if (ext2_read_block(fs, index_save, cache) < 0) {
+                    pr_err("Cannot read the index block %u to set an index in it.\n", index_save);
+                    ret = -1;
+                    goto early_exit;
+                }
                 // Write the index inside the final block.
                 ((uint32_t *)cache)[d] = real_index;
                 // Write back the indirect block.
-                ext2_write_block(fs, index_save, cache);
+                if (ext2_write_block(fs, index_save, cache) < 0) {
+                    pr_err("Cannot write back the index block %u.\n", index_save);
+                    ret = -1;
+                    goto early_exit;
+                }
 
             } else {
                 d = c - p * p * p;
@@ -168,12 +196,21 @@ static int ext2_set_real_block_index(
                     }
                     // Save the index.
                     index_save = ((uint32_t *)cache)[f];
-                    // Read the indirect block (which contains pointers to the next set of blocks).
-                    ext2_read_block(fs, index_save, cache);
+                    // Read the indirect block (which contains pointers to the
+                    // next set of blocks). As above (#344).
+                    if (ext2_read_block(fs, index_save, cache) < 0) {
+                        pr_err("Cannot read the index block %u to set an index in it.\n", index_save);
+                        ret = -1;
+                        goto early_exit;
+                    }
                     // Write the index inside the final block.
                     ((uint32_t *)cache)[g] = real_index;
                     // Write back the indirect block.
-                    ext2_write_block(fs, index_save, cache);
+                    if (ext2_write_block(fs, index_save, cache) < 0) {
+                        pr_err("Cannot write back the index block %u.\n", index_save);
+                        ret = -1;
+                        goto early_exit;
+                    }
 
                 } else {
                     pr_err(
@@ -219,15 +256,24 @@ uint32_t ext2_get_real_block_index(ext2_filesystem_t *fs, ext2_inode_t *inode, u
     } else {
         // Allocate the cache.
         uint8_t *cache = ext2_alloc_cache(fs);
+        if (cache == NULL) {
+            pr_err("Failed to allocate the cache to map block %u of an inode.\n", block_index);
+            return 0;
+        }
         // Check if the index is among the INDIRECT blocks.
-        b              = a - p;
+        b = a - p;
         if (b < 0) {
             // Read the indirect block (which contains pointers to the next set of blocks).
             if (inode->data.blocks.indir_block == 0) {
                 pr_warning("ext2_get_real_block_index: indirect block not allocated (block_index=%u)\n", block_index);
                 real_index = 0;
             } else {
-                ext2_read_block(fs, inode->data.blocks.indir_block, cache);
+                // A failed read leaves the cache zeroed, which the caller cannot tell
+                // apart from a hole. Say so at least; the ambiguity itself needs this
+                // function to stop returning an index as its result.
+                if (ext2_read_block(fs, inode->data.blocks.indir_block, cache) < 0) {
+                    pr_err("Cannot read the index block while mapping block %u.\\n", block_index);
+                }
                 // Compute the index inside the final block.
                 real_index = ((uint32_t *)cache)[a];
                 pr_debug("ext2_get_real_block_index: indirect block %u (via block %u) -> real_index %u\n", block_index, inode->data.blocks.indir_block, real_index);
@@ -245,14 +291,24 @@ uint32_t ext2_get_real_block_index(ext2_filesystem_t *fs, ext2_inode_t *inode, u
                     pr_warning("ext2_get_real_block_index: doubly-indirect block not allocated (block_index=%u)\n", block_index);
                     real_index = 0;
                 } else {
-                    ext2_read_block(fs, inode->data.blocks.doubly_indir_block, cache);
+                    // A failed read leaves the cache zeroed, which the caller cannot tell
+                    // apart from a hole. Say so at least; the ambiguity itself needs this
+                    // function to stop returning an index as its result.
+                    if (ext2_read_block(fs, inode->data.blocks.doubly_indir_block, cache) < 0) {
+                        pr_err("Cannot read the index block while mapping block %u.\\n", block_index);
+                    }
                     // Compute the index inside the indirect block.
                     uint32_t indir_blk = ((uint32_t *)cache)[c];
                     if (indir_blk == 0) {
                         pr_warning("ext2_get_real_block_index: indirect block pointer is 0 in doubly-indirect (c=%u)\n", c);
                         real_index = 0;
                     } else {
-                        ext2_read_block(fs, indir_blk, cache);
+                        // A failed read leaves the cache zeroed, which the caller cannot tell
+                        // apart from a hole. Say so at least; the ambiguity itself needs this
+                        // function to stop returning an index as its result.
+                        if (ext2_read_block(fs, indir_blk, cache) < 0) {
+                            pr_err("Cannot read the index block while mapping block %u.\\n", block_index);
+                        }
                         // Compute the index inside the final block.
                         real_index = ((uint32_t *)cache)[d];
                         pr_debug("ext2_get_real_block_index: doubly-indirect block %u -> real_index %u\n", block_index, real_index);
@@ -271,21 +327,36 @@ uint32_t ext2_get_real_block_index(ext2_filesystem_t *fs, ext2_inode_t *inode, u
                         pr_warning("ext2_get_real_block_index: trebly-indirect block not allocated (block_index=%u)\n", block_index);
                         real_index = 0;
                     } else {
-                        ext2_read_block(fs, inode->data.blocks.trebly_indir_block, cache);
+                        // A failed read leaves the cache zeroed, which the caller cannot tell
+                        // apart from a hole. Say so at least; the ambiguity itself needs this
+                        // function to stop returning an index as its result.
+                        if (ext2_read_block(fs, inode->data.blocks.trebly_indir_block, cache) < 0) {
+                            pr_err("Cannot read the index block while mapping block %u.\\n", block_index);
+                        }
                         // Read the doubly-indirect block (which contains pointers to indirect blocks).
                         uint32_t dblind_blk = ((uint32_t *)cache)[e];
                         if (dblind_blk == 0) {
                             pr_warning("ext2_get_real_block_index: doubly-indirect pointer is 0 in trebly-indirect (e=%u)\n", e);
                             real_index = 0;
                         } else {
-                            ext2_read_block(fs, dblind_blk, cache);
+                            // A failed read leaves the cache zeroed, which the caller cannot tell
+                            // apart from a hole. Say so at least; the ambiguity itself needs this
+                            // function to stop returning an index as its result.
+                            if (ext2_read_block(fs, dblind_blk, cache) < 0) {
+                                pr_err("Cannot read the index block while mapping block %u.\\n", block_index);
+                            }
                             uint32_t indir_blk = ((uint32_t *)cache)[f];
                             if (indir_blk == 0) {
                                 pr_warning("ext2_get_real_block_index: indirect pointer is 0 in trebly-indirect (f=%u)\n", f);
                                 real_index = 0;
                             } else {
                                 // Read the indirect block (which contains pointers to the next set of blocks).
-                                ext2_read_block(fs, indir_blk, cache);
+                                // A failed read leaves the cache zeroed, which the caller cannot tell
+                                // apart from a hole. Say so at least; the ambiguity itself needs this
+                                // function to stop returning an index as its result.
+                                if (ext2_read_block(fs, indir_blk, cache) < 0) {
+                                    pr_err("Cannot read the index block while mapping block %u.\\n", block_index);
+                                }
                                 // Compute the index inside the final block.
                                 real_index = ((uint32_t *)cache)[g];
                                 pr_debug("ext2_get_real_block_index: trebly-indirect block %u -> real_index %u\n", block_index, real_index);
@@ -688,7 +759,13 @@ int ext2_truncate_inode(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t ino
     // Release the blocks before the size stops naming them: the loop that
     // frees the data derives its bound from `size`, so clearing the size
     // first would leak every block of the file.
-    ext2_free_inode_blocks(fs, inode);
+    // If a block could not be released, the file is not empty: clearing the
+    // size would leave those blocks allocated with nothing describing them,
+    // which is the loss #343 is about. Report instead.
+    if (ext2_free_inode_blocks(fs, inode) < 0) {
+        pr_err("Failed to release every block of inode %u; leaving its size alone.\n", inode_index);
+        return -EIO;
+    }
     inode->size  = 0;
     inode->ctime = sys_time(NULL);
     inode->mtime = inode->ctime;

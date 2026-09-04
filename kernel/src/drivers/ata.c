@@ -1195,7 +1195,7 @@ static int ata_device_read_sector_pio(ata_device_t *dev, uint32_t lba_sector, ui
     // Injected failures return before the transfer, which is where every real
     // error path here leaves off too: the caller's buffer is left untouched,
     // so the code above sees exactly what a failing device shows it (#338).
-    int injected = ata_fault_inject_read();
+    int injected = ata_fault_inject_read(lba_sector);
     if (injected != 0) {
         return injected;
     }

@@ -207,7 +207,12 @@ void ext2_dump_bgdt(ext2_filesystem_t *fs)
         pr_debug("    Free Blocks  : %4u of %u\n", gd->free_blocks_count, fs->superblock.blocks_per_group);
         pr_debug("    Free Inodes  : %4u of %u\n", gd->free_inodes_count, fs->superblock.inodes_per_group);
         // Dump the block bitmap.
-        ext2_read_block(fs, gd->block_bitmap, cache);
+        // A dump that prints an unread bitmap prints zeroes, which reads as
+        // "everything is free" and is the opposite of the truth.
+        if (ext2_read_block(fs, gd->block_bitmap, cache) < 0) {
+            pr_debug("    Block bitmap : <unreadable>\n");
+            continue;
+        }
         pr_debug("    Block Bitmap at %u\n", gd->block_bitmap);
         for (uint32_t j = 0; j < fs->block_size; ++j) {
             if ((j % 8) == 0) {
@@ -222,7 +227,12 @@ void ext2_dump_bgdt(ext2_filesystem_t *fs)
             }
         }
         // Dump the block bitmap.
-        ext2_read_block(fs, gd->inode_bitmap, cache);
+        // A dump that prints an unread bitmap prints zeroes, which reads as
+        // "everything is free" and is the opposite of the truth.
+        if (ext2_read_block(fs, gd->inode_bitmap, cache) < 0) {
+            pr_debug("    Inode bitmap : <unreadable>\n");
+            continue;
+        }
         pr_debug("    Inode Bitmap at %d\n", gd->inode_bitmap);
         for (uint32_t j = 0; j < fs->block_size; ++j) {
             if ((j % 8) == 0) {

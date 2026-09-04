@@ -98,6 +98,7 @@ static char *all_tests[] = {
     "t_wifsignaled",
     "t_write_read",
     "t_faultinj",
+    "t_meta_rmw",
 };
 
 static char **tests = &all_tests[0];
