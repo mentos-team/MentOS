@@ -46,7 +46,7 @@ Consumers:
 Every `close_f` **decrements `file->count` itself** and, at zero, performs
 filesystem-specific teardown then `vfs_dealloc_file(file)`:
 
-- `ext2_close` (ext2.c:3286-3325 @`MAIN`): `--count`; at 0: refuses to free
+- `ext2_close` (ext2_file.c @`MAIN`): `--count`; at 0: refuses to free
   `fs->root` (returns -EPERM leaving count at 0), else unlinks from
   `fs->opened_files` and frees.
 - `procfs_close` (procfs.c:548-572): `--count`; at 0: unlink + free.
@@ -62,7 +62,7 @@ decrement; verified correct against every producer above.
 
 ## ext2 per-inode file cache (critical for security reasoning)
 
-`ext2_open` (ext2.c:3095ff @`MAIN`) looks up
+`ext2_open` (ext2_file.c @`MAIN`) looks up
 `ext2_find_vfs_file_with_inode(fs, ino)` and REUSES the existing
 `vfs_file_t` (sharing `count`, `f_pos`, mask/uid/gid) instead of allocating a
 fresh one. Two opens of the same file = one struct, count 2.
