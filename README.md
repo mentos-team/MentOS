@@ -102,7 +102,6 @@ make qemu
 - **[Debugging](https://github.com/mentos-team/MentOS/wiki/Debugging)** - GDB and kernel logging
 - **[Contributing](https://github.com/mentos-team/MentOS/wiki/Contributing)** - Contribution guidelines
 - **[Features](https://github.com/mentos-team/MentOS/wiki/Features)** - Feature roadmap with priorities
-- **[Changelog](CHANGELOG.md)** - What changed in each release, and the known issues carried forward
 
 ## Project Structure
 
