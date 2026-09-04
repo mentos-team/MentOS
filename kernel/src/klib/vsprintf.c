@@ -246,16 +246,6 @@ static void __format_pointer(char **buf, char *end, void *ptr, int width, int fl
     __format_unsigned(buf, end, addr, 16, width - 2, 0, 0);
 }
 
-/// @brief Handles `%n`, storing the number of characters printed so far.
-/// @param count_var Pointer to the integer where the character count is stored.
-/// @param count The number of characters written so far.
-static void __format_count(int *count_var, int count)
-{
-    if (count_var) {
-        *count_var = count;
-    }
-}
-
 int vsnprintf(char *buffer, size_t size, const char *format, va_list args)
 {
     char dummy;
@@ -270,7 +260,6 @@ int vsnprintf(char *buffer, size_t size, const char *format, va_list args)
     }
 
     // Tracks number of characters written.
-    int count = 0;
 
     while (*format) {
         if (*format == '%') {
@@ -420,10 +409,6 @@ int vsnprintf(char *buffer, size_t size, const char *format, va_list args)
                 __format_float(&buf, end, va_arg(args, double), width, precision, flags);
                 break;
             }
-            case 'n': {
-                __format_count(va_arg(args, int *), count);
-                break;
-            }
             case '%': {
                 __emit_char(&buf, end, '%');
                 break;
@@ -439,7 +424,6 @@ int vsnprintf(char *buffer, size_t size, const char *format, va_list args)
         }
 
         format++;
-        count++;
     }
     if (buffer)
         *buf = '\0';
