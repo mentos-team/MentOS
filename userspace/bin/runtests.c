@@ -59,6 +59,7 @@ static char *all_tests[] = {
     "t_list",
     "t_mem",
     "t_mkdir",
+    "t_syslog_format",
     "t_rmdir_dotfiles",
     "t_stdint",
     "t_mount_boundary",
