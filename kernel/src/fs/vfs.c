@@ -276,11 +276,24 @@ super_block_t *vfs_get_superblock(const char *path)
     list_for_each_decl (it, &vfs_super_blocks) {
         sb  = list_entry(it, super_block_t, mounts);
         len = strlen(sb->path);
-        if (!strncmp(path, sb->path, len)) {
-            if (len > last_sb_len) {
-                last_sb_len = len;
-                last_sb     = sb;
-            }
+        if (strncmp(path, sb->path, len) != 0) {
+            continue;
+        }
+        // The prefix has to end where a path component ends. Comparing only
+        // the first `len` characters made a mount at `/dev/hda` claim
+        // `/dev/hda2` as well: the two share eight characters and nothing
+        // looked at the ninth (#289). Harmless with a single disk, but it is
+        // mount confusion waiting for a second one.
+        //
+        // Two prefixes need no such check: one that is the separator itself,
+        // which is the root and is a prefix of everything, and one that
+        // already ends with a separator.
+        if ((len > 1) && (sb->path[len - 1] != '/') && (path[len] != '\0') && (path[len] != '/')) {
+            continue;
+        }
+        if (len > last_sb_len) {
+            last_sb_len = len;
+            last_sb     = sb;
         }
     }
     return last_sb;
@@ -331,11 +344,12 @@ vfs_file_t *vfs_open(const char *path, int flags, mode_t mode)
     pr_debug("vfs_open(path: %s, flags: %d, mode: %d)\n", path, flags, mode);
     assert(path && "Provided null path.");
     // Resolve all symbolic links in the path before opening the file.
+    // Resolution never requires the last component to exist, which is why
+    // O_CREAT works, so there was nothing for a CREAT_LAST_COMPONENT flag to
+    // ask for: it was set here, set unconditionally in vfs_mkdir, and read
+    // nowhere. A flag nobody reads describes behaviour that does not exist
+    // and invites the next reader to rely on it (#289).
     int resolve_flags = FOLLOW_LINKS | REMOVE_TRAILING_SLASH;
-    // Allow the last component to be non existing when attempting to create it.
-    if (bitmask_check(flags, O_CREAT)) {
-        resolve_flags |= CREAT_LAST_COMPONENT;
-    }
     // Allocate a variable for the path.
     char absolute_path[PATH_MAX];
     // If the first character is not the '/' then get the absolute path.
@@ -666,7 +680,7 @@ int vfs_mkdir(const char *path, mode_t mode)
     // Allocate a variable for the path.
     char absolute_path[PATH_MAX];
     // If the first character is not the '/' then get the absolute path.
-    int resolve_flags = REMOVE_TRAILING_SLASH | FOLLOW_LINKS | CREAT_LAST_COMPONENT;
+    int resolve_flags = REMOVE_TRAILING_SLASH | FOLLOW_LINKS;
     int ret           = resolve_path(path, absolute_path, PATH_MAX, resolve_flags);
     if (ret < 0) {
         pr_err("vfs_mkdir(%s): Cannot get the absolute path.\n", path);
