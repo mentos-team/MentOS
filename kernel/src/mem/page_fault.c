@@ -159,11 +159,51 @@ static int __page_handle_cow(page_table_entry_t *entry)
 ///          and scheduler_run delivers it through the stored frame (running
 ///          the handler or the default terminating action) before this
 ///          task runs again.
-static int __send_sigsegv_to_current(pt_regs_t *f)
+/// @brief The user-mode fault that was last reported.
+/// @details A SIGSEGV handler that returns without fixing the mapping leaves
+///          the faulting instruction to re-execute, which faults again, which
+///          enters the handler again, for ever. That loop is what Linux does
+///          too and is the program's own doing, but one error line per
+///          delivery is not: measured over 60 seconds of one such process, it
+///          was 341722 of the 341824 lines the kernel printed, so a program
+///          misusing its own handler starved everything else instead of only
+///          itself (#296). Remembering the last fault keeps one report per
+///          distinct fault and one note when it starts repeating.
+static struct {
+    int seen;         ///< Whether anything has been reported yet.
+    pid_t pid;        ///< The process that faulted.
+    uint32_t eip;     ///< The instruction that faulted.
+    uint32_t address; ///< The address it faulted on.
+    int noted;        ///< Whether the repeat has already been noted.
+} __last_user_fault;
+
+static int __send_sigsegv_to_current(pt_regs_t *f, uint32_t faulting_addr)
 {
     task_struct *task = scheduler_get_current_process();
     if (task) {
-        pr_err("User-mode fault: delivering SIGSEGV to pid %d.\n", task->pid);
+        // The same process faulting at the same instruction on the same
+        // address is the loop described above, and there is nothing to add
+        // after the first line.
+        int repeat = __last_user_fault.seen && (__last_user_fault.pid == task->pid) &&
+                     (__last_user_fault.eip == f->eip) && (__last_user_fault.address == faulting_addr);
+        if (!repeat) {
+            __last_user_fault.seen    = 1;
+            __last_user_fault.pid     = task->pid;
+            __last_user_fault.eip     = f->eip;
+            __last_user_fault.address = faulting_addr;
+            __last_user_fault.noted   = 0;
+            // The instruction and the address are what a report of this has
+            // to carry: without them the line says only that something in
+            // the process went wrong.
+            pr_err(
+                "User-mode fault: delivering SIGSEGV to pid %d (eip: 0x%08x, address: 0x%08x).\n", task->pid, f->eip,
+                faulting_addr);
+        } else if (!__last_user_fault.noted) {
+            __last_user_fault.noted = 1;
+            pr_err(
+                "pid %d keeps faulting at 0x%08x: further SIGSEGV deliveries for it are not reported.\n", task->pid,
+                faulting_addr);
+        }
         // Notifies current process.
         sys_kill(task->pid, SIGSEGV);
         // Now, we know the process needs to be removed from the list of
@@ -279,7 +319,7 @@ void page_fault_handler(pt_regs_t *f)
 
         // If the fault was caused by a user process, send a SIGSEGV signal.
         if (err_user) {
-            if (__send_sigsegv_to_current(f) == 0) {
+            if (__send_sigsegv_to_current(f, faulting_addr) == 0) {
                 return;
             }
             pr_crit("No task found for current process, unable to send SIGSEGV.\n");
@@ -322,7 +362,7 @@ void page_fault_handler(pt_regs_t *f)
         // it is a protection violation to signal, not something the kernel
         // demand paging should service (#237).
         if (err_user) {
-            if (__send_sigsegv_to_current(f) == 0) {
+            if (__send_sigsegv_to_current(f, faulting_addr) == 0) {
                 return;
             }
         }
@@ -358,7 +398,7 @@ void page_fault_handler(pt_regs_t *f)
                 // Any user-mode fault we cannot resolve (the CoW handling
                 // failed) kills the process, not the kernel (#237).
                 if (err_user) {
-                    if (__send_sigsegv_to_current(f) == 0) {
+                    if (__send_sigsegv_to_current(f, faulting_addr) == 0) {
                         return;
                     }
                 } else {
@@ -378,7 +418,7 @@ void page_fault_handler(pt_regs_t *f)
             // process dies with SIGSEGV; only kernel-mode faults panic
             // (#237).
             if (err_user) {
-                if (__send_sigsegv_to_current(f) == 0) {
+                if (__send_sigsegv_to_current(f, faulting_addr) == 0) {
                     return;
                 }
             }

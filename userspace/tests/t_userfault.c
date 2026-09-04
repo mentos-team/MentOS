@@ -42,6 +42,28 @@ static void segv_handler(int sig)
     exit(HANDLER_EXIT);
 }
 
+/// How many times the returning handler has been entered.
+static volatile int handler_entries = 0;
+
+/// @brief SIGSEGV handler that returns the first time and exits the second.
+/// @details A handler that returns without fixing the mapping leaves the
+///          faulting instruction to re-execute, so the fault and the delivery
+///          repeat. That is what Linux does too, and it is the program's
+///          business, not the kernel's — but the kernel used to print an
+///          error line for every delivery, which was 341722 of the 341824
+///          lines it emitted in 60 seconds of one such process and starved
+///          everything else (#296). Bounding that output must not change what
+///          the process sees, which is what this checks: the handler has to
+///          be entered a second time, and the process has to be able to leave
+///          the loop under its own power.
+static void segv_returning_handler(int sig)
+{
+    (void)sig;
+    if (++handler_entries >= 2) {
+        exit(HANDLER_EXIT);
+    }
+}
+
 /// @brief Runs the faulting operation in a child and checks the outcome.
 /// @param label description of the case.
 /// @param fault the faulting operation (executed by the child).
@@ -112,6 +134,42 @@ static void fault_kernel_write(void)
     *KERNEL_REGION = 1;
 }
 
+/// @brief Checks that a handler which returns is entered again.
+/// @return 0 when the child left the loop through its handler, -1 otherwise.
+static int check_repeating_case(void)
+{
+    pid_t pid = fork();
+    if (pid < 0) {
+        syslog(LOG_ERR, "[t_userfault] fork: %s", strerror(errno));
+        return -1;
+    }
+    if (pid == 0) {
+        if (signal(SIGSEGV, segv_returning_handler) == SIG_ERR) {
+            syslog(LOG_ERR, "[t_userfault] signal: %s", strerror(errno));
+            exit(90);
+        }
+        fault_null_read();
+        // The handler returned and the instruction did not fault again, so
+        // the process resumed past a dereference of NULL.
+        exit(92);
+    }
+    int status;
+    if (waitpid(pid, &status, 0) < 0) {
+        syslog(LOG_ERR, "[t_userfault] waitpid: %s", strerror(errno));
+        return -1;
+    }
+    if (WIFEXITED(status) && (WEXITSTATUS(status) == HANDLER_EXIT)) {
+        return 0;
+    }
+    if (WIFEXITED(status) && (WEXITSTATUS(status) == 92)) {
+        syslog(LOG_ERR, "[t_userfault] a returning SIGSEGV handler was entered only once");
+        return -1;
+    }
+    syslog(
+        LOG_ERR, "[t_userfault] repeating fault: expected handler exit %d, got raw status 0x%x", HANDLER_EXIT, status);
+    return -1;
+}
+
 int main(void)
 {
     int failures = 0;
@@ -135,6 +193,12 @@ int main(void)
         ++failures;
     }
     if (check_case("kernel read, handled", fault_kernel_read, 1) < 0) {
+        ++failures;
+    }
+    // A handler that returns has to be entered again, because the faulting
+    // instruction runs again. The kernel reports the fault once instead of
+    // once per delivery, and that must not stop the deliveries themselves.
+    if (check_repeating_case() < 0) {
         ++failures;
     }
 
