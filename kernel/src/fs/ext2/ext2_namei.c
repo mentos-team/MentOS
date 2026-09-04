@@ -457,7 +457,7 @@ early_exit:
 /// @details Used when mkdir cannot finish: the entry it added to the parent
 ///          must go away before the inode is freed, otherwise the parent
 ///          keeps a name pointing at a free inode (#264).
-static int __ext2_clear_direntry_for_path(ext2_filesystem_t *fs, const char *path)
+int __ext2_clear_direntry_for_path(ext2_filesystem_t *fs, const char *path)
 {
     ext2_direntry_search_t search;
     memset(&search, 0, sizeof(ext2_direntry_search_t));

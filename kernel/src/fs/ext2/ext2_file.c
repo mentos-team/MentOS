@@ -23,10 +23,14 @@ vfs_file_t *ext2_creat(const char *path, mode_t mode)
     // Get the name of the directory.
     char parent_path[PATH_MAX];
     if (!dirname(path, parent_path, sizeof(parent_path))) {
+        errno = ENAMETOOLONG;
         return NULL;
     }
     const char *file_name = basename(path);
     if (strcmp(parent_path, path) == 0) {
+        // A path that is its own parent directory is the root, and creating
+        // the root means creating a directory: EISDIR is what POSIX asks for.
+        errno = EISDIR;
         return NULL;
     }
     // Get the parent VFS node.
@@ -35,12 +39,28 @@ vfs_file_t *ext2_creat(const char *path, mode_t mode)
         errno = ENOENT;
         return NULL;
     }
+    // What has to be undone when a later step fails. The inode is allocated
+    // in the bitmap before anything points at it, and its name is placed
+    // before the VFS file exists, so a failure in between used to leave the
+    // inode marked used with no name, or the name on disk while creat
+    // reported failure (#305).
+    int inode_index      = -1;
+    int has_direntry     = 0;
+    vfs_file_t *new_file = NULL;
+    // The error to report, as a negative errno. Every path out of here used
+    // to return NULL without touching errno, leaving the caller to read
+    // whatever the last unrelated failure had set.
+    int failure          = 0;
+    // The file to hand back on success.
+    vfs_file_t *result   = NULL;
+
     // flags = O_WRONLY | O_CREAT | O_TRUNC
     // Get the filesystem.
     ext2_filesystem_t *fs = (ext2_filesystem_t *)parent->device;
     if (fs == NULL) {
         pr_err("The parent does not belong to an EXT2 filesystem `%s`.\n", parent->name);
-        goto close_parent_return_null;
+        failure = -ENODEV;
+        goto rollback;
     }
     // Prepare an inode, it will come in handy either way.
     ext2_inode_t inode;
@@ -51,7 +71,8 @@ vfs_file_t *ext2_creat(const char *path, mode_t mode)
     if (!ext2_find_direntry(fs, parent->ino, file_name, &search)) {
         if (ext2_read_inode(fs, &inode, search.direntry.inode) == -1) {
             pr_err("Failed to read the inode of `%s`.\n", search.direntry.name);
-            goto close_parent_return_null;
+            failure = -EIO;
+            goto rollback;
         }
         vfs_file_t *file = ext2_find_vfs_file_with_inode(fs, search.direntry.inode);
         if (file == NULL) {
@@ -59,15 +80,20 @@ vfs_file_t *ext2_creat(const char *path, mode_t mode)
             file = vfs_alloc_file();
             if (file == NULL) {
                 pr_err("Failed to allocate memory for the EXT2 file.\n");
-                goto close_parent_return_null;
+                failure = -ENOMEM;
+                goto rollback;
             }
+            // From here the file is ours to release if the next step fails.
+            new_file = file;
             if (ext2_init_vfs_file(
                     fs, file, &inode, search.direntry.inode, search.direntry.name, search.direntry.name_len) == -1) {
                 pr_err("Failed to properly set the VFS file.\n");
-                goto close_parent_return_null;
+                failure = -EIO;
+                goto rollback;
             }
             // Add the vfs_file to the list of associated files.
             list_head_insert_before(&file->siblings, &fs->opened_files);
+            new_file = NULL;
         } else {
             // The list of open files is keyed by inode number, and the entry
             // may describe a file that was deleted while its number got
@@ -75,48 +101,90 @@ vfs_file_t *ext2_creat(const char *path, mode_t mode)
             __ext2_set_vfs_file_properties(
                 fs, file, &inode, search.direntry.inode, search.direntry.name, search.direntry.name_len);
         }
-        return file;
+        result = file;
+        goto done;
     }
     // Set the inode mode.
     mode                 = S_IFREG | (0xFFF & mode);
     // Get the group index of the parent.
     uint32_t group_index = ext2_inode_index_to_group_index(fs, parent->ino);
     // Create and initialize the new inode.
-    int inode_index      = ext2_create_inode(fs, &inode, mode, group_index);
+    inode_index          = ext2_create_inode(fs, &inode, mode, group_index);
     if (inode_index == -1) {
         pr_err("Failed to create a new inode inside `%s` (group index: %d).\n", parent->name, group_index);
-        goto close_parent_return_null;
+        failure = -ENOSPC;
+        goto rollback;
     }
     // Write the inode.
     if (ext2_write_inode(fs, &inode, inode_index) == -1) {
         pr_err("Failed to write the newly created inode.\n");
-        goto close_parent_return_null;
+        failure = -EIO;
+        goto rollback;
     }
 
     // Clean the content of the newly created file.
     if (ext2_clean_inode_content(fs, &inode, inode_index) < 0) {
         pr_err("Failed to clean the content of the newly created inode.\n");
-        goto close_parent_return_null;
+        failure = -EIO;
+        goto rollback;
     }
 
     // Initialize the file.
     if (ext2_allocate_direntry(fs, parent->ino, inode_index, file_name, ext2_file_type_regular_file) == -1) {
         pr_err("Failed to allocate a new direntry for the inode.\n");
-        goto close_parent_return_null;
+        failure = -ENOSPC;
+        goto rollback;
     }
+    has_direntry = 1;
     // Allocate the memory for the file.
-    vfs_file_t *new_file = vfs_alloc_file();
+    new_file     = vfs_alloc_file();
     if (new_file == NULL) {
         pr_err("Failed to allocate memory for the EXT2 file.\n");
-        goto close_parent_return_null;
+        failure = -ENOMEM;
+        goto rollback;
     }
     if (ext2_init_vfs_file(fs, new_file, &inode, inode_index, file_name, strlen(file_name)) == -1) {
         pr_err("Failed to properly set the VFS file.\n");
-        goto close_parent_return_null;
+        failure = -EIO;
+        goto rollback;
     }
-    return new_file;
-close_parent_return_null:
+    result   = new_file;
+    new_file = NULL;
+done:
+    // The reference taken on the parent is released on the way out, on this
+    // path as much as on the failing one (#323).
     vfs_close(parent);
+    return result;
+rollback:
+    // Take the name out of the parent before the inode goes away, so that no
+    // entry is left pointing at a free inode.
+    if (has_direntry && (__ext2_clear_direntry_for_path(fs, path) < 0)) {
+        pr_err("ext2_creat(path: %s): Failed to remove the incomplete directory entry.\n", path);
+    }
+    // Give the inode back. Re-read it, because cleaning its content may have
+    // given it blocks that have to be released along with it.
+    if (inode_index >= 0) {
+        ext2_inode_t stale;
+        if (ext2_read_inode(fs, &stale, (uint32_t)inode_index) != -1) {
+            stale.links_count = 0;
+            stale.dtime       = sys_time(NULL);
+            if (ext2_write_inode(fs, &stale, (uint32_t)inode_index) == -1) {
+                pr_err("ext2_creat(path: %s): Failed to update the inode being freed.\n", path);
+            }
+            if (ext2_free_inode(fs, &stale, (uint32_t)inode_index) < 0) {
+                pr_err("ext2_creat(path: %s): Failed to free the inode.\n", path);
+            }
+        } else {
+            pr_err("ext2_creat(path: %s): Failed to re-read the inode to free it.\n", path);
+        }
+    }
+    // Release the VFS file only when it is one we allocated and never handed
+    // to anybody.
+    if (new_file != NULL) {
+        vfs_dealloc_file(new_file);
+    }
+    vfs_close(parent);
+    errno = -failure;
     return NULL;
 }
 

@@ -754,8 +754,15 @@ vfs_file_t *vfs_creat(const char *path, mode_t mode)
     // Retrieve the file.
     vfs_file_t *file = sb_root->sys_operations->creat_f(absolute_path, mode);
     if (file == NULL) {
-        pr_err("vfs_creat(%s): Cannot find the given file (%s)!\n", path, strerror(errno));
-        errno = ENOENT;
+        // Keep what the filesystem reported. Overwriting it with ENOENT
+        // turned every creation failure into "no such file", so a full
+        // filesystem, a read-only device and a name that is too long were
+        // indistinguishable from user space; the line below used to print
+        // the right reason and then throw it away (#289).
+        if (errno == 0) {
+            errno = ENOENT;
+        }
+        pr_err("vfs_creat(%s): Cannot create the given file (%s)!\n", path, strerror(errno));
         return NULL;
     }
     // Increment file reference counter.

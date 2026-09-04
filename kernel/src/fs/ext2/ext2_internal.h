@@ -529,6 +529,7 @@ int ext2_destroy_direntry(ext2_filesystem_t *fs, ext2_inode_t parent, ext2_inode
 int ext2_find_direntry(ext2_filesystem_t *fs, ino_t ino, const char *name, ext2_direntry_search_t *search);
 
 // Defined in ext2_namei.c.
+int __ext2_clear_direntry_for_path(ext2_filesystem_t *fs, const char *path);
 int __valid_x_permission(task_struct *task, ext2_inode_t *inode);
 int ext2_file_type_to_vfs_file_type(int ext2_type);
 int ext2_resolve_path(vfs_file_t *directory, const char *path, ext2_direntry_search_t *search);
