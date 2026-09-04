@@ -1,6 +1,26 @@
 # ext2
 
-Verified against `MAIN` = `62c638a` (line numbers cited are for `MAIN`).
+Verified against `MAIN` = `62c638a`.
+
+The driver used to be one 4412-line `kernel/src/fs/ext2.c`; it now lives in
+`kernel/src/fs/ext2/`, one unit per concern, so the references below name a
+file rather than a line:
+
+| file | what it holds |
+| --- | --- |
+| `ext2.c` | mount, the VFS operation tables, initialize and finalize |
+| `ext2_io.c` | transfers between the block device and memory: superblock, block, BGDT, inode |
+| `ext2_alloc.c` | finding, allocating and releasing inodes and blocks |
+| `ext2_blockmap.c` | file-relative block to device block, and inode data I/O |
+| `ext2_dir.c` | directory entries: iteration, creation, removal |
+| `ext2_namei.c` | resolving a path, and creating or removing a name |
+| `ext2_file.c` | operations on an open file |
+| `ext2_attr.c` | stat, statfs and setattr |
+| `ext2_debug.c` | dumps of the on-disk structures |
+| `ext2_internal.h` | the definitions the units share |
+
+Serial output quoted further down predates the split and still names
+`ext2.c`: it is kept verbatim, because it is evidence of a past run.
 
 ## Image build (root cause context for #192)
 
@@ -19,7 +39,7 @@ Verified against `MAIN` = `62c638a` (line numbers cited are for `MAIN`).
 ## Read path
 
 `sys_read` → `vfs_read` → `ext2_read(file, buffer, f_pos, n)` →
-`ext2_read_inode_data` (ext2.c:1886 @`MAIN`):
+`ext2_read_inode_data` (ext2_blockmap.c @`MAIN`):
 
 - `end_offset = min(inode->size, offset + nbyte)`;
   `start_block/end_block = offset|end_offset / block_size`;
@@ -27,7 +47,7 @@ Verified against `MAIN` = `62c638a` (line numbers cited are for `MAIN`).
   `ext2_read_inode_block(fs, inode, block_index, cache)` → resolves direct /
   indirect (`ext2_get_real_block_index`) → `ext2_read_block`.
 
-`ext2_read_block` (ext2.c:1044-1048 @`MAIN`) **rejects block_index == 0**
+`ext2_read_block` (ext2_io.c @`MAIN`) **rejects block_index == 0**
 with `pr_err("You are trying to read an invalid block index (%d)")`.
 
 ### The #192 bug (VERIFIED FACT; EMPIRICALLY REPRODUCED)
@@ -63,7 +83,7 @@ for a new issue on recurrence → #192.
 
 ## Open path and the per-inode file cache
 
-`ext2_open` (ext2.c:3095 @`MAIN`):
+`ext2_open` (ext2_file.c @`MAIN`):
 - `get_ext2_filesystem(path)` → `ext2_resolve_path(fs->root, path, &search)`.
 - O_CREAT → `ext2_creat`; O_DIRECTORY/O_EXCL validation; inode read;
   `vfs_valid_open_permissions` (root/pid-0 bypass; owner/group/other bits);
@@ -76,7 +96,7 @@ for a new issue on recurrence → #192.
 
 ## Close path
 
-`ext2_close` (ext2.c:3286 @`MAIN`): `--count`; at 0: **refuses to free
+`ext2_close` (ext2_file.c @`MAIN`): `--count`; at 0: **refuses to free
 `fs->root`** (pr_warning + `-EPERM`, count stays 0), otherwise unlinks from
 `fs->opened_files` and `vfs_dealloc_file`. The root guard is what keeps the
 mount root alive despite reference quirks.

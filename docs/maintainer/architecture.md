@@ -12,8 +12,9 @@ kernel/
     kernel.c / kernel.c? kmain                     — init flow (kmain in kernel/src/kernel.c)
     process/ process.c, scheduler.c, wait.c, pid_manager.c,
              scheduler_algorithm.c, scheduler_feedback.c
-    fs/      vfs.c, ext2.c, procfs.c, pipe.c, open.c, namei.c, read_write.c,
+    fs/      vfs.c, procfs.c, pipe.c, open.c, namei.c, read_write.c,
              readdir.c, stat.c, attr.c, fcntl.c, ioctl.c, sync.c, fhs.c
+             ext2/  the ext2 driver, one unit per concern (see ext2.md)
     mem/     paging.c, page_fault.c, mm/mm.c, vm_area.c, vmem.c,
              alloc/{slab.c, buddy_system.c, zone_allocator.c, heap.c}
     elf/     elf.c (ELF loader)
