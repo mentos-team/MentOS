@@ -278,11 +278,6 @@ void ext2_free_block(ext2_filesystem_t *fs, uint32_t block_index)
     }
 }
 
-/// @brief Frees the given inode.
-/// @param fs a pointer to the filesystem.
-/// @param inode the inode we free.
-/// @param inode_index its index.
-/// @return 0 on success, otherwise it is a failure.
 /// @brief Frees the blocks that hold the block pointers of an inode.
 /// @param fs the filesystem.
 /// @param inode the inode whose index blocks are freed.
@@ -345,22 +340,22 @@ static void __ext2_free_index_blocks(ext2_filesystem_t *fs, ext2_inode_t *inode)
     ext2_dealloc_cache(inner);
 }
 
-int ext2_free_inode(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t inode_index)
+/// @brief Frees every block that belongs to an inode, data and index alike.
+/// @param fs a pointer to the filesystem.
+/// @param inode the inode whose blocks are released.
+/// @details The block pointers and the sector count are cleared, so the inode
+///          is left describing a file with no blocks at all. `size` is the
+///          caller's: releasing the blocks of a file and declaring it empty
+///          are two different things, and only truncation does both.
+void ext2_free_inode_blocks(ext2_filesystem_t *fs, ext2_inode_t *inode)
 {
-    // Retrieve the group index.
-    uint32_t group_index  = ext2_inode_index_to_group_index(fs, inode_index);
-    // Get the index of the inode inside the group.
-    uint32_t group_offset = ext2_inode_index_to_group_offset(fs, inode_index);
-    // Get the block bitmap index.
-    uint32_t inode_bitmap = fs->block_groups[group_index].inode_bitmap;
-    // Get the number of blocks we need to free.
+    // How many blocks the size says the file holds. Sparse files legally
+    // contain holes, so a null pointer inside that range is skipped rather
+    // than treated as the end.
     uint32_t block_number = (inode->size / fs->block_size) + ((inode->size % fs->block_size) != 0);
 
-    // Log the allocation of the inode.
-    pr_debug(
-        "ext2_free_inode(group: %4u, inode_index: %4u, group_offset: %4u)\n", group_index, inode_index, group_offset);
-
-    // Free its blocks.
+    // Free the data blocks first: they are reached through the index blocks,
+    // which the next step releases.
     for (uint32_t block_index = 0; block_index < block_number; ++block_index) {
         // Get the real index.
         uint32_t real_index = ext2_get_real_block_index(fs, inode, block_index);
@@ -370,8 +365,39 @@ int ext2_free_inode(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t inode_i
         ext2_free_block(fs, real_index);
     }
 
-    // Free the blocks that held the pointers to those data blocks.
+    // Free the blocks that held the pointers to those data blocks (#302).
     __ext2_free_index_blocks(fs, inode);
+
+    // Nothing points anywhere any more, and the inode owns no sector. The
+    // write path derives the blocks it still has to allocate from
+    // `blocks_count`, so leaving it set would make it skip allocating the
+    // blocks it just gave back.
+    for (uint32_t index = 0; index < EXT2_DIRECT_BLOCKS; ++index) {
+        inode->data.blocks.dir_blocks[index] = 0;
+    }
+    inode->blocks_count = 0;
+}
+
+/// @brief Frees the given inode.
+/// @param fs a pointer to the filesystem.
+/// @param inode the inode we free.
+/// @param inode_index its index.
+/// @return 0 on success, otherwise it is a failure.
+int ext2_free_inode(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t inode_index)
+{
+    // Retrieve the group index.
+    uint32_t group_index  = ext2_inode_index_to_group_index(fs, inode_index);
+    // Get the index of the inode inside the group.
+    uint32_t group_offset = ext2_inode_index_to_group_offset(fs, inode_index);
+    // Get the block bitmap index.
+    uint32_t inode_bitmap = fs->block_groups[group_index].inode_bitmap;
+
+    // Log the allocation of the inode.
+    pr_debug(
+        "ext2_free_inode(group: %4u, inode_index: %4u, group_offset: %4u)\n", group_index, inode_index, group_offset);
+
+    // Give back every block the inode owns, data and index alike.
+    ext2_free_inode_blocks(fs, inode);
 
     // Allocate the cache.
     uint8_t *cache = ext2_alloc_cache(fs);

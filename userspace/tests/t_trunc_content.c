@@ -1,8 +1,10 @@
 /// @file t_trunc_content.c
-/// @brief Regression test for #315: truncating a file larger than one block
-/// must not write anything but zeroes, and must not make the file grow.
-/// @details ext2_clean_inode_content walked the file one block at a time with
-/// a one-block buffer, but computed the length of each write as
+/// @brief Regression test for #315 and #320: a truncating open must leave the
+/// file empty, and must give its blocks back.
+/// @details Two defects met on this path.
+///
+/// #315: ext2_clean_inode_content walked the file one block at a time with a
+/// one-block buffer, but computed the length of each write as
 /// `max(min(offset + cache_size, inode->size), 0)`, which is the offset of the
 /// end of the window rather than its length. The first iteration was right by
 /// accident, since its offset is 0; from the second on it asked
@@ -10,14 +12,21 @@
 /// copied whatever followed the one-block slab object into the file, and the
 /// last iteration wrote past the end of the file and grew it.
 ///
-/// The file therefore has to be larger than one block for the defect to show:
-/// t_write_read already truncates a file, but a 6-byte one, so its single
-/// iteration never leaves the range where the arithmetic happens to work.
+/// #320: nothing set the size to zero. The content was overwritten with
+/// zeroes and the length stayed whatever it was, so `stat` kept reporting the
+/// old size, reading returned that many zero bytes instead of end-of-file,
+/// and the blocks stayed allocated and attributed to the file.
 ///
-/// Both consequences are checked. The growth is the deterministic one and does
-/// not depend on what the kernel heap happens to hold; the non-zero bytes are
-/// the reason the defect matters, because they are kernel memory that a
-/// program can read back.
+/// The file therefore has to be larger than one block for either defect to
+/// show: t_write_read already truncates a file, but a 6-byte one, so its
+/// single iteration never leaves the range where the #315 arithmetic happens
+/// to work, and one block is too little to see space come back.
+///
+/// The file is created empty before the measurement starts, so that the
+/// directory entry already exists and a block the directory needs to grow
+/// cannot be counted against the file. Four blocks keeps it inside the twelve
+/// direct pointers of the inode, so no index block is involved either and the
+/// expected counts are exact.
 /// @copyright (c) 2014-2026 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
@@ -28,6 +37,7 @@
 #include <strerror.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/statfs.h>
 #include <syslog.h>
 #include <unistd.h>
 
@@ -41,17 +51,34 @@
 /// runs four times and the last one lands past the end of the file.
 #define FILE_SIZE ((3 * BLOCK_SIZE) + 100)
 
+/// How many blocks FILE_SIZE occupies: three whole ones and the remainder.
+#define FILE_BLOCKS 4
+
 /// Byte written everywhere, so that anything left over is visible.
 #define FILLER 0xAB
 
 /// Buffer used for writing and for reading back, one block at a time.
 static char buffer[BLOCK_SIZE];
 
-/// @brief Creates the file and fills it with FILLER.
+/// @brief Creates the file, empty, so the directory entry exists before the
+///        measurement starts.
 /// @return 0 on success, -1 on failure.
-static int __create_and_fill(void)
+static int __create_empty(void)
 {
     int fd = open(PATH, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if (fd < 0) {
+        syslog(LOG_ERR, "[t_trunc_content] open for creating: %s", strerror(errno));
+        return -1;
+    }
+    close(fd);
+    return 0;
+}
+
+/// @brief Fills the file with FILLER.
+/// @return 0 on success, -1 on failure.
+static int __fill(void)
+{
+    int fd = open(PATH, O_WRONLY, 0);
     if (fd < 0) {
         syslog(LOG_ERR, "[t_trunc_content] open for filling: %s", strerror(errno));
         return -1;
@@ -85,31 +112,46 @@ static int __size_of(unsigned *size)
     return 0;
 }
 
-/// @brief Counts the bytes of the file that are not zero.
-/// @param nonzero where the count is stored.
+/// @brief Reads the number of free blocks of the filesystem.
+/// @param blocks where the count is stored.
+/// @return 0 on success, -1 on failure.
+static int __free_blocks(unsigned long *blocks)
+{
+    statfs_t buf;
+    if (statfs("/home/user", &buf) < 0) {
+        syslog(LOG_ERR, "[t_trunc_content] statfs: %s", strerror(errno));
+        return -1;
+    }
+    *blocks = (unsigned long)buf.f_bfree;
+    return 0;
+}
+
+/// @brief Reads the whole file, counting what it holds.
+/// @param total where the number of bytes read before end-of-file is stored.
+/// @param nonzero where the count of bytes that are not zero is stored.
 /// @param first where the offset of the first non-zero byte is stored.
 /// @return 0 on success, -1 on failure.
-static int __count_nonzero(unsigned *nonzero, unsigned *first)
+static int __read_all(unsigned *total, unsigned *nonzero, unsigned *first)
 {
     int fd = open(PATH, O_RDONLY, 0);
     if (fd < 0) {
         syslog(LOG_ERR, "[t_trunc_content] open for reading: %s", strerror(errno));
         return -1;
     }
-    *nonzero      = 0;
-    *first        = 0;
-    unsigned seen = 0;
+    *total   = 0;
+    *nonzero = 0;
+    *first   = 0;
     ssize_t bytes;
     while ((bytes = read(fd, buffer, sizeof(buffer))) > 0) {
         for (ssize_t i = 0; i < bytes; ++i) {
             if (buffer[i] != 0) {
                 if (*nonzero == 0) {
-                    *first = seen + (unsigned)i;
+                    *first = *total + (unsigned)i;
                 }
                 ++(*nonzero);
             }
         }
-        seen += (unsigned)bytes;
+        *total += (unsigned)bytes;
     }
     close(fd);
     if (bytes < 0) {
@@ -121,21 +163,36 @@ static int __count_nonzero(unsigned *nonzero, unsigned *first)
 
 int main(void)
 {
-    unsigned before  = 0;
-    unsigned after   = 0;
-    unsigned nonzero = 0;
-    unsigned first   = 0;
-    int failures     = 0;
+    unsigned long free_empty  = 0;
+    unsigned long free_filled = 0;
+    unsigned long free_after  = 0;
+    unsigned size             = 0;
+    unsigned total            = 0;
+    unsigned nonzero          = 0;
+    unsigned first            = 0;
+    int failures              = 0;
 
-    if (__create_and_fill() < 0) {
-        return EXIT_FAILURE;
-    }
-    if (__size_of(&before) < 0) {
+    if ((__create_empty() < 0) || (__free_blocks(&free_empty) < 0) || (__fill() < 0) ||
+        (__free_blocks(&free_filled) < 0)) {
         unlink(PATH);
         return EXIT_FAILURE;
     }
-    if (before != FILE_SIZE) {
-        syslog(LOG_ERR, "[t_trunc_content] the file is %u bytes, expected %u", before, (unsigned)FILE_SIZE);
+
+    // The starting state has to be the one the test assumes, otherwise every
+    // check below can pass without meaning anything.
+    if (__size_of(&size) < 0) {
+        unlink(PATH);
+        return EXIT_FAILURE;
+    }
+    if (size != FILE_SIZE) {
+        syslog(LOG_ERR, "[t_trunc_content] the filled file is %u bytes, expected %u", size, (unsigned)FILE_SIZE);
+        unlink(PATH);
+        return EXIT_FAILURE;
+    }
+    if ((free_empty - free_filled) != FILE_BLOCKS) {
+        syslog(
+            LOG_ERR, "[t_trunc_content] filling the file took %lu blocks, expected %u", free_empty - free_filled,
+            (unsigned)FILE_BLOCKS);
         unlink(PATH);
         return EXIT_FAILURE;
     }
@@ -150,30 +207,48 @@ int main(void)
     }
     close(fd);
 
-    // Truncating a file cannot make it longer. #320 tracks the fact that it
-    // does not shorten it either, which is why this is not an equality.
-    if (__size_of(&after) < 0) {
+    // A truncating open leaves the file with no content at all.
+    if (__size_of(&size) < 0) {
         ++failures;
-    } else if (after > before) {
-        syslog(LOG_ERR, "[t_trunc_content] truncating grew the file from %u bytes to %u", before, after);
+    } else if (size != 0) {
+        syslog(LOG_ERR, "[t_trunc_content] the truncated file is %u bytes, expected 0", size);
         ++failures;
     }
 
-    // Whatever length is left, none of it may be anything but zero: a non-zero
-    // byte here came from kernel memory past the one-block buffer.
-    if (__count_nonzero(&nonzero, &first) < 0) {
+    // Reading it therefore reports end-of-file straight away, and nothing it
+    // returns may be anything but zero: a non-zero byte here came from kernel
+    // memory past the one-block buffer.
+    if (__read_all(&total, &nonzero, &first) < 0) {
         ++failures;
-    } else if (nonzero != 0) {
+    } else {
+        if (total != 0) {
+            syslog(LOG_ERR, "[t_trunc_content] reading the truncated file returned %u bytes, expected 0", total);
+            ++failures;
+        }
+        if (nonzero != 0) {
+            syslog(
+                LOG_ERR, "[t_trunc_content] %u bytes of the truncated file are not zero, the first at offset %u",
+                nonzero, first);
+            ++failures;
+        }
+    }
+
+    // And the space it held goes back to the filesystem.
+    if (__free_blocks(&free_after) < 0) {
+        ++failures;
+    } else if (free_after != free_empty) {
         syslog(
-            LOG_ERR, "[t_trunc_content] %u bytes of the truncated file are not zero, the first at offset %u", nonzero,
-            first);
+            LOG_ERR, "[t_trunc_content] truncating gave back %lu of the %u blocks the file held",
+            free_after - free_filled, (unsigned)FILE_BLOCKS);
         ++failures;
     }
 
     unlink(PATH);
 
     if (failures == 0) {
-        syslog(LOG_INFO, "[t_trunc_content] truncating %u bytes left only zeroes and did not grow the file", before);
+        syslog(
+            LOG_INFO, "[t_trunc_content] truncating %u bytes left an empty file and returned %u blocks",
+            (unsigned)FILE_SIZE, (unsigned)FILE_BLOCKS);
         return EXIT_SUCCESS;
     }
     syslog(LOG_ERR, "[t_trunc_content] %d FAILURES", failures);

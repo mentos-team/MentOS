@@ -258,15 +258,18 @@ vfs_file_t *ext2_open(const char *path, int flags, mode_t mode)
         return NULL;
     }
 
-    // Check if the file is a regular file, and the user wants to write and truncate.
-    if (bitmask_exact(inode.mode, S_IFREG) &&
-        (bitmask_exact(flags, O_RDWR | O_TRUNC) || bitmask_exact(flags, O_RDONLY | O_TRUNC))) {
-        // Clean the content of the newly created file.
-        if (ext2_clean_inode_content(fs, &inode, search.direntry.inode) < 0) {
+    // Any truncating open of a regular file has to leave it empty. There is
+    // one flag to test: the condition used to read as "read-write or
+    // read-only truncating opens", and meant "any open with O_TRUNC", because
+    // `bitmask_exact(V, M)` is `((V) & (M)) == (M)` and `O_RDONLY` is 0. The
+    // behaviour that fell out of it was the right one, but by accident (#320).
+    if (bitmask_exact(inode.mode, S_IFREG) && bitmask_check(flags, O_TRUNC)) {
+        if (ext2_truncate_inode(fs, &inode, search.direntry.inode) < 0) {
             pr_err(
-                "ext2_open(path: '%s', flags: %d, mode: %d): Failed to clean "
-                "the content of the newly created inode.\n",
+                "ext2_open(path: '%s', flags: %d, mode: %d): Failed to "
+                "truncate the file.\n",
                 path, flags, mode);
+            errno = EIO;
             return NULL;
         }
     }
