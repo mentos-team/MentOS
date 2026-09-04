@@ -47,6 +47,7 @@ set(TEST_LIST
     t_shm.c
     t_semget.c
     t_mkdir.c
+    t_name_max.c
     t_alarm.c
     t_exit.c
     t_environ.c
