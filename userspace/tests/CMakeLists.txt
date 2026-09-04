@@ -47,6 +47,7 @@ set(TEST_LIST
     t_shm.c
     t_semget.c
     t_mkdir.c
+    t_faultinj.c
     t_syslog_format.c
     t_rmdir_dotfiles.c
     t_stdint.c

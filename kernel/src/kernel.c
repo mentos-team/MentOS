@@ -374,6 +374,15 @@ int kmain(boot_info_t *boot_informations)
         print_fail();
         kernel_panic("Failed to initialize the IPC information system.");
     }
+
+#ifdef ENABLE_ATA_FAULT_INJECTION
+    // Only present when the option is on: it exists to make the block layer
+    // fail on demand, which is a testing facility and not something a normal
+    // build should offer (#338).
+    if (procfaultinj_module_init()) {
+        pr_err("Failed to initialize the fault injection entry.\n");
+    }
+#endif
     print_ok();
 
     //==========================================================================

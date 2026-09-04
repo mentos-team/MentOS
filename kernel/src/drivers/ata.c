@@ -13,6 +13,7 @@
 
 #include "drivers/ata/ata.h"
 #include "drivers/ata/ata_types.h"
+#include "io/fault_injection.h"
 
 #include "descriptor_tables/isr.h"
 #include "devices/pci.h"
@@ -1191,6 +1192,14 @@ static bool_t ata_device_init(ata_device_t *dev)
 /// @return 0 on success, negative errno on failure.
 static int ata_device_read_sector_pio(ata_device_t *dev, uint32_t lba_sector, uint8_t *buffer)
 {
+    // Injected failures return before the transfer, which is where every real
+    // error path here leaves off too: the caller's buffer is left untouched,
+    // so the code above sees exactly what a failing device shows it (#338).
+    int injected = ata_fault_inject_read();
+    if (injected != 0) {
+        return injected;
+    }
+
     int rc = 0;
 
     if (ata_status_wait_not(dev, ata_status_bsy, 100000)) {
@@ -1335,6 +1344,12 @@ ata_device_write_sector(ata_device_t *dev, uint32_t lba_sector, uint8_t *buffer)
     if ((dev->type != ata_dev_type_pata) && (dev->type != ata_dev_type_sata)) {
         pr_crit("[%s] Unsupported device type for read operation.\n", ata_get_device_settings_str(dev));
         return -EPERM;
+    }
+
+    // As for the read: fail before anything reaches the device (#338).
+    int injected = ata_fault_inject_write();
+    if (injected != 0) {
+        return injected;
     }
 
     // Acquire the lock for thread safety.
