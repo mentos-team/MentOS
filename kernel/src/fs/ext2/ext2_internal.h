@@ -518,7 +518,6 @@ ssize_t ext2_read_inode_block(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32
 ssize_t ext2_write_inode_block(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t inode_index, uint32_t block_index, uint8_t *buffer);
 ssize_t ext2_read_inode_data(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t inode_index, off_t offset, size_t nbyte, char *buffer);
 ssize_t ext2_write_inode_data(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t inode_index, off_t offset, size_t nbyte, char *buffer);
-int ext2_clean_inode_content(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t inode_index);
 int ext2_truncate_inode(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t inode_index);
 
 // Defined in ext2_dir.c.
