@@ -118,3 +118,28 @@ With the fix applied, failure detection is now automatic:
   `scripts/run-qemu-test build 600`, then a diagnostic tapview step;
   artifacts test.log/serial.log uploaded `if: always()`.
 - macos.yml exists (issue #124 tracks build problems there; not examined).
+
+## The five workflows and when they run
+
+The README groups the badges the same way, because the two groups mean
+different things when they are red.
+
+Core CI, on every push to `main`/`develop` and every pull request against
+them, all three path-filtered:
+
+- `ubuntu.yml` — the gate: build matrix plus the QEMU test job described above.
+- `macos.yml` — build only, no test job (issue #124).
+- `documentation.yml` — Doxygen build.
+
+Compatibility, weekly and on demand, never a merge gate:
+
+- `compiler-compatibility.yml` — also on pushes to `develop`; Sundays 03:00.
+- `macos-compatibility.yml` — `schedule` (Sundays 04:00) and
+  `workflow_dispatch` only, so it never sees a branch push.
+
+A scheduled run is attributed to the default branch, which is why the
+compatibility badges only started resolving once `develop` became the default:
+`macos-compatibility.yml` had no run at all in the repository's history until
+it was dispatched by hand on 2026-09-04. Until a workflow has one run on the
+branch a badge is pinned to, that badge reads "no status" rather than failing,
+which is easy to mistake for a broken link.
