@@ -94,7 +94,10 @@ static inline void __scheduler_feedback_log(void)
     int written = 0;
 #endif
 #ifdef WRITE_ON_FILE
-    written = sprintf(buffer, "TIME : %ds\n", timer_get_seconds());
+    // timer_get_seconds returns a uint64_t, and this printf has no 64-bit
+    // conversion, so the value is narrowed here rather than left to be read
+    // half-width by a %d that cannot say so (#270).
+    written = sprintf(buffer, "TIME : %us\n", (uint32_t)timer_get_seconds());
     vfs_write(feedback, buffer, offset, written);
     offset += written;
 #endif
