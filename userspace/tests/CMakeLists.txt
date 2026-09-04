@@ -34,6 +34,7 @@ set(TEST_LIST
     t_fflush.c
     t_file_blocks.c
     t_file_blocks_free.c
+    t_trunc_content.c
     t_font.c
     t_sigusr.c
     t_kill.c

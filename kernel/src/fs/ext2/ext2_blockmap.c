@@ -661,7 +661,11 @@ int ext2_clean_inode_content(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_
         return 1;
     }
     // Allocate the cache.
-    uint8_t *cache    = ext2_alloc_cache(fs);
+    uint8_t *cache = ext2_alloc_cache(fs);
+    if (cache == NULL) {
+        pr_err("Failed to allocate the cache to clean inode %u\n", inode_index);
+        return -1;
+    }
     // Get the cache size.
     size_t cache_size = fs->block_size;
     //
@@ -670,8 +674,12 @@ int ext2_clean_inode_content(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_
         pr_debug(
             "ext2_clean_inode_content(%p, %p, %u): offset = %6u of size = %u\n", fs, inode, inode_index, offset,
             inode->size);
-        // We do not want to extend the size of the inode.
-        to_write = max(min(offset + cache_size, inode->size), 0);
+        // How many bytes are left to clean. The cache holds a single block, so
+        // that is the most one call can store: asking for more made the driver
+        // copy whatever followed the cache into the file, and the last request
+        // reached past the end of the file and extended it (#315).
+        size_t remaining = (size_t)(inode->size - (uint32_t)offset);
+        to_write         = (ssize_t)min(cache_size, remaining);
         pr_debug("ext2_clean_inode_content(%p, %p, %u): to_write = %6u\n", fs, inode, inode_index, to_write);
         // Override the content.
         ssize_t written = ext2_write_inode_data(fs, inode, inode_index, offset, to_write, (char *)cache);
