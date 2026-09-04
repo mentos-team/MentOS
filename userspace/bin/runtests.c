@@ -97,6 +97,7 @@ static char *all_tests[] = {
     "t_time",
     "t_wifsignaled",
     "t_write_read",
+    "t_faultinj",
 };
 
 static char **tests = &all_tests[0];
