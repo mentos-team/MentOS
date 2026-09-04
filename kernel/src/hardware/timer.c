@@ -4,10 +4,10 @@
 /// See LICENSE.md for details.
 
 // Setup the logging for this file (do this before any other include).
-#include "sys/kernel_levels.h"          // Include kernel log levels.
-#define __DEBUG_HEADER__ "[TIMER ]"     ///< Change header.
+#include "sys/kernel_levels.h"           // Include kernel log levels.
+#define __DEBUG_HEADER__ "[TIMER ]"      ///< Change header.
 #define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
-#include "io/debug.h"                   // Include debugging functions.
+#include "io/debug.h"                    // Include debugging functions.
 
 #include "assert.h"
 #include "descriptor_tables/isr.h"
@@ -560,16 +560,18 @@ void run_timer_softirq(void)
 /// @param data The data.
 static inline void debug_timeout(unsigned long data)
 {
+    // The seconds come back as a uint64_t and the logging printf has no
+    // 64-bit conversion, so narrow it here (#270).
     pr_debug(
         "The timer has been successfully deactivated: %d, ticks: %d, seconds: "
-        "%d\n",
-        data, timer_ticks, timer_get_seconds());
+        "%u\n",
+        data, timer_ticks, (uint32_t)timer_get_seconds());
 }
 
 /// @brief Cancels a sleep timer for a task being woken up by signals.
 /// This handles the race where a signal interrupts a sleeping task:
 /// the signal handler calls this to stop the sleep timer from firing.
-/// 
+///
 /// With boundary-based context switching, we don't need to trigger
 /// immediate scheduling - the signal handler will return to the next
 /// interrupt/exception boundary where scheduler_run() picks the next task.
@@ -691,7 +693,7 @@ int sys_nanosleep(const struct timespec *req, struct timespec *rem)
     // Prevent a race between entering sleep state and arming the wake timer.
     // If a timer interrupt preempts in that window, the task can become
     // TASK_UNINTERRUPTIBLE without a wake source and block the system.
-    uint8_t irqs = irq_disable();
+    uint8_t irqs                   = irq_disable();
     // Create a dinamic timer to wake up the process after some time
     struct timer_list *sleep_timer = __timer_list_alloc();
     // First, we save the remaining time. Then, we remove the current process

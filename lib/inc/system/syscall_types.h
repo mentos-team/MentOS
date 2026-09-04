@@ -395,6 +395,27 @@
         return (type)(value);                                                                                          \
     } while (0)
 
+/// @brief Handle a pointer returned from a system call that reports failure
+///        with a null pointer.
+/// @param type Specifies the pointer type of the returned value.
+/// @param value The variable where the result of the system call is stored.
+/// @details POSIX splits the pointer-returning calls in two, and only one of
+///          them fits `__syscall_return`. `getcwd` and its kind report failure
+///          with a null pointer, and `__syscall_return` gives them
+///          `(type)-1`, which no `== NULL` test can ever see: the error
+///          handling written against the documented contract was dead code
+///          (#231). `shmat` and `mmap` are the other kind — POSIX gives them
+///          `(void *)-1` and MAP_FAILED respectively — so they keep using
+///          `__syscall_return` and must not be moved here.
+#define __syscall_return_pointer(type, value)                                                                          \
+    do {                                                                                                               \
+        if ((unsigned int)(value) >= (unsigned int)(-125)) {                                                           \
+            errno = -(value);                                                                                          \
+            return (type)0;                                                                                            \
+        }                                                                                                              \
+        return (type)(value);                                                                                          \
+    } while (0)
+
 // Few things about what follows:
 //
 // 1. The symbol "=", is a a constraint modifier, and it means that the operand

@@ -12,5 +12,8 @@ char *getcwd(char *buf, size_t size)
 {
     long __res;
     __inline_syscall_2(__res, getcwd, buf, size);
-    __syscall_return(char *, __res);
+    // POSIX: NULL on failure, with errno set. `__syscall_return` would give
+    // `(char *)-1` here, which every `== NULL` caller in the tree missed
+    // (#231).
+    __syscall_return_pointer(char *, __res);
 }

@@ -11,6 +11,7 @@
 /// Reference: https://refspecs.linuxfoundation.org/FHS_3.0/fhs-3.0.html
 
 #include "fs/fhs.h"
+#include "fs/attr.h"
 #include "fs/vfs.h"
 #include "io/debug.h"
 #include "sys/stat.h"
@@ -71,7 +72,21 @@ static int create_directory_if_not_exists(const char *path, mode_t mode)
     if (stat_result == 0) {
         // Path exists, check if it's a directory
         if (S_ISDIR(stat_buf.st_mode)) {
-            pr_debug("[FHS] Directory already exists: %s\n", path);
+            // Existing is not the same as correct. `/root` is in the staged
+            // rootfs at 0755 and the table asks for 0700, and this function
+            // used to stat it, see a directory and return: the table
+            // documented a contract the code never delivered (#263).
+            mode_t current = stat_buf.st_mode & 07777;
+            mode_t wanted  = mode & 07777;
+            if (current != wanted) {
+                if (sys_chmod(path, wanted) != 0) {
+                    pr_err("[FHS] Failed to set the mode of %s to 0%o (it is 0%o)\n", path, wanted, current);
+                    return -1;
+                }
+                pr_debug("[FHS] Corrected the mode of %s: 0%o -> 0%o\n", path, current, wanted);
+            } else {
+                pr_debug("[FHS] Directory already exists: %s\n", path);
+            }
             return 0;
         } else {
             // Path exists but is not a directory
@@ -80,13 +95,19 @@ static int create_directory_if_not_exists(const char *path, mode_t mode)
         }
     }
 
-    // Directory doesn't exist, create it using vfs_mkdir
-    if (vfs_mkdir(path, mode & 0777) != 0) {
+    // Directory doesn't exist, create it using vfs_mkdir. The mask is 07777
+    // and not 0777 because the low four bits of that nibble are the set-user,
+    // set-group and sticky bits, and 0777 dropped exactly the 01000 that the
+    // table asks for on /tmp and /var/tmp. ext2_mkdir keeps the whole low 12
+    // bits, so the sticky bit was being discarded here and nowhere else,
+    // which left both directories world-writable *without* it: any user could
+    // delete another user's files there (#263).
+    if (vfs_mkdir(path, mode & 07777) != 0) {
         pr_err("[FHS] Failed to create directory: %s\n", path);
         return -1;
     }
 
-    pr_debug("[FHS] Created directory: %s (mode: 0%o)\n", path, mode & 0777);
+    pr_debug("[FHS] Created directory: %s (mode: 0%o)\n", path, mode & 07777);
     return 0;
 }
 

@@ -32,8 +32,15 @@ static int check_success(const char *what, char *buf, size_t size, char *ret, co
 
 static int check_failure(const char *what, char *ret, int expected_errno)
 {
-    if ((ret != (char *)-1) && (ret != NULL)) {
-        syslog(LOG_ERR, "[t_getcwd] %s: expected failure, got success pointer\n", what);
+    // POSIX: NULL, and only NULL. This used to accept `(char *)-1` as well,
+    // because the wrapper could not return NULL and the test had to take what
+    // it was given (#231).
+    if (ret != NULL) {
+        if (ret == (char *)-1) {
+            syslog(LOG_ERR, "[t_getcwd] %s: failure reported as (char *)-1 instead of NULL\n", what);
+        } else {
+            syslog(LOG_ERR, "[t_getcwd] %s: expected failure, got success pointer\n", what);
+        }
         return -1;
     }
     if (errno != expected_errno) {
@@ -61,7 +68,7 @@ int main(int argc, char *argv[])
     // 1. A sufficiently large buffer must succeed and be NUL-terminated.
     memset(buf, SENTINEL, sizeof(buf));
     errno = 0;
-    ret = getcwd(buf, sizeof(buf));
+    ret   = getcwd(buf, sizeof(buf));
     if (check_success("large buffer", buf, sizeof(buf), ret, directory) < 0) {
         failed = 1;
     }
@@ -70,7 +77,7 @@ int main(int argc, char *argv[])
     // 2. A buffer of exactly len + 1 bytes (terminator included) must succeed.
     memset(buf, SENTINEL, sizeof(buf));
     errno = 0;
-    ret = getcwd(buf, len + 1);
+    ret   = getcwd(buf, len + 1);
     if (check_success("exact-size buffer", buf, len + 1, ret, directory) < 0) {
         failed = 1;
     }
@@ -78,7 +85,7 @@ int main(int argc, char *argv[])
     // 3. A buffer one byte too small must fail with ERANGE.
     memset(buf, SENTINEL, sizeof(buf));
     errno = 0;
-    ret = getcwd(buf, len);
+    ret   = getcwd(buf, len);
     if (check_failure("one-byte-too-small buffer", ret, ERANGE) < 0) {
         failed = 1;
     }
@@ -86,7 +93,7 @@ int main(int argc, char *argv[])
     // 3b. A clearly undersized buffer must fail with ERANGE as well.
     memset(buf, SENTINEL, sizeof(buf));
     errno = 0;
-    ret = getcwd(buf, 2);
+    ret   = getcwd(buf, 2);
     if (check_failure("undersized buffer", ret, ERANGE) < 0) {
         failed = 1;
     }
@@ -94,7 +101,7 @@ int main(int argc, char *argv[])
     // 4. size == 0 must fail with EINVAL (POSIX.1-2017).
     memset(buf, SENTINEL, sizeof(buf));
     errno = 0;
-    ret = getcwd(buf, 0);
+    ret   = getcwd(buf, 0);
     if (check_failure("zero size", ret, EINVAL) < 0) {
         failed = 1;
     }

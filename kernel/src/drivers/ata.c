@@ -131,6 +131,13 @@ typedef struct ata_identity {
     uint16_t unused7[152];
 } ata_identity_t;
 
+// IDENTIFY returns 256 words, and the read below derives its word count from
+// this structure, so a structure of the wrong size reads the wrong number of
+// words. It was 508 bytes while `uint64_t` was 32 bits wide, which made the
+// driver take 254 of the 256 words the drive had to give and leave two of them
+// in its buffer (#270).
+typedef char ata_identity_size_check[(sizeof(ata_identity_t) == 512) ? 1 : -1];
+
 /// @brief Physical Region Descriptor Table (PRDT) entry.
 /// @details
 /// The physical memory region to be transferred is described by a Physical
@@ -517,7 +524,9 @@ static inline void ata_dump_device(ata_device_t *dev)
     pr_debug("        overwrite_ext_command_supported       : %u\n", dev->identity.overwrite_ext_command_supported);
     pr_debug("        block_erase_ext_command_supported     : %u\n", dev->identity.block_erase_ext_command_supported);
     pr_debug("        sectors_28                            : %u\n", dev->identity.sectors_28);
-    pr_debug("        sectors_48                            : %u\n", dev->identity.sectors_48);
+    // 48-bit, and this printf has no 64-bit conversion. The dump shows the
+    // low half; ata_max_offset is where the whole value is used (#270).
+    pr_debug("        sectors_48 (low 32)                   : %u\n", (uint32_t)dev->identity.sectors_48);
     pr_debug("    }\n");
     pr_debug("    bmr {\n");
     pr_debug("        command : %6u, status : %6u, prdt : %6u\n", dev->bmr.command, dev->bmr.status, dev->bmr.prdt);
@@ -579,16 +588,14 @@ static inline int __cond_status_missing_bits(uint8_t status, uint8_t mask)
 /// @return 0 on success (condition satisfied), 1 on timeout.
 /// @details Polls the device status register while applying the condition function.
 /// Uses volatile timeout to prevent compiler optimization of the critical wait loop.
-static inline int ata_status_wait(ata_device_t *dev, uint8_t mask, 
-                                  int (*evaluate_condition)(uint8_t, uint8_t),
-                                  long timeout)
+static inline int ata_status_wait(ata_device_t *dev, uint8_t mask, int (*evaluate_condition)(uint8_t, uint8_t), long timeout)
 {
     uint8_t status;
     // Use volatile local copy to prevent compiler optimization of timeout loop.
     // The return value depends on proper timeout decrement, making volatile
     // semantics critical for correctness.
     volatile long volatile_timeout = timeout;
-    
+
     do {
         // Read current device status.
         status = inportb(dev->io_reg.status);
@@ -598,7 +605,7 @@ static inline int ata_status_wait(ata_device_t *dev, uint8_t mask,
             return 0;
         }
     } while (--volatile_timeout > 0);
-    
+
     // Timeout occurred - operation failed or device not responding.
     return 1;
 }
@@ -1247,39 +1254,87 @@ static int ata_device_read_sector_dma(ata_device_t *dev, uint32_t lba_sector, ui
     return -ENOSYS;
 }
 
+/// @brief How many times a sector transfer is attempted before it is reported
+///        as a failure.
+/// @details Three, because the observed failure is a transient status race
+///          that clears on the next attempt, and a sector that genuinely
+///          cannot be read will not become readable on the tenth try either.
+#define ATA_TRANSFER_ATTEMPTS 3
+
 /// @brief Reads an ATA sector with PIO (DMA disabled due to QEMU incompatibility).
 /// @param dev the device on which we perform the read.
 /// @param lba_sector the sector where we read.
 /// @param buffer the buffer we are writing.
-static void ata_device_read_sector(ata_device_t *dev, uint32_t lba_sector, uint8_t *buffer)
+/// @return 0 on success, a negative errno on failure.
+/// @details The result must be checked. This used to be a void function that
+///          logged the failure and returned, and `ata_device_read_sector_pio`
+///          jumps out before its `inportsw` on every error path, so the
+///          caller's buffer kept whatever it held before — for the two
+///          `support_buffer` paths in `ata_read` that is the previous sector,
+///          read as though it were this one. A transient `-EBUSY` was observed
+///          on a boot that then passed its whole suite (#291).
+static __attribute__((warn_unused_result)) int
+ata_device_read_sector(ata_device_t *dev, uint32_t lba_sector, uint8_t *buffer)
 {
     if ((dev->type != ata_dev_type_pata) && (dev->type != ata_dev_type_sata)) {
         pr_crit("[%s] Unsupported device type for read operation.\n", ata_get_device_settings_str(dev));
-        return;
+        return -EPERM;
     }
 
     spinlock_lock(&dev->lock);
 
     // Skip DMA entirely; QEMU's DMA IRQ emulation is unreliable.
     // PIO works perfectly, so use it directly.
-    int rc = ata_device_read_sector_pio(dev, lba_sector, buffer);
-    if (rc) {
-        pr_crit("ata_device_read_sector: PIO failed (sector %u, rc=%d)\n", lba_sector, rc);
+    //
+    // Retry a failed attempt before reporting it. What this bounds is a status
+    // race and not a bad sector: the device reports BSY, or clears DRQ, on a
+    // sector that reads perfectly when asked again. Once the error stopped
+    // being dropped it turned out to be frequent enough to break a suite run,
+    // on sectors 40 and 44 of the inode table in the same boot, which is how
+    // #291's "silently absorbed" reads were being absorbed. Reporting it
+    // immediately is correct but needlessly destructive; absorbing it, which
+    // is what this function used to do, handed ext2 the previous sector as an
+    // inode table.
+    int rc = 0;
+    for (unsigned attempt = 0; attempt < ATA_TRANSFER_ATTEMPTS; ++attempt) {
+        rc = ata_device_read_sector_pio(dev, lba_sector, buffer);
+        if (rc == 0) {
+            // Keep the transient visible: it is a real event on the bus, and
+            // a driver that recovers in silence cannot be told from one that
+            // never had the problem.
+            if (attempt > 0) {
+                pr_warning(
+                    "ata_device_read_sector: sector %u read on attempt %u of %u\n", lba_sector, attempt + 1,
+                    ATA_TRANSFER_ATTEMPTS);
+            }
+            break;
+        }
+        pr_crit(
+            "ata_device_read_sector: PIO failed (sector %u, rc=%d, attempt %u of %u)\n", lba_sector, rc, attempt + 1,
+            ATA_TRANSFER_ATTEMPTS);
     }
 
     spinlock_unlock(&dev->lock);
+
+    return rc;
 }
 
 /// @brief Writs an ATA sector.
 /// @param dev the device on which we perform the write.
 /// @param lba_sector the sector where we read.
 /// @param buffer the buffer where we store what we read.
-static void ata_device_write_sector(ata_device_t *dev, uint32_t lba_sector, uint8_t *buffer)
+/// @return 0 on success, a negative errno on failure.
+/// @details The result must be checked, for the same reason as the read: a
+///          write that never reached the device used to report nothing, so
+///          `ata_write` returned the byte count it had been asked for and the
+///          data was not on the disk (#291).
+static __attribute__((warn_unused_result)) int
+ata_device_write_sector(ata_device_t *dev, uint32_t lba_sector, uint8_t *buffer)
 {
     // Check if we are trying to perform the read on a valid device type.
     if ((dev->type != ata_dev_type_pata) && (dev->type != ata_dev_type_sata)) {
         pr_crit("[%s] Unsupported device type for read operation.\n", ata_get_device_settings_str(dev));
-        return;
+        return -EPERM;
     }
 
     // Acquire the lock for thread safety.
@@ -1301,7 +1356,7 @@ static void ata_device_write_sector(ata_device_t *dev, uint32_t lba_sector, uint
     if (ata_status_wait_not(dev, ata_status_bsy, 100000)) {
         ata_print_status_error(dev);
         spinlock_unlock(&dev->lock);
-        return;
+        return -EBUSY;
     }
 
     // Select the drive (set head and device).
@@ -1311,7 +1366,7 @@ static void ata_device_write_sector(ata_device_t *dev, uint32_t lba_sector, uint
     if (ata_status_wait_not(dev, ata_status_bsy, 100000)) {
         ata_print_status_error(dev);
         spinlock_unlock(&dev->lock);
-        return;
+        return -EBUSY;
     }
 
     // Set the features, sector count, and LBA for the write operation.
@@ -1325,7 +1380,7 @@ static void ata_device_write_sector(ata_device_t *dev, uint32_t lba_sector, uint
     if (ata_status_wait_not(dev, ata_status_bsy, 100000)) {
         ata_print_status_error(dev);
         spinlock_unlock(&dev->lock);
-        return;
+        return -EBUSY;
     }
 
     // Notify that we are starting the DMA writing operation.
@@ -1353,6 +1408,8 @@ static void ata_device_write_sector(ata_device_t *dev, uint32_t lba_sector, uint
 
     // Release the lock after the operation is complete.
     spinlock_unlock(&dev->lock);
+
+    return 0;
 }
 
 // == VFS CALLBACKS ===========================================================
@@ -1490,8 +1547,18 @@ static ssize_t ata_read(vfs_file_t *file, char *buffer, off_t offset, size_t siz
     uint32_t postfix_size = (offset + size) % ATA_SECTOR_SIZE;
     uint32_t x_offset     = 0;
 
+    // A sector that could not be read must not be copied out. The support
+    // buffer holds the previous sector and the caller's buffer holds whatever
+    // it held before, and neither is distinguishable from the data that was
+    // asked for, so the error has to end the read (#291).
+    int rc;
+
     if (start_offset) {
-        ata_device_read_sector(dev, start_block, (uint8_t *)support_buffer);
+        rc = ata_device_read_sector(dev, start_block, (uint8_t *)support_buffer);
+        if (rc < 0) {
+            pr_err("ata_read: failed to read sector %u (%d)\n", start_block, rc);
+            return rc;
+        }
         // Copy the prefix from the support buffer to the output buffer.
         memcpy(buffer, (void *)((uintptr_t)support_buffer + start_offset), prefix_size);
         x_offset += prefix_size;
@@ -1500,7 +1567,11 @@ static ssize_t ata_read(vfs_file_t *file, char *buffer, off_t offset, size_t siz
 
     // Read postfix if needed.
     if (postfix_size && (start_block <= end_block)) {
-        ata_device_read_sector(dev, end_block, (uint8_t *)support_buffer);
+        rc = ata_device_read_sector(dev, end_block, (uint8_t *)support_buffer);
+        if (rc < 0) {
+            pr_err("ata_read: failed to read sector %u (%d)\n", end_block, rc);
+            return rc;
+        }
         // Copy the postfix from the support buffer to the output buffer.
         memcpy((void *)((uintptr_t)buffer + size - postfix_size), support_buffer, postfix_size);
         --end_block;
@@ -1508,7 +1579,11 @@ static ssize_t ata_read(vfs_file_t *file, char *buffer, off_t offset, size_t siz
 
     // Read full sectors in between.
     for (; start_block <= end_block; ++start_block) {
-        ata_device_read_sector(dev, start_block, (uint8_t *)((uintptr_t)buffer + x_offset));
+        rc = ata_device_read_sector(dev, start_block, (uint8_t *)((uintptr_t)buffer + x_offset));
+        if (rc < 0) {
+            pr_err("ata_read: failed to read sector %u (%d)\n", start_block, rc);
+            return rc;
+        }
         x_offset += ATA_SECTOR_SIZE;
     }
 
@@ -1563,26 +1638,52 @@ static ssize_t ata_write(vfs_file_t *file, const void *buffer, off_t offset, siz
         size = max_offset - offset;
     }
 
+    // A partial sector has to be read before it can be modified, so a failed
+    // read here would write the previous sector's contents back over the one
+    // being edited. And a write that never reached the device used to leave
+    // `ata_write` reporting the full byte count (#291).
+    int rc;
+
     // Handle the prefix if needed.
     if (start_offset) {
-        ata_device_read_sector(dev, start_block, (uint8_t *)support_buffer);
+        rc = ata_device_read_sector(dev, start_block, (uint8_t *)support_buffer);
+        if (rc < 0) {
+            pr_err("ata_write: failed to read sector %u before modifying it (%d)\n", start_block, rc);
+            return rc;
+        }
         memcpy((void *)((uintptr_t)support_buffer + (start_offset)), buffer, prefix_size);
-        ata_device_write_sector(dev, start_block, (uint8_t *)support_buffer);
+        rc = ata_device_write_sector(dev, start_block, (uint8_t *)support_buffer);
+        if (rc < 0) {
+            pr_err("ata_write: failed to write sector %u (%d)\n", start_block, rc);
+            return rc;
+        }
         x_offset += prefix_size;
         ++start_block;
     }
 
     // Handle the postfix if needed.
     if (postfix_size && (start_block <= end_block)) {
-        ata_device_read_sector(dev, end_block, (uint8_t *)support_buffer);
+        rc = ata_device_read_sector(dev, end_block, (uint8_t *)support_buffer);
+        if (rc < 0) {
+            pr_err("ata_write: failed to read sector %u before modifying it (%d)\n", end_block, rc);
+            return rc;
+        }
         memcpy(support_buffer, (void *)((uintptr_t)buffer + size - postfix_size), postfix_size);
-        ata_device_write_sector(dev, end_block, (uint8_t *)support_buffer);
+        rc = ata_device_write_sector(dev, end_block, (uint8_t *)support_buffer);
+        if (rc < 0) {
+            pr_err("ata_write: failed to write sector %u (%d)\n", end_block, rc);
+            return rc;
+        }
         --end_block;
     }
 
     // Write full sectors in between.
     for (; start_block <= end_block; ++start_block) {
-        ata_device_write_sector(dev, start_block, (uint8_t *)((uintptr_t)buffer + x_offset));
+        rc = ata_device_write_sector(dev, start_block, (uint8_t *)((uintptr_t)buffer + x_offset));
+        if (rc < 0) {
+            pr_err("ata_write: failed to write sector %u (%d)\n", start_block, rc);
+            return rc;
+        }
         x_offset += ATA_SECTOR_SIZE;
     }
 

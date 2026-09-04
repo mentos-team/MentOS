@@ -1,6 +1,7 @@
-/// @file t_mkdir_nospace.c
-/// @brief Regression test for #264: mkdir must fail, and leave nothing
-/// behind, when the filesystem has no room for the new directory.
+/// @file t_nospace.c
+/// @brief Regression tests for what the filesystem does when it runs out of
+/// space: #264, mkdir must fail and leave nothing behind, and #303, a write
+/// that cannot allocate its block must not report success.
 /// @details ext2_mkdir allocates an inode, adds the entry to the parent and
 /// only then allocates the data block that holds `.` and `..`. When that
 /// last allocation failed the function returned 0, so user space saw a
@@ -37,7 +38,12 @@
 #define BASE_DIR "/home/user"
 
 /// The directory the test tries to create with no space left.
-#define DIR_PATH BASE_DIR "/t_mkdir_nospace.d"
+#define DIR_PATH BASE_DIR "/t_nospace.d"
+
+/// The file used to check what a write does with no space left. It is
+/// created before the fill, so that the check does not depend on being able
+/// to create a file on a full filesystem.
+#define TARGET_PATH BASE_DIR "/t_nospace.target"
 
 /// Size of a single write, one block of the image.
 #define CHUNK 4096
@@ -54,7 +60,7 @@ static char buffer[CHUNK];
 /// @brief Builds the path of a fill file.
 /// @param path the destination buffer.
 /// @param index the index of the fill file.
-static void __fill_path(char *path, int index) { sprintf(path, BASE_DIR "/t_mkdir_nospace.%04d", index); }
+static void __fill_path(char *path, int index) { sprintf(path, BASE_DIR "/t_nospace.%04d", index); }
 
 /// @brief Reads the free counters of the filesystem.
 /// @param blocks where the free block count is stored, may be NULL.
@@ -64,7 +70,7 @@ static int __read_free(unsigned long *blocks, unsigned long *inodes)
 {
     statfs_t buf;
     if (statfs(BASE_DIR, &buf) < 0) {
-        syslog(LOG_ERR, "[t_mkdir_nospace] statfs: %s", strerror(errno));
+        syslog(LOG_ERR, "[t_nospace] statfs: %s", strerror(errno));
         return -1;
     }
     if (blocks) {
@@ -95,7 +101,7 @@ static int __fill_filesystem(int *files)
         __fill_path(path, index);
         int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
         if (fd < 0) {
-            syslog(LOG_ERR, "[t_mkdir_nospace] open %s: %s", path, strerror(errno));
+            syslog(LOG_ERR, "[t_nospace] open %s: %s", path, strerror(errno));
             return -1;
         }
         ++(*files);
@@ -106,7 +112,7 @@ static int __fill_filesystem(int *files)
         }
         close(fd);
     }
-    syslog(LOG_ERR, "[t_mkdir_nospace] the filesystem still has free blocks after %d files", MAX_FILES);
+    syslog(LOG_ERR, "[t_nospace] the filesystem still has free blocks after %d files", MAX_FILES);
     return -1;
 }
 
@@ -119,6 +125,75 @@ static void __remove_fill(int files)
         __fill_path(path, index);
         unlink(path);
     }
+}
+
+/// @brief Creates the file used by the write check, with one block of data.
+/// @return 0 on success, -1 on failure.
+static int __prepare_target(void)
+{
+    memset(buffer, 'a', sizeof(buffer));
+    int fd = open(TARGET_PATH, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if (fd < 0) {
+        syslog(LOG_ERR, "[t_nospace] open %s: %s", TARGET_PATH, strerror(errno));
+        return -1;
+    }
+    ssize_t written = write(fd, buffer, sizeof(buffer));
+    close(fd);
+    if (written != (ssize_t)sizeof(buffer)) {
+        syslog(LOG_ERR, "[t_nospace] preparing the target wrote %zd bytes", written);
+        return -1;
+    }
+    return 0;
+}
+
+/// @brief Appends a block to the target file with no space left.
+/// @details The block cannot be allocated, so the write has to say so: it
+///          either fails with ENOSPC or reports fewer bytes than asked. It
+///          used to return the full count and drop the data, leaving the file
+///          claiming a size it could not back (#303).
+/// @return 0 on success, -1 on failure.
+static int check_write_with_no_space(void)
+{
+    int failures = 0;
+    memset(buffer, 'b', sizeof(buffer));
+    int fd = open(TARGET_PATH, O_WRONLY, 0);
+    if (fd < 0) {
+        syslog(LOG_ERR, "[t_nospace] open %s for appending: %s", TARGET_PATH, strerror(errno));
+        return -1;
+    }
+    // Append past the end of the file, so the write needs a block that the
+    // file does not already own.
+    if (lseek(fd, 2 * CHUNK, SEEK_SET) != (2 * CHUNK)) {
+        syslog(LOG_ERR, "[t_nospace] lseek on the target: %s", strerror(errno));
+        close(fd);
+        return -1;
+    }
+    errno           = 0;
+    ssize_t written = write(fd, buffer, CHUNK);
+    close(fd);
+    if (written == CHUNK) {
+        syslog(LOG_ERR, "[t_nospace] the write reported %zd bytes with no free block left", written);
+        ++failures;
+    } else if ((written < 0) && (errno != ENOSPC)) {
+        syslog(LOG_ERR, "[t_nospace] the write failed with %s, expected ENOSPC", strerror(errno));
+        ++failures;
+    }
+
+    // Whatever the write reported, the file must not claim bytes it does not
+    // hold: the size covers the first block plus whatever was stored.
+    stat_t st;
+    if (stat(TARGET_PATH, &st) < 0) {
+        syslog(LOG_ERR, "[t_nospace] stat %s: %s", TARGET_PATH, strerror(errno));
+        return -1;
+    }
+    unsigned long expected = ((written > 0) ? (2 * CHUNK + (unsigned long)written) : CHUNK);
+    if ((unsigned long)st.st_size != expected) {
+        syslog(
+            LOG_ERR, "[t_nospace] the target is %lu bytes, expected %lu after a write that reported %zd",
+            (unsigned long)st.st_size, expected, written);
+        ++failures;
+    }
+    return (failures == 0) ? 0 : -1;
 }
 
 int main(void)
@@ -134,10 +209,14 @@ int main(void)
     if (__read_free(&blocks_before, &inodes_before) < 0) {
         return EXIT_FAILURE;
     }
-    syslog(LOG_INFO, "[t_mkdir_nospace] before: %lu free blocks, %lu free inodes", blocks_before, inodes_before);
+    syslog(LOG_INFO, "[t_nospace] before: %lu free blocks, %lu free inodes", blocks_before, inodes_before);
 
+    if (__prepare_target() < 0) {
+        return EXIT_FAILURE;
+    }
     if (__fill_filesystem(&files) < 0) {
         __remove_fill(files);
+        unlink(TARGET_PATH);
         return EXIT_FAILURE;
     }
     if (__read_free(&blocks_full, &inodes_full) < 0) {
@@ -145,7 +224,7 @@ int main(void)
         return EXIT_FAILURE;
     }
     syslog(
-        LOG_INFO, "[t_mkdir_nospace] full after %d files: %lu free blocks, %lu free inodes", files, blocks_full,
+        LOG_INFO, "[t_nospace] full after %d files: %lu free blocks, %lu free inodes", files, blocks_full,
         inodes_full);
 
     // With no room for the directory data block, mkdir must fail, and it must
@@ -158,20 +237,25 @@ int main(void)
         return EXIT_FAILURE;
     }
     if (ret == 0) {
-        syslog(LOG_ERR, "[t_mkdir_nospace] mkdir succeeded with a full filesystem");
+        syslog(LOG_ERR, "[t_nospace] mkdir succeeded with a full filesystem");
         ++failures;
         // The directory it claims to have created has no entries at all, and
         // it is not removed here: rmdir walks its zeroed block and never
         // comes back (#304).
         int fd = open(DIR_PATH, O_RDONLY | O_DIRECTORY, 0);
         syslog(
-            LOG_ERR, "[t_mkdir_nospace] open of the claimed directory returned %d (%s)", fd,
+            LOG_ERR, "[t_nospace] open of the claimed directory returned %d (%s)", fd,
             (fd < 0) ? strerror(errno) : "no error");
         if (fd >= 0) {
             close(fd);
         }
     } else if (errno != ENOSPC) {
-        syslog(LOG_ERR, "[t_mkdir_nospace] mkdir failed with %s, expected ENOSPC", strerror(errno));
+        syslog(LOG_ERR, "[t_nospace] mkdir failed with %s, expected ENOSPC", strerror(errno));
+        ++failures;
+    }
+
+    // A write that cannot allocate its block must not report success.
+    if (check_write_with_no_space() < 0) {
         ++failures;
     }
 
@@ -180,7 +264,7 @@ int main(void)
     // whatever the fill itself consumed or stranded stays out of the check.
     if (inodes_after_mkdir != inodes_full) {
         syslog(
-            LOG_ERR, "[t_mkdir_nospace] free inodes went from %lu to %lu across the failed mkdir: it stranded one",
+            LOG_ERR, "[t_nospace] free inodes went from %lu to %lu across the failed mkdir: it stranded one",
             inodes_full, inodes_after_mkdir);
         ++failures;
     }
@@ -189,17 +273,18 @@ int main(void)
     // the parent directory keeps the blocks it grew to hold the fill entries,
     // and ext2 never shrinks a directory.
     __remove_fill(files);
+    unlink(TARGET_PATH);
     if (__read_free(NULL, &inodes_after) < 0) {
         return EXIT_FAILURE;
     }
     syslog(
-        LOG_INFO, "[t_mkdir_nospace] after the fill was removed: %lu free inodes (%lu before the test)", inodes_after,
+        LOG_INFO, "[t_nospace] after the fill was removed: %lu free inodes (%lu before the test)", inodes_after,
         inodes_before);
 
     if (failures == 0) {
-        syslog(LOG_INFO, "[t_mkdir_nospace] mkdir reported ENOSPC and left nothing behind");
+        syslog(LOG_INFO, "[t_nospace] mkdir and write both reported the full filesystem");
         return EXIT_SUCCESS;
     }
-    syslog(LOG_ERR, "[t_mkdir_nospace] %d FAILURES", failures);
+    syslog(LOG_ERR, "[t_nospace] %d FAILURES", failures);
     return EXIT_FAILURE;
 }

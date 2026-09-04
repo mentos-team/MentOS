@@ -20,10 +20,26 @@
 [![forthebadge](https://forthebadge.com/images/badges/made-with-c.svg)](https://forthebadge.com)
 [![forthebadge](https://forthebadge.com/images/badges/for-you.svg)](https://forthebadge.com)
 
-[![Ubuntu](https://github.com/mentos-team/MentOS/actions/workflows/ubuntu.yml/badge.svg)](https://github.com/mentos-team/MentOS/actions/workflows/ubuntu.yml)
-[![Documentation](https://github.com/mentos-team/MentOS/actions/workflows/documentation.yml/badge.svg)](https://github.com/mentos-team/MentOS/actions/workflows/documentation.yml)
+<!--
+  The badges are pinned to `develop`, the default branch: that is where every change
+  lands first, so it is the state a visitor is actually looking at. The two groups are
+  kept apart because they answer different questions. The first says whether `develop`
+  builds, boots and documents itself right now, and runs on every push and pull
+  request. The second says whether the tree still builds with compilers and hosts we
+  do not gate merges on; those workflows run weekly, so a red badge there is a
+  standing report, not a broken branch.
+-->
+**Core CI**
+[![Ubuntu](https://github.com/mentos-team/MentOS/actions/workflows/ubuntu.yml/badge.svg?branch=develop)](https://github.com/mentos-team/MentOS/actions/workflows/ubuntu.yml)
+[![macOS](https://github.com/mentos-team/MentOS/actions/workflows/macos.yml/badge.svg?branch=develop)](https://github.com/mentos-team/MentOS/actions/workflows/macos.yml)
+[![Documentation](https://github.com/mentos-team/MentOS/actions/workflows/documentation.yml/badge.svg?branch=develop)](https://github.com/mentos-team/MentOS/actions/workflows/documentation.yml)
 
-> 📢 **Note:** The default branch is `main`
+**Compatibility**
+[![Compiler Compatibility](https://github.com/mentos-team/MentOS/actions/workflows/compiler-compatibility.yml/badge.svg?branch=develop)](https://github.com/mentos-team/MentOS/actions/workflows/compiler-compatibility.yml)
+[![macOS Compatibility](https://github.com/mentos-team/MentOS/actions/workflows/macos-compatibility.yml/badge.svg?branch=develop)](https://github.com/mentos-team/MentOS/actions/workflows/macos-compatibility.yml)
+
+> 📢 **Note:** The default branch is `develop`. Pull requests go there; `main` only ever
+> receives release merges.
 
 ---
 

@@ -1,6 +1,8 @@
 # List of programs.
 set(TEST_LIST
     t_aab_pipe.c
+    t_creat_errno.c
+    t_dir_entries.c
     t_dup.c
     t_hashmap.c
     t_procfs_read.c
@@ -21,7 +23,7 @@ set(TEST_LIST
     t_execve_bigargv.c
     t_userfault.c
     t_path_bounds.c
-    t_mkdir_nospace.c
+    t_nospace.c
     t_execve_fail.c
     t_elf_short.c
     t_gid.c
@@ -32,6 +34,9 @@ set(TEST_LIST
     t_pwd.c
     t_fflush.c
     t_file_blocks.c
+    t_file_blocks_free.c
+    t_trunc_content.c
+    t_write_aligned.c
     t_font.c
     t_sigusr.c
     t_kill.c
@@ -42,6 +47,10 @@ set(TEST_LIST
     t_shm.c
     t_semget.c
     t_mkdir.c
+    t_rmdir_dotfiles.c
+    t_stdint.c
+    t_mount_boundary.c
+    t_name_max.c
     t_alarm.c
     t_exit.c
     t_environ.c

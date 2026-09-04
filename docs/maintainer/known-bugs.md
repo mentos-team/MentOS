@@ -6,7 +6,7 @@ reviewed against `BASE` = `82f4314`.
 ## Open issues filed from this investigation
 
 ### #192 — ext2 sparse holes fail to read; qemu-test panic at t_gid
-- **Status**: open. **Severity**: high. **Subsystem**: kernel/src/fs/ext2.c.
+- **Status**: open. **Severity**: high. **Subsystem**: kernel/src/fs/ext2/.
 - **Proven root cause**: `mke2fs` writes all-zero tail blocks as holes;
   `ext2_read_inode_data` includes the hole block;
   `ext2_read_block` rejects block 0 → whole read fails. Secondary: failed
