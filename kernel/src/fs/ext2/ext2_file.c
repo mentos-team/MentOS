@@ -98,7 +98,7 @@ vfs_file_t *ext2_creat(const char *path, mode_t mode)
             // The list of open files is keyed by inode number, and the entry
             // may describe a file that was deleted while its number got
             // reused: refresh it from the inode we just read (#297).
-            __ext2_set_vfs_file_properties(
+            ext2_set_vfs_file_properties(
                 fs, file, &inode, search.direntry.inode, search.direntry.name, search.direntry.name_len);
         }
         result = file;
@@ -158,7 +158,7 @@ done:
 rollback:
     // Take the name out of the parent before the inode goes away, so that no
     // entry is left pointing at a free inode.
-    if (has_direntry && (__ext2_clear_direntry_for_path(fs, path) < 0)) {
+    if (has_direntry && (ext2_clear_direntry_for_path(fs, path) < 0)) {
         pr_err("ext2_creat(path: %s): Failed to remove the incomplete directory entry.\n", path);
     }
     // Give the inode back. Re-read it, because cleaning its content may have
@@ -197,7 +197,7 @@ vfs_file_t *ext2_open(const char *path, int flags, mode_t mode)
 {
     pr_debug("ext2_open(path: '%s', flags: %d, mode: %d)\n", path, flags, mode);
     // Get the EXT2 filesystem.
-    ext2_filesystem_t *fs = get_ext2_filesystem(path);
+    ext2_filesystem_t *fs = ext2_get_filesystem(path);
     if (fs == NULL) {
         pr_err(
             "ext2_open(path: '%s', flags: %d, mode: %d): Failed to get the "
@@ -276,7 +276,7 @@ vfs_file_t *ext2_open(const char *path, int flags, mode_t mode)
         // The list of open files is keyed by inode number, and the entry may
         // describe a file that was deleted while its number got reused:
         // refresh it from the inode we just read (#297).
-        __ext2_set_vfs_file_properties(
+        ext2_set_vfs_file_properties(
             fs, file, &inode, search.direntry.inode, search.direntry.name, search.direntry.name_len);
     }
     if (file == NULL) {
@@ -541,7 +541,7 @@ ssize_t ext2_readlink(const char *path, char *buffer, size_t bufsize)
     pr_debug("ext2_readlink(path: %s)\n", path);
 
     // Get the EXT2 filesystem associated with the given path
-    ext2_filesystem_t *fs = get_ext2_filesystem(path);
+    ext2_filesystem_t *fs = ext2_get_filesystem(path);
     if (!fs) {
         pr_err("ext2_readlink(path: %s): Failed to get the EXT2 filesystem.\n", path);
         return -ENOENT;

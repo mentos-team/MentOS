@@ -590,7 +590,7 @@ int ext2_find_direntry(ext2_filesystem_t *fs, ino_t ino, const char *name, ext2_
     }
 
     // Check that we are allowed to reach through the directory
-    if (!__valid_x_permission(scheduler_get_current_process(), &inode)) {
+    if (!ext2_valid_x_permission(scheduler_get_current_process(), &inode)) {
         pr_err(
             "The parent inode has no x permission (ino: %d, mode: %d, name: "
             "%s).\n",

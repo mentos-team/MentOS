@@ -529,12 +529,12 @@ int ext2_destroy_direntry(ext2_filesystem_t *fs, ext2_inode_t parent, ext2_inode
 int ext2_find_direntry(ext2_filesystem_t *fs, ino_t ino, const char *name, ext2_direntry_search_t *search);
 
 // Defined in ext2_namei.c.
-int __ext2_clear_direntry_for_path(ext2_filesystem_t *fs, const char *path);
-int __valid_x_permission(task_struct *task, ext2_inode_t *inode);
+int ext2_clear_direntry_for_path(ext2_filesystem_t *fs, const char *path);
+int ext2_valid_x_permission(task_struct *task, ext2_inode_t *inode);
 int ext2_file_type_to_vfs_file_type(int ext2_type);
 int ext2_resolve_path(vfs_file_t *directory, const char *path, ext2_direntry_search_t *search);
-ext2_filesystem_t *get_ext2_filesystem(const char *absolute_path);
-void __ext2_set_vfs_file_properties(ext2_filesystem_t *fs, vfs_file_t *file, ext2_inode_t *inode, uint32_t inode_index, const char *name, size_t name_len);
+ext2_filesystem_t *ext2_get_filesystem(const char *absolute_path);
+void ext2_set_vfs_file_properties(ext2_filesystem_t *fs, vfs_file_t *file, ext2_inode_t *inode, uint32_t inode_index, const char *name, size_t name_len);
 int ext2_init_vfs_file(ext2_filesystem_t *fs, vfs_file_t *file, ext2_inode_t *inode, uint32_t inode_index, const char *name, size_t name_len);
 vfs_file_t *ext2_find_vfs_file_with_inode(ext2_filesystem_t *fs, ino_t inode);
 int ext2_create_inode(ext2_filesystem_t *fs, ext2_inode_t *inode, mode_t mode, uint32_t preferred_group);

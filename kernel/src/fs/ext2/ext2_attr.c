@@ -74,7 +74,7 @@ int ext2_stat(const char *path, stat_t *stat)
 {
     pr_debug("ext2_stat(path: %s)\n", path);
     // Get the EXT2 filesystem.
-    ext2_filesystem_t *fs = get_ext2_filesystem(path);
+    ext2_filesystem_t *fs = ext2_get_filesystem(path);
     if (fs == NULL) {
         pr_err("ext2_stat(path: %s): Failed to get the EXT2 filesystem.\n", path);
         return -ENOENT;
@@ -98,7 +98,7 @@ int ext2_stat(const char *path, stat_t *stat)
 
 int ext2_statfs(const char *path, statfs_t *statfs)
 {
-    ext2_filesystem_t *fs = get_ext2_filesystem(path);
+    ext2_filesystem_t *fs = ext2_get_filesystem(path);
     if (fs == NULL) {
         pr_err("ext2_statfs(path: %s): Failed to get the EXT2 filesystem.\n", path);
         return -ENOENT;
@@ -193,7 +193,7 @@ int ext2_setattr(const char *path, struct iattr *attr)
 {
     pr_debug("ext2_setattr(file: %s)\n", path);
     // Get the EXT2 filesystem.
-    ext2_filesystem_t *fs = get_ext2_filesystem(path);
+    ext2_filesystem_t *fs = ext2_get_filesystem(path);
     if (fs == NULL) {
         pr_err(
             "setattr(%s): Failed to get the EXT2 filesystem for absolute path "
