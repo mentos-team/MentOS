@@ -44,6 +44,7 @@ static char *all_tests[] = {
     "t_file_blocks",
     "t_fhs",
     "t_file_blocks_free",
+    "t_trunc_content",
     "t_font",
     "t_fork",
     "t_getcwd",
