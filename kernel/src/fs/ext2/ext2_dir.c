@@ -387,7 +387,12 @@ free_block_and_fail:
     // failed append changes nothing.
     real_index = ext2_get_real_block_index(fs, &parent_inode, block_index);
     if (real_index != 0) {
-        ext2_free_block(fs, real_index);
+        // A block that cannot be released is a leak, and the entry removal
+        // above has already happened, so there is nothing to undo — report it
+        // and carry on rather than abandon the removal half-done (#342).
+        if (ext2_free_block(fs, real_index) < 0) {
+            pr_err("Failed to release block %u of inode %u.\n", real_index, inode_index);
+        }
     }
     parent_inode.size = old_size;
     if (ext2_write_inode(fs, &parent_inode, parent_inode_index) == -1) {
@@ -496,6 +501,10 @@ int ext2_destroy_direntry(
 
     // Allocate and clean the cache
     uint8_t *cache = ext2_alloc_cache(fs);
+    if (cache == NULL) {
+        pr_err("Failed to allocate the cache to destroy a direntry of inode %u.\n", inode_index);
+        return -ENOMEM;
+    }
 
     // Check if the directory is empty, if it enters the loop then it means it is not empty.
     if (!ext2_directory_is_empty(fs, cache, &inode)) {

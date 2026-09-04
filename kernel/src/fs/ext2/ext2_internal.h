@@ -507,9 +507,9 @@ int ext2_write_inode(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t inode_
 // Defined in ext2_alloc.c.
 int ext2_allocate_inode(ext2_filesystem_t *fs, unsigned preferred_group);
 uint32_t ext2_allocate_block(ext2_filesystem_t *fs);
-void ext2_free_block(ext2_filesystem_t *fs, uint32_t block_index);
+int ext2_free_block(ext2_filesystem_t *fs, uint32_t block_index);
 int ext2_free_inode(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t inode_index);
-void ext2_free_inode_blocks(ext2_filesystem_t *fs, ext2_inode_t *inode);
+int ext2_free_inode_blocks(ext2_filesystem_t *fs, ext2_inode_t *inode);
 
 // Defined in ext2_blockmap.c.
 uint32_t ext2_get_real_block_index(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t block_index);
