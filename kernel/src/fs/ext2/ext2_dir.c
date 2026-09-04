@@ -101,7 +101,15 @@ static inline int ext2_directory_is_empty(ext2_filesystem_t *fs, uint8_t *cache,
 {
     ext2_direntry_iterator_t it = ext2_direntry_iterator_begin(fs, cache, inode);
     for (; ext2_direntry_iterator_valid(&it); ext2_direntry_iterator_next(&it)) {
-        if (!strncmp(it.direntry->name, ".", 1) || !strncmp(it.direntry->name, "..", 2)) {
+        // Skip the two entries every directory has, and only those. This used
+        // to be `strncmp(name, ".", 1)`, which compares one character and so
+        // matched every dot-prefixed name — `.bashrc`, `.config`, anything.
+        // A directory holding only such files was reported empty, rmdir
+        // removed it, and its contents were left with no path and an inode
+        // nothing would ever free (#341). The length is compared first
+        // because the on-disk name is not required to be terminated.
+        if (((it.direntry->name_len == 1) && (it.direntry->name[0] == '.')) ||
+            ((it.direntry->name_len == 2) && (it.direntry->name[0] == '.') && (it.direntry->name[1] == '.'))) {
             continue;
         }
         if (it.direntry->inode != 0) {
