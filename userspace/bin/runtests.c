@@ -59,6 +59,7 @@ static char *all_tests[] = {
     "t_list",
     "t_mem",
     "t_mkdir",
+    "t_stdint",
     "t_mount_boundary",
     "t_name_max",
     // Skipped on purpose: filling the image to make the allocation fail takes

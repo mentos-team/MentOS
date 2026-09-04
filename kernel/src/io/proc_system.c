@@ -160,7 +160,12 @@ int procs_module_init(void)
 /// @param buffer the buffer.
 /// @param bufsize the buffer size.
 /// @return the amount we wrote.
-static ssize_t procs_do_uptime(char *buffer, size_t bufsize) { return sprintf(buffer, "%d", timer_get_seconds()); }
+// The uptime is a uint64_t and this printf has no 64-bit conversion, so it
+// is narrowed here rather than read half-width by a %d (#270).
+static ssize_t procs_do_uptime(char *buffer, size_t bufsize)
+{
+    return sprintf(buffer, "%u", (uint32_t)timer_get_seconds());
+}
 
 /// @brief Write the version inside the buffer.
 /// @param buffer the buffer.
@@ -194,10 +199,10 @@ static int procs_do_mounts_cb(super_block_t *sb, void *ctx)
         return 1;
     }
 
-    const char *source = (sb->source[0] != '\0') ? sb->source : sb->name;
+    const char *source     = (sb->source[0] != '\0') ? sb->source : sb->name;
     const char *mountpoint = sb->path;
-    const char *fstype = (sb->type && sb->type->name) ? sb->type->name : "unknown";
-    const char *options = "rw";
+    const char *fstype     = (sb->type && sb->type->name) ? sb->type->name : "unknown";
+    const char *options    = "rw";
 
     int written = snprintf(
         mounts_ctx->buf + mounts_ctx->pos,
@@ -213,7 +218,7 @@ static int procs_do_mounts_cb(super_block_t *sb, void *ctx)
 
     if ((size_t)written >= mounts_ctx->bufsize - mounts_ctx->pos) {
         // Buffer filled, stop writing.
-        mounts_ctx->pos = mounts_ctx->bufsize - 1;
+        mounts_ctx->pos                  = mounts_ctx->bufsize - 1;
         mounts_ctx->buf[mounts_ctx->pos] = '\0';
         return 1;
     }

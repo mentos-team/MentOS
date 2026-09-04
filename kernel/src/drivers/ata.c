@@ -131,6 +131,13 @@ typedef struct ata_identity {
     uint16_t unused7[152];
 } ata_identity_t;
 
+// IDENTIFY returns 256 words, and the read below derives its word count from
+// this structure, so a structure of the wrong size reads the wrong number of
+// words. It was 508 bytes while `uint64_t` was 32 bits wide, which made the
+// driver take 254 of the 256 words the drive had to give and leave two of them
+// in its buffer (#270).
+typedef char ata_identity_size_check[(sizeof(ata_identity_t) == 512) ? 1 : -1];
+
 /// @brief Physical Region Descriptor Table (PRDT) entry.
 /// @details
 /// The physical memory region to be transferred is described by a Physical
@@ -517,7 +524,9 @@ static inline void ata_dump_device(ata_device_t *dev)
     pr_debug("        overwrite_ext_command_supported       : %u\n", dev->identity.overwrite_ext_command_supported);
     pr_debug("        block_erase_ext_command_supported     : %u\n", dev->identity.block_erase_ext_command_supported);
     pr_debug("        sectors_28                            : %u\n", dev->identity.sectors_28);
-    pr_debug("        sectors_48                            : %u\n", dev->identity.sectors_48);
+    // 48-bit, and this printf has no 64-bit conversion. The dump shows the
+    // low half; ata_max_offset is where the whole value is used (#270).
+    pr_debug("        sectors_48 (low 32)                   : %u\n", (uint32_t)dev->identity.sectors_48);
     pr_debug("    }\n");
     pr_debug("    bmr {\n");
     pr_debug("        command : %6u, status : %6u, prdt : %6u\n", dev->bmr.command, dev->bmr.status, dev->bmr.prdt);
@@ -579,16 +588,14 @@ static inline int __cond_status_missing_bits(uint8_t status, uint8_t mask)
 /// @return 0 on success (condition satisfied), 1 on timeout.
 /// @details Polls the device status register while applying the condition function.
 /// Uses volatile timeout to prevent compiler optimization of the critical wait loop.
-static inline int ata_status_wait(ata_device_t *dev, uint8_t mask, 
-                                  int (*evaluate_condition)(uint8_t, uint8_t),
-                                  long timeout)
+static inline int ata_status_wait(ata_device_t *dev, uint8_t mask, int (*evaluate_condition)(uint8_t, uint8_t), long timeout)
 {
     uint8_t status;
     // Use volatile local copy to prevent compiler optimization of timeout loop.
     // The return value depends on proper timeout decrement, making volatile
     // semantics critical for correctness.
     volatile long volatile_timeout = timeout;
-    
+
     do {
         // Read current device status.
         status = inportb(dev->io_reg.status);
@@ -598,7 +605,7 @@ static inline int ata_status_wait(ata_device_t *dev, uint8_t mask,
             return 0;
         }
     } while (--volatile_timeout > 0);
-    
+
     // Timeout occurred - operation failed or device not responding.
     return 1;
 }
