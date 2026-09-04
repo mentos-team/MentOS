@@ -44,7 +44,7 @@ int ext2_file_type_to_vfs_file_type(int ext2_type)
 /// @param task the task to check permission for.
 /// @param inode the inode to check permission.
 /// @return 1 on success, 0 otherwise.
-int __valid_x_permission(task_struct *task, ext2_inode_t *inode)
+int ext2_valid_x_permission(task_struct *task, ext2_inode_t *inode)
 {
     // Init, and all root processes always have permission
     if (!task || (task->pid == 0) || (task->uid == 0)) {
@@ -120,7 +120,7 @@ int ext2_resolve_path(vfs_file_t *directory, const char *path, ext2_direntry_sea
 /// @brief Get the ext2 filesystem object starting from a path.
 /// @param absolute_path the absolute path for which we want to find the associated EXT2 filesystem.
 /// @return a pointer to the EXT2 filesystem, NULL otherwise.
-ext2_filesystem_t *get_ext2_filesystem(const char *absolute_path)
+ext2_filesystem_t *ext2_get_filesystem(const char *absolute_path)
 {
     if (absolute_path == NULL) {
         pr_err("We received a NULL absolute path.\n");
@@ -176,7 +176,7 @@ ext2_filesystem_t *get_ext2_filesystem(const char *absolute_path)
 ///          be reused by an unrelated file, whose name and permissions would
 ///          otherwise be those of the file that held the number before it
 ///          (#297).
-void __ext2_set_vfs_file_properties(
+void ext2_set_vfs_file_properties(
     ext2_filesystem_t *fs,
     vfs_file_t *file,
     ext2_inode_t *inode,
@@ -247,7 +247,7 @@ int ext2_init_vfs_file(
     size_t name_len)
 {
     // Set everything that comes from the inode.
-    __ext2_set_vfs_file_properties(fs, file, inode, inode_index, name, name_len);
+    ext2_set_vfs_file_properties(fs, file, inode, inode_index, name, name_len);
     //uint32_t impl;
     //uint32_t open_flags;
     // Set the open count.
@@ -373,7 +373,7 @@ int ext2_unlink(const char *path)
         return -ENOENT;
     }
     // Get the EXT2 filesystem.
-    ext2_filesystem_t *fs = get_ext2_filesystem(path);
+    ext2_filesystem_t *fs = ext2_get_filesystem(path);
     if (fs == NULL) {
         pr_err("ext2_unlink(%s): Failed to get the EXT2 filesystem.\n", path);
         return -ENOENT;
@@ -457,7 +457,7 @@ early_exit:
 /// @details Used when mkdir cannot finish: the entry it added to the parent
 ///          must go away before the inode is freed, otherwise the parent
 ///          keeps a name pointing at a free inode (#264).
-int __ext2_clear_direntry_for_path(ext2_filesystem_t *fs, const char *path)
+int ext2_clear_direntry_for_path(ext2_filesystem_t *fs, const char *path)
 {
     ext2_direntry_search_t search;
     memset(&search, 0, sizeof(ext2_direntry_search_t));
@@ -510,7 +510,7 @@ int ext2_mkdir(const char *path, mode_t mode)
         return -ENOENT;
     }
     // Get the EXT2 filesystem.
-    ext2_filesystem_t *fs = get_ext2_filesystem(path);
+    ext2_filesystem_t *fs = ext2_get_filesystem(path);
     if (fs == NULL) {
         pr_err("ext2_mkdir(path: %s): Failed to get the EXT2 filesystem.\n", path);
         return -ENODEV;
@@ -613,7 +613,7 @@ rollback:
     }
     // Take the name out of the parent before the inode goes away, so no entry
     // is left pointing at a free inode.
-    if (has_direntry && (__ext2_clear_direntry_for_path(fs, path) < 0)) {
+    if (has_direntry && (ext2_clear_direntry_for_path(fs, path) < 0)) {
         pr_err("ext2_mkdir(path: %s): Failed to remove the incomplete directory entry.\n", path);
     }
     // Re-read the inode: initializing its entry block may have given it a
@@ -652,7 +652,7 @@ int ext2_rmdir(const char *path)
         return -ENOENT;
     }
     // Get the EXT2 filesystem.
-    ext2_filesystem_t *fs = get_ext2_filesystem(path);
+    ext2_filesystem_t *fs = ext2_get_filesystem(path);
     if (fs == NULL) {
         pr_err("ext2_rmdir(path: %s): Failed to get the EXT2 filesystem.\n", path);
         return -ENOENT;

@@ -84,7 +84,7 @@ for a new issue on recurrence → #192.
 ## Open path and the per-inode file cache
 
 `ext2_open` (ext2_file.c @`MAIN`):
-- `get_ext2_filesystem(path)` → `ext2_resolve_path(fs->root, path, &search)`.
+- `ext2_get_filesystem(path)` → `ext2_resolve_path(fs->root, path, &search)`.
 - O_CREAT → `ext2_creat`; O_DIRECTORY/O_EXCL validation; inode read;
   `vfs_valid_open_permissions` (root/pid-0 bypass; owner/group/other bits);
   O_TRUNC on regular files → `ext2_clean_inode_content`.
