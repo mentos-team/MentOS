@@ -122,13 +122,6 @@ vfs_file_t *ext2_creat(const char *path, mode_t mode)
         goto rollback;
     }
 
-    // Clean the content of the newly created file.
-    if (ext2_clean_inode_content(fs, &inode, inode_index) < 0) {
-        pr_err("Failed to clean the content of the newly created inode.\n");
-        failure = -EIO;
-        goto rollback;
-    }
-
     // Initialize the file.
     if (ext2_allocate_direntry(fs, parent->ino, inode_index, file_name, ext2_file_type_regular_file) == -1) {
         pr_err("Failed to allocate a new direntry for the inode.\n");

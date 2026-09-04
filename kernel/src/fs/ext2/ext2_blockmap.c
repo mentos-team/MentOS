@@ -659,55 +659,6 @@ ssize_t ext2_write_inode_data(
     return written;
 }
 
-/// @brief Cleans the inode content.
-/// @param fs a pointer to the filesystem.
-/// @param inode the inode.
-/// @param inode_index the inode index.
-/// @return 0 on success, 1 on failure.
-int ext2_clean_inode_content(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t inode_index)
-{
-    pr_debug("ext2_clean_inode_content(%p, %p, %u)\n", fs, inode, inode_index);
-    // Check the type of operation.
-    if ((inode->mode & S_IFREG) != S_IFREG) {
-        pr_alert("Trying to clean the content of a non-regular file.\n");
-        return 1;
-    }
-    // Allocate the cache.
-    uint8_t *cache = ext2_alloc_cache(fs);
-    if (cache == NULL) {
-        pr_err("Failed to allocate the cache to clean inode %u\n", inode_index);
-        return -1;
-    }
-    // Get the cache size.
-    size_t cache_size = fs->block_size;
-    //
-    int ret           = 0;
-    for (ssize_t offset = 0, to_write; offset < inode->size;) {
-        pr_debug(
-            "ext2_clean_inode_content(%p, %p, %u): offset = %6u of size = %u\n", fs, inode, inode_index, offset,
-            inode->size);
-        // How many bytes are left to clean. The cache holds a single block, so
-        // that is the most one call can store: asking for more made the driver
-        // copy whatever followed the cache into the file, and the last request
-        // reached past the end of the file and extended it (#315).
-        size_t remaining = (size_t)(inode->size - (uint32_t)offset);
-        to_write         = (ssize_t)min(cache_size, remaining);
-        pr_debug("ext2_clean_inode_content(%p, %p, %u): to_write = %6u\n", fs, inode, inode_index, to_write);
-        // Override the content.
-        ssize_t written = ext2_write_inode_data(fs, inode, inode_index, offset, to_write, (char *)cache);
-        pr_debug("ext2_clean_inode_content(%p, %p, %u): written = %6u\n", fs, inode, inode_index, written);
-        if (written < 0) {
-            pr_err("Failed to clean content of inode %d\n", inode_index);
-            ret = -1;
-            break;
-        }
-        offset += written;
-    }
-    // Free the cache.
-    ext2_dealloc_cache(cache);
-    return ret;
-}
-
 /// @brief Discards the whole content of a regular file.
 /// @param fs a pointer to the filesystem.
 /// @param inode the inode to truncate.

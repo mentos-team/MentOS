@@ -87,7 +87,9 @@ for a new issue on recurrence → #192.
 - `ext2_get_filesystem(path)` → `ext2_resolve_path(fs->root, path, &search)`.
 - O_CREAT → `ext2_creat`; O_DIRECTORY/O_EXCL validation; inode read;
   `vfs_valid_open_permissions` (root/pid-0 bypass; owner/group/other bits);
-  O_TRUNC on regular files → `ext2_clean_inode_content`.
+  O_TRUNC on regular files → `ext2_truncate_inode` (frees the blocks and sets
+  the size to 0; the old `ext2_clean_inode_content` zero-filled and left the
+  length alone, #320/#327).
 - **`ext2_find_vfs_file_with_inode`**: reuse cached `vfs_file_t` for the same
   inode (shared `count`, `f_pos`); only allocate + `ext2_init_vfs_file` +
   insert into `fs->opened_files` when not cached.
