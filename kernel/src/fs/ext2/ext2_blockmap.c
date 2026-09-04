@@ -542,6 +542,12 @@ ssize_t ext2_write_inode_data(
         pr_err("Integer overflow: offset + nbyte exceeds UINT32_MAX\n");
         return -1;
     }
+    // A zero-length write stores nothing and must not touch the file, the
+    // size included. It also keeps `end_offset` below from reaching zero,
+    // which the block arithmetic relies on.
+    if (nbyte == 0) {
+        return 0;
+    }
     // Keep the size the file had, so that a write which cannot store every
     // block does not leave the inode claiming bytes that were never written.
     uint32_t original_size = inode->size;
@@ -554,9 +560,15 @@ ssize_t ext2_write_inode_data(
     }
     // Get the offset to the end of the portion we are writing.
     uint32_t end_offset  = (inode->size >= offset + nbyte) ? (offset + nbyte) : (inode->size);
-    // Convert the offset/size to some starting/end iblock numbers.
+    // Convert the offset/size to some starting/end iblock numbers. The end
+    // block is the one containing the last byte to write (end_offset - 1):
+    // when end_offset is an exact multiple of the block size, dividing
+    // end_offset directly named the block after the data and left end_size at
+    // zero, so the loop ran one more time and allocated a block it then
+    // copied nothing into (#311). The read path above was corrected the same
+    // way by #242; this side was left behind.
     uint32_t start_block = offset / fs->block_size;
-    uint32_t end_block   = end_offset / fs->block_size;
+    uint32_t end_block   = (end_offset - 1) / fs->block_size;
     // What's the offset into the start block.
     uint32_t start_off   = offset % fs->block_size;
     // How much bytes to read for the end block.
