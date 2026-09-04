@@ -15,6 +15,7 @@ VGA_ARGS="${3:--vga std}"
 # test, which is the case for every backend that needs no promotion.
 REQUIRE_BACKEND="${4:-}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 # PIDs of the log-streaming subshells. Each was started as a background job
 # under a temporary `set -m` window, so each subshell is also its own process
@@ -42,6 +43,57 @@ trap cleanup EXIT
 trap 'trap - INT; cleanup; exit 130' INT
 trap 'trap - TERM; cleanup; exit 143' TERM
 trap 'trap - HUP; cleanup; exit 129' HUP
+
+# Refuse to boot an image that predates what it is supposed to contain.
+#
+# Invoking this wrapper by hand boots whatever ${BUILD_DIR}/cdrom_test.iso and
+# ${BUILD_DIR}/rootfs.img happen to be there. Three times now that has
+# produced a verification that proved nothing: during the #283 negative control
+# a stale ISO carrying the already-fixed kernel kept booting while the sources
+# were reverted, and the control passed. The same trap recurred while setting
+# up the #245 campaign. A negative control that silently passes is worse than
+# no negative control, because it is believed (#289).
+#
+# The ISO carries the kernel through mentos/bootloader.bin, which embeds
+# kernel.bin; rootfs.img is built from the filesystem/ staging tree, where the
+# userspace binaries and the tests are installed. Those are the two inputs
+# that make an image stale.
+#
+# Set ALLOW_STALE_IMAGES=1 to boot an old image on purpose.
+check_freshness() {
+    local artifact="$1"
+    shift
+    local newer
+    if [ ! -f "${artifact}" ]; then
+        echo "Missing ${artifact}." >&2
+        return 1
+    fi
+    # -quit stops at the first offender: naming one is enough to explain why.
+    newer="$(find "$@" -newer "${artifact}" -print -quit 2>/dev/null)"
+    if [ -n "${newer}" ]; then
+        echo "${artifact} is older than ${newer}." >&2
+        return 1
+    fi
+    return 0
+}
+
+if [ "${ALLOW_STALE_IMAGES:-0}" != "1" ]; then
+    STALE=0
+    check_freshness "${BUILD_DIR}/cdrom_test.iso" "${BUILD_DIR}/mentos/bootloader.bin" || STALE=1
+    check_freshness "${BUILD_DIR}/rootfs.img" "${REPO_DIR}/filesystem" || STALE=1
+    if [ "${STALE}" -ne 0 ]; then
+        echo "" >&2
+        echo "This run would boot an image that does not contain the current build," >&2
+        echo "so whatever it reports would say nothing about the working tree." >&2
+        echo "" >&2
+        echo "Rebuild first:" >&2
+        echo "  make -C ${BUILD_DIR} -j\$(nproc)" >&2
+        echo "  make -C ${BUILD_DIR} cdrom_test.iso filesystem" >&2
+        echo "" >&2
+        echo "Set ALLOW_STALE_IMAGES=1 to boot the existing image anyway." >&2
+        exit 1
+    fi
+fi
 
 echo "===================================================="
 echo "Starting QEMU test run (timeout: ${TIMEOUT}s)..."
