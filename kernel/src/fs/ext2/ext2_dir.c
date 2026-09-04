@@ -124,13 +124,23 @@ static inline void ext2_initialize_direntry(
     uint32_t rec_len,
     uint8_t file_type)
 {
-    // Initialize the new directory entry.
+    // Initialize the new directory entry. The length is stored in a uint8_t,
+    // so a name of 256 characters or more would be recorded modulo 256 and
+    // the entry would describe a name nobody wrote: 300 characters would go
+    // on the disk as 44. The VFS rejects an over-long path component before
+    // this is reached, so the clamp is there to keep the invariant local
+    // rather than to catch a caller that exists (#285).
+    size_t name_len = strlen(name);
+    if (name_len > (EXT2_NAME_LEN - 1)) {
+        pr_warning("Directory entry name of %u characters truncated to %u.\n", (unsigned)name_len, EXT2_NAME_LEN - 1);
+        name_len = EXT2_NAME_LEN - 1;
+    }
     direntry->inode     = inode_index;
     direntry->rec_len   = rec_len;
-    direntry->name_len  = strlen(name);
+    direntry->name_len  = (uint8_t)name_len;
     direntry->file_type = file_type;
-    memset(direntry->name, 0, direntry->name_len + 1);
-    strncpy(direntry->name, name, direntry->name_len);
+    memset(direntry->name, 0, name_len + 1);
+    memcpy(direntry->name, name, name_len);
 }
 
 /// @brief Initializes a new directory entry block for the specified inode.
@@ -628,14 +638,29 @@ int ext2_find_direntry(ext2_filesystem_t *fs, ino_t ino, const char *name, ext2_
     // Copy the direntry.
     search->direntry.inode     = it.direntry->inode;
     search->direntry.rec_len   = it.direntry->rec_len;
-    search->direntry.name_len  = it.direntry->name_len;
     search->direntry.file_type = it.direntry->file_type;
-    strncpy(search->direntry.name, it.direntry->name, it.direntry->name_len);
-    search->direntry.name[it.direntry->name_len] = 0;
+    // The on-disk name_len is a uint8_t, so 255 is a legal value, while the
+    // destination is a NUL-terminated char[EXT2_NAME_LEN] with EXT2_NAME_LEN
+    // equal to 255. A name of exactly that length filled the array and put
+    // its terminator one byte past it, which happened to be the trailing
+    // padding of the search structure: the name was readable only because of
+    // a write that was out of bounds of the array (#285). Keep the terminator
+    // inside, and report the length that was actually stored, so that a
+    // caller comparing name_len against the string it can see agrees with it.
+    uint8_t copy_len           = it.direntry->name_len;
+    if (copy_len > (EXT2_NAME_LEN - 1)) {
+        pr_warning(
+            "Directory entry name of %u characters truncated to %u (inode %u).\n", it.direntry->name_len,
+            EXT2_NAME_LEN - 1, it.direntry->inode);
+        copy_len = EXT2_NAME_LEN - 1;
+    }
+    memcpy(search->direntry.name, it.direntry->name, copy_len);
+    search->direntry.name[copy_len] = 0;
+    search->direntry.name_len       = copy_len;
     // Copy the index of the block containing the direntry.
-    search->block_index                          = it.block_index;
+    search->block_index             = it.block_index;
     // Copy the offset of the direntry inside the block.
-    search->block_offset                         = it.block_offset;
+    search->block_offset            = it.block_offset;
     // Free the cache.
     ext2_dealloc_cache(cache);
     return 0;

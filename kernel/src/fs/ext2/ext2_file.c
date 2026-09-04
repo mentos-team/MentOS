@@ -512,10 +512,21 @@ ssize_t ext2_getdents(vfs_file_t *file, dirent_t *dirp, off_t doff, size_t count
             continue;
         }
         // Write on current directory entry data.
-        dirp->d_ino  = it.direntry->inode;
-        dirp->d_type = ext2_file_type_to_vfs_file_type(it.direntry->file_type);
+        dirp->d_ino      = it.direntry->inode;
+        dirp->d_type     = ext2_file_type_to_vfs_file_type(it.direntry->file_type);
+        // d_name is a NUL-terminated char[NAME_MAX], and the on-disk
+        // name_len is a uint8_t that may legally hold 255: copying that many
+        // bytes filled the field and left no terminator, so the program
+        // reading the entry ran into the next record (#285).
+        uint8_t copy_len = it.direntry->name_len;
+        if (copy_len > (NAME_MAX - 1)) {
+            pr_warning(
+                "Directory entry name of %u characters truncated to %u (inode %u).\n", it.direntry->name_len,
+                NAME_MAX - 1, it.direntry->inode);
+            copy_len = NAME_MAX - 1;
+        }
         memset(dirp->d_name, 0, NAME_MAX);
-        strncpy(dirp->d_name, it.direntry->name, it.direntry->name_len);
+        memcpy(dirp->d_name, it.direntry->name, copy_len);
         dirp->d_off    = it.direntry->rec_len;
         dirp->d_reclen = it.direntry->rec_len;
         // Increment the amount written.
