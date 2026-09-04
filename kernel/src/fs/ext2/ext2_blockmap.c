@@ -707,3 +707,46 @@ int ext2_clean_inode_content(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_
     ext2_dealloc_cache(cache);
     return ret;
 }
+
+/// @brief Discards the whole content of a regular file.
+/// @param fs a pointer to the filesystem.
+/// @param inode the inode to truncate.
+/// @param inode_index the inode index.
+/// @return 0 on success, a negative errno on failure.
+/// @details This is what `O_TRUNC` has to do: the file is left with length 0
+///          and its blocks go back to the filesystem. Overwriting the content
+///          with zeroes and keeping the length was not enough — `stat` kept
+///          reporting the old size, reading returned that many zero bytes
+///          instead of end-of-file, and the space was never released (#320).
+int ext2_truncate_inode(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t inode_index)
+{
+    pr_debug("ext2_truncate_inode(inode_index: %u, size: %u)\n", inode_index, inode->size);
+    // Only the content of a regular file can be discarded this way. A
+    // directory holds the entries its parent and children depend on, and
+    // there is no size to speak of for the other types.
+    if ((inode->mode & S_IFREG) != S_IFREG) {
+        pr_err("Trying to truncate inode %u, which is not a regular file.\n", inode_index);
+        return -EINVAL;
+    }
+    // Nothing to give back, and nothing to write: an inode that is already
+    // empty must not have its timestamps touched by a truncation that does
+    // not change it.
+    if (inode->size == 0) {
+        return 0;
+    }
+    // Release the blocks before the size stops naming them: the loop that
+    // frees the data derives its bound from `size`, so clearing the size
+    // first would leak every block of the file.
+    ext2_free_inode_blocks(fs, inode);
+    inode->size  = 0;
+    inode->ctime = sys_time(NULL);
+    inode->mtime = inode->ctime;
+    // The inode on the device still describes the old file until this
+    // succeeds, and the blocks are already back in the bitmap, so a failure
+    // here leaves the two disagreeing and has to be reported.
+    if (ext2_write_inode(fs, inode, inode_index) == -1) {
+        pr_err("Failed to write inode %u after truncating it.\n", inode_index);
+        return -EIO;
+    }
+    return 0;
+}

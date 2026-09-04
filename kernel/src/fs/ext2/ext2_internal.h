@@ -509,6 +509,7 @@ int ext2_allocate_inode(ext2_filesystem_t *fs, unsigned preferred_group);
 uint32_t ext2_allocate_block(ext2_filesystem_t *fs);
 void ext2_free_block(ext2_filesystem_t *fs, uint32_t block_index);
 int ext2_free_inode(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t inode_index);
+void ext2_free_inode_blocks(ext2_filesystem_t *fs, ext2_inode_t *inode);
 
 // Defined in ext2_blockmap.c.
 uint32_t ext2_get_real_block_index(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t block_index);
@@ -518,6 +519,7 @@ ssize_t ext2_write_inode_block(ext2_filesystem_t *fs, ext2_inode_t *inode, uint3
 ssize_t ext2_read_inode_data(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t inode_index, off_t offset, size_t nbyte, char *buffer);
 ssize_t ext2_write_inode_data(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t inode_index, off_t offset, size_t nbyte, char *buffer);
 int ext2_clean_inode_content(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t inode_index);
+int ext2_truncate_inode(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t inode_index);
 
 // Defined in ext2_dir.c.
 int ext2_direntry_iterator_valid(ext2_direntry_iterator_t *it);
