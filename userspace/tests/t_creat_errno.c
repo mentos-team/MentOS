@@ -77,7 +77,7 @@ static int check_success(void)
     ssize_t written     = write(fd, content, strlen(content));
     close(fd);
     if (written != (ssize_t)strlen(content)) {
-        syslog(LOG_ERR, "[t_creat_errno] write returned %zd, expected %u", written, (unsigned)strlen(content));
+        syslog(LOG_ERR, "[t_creat_errno] write returned %ld, expected %u", written, (unsigned)strlen(content));
         unlink(GOOD_PATH);
         return -1;
     }

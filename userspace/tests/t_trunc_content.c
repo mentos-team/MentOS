@@ -88,7 +88,7 @@ static int __fill(void)
         size_t chunk    = ((FILE_SIZE - done) < sizeof(buffer)) ? (FILE_SIZE - done) : sizeof(buffer);
         ssize_t written = write(fd, buffer, chunk);
         if (written != (ssize_t)chunk) {
-            syslog(LOG_ERR, "[t_trunc_content] write at %u returned %zd: %s", (unsigned)done, written, strerror(errno));
+            syslog(LOG_ERR, "[t_trunc_content] write at %u returned %ld: %s", (unsigned)done, written, strerror(errno));
             close(fd);
             return -1;
         }

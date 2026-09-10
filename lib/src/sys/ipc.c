@@ -157,7 +157,7 @@ key_t ftok(const char *path, int id)
     // file we use to generate the key.
     struct stat st;
     if (stat(path, &st) < 0) {
-        printf("Cannot stat the file `%s`.\n");
+        printf("Cannot stat the file `%s`.\n", path);
         errno = ENOENT;
         return -1;
     }

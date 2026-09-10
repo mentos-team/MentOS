@@ -353,14 +353,14 @@ int elf_load_file(mm_struct_t *mm, vfs_file_t *file, uint32_t *entry)
         pr_err(
             "Failed to allocate %d bytes of memory for reading the file "
             "`%s`.\n",
-            stat_buf.st_size, file->name);
+            (int)stat_buf.st_size, file->name);
         return -ENOMEM;
     }
     // Clean the memory.
     memset(buffer, 0, stat_buf.st_size);
     // Read the file.
     if (vfs_read(file, buffer, 0, stat_buf.st_size) != stat_buf.st_size) {
-        pr_err("Failed to read %d bytes from the file `%s`.\n", stat_buf.st_size, file->name);
+        pr_err("Failed to read %d bytes from the file `%s`.\n", (int)stat_buf.st_size, file->name);
         goto return_error_free_buffer;
     }
     // The first thing inside the file is the ELF header.

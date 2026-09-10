@@ -1523,7 +1523,7 @@ static ssize_t ata_read(vfs_file_t *file, char *buffer, off_t offset, size_t siz
 
     // Check the device.
     if (dev == NULL) {
-        pr_crit("Device not set for file: %p\n", file);
+        pr_crit("Device not set for file: %p\n", (void *)file);
         return -1; // Return error if the device is not set.
     }
 
@@ -1537,7 +1537,7 @@ static ssize_t ata_read(vfs_file_t *file, char *buffer, off_t offset, size_t siz
 
     // Check if the offset exceeds the disk size.
     if (offset > max_offset) {
-        pr_warning("The offset is exceeding the disk size (%d > %d)\n", offset, max_offset);
+        pr_warning("The offset is exceeding the disk size (%d > %d)\n", (int)offset, max_offset);
         ata_dump_device(dev);
         // Get the error and status information of the device.
         uint8_t error  = inportb(dev->io_reg.error);
@@ -1622,7 +1622,7 @@ static ssize_t ata_write(vfs_file_t *file, const void *buffer, off_t offset, siz
 
     // Check the device.
     if (dev == NULL) {
-        pr_crit("Device not set for file: %p\n", file);
+        pr_crit("Device not set for file: %p\n", (void *)file);
         return -1; // Return error if the device is not set.
     }
 

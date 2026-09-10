@@ -105,7 +105,7 @@ static int __check_accepted(unsigned len)
     ssize_t written     = write(fd, content, strlen(content));
     close(fd);
     if (written != (ssize_t)strlen(content)) {
-        syslog(LOG_ERR, "[t_name_max] writing to the %u-character name returned %zd", len, written);
+        syslog(LOG_ERR, "[t_name_max] writing to the %u-character name returned %ld", len, written);
         unlink(path);
         return -1;
     }

@@ -140,7 +140,7 @@ static int __prepare_target(void)
     ssize_t written = write(fd, buffer, sizeof(buffer));
     close(fd);
     if (written != (ssize_t)sizeof(buffer)) {
-        syslog(LOG_ERR, "[t_nospace] preparing the target wrote %zd bytes", written);
+        syslog(LOG_ERR, "[t_nospace] preparing the target wrote %ld bytes", written);
         return -1;
     }
     return 0;
@@ -172,7 +172,7 @@ static int check_write_with_no_space(void)
     ssize_t written = write(fd, buffer, CHUNK);
     close(fd);
     if (written == CHUNK) {
-        syslog(LOG_ERR, "[t_nospace] the write reported %zd bytes with no free block left", written);
+        syslog(LOG_ERR, "[t_nospace] the write reported %ld bytes with no free block left", written);
         ++failures;
     } else if ((written < 0) && (errno != ENOSPC)) {
         syslog(LOG_ERR, "[t_nospace] the write failed with %s, expected ENOSPC", strerror(errno));
@@ -189,7 +189,7 @@ static int check_write_with_no_space(void)
     unsigned long expected = ((written > 0) ? (2 * CHUNK + (unsigned long)written) : CHUNK);
     if ((unsigned long)st.st_size != expected) {
         syslog(
-            LOG_ERR, "[t_nospace] the target is %lu bytes, expected %lu after a write that reported %zd",
+            LOG_ERR, "[t_nospace] the target is %lu bytes, expected %lu after a write that reported %ld",
             (unsigned long)st.st_size, expected, written);
         ++failures;
     }

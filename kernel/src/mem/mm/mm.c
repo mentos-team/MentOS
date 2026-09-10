@@ -198,7 +198,7 @@ int mm_destroy(mm_struct_t *mm)
     // Step 2: Get the physical address from the low memory page.
     uint32_t mm_pgd_phys_addr = get_physical_address_from_page(lowmem_page);
     if (mm_pgd_phys_addr == 0) {
-        pr_crit("Failed to get physical address from low memory page: %p.\n", lowmem_page);
+        pr_crit("Failed to get physical address from low memory page: %p.\n", (void *)lowmem_page);
         return -1;
     }
 

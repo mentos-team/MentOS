@@ -135,35 +135,35 @@ static inline void __blkmngr_dump(int log_level, heap_header_t *header)
     task_struct *task = scheduler_get_current_process();
     assert(task && "There is no current task!\n");
     kheap_block_t *block;
-    pr_log(log_level, "[%s] LIST (0x%p):\n", task->name, &header->list);
+    pr_log(log_level, "[%s] LIST (0x%p):\n", task->name, (void *)&header->list);
     list_for_each_decl (it, &header->list) {
         block = list_entry(it, kheap_block_t, list);
         pr_log(log_level, "[%s]     %s{", task->name, __block_to_string(block));
         if (it->prev != &header->list) {
-            pr_log(log_level, "0x%p", list_entry(it->prev, kheap_block_t, list));
+            pr_log(log_level, "0x%p", (void *)list_entry(it->prev, kheap_block_t, list));
         } else {
             pr_log(log_level, "   HEAD   ");
         }
         pr_log(log_level, ", ");
         if (it->next != &header->list) {
-            pr_log(log_level, "0x%p", list_entry(it->next, kheap_block_t, list));
+            pr_log(log_level, "0x%p", (void *)list_entry(it->next, kheap_block_t, list));
         } else {
             pr_log(log_level, "   HEAD   ");
         }
         pr_log(log_level, "}\n");
     }
-    pr_log(log_level, "[%s] FREE (0x%p):\n", task->name, &header->free);
+    pr_log(log_level, "[%s] FREE (0x%p):\n", task->name, (void *)&header->free);
     list_for_each_decl (it, &header->free) {
         block = list_entry(it, kheap_block_t, free);
         pr_log(log_level, "[%s]     %s{", task->name, __block_to_string(block));
         if (it->prev != &header->free) {
-            pr_log(log_level, "0x%p", list_entry(it->prev, kheap_block_t, free));
+            pr_log(log_level, "0x%p", (void *)list_entry(it->prev, kheap_block_t, free));
         } else {
             pr_log(log_level, "   HEAD   ");
         }
         pr_log(log_level, ", ");
         if (it->next != &header->free) {
-            pr_log(log_level, "0x%p", list_entry(it->next, kheap_block_t, free));
+            pr_log(log_level, "0x%p", (void *)list_entry(it->next, kheap_block_t, free));
         } else {
             pr_log(log_level, "   HEAD   ");
         }
@@ -716,7 +716,7 @@ void *sys_brk(void *addr)
         // If not, allocate new memory of the specified size.
         _ret = __do_malloc(heap, (size_t)addr);
         if (!_ret) {
-            pr_err("Memory allocation failed for size: %zu.\n", (size_t)addr);
+            pr_err("Memory allocation failed for size: %lu.\n", (size_t)addr);
             return NULL; // Return error if allocation fails.
         }
     }

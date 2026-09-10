@@ -68,8 +68,8 @@ int main(void)
 
     // `z` must read a full size_t/ssize_t, not a truncated one.
     CHECK_FMT("%zu", "4", "%zu", sizeof(long));
-    CHECK_FMT("%zd negative", "-7", "%zd", (ssize_t)-7);
-    CHECK_FMT("%zx", "ff", "%zx", (size_t)0xff);
+    CHECK_FMT("%zd negative", "-7", "%zd", (int)-7);
+    CHECK_FMT("%zx", "ff", "%zx", (unsigned)0xff);
 
     // `l` keeps its meaning.
     CHECK_FMT("%lu", "1234567890", "%lu", 1234567890UL);
