@@ -215,7 +215,10 @@ int main(int argc, char *argv[])
     }
     if (no_directory) {
         char cwd[PATH_MAX];
-        getcwd(cwd, PATH_MAX);
+        if (getcwd(cwd, PATH_MAX) == NULL) {
+            fprintf(stderr, "%s: cannot get current working directory: %s\n", argv[0], strerror(errno));
+            return 1;
+        }
         print_ls(cwd, flags);
         printf("\n");
     }

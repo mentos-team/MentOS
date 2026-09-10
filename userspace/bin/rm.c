@@ -49,7 +49,10 @@ int main(int argc, char **argv)
         int fd;
 
         if (strcmp(argv[argc - 1], "*") == 0) {
-            getcwd(directory, PATH_MAX);
+            if (getcwd(directory, PATH_MAX) == NULL) {
+                fprintf(stderr, "%s: cannot get current working directory: %s\n", argv[0], strerror(errno));
+                return 1;
+            }
         } else {
             // Get the parent directory.
             if (!dirname(argv[argc - 1], directory, sizeof(directory))) {

@@ -63,8 +63,10 @@ char *realpath(const char *path, char *buffer, size_t buflen)
     memset(abspath, '\0', PATH_MAX);
     int remaining;
     if (path[0] != '/') {
-        // Get the current task.
-        getcwd(abspath, PATH_MAX);
+        // Get the current working directory.
+        if (getcwd(abspath, PATH_MAX) == NULL) {
+            return NULL;
+        }
         // Check the current task.
         assert((strlen(abspath) > 0) && "There is no current task.");
         // Check that the current working directory is an absolute path.
