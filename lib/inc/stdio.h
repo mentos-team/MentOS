@@ -79,7 +79,7 @@ long strtol(const char *str, char **endptr, int base);
 /// @param ... The list of arguments.
 /// @return On success, the total number of characters written is returned.
 ///         On failure, a negative number is returned.
-int printf(const char *format, ...);
+int printf(const char *format, ...) __attribute__((format(printf, 1, 2)));
 
 /// @brief Write formatted output to `str`.
 /// @param str The buffer where the formatted string will be placed.
@@ -87,7 +87,7 @@ int printf(const char *format, ...);
 /// @param ... The list of arguments.
 /// @return On success, the total number of characters written is returned.
 ///         On failure, a negative number is returned.
-int sprintf(char *str, const char *format, ...);
+int sprintf(char *str, const char *format, ...) __attribute__((format(printf, 2, 3)));
 
 /// @brief Writes formatted output to `str`.
 /// @param str The buffer where the formatted string will be placed.
@@ -96,7 +96,7 @@ int sprintf(char *str, const char *format, ...);
 /// @param ... The list of arguments.
 /// @return On success, the total number of characters written (excluding the null terminator) is returned.
 ///         On failure, a negative number is returned.
-int snprintf(char *str, size_t size, const char *format, ...);
+int snprintf(char *str, size_t size, const char *format, ...) __attribute__((format(printf, 3, 4)));
 
 #ifndef __KERNEL__
 /// @brief Write formatted output to a file.
@@ -105,7 +105,7 @@ int snprintf(char *str, size_t size, const char *format, ...);
 /// @param ... The list of arguments.
 /// @return On success, the total number of characters written is returned.
 ///         On failure, a negative number is returned.
-int fprintf(int fd, const char *format, ...);
+int fprintf(int fd, const char *format, ...) __attribute__((format(printf, 2, 3)));
 
 /// @brief Write formatted data from variable argument list to a file.
 /// @param fd  The file descriptor associated with the file.
@@ -113,7 +113,7 @@ int fprintf(int fd, const char *format, ...);
 /// @param args A variable arguments list.
 /// @return On success, the total number of characters written is returned.
 ///         On failure, a negative number is returned.
-int vfprintf(int fd, const char *format, va_list args);
+int vfprintf(int fd, const char *format, va_list args) __attribute__((format(printf, 2, 0)));
 #endif
 
 /// @brief Formats a string and ensures buffer boundaries are respected.
@@ -122,7 +122,7 @@ int vfprintf(int fd, const char *format, va_list args);
 /// @param format The format string.
 /// @param args The argument list for the format specifiers.
 /// @return int The number of characters written, excluding the null-terminator.
-int vsnprintf(char *str, size_t size, const char *format, va_list args);
+int vsnprintf(char *str, size_t size, const char *format, va_list args) __attribute__((format(printf, 3, 0)));
 
 /// @brief Write formatted data from variable argument list to string.
 /// @details The buffer is limited to 4096 bytes. This function does not
@@ -132,7 +132,7 @@ int vsnprintf(char *str, size_t size, const char *format, va_list args);
 /// @param args A variable arguments list.
 /// @return On success, the total number of characters written is returned.
 ///         On failure, a negative number is returned.
-int vsprintf(char *str, const char *format, va_list args);
+int vsprintf(char *str, const char *format, va_list args) __attribute__((format(printf, 2, 0)));
 
 #ifndef __KERNEL__
 /// @brief Read formatted input from stdin.

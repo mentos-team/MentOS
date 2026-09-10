@@ -1115,7 +1115,7 @@ static void __alloc_argv(char *command, int *argc, char ***argv)
             // Allocate memory for the expanded argument.
             (*argv)[argcIt] = (char *)malloc(strlen(expand_env_buf) + 1);
             if ((*argv)[argcIt] == NULL) {
-                printf("Error: Failed to allocate memory for argument %zu.\n", argcIt);
+                printf("Error: Failed to allocate memory for argument %lu.\n", argcIt);
                 // Free previously allocated arguments to prevent memory leaks.
                 for (size_t j = 0; j < argcIt; ++j) {
                     free((*argv)[j]);
@@ -1356,7 +1356,7 @@ static void __interactive_mode(void)
     if (stat(".shellrc", &buf) == 0) {
         int ret = __execute_file(".shellrc");
         if (ret < 0) {
-            printf("%s: .shellrc: %s\n", strerror(-ret));
+            printf(".shellrc: %s\n", strerror(-ret));
         }
     }
 #pragma clang diagnostic push
@@ -1456,7 +1456,7 @@ int main(int argc, char *argv[])
     memset(&action, 0, sizeof(action));
     action.sa_handler = wait_for_child;
     if (sigaction(SIGCHLD, &action, NULL) == -1) {
-        printf("Failed to set signal handler (%s).\n", SIGCHLD, strerror(errno));
+        printf("Failed to set signal handler (%d: %s).\n", SIGCHLD, strerror(errno));
         return 1;
     }
 

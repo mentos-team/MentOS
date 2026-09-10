@@ -746,7 +746,7 @@ sighandler_t sys_signal(int signum, sighandler_t handler, uint32_t sigreturn_add
     pr_debug("sys_signal(%d, %p, %p)\n", signum, handler, sigreturn_addr);
     // Check the signal that we want to send.
     if ((signum < 0) || (signum >= NSIG)) {
-        pr_err("sys_signal(%d, %p): Wrong signal number!\n", signum, handler);
+        pr_err("sys_signal(%d, %p): Wrong signal number!\n", signum, (void *)(unsigned long)handler);
         return SIG_ERR;
     }
     // Get the current process.
@@ -755,7 +755,7 @@ sighandler_t sys_signal(int signum, sighandler_t handler, uint32_t sigreturn_add
     assert(current_process && "There is no current process!");
     // Skip the `init` process, always.
     if (current_process->pid == 1) {
-        pr_err("sys_signal(%d, %p): Cannot signal init!\n", signum, handler);
+        pr_err("sys_signal(%d, %p): Cannot signal init!\n", signum, (void *)(unsigned long)handler);
         return SIG_ERR;
     }
     // Create a new signal action.
@@ -787,7 +787,7 @@ int sys_sigaction(int signum, const sigaction_t *act, sigaction_t *oldact, uint3
     pr_debug("sys_sigaction(%d, %p, %p, %p)\n", signum, act, oldact, sigreturn_addr);
     // Check the signal that we want to send.
     if ((signum < 0) || (signum >= NSIG)) {
-        pr_err("sys_sigaction(%d, %p, %p): Wrong signal number!\n", signum, act, oldact);
+        pr_err("sys_sigaction(%d, %p, %p): Wrong signal number!\n", signum, (void *)act, (void *)oldact);
         return -EINVAL;
     }
     // Get the current process.
@@ -796,7 +796,7 @@ int sys_sigaction(int signum, const sigaction_t *act, sigaction_t *oldact, uint3
     assert(current_process && "There is no current process!");
     // Skip the `init` process, always.
     if (current_process->pid == 1) {
-        pr_err("sys_sigaction(%d, %p, %p): Cannot set signal for init!\n", signum, act, oldact);
+        pr_err("sys_sigaction(%d, %p, %p): Cannot set signal for init!\n", signum, (void *)act, (void *)oldact);
         return -EINVAL;
     }
     // Lock the signal handling for the given task.
@@ -833,7 +833,7 @@ int sys_sigprocmask(int how, const sigset_t *set, sigset_t *oldset)
     assert(current_process && "There is no current process!");
     // Skip the `init` process, always.
     if (current_process->pid == 1) {
-        pr_warning("sys_sigprocmask(%d, %p, %p): Cannot set signal for init!\n", how, set, oldset);
+        pr_warning("sys_sigprocmask(%d, %p, %p): Cannot set signal for init!\n", how, (void *)set, (void *)oldset);
         return -EINVAL;
     }
     // If `oldset` is not, return the old set.

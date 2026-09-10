@@ -1179,7 +1179,7 @@ void pci_debug_scan(void)
     pr_default("Counting PCI entities...\n");
     size_t count = 0;
     pci_scan(&__scan_count, -1, &count);
-    pr_default("Total PCI entities: %d\n", count);
+    pr_default("Total PCI entities: %u\n", (unsigned int)count);
 
     pr_default("Scanning PCI entities...\n");
     pci_scan(&__scan_hit_list, -1, NULL);

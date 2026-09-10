@@ -43,10 +43,10 @@ static wait_queue_head_t waitpid_queue = {
 
 void __dump_runqueue(int log_level)
 {
-    pr_log(log_level, "Dumping runqueue (num_active: %zu, num_periodic: %zu):\n", runqueue.num_active, runqueue.num_periodic);
+    pr_log(log_level, "Dumping runqueue (num_active: %lu, num_periodic: %lu):\n", runqueue.num_active, runqueue.num_periodic);
     list_for_each_decl (it, &runqueue.queue) {
         task_struct *entry = list_entry(it, task_struct, run_list);
-        pr_log(log_level, "  PID %d (%s) - state: %ld, vruntime: %lu\n", entry->pid, entry->name, entry->state, entry->se.vruntime);
+        pr_log(log_level, "  PID %d (%s) - state: %ld, vruntime: %u\n", entry->pid, entry->name, entry->state, entry->se.vruntime);
     }
 }
 

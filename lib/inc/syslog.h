@@ -60,7 +60,8 @@ void closelog(void);
 /// @param format the format to used, see printf.
 /// @param ... Arguments for the format string
 /// @return The number of bytes written or -1 on failure
-int __syslog(const char *file, const char *fun, int line, short log_level, const char *format, ...);
+int __syslog(const char *file, const char *fun, int line, short log_level, const char *format, ...)
+    __attribute__((format(printf, 5, 6)));
 
 /// @brief Wrapper macro to simplify usage.
 #define syslog(...) __syslog(__RELATIVE_PATH__, __func__, __LINE__, __VA_ARGS__)

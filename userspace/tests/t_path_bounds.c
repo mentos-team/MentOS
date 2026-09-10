@@ -52,14 +52,14 @@ static int __write_file(const char *path, const char *content)
 {
     int fd = creat(path, 0644);
     if (fd < 0) {
-        syslog(LOG_ERR, "[t_path_bounds] creat(%zu-byte path): %s", strlen(path), strerror(errno));
+        syslog(LOG_ERR, "[t_path_bounds] creat(%lu-byte path): %s", strlen(path), strerror(errno));
         return -1;
     }
     size_t length   = strlen(content);
     ssize_t written = write(fd, content, length);
     close(fd);
     if (written != (ssize_t)length) {
-        syslog(LOG_ERR, "[t_path_bounds] write returned %zd, expected %zu", written, length);
+        syslog(LOG_ERR, "[t_path_bounds] write returned %ld, expected %lu", written, length);
         return -1;
     }
     return 0;
@@ -74,7 +74,7 @@ static int __check_content(const char *path, const char *expected)
     char buffer[64] = {0};
     int fd          = open(path, O_RDONLY, 0);
     if (fd < 0) {
-        syslog(LOG_ERR, "[t_path_bounds] open(%zu-byte path): %s", strlen(path), strerror(errno));
+        syslog(LOG_ERR, "[t_path_bounds] open(%lu-byte path): %s", strlen(path), strerror(errno));
         return -1;
     }
     ssize_t bytes = read(fd, buffer, sizeof(buffer) - 1);
@@ -165,12 +165,12 @@ static int check_component_rejected(size_t length)
     if (fd >= 0) {
         close(fd);
         unlink(path);
-        syslog(LOG_ERR, "[t_path_bounds] creat of a %zu-character component succeeded", length);
+        syslog(LOG_ERR, "[t_path_bounds] creat of a %lu-character component succeeded", length);
         return -1;
     }
     if (errno != ENAMETOOLONG) {
         syslog(
-            LOG_ERR, "[t_path_bounds] %zu-character component: expected ENAMETOOLONG, got %s", length,
+            LOG_ERR, "[t_path_bounds] %lu-character component: expected ENAMETOOLONG, got %s", length,
             strerror(errno));
         return -1;
     }
@@ -195,7 +195,7 @@ int main(void)
     strcpy(dir, BASE_DIR "/");
     strcat(dir, name);
     if (mkdir(dir, 0755) < 0) {
-        syslog(LOG_ERR, "[t_path_bounds] mkdir(%zu-byte path): %s", strlen(dir), strerror(errno));
+        syslog(LOG_ERR, "[t_path_bounds] mkdir(%lu-byte path): %s", strlen(dir), strerror(errno));
         return EXIT_FAILURE;
     }
 

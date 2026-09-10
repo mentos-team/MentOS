@@ -68,7 +68,7 @@ static int __check_null_device(void)
     ssize_t written = write(fd, "discarded", 9);
     close(fd);
     if (written != 9) {
-        syslog(LOG_ERR, "[t_mount_boundary] writing to /dev/null returned %zd, expected 9", written);
+        syslog(LOG_ERR, "[t_mount_boundary] writing to /dev/null returned %ld, expected 9", written);
         return -1;
     }
     return 0;
@@ -92,7 +92,7 @@ static int __check_beyond_proc(void)
     ssize_t written     = write(fd, content, strlen(content));
     close(fd);
     if (written != (ssize_t)strlen(content)) {
-        syslog(LOG_ERR, "[t_mount_boundary] writing to " BEYOND_PROC " returned %zd", written);
+        syslog(LOG_ERR, "[t_mount_boundary] writing to " BEYOND_PROC " returned %ld", written);
         unlink(BEYOND_PROC);
         return -1;
     }
@@ -125,7 +125,7 @@ static int __check_procfs(void)
     ssize_t bytes    = read(fd, buffer, sizeof(buffer) - 1);
     close(fd);
     if (bytes <= 0) {
-        syslog(LOG_ERR, "[t_mount_boundary] reading /proc/mounts returned %zd", bytes);
+        syslog(LOG_ERR, "[t_mount_boundary] reading /proc/mounts returned %ld", bytes);
         return -1;
     }
     // The root mount has to be in there, otherwise the read said nothing.

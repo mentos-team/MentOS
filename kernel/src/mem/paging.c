@@ -335,14 +335,14 @@ static inline int __set_pg_entry_frame(page_dir_entry_t *entry, page_table_t *ta
     // Retrieve the low memory page structure from the virtual address of the table.
     page_t *table_page = get_page_from_virtual_address((uint32_t)table);
     if (!table_page) {
-        pr_crit("Failed to retrieve low memory page from table address: %p\n", table);
+        pr_crit("Failed to retrieve low memory page from table address: %p\n", (void *)table);
         return -1;
     }
 
     // Retrieve the physical address from the page structure.
     uint32_t phy_addr = get_physical_address_from_page(table_page);
     if (!phy_addr) {
-        pr_crit("Failed to retrieve physical address from page: %p\n", table_page);
+        pr_crit("Failed to retrieve physical address from page: %p\n", (void *)table_page);
         return -1;
     }
 
@@ -746,7 +746,7 @@ int sys_munmap(void *addr, size_t length)
 
     pr_err(
         "No matching memory area found for unmapping at address 0x%p with "
-        "length %zu.\n",
+        "length %lu.\n",
         addr, length);
     return 1;
 }

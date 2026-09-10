@@ -76,7 +76,7 @@ uint32_t get_virtual_address_from_page(page_t *page)
 
     // Validate the computed virtual address.
     if (!is_valid_virtual_address(vaddr)) {
-        pr_err("Computed virtual address 0x%p is invalid.\n", vaddr);
+        pr_err("Computed virtual address 0x%p is invalid.\n", (void *)vaddr);
         return 0;
     }
 
@@ -112,7 +112,7 @@ page_t *get_page_from_virtual_address(uint32_t vaddr)
 {
     // Ensure it is a valid virtual address.
     if (!is_valid_virtual_address(vaddr)) {
-        pr_crit("The provided address 0x%p is not a valid virtual address.\n", vaddr);
+        pr_crit("The provided address 0x%p is not a valid virtual address.\n", (void *)vaddr);
         return NULL;
     }
 
@@ -148,7 +148,7 @@ page_t *get_page_from_virtual_address(uint32_t vaddr)
         offset     = vaddr - memory.kernel_mem.virt_start;
         page_index = (memory.kernel_mem.start_addr / PAGE_SIZE) + (offset / PAGE_SIZE);
     } else {
-        pr_err("Virtual address 0x%p does not belong to any known memory zone or region.\n", vaddr);
+        pr_err("Virtual address 0x%p does not belong to any known memory zone or region.\n", (void *)vaddr);
         return NULL;
     }
 

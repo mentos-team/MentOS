@@ -206,7 +206,7 @@ int ext2_setattr(const char *path, struct iattr *attr)
         pr_err(
             "setattr(%s): Failed to get the EXT2 filesystem for absolute path "
             "`%s`.\n",
-            path);
+            path, path);
         return -ENOENT;
     }
     // Prepare the structure for the search.
