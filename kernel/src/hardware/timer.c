@@ -560,12 +560,10 @@ void run_timer_softirq(void)
 /// @param data The data.
 static inline void debug_timeout(unsigned long data)
 {
-    // The seconds come back as a uint64_t and the logging printf has no
-    // 64-bit conversion, so narrow it here (#270).
     pr_debug(
         "The timer has been successfully deactivated: %d, ticks: %d, seconds: "
-        "%u\n",
-        data, timer_ticks, (uint32_t)timer_get_seconds());
+        "%llu\n",
+        data, timer_ticks, timer_get_seconds());
 }
 
 /// @brief Cancels a sleep timer for a task being woken up by signals.

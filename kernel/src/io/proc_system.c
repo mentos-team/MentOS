@@ -159,12 +159,10 @@ int procs_module_init(void)
 /// @brief Write the uptime inside the buffer.
 /// @param buffer the buffer.
 /// @param bufsize the buffer size.
-/// @return the amount we wrote.
-// The uptime is a uint64_t and this printf has no 64-bit conversion, so it
-// is narrowed here rather than read half-width by a %d (#270).
+/// @return The amount we wrote.
 static ssize_t procs_do_uptime(char *buffer, size_t bufsize)
 {
-    return sprintf(buffer, "%u", (uint32_t)timer_get_seconds());
+    return sprintf(buffer, "%llu", timer_get_seconds());
 }
 
 /// @brief Write the version inside the buffer.

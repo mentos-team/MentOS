@@ -60,6 +60,7 @@ static char *all_tests[] = {
     "t_mem",
     "t_mkdir",
     "t_syslog_format",
+    "t_printf_length",
     "t_rmdir_dotfiles",
     "t_stdint",
     "t_mount_boundary",

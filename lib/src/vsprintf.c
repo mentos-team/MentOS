@@ -17,6 +17,57 @@
 #define FLAGS_SIGN      (1U << 5U) ///< Print the sign.
 #define FLAGS_NEGATIVE  (1U << 6U) ///< Negative number flag.
 
+/// Length modifiers, in the order they are parsed from the format string.
+#define LEN_NONE 0 ///< No length modifier was provided.
+#define LEN_H    1 ///< `h` modifier, the argument is a short.
+#define LEN_HH   2 ///< `hh` modifier, the argument is a char.
+#define LEN_L    3 ///< `l` modifier, the argument is a long.
+#define LEN_LL   4 ///< `ll` modifier, the argument is a long long.
+#define LEN_Z    5 ///< `z` modifier, the argument is a size_t/ssize_t.
+
+/// @brief Divides two unsigned 64-bit values, returning quotient and remainder.
+/// @details This libc is linked with `-nostdlib`, so the compiler's 64-bit
+/// division helpers (`__udivdi3`, `__umoddi3`) are not available: the `/` and
+/// `%` operators on `long long` would leave every program that pulls in
+/// vsprintf with undefined references. The operation is therefore performed
+/// with shifts and subtracts, which compile to inline instructions. Values
+/// that fit in 32 bits — the overwhelming majority — take a native-division
+/// fast path instead.
+/// @param num The dividend.
+/// @param den The divisor.
+/// @param rem If not NULL, receives the remainder.
+/// @return The quotient.
+static unsigned long long __udivmod64(unsigned long long num, unsigned long long den, unsigned long long *rem)
+{
+    // Fast path: both operands fit in 32 bits, the hardware divider does it.
+    if ((num <= 0xFFFFFFFFULL) && (den <= 0xFFFFFFFFULL)) {
+        unsigned long long q = (unsigned long)(unsigned)num / (unsigned)den;
+        if (rem) {
+            *rem = (unsigned long)(unsigned)num % (unsigned)den;
+        }
+        return q;
+    }
+    // Slow path: classic shift-and-subtract long division.
+    unsigned long long q   = 0;
+    unsigned long long bit = 1;
+    while ((den & 0x8000000000000000ULL) == 0 && den < num) {
+        den <<= 1;
+        bit <<= 1;
+    }
+    while (bit != 0) {
+        if (num >= den) {
+            num -= den;
+            q |= bit;
+        }
+        den >>= 1;
+        bit >>= 1;
+    }
+    if (rem) {
+        *rem = num;
+    }
+    return q;
+}
+
 /// @brief Internal function to emit a character.
 /// @param buf Current pointer in the buffer.
 /// @param end Pointer to the end of the buffer.
@@ -50,15 +101,16 @@ static void __emit_padding(char **buf, char *end, int padding, char padchar)
 /// @param precision The minimum number of digits to print.
 /// @param flags Formatting flags.
 /// @return The length of the formatted number.
-static int __emit_number(char *buffer, size_t buflen, unsigned long num, int base, int precision, int flags)
+static int __emit_number(char *buffer, size_t buflen, unsigned long long num, int base, int precision, int flags)
 {
     size_t len = 0;
     // Reserve space for prefix.
     buflen -= (flags & (FLAGS_NEGATIVE | FLAGS_PLUS | FLAGS_SPACE));
     // Convert number to string (in reverse).
     do {
-        buffer[len++] = ((flags & FLAGS_UPPERCASE) ? "0123456789ABCDEF" : "0123456789abcdef")[num % base];
-        num /= base;
+        unsigned long long rem;
+        num = __udivmod64(num, (unsigned long long)base, &rem);
+        buffer[len++] = ((flags & FLAGS_UPPERCASE) ? "0123456789ABCDEF" : "0123456789abcdef")[rem];
     } while ((num > 0) && (len < buflen));
     // Apply precision (zero padding).
     if (precision > 0) {
@@ -139,10 +191,10 @@ static void __format_char(char **buf, char *end, char c, int width, int flags)
 /// @param width The minimum width of the output.
 /// @param precision The minimum number of digits to print.
 /// @param flags Formatting flags.
-static void __format_integer(char **buf, char *end, long num, int base, int width, int precision, int flags)
+static void __format_integer(char **buf, char *end, long long num, int base, int width, int precision, int flags)
 {
     char tmp[32] = {0};
-    unsigned long unum;
+    unsigned long long unum;
     if (num < 0) {
         unum = -num;
         flags |= FLAGS_NEGATIVE;
@@ -175,7 +227,7 @@ static void __format_integer(char **buf, char *end, long num, int base, int widt
 /// @param width The minimum width of the output.
 /// @param precision The minimum number of digits to print.
 /// @param flags Formatting flags.
-static void __format_unsigned(char **buf, char *end, unsigned long num, int base, int width, int precision, int flags)
+static void __format_unsigned(char **buf, char *end, unsigned long long num, int base, int width, int precision, int flags)
 {
     char tmp[32] = {0};
     // Convert number to string (reverse order).
@@ -316,26 +368,26 @@ int vsnprintf(char *buffer, size_t size, const char *format, va_list args)
                 format++;
                 // "hh" (char)
                 if (*format == 'h') {
-                    length = 2;
+                    length = LEN_HH;
                     format++;
                 }
                 // "h" (short)
                 else {
-                    length = 1;
+                    length = LEN_H;
                 }
             } else if (*format == 'l') {
                 format++;
-                // "ll" (long)
+                // "ll" (long long)
                 if (*format == 'l') {
-                    length = 4;
+                    length = LEN_LL;
                     format++;
                 }
                 // "l" (long)
                 else {
-                    length = 3;
+                    length = LEN_L;
                 }
             } else if (*format == 'z') {
-                length = 'z';
+                length = LEN_Z;
                 format++;
             }
 
@@ -354,17 +406,19 @@ int vsnprintf(char *buffer, size_t size, const char *format, va_list args)
             }
             case 'd':
             case 'i': {
-                long num;
-                if (length == 0) {
+                long long num;
+                if (length == LEN_NONE) {
                     num = va_arg(args, int);
-                } else if (length == 1) {
+                } else if (length == LEN_H) {
                     num = (short)va_arg(args, int);
-                } else if (length == 2) {
-                    num = (char)va_arg(args, int);
-                } else if (length == 'z') {
-                    num = (short)va_arg(args, ssize_t);
-                } else {
+                } else if (length == LEN_HH) {
+                    num = (signed char)va_arg(args, int);
+                } else if (length == LEN_Z) {
+                    num = va_arg(args, ssize_t);
+                } else if (length == LEN_L) {
                     num = va_arg(args, long);
+                } else {
+                    num = va_arg(args, long long);
                 }
                 __format_integer(&buf, end, num, 10, width, precision, flags);
                 break;
@@ -373,17 +427,19 @@ int vsnprintf(char *buffer, size_t size, const char *format, va_list args)
             case 'o':
             case 'x':
             case 'X': {
-                unsigned long num;
-                if (length == 0) {
+                unsigned long long num;
+                if (length == LEN_NONE) {
                     num = va_arg(args, unsigned int);
-                } else if (length == 1) {
+                } else if (length == LEN_H) {
                     num = (unsigned short)va_arg(args, unsigned int);
-                } else if (length == 2) {
+                } else if (length == LEN_HH) {
                     num = (unsigned char)va_arg(args, unsigned int);
-                } else if (length == 'z') {
-                    num = (short)va_arg(args, size_t);
-                } else {
+                } else if (length == LEN_Z) {
+                    num = va_arg(args, size_t);
+                } else if (length == LEN_L) {
                     num = va_arg(args, unsigned long);
+                } else {
+                    num = va_arg(args, unsigned long long);
                 }
                 int base;
                 if (*format == 'o') {

@@ -525,9 +525,7 @@ static inline void ata_dump_device(ata_device_t *dev)
     pr_debug("        overwrite_ext_command_supported       : %u\n", dev->identity.overwrite_ext_command_supported);
     pr_debug("        block_erase_ext_command_supported     : %u\n", dev->identity.block_erase_ext_command_supported);
     pr_debug("        sectors_28                            : %u\n", dev->identity.sectors_28);
-    // 48-bit, and this printf has no 64-bit conversion. The dump shows the
-    // low half; ata_max_offset is where the whole value is used (#270).
-    pr_debug("        sectors_48 (low 32)                   : %u\n", (uint32_t)dev->identity.sectors_48);
+    pr_debug("        sectors_48                            : %llu\n", dev->identity.sectors_48);
     pr_debug("    }\n");
     pr_debug("    bmr {\n");
     pr_debug("        command : %6u, status : %6u, prdt : %6u\n", dev->bmr.command, dev->bmr.status, dev->bmr.prdt);
