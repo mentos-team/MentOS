@@ -717,7 +717,11 @@ int __send_sig_info(int sig, siginfo_t *info, struct task_struct *p)
 
 int sys_kill(pid_t pid, int sig)
 {
-    pr_debug("sys_kill(%d, %2d:%s)\n", pid, sig, strsignal(sig));
+    // `sig` is unvalidated syscall input here, and strsignal() returns NULL
+    // for anything out of range: logging it straight through %s risks a
+    // NULL string argument, which GCC's -O2 format-overflow check catches.
+    const char *signame = strsignal(sig);
+    pr_debug("sys_kill(%d, %2d:%s)\n", pid, sig, signame ? signame : "unknown");
     struct task_struct *process = scheduler_get_running_process(pid);
     // Check the task associated with the pid.
     if (!process) {

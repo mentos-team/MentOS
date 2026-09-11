@@ -1,0 +1,62 @@
+name: Log Format
+
+# `pr_debug`/`pr_info`/`pr_notice` compile to nothing below a file's
+# `__DEBUG_LEVEL__`, which is `LOGLEVEL_NOTICE` almost everywhere. `-Wformat`
+# only checks code the compiler sees, so most log calls in the tree are never
+# format-checked by the other jobs. This one builds with every level forced to
+# `LOGLEVEL_DEBUG`, so a mismatch in a call the normal build drops still fails
+# the PR (#365).
+on:
+  push:
+    branches:
+    - main
+    - develop
+    paths:
+    - '**/*.c'
+    - '**/*.h'
+    - '**/CMakeLists.txt'
+    - '**/cmake/**'
+    - 'tools/**'
+    - '.github/workflows/log-format.yml'
+  pull_request:
+    branches:
+    - main
+    - develop
+    paths:
+    - '**/*.c'
+    - '**/*.h'
+    - '**/CMakeLists.txt'
+    - '**/cmake/**'
+    - 'tools/**'
+    - '.github/workflows/log-format.yml'
+
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Check the log calls a normal build drops
+    runs-on: ubuntu-latest
+    steps:
+    - name: Clone repository
+      uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y nasm gcc-14 g++-14
+
+    # Release, so the optimizer-dependent checks (-Wformat-overflow, which
+    # needs the constant propagation -O2 does) run as well as plain -Wformat.
+    - name: Build with every log level forced on
+      env:
+        CC: gcc-14
+        CXX: g++-14
+      run: |
+        cmake -B build \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DFORCE_DEBUG_LOGLEVEL=ON
+        cmake --build build --parallel $(nproc)
