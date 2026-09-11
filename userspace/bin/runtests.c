@@ -102,6 +102,7 @@ static char *all_tests[] = {
     "t_faultinj",
     "t_indirect_map",
     "t_meta_rmw",
+    "t_namei_io",
 };
 
 static char **tests = &all_tests[0];

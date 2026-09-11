@@ -75,21 +75,21 @@ int ext2_resolve_path(vfs_file_t *directory, const char *path, ext2_direntry_sea
     // Check the pointers.
     if (directory == NULL) {
         pr_err("You provided a NULL directory.\n");
-        return -1;
+        return -EINVAL;
     }
     if (path == NULL) {
         pr_err("You provided a NULL path.\n");
-        return -1;
+        return -EINVAL;
     }
     if (search == NULL) {
         pr_err("You provided a NULL search.\n");
-        return -1;
+        return -EINVAL;
     }
     // Get the filesystem.
     ext2_filesystem_t *fs = (ext2_filesystem_t *)directory->device;
     if (fs == NULL) {
         pr_err("The file does not belong to an EXT2 filesystem `%s`.\n", directory->name);
-        return -1;
+        return -ENODEV;
     }
     // If the path is `/`.
     if (strcmp(path, "/") == 0) {
@@ -100,8 +100,12 @@ int ext2_resolve_path(vfs_file_t *directory, const char *path, ext2_direntry_sea
     size_t offset        = 0;
     int tokens;
     while ((tokens = tokenize(path, "/", &offset, token, NAME_MAX)) > 0) {
-        if (ext2_find_direntry(fs, ino, token, search)) {
-            return -1;
+        // Pass on why the component could not be resolved, rather than the
+        // single -1 that made "it is not here" and "it could not be read"
+        // the same answer (#353).
+        int err = ext2_find_direntry(fs, ino, token, search);
+        if (err < 0) {
+            return err;
         }
         ino = search->direntry.inode;
     }
@@ -109,7 +113,7 @@ int ext2_resolve_path(vfs_file_t *directory, const char *path, ext2_direntry_sea
     // truncated: a truncated component would resolve to a different name.
     if (tokens < 0) {
         pr_err("Path component too long in `%s`.\n", path);
-        return -1;
+        return -ENAMETOOLONG;
     }
     pr_debug(
         "ext2_resolve_path(directory: %s, path: %s) -> (%s, %d)\n", directory->name, path, search->direntry.name,
