@@ -57,7 +57,7 @@ static int __arm(const char *command)
     ssize_t written = write(fd, command, strlen(command));
     close(fd);
     if (written != (ssize_t)strlen(command)) {
-        syslog(LOG_ERR, "[t_faultinj] `%s` returned %ld", command, written);
+        syslog(LOG_ERR, "[t_faultinj] `%s` returned %zd", command, written);
         return -1;
     }
     return 0;
@@ -78,7 +78,7 @@ static int __counter(const char *name, unsigned *value)
     ssize_t bytes    = read(fd, buffer, sizeof(buffer) - 1);
     close(fd);
     if (bytes <= 0) {
-        syslog(LOG_ERR, "[t_faultinj] reading " CONTROL " returned %ld", bytes);
+        syslog(LOG_ERR, "[t_faultinj] reading " CONTROL " returned %zd", bytes);
         return -1;
     }
     char *at = strstr(buffer, name);
@@ -227,7 +227,7 @@ int main(void)
             ssize_t bytes  = read(victim, buffer, sizeof(buffer) - 1);
             close(victim);
             if ((bytes != 5) || (strcmp(buffer, "fault") != 0)) {
-                syslog(LOG_ERR, "[t_faultinj] " VICTIM " reads back %ld bytes `%s` after disarming", bytes, buffer);
+                syslog(LOG_ERR, "[t_faultinj] " VICTIM " reads back %zd bytes `%s` after disarming", bytes, buffer);
                 ++failures;
             }
         }

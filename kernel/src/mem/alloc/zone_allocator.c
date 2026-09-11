@@ -103,8 +103,8 @@ static inline void __print_zone(int log_level, const zone_t *zone)
     char buddy_status[512] = {0};
     buddy_system_to_string(&zone->buddy_system, buddy_status, sizeof(buddy_status));
     pr_log(log_level, "Zone: %s\n", zone->name);
-    pr_log(log_level, "    Number of Pages      : %lu\n", zone->num_pages);
-    pr_log(log_level, "    Number of Free Pages : %lu\n", zone->free_pages);
+    pr_log(log_level, "    Number of Pages      : %zu\n", zone->num_pages);
+    pr_log(log_level, "    Number of Free Pages : %zu\n", zone->free_pages);
     pr_log(log_level, "    Startint PFN         : %u\n", zone->zone_start_pfn);
     pr_log(log_level, "    Zone Size            : %s\n", to_human_size(zone->total_size));
     pr_log(log_level, "    Zone Memory Map      : 0x%p\n", (void *)zone->zone_mem_map);
@@ -201,7 +201,7 @@ static inline int is_memory_clean(gfp_t gfp_mask)
     unsigned long free_space = buddy_system_get_free_space(&zone->buddy_system);
     if (zone->total_size != free_space) {
         pr_crit("Memory zone check failed for zone '%s'.\n", zone->name);
-        pr_crit("Expected free space %lu bytes, but found %lu bytes.\n", zone->total_size, free_space);
+        pr_crit("Expected free space %zu bytes, but found %lu bytes.\n", zone->total_size, free_space);
         pr_crit("Buddy system state for zone '%s':\n", zone->name);
         char buddy_status[512] = {0};
         buddy_system_to_string(&zone->buddy_system, buddy_status, sizeof(buddy_status));

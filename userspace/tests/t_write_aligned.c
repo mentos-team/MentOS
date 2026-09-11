@@ -87,7 +87,7 @@ static int __write_blocks(unsigned count)
     for (unsigned block = 0; block < count; ++block) {
         ssize_t written = write(fd, buffer, sizeof(buffer));
         if (written != (ssize_t)sizeof(buffer)) {
-            syslog(LOG_ERR, "[t_write_aligned] write of block %u returned %ld: %s", block, written, strerror(errno));
+            syslog(LOG_ERR, "[t_write_aligned] write of block %u returned %zd: %s", block, written, strerror(errno));
             close(fd);
             return -1;
         }
@@ -110,7 +110,7 @@ static int __check_content(unsigned count)
         memset(buffer, 0, sizeof(buffer));
         ssize_t bytes = read(fd, buffer, sizeof(buffer));
         if (bytes != (ssize_t)sizeof(buffer)) {
-            syslog(LOG_ERR, "[t_write_aligned] read of block %u returned %ld: %s", block, bytes, strerror(errno));
+            syslog(LOG_ERR, "[t_write_aligned] read of block %u returned %zd: %s", block, bytes, strerror(errno));
             close(fd);
             return -1;
         }

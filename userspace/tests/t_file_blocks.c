@@ -158,7 +158,7 @@ int main(void)
         __fill_marker(index);
         ssize_t written = write(fd, buffer, sizeof(buffer));
         if (written != (ssize_t)sizeof(buffer)) {
-            syslog(LOG_ERR, "[t_file_blocks] write of block %u returned %ld: %s", index, written, strerror(errno));
+            syslog(LOG_ERR, "[t_file_blocks] write of block %u returned %zd: %s", index, written, strerror(errno));
             ++failures;
         }
     }
@@ -180,7 +180,7 @@ int main(void)
         memset(buffer, 0, sizeof(buffer));
         ssize_t bytes = read(fd, buffer, sizeof(buffer));
         if (bytes != (ssize_t)sizeof(buffer)) {
-            syslog(LOG_ERR, "[t_file_blocks] read of block %u returned %ld: %s", index, bytes, strerror(errno));
+            syslog(LOG_ERR, "[t_file_blocks] read of block %u returned %zd: %s", index, bytes, strerror(errno));
             ++failures;
             continue;
         }

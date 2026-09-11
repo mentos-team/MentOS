@@ -347,7 +347,7 @@ static int editor_save_file(editor_state_t *editor)
 
     close(fd);
     editor->modified = 0;
-    snprintf(editor->status_msg, sizeof(editor->status_msg), "File saved (%lu lines)", editor->line_count);
+    snprintf(editor->status_msg, sizeof(editor->status_msg), "File saved (%zu lines)", editor->line_count);
     return 0;
 }
 

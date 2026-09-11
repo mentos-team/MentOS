@@ -70,7 +70,7 @@ int main(int argc, char *argv[])
 
     // Check if the file size is correct.
     if (st.st_size != content_size) {
-        syslog(LOG_ERR, "[t_creat] Wrong file size. (expected: %ld, is: %ld)\n", content_size, st.st_size);
+        syslog(LOG_ERR, "[t_creat] Wrong file size. (expected: %zu, is: %ld)\n", content_size, st.st_size);
         // Remove the file.
         if (unlink(filename) < 0) {
             syslog(LOG_ERR, "[t_creat] unlink: %s: %s\n", filename, strerror(errno));

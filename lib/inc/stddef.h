@@ -25,10 +25,10 @@ typedef long signed int ptrdiff_t;
 typedef unsigned char byte_t;
 
 /// Define the generic size type.
-typedef unsigned long size_t;
+typedef __SIZE_TYPE__ size_t;
 
 /// Define the generic signed size type.
-typedef long ssize_t;
+typedef __PTRDIFF_TYPE__ ssize_t;
 
 /// Define the type of an inode.
 typedef unsigned int ino_t;

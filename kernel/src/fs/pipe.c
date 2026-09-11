@@ -347,7 +347,7 @@ static ssize_t pipe_calculate_bytes_to_write(pipe_buffer_t *pipe_buffer, size_t 
         return -EINVAL;
     }
     if (count == 0) {
-        pr_err("Invalid write request of %lu bytes (must be positive).\n", count);
+        pr_err("Invalid write request of %zu bytes (must be positive).\n", count);
         return -EINVAL;
     }
 
@@ -376,7 +376,7 @@ static int pipe_buffer_confirm(pipe_buffer_t *pipe_buffer)
     // Ensure length and offset are within valid bounds.
     if ((pipe_buffer->len + pipe_buffer->offset) > PIPE_BUFFER_SIZE) {
         pr_err(
-            "Buffer length and offset exceed bounds: len = %lu, offset = %lu, "
+            "Buffer length and offset exceed bounds: len = %zu, offset = %zu, "
             "PIPE_BUFFER_SIZE = %d.\n",
             pipe_buffer->len, pipe_buffer->offset, PIPE_BUFFER_SIZE);
         return -EOVERFLOW;
@@ -751,7 +751,7 @@ static vfs_file_t *pipe_open(const char *path, int flags, mode_t mode)
 
         int ret = pipe_buffer_confirm(pipe_buffer);
         if (ret < 0) {
-            pr_err("Buffer confirmation failed for buffer %lu (error[%2d]: %s).\n", buffer_index, -ret, strerror(-ret));
+            pr_err("Buffer confirmation failed for buffer %zu (error[%2d]: %s).\n", buffer_index, -ret, strerror(-ret));
             // Free pipe info structure.
             __pipe_inode_info_dealloc(pipe_info);
             // Free allocated new_file structure before returning.
@@ -932,14 +932,14 @@ static ssize_t pipe_read(vfs_file_t *file, char *buffer, off_t offset, size_t nb
 
             // Confirm that the buffer is ready to be read.
             if (pipe_buffer_confirm(pipe_buffer) < 0) {
-                pr_err("Failed to confirm readiness of buffer %lu for reading.\n", buffer_index);
+                pr_err("Failed to confirm readiness of buffer %zu for reading.\n", buffer_index);
                 break; // Stop if there’s no data to read.
             }
 
             // Calculate bytes to read in this iteration, considering the remaining requested bytes.
             ssize_t bytes_to_read = pipe_buffer_read(pipe_buffer, buffer + bytes_read, nbyte - bytes_read);
             if (bytes_to_read < 0) {
-                pr_err("Error reading from pipe buffer (error[%2ld]: %s).\n", -bytes_to_read, strerror(-bytes_to_read));
+                pr_err("Error reading from pipe buffer (error[%2zd]: %s).\n", -bytes_to_read, strerror(-bytes_to_read));
                 bytes_read = -bytes_to_read;
                 break;
             }
@@ -1016,7 +1016,7 @@ static ssize_t pipe_write(vfs_file_t *file, const void *buffer, off_t offset, si
 
             // Confirm the buffer is ready for writing.
             if (pipe_buffer_confirm(pipe_buffer) < 0) {
-                pr_err("Failed to confirm readiness of buffer %lu for writing.\n", buffer_index);
+                pr_err("Failed to confirm readiness of buffer %zu for writing.\n", buffer_index);
                 bytes_written = -1;
                 break;
             }
@@ -1026,7 +1026,7 @@ static ssize_t pipe_write(vfs_file_t *file, const void *buffer, off_t offset, si
                 pipe_buffer_write(pipe_buffer, (const char *)buffer + bytes_written, nbyte - bytes_written);
             if (bytes_to_write < 0) {
                 // Other errors: Log and return immediately.
-                pr_err("Error writing to pipe buffer (error[%2ld]: %s).\n", -bytes_to_write, strerror(-bytes_to_write));
+                pr_err("Error writing to pipe buffer (error[%2zd]: %s).\n", -bytes_to_write, strerror(-bytes_to_write));
                 bytes_written = -1;
                 break;
             }
@@ -1223,7 +1223,7 @@ int sys_pipe(int fds[2])
 
         int ret = pipe_buffer_confirm(pipe_buffer);
         if (ret < 0) {
-            pr_err("Buffer confirmation failed for buffer %lu (error[%2d]: %s).\n", buffer_index, -ret, strerror(-ret));
+            pr_err("Buffer confirmation failed for buffer %zu (error[%2d]: %s).\n", buffer_index, -ret, strerror(-ret));
             // Free pipe info structure.
             __pipe_inode_info_dealloc(pipe_info);
             // Free allocated file structure before returning.
