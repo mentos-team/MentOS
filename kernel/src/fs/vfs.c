@@ -198,7 +198,7 @@ int vfs_superblock_for_each(vfs_superblock_iter_fn fn, void *ctx)
 
 int vfs_register_superblock(const char *name, const char *path, const char *source, file_system_type_t *type, vfs_file_t *root)
 {
-    pr_debug("vfs_register_superblock(name: %s, path: %s, source: %s, type: %s, root: %p)\n", name, path, source ? source : "(null)", type->name, root);
+    pr_debug("vfs_register_superblock(name: %s, path: %s, source: %s, type: %s, root: %p)\n", name, path, source ? source : "(null)", type->name, (void *)root);
     // Validate input parameters.
     if (!name) {
         pr_err("vfs_register_superblock: NULL name provided\n");
@@ -567,7 +567,7 @@ ssize_t vfs_getdents(vfs_file_t *file, dirent_t *dirp, off_t off, size_t count)
         --dir_path_len;
     }
 
-    pr_debug("vfs_getdents: Checking for mountpoints under '%s' (off=%u, written=%d)\n", dir_path, off, written);
+    pr_debug("vfs_getdents: Checking for mountpoints under '%s' (off=%ld, written=%d)\n", dir_path, off, written);
 
     // Calculate offset handling for mountpoint entries.
     size_t mountpoints_skipped = 0;
@@ -689,7 +689,7 @@ int vfs_mkdir(const char *path, mode_t mode)
     pr_debug("vfs_mkdir(path: %s, mode: %d) -> absolute_path: %s\n", path, mode, absolute_path);
     super_block_t *sb = vfs_get_superblock(absolute_path);
     if (sb == NULL) {
-        pr_err("vfs_mkdir(%s): Cannot find the superblock!\n");
+        pr_err("vfs_mkdir(%s): Cannot find the superblock!\n", path);
         return -ENODEV;
     }
     vfs_file_t *sb_root = sb->root;
@@ -718,7 +718,7 @@ int vfs_rmdir(const char *path)
     }
     super_block_t *sb = vfs_get_superblock(absolute_path);
     if (sb == NULL) {
-        pr_err("vfs_rmdir(%s): Cannot find the superblock!\n");
+        pr_err("vfs_rmdir(%s): Cannot find the superblock!\n", path);
         return -ENODEV;
     }
     vfs_file_t *sb_root = sb->root;
@@ -749,7 +749,7 @@ vfs_file_t *vfs_creat(const char *path, mode_t mode)
     }
     super_block_t *sb = vfs_get_superblock(absolute_path);
     if (sb == NULL) {
-        pr_err("vfs_creat(%s): Cannot find the superblock!\n");
+        pr_err("vfs_creat(%s): Cannot find the superblock!\n", path);
         errno = ENODEV;
         return NULL;
     }
@@ -787,22 +787,22 @@ vfs_file_t *vfs_creat(const char *path, mode_t mode)
 
 ssize_t vfs_readlink(const char *path, char *buffer, size_t bufsize)
 {
-    pr_debug("vfs_readlink(%s, %s, %d)\n", path, buffer, bufsize);
+    pr_debug("vfs_readlink(%s, %s, %zu)\n", path, buffer, bufsize);
     // Allocate a variable for the path.
     char absolute_path[PATH_MAX] = {0};
     // If the first character is not the '/' then get the absolute path.
     int ret                      = resolve_path(path, absolute_path, PATH_MAX, REMOVE_TRAILING_SLASH);
     if (ret < 0) {
-        pr_err("vfs_readlink(%s, %s, %d): Cannot get the absolute path.", path, buffer, bufsize);
+        pr_err("vfs_readlink(%s, %s, %zu): Cannot get the absolute path.", path, buffer, bufsize);
         return ret;
     }
     super_block_t *sb = vfs_get_superblock(absolute_path);
     if (sb == NULL) {
-        pr_err("vfs_readlink(%s, %s, %d): Cannot find the superblock!.\n", path, buffer, bufsize);
+        pr_err("vfs_readlink(%s, %s, %zu): Cannot find the superblock!.\n", path, buffer, bufsize);
         return -ENOENT;
     }
     if (sb->root == NULL) {
-        pr_err("vfs_readlink(%s, %s, %d): Cannot find the superblock root.\n", path, buffer, bufsize);
+        pr_err("vfs_readlink(%s, %s, %zu): Cannot find the superblock root.\n", path, buffer, bufsize);
         return -ENOENT;
     }
     if (sb->root->fs_operations->readlink_f == NULL) {
@@ -825,7 +825,7 @@ int vfs_symlink(const char *linkname, const char *path)
     }
     super_block_t *sb = vfs_get_superblock(absolute_path);
     if (sb == NULL) {
-        pr_err("vfs_symlink(%s, %s): Cannot find the superblock!\n");
+        pr_err("vfs_symlink(%s, %s): Cannot find the superblock!\n", linkname, path);
         return -ENODEV;
     }
     vfs_file_t *sb_root = sb->root;
@@ -847,7 +847,7 @@ int vfs_symlink(const char *linkname, const char *path)
 
 int vfs_stat(const char *path, stat_t *buf)
 {
-    pr_debug("vfs_stat(path: %s, buf: %p)\n", path, buf);
+    pr_debug("vfs_stat(path: %s, buf: %p)\n", path, (void *)buf);
     // Allocate a variable for the path.
     char absolute_path[PATH_MAX] = {0};
     // If the first character is not the '/' then get the absolute path.
@@ -858,7 +858,7 @@ int vfs_stat(const char *path, stat_t *buf)
     }
     super_block_t *sb = vfs_get_superblock(absolute_path);
     if (sb == NULL) {
-        pr_err("vfs_stat(%s): Cannot find the superblock!\n");
+        pr_err("vfs_stat(%s): Cannot find the superblock!\n", path);
         return -ENODEV;
     }
     vfs_file_t *sb_root = sb->root;

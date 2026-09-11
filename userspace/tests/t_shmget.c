@@ -41,7 +41,7 @@ int main(void)
             syslog(LOG_ERR, "[t_shmget] shmat: %s", strerror(errno));
             return EXIT_FAILURE;
         }
-        syslog(LOG_INFO, "[t_shmget] C: %p\n", array);
+        syslog(LOG_INFO, "[t_shmget] C: %p\n", (void *)array);
         array[0] = 1;
         return 0;
     }
@@ -57,7 +57,7 @@ int main(void)
     while (wait(NULL) != -1) {
     }
 
-    syslog(LOG_INFO, "[t_shmget] F: %p\n", array);
+    syslog(LOG_INFO, "[t_shmget] F: %p\n", (void *)array);
     array[1] = 2;
 
     syslog(LOG_INFO, "[t_shmget] array[%d] : %d\n", 0, array[0]);

@@ -252,7 +252,7 @@ static inline procfs_file_t *procfs_create_file(const char *path, unsigned flags
 {
     procfs_file_t *procfs_file = (procfs_file_t *)kmem_cache_alloc(fs.procfs_file_cache, GFP_KERNEL);
     if (!procfs_file) {
-        pr_err("Failed to get free entry (%p).\n", procfs_file);
+        pr_err("Failed to get free entry (%p).\n", (void *)procfs_file);
         return NULL;
     }
     // Clean up the memory.
@@ -284,7 +284,7 @@ static inline procfs_file_t *procfs_create_file(const char *path, unsigned flags
     procfs_file->dir_entry.fs_operations  = NULL;
     // Increase the number of files.
     ++fs.nfiles;
-    pr_debug("procfs_create_file(%p) `%s`\n", procfs_file, path);
+    pr_debug("procfs_create_file(%p) `%s`\n", (void *)procfs_file, path);
     return procfs_file;
 }
 
@@ -294,10 +294,10 @@ static inline procfs_file_t *procfs_create_file(const char *path, unsigned flags
 static inline int procfs_destroy_file(procfs_file_t *procfs_file)
 {
     if (!procfs_file) {
-        pr_err("Received a null entry (%p).\n", procfs_file);
+        pr_err("Received a null entry (%p).\n", (void *)procfs_file);
         return 1;
     }
-    pr_debug("procfs_destroy_file(%p) `%s`\n", procfs_file, procfs_file->name);
+    pr_debug("procfs_destroy_file(%p) `%s`\n", (void *)procfs_file, procfs_file->name);
     // Remove the file from the list of opened files.
     list_head_remove(&procfs_file->siblings);
     // Free the cache.
@@ -313,7 +313,7 @@ static inline int procfs_destroy_file(procfs_file_t *procfs_file)
 static inline vfs_file_t *procfs_create_file_struct(procfs_file_t *procfs_file)
 {
     if (!procfs_file) {
-        pr_err("procfs_create_file_struct(%p): Procfs file not valid!\n", procfs_file);
+        pr_err("procfs_create_file_struct(%p): Procfs file not valid!\n", (void *)procfs_file);
         return NULL;
     }
     vfs_file_t *vfs_file = vfs_alloc_file();
@@ -321,7 +321,7 @@ static inline vfs_file_t *procfs_create_file_struct(procfs_file_t *procfs_file)
         pr_err(
             "procfs_create_file_struct(%p): Failed to allocate memory for VFS "
             "file!\n",
-            procfs_file);
+            (void *)procfs_file);
         return NULL;
     }
     memset(vfs_file, 0, sizeof(vfs_file_t));
@@ -336,7 +336,7 @@ static inline vfs_file_t *procfs_create_file_struct(procfs_file_t *procfs_file)
     vfs_file->sys_operations = &procfs_sys_operations;
     vfs_file->fs_operations  = &procfs_fs_operations;
     list_head_init(&vfs_file->siblings);
-    pr_debug("procfs_create_file_struct(%p): VFS file : %p\n", procfs_file, vfs_file);
+    pr_debug("procfs_create_file_struct(%p): VFS file : %p\n", (void *)procfs_file, (void *)vfs_file);
     return vfs_file;
 }
 

@@ -82,15 +82,19 @@ int ext2_stat(const char *path, stat_t *stat)
     // Prepare the structure for the search.
     ext2_direntry_search_t search;
     memset(&search, 0, sizeof(ext2_direntry_search_t));
-    // Resolve the path.
-    if (ext2_resolve_path(fs->root, path, &search)) {
-        return -ENOENT;
+    // Resolve the path. The reason matters to the caller: path resolution
+    // reads -ENOENT as "this component is not a symbolic link" and carries
+    // on, which is the right answer for a name that is not there and the
+    // wrong one for a name it could not read (#353).
+    int err = ext2_resolve_path(fs->root, path, &search);
+    if (err < 0) {
+        return err;
     }
     // Get the inode associated with the directory entry.
     ext2_inode_t inode;
     if (ext2_read_inode(fs, &inode, search.direntry.inode) == -1) {
         pr_err("ext2_stat(path: %s): Failed to read the inode of `%s`.\n", path, search.direntry.name);
-        return -ENOENT;
+        return -EIO;
     }
     // Set the rest of the structure.
     return __ext2_stat(fs, &inode, search.direntry.inode, stat);
@@ -206,21 +210,22 @@ int ext2_setattr(const char *path, struct iattr *attr)
         pr_err(
             "setattr(%s): Failed to get the EXT2 filesystem for absolute path "
             "`%s`.\n",
-            path);
+            path, path);
         return -ENOENT;
     }
     // Prepare the structure for the search.
     ext2_direntry_search_t search;
     memset(&search, 0, sizeof(ext2_direntry_search_t));
     // Resolve the path.
-    if (ext2_resolve_path(fs->root, path, &search)) {
-        return -ENOENT;
+    int err = ext2_resolve_path(fs->root, path, &search);
+    if (err < 0) {
+        return err;
     }
     // Get the inode associated with the directory entry.
     ext2_inode_t inode;
     if (ext2_read_inode(fs, &inode, search.direntry.inode) == -1) {
         pr_err("setattr(%s): Failed to read the inode of `%s`.\n", path, search.direntry.name);
-        return -ENOENT;
+        return -EIO;
     }
     if (!__ext2_check_setattr_permission(inode.uid)) {
         return -EPERM;

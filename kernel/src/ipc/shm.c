@@ -393,7 +393,7 @@ ssize_t procipc_shm_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyte
 
         // Add information about the current shared memory entry to the buffer.
         ret += sprintf(
-            buffer + ret, "%8d %5d %10d %7d %5d %4d %5d %9d %10d %10d %10d %5d %5d %5d\n",
+            buffer + ret, "%8d %5d %10d %7zu %5d %4d %5d %9d %10d %10d %10d %5d %5d %5lu\n",
             abs(shm_info->shmid.shm_perm.key), shm_info->id, shm_info->shmid.shm_perm.mode, shm_info->shmid.shm_segsz,
             shm_info->shmid.shm_perm.uid, shm_info->shmid.shm_perm.gid, shm_info->shmid.shm_perm.cuid,
             shm_info->shmid.shm_perm.cgid, shm_info->shmid.shm_atime, shm_info->shmid.shm_dtime,

@@ -66,7 +66,7 @@ void ext2_dealloc_cache(uint8_t *cache)
 /// @return the amount of data we read, or negative value for an error.
 int ext2_read_superblock(ext2_filesystem_t *fs)
 {
-    pr_debug("Read superblock for EXT2 filesystem (0x%x)\n", fs);
+    pr_debug("Read superblock for EXT2 filesystem (%p)\n", (void *)fs);
     return vfs_read(fs->block_device, &fs->superblock, 1024, sizeof(ext2_superblock_t));
 }
 
@@ -75,7 +75,7 @@ int ext2_read_superblock(ext2_filesystem_t *fs)
 /// @return the amount of data we wrote, or negative value for an error.
 int ext2_write_superblock(ext2_filesystem_t *fs)
 {
-    pr_debug("Write superblock for EXT2 filesystem (0x%x)\n", fs);
+    pr_debug("Write superblock for EXT2 filesystem (%p)\n", (void *)fs);
     return vfs_write(fs->block_device, &fs->superblock, 1024, sizeof(ext2_superblock_t));
 }
 
@@ -88,7 +88,7 @@ int ext2_write_superblock(ext2_filesystem_t *fs)
 /// @return 0 on success, negative value on failure.
 static int ext2_sync(ext2_filesystem_t *fs)
 {
-    pr_debug("ext2_sync(%p) - syncing superblock and BGDT to disk\n", fs);
+    pr_debug("ext2_sync(%p) - syncing superblock and BGDT to disk\n", (void *)fs);
 
     if (!fs) {
         pr_err("Invalid filesystem pointer for sync.\n");
@@ -153,13 +153,20 @@ int ext2_write_block(ext2_filesystem_t *fs, uint32_t block_index, uint8_t *buffe
 /// @return 0 on success, -1 on failure.
 int ext2_read_bgdt(ext2_filesystem_t *fs)
 {
-    pr_debug("ext2_read_bgdt(%p)\n", fs);
+    pr_debug("ext2_read_bgdt(%p)\n", (void *)fs);
     if (!fs->block_groups) {
         pr_err("The `block_groups` list is not initialized.\n");
         return -1;
     }
     for (uint32_t i = 0; i < fs->bgdt_length; ++i) {
-        ext2_read_block(fs, fs->bgdt_start_block + i, (uint8_t *)((uintptr_t)fs->block_groups + (fs->block_size * i)));
+        // A descriptor block that cannot be read leaves that slice of
+        // `block_groups` holding whatever it held before, and the free counts
+        // and bitmap locations for those groups would then be fiction. The
+        // failure was discarded and the mount continued on it (#344).
+        if (ext2_read_block(fs, fs->bgdt_start_block + i, (uint8_t *)((uintptr_t)fs->block_groups + (fs->block_size * i))) < 0) {
+            pr_err("Failed to read BGDT block %u of %u.\n", i, fs->bgdt_length);
+            return -1;
+        }
     }
     return 0;
 }
@@ -187,7 +194,10 @@ int ext2_write_bgdt_for_group(ext2_filesystem_t *fs, uint32_t group_index)
 
     pr_debug("ext2_write_bgdt_for_group(group: %u, bgdt_block: %u)\n", group_index, bgdt_block_index);
     // Write only the specific BGDT block containing this group's descriptor.
-    ext2_write_block(fs, fs->bgdt_start_block + bgdt_block_index, (uint8_t *)((uintptr_t)fs->block_groups + (fs->block_size * bgdt_block_index)));
+    if (ext2_write_block(fs, fs->bgdt_start_block + bgdt_block_index, (uint8_t *)((uintptr_t)fs->block_groups + (fs->block_size * bgdt_block_index))) < 0) {
+        pr_err("Failed to write BGDT block %u for group %u.\n", bgdt_block_index, group_index);
+        return -1;
+    }
     return 0;
 }
 
@@ -196,15 +206,21 @@ int ext2_write_bgdt_for_group(ext2_filesystem_t *fs, uint32_t group_index)
 /// @return 0 on success, -1 on failure.
 static int ext2_write_bgdt(ext2_filesystem_t *fs)
 {
-    pr_debug("ext2_write_bgdt(%p)\n", fs);
+    pr_debug("ext2_write_bgdt(%p)\n", (void *)fs);
     if (!fs->block_groups) {
         pr_err("The `block_groups` list is not initialized.\n");
         return -1;
     }
+    int failure = 0;
     for (uint32_t i = 0; i < fs->bgdt_length; ++i) {
-        ext2_write_block(fs, fs->bgdt_start_block + i, (uint8_t *)((uintptr_t)fs->block_groups + (fs->block_size * i)));
+        // Keep going: the descriptors that can be written should be, and the
+        // caller still has to learn that some could not.
+        if (ext2_write_block(fs, fs->bgdt_start_block + i, (uint8_t *)((uintptr_t)fs->block_groups + (fs->block_size * i))) < 0) {
+            pr_err("Failed to write BGDT block %u of %u.\n", i, fs->bgdt_length);
+            failure = -1;
+        }
     }
-    return 0;
+    return failure;
 }
 
 /// @brief Reads an inode.
@@ -290,16 +306,38 @@ int ext2_write_inode(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t inode_
 
     // Get the real inode offset inside the block.
     group_offset %= fs->inodes_per_block_count;
+    uint32_t table_block = fs->block_groups[group_index].inode_table + block_index;
+
     // Allocate the cache.
     uint8_t *cache = ext2_alloc_cache(fs);
-    // Read the block containing the inode table.
-    ext2_read_block(fs, fs->block_groups[group_index].inode_table + block_index, cache);
+    if (cache == NULL) {
+        pr_err("Failed to allocate the cache to write inode %u.\n", inode_index);
+        return -1;
+    }
+    // Read the block containing the inode table. This is a read-modify-write:
+    // one inode is patched into a block that holds many, so the rest of the
+    // block has to be the block. `ext2_alloc_cache` zeroes what it returns, so
+    // a failed read here does not leave stale contents, it leaves *zeroes* —
+    // and writing those back destroys every other inode in the block, which
+    // with 4 KiB blocks and 128-byte inodes is 31 of them. Nothing may be
+    // written when the read fails (#344).
+    if (ext2_read_block(fs, table_block, cache) < 0) {
+        pr_err("Failed to read inode table block %u while writing inode %u.\n", table_block, inode_index);
+        ext2_dealloc_cache(cache);
+        return -1;
+    }
     // Write the inode.
     memcpy(
         (ext2_inode_t *)((uintptr_t)cache + (group_offset * fs->superblock.inode_size)), inode, sizeof(ext2_inode_t));
-    // Write back the block.
-    ext2_write_block(fs, fs->block_groups[group_index].inode_table + block_index, cache);
+    // Write back the block. The result is the function's result: this used to
+    // return 0 unconditionally, so an inode that never reached the disk was
+    // reported as written.
+    int ret = 0;
+    if (ext2_write_block(fs, table_block, cache) < 0) {
+        pr_err("Failed to write inode table block %u for inode %u.\n", table_block, inode_index);
+        ret = -1;
+    }
     // Free the cache.
     ext2_dealloc_cache(cache);
-    return 0;
+    return ret;
 }

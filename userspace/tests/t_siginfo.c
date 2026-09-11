@@ -22,22 +22,22 @@
 /// information about the signal.
 void sig_handler_info(int sig, siginfo_t *siginfo)
 {
-    syslog(LOG_INFO, "[t_siginfo] handler(%d, %p) : Starting handler.\n", sig, siginfo);
+    syslog(LOG_INFO, "[t_siginfo] handler(%d, %p) : Starting handler.\n", sig, (void *)siginfo);
 
     // Check if the received signal is SIGFPE.
     if (sig == SIGFPE) {
-        syslog(LOG_INFO, "[t_siginfo] handler(%d, %p) : Correct signal.\n", sig, siginfo);
+        syslog(LOG_INFO, "[t_siginfo] handler(%d, %p) : Correct signal.\n", sig, (void *)siginfo);
 
         // Print additional information from the siginfo structure.
-        syslog(LOG_INFO, "[t_siginfo] handler(%d, %p) : Code : %d\n", sig, siginfo, siginfo->si_code);
-        syslog(LOG_INFO, "[t_siginfo] handler(%d, %p) : Exiting\n", sig, siginfo);
+        syslog(LOG_INFO, "[t_siginfo] handler(%d, %p) : Code : %d\n", sig, (void *)siginfo, siginfo->si_code);
+        syslog(LOG_INFO, "[t_siginfo] handler(%d, %p) : Exiting\n", sig, (void *)siginfo);
 
         // Exit the process after handling the signal.
         exit(EXIT_SUCCESS);
     }
 
     // Handle unexpected signals.
-    syslog(LOG_INFO, "[t_siginfo] handler(%d, %p) : Wrong signal.\n", sig, siginfo);
+    syslog(LOG_INFO, "[t_siginfo] handler(%d, %p) : Wrong signal.\n", sig, (void *)siginfo);
     exit(EXIT_FAILURE);
 }
 

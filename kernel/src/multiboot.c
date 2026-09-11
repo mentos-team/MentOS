@@ -84,7 +84,7 @@ multiboot_module_t *next_module(multiboot_info_t *info, multiboot_module_t *mod)
 void dump_multiboot(multiboot_info_t *mbi)
 {
     pr_debug("\n--------------------------------------------------\n");
-    pr_debug("MULTIBOOT header at 0x%x:\n", mbi);
+    pr_debug("MULTIBOOT header at %p:\n", (void *)mbi);
 
     // Print out the flags.
     pr_debug("%-16s = 0x%x\n", "flags", mbi->flags);
@@ -99,7 +99,7 @@ void dump_multiboot(multiboot_info_t *mbi)
 
     // Is boot_device valid?
     if (bitmask_check(mbi->flags, MULTIBOOT_FLAG_DEVICE)) {
-        pr_debug("%-16s = 0x%x (0x%x)", "boot_device", mbi->boot_device);
+        pr_debug("%-16s = 0x%x ", "boot_device", mbi->boot_device);
         switch ((mbi->boot_device) & 0xFF000000) {
         case 0x00000000:
             pr_debug("(floppy)\n");
@@ -160,8 +160,8 @@ void dump_multiboot(multiboot_info_t *mbi)
     if (bitmask_check(mbi->flags, MULTIBOOT_FLAG_MMAP)) {
         pr_debug("%-16s = 0x%x\n", "mmap_addr", mbi->mmap_addr);
         pr_debug(
-            "%-16s = 0x%x (%d entries)\n", "mmap_length", mbi->mmap_length,
-            mbi->mmap_length / sizeof(multiboot_memory_map_t));
+            "%-16s = 0x%x (%u entries)\n", "mmap_length", mbi->mmap_length,
+            (unsigned)(mbi->mmap_length / sizeof(multiboot_memory_map_t)));
         multiboot_memory_map_t *mmap = mmap_first_entry(mbi);
         do {
             pr_debug(

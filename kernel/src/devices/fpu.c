@@ -79,7 +79,7 @@ static inline void __init_fpu(void)
 /// @param f The interrupt stack frame.
 static inline void __invalid_op(pt_regs_t *f)
 {
-    pr_debug("__invalid_op(%p) - FPU device not available\n", f);
+    pr_debug("__invalid_op(%p) - FPU device not available\n", (void *)f);
     pr_debug("  EIP: 0x%x, ESP: 0x%x\n", f->eip, f->esp);
 
     // First, turn the FPU on.
@@ -88,7 +88,7 @@ static inline void __invalid_op(pt_regs_t *f)
     pr_debug("  FPU enabled.\n");
 
     task_struct *current = scheduler_get_current_process();
-    pr_debug("  Current process: %p (pid=%d)\n", current, current ? current->pid : -1);
+    pr_debug("  Current process: %p (pid=%d)\n", (void *)current, current ? current->pid : -1);
 
     if (thread_using_fpu == current) {
         // If this is the thread that last used the FPU, do nothing.
@@ -104,7 +104,7 @@ static inline void __invalid_op(pt_regs_t *f)
     }
 
     thread_using_fpu = current;
-    pr_debug("  Updated thread_using_fpu to %p\n", thread_using_fpu);
+    pr_debug("  Updated thread_using_fpu to %p\n", (void *)thread_using_fpu);
 
     if (!thread_using_fpu->thread.fpu_enabled) {
         /*
@@ -129,7 +129,7 @@ static inline void __invalid_op(pt_regs_t *f)
 /// @param f The interrupt stack frame.
 static inline void __sigfpe_handler(pt_regs_t *f)
 {
-    pr_debug("__sigfpe_handler(%p) - FPU/Math error trap\n", f);
+    pr_debug("__sigfpe_handler(%p) - FPU/Math error trap\n", (void *)f);
     pr_debug("  EIP: 0x%x, Error code: 0x%x\n", f->eip, f->err_code);
 
     // Notifies current process
@@ -143,7 +143,7 @@ static inline void __sigfpe_handler(pt_regs_t *f)
 /// @param f The interrupt stack frame.
 static inline void __invalid_opcode_handler(pt_regs_t *f)
 {
-    pr_debug("__invalid_opcode_handler(%p) - Invalid opcode trap\n", f);
+    pr_debug("__invalid_opcode_handler(%p) - Invalid opcode trap\n", (void *)f);
     pr_debug("  EIP: 0x%x, Error code: 0x%x\n", f->eip, f->err_code);
 
     // Check if this is user mode or kernel mode
@@ -193,7 +193,7 @@ int fpu_install(void)
 
     pr_debug("  Step 3: Getting current process\n");
     task_struct *current = scheduler_get_current_process();
-    pr_debug("  Current process: %p (pid=%d)\n", current, current ? current->pid : -1);
+    pr_debug("  Current process: %p (pid=%d)\n", (void *)current, current ? current->pid : -1);
 
     pr_debug("  Step 4: Saving FPU state\n");
     __save_fpu(current);

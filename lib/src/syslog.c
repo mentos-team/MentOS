@@ -90,7 +90,9 @@ int __syslog(const char *file, const char *fun, int line, short log_level, const
 
     // If the syslog system call fails and LOG_CONS is set, write to console as a fallback.
     if ((len == -1) && (syslog_options & LOG_CONS)) {
-        fprintf(stderr, buf, len);
+        // The message is an argument, not a format: it holds whatever the
+        // caller wrote, expansions included (#351).
+        fprintf(stderr, "%s", buf);
     }
 
     __syscall_return(int, len);

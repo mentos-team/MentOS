@@ -13,6 +13,14 @@
 #define __DEBUG_LEVEL__ LOGLEVEL_NOTICE
 #endif
 
+#ifdef MENTOS_FORCE_DEBUG_LOGLEVEL
+// Set by the `FORCE_DEBUG_LOGLEVEL` CMake option: makes every `pr_*` macro
+// compile in regardless of what each file requested, so a format mismatch
+// that normally hides below the file's debug level gets checked (#365).
+#undef __DEBUG_LEVEL__
+#define __DEBUG_LEVEL__ LOGLEVEL_DEBUG
+#endif
+
 #ifndef __DEBUG_HEADER__
 /// Header for identifying outputs coming from a mechanism.
 #define __DEBUG_HEADER__ 0
@@ -53,7 +61,8 @@ void dbg_puts(const char *s);
 /// @param log_level the log level.
 /// @param format the format to used, see printf.
 /// @param ... the list of arguments.
-void dbg_printf(const char *file, const char *fun, int line, char *header, short log_level, const char *format, ...);
+void dbg_printf(const char *file, const char *fun, int line, char *header, short log_level, const char *format, ...)
+    __attribute__((format(printf, 6, 7)));
 
 /// General logging macro that logs a message at the specified log level.
 /// Only logs messages if the specified log level is less than or equal to __DEBUG_LEVEL__.
@@ -132,26 +141,26 @@ struct pt_regs;
 #define PRINT_REGS(dbg_fn, frame)                                                                                      \
     do {                                                                                                               \
         dbg_fn("Printing given registers:\n");                                                                         \
-        dbg_fn("    GS     = 0x%-04x\n", (frame)->gs);                                                                 \
-        dbg_fn("    FS     = 0x%-04x\n", (frame)->fs);                                                                 \
-        dbg_fn("    ES     = 0x%-04x\n", (frame)->es);                                                                 \
-        dbg_fn("    DS     = 0x%-04x\n", (frame)->ds);                                                                 \
-        dbg_fn("    EDI    = 0x%-09x\n", (frame)->edi);                                                                \
-        dbg_fn("    ESI    = 0x%-09x\n", (frame)->esi);                                                                \
-        dbg_fn("    EBP    = 0x%-09x\n", (frame)->ebp);                                                                \
-        dbg_fn("    ESP    = 0x%-09x\n", (frame)->esp);                                                                \
-        dbg_fn("    EBX    = 0x%-09x\n", (frame)->ebx);                                                                \
-        dbg_fn("    EDX    = 0x%-09x\n", (frame)->edx);                                                                \
-        dbg_fn("    ECX    = 0x%-09x\n", (frame)->ecx);                                                                \
-        dbg_fn("    EAX    = 0x%-09x\n", (frame)->eax);                                                                \
+        dbg_fn("    GS     = 0x%-4x\n", (frame)->gs);                                                                 \
+        dbg_fn("    FS     = 0x%-4x\n", (frame)->fs);                                                                 \
+        dbg_fn("    ES     = 0x%-4x\n", (frame)->es);                                                                 \
+        dbg_fn("    DS     = 0x%-4x\n", (frame)->ds);                                                                 \
+        dbg_fn("    EDI    = 0x%-9x\n", (frame)->edi);                                                                \
+        dbg_fn("    ESI    = 0x%-9x\n", (frame)->esi);                                                                \
+        dbg_fn("    EBP    = 0x%-9x\n", (frame)->ebp);                                                                \
+        dbg_fn("    ESP    = 0x%-9x\n", (frame)->esp);                                                                \
+        dbg_fn("    EBX    = 0x%-9x\n", (frame)->ebx);                                                                \
+        dbg_fn("    EDX    = 0x%-9x\n", (frame)->edx);                                                                \
+        dbg_fn("    ECX    = 0x%-9x\n", (frame)->ecx);                                                                \
+        dbg_fn("    EAX    = 0x%-9x\n", (frame)->eax);                                                                \
         dbg_fn("    INT_NO = %-9d\n", (frame)->int_no);                                                                \
         dbg_fn("    ERR_CD = %-9d\n", (frame)->err_code);                                                              \
-        dbg_fn("    EIP    = 0x%-09x\n", (frame)->eip);                                                                \
-        dbg_fn("    CS     = 0x%-04x\n", (frame)->cs);                                                                 \
-        dbg_fn("    EFLAGS = 0x%-09x\n", (frame)->eflags);                                                             \
+        dbg_fn("    EIP    = 0x%-9x\n", (frame)->eip);                                                                \
+        dbg_fn("    CS     = 0x%-4x\n", (frame)->cs);                                                                 \
+        dbg_fn("    EFLAGS = 0x%-9x\n", (frame)->eflags);                                                             \
         /* Only print user mode stack info if exception came from user mode (CS privilege bits = 3) */                \
         if (((frame)->cs & 0x3) == 3) {                                                                                \
-            dbg_fn("    UESP   = 0x%-09x\n", (frame)->useresp);                                                        \
-            dbg_fn("    SS     = 0x%-04x\n", (frame)->ss);                                                             \
+            dbg_fn("    UESP   = 0x%-9x\n", (frame)->useresp);                                                        \
+            dbg_fn("    SS     = 0x%-4x\n", (frame)->ss);                                                             \
         }                                                                                                               \
     } while (0)

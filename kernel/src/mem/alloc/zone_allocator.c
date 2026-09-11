@@ -103,11 +103,11 @@ static inline void __print_zone(int log_level, const zone_t *zone)
     char buddy_status[512] = {0};
     buddy_system_to_string(&zone->buddy_system, buddy_status, sizeof(buddy_status));
     pr_log(log_level, "Zone: %s\n", zone->name);
-    pr_log(log_level, "    Number of Pages      : %lu\n", zone->num_pages);
-    pr_log(log_level, "    Number of Free Pages : %lu\n", zone->free_pages);
+    pr_log(log_level, "    Number of Pages      : %zu\n", zone->num_pages);
+    pr_log(log_level, "    Number of Free Pages : %zu\n", zone->free_pages);
     pr_log(log_level, "    Startint PFN         : %u\n", zone->zone_start_pfn);
     pr_log(log_level, "    Zone Size            : %s\n", to_human_size(zone->total_size));
-    pr_log(log_level, "    Zone Memory Map      : 0x%p\n", (uintptr_t)zone->zone_mem_map);
+    pr_log(log_level, "    Zone Memory Map      : 0x%p\n", (void *)zone->zone_mem_map);
     pr_log(log_level, "    Buddy System Status  : %s\n", buddy_status);
 }
 
@@ -201,7 +201,7 @@ static inline int is_memory_clean(gfp_t gfp_mask)
     unsigned long free_space = buddy_system_get_free_space(&zone->buddy_system);
     if (zone->total_size != free_space) {
         pr_crit("Memory zone check failed for zone '%s'.\n", zone->name);
-        pr_crit("Expected free space %lu bytes, but found %lu bytes.\n", zone->total_size, free_space);
+        pr_crit("Expected free space %zu bytes, but found %lu bytes.\n", zone->total_size, free_space);
         pr_crit("Buddy system state for zone '%s':\n", zone->name);
         char buddy_status[512] = {0};
         buddy_system_to_string(&zone->buddy_system, buddy_status, sizeof(buddy_status));
@@ -677,7 +677,7 @@ ssize_t pmmngr_initialize_page_data(const boot_info_t *boot_info, size_t offset)
         return -1;
     }
 
-    pr_debug("page_data node initialized: %p\n", memory.page_data);
+    pr_debug("page_data node initialized: %p\n", (void *)memory.page_data);
 
     return (ssize_t)mem_usage;
 }
@@ -794,7 +794,7 @@ int pmmngr_init(boot_info_t *boot_info)
     }
 
     pr_debug("  DMA zone (PFN-aligned): 0x%08x - 0x%08x (size: 0x%08x, %u MB)\n", dma_start_aligned, dma_start_aligned + dma_size, dma_size, dma_size / (1024 * 1024));
-    pr_debug("  DMA start PFN: %u (aligned to %u-page boundary: %s)\n", dma_start_aligned / PAGE_SIZE, max_order_pages, ((dma_start_aligned / PAGE_SIZE) % max_order_pages == 0) ? "YES" : "NO");
+    pr_debug("  DMA start PFN: %u (aligned to %u-page boundary: %s)\n", (unsigned)(dma_start_aligned / PAGE_SIZE), max_order_pages, ((dma_start_aligned / PAGE_SIZE) % max_order_pages == 0) ? "YES" : "NO");
 
     memory.dma_mem.start_addr = dma_start_aligned;
     memory.dma_mem.size       = dma_size;
@@ -1011,7 +1011,7 @@ int free_pages_lowmem(uint32_t vaddr)
 {
     // Ensure it is a valid virtual address.
     if (!is_valid_virtual_address(vaddr)) {
-        pr_crit("The provided address 0x%p is not a valid virtual address.\n", vaddr);
+        pr_crit("The provided address 0x%p is not a valid virtual address.\n", (void *)vaddr);
         return -1;
     }
 
@@ -1023,7 +1023,7 @@ int free_pages_lowmem(uint32_t vaddr)
         pr_emerg(
             "Failed to retrieve page from address: 0x%p. Page is over memory "
             "size.\n",
-            vaddr);
+            (void *)vaddr);
         return -1;
     }
 

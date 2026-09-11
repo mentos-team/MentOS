@@ -306,7 +306,7 @@ int procv_module_init(void)
         pr_err("Cannot create `/proc/video`.\n");
         return 1;
     }
-    pr_debug("Created `/proc/video` (%p)\n", video);
+    pr_debug("Created `/proc/video` (%p)\n", (void *)video);
     // Set the specific operations.
     video->sys_operations = &procv_sys_operations;
     video->fs_operations  = &procv_fs_operations;

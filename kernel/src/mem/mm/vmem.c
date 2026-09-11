@@ -171,7 +171,7 @@ uint32_t vmem_map_physical_pages(page_t *page, int pfn_count)
         pr_crit(
             "The virtual address 0x%p associated with the virtual page 0x%p is "
             "not valid.\n",
-            vaddr, vpage);
+            (void *)vaddr, (void *)vpage);
         return 0;
     }
 
@@ -225,7 +225,7 @@ uint32_t vmem_map_virtual_address(mm_struct_t *mm, virt_map_page_t *vpage, uint3
         pr_crit(
             "Invalid start virtual address for mapping 0x%08x, associated "
             "virtual page: 0x%p\n",
-            start_map_virt_address, vpage);
+            start_map_virt_address, (void *)vpage);
         return 0;
     }
 
@@ -249,7 +249,7 @@ int vmem_unmap_virtual_address(uint32_t addr)
 {
     // Ensure it is a valid virtual address.
     if (!is_valid_virtual_address(addr)) {
-        pr_crit("The provided address 0x%p is not a valid virtual address.\n", addr);
+        pr_crit("The provided address 0x%p is not a valid virtual address.\n", (void *)addr);
         return -1;
     }
 

@@ -22,3 +22,9 @@ int procfb_module_init(void);
 /// @brief Initializes the IPC information system.
 /// @return 0 on success, 1 on failure.
 int procipc_module_init(void);
+
+#ifdef ENABLE_ATA_FAULT_INJECTION
+/// @brief Initializes the `/proc/faultinj` entry.
+/// @return 0 on success, 1 on failure.
+int procfaultinj_module_init(void);
+#endif

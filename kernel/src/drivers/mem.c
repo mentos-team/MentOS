@@ -358,7 +358,7 @@ static int null_fstat(vfs_file_t *file, stat_t *stat)
     }
 
     // Log debug information.
-    pr_debug("null_fstat(%s, %p)\n", file->name, stat);
+    pr_debug("null_fstat(%s, %p)\n", file->name, (void *)stat);
 
     stat->st_dev   = 0;
     stat->st_ino   = 0;

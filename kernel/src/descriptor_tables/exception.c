@@ -73,8 +73,8 @@ void handle_gp_fault(pt_regs_t *frame)
 {
     // Log the general protection fault details
     pr_info("General Protection Fault (Exception 13) occurred!\n");
-    pr_info("Faulting address: 0x%-09x\n", frame->eip);
-    pr_info("Error code: 0x%-04x\n", frame->err_code);
+    pr_info("Faulting address: 0x%08x\n", frame->eip);
+    pr_info("Error code: 0x%04x\n", frame->err_code);
 
     // Check if the privilege level is 3 (user mode)
     if ((frame->cs & 0x3) == 0x3) {

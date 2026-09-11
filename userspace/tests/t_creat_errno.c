@@ -98,6 +98,104 @@ static int check_success(void)
     return 0;
 }
 
+/// @brief Checks that creat on an existing directory fails with EISDIR, and
+/// that creat on an existing regular file truncates it, the control that the
+/// directory is not being singled out.
+/// @return 0 on success, -1 on failure.
+static int check_existing_entry(void)
+{
+    // The directory the entries live in, and the names inside it.
+    const char *dir_path = "/home/user/t_creat_errno.d";
+    char file_path[64];
+    strcpy(file_path, dir_path);
+    strcat(file_path, "/file");
+    if (mkdir(dir_path, 0755) < 0) {
+        syslog(LOG_ERR, "[t_creat_errno] creating %s failed: %s", dir_path, strerror(errno));
+        return -1;
+    }
+    int failed = 0;
+    // Creating over a directory has to fail with EISDIR: creat is defined as
+    // open(O_WRONLY|O_CREAT|O_TRUNC), and a directory cannot be opened for
+    // writing. It used to hand back a writable descriptor for the directory
+    // instead (#346).
+    errno      = 0;
+    int fd     = creat(dir_path, 0644);
+    if (fd >= 0) {
+        close(fd);
+        syslog(LOG_ERR, "[t_creat_errno] creating %s succeeded, it had to fail with EISDIR", dir_path);
+        failed = 1;
+    } else if (errno != EISDIR) {
+        int reported = errno;
+        syslog(LOG_ERR, "[t_creat_errno] creating %s reported errno %d: %s", dir_path, reported, strerror(reported));
+        syslog(LOG_ERR, "[t_creat_errno] the expected errno was %d: %s", EISDIR, strerror(EISDIR));
+        failed = 1;
+    }
+    // `.` and `..` resolve to directories as well; before the fix these went
+    // through as creations of the directory itself.
+    errno = 0;
+    fd    = creat(file_path, 0644);
+    if (fd < 0) {
+        syslog(LOG_ERR, "[t_creat_errno] creating %s failed: %s", file_path, strerror(errno));
+        rmdir(dir_path);
+        return -1;
+    }
+    close(fd);
+    char dot_path[80];
+    strcpy(dot_path, dir_path);
+    strcat(dot_path, "/.");
+    errno = 0;
+    fd    = creat(dot_path, 0644);
+    if (fd >= 0) {
+        close(fd);
+        syslog(LOG_ERR, "[t_creat_errno] creating %s succeeded, it had to fail with EISDIR", dot_path);
+        failed = 1;
+    } else if (errno != EISDIR) {
+        int reported = errno;
+        syslog(LOG_ERR, "[t_creat_errno] creating %s reported errno %d: %s", dot_path, reported, strerror(reported));
+        syslog(LOG_ERR, "[t_creat_errno] the expected errno was %d: %s", EISDIR, strerror(EISDIR));
+        failed = 1;
+    }
+    // The control: creat over an existing regular file is the ordinary POSIX
+    // case, and truncates it like O_TRUNC would.
+    fd = open(file_path, O_WRONLY, 0);
+    if (fd < 0) {
+        syslog(LOG_ERR, "[t_creat_errno] opening %s failed: %s", file_path, strerror(errno));
+        rmdir(dir_path);
+        return -1;
+    }
+    const char *content = "to be truncated";
+    write(fd, content, strlen(content));
+    close(fd);
+    errno = 0;
+    fd    = creat(file_path, 0644);
+    if (fd < 0) {
+        syslog(LOG_ERR, "[t_creat_errno] re-creating %s failed: %s", file_path, strerror(errno));
+        rmdir(dir_path);
+        return -1;
+    }
+    close(fd);
+    fd = open(file_path, O_RDONLY, 0);
+    if (fd < 0) {
+        syslog(LOG_ERR, "[t_creat_errno] reopening %s failed: %s", file_path, strerror(errno));
+        unlink(file_path);
+        rmdir(dir_path);
+        return -1;
+    }
+    char buffer[32] = {0};
+    ssize_t bytes   = read(fd, buffer, sizeof(buffer) - 1);
+    close(fd);
+    if (bytes != 0) {
+        syslog(LOG_ERR, "[t_creat_errno] re-created %s still reads %zd bytes, it had to be truncated", file_path, bytes);
+        failed = 1;
+    }
+    unlink(file_path);
+    if (rmdir(dir_path) < 0) {
+        syslog(LOG_ERR, "[t_creat_errno] removing %s failed: %s", dir_path, strerror(errno));
+        failed = 1;
+    }
+    return failed ? -1 : 0;
+}
+
 int main(void)
 {
     int failures = 0;
@@ -116,6 +214,10 @@ int main(void)
     }
 
     if (check_success() < 0) {
+        ++failures;
+    }
+
+    if (check_existing_entry() < 0) {
         ++failures;
     }
 

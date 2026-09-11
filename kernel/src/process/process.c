@@ -226,7 +226,7 @@ static int __load_executable(const char *path, task_struct *task, uint32_t *entr
     uid_t saved_uid        = task->uid;
     gid_t saved_gid        = task->gid;
 start:
-    pr_debug("__load_executable(`%s`, %p `%s`, %p)\n", path, task, task->name, entry);
+    pr_debug("__load_executable(`%s`, %p `%s`, %p)\n", path, (void *)task, task->name, (void *)entry);
     vfs_file_t *file = vfs_open(path, O_RDONLY, 0);
     if (file == NULL) {
         pr_err("Cannot find executable!\n");
@@ -492,21 +492,21 @@ int process_create_init(const char *path)
     vfs_stdin->count++;
     init_process->fd_list[STDIN_FILENO].file_struct = vfs_stdin;
     init_process->fd_list[STDIN_FILENO].flags_mask  = O_RDONLY;
-    pr_debug("`/proc/video` stdin  : %p\n", vfs_stdin);
+    pr_debug("`/proc/video` stdin  : %p\n", (void *)vfs_stdin);
 
     // Create STDOUT descriptor.
     vfs_file_t *vfs_stdout = vfs_open("/proc/video", O_WRONLY, 0);
     vfs_stdout->count++;
     init_process->fd_list[STDOUT_FILENO].file_struct = vfs_stdout;
     init_process->fd_list[STDOUT_FILENO].flags_mask  = O_WRONLY;
-    pr_debug("`/proc/video` stdout : %p\n", vfs_stdout);
+    pr_debug("`/proc/video` stdout : %p\n", (void *)vfs_stdout);
 
     // Create STDERR descriptor.
     vfs_file_t *vfs_stderr = vfs_open("/proc/video", O_WRONLY, 0);
     vfs_stderr->count++;
     init_process->fd_list[STDERR_FILENO].file_struct = vfs_stderr;
     init_process->fd_list[STDERR_FILENO].flags_mask  = O_WRONLY;
-    pr_debug("`/proc/video` stderr : %p\n", vfs_stderr);
+    pr_debug("`/proc/video` stderr : %p\n", (void *)vfs_stderr);
     // ------------------------------------------------------------------------
 
     // == INITIALIZE TASK MEMORY ==============================================

@@ -13,6 +13,7 @@
 
 #include "drivers/ata/ata.h"
 #include "drivers/ata/ata_types.h"
+#include "io/fault_injection.h"
 
 #include "descriptor_tables/isr.h"
 #include "devices/pci.h"
@@ -524,16 +525,14 @@ static inline void ata_dump_device(ata_device_t *dev)
     pr_debug("        overwrite_ext_command_supported       : %u\n", dev->identity.overwrite_ext_command_supported);
     pr_debug("        block_erase_ext_command_supported     : %u\n", dev->identity.block_erase_ext_command_supported);
     pr_debug("        sectors_28                            : %u\n", dev->identity.sectors_28);
-    // 48-bit, and this printf has no 64-bit conversion. The dump shows the
-    // low half; ata_max_offset is where the whole value is used (#270).
-    pr_debug("        sectors_48 (low 32)                   : %u\n", (uint32_t)dev->identity.sectors_48);
+    pr_debug("        sectors_48                            : %llu\n", dev->identity.sectors_48);
     pr_debug("    }\n");
     pr_debug("    bmr {\n");
     pr_debug("        command : %6u, status : %6u, prdt : %6u\n", dev->bmr.command, dev->bmr.status, dev->bmr.prdt);
     pr_debug("    }\n");
     pr_debug("    dma {\n");
-    pr_debug("        prdt  : 0x%p (Ph: 0x%p)\n", dev->dma.prdt, dev->dma.prdt_phys);
-    pr_debug("        start : 0x%p (Ph: 0x%p)\n", dev->dma.start, dev->dma.start_phys);
+    pr_debug("        prdt  : %p (Ph: %p)\n", (void *)dev->dma.prdt, (void *)dev->dma.prdt_phys);
+    pr_debug("        start : %p (Ph: %p)\n", (void *)dev->dma.start, (void *)dev->dma.start_phys);
     pr_debug("    }\n");
 }
 
@@ -796,9 +795,9 @@ static inline uintptr_t ata_dma_alloc(size_t size, uintptr_t *physical)
     }
 
     pr_debug("Size requirement is %d, which results in an order %d\n", size, order);
-    pr_debug("Allocated page is at       : 0x%p\n", page);
-    pr_debug("The physical address is at : 0x%lx\n", *physical);
-    pr_debug("The lowmem address is at   : 0x%lx\n", lowmem_address);
+    pr_debug("Allocated page is at       : %p\n", (void *)page);
+    pr_debug("The physical address is at : 0x%x\n", *physical);
+    pr_debug("The lowmem address is at   : 0x%x\n", lowmem_address);
 
     // Return the logical (low-memory) address for CPU access.
     return lowmem_address;
@@ -820,19 +819,19 @@ static inline int ata_dma_free(uintptr_t logical_addr)
     if (!page) {
         pr_debug(
             "Failed to retrieve the page structure from logical address "
-            "0x%lx.\n",
+            "0x%x.\n",
             logical_addr);
         return 1;
     }
 
     // Free the allocated pages.
     if (free_pages(page) < 0) {
-        pr_debug("Failed to free allocated pages 0x%p.\n", page);
+        pr_debug("Failed to free allocated pages %p.\n", (void *)page);
         return 1;
     }
 
     // Debugging information.
-    pr_debug("Successfully freed DMA memory at logical address 0x%p.\n", logical_addr);
+    pr_debug("Successfully freed DMA memory at logical address %p.\n", (void *)logical_addr);
 
     return 0; // Success.
 }
@@ -1191,6 +1190,14 @@ static bool_t ata_device_init(ata_device_t *dev)
 /// @return 0 on success, negative errno on failure.
 static int ata_device_read_sector_pio(ata_device_t *dev, uint32_t lba_sector, uint8_t *buffer)
 {
+    // Injected failures return before the transfer, which is where every real
+    // error path here leaves off too: the caller's buffer is left untouched,
+    // so the code above sees exactly what a failing device shows it (#338).
+    int injected = ata_fault_inject_read(lba_sector);
+    if (injected != 0) {
+        return injected;
+    }
+
     int rc = 0;
 
     if (ata_status_wait_not(dev, ata_status_bsy, 100000)) {
@@ -1335,6 +1342,12 @@ ata_device_write_sector(ata_device_t *dev, uint32_t lba_sector, uint8_t *buffer)
     if ((dev->type != ata_dev_type_pata) && (dev->type != ata_dev_type_sata)) {
         pr_crit("[%s] Unsupported device type for read operation.\n", ata_get_device_settings_str(dev));
         return -EPERM;
+    }
+
+    // As for the read: fail before anything reaches the device (#338).
+    int injected = ata_fault_inject_write();
+    if (injected != 0) {
+        return injected;
     }
 
     // Acquire the lock for thread safety.
@@ -1510,7 +1523,7 @@ static ssize_t ata_read(vfs_file_t *file, char *buffer, off_t offset, size_t siz
 
     // Check the device.
     if (dev == NULL) {
-        pr_crit("Device not set for file: %p\n", file);
+        pr_crit("Device not set for file: %p\n", (void *)file);
         return -1; // Return error if the device is not set.
     }
 
@@ -1524,7 +1537,7 @@ static ssize_t ata_read(vfs_file_t *file, char *buffer, off_t offset, size_t siz
 
     // Check if the offset exceeds the disk size.
     if (offset > max_offset) {
-        pr_warning("The offset is exceeding the disk size (%d > %d)\n", offset, max_offset);
+        pr_warning("The offset is exceeding the disk size (%d > %d)\n", (int)offset, max_offset);
         ata_dump_device(dev);
         // Get the error and status information of the device.
         uint8_t error  = inportb(dev->io_reg.error);
@@ -1599,7 +1612,7 @@ static ssize_t ata_read(vfs_file_t *file, char *buffer, off_t offset, size_t siz
 /// @return the number of written characters.
 static ssize_t ata_write(vfs_file_t *file, const void *buffer, off_t offset, size_t size)
 {
-    pr_debug("ata_write(%p, %p, %d, %d)\n", file, buffer, offset, size);
+    pr_debug("ata_write(%p, %p, %ld, %zu)\n", (void *)file, buffer, offset, size);
 
     // Prepare a static support buffer.
     static char support_buffer[ATA_SECTOR_SIZE];
@@ -1609,7 +1622,7 @@ static ssize_t ata_write(vfs_file_t *file, const void *buffer, off_t offset, siz
 
     // Check the device.
     if (dev == NULL) {
-        pr_crit("Device not set for file: %p\n", file);
+        pr_crit("Device not set for file: %p\n", (void *)file);
         return -1; // Return error if the device is not set.
     }
 
@@ -1697,7 +1710,7 @@ static ssize_t ata_write(vfs_file_t *file, const void *buffer, off_t offset, siz
 static int _ata_stat(const ata_device_t *dev, stat_t *stat)
 {
     if (dev && dev->fs_root) {
-        pr_debug("_ata_stat(%p, %p)\n", dev, stat);
+        pr_debug("_ata_stat(%p, %p)\n", (void *)dev, (void *)stat);
         stat->st_dev   = 0;
         stat->st_ino   = 0;
         stat->st_mode  = dev->fs_root->mask;

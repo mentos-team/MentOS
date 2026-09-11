@@ -135,35 +135,35 @@ static inline void __blkmngr_dump(int log_level, heap_header_t *header)
     task_struct *task = scheduler_get_current_process();
     assert(task && "There is no current task!\n");
     kheap_block_t *block;
-    pr_log(log_level, "[%s] LIST (0x%p):\n", task->name, &header->list);
+    pr_log(log_level, "[%s] LIST (0x%p):\n", task->name, (void *)&header->list);
     list_for_each_decl (it, &header->list) {
         block = list_entry(it, kheap_block_t, list);
         pr_log(log_level, "[%s]     %s{", task->name, __block_to_string(block));
         if (it->prev != &header->list) {
-            pr_log(log_level, "0x%p", list_entry(it->prev, kheap_block_t, list));
+            pr_log(log_level, "0x%p", (void *)list_entry(it->prev, kheap_block_t, list));
         } else {
             pr_log(log_level, "   HEAD   ");
         }
         pr_log(log_level, ", ");
         if (it->next != &header->list) {
-            pr_log(log_level, "0x%p", list_entry(it->next, kheap_block_t, list));
+            pr_log(log_level, "0x%p", (void *)list_entry(it->next, kheap_block_t, list));
         } else {
             pr_log(log_level, "   HEAD   ");
         }
         pr_log(log_level, "}\n");
     }
-    pr_log(log_level, "[%s] FREE (0x%p):\n", task->name, &header->free);
+    pr_log(log_level, "[%s] FREE (0x%p):\n", task->name, (void *)&header->free);
     list_for_each_decl (it, &header->free) {
         block = list_entry(it, kheap_block_t, free);
         pr_log(log_level, "[%s]     %s{", task->name, __block_to_string(block));
         if (it->prev != &header->free) {
-            pr_log(log_level, "0x%p", list_entry(it->prev, kheap_block_t, free));
+            pr_log(log_level, "0x%p", (void *)list_entry(it->prev, kheap_block_t, free));
         } else {
             pr_log(log_level, "   HEAD   ");
         }
         pr_log(log_level, ", ");
         if (it->next != &header->free) {
-            pr_log(log_level, "0x%p", list_entry(it->next, kheap_block_t, free));
+            pr_log(log_level, "0x%p", (void *)list_entry(it->next, kheap_block_t, free));
         } else {
             pr_log(log_level, "   HEAD   ");
         }
@@ -339,7 +339,7 @@ static inline int __blkmngr_split_block(heap_header_t *header, kheap_block_t *bl
     // Check if the requested size is valid (greater than 0 and less than the
     // current block size minus overhead).
     if ((size == 0) || (size + OVERHEAD >= block->size)) {
-        pr_crit("Invalid size for splitting: size must be > 0 and < %u.\n", block->size - OVERHEAD);
+        pr_crit("Invalid size for splitting: size must be > 0 and < %u.\n", (unsigned)(block->size - OVERHEAD));
         return -1; // Size is invalid for splitting.
     }
 
@@ -459,7 +459,7 @@ static void *__do_brk(vm_area_struct_t *heap, uint32_t increment)
     uint32_t new_heap_top = mm->brk + increment;
 
     // Debugging message to indicate the expansion of the heap.
-    pr_debug("Expanding heap from 0x%p to 0x%p.\n", mm->brk, new_heap_top);
+    pr_debug("Expanding heap from %p to %p.\n", (void *)mm->brk, (void *)new_heap_top);
 
     // Check if the new heap top exceeds the boundaries of the heap.
     if (new_heap_top > heap->vm_end) {
@@ -669,8 +669,8 @@ void *sys_brk(void *addr)
         }
 
         pr_debug("Heap size  : %s.\n", to_human_size(heap_size));
-        pr_debug("Heap start : 0x%p.\n", heap->vm_start);
-        pr_debug("Heap end   : 0x%p.\n", heap->vm_end);
+        pr_debug("Heap start : %p.\n", (void *)heap->vm_start);
+        pr_debug("Heap end   : %p.\n", (void *)heap->vm_end);
 
         // Initialize the memory for the heap.
         memset((char *)heap->vm_start, 0, segment_size);

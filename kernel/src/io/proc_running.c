@@ -191,12 +191,12 @@ static inline ssize_t __procr_do_stat(char *buffer, size_t bufsize, task_struct 
     //      Before Linux 2.6, this was a scaled value based on the
     //      scheduler weighting given to this process.
     //
-    sprintf(buffer, "%s %ld", buffer, task->se.prio);
+    sprintf(buffer, "%s %d", buffer, task->se.prio);
     //(19) nice  %ld
     //      The nice value (see setpriority(2)), a value in the
     //      range 19 (low priority) to -20 (high priority).
     //
-    sprintf(buffer, "%s %ld", buffer, PRIO_TO_NICE(task->se.prio));
+    sprintf(buffer, "%s %d", buffer, PRIO_TO_NICE(task->se.prio));
     //(20) TODO: num_threads  %ld
     //      Number of threads in this process (since Linux 2.6).
     //      Before kernel 2.6, this field was hard coded to 0 as a
@@ -218,11 +218,11 @@ static inline ssize_t __procr_do_stat(char *buffer, size_t bufsize, task_struct 
     //
     //      The format for this field was %lu before Linux 2.6.
     //
-    sprintf(buffer, "%s %lu", buffer, task->se.exec_start);
+    sprintf(buffer, "%s %u", buffer, task->se.exec_start);
     //(23) vsize  %lu
     //      Virtual memory size in bytes.
     //
-    sprintf(buffer, "%s %lu", buffer, task->mm->total_vm);
+    sprintf(buffer, "%s %u", buffer, task->mm->total_vm);
     //(24) TODO: rss  %ld
     //      Resident Set Size: number of pages the process has in
     //      real memory.  This is just the pages which count toward
@@ -240,24 +240,24 @@ static inline ssize_t __procr_do_stat(char *buffer, size_t bufsize, task_struct 
     //(26) startcode  %lu  [PT]
     //      The address above which program text can run.
     //
-    sprintf(buffer, "%s %lu", buffer, task->mm->start_code);
+    sprintf(buffer, "%s %u", buffer, task->mm->start_code);
     //(27) endcode  %lu  [PT]
     //      The address below which program text can run.
     //
-    sprintf(buffer, "%s %lu", buffer, task->mm->end_code);
+    sprintf(buffer, "%s %u", buffer, task->mm->end_code);
     //(28) startstack  %lu  [PT]
     //      The address of the start (i.e., bottom) of the stack.
     //
-    sprintf(buffer, "%s %lu", buffer, task->mm->start_stack);
+    sprintf(buffer, "%s %u", buffer, task->mm->start_stack);
     //(29) kstkesp  %lu  [PT]
     //      The current value of ESP (stack pointer), as found in
     //      the kernel stack page for the process.
     //
-    sprintf(buffer, "%s %lu", buffer, task->thread.regs.useresp);
+    sprintf(buffer, "%s %u", buffer, task->thread.regs.useresp);
     //(30) kstkeip  %lu  [PT]
     //      The current EIP (instruction pointer).
     //
-    sprintf(buffer, "%s %lu", buffer, task->thread.regs.eip);
+    sprintf(buffer, "%s %u", buffer, task->thread.regs.eip);
     //(31) TODO: signal  %lu
     //      The bitmap of pending signals, displayed as a decimal
     //      number.  Obsolete, because it does not provide informa‐
@@ -346,35 +346,35 @@ static inline ssize_t __procr_do_stat(char *buffer, size_t bufsize, task_struct 
     //      Address above which program initialized and uninitial‐
     //      ized (BSS) data are placed.
     //
-    sprintf(buffer, "%s %lu", buffer, task->mm->start_data);
+    sprintf(buffer, "%s %u", buffer, task->mm->start_data);
     //(46) end_data  %lu  (since Linux 3.3)  [PT]
     //      Address below which program initialized and uninitial‐
     //      ized (BSS) data are placed.
     //
-    sprintf(buffer, "%s %lu", buffer, task->mm->end_data);
+    sprintf(buffer, "%s %u", buffer, task->mm->end_data);
     //(47) start_brk  %lu  (since Linux 3.3)  [PT]
     //      Address above which program heap can be expanded with
     //      brk(2).
     //
-    sprintf(buffer, "%s %lu", buffer, task->mm->start_brk);
+    sprintf(buffer, "%s %u", buffer, task->mm->start_brk);
     //(48) arg_start  %lu  (since Linux 3.5)  [PT]
     //      Address above which program command-line arguments
     //      (argv) are placed.
     //
-    sprintf(buffer, "%s %lu", buffer, task->mm->arg_start);
+    sprintf(buffer, "%s %u", buffer, task->mm->arg_start);
     //(49) arg_end  %lu  (since Linux 3.5)  [PT]
     //      Address below program command-line arguments (argv) are
     //      placed.
     //
-    sprintf(buffer, "%s %lu", buffer, task->mm->arg_end);
+    sprintf(buffer, "%s %u", buffer, task->mm->arg_end);
     //(50) env_start  %lu  (since Linux 3.5)  [PT]
     //      Address above which program environment is placed.
     //
-    sprintf(buffer, "%s %lu", buffer, task->mm->env_start);
+    sprintf(buffer, "%s %u", buffer, task->mm->env_start);
     //(51) env_end  %lu  (since Linux 3.5)  [PT]
     //      Address below which program environment is placed.
     //
-    sprintf(buffer, "%s %lu", buffer, task->mm->env_end);
+    sprintf(buffer, "%s %u", buffer, task->mm->env_end);
     //(52) exit_code  %d  (since Linux 3.5)  [PT]
     //      The thread's exit status in the form reported by
     //      waitpid(2).

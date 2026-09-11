@@ -36,7 +36,9 @@ int write_test_data(const char *filename, int iterations)
                 result = EXIT_FAILURE;
                 goto write_close_and_cleanup;
             } else {
-                syslog(LOG_DEBUG, "Wrote %u bytes of character %c to file %s (progress %u/%u)\n", sizeof(buffer), i, filename, times * ('z' - 'A' + 1) + i - 'A', iterations * ('z' - 'A' + 1));
+                syslog(
+                    LOG_DEBUG, "Wrote %u bytes of character %c to file %s (progress %u/%u)\n", (unsigned)sizeof(buffer),
+                    i, filename, times * ('z' - 'A' + 1) + i - 'A', iterations * ('z' - 'A' + 1));
             }
         }
     }

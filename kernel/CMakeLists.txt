@@ -14,6 +14,7 @@ option(ENABLE_FILE_TRACE "Enables vfs_file allocation tracing." OFF)
 option(ENABLE_KERNEL_TESTS "Enable kernel-side unit and integration tests" OFF)
 option(ENABLE_PERF "Enables the perf counter facility (klib/perf.h)." OFF)
 option(ENABLE_SCHEDULER_FEEDBACK "Enables scheduling feedback on terminal." OFF)
+option(ENABLE_ATA_FAULT_INJECTION "Enables deliberate failure of block transfers, for testing." OFF)
 
 # =============================================================================
 # Set the list of valid video backends.
@@ -156,6 +157,10 @@ endif()
 # Enables scheduling feedback on terminal.
 if(ENABLE_SCHEDULER_FEEDBACK)
     target_compile_definitions(kernel PUBLIC ENABLE_SCHEDULER_FEEDBACK)
+endif()
+
+if(ENABLE_ATA_FAULT_INJECTION)
+    target_compile_definitions(kernel PUBLIC ENABLE_ATA_FAULT_INJECTION)
 endif()
 
 # =============================================================================

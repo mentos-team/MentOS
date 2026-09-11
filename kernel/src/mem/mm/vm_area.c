@@ -58,7 +58,7 @@ vm_area_create(struct mm_struct *mm, uint32_t vm_start, size_t size, uint32_t pg
 
     // Check if the range is already occupied.
     if (vm_area_is_valid(mm, vm_start, vm_end) <= 0) {
-        pr_crit("The virtual memory area range [%p, %p] is already in use.\n", vm_start, vm_end);
+        pr_crit("The virtual memory area range [%p, %p] is already in use.\n", (void *)vm_start, (void *)vm_end);
         return NULL;
     }
 
@@ -83,7 +83,7 @@ vm_area_create(struct mm_struct *mm, uint32_t vm_start, size_t size, uint32_t pg
 
         page_t *page = alloc_pages(gfpflags, order);
         if (!page) {
-            pr_crit("Failed to allocate physical pages for vm_area at [%p, %p].\n", vm_start, vm_end);
+            pr_crit("Failed to allocate physical pages for vm_area at [%p, %p].\n", (void *)vm_start, (void *)vm_end);
             kmem_cache_free(segment);
             return NULL;
         }
@@ -282,7 +282,7 @@ int vm_area_is_valid(mm_struct_t *mm, uintptr_t vm_start, uintptr_t vm_end)
         return -1;
     }
     if (vm_start >= vm_end) {
-        pr_crit("Invalid arguments: vm_start >= vm_end (0x%p >= 0x%p).\n", vm_start, vm_end);
+        pr_crit("Invalid arguments: vm_start >= vm_end (0x%p >= 0x%p).\n", (void *)vm_start, (void *)vm_end);
         return -1;
     }
 

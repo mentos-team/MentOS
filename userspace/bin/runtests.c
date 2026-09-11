@@ -30,6 +30,7 @@ static char *all_tests[] = {
     "t_chdir",
     "t_creat",
     "t_creat_errno",
+    "t_dir_block_boundary",
     "t_dir_entries",
     "t_dup",
     "t_environ",
@@ -59,6 +60,8 @@ static char *all_tests[] = {
     "t_list",
     "t_mem",
     "t_mkdir",
+    "t_syslog_format",
+    "t_printf_length",
     "t_rmdir_dotfiles",
     "t_stdint",
     "t_mount_boundary",
@@ -96,6 +99,10 @@ static char *all_tests[] = {
     "t_time",
     "t_wifsignaled",
     "t_write_read",
+    "t_faultinj",
+    "t_indirect_map",
+    "t_meta_rmw",
+    "t_namei_io",
 };
 
 static char **tests = &all_tests[0];

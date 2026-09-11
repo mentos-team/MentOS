@@ -2,6 +2,7 @@
 set(TEST_LIST
     t_aab_pipe.c
     t_creat_errno.c
+    t_dir_block_boundary.c
     t_dir_entries.c
     t_dup.c
     t_hashmap.c
@@ -47,6 +48,12 @@ set(TEST_LIST
     t_shm.c
     t_semget.c
     t_mkdir.c
+    t_faultinj.c
+    t_indirect_map.c
+    t_meta_rmw.c
+    t_namei_io.c
+    t_syslog_format.c
+    t_printf_length.c
     t_rmdir_dotfiles.c
     t_stdint.c
     t_mount_boundary.c
