@@ -624,25 +624,30 @@ int ext2_destroy_direntry(
 /// @param name the name of the entry we are looking for.
 /// @param search the output variable where we save the info about the entry.
 /// @return 0 on success, -errno on failure.
+/// @details Every failure used to leave as -1, so a directory whose inode
+///          could not be read was indistinguishable from one that simply does
+///          not hold the name. The caller that cares is path resolution: it
+///          reads "not found" as "this component is not a symbolic link" and
+///          walks on, along a path the link would have redirected (#353).
 int ext2_find_direntry(ext2_filesystem_t *fs, ino_t ino, const char *name, ext2_direntry_search_t *search)
 {
     if (fs == NULL) {
         pr_err("You provided a NULL filesystem.\n");
-        return -1;
+        return -EINVAL;
     }
     if (name == NULL) {
         pr_err("You provided a NULL name.\n");
-        return -1;
+        return -EINVAL;
     }
     if (search == NULL) {
         pr_err("You provided a NULL search.\n");
-        return -1;
+        return -EINVAL;
     }
     // Get the inode associated with the file.
     ext2_inode_t inode;
     if (ext2_read_inode(fs, &inode, ino) == -1) {
         pr_err("Failed to read the inode (%d).\n", ino);
-        return -1;
+        return -EIO;
     }
     // Check that the parent is a directory.
     if (!bitmask_check(inode.mode, S_IFDIR)) {
@@ -650,7 +655,7 @@ int ext2_find_direntry(ext2_filesystem_t *fs, ino_t ino, const char *name, ext2_
             "The parent inode is not a directory (ino: %d, mode: %d, name: "
             "%s).\n",
             ino, inode.mode, name);
-        return -1;
+        return -ENOTDIR;
     }
 
     // Check that we are allowed to reach through the directory
@@ -664,6 +669,10 @@ int ext2_find_direntry(ext2_filesystem_t *fs, ino_t ino, const char *name, ext2_
 
     // Allocate the cache.
     uint8_t *cache = ext2_alloc_cache(fs);
+    if (cache == NULL) {
+        pr_err("Failed to allocate the cache to look for `%s` in inode %u.\n", name, ino);
+        return -ENOMEM;
+    }
 
     // Prepare iterator.
     ext2_direntry_iterator_t it = ext2_direntry_iterator_begin(fs, cache, &inode);
@@ -721,5 +730,5 @@ int ext2_find_direntry(ext2_filesystem_t *fs, ino_t ino, const char *name, ext2_
 free_cache_return_error:
     // Free the cache.
     ext2_dealloc_cache(cache);
-    return -1;
+    return -ENOENT;
 }

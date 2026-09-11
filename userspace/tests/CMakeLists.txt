@@ -50,6 +50,7 @@ set(TEST_LIST
     t_mkdir.c
     t_faultinj.c
     t_meta_rmw.c
+    t_namei_io.c
     t_syslog_format.c
     t_printf_length.c
     t_rmdir_dotfiles.c

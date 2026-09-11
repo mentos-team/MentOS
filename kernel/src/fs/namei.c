@@ -95,14 +95,27 @@ char *realpath(const char *path, char *buffer, size_t buflen)
 
 /// @brief Determines if the path points to a link.
 /// @param path the path to the file.
-/// @return 1 if it is a link, 0 otherwise.
+/// @return 1 if it is a link, 0 if it is not, -errno if it could not be told.
+/// @details A component that is not there is not a link, and resolution has to
+///          walk past it: the last component of a path being created does not
+///          exist yet. A component whose inode could not be read is a
+///          different answer. This used to be one answer for both, because a
+///          failed `vfs_stat` came back as 0, so a symbolic link that could
+///          not be read was resolved as if it were an ordinary name and the
+///          operation landed on whatever the link would have redirected away
+///          from — a different file from the one the caller named (#353).
 static inline int __is_a_link(const char *path)
 {
     stat_t statbuf;
-    if (vfs_stat(path, &statbuf) == 0) {
+    int err = vfs_stat(path, &statbuf);
+    if (err == 0) {
         return S_ISLNK(statbuf.st_mode);
     }
-    return 0;
+    // Absent is a definite answer, and the only one that lets the walk go on.
+    if (err == -ENOENT) {
+        return 0;
+    }
+    return err;
 }
 
 /// @brief Returns the content of the link.
@@ -137,7 +150,6 @@ int __resolve_path(const char *path, char *abspath, size_t buflen, int flags, in
     size_t linklen          = 0;
     size_t tokenlen         = 0;
     int contains_links      = 0;
-    stat_t statbuf;
 
     if (path[0] != '/') {
         // Get the working directory of the current task.
@@ -178,7 +190,15 @@ int __resolve_path(const char *path, char *abspath, size_t buflen, int flags, in
                 pr_err("Buffer overflow while resolving path.\n");
                 return -ENAMETOOLONG;
             }
-            if ((flags & FOLLOW_LINKS) && __is_a_link(buffer)) {
+            // Only ask when links are being followed, so a resolution that
+            // does not care about them cannot fail on a component it was
+            // never going to read.
+            int is_link = (flags & FOLLOW_LINKS) ? __is_a_link(buffer) : 0;
+            if (is_link < 0) {
+                pr_err("Cannot tell whether `%s` is a symbolic link (%d).\n", buffer, is_link);
+                return is_link;
+            }
+            if (is_link) {
                 ssize_t link_length = __get_link_content(buffer, linkpath, PATH_MAX);
                 if (link_length > 0) {
                     if (link_depth >= SYMLOOP_MAX) {
