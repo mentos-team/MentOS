@@ -459,7 +459,7 @@ static void *__do_brk(vm_area_struct_t *heap, uint32_t increment)
     uint32_t new_heap_top = mm->brk + increment;
 
     // Debugging message to indicate the expansion of the heap.
-    pr_debug("Expanding heap from 0x%p to 0x%p.\n", mm->brk, new_heap_top);
+    pr_debug("Expanding heap from %p to %p.\n", (void *)mm->brk, (void *)new_heap_top);
 
     // Check if the new heap top exceeds the boundaries of the heap.
     if (new_heap_top > heap->vm_end) {
@@ -669,8 +669,8 @@ void *sys_brk(void *addr)
         }
 
         pr_debug("Heap size  : %s.\n", to_human_size(heap_size));
-        pr_debug("Heap start : 0x%p.\n", heap->vm_start);
-        pr_debug("Heap end   : 0x%p.\n", heap->vm_end);
+        pr_debug("Heap start : %p.\n", (void *)heap->vm_start);
+        pr_debug("Heap end   : %p.\n", (void *)heap->vm_end);
 
         // Initialize the memory for the heap.
         memset((char *)heap->vm_start, 0, segment_size);

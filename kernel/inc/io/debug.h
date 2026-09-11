@@ -13,6 +13,14 @@
 #define __DEBUG_LEVEL__ LOGLEVEL_NOTICE
 #endif
 
+#ifdef MENTOS_FORCE_DEBUG_LOGLEVEL
+// Set by the `FORCE_DEBUG_LOGLEVEL` CMake option: makes every `pr_*` macro
+// compile in regardless of what each file requested, so a format mismatch
+// that normally hides below the file's debug level gets checked (#365).
+#undef __DEBUG_LEVEL__
+#define __DEBUG_LEVEL__ LOGLEVEL_DEBUG
+#endif
+
 #ifndef __DEBUG_HEADER__
 /// Header for identifying outputs coming from a mechanism.
 #define __DEBUG_HEADER__ 0

@@ -110,6 +110,15 @@ endif()
 # GLOBAL COMPILATION FLAGS
 # =============================================================================
 
+# `pr_debug`/`pr_info`/`pr_notice` compile to nothing below a file's
+# `__DEBUG_LEVEL__`, which is `LOGLEVEL_NOTICE` almost everywhere: -Wformat
+# only checks code the compiler sees, so most log calls are never
+# format-checked in a normal build (#365). Forcing every level to
+# `LOGLEVEL_DEBUG` here, behind an option that defaults off, lets a dedicated
+# CI job (and anyone locally) catch a mismatch before it joins that blind
+# spot, without changing what a normal build compiles.
+option(FORCE_DEBUG_LOGLEVEL "Force every pr_* log call to compile in, to catch format mismatches a normal build never checks (#365)." OFF)
+
 # Warning flags.
 list(APPEND MENTOS_C_FLAGS
     -Wall
@@ -125,6 +134,10 @@ list(APPEND MENTOS_C_FLAGS
     -Wno-missing-braces
     -Wno-unused-command-line-argument
 )
+
+if(FORCE_DEBUG_LOGLEVEL)
+    list(APPEND MENTOS_C_FLAGS -DMENTOS_FORCE_DEBUG_LOGLEVEL)
+endif()
 
 # Compiler options for freestanding kernel environment.
 list(APPEND MENTOS_C_FLAGS

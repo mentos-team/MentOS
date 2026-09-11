@@ -66,7 +66,7 @@ void ext2_dealloc_cache(uint8_t *cache)
 /// @return the amount of data we read, or negative value for an error.
 int ext2_read_superblock(ext2_filesystem_t *fs)
 {
-    pr_debug("Read superblock for EXT2 filesystem (0x%x)\n", fs);
+    pr_debug("Read superblock for EXT2 filesystem (%p)\n", (void *)fs);
     return vfs_read(fs->block_device, &fs->superblock, 1024, sizeof(ext2_superblock_t));
 }
 
@@ -75,7 +75,7 @@ int ext2_read_superblock(ext2_filesystem_t *fs)
 /// @return the amount of data we wrote, or negative value for an error.
 int ext2_write_superblock(ext2_filesystem_t *fs)
 {
-    pr_debug("Write superblock for EXT2 filesystem (0x%x)\n", fs);
+    pr_debug("Write superblock for EXT2 filesystem (%p)\n", (void *)fs);
     return vfs_write(fs->block_device, &fs->superblock, 1024, sizeof(ext2_superblock_t));
 }
 
@@ -88,7 +88,7 @@ int ext2_write_superblock(ext2_filesystem_t *fs)
 /// @return 0 on success, negative value on failure.
 static int ext2_sync(ext2_filesystem_t *fs)
 {
-    pr_debug("ext2_sync(%p) - syncing superblock and BGDT to disk\n", fs);
+    pr_debug("ext2_sync(%p) - syncing superblock and BGDT to disk\n", (void *)fs);
 
     if (!fs) {
         pr_err("Invalid filesystem pointer for sync.\n");
@@ -153,7 +153,7 @@ int ext2_write_block(ext2_filesystem_t *fs, uint32_t block_index, uint8_t *buffe
 /// @return 0 on success, -1 on failure.
 int ext2_read_bgdt(ext2_filesystem_t *fs)
 {
-    pr_debug("ext2_read_bgdt(%p)\n", fs);
+    pr_debug("ext2_read_bgdt(%p)\n", (void *)fs);
     if (!fs->block_groups) {
         pr_err("The `block_groups` list is not initialized.\n");
         return -1;
@@ -206,7 +206,7 @@ int ext2_write_bgdt_for_group(ext2_filesystem_t *fs, uint32_t group_index)
 /// @return 0 on success, -1 on failure.
 static int ext2_write_bgdt(ext2_filesystem_t *fs)
 {
-    pr_debug("ext2_write_bgdt(%p)\n", fs);
+    pr_debug("ext2_write_bgdt(%p)\n", (void *)fs);
     if (!fs->block_groups) {
         pr_err("The `block_groups` list is not initialized.\n");
         return -1;

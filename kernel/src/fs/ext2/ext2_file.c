@@ -435,7 +435,7 @@ ssize_t ext2_write(vfs_file_t *file, const void *buffer, off_t offset, size_t nb
 /// indicate the error.
 off_t ext2_lseek(vfs_file_t *file, off_t offset, int whence)
 {
-    pr_debug("ext2_lseek(file: %s, offset: %4u, whence: %4u)\n", file->name, offset, whence);
+    pr_debug("ext2_lseek(file: %s, offset: %4ld, whence: %4u)\n", file->name, offset, whence);
     // Get the filesystem.
     ext2_filesystem_t *fs = (ext2_filesystem_t *)file->device;
     if (fs == NULL) {
@@ -491,7 +491,7 @@ long ext2_ioctl(vfs_file_t *file, unsigned int request, unsigned long data) { re
 /// @return The number of written bytes in the buffer.
 ssize_t ext2_getdents(vfs_file_t *file, dirent_t *dirp, off_t doff, size_t count)
 {
-    pr_debug("ext2_getdents(file: %s, doff: %4u, count: %4u)\n", file->name, doff, count);
+    pr_debug("ext2_getdents(file: %s, doff: %4ld, count: %4u)\n", file->name, doff, count);
     // Get the filesystem.
     ext2_filesystem_t *fs = (ext2_filesystem_t *)file->device;
     if (fs == NULL) {

@@ -165,7 +165,7 @@ static int __send_signal(int sig, siginfo_t *info, struct task_struct *t)
     __lock_task_sighand(t);
     pr_debug(
         "Trying to add signal (%2d:%s) to task (%2d:%s), currently pending "
-        "`%d, %d`.\n",
+        "`%lu, %lu`.\n",
         sig, strsignal(sig), t->pid, t->name, t->pending.signal.sig[0], t->pending.signal.sig[1]);
     // Check if the signal is ignored.
     if (__sig_is_ignored(t, sig)) {
@@ -194,7 +194,7 @@ static int __send_signal(int sig, siginfo_t *info, struct task_struct *t)
     // Set that there is a signal pending.
     sigaddset(&t->pending.signal, sig);
     pr_debug(
-        "Added pending signal (%2d:%s) to task (%2d:%s), pending `%d, %d`.\n", sig, strsignal(sig), t->pid, t->name,
+        "Added pending signal (%2d:%s) to task (%2d:%s), pending `%lu, %lu`.\n", sig, strsignal(sig), t->pid, t->name,
         t->pending.signal.sig[0], t->pending.signal.sig[1]);
 
     // If the task is in an interruptible sleep, wake it so the signal can be
@@ -228,7 +228,7 @@ static int __send_signal(int sig, siginfo_t *info, struct task_struct *t)
 /// @return index of the next signal to handle.
 static inline int __next_signal(sigpending_t *pending, sigset_t *mask)
 {
-    pr_debug("__next_signal(%p, %p)\n", pending, mask);
+    pr_debug("__next_signal(%p, %p)\n", (void *)pending, (void *)mask);
     assert(pending && "Null `pending` structure.");
     assert(mask && "Null `mask` structure.");
     unsigned long x;
@@ -249,7 +249,7 @@ static inline int __next_signal(sigpending_t *pending, sigset_t *mask)
 /// @param info the where we store the signal information.
 static inline void __collect_signal(int sig, sigpending_t *list, siginfo_t *info)
 {
-    pr_debug("__collect_signal(%2d:%s, %p, %p)\n", sig, strsignal(sig), list, info);
+    pr_debug("__collect_signal(%2d:%s, %p, %p)\n", sig, strsignal(sig), (void *)list, (void *)info);
     assert(list && "Null `list` structure.");
     assert(info && "Null `info` structure.");
 
@@ -262,7 +262,8 @@ static inline void __collect_signal(int sig, sigpending_t *list, siginfo_t *info
         pr_debug(
             "__collect_signal(%2d:%s, %p, %p) : Signal in queue : %p(%d : "
             "%s).\n",
-            sig, strsignal(sig), list, info, q, q->info.si_signo, strsignal(q->info.si_signo));
+            sig, strsignal(sig), (void *)list, (void *)info, (void *)q, q->info.si_signo,
+            strsignal(q->info.si_signo));
         if (q->info.si_signo == sig) {
             // If the entry is already set, this means that there are several handlers
             // pending for this particular signal.
@@ -270,7 +271,7 @@ static inline void __collect_signal(int sig, sigpending_t *list, siginfo_t *info
                 pr_debug(
                     "__collect_signal(%2d:%s, %p, %p) : Still pending, do not "
                     "remove from set.\n",
-                    sig, strsignal(sig), list, info);
+                    sig, strsignal(sig), (void *)list, (void *)info);
                 still_pending = true;
                 break;
             }
@@ -283,15 +284,15 @@ static inline void __collect_signal(int sig, sigpending_t *list, siginfo_t *info
     if (!still_pending) {
         sigdelset(&list->signal, sig);
         pr_debug(
-            "__collect_signal(%2d:%s, %p, %p) : Remove signal from set: %d.\n", sig, strsignal(sig), list, info,
-            list->signal.sig[0]);
+            "__collect_signal(%2d:%s, %p, %p) : Remove signal from set: %lu.\n", sig, strsignal(sig), (void *)list,
+            (void *)info, list->signal.sig[0]);
     }
     // If we have found an entry.
     if (queue_entry) {
         pr_debug(
             "__collect_signal(%2d:%s, %p, %p) : Remove and delete sigqueue "
             "entry : %p.\n",
-            sig, strsignal(sig), list, info, queue_entry);
+            sig, strsignal(sig), (void *)list, (void *)info, (void *)queue_entry);
         // Remove the entry from the queue.
         list_head_remove(&queue_entry->list);
         // Copy the details about the entry inside the info structure.
@@ -302,7 +303,7 @@ static inline void __collect_signal(int sig, sigpending_t *list, siginfo_t *info
         pr_debug(
             "__collect_signal(%2d:%s, %p, %p) : Cannot find the signal in the "
             "queue.\n",
-            sig, strsignal(sig), list, info);
+            sig, strsignal(sig), (void *)list, (void *)info);
         // Ok, it wasn't in the queue, zero out the info.
         __clear_siginfo(info);
         // Get the current process.
@@ -329,7 +330,7 @@ static inline void __collect_signal(int sig, sigpending_t *list, siginfo_t *info
 /// @return the signal index on success, a negative value on failure.
 static inline int __dequeue_signal(sigpending_t *pending, sigset_t *mask, siginfo_t *info)
 {
-    pr_debug("__dequeue_signal(%p, %p, %p)\n", pending, mask, info);
+    pr_debug("__dequeue_signal(%p, %p, %p)\n", (void *)pending, (void *)mask, (void *)info);
     // The dequeue_signal( ) always considers the lowest-numbered pending signal.
     // It updates the data structures to indicate that the signal is no longer
     // pending and returns its number.
@@ -348,7 +349,7 @@ static inline int __dequeue_signal(sigpending_t *pending, sigset_t *mask, siginf
 /// @return 1 on success, 0 on failure.
 static inline int __handle_signal(int signr, siginfo_t *info, sigaction_t *ka, struct pt_regs *regs)
 {
-    pr_debug("__handle_signal(%d, %p, %p, %p)\n", signr, info, ka, regs);
+    pr_debug("__handle_signal(%d, %p, %p, %p)\n", signr, (void *)info, (void *)ka, (void *)regs);
     // Get the current process.
     task_struct *current_process = scheduler_get_current_process();
     // Check the current task.
@@ -395,7 +396,7 @@ static inline int __handle_signal(int signr, siginfo_t *info, sigaction_t *ka, s
 
 long sys_sigreturn(struct pt_regs *f)
 {
-    pr_debug("sys_sigreturn(%p)\n", f);
+    pr_debug("sys_sigreturn(%p)\n", (void *)f);
     // Get the current process.
     task_struct *current_process = scheduler_get_current_process();
     // Check the current task.
@@ -406,7 +407,7 @@ long sys_sigreturn(struct pt_regs *f)
     __copy_sigset(&current_process->blocked, &current_process->saved_sigmask);
     // Switch to process page directory
     paging_switch_pgd(current_process->mm->pgd);
-    pr_debug("sys_sigreturn(%p) : done!\n", f);
+    pr_debug("sys_sigreturn(%p) : done!\n", (void *)f);
     return 0;
 }
 
@@ -716,7 +717,11 @@ int __send_sig_info(int sig, siginfo_t *info, struct task_struct *p)
 
 int sys_kill(pid_t pid, int sig)
 {
-    pr_debug("sys_kill(%d, %2d:%s)\n", pid, sig, strsignal(sig));
+    // `sig` is unvalidated syscall input here, and strsignal() returns NULL
+    // for anything out of range: logging it straight through %s risks a
+    // NULL string argument, which GCC's -O2 format-overflow check catches.
+    const char *signame = strsignal(sig);
+    pr_debug("sys_kill(%d, %2d:%s)\n", pid, sig, signame ? signame : "unknown");
     struct task_struct *process = scheduler_get_running_process(pid);
     // Check the task associated with the pid.
     if (!process) {
@@ -743,7 +748,7 @@ int sys_kill(pid_t pid, int sig)
 
 sighandler_t sys_signal(int signum, sighandler_t handler, uint32_t sigreturn_addr)
 {
-    pr_debug("sys_signal(%d, %p, %p)\n", signum, handler, sigreturn_addr);
+    pr_debug("sys_signal(%d, %p, %p)\n", signum, (void *)(unsigned long)handler, (void *)(unsigned long)sigreturn_addr);
     // Check the signal that we want to send.
     if ((signum < 0) || (signum >= NSIG)) {
         pr_err("sys_signal(%d, %p): Wrong signal number!\n", signum, (void *)(unsigned long)handler);
@@ -784,7 +789,7 @@ sighandler_t sys_signal(int signum, sighandler_t handler, uint32_t sigreturn_add
 
 int sys_sigaction(int signum, const sigaction_t *act, sigaction_t *oldact, uint32_t sigreturn_addr)
 {
-    pr_debug("sys_sigaction(%d, %p, %p, %p)\n", signum, act, oldact, sigreturn_addr);
+    pr_debug("sys_sigaction(%d, %p, %p, %p)\n", signum, (void *)act, (void *)oldact, (void *)(unsigned long)sigreturn_addr);
     // Check the signal that we want to send.
     if ((signum < 0) || (signum >= NSIG)) {
         pr_err("sys_sigaction(%d, %p, %p): Wrong signal number!\n", signum, (void *)act, (void *)oldact);
@@ -805,7 +810,7 @@ int sys_sigaction(int signum, const sigaction_t *act, sigaction_t *oldact, uint3
     current_process->sigreturn_addr        = sigreturn_addr;
     // Get a pointer to the entry in the sighand.action array.
     sigaction_t *current_process_sigaction = &current_process->sighand.action[signum - 1];
-    pr_debug("sys_sigaction(%d, %p, %p): : Signal old action ptr %p\n", signum, act, oldact, current_process_sigaction);
+    pr_debug("sys_sigaction(%d, %p, %p): : Signal old action ptr %p\n", signum, (void *)act, (void *)oldact, (void *)current_process_sigaction);
     // If requested, get the old sigaction.
     if (oldact) {
         __copy_sigaction(oldact, current_process_sigaction);
@@ -820,7 +825,7 @@ int sys_sigaction(int signum, const sigaction_t *act, sigaction_t *oldact, uint3
 
 int sys_sigprocmask(int how, const sigset_t *set, sigset_t *oldset)
 {
-    pr_debug("sys_sigprocmask(%d, %p, %p)\n", how, set, oldset);
+    pr_debug("sys_sigprocmask(%d, %p, %p)\n", how, (void *)set, (void *)oldset);
     if (!set && !oldset) {
         return -EFAULT;
     }

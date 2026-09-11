@@ -733,7 +733,7 @@ int pr_kmem_cache_free(const char *file, const char *fun, int line, void *addr)
         list_head_remove(&slab_page->slabs);
         // Add the page to the free list.
         list_head_insert_after(&slab_page->slabs, &cachep->slabs_free);
-        pr_debug("Slab page 0x%p moved to free list.\n", slab_page);
+        pr_debug("Slab page %p moved to free list.\n", (void *)slab_page);
     }
     // If the page is not full, update its list status.
     else if (slab_page->slab_objfree == 1) {
@@ -741,7 +741,7 @@ int pr_kmem_cache_free(const char *file, const char *fun, int line, void *addr)
         list_head_remove(&slab_page->slabs);
         // Add the page to the partial list.
         list_head_insert_after(&slab_page->slabs, &cachep->slabs_partial);
-        pr_debug("Slab page 0x%p moved to partial list.\n", slab_page);
+        pr_debug("Slab page %p moved to partial list.\n", (void *)slab_page);
     }
     return 0;
 }

@@ -172,7 +172,7 @@ static void ext2_dump_inode(ext2_filesystem_t *fs, ext2_inode_t *inode)
         }
         pr_debug("]");
     }
-    pr_debug("\n", inode->data.blocks.indir_block);
+    pr_debug("\n");
 
     pr_debug("DBlocks : %u\n", inode->data.blocks.doubly_indir_block);
     pr_debug("TBlocks : %u\n", inode->data.blocks.trebly_indir_block);
@@ -254,10 +254,10 @@ void ext2_dump_bgdt(ext2_filesystem_t *fs)
 /// @param fs the object to dump.
 void ext2_dump_filesystem(ext2_filesystem_t *fs)
 {
-    pr_debug("block_device          : 0x%x\n", fs->block_device);
-    pr_debug("superblock            : 0x%x\n", fs->superblock);
-    pr_debug("block_groups          : 0x%x\n", fs->block_groups);
-    pr_debug("root                  : 0x%x\n", fs->root);
+    pr_debug("block_device          : %p\n", (void *)fs->block_device);
+    pr_debug("superblock            : %p\n", (void *)&fs->superblock);
+    pr_debug("block_groups          : %p\n", (void *)fs->block_groups);
+    pr_debug("root                  : %p\n", (void *)fs->root);
     pr_debug("block_size            : %d\n", fs->block_size);
     pr_debug("inodes_per_block_count: %d\n", fs->inodes_per_block_count);
     pr_debug("blocks_per_block_count: %d\n", fs->blocks_per_block_count);

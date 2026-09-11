@@ -143,7 +143,7 @@ int procs_module_init(void)
             pr_err("Cannot create `/proc/%s`.\n", entry_name);
             return 1;
         }
-        pr_debug("Created `/proc/%s` (%p)\n", entry_name, system_entry);
+        pr_debug("Created `/proc/%s` (%p)\n", entry_name, (void *)system_entry);
         // Set the specific operations.
         system_entry->sys_operations = &procs_sys_operations;
         system_entry->fs_operations  = &procs_fs_operations;
