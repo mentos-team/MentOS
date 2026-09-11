@@ -125,7 +125,7 @@ static inline int ext2_directory_is_empty(ext2_filesystem_t *fs, uint8_t *cache,
 /// @param inode_index its inode index.
 /// @param rec_len the length of the new entry.
 /// @param file_type its file type.
-static inline void ext2_initialize_direntry(
+static inline int ext2_initialize_direntry(
     ext2_dirent_t *direntry,
     const char *name,
     ino_t inode_index,
@@ -143,12 +143,24 @@ static inline void ext2_initialize_direntry(
         pr_warning("Directory entry name of %u characters truncated to %u.\n", (unsigned)name_len, EXT2_NAME_LEN - 1);
         name_len = EXT2_NAME_LEN - 1;
     }
+    // The name lives inside the record, so it has to fit in it. It used to be
+    // written whatever `rec_len` said, and a caller that had measured the free
+    // space of a directory block from the wrong offset handed over a record
+    // with room for the header alone: the name went past the end of the block
+    // buffer, over whatever the slab allocator kept next to it (#360).
+    if ((sizeof(ext2_dirent_t) + name_len + 1) > rec_len) {
+        pr_err(
+            "Directory entry `%s` needs %u bytes, the record holds %u.\n", name,
+            (unsigned)(sizeof(ext2_dirent_t) + name_len + 1), rec_len);
+        return -1;
+    }
     direntry->inode     = inode_index;
     direntry->rec_len   = rec_len;
     direntry->name_len  = (uint8_t)name_len;
     direntry->file_type = file_type;
     memset(direntry->name, 0, name_len + 1);
     memcpy(direntry->name, name, name_len);
+    return 0;
 }
 
 /// @brief Initializes a new directory entry block for the specified inode.
@@ -196,7 +208,11 @@ int ext2_initialize_new_direntry_block(ext2_filesystem_t *fs, uint32_t inode_ind
     ext2_dirent_t *direntry = (ext2_dirent_t *)cache;
 
     // Initialize the new directory entry with an empty name and unknown file type
-    ext2_initialize_direntry(direntry, "", 0, fs->block_size, ext2_file_type_unknown);
+    if (ext2_initialize_direntry(direntry, "", 0, fs->block_size, ext2_file_type_unknown) < 0) {
+        pr_err("Failed to initialize the first entry of block `%u`.\n", block_index);
+        ext2_dealloc_cache(cache); // Free allocated cache memory before returning
+        return 0;
+    }
 
     // Write the updated block (with new directory entry) back to the filesystem
     if (ext2_write_inode_block(fs, &inode, inode_index, block_index, cache) == -1) {
@@ -248,7 +264,10 @@ static inline int ext2_get_free_direntry(
                 assert(fs->block_size > it.block_offset);
                 rec_len = fs->block_size - it.block_offset;
             }
-            ext2_initialize_direntry(it.direntry, name, inode_index, rec_len, file_type);
+            if (ext2_initialize_direntry(it.direntry, name, inode_index, rec_len, file_type) < 0) {
+                pr_err("Failed to write the directory entry `%s` in the free record.\n", name);
+                return 0;
+            }
             // Update the inode block.
             if (ext2_write_inode_block(fs, &parent_inode, parent_inode_index, it.block_index, cache) == -1) {
                 pr_err("Failed to update the block of the father directory.\n");
@@ -292,36 +311,51 @@ static inline int ext2_append_new_direntry(
     ext2_direntry_iterator_t it = ext2_direntry_iterator_begin(fs, cache, &parent_inode);
     // Iterate the directory entries.
     for (; ext2_direntry_iterator_valid(&it); ext2_direntry_iterator_next(&it)) {
-        // Check if we reached the last directory entry, if that's the case, we
-        // check if the remaining space is big enough.
-        if (ext2_is_last_directory_entry(it.direntry) && ((it.block_offset + rec_len) <= fs->block_size)) {
-            pr_debug(
-                "Found last directory entry (offset: %u, %u != "
-                "round(%u+%u+1):\n",
-                it.block_offset, it.direntry->rec_len, sizeof(ext2_dirent_t), it.direntry->name_len);
-
-            ext2_dump_dirent(it.direntry);
-            // Compute the real rec_len of the entry.
-            real_rec_len         = ext2_get_rec_len_from_direntry(it.direntry);
-            // Fix the rec_len of the entry.
-            it.direntry->rec_len = real_rec_len;
-            // Move the block offsets correctly.
-            it.block_offset += real_rec_len;
-            it.total_offset += real_rec_len;
-            // Set the iterator pointer to the new free location.
-            it.direntry = ext2_direntry_iterator_get(&it);
-            // Initialize the new directory entry.
-            ext2_initialize_direntry(it.direntry, name, inode_index, fs->block_size - it.block_offset, file_type);
-            pr_debug(
-                "Appended new directory entry (offset: %u -> %u):\n", it.block_offset - real_rec_len, it.block_offset);
-            ext2_dump_dirent(it.direntry);
-            // Update the inode block.
-            if (ext2_write_inode_block(fs, &parent_inode, parent_inode_index, it.block_index, cache) == -1) {
-                pr_err("Failed to update the block of the father directory.\n");
-                return 0;
-            }
-            return 1;
+        // Only the last entry of a block can be split: it is the one holding
+        // all the space up to the end of the block.
+        if (!ext2_is_last_directory_entry(it.direntry)) {
+            continue;
         }
+        // Compute the real rec_len of the entry.
+        real_rec_len = ext2_get_rec_len_from_direntry(it.direntry);
+        // The new entry starts where the last one really ends, so the free
+        // space has to be measured from there. Measuring it from
+        // `it.block_offset`, the start of the last entry, overstated it by
+        // `real_rec_len`: with a block whose last entry ended `rec_len` bytes
+        // before the end of the block, the check passed, the new entry was
+        // placed with room for its header alone, and its name was written
+        // past the end of the block buffer (#360).
+        if ((it.block_offset + real_rec_len + rec_len) > fs->block_size) {
+            continue;
+        }
+        pr_debug(
+            "Found last directory entry (offset: %u, %u != "
+            "round(%u+%u+1):\n",
+            it.block_offset, it.direntry->rec_len, sizeof(ext2_dirent_t), it.direntry->name_len);
+
+        ext2_dump_dirent(it.direntry);
+        // Fix the rec_len of the entry.
+        it.direntry->rec_len = real_rec_len;
+        // Move the block offsets correctly.
+        it.block_offset += real_rec_len;
+        it.total_offset += real_rec_len;
+        // Set the iterator pointer to the new free location.
+        it.direntry = ext2_direntry_iterator_get(&it);
+        // Initialize the new directory entry.
+        if (ext2_initialize_direntry(it.direntry, name, inode_index, fs->block_size - it.block_offset, file_type) <
+            0) {
+            pr_err("Failed to append the directory entry `%s`.\n", name);
+            return 0;
+        }
+        pr_debug(
+            "Appended new directory entry (offset: %u -> %u):\n", it.block_offset - real_rec_len, it.block_offset);
+        ext2_dump_dirent(it.direntry);
+        // Update the inode block.
+        if (ext2_write_inode_block(fs, &parent_inode, parent_inode_index, it.block_index, cache) == -1) {
+            pr_err("Failed to update the block of the father directory.\n");
+            return 0;
+        }
+        return 1;
     }
     return 0;
 }
@@ -372,7 +406,10 @@ static inline int ext2_create_new_direntry(
     // The new block holds one entry, spanning the whole block: the next
     // append splits it, the same way the first block of a directory works.
     memset(cache, 0, fs->block_size);
-    ext2_initialize_direntry((ext2_dirent_t *)cache, name, inode_index, fs->block_size, file_type);
+    if (ext2_initialize_direntry((ext2_dirent_t *)cache, name, inode_index, fs->block_size, file_type) < 0) {
+        pr_err("Failed to write the directory entry `%s` in the new block.\n", name);
+        goto free_block_and_fail;
+    }
     // Write the new block.
     if (ext2_write_inode_block(fs, &parent_inode, parent_inode_index, block_index, cache) == -1) {
         pr_err("Failed to update the block of the father directory.\n");
