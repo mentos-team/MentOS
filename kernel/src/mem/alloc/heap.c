@@ -339,7 +339,7 @@ static inline int __blkmngr_split_block(heap_header_t *header, kheap_block_t *bl
     // Check if the requested size is valid (greater than 0 and less than the
     // current block size minus overhead).
     if ((size == 0) || (size + OVERHEAD >= block->size)) {
-        pr_crit("Invalid size for splitting: size must be > 0 and < %u.\n", block->size - OVERHEAD);
+        pr_crit("Invalid size for splitting: size must be > 0 and < %u.\n", (unsigned)(block->size - OVERHEAD));
         return -1; // Size is invalid for splitting.
     }
 

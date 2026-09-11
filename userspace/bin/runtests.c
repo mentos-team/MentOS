@@ -30,6 +30,7 @@ static char *all_tests[] = {
     "t_chdir",
     "t_creat",
     "t_creat_errno",
+    "t_dir_block_boundary",
     "t_dir_entries",
     "t_dup",
     "t_environ",

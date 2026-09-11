@@ -160,8 +160,8 @@ void dump_multiboot(multiboot_info_t *mbi)
     if (bitmask_check(mbi->flags, MULTIBOOT_FLAG_MMAP)) {
         pr_debug("%-16s = 0x%x\n", "mmap_addr", mbi->mmap_addr);
         pr_debug(
-            "%-16s = 0x%x (%d entries)\n", "mmap_length", mbi->mmap_length,
-            mbi->mmap_length / sizeof(multiboot_memory_map_t));
+            "%-16s = 0x%x (%u entries)\n", "mmap_length", mbi->mmap_length,
+            (unsigned)(mbi->mmap_length / sizeof(multiboot_memory_map_t)));
         multiboot_memory_map_t *mmap = mmap_first_entry(mbi);
         do {
             pr_debug(
