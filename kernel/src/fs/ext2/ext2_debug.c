@@ -168,7 +168,14 @@ static void ext2_dump_inode(ext2_filesystem_t *fs, ext2_inode_t *inode)
     if (inode->data.blocks.indir_block) {
         pr_debug(" [ ");
         for (uint32_t it = EXT2_DIRECT_BLOCKS; it < (inode->size / fs->block_size); ++it) {
-            pr_debug("%u ", ext2_get_real_block_index(fs, inode, it));
+            uint32_t real_index = 0;
+            if (ext2_get_real_block_index(fs, inode, it, &real_index) < 0) {
+                // Printing an index here would claim a block the mapping
+                // never resolved.
+                pr_debug("? ");
+            } else {
+                pr_debug("%u ", real_index);
+            }
         }
         pr_debug("]");
     }
