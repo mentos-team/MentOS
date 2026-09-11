@@ -427,7 +427,7 @@ static ssize_t pipe_buffer_read(pipe_buffer_t *pipe_buffer, char *dest, size_t c
     }
 
     pr_debug(
-        "Read %3ld bytes from buffer (offset: %3u, length: %3u).\n", bytes_to_read, pipe_buffer->offset,
+        "Read %3zd bytes from buffer (offset: %3u, length: %3u).\n", bytes_to_read, pipe_buffer->offset,
         pipe_buffer->len);
 
     return bytes_to_read;
@@ -467,7 +467,7 @@ static ssize_t pipe_buffer_write(pipe_buffer_t *pipe_buffer, const char *src, si
     pipe_buffer->len += bytes_to_write;
 
     pr_debug(
-        "pipe_buffer_write: Wrote %3ld bytes to buffer (offset: %3u, length: "
+        "pipe_buffer_write: Wrote %3zd bytes to buffer (offset: %3u, length: "
         "%3u).\n",
         bytes_to_write, pipe_buffer->offset, pipe_buffer->len);
 
