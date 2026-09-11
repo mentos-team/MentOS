@@ -74,6 +74,23 @@ vfs_file_t *ext2_creat(const char *path, mode_t mode)
             failure = -EIO;
             goto rollback;
         }
+        // `creat` is `open(path, O_WRONLY|O_CREAT|O_TRUNC, mode)`: an entry
+        // that already exists is opened for writing, which a directory must
+        // refuse with EISDIR, and a regular file must truncate, exactly like
+        // a truncating open does. Neither check was here, so creat on a
+        // directory handed back a writable descriptor for it (#346).
+        if (bitmask_exact(inode.mode, S_IFDIR)) {
+            pr_err("ext2_creat(path: `%s`): The entry `%s` is a directory.\n", path, search.direntry.name);
+            failure = -EISDIR;
+            goto rollback;
+        }
+        if (bitmask_exact(inode.mode, S_IFREG)) {
+            if (ext2_truncate_inode(fs, &inode, search.direntry.inode) < 0) {
+                pr_err("ext2_creat(path: `%s`): Failed to truncate the existing entry `%s`.\n", path, search.direntry.name);
+                failure = -EIO;
+                goto rollback;
+            }
+        }
         vfs_file_t *file = ext2_find_vfs_file_with_inode(fs, search.direntry.inode);
         if (file == NULL) {
             // Allocate the memory for the file.
