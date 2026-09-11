@@ -331,7 +331,7 @@ static inline int ext2_append_new_direntry(
         pr_debug(
             "Found last directory entry (offset: %u, %u != "
             "round(%u+%u+1):\n",
-            it.block_offset, it.direntry->rec_len, sizeof(ext2_dirent_t), it.direntry->name_len);
+            it.block_offset, it.direntry->rec_len, (unsigned)sizeof(ext2_dirent_t), it.direntry->name_len);
 
         ext2_dump_dirent(it.direntry);
         // Fix the rec_len of the entry.
