@@ -65,7 +65,7 @@ int procfb_module_init(void)
         pr_err("Cannot create `/proc/feedback`.\n");
         return 1;
     }
-    pr_debug("Created `/proc/feedback` (%p)\n", file);
+    pr_debug("Created `/proc/feedback` (%p)\n", (void *)file);
     // Set the specific operations.
     file->sys_operations = &procfb_sys_operations;
     file->fs_operations  = &procfb_fs_operations;

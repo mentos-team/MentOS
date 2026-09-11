@@ -75,7 +75,7 @@ int default_wake_function(wait_queue_entry_t *entry, unsigned mode, int sync)
     // Wake if task is in a sleep state (interruptible or uninterruptible).
     if ((entry->task->state == TASK_INTERRUPTIBLE) || 
         (entry->task->state == TASK_UNINTERRUPTIBLE)) {
-        pr_debug("Task %d (%s) wake condition met (state: %d)\n", 
+        pr_debug("Task %d (%s) wake condition met (state: %ld)\n", 
                  entry->task->pid, entry->task->name, entry->task->state);
         return 1;
     }
@@ -95,7 +95,7 @@ void wait_queue_head_init(wait_queue_head_t *head)
     spinlock_init(&head->lock);
     // Initialize the task list as an empty list.
     list_head_init(&head->task_list);
-    pr_debug("Initialized wait queue head at %p.\n", head);
+    pr_debug("Initialized wait queue head at %p.\n", (void *)head);
 }
 
 wait_queue_entry_t *wait_queue_entry_alloc(void)
@@ -265,7 +265,7 @@ void remove_wait_queue(wait_queue_head_t *head, wait_queue_entry_t *entry)
     __remove_wait_queue(head, entry);
     spinlock_unlock(&head->lock);
 
-    pr_debug("Removed process %d (%s) from wait queue %s (state: %d)\n", entry->task->pid, entry->task->name, head->name, entry->task->state);
+    pr_debug("Removed process %d (%s) from wait queue %s (state: %ld)\n", entry->task->pid, entry->task->name, head->name, entry->task->state);
 }
 
 static wait_queue_entry_t *__sleep_on_state(wait_queue_head_t *head, int state)
@@ -309,7 +309,7 @@ static wait_queue_entry_t *__sleep_on_state(wait_queue_head_t *head, int state)
     // Add the wait queue entry to the specified wait queue.
     add_wait_queue(head, entry);
 
-    pr_debug("Process %d (%s) SLEEPS ON %s (state: %d, stays on runqueue)\n", sleeping_task->pid, sleeping_task->name, head->name, sleeping_task->state);
+    pr_debug("Process %d (%s) SLEEPS ON %s (state: %ld, stays on runqueue)\n", sleeping_task->pid, sleeping_task->name, head->name, sleeping_task->state);
 
     // Restore interrupts before returning.
     irq_enable(irqs);

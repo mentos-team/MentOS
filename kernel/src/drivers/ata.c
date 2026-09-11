@@ -531,8 +531,8 @@ static inline void ata_dump_device(ata_device_t *dev)
     pr_debug("        command : %6u, status : %6u, prdt : %6u\n", dev->bmr.command, dev->bmr.status, dev->bmr.prdt);
     pr_debug("    }\n");
     pr_debug("    dma {\n");
-    pr_debug("        prdt  : 0x%p (Ph: 0x%p)\n", dev->dma.prdt, dev->dma.prdt_phys);
-    pr_debug("        start : 0x%p (Ph: 0x%p)\n", dev->dma.start, dev->dma.start_phys);
+    pr_debug("        prdt  : %p (Ph: %p)\n", (void *)dev->dma.prdt, (void *)dev->dma.prdt_phys);
+    pr_debug("        start : %p (Ph: %p)\n", (void *)dev->dma.start, (void *)dev->dma.start_phys);
     pr_debug("    }\n");
 }
 
@@ -795,9 +795,9 @@ static inline uintptr_t ata_dma_alloc(size_t size, uintptr_t *physical)
     }
 
     pr_debug("Size requirement is %d, which results in an order %d\n", size, order);
-    pr_debug("Allocated page is at       : 0x%p\n", page);
-    pr_debug("The physical address is at : 0x%lx\n", *physical);
-    pr_debug("The lowmem address is at   : 0x%lx\n", lowmem_address);
+    pr_debug("Allocated page is at       : %p\n", (void *)page);
+    pr_debug("The physical address is at : 0x%x\n", *physical);
+    pr_debug("The lowmem address is at   : 0x%x\n", lowmem_address);
 
     // Return the logical (low-memory) address for CPU access.
     return lowmem_address;
@@ -819,19 +819,19 @@ static inline int ata_dma_free(uintptr_t logical_addr)
     if (!page) {
         pr_debug(
             "Failed to retrieve the page structure from logical address "
-            "0x%lx.\n",
+            "0x%x.\n",
             logical_addr);
         return 1;
     }
 
     // Free the allocated pages.
     if (free_pages(page) < 0) {
-        pr_debug("Failed to free allocated pages 0x%p.\n", page);
+        pr_debug("Failed to free allocated pages %p.\n", (void *)page);
         return 1;
     }
 
     // Debugging information.
-    pr_debug("Successfully freed DMA memory at logical address 0x%p.\n", logical_addr);
+    pr_debug("Successfully freed DMA memory at logical address %p.\n", (void *)logical_addr);
 
     return 0; // Success.
 }
@@ -1612,7 +1612,7 @@ static ssize_t ata_read(vfs_file_t *file, char *buffer, off_t offset, size_t siz
 /// @return the number of written characters.
 static ssize_t ata_write(vfs_file_t *file, const void *buffer, off_t offset, size_t size)
 {
-    pr_debug("ata_write(%p, %p, %d, %d)\n", file, buffer, offset, size);
+    pr_debug("ata_write(%p, %p, %ld, %zu)\n", (void *)file, buffer, offset, size);
 
     // Prepare a static support buffer.
     static char support_buffer[ATA_SECTOR_SIZE];
@@ -1710,7 +1710,7 @@ static ssize_t ata_write(vfs_file_t *file, const void *buffer, off_t offset, siz
 static int _ata_stat(const ata_device_t *dev, stat_t *stat)
 {
     if (dev && dev->fs_root) {
-        pr_debug("_ata_stat(%p, %p)\n", dev, stat);
+        pr_debug("_ata_stat(%p, %p)\n", (void *)dev, (void *)stat);
         stat->st_dev   = 0;
         stat->st_ino   = 0;
         stat->st_mode  = dev->fs_root->mask;

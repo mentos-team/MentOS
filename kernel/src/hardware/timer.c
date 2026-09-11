@@ -232,7 +232,7 @@ static inline void __timer_cascate_vector(tvec_base_t *base, list_head_t *curren
     struct timer_list *timer;
     // Migrate only if the vector actually has a timer in it.
     if (!list_head_empty(current_vector)) {
-        pr_debug("Migrate from vector 0x%p\n", current_vector);
+        pr_debug("Migrate from vector %p\n", (void *)current_vector);
         // Reinsert all timers into base in the new correct list.
         list_for_each_safe_decl(it, save, current_vector)
         {
@@ -249,7 +249,7 @@ static inline void __timer_cascate_vector(tvec_base_t *base, list_head_t *curren
                 // Insert the timer inside the vector.
                 list_head_insert_before(it, target_vector);
                 // Since we are moving timers around, print the vector base.
-                pr_debug("Migrate timer (0x%p) 0x%p -> 0x%p\n", it, current_vector, target_vector);
+                pr_debug("Migrate timer (%p) %p -> %p\n", (void *)it, (void *)current_vector, (void *)target_vector);
                 __print_vector_base(base);
             }
         }
@@ -281,7 +281,7 @@ static inline struct timer_list *__timer_list_alloc(void)
 {
     // Allocate the memory.
     struct timer_list *timer = (struct timer_list *)kmalloc(sizeof(struct timer_list));
-    pr_debug("ALLOCATE TIMER 0x%p (0x%p)\n", timer, &timer->entry);
+    pr_debug("ALLOCATE TIMER %p (%p)\n", (void *)timer, (void *)&timer->entry);
     // Check the allocated memory.
     assert(timer && "Failed to allocate memory for a timer.");
     // Clean the memory.
@@ -302,7 +302,7 @@ static inline struct timer_list *__timer_list_alloc(void)
 static inline void __timer_list_dealloc(struct timer_list *timer)
 {
     assert(timer && "Received a NULL pointer.");
-    pr_debug("FREE TIMER     0x%p (0x%p)\n", timer, &timer->entry);
+    pr_debug("FREE TIMER     %p (%p)\n", (void *)timer, (void *)&timer->entry);
     // Remove the timer.
     remove_timer(timer);
     // Deallocate the timer memory.
@@ -328,7 +328,7 @@ void add_timer(struct timer_list *timer)
     // Insert the timer inside the vector.
     list_head_insert_before(&timer->entry, vector);
     // Debug on the output.
-    pr_debug("Add timer     (0x%p) to (0x%p)\n", &timer->entry, vector);
+    pr_debug("Add timer     (%p) to (%p)\n", (void *)&timer->entry, (void *)vector);
     __print_vector_base(&cpu_base);
 #else
     list_head_insert_before(&timer->entry, &base->list);
@@ -342,7 +342,7 @@ void remove_timer(struct timer_list *timer)
     // Then, re-initialize the timer.
     init_timer(timer);
     // Debug on the output.
-    pr_debug("Remove timer  (0x%p)\n", &timer->entry);
+    pr_debug("Remove timer  (%p)\n", (void *)&timer->entry);
     __print_vector_base(&cpu_base);
 }
 
@@ -365,7 +365,7 @@ static inline sleep_data_t *__sleep_data_alloc(void)
 {
     // Allocate the memory.
     sleep_data_t *sleep_data = (sleep_data_t *)kmalloc(sizeof(sleep_data_t));
-    pr_debug("ALLOCATE SLEEP_DATA 0x%p\n", sleep_data);
+    pr_debug("ALLOCATE SLEEP_DATA %p\n", (void *)sleep_data);
     // Check the allocated memory.
     assert(sleep_data && "Failed to allocate memory for a sleep_data.");
     // Clean the memory.
@@ -382,7 +382,7 @@ static inline sleep_data_t *__sleep_data_alloc(void)
 static inline void __sleep_data_dealloc(sleep_data_t *sleep_data)
 {
     assert(sleep_data && "Received a NULL pointer.");
-    pr_debug("FREE     SLEEP_DATA 0x%p\n", sleep_data);
+    pr_debug("FREE     SLEEP_DATA %p\n", (void *)sleep_data);
     // Deallocate the sleep_data memory.
     kfree(sleep_data);
 }
@@ -506,7 +506,7 @@ void run_timer_softirq(void)
             // Trigger all timers.
             list_for_each_safe_decl(it, store, &base->tvr[timer_index])
             {
-                pr_debug("Execute timer (0x%p)\n", it);
+                pr_debug("Execute timer (%p)\n", (void *)it);
                 // Get the timer.
                 timer = list_entry(it, struct timer_list, entry);
                 // Check the timer and its function.
@@ -561,7 +561,7 @@ void run_timer_softirq(void)
 static inline void debug_timeout(unsigned long data)
 {
     pr_debug(
-        "The timer has been successfully deactivated: %d, ticks: %d, seconds: "
+        "The timer has been successfully deactivated: %lu, ticks: %lu, seconds: "
         "%llu\n",
         data, timer_ticks, timer_get_seconds());
 }
@@ -684,7 +684,7 @@ int sys_nanosleep(const struct timespec *req, struct timespec *rem)
 {
     // We need to store rem somewhere, because it contains how much time left
     // until the timer expires, when the timer is stopped early by a signal.
-    pr_debug("sys_nanosleep([s:%d; ns:%d],...)\n", req->tv_sec, req->tv_nsec);
+    pr_debug("sys_nanosleep([s:%u; ns:%ld],...)\n", req->tv_sec, req->tv_nsec);
     // Get the current task.
     task_struct *current = scheduler_get_current_process();
     assert(current && "No current process in sys_nanosleep");

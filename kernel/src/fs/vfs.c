@@ -198,7 +198,7 @@ int vfs_superblock_for_each(vfs_superblock_iter_fn fn, void *ctx)
 
 int vfs_register_superblock(const char *name, const char *path, const char *source, file_system_type_t *type, vfs_file_t *root)
 {
-    pr_debug("vfs_register_superblock(name: %s, path: %s, source: %s, type: %s, root: %p)\n", name, path, source ? source : "(null)", type->name, root);
+    pr_debug("vfs_register_superblock(name: %s, path: %s, source: %s, type: %s, root: %p)\n", name, path, source ? source : "(null)", type->name, (void *)root);
     // Validate input parameters.
     if (!name) {
         pr_err("vfs_register_superblock: NULL name provided\n");
@@ -567,7 +567,7 @@ ssize_t vfs_getdents(vfs_file_t *file, dirent_t *dirp, off_t off, size_t count)
         --dir_path_len;
     }
 
-    pr_debug("vfs_getdents: Checking for mountpoints under '%s' (off=%u, written=%d)\n", dir_path, off, written);
+    pr_debug("vfs_getdents: Checking for mountpoints under '%s' (off=%ld, written=%d)\n", dir_path, off, written);
 
     // Calculate offset handling for mountpoint entries.
     size_t mountpoints_skipped = 0;
@@ -847,7 +847,7 @@ int vfs_symlink(const char *linkname, const char *path)
 
 int vfs_stat(const char *path, stat_t *buf)
 {
-    pr_debug("vfs_stat(path: %s, buf: %p)\n", path, buf);
+    pr_debug("vfs_stat(path: %s, buf: %p)\n", path, (void *)buf);
     // Allocate a variable for the path.
     char absolute_path[PATH_MAX] = {0};
     // If the first character is not the '/' then get the absolute path.

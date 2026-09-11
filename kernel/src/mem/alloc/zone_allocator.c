@@ -677,7 +677,7 @@ ssize_t pmmngr_initialize_page_data(const boot_info_t *boot_info, size_t offset)
         return -1;
     }
 
-    pr_debug("page_data node initialized: %p\n", memory.page_data);
+    pr_debug("page_data node initialized: %p\n", (void *)memory.page_data);
 
     return (ssize_t)mem_usage;
 }
@@ -794,7 +794,7 @@ int pmmngr_init(boot_info_t *boot_info)
     }
 
     pr_debug("  DMA zone (PFN-aligned): 0x%08x - 0x%08x (size: 0x%08x, %u MB)\n", dma_start_aligned, dma_start_aligned + dma_size, dma_size, dma_size / (1024 * 1024));
-    pr_debug("  DMA start PFN: %u (aligned to %u-page boundary: %s)\n", dma_start_aligned / PAGE_SIZE, max_order_pages, ((dma_start_aligned / PAGE_SIZE) % max_order_pages == 0) ? "YES" : "NO");
+    pr_debug("  DMA start PFN: %u (aligned to %u-page boundary: %s)\n", (unsigned)(dma_start_aligned / PAGE_SIZE), max_order_pages, ((dma_start_aligned / PAGE_SIZE) % max_order_pages == 0) ? "YES" : "NO");
 
     memory.dma_mem.start_addr = dma_start_aligned;
     memory.dma_mem.size       = dma_size;
