@@ -40,7 +40,7 @@ ext2_direntry_iterator_t ext2_direntry_iterator_begin(ext2_filesystem_t *fs, uin
         .block_offset = 0,
         .direntry     = NULL};
     // Start by reading the first block of the inode.
-    if (ext2_read_inode_block(fs, inode, it.block_index, cache) == -1) {
+    if (ext2_read_inode_block(fs, inode, it.block_index, cache) < 0) {
         pr_err("Failed to read the inode block `%d`\n", it.block_index);
     } else {
         // Initialize the directory entry.
@@ -81,7 +81,7 @@ void ext2_direntry_iterator_next(ext2_direntry_iterator_t *it)
         // Increase the block index, and reset the block offset.
         it->block_index += 1, it->block_offset = 0;
         // Read the new block.
-        if (ext2_read_inode_block(it->fs, it->inode, it->block_index, it->cache) == -1) {
+        if (ext2_read_inode_block(it->fs, it->inode, it->block_index, it->cache) < 0) {
             pr_err("Failed to read the inode block `%d`.\n", it->block_index);
             // The iterator is not valid anymore.
             it->direntry = NULL;
@@ -215,7 +215,7 @@ int ext2_initialize_new_direntry_block(ext2_filesystem_t *fs, uint32_t inode_ind
     }
 
     // Write the updated block (with new directory entry) back to the filesystem
-    if (ext2_write_inode_block(fs, &inode, inode_index, block_index, cache) == -1) {
+    if (ext2_write_inode_block(fs, &inode, inode_index, block_index, cache) < 0) {
         pr_err("Failed to write the block for inode `%u`.\n", inode_index);
         ext2_dealloc_cache(cache); // Free allocated cache memory before returning
         return 0;
@@ -269,7 +269,7 @@ static inline int ext2_get_free_direntry(
                 return 0;
             }
             // Update the inode block.
-            if (ext2_write_inode_block(fs, &parent_inode, parent_inode_index, it.block_index, cache) == -1) {
+            if (ext2_write_inode_block(fs, &parent_inode, parent_inode_index, it.block_index, cache) < 0) {
                 pr_err("Failed to update the block of the father directory.\n");
                 return 0;
             }
@@ -351,7 +351,7 @@ static inline int ext2_append_new_direntry(
             "Appended new directory entry (offset: %u -> %u):\n", it.block_offset - real_rec_len, it.block_offset);
         ext2_dump_dirent(it.direntry);
         // Update the inode block.
-        if (ext2_write_inode_block(fs, &parent_inode, parent_inode_index, it.block_index, cache) == -1) {
+        if (ext2_write_inode_block(fs, &parent_inode, parent_inode_index, it.block_index, cache) < 0) {
             pr_err("Failed to update the block of the father directory.\n");
             return 0;
         }
@@ -411,7 +411,7 @@ static inline int ext2_create_new_direntry(
         goto free_block_and_fail;
     }
     // Write the new block.
-    if (ext2_write_inode_block(fs, &parent_inode, parent_inode_index, block_index, cache) == -1) {
+    if (ext2_write_inode_block(fs, &parent_inode, parent_inode_index, block_index, cache) < 0) {
         pr_err("Failed to update the block of the father directory.\n");
         goto free_block_and_fail;
     }
@@ -422,8 +422,9 @@ static inline int ext2_create_new_direntry(
 free_block_and_fail:
     // Give the block back and leave the directory the size it had, so a
     // failed append changes nothing.
-    real_index = ext2_get_real_block_index(fs, &parent_inode, block_index);
-    if (real_index != 0) {
+    // A block that cannot be mapped cannot be given back either, so it is
+    // left allocated rather than guessed at (#356).
+    if ((ext2_get_real_block_index(fs, &parent_inode, block_index, &real_index) == 0) && (real_index != 0)) {
         // A block that cannot be released is a leak, and the entry removal
         // above has already happened, so there is nothing to undo — report it
         // and carry on rather than abandon the removal half-done (#342).
@@ -589,7 +590,7 @@ int ext2_destroy_direntry(
     }
 
     // Read the block where the direntry resides.
-    if (ext2_read_inode_block(fs, &parent, block_index, cache) == -1) {
+    if (ext2_read_inode_block(fs, &parent, block_index, cache) < 0) {
         pr_err("Failed to read block `%u` for parent inode `%u`.\n", block_index, parent_index);
         ext2_dealloc_cache(cache);
         return -1;
@@ -607,7 +608,7 @@ int ext2_destroy_direntry(
     dirent->inode = 0;
 
     // Write back the parent directory block.
-    if (!ext2_write_inode_block(fs, &parent, parent_index, block_index, cache)) {
+    if (ext2_write_inode_block(fs, &parent, parent_index, block_index, cache) <= 0) {
         pr_err("Failed to write block `%u` for parent inode `%u`.\n", block_index, parent_index);
         ext2_dealloc_cache(cache);
         return -1;

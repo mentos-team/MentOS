@@ -334,7 +334,7 @@ static int __ext2_free_index_blocks(ext2_filesystem_t *fs, ext2_inode_t *inode)
     }
     // The doubly-indirect block points at a level of index blocks.
     if (inode->data.blocks.doubly_indir_block != 0) {
-        if (ext2_read_block(fs, inode->data.blocks.doubly_indir_block, outer) == -1) {
+        if (ext2_read_block(fs, inode->data.blocks.doubly_indir_block, outer) < 0) {
             pr_err(
                 "Cannot read the doubly-indirect block %u: keeping it, so what it points at stays findable.\n",
                 inode->data.blocks.doubly_indir_block);
@@ -355,7 +355,7 @@ static int __ext2_free_index_blocks(ext2_filesystem_t *fs, ext2_inode_t *inode)
     }
     // The trebly-indirect block points at two levels of index blocks.
     if (inode->data.blocks.trebly_indir_block != 0) {
-        if (ext2_read_block(fs, inode->data.blocks.trebly_indir_block, outer) == -1) {
+        if (ext2_read_block(fs, inode->data.blocks.trebly_indir_block, outer) < 0) {
             pr_err(
                 "Cannot read the trebly-indirect block %u: keeping it, so what it points at stays findable.\n",
                 inode->data.blocks.trebly_indir_block);
@@ -366,7 +366,7 @@ static int __ext2_free_index_blocks(ext2_filesystem_t *fs, ext2_inode_t *inode)
                 if (middle == 0) {
                     continue;
                 }
-                if (ext2_read_block(fs, middle, inner) == -1) {
+                if (ext2_read_block(fs, middle, inner) < 0) {
                     pr_err("Cannot read the index block %u: keeping it, so what it points at stays findable.\n", middle);
                     failure = -1;
                     continue;
@@ -417,7 +417,15 @@ int ext2_free_inode_blocks(ext2_filesystem_t *fs, ext2_inode_t *inode)
     int failure = 0;
     for (uint32_t block_index = 0; block_index < block_number; ++block_index) {
         // Get the real index.
-        uint32_t real_index = ext2_get_real_block_index(fs, inode, block_index);
+        uint32_t real_index = 0;
+        if (ext2_get_real_block_index(fs, inode, block_index, &real_index) < 0) {
+            // A block that cannot be named cannot be freed. Reporting it
+            // keeps the inode pointers in place, so the block is still
+            // described on disk and a checker can find it (#356).
+            pr_err("Cannot map block %u of the inode; it stays allocated.\n", block_index);
+            failure = -1;
+            continue;
+        }
         if (real_index == 0) {
             continue;
         }

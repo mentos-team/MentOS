@@ -49,6 +49,7 @@ set(TEST_LIST
     t_semget.c
     t_mkdir.c
     t_faultinj.c
+    t_indirect_map.c
     t_meta_rmw.c
     t_syslog_format.c
     t_printf_length.c

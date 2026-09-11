@@ -395,7 +395,7 @@ int ext2_unlink(const char *path)
     uint8_t *cache = ext2_alloc_cache(fs);
 
     // Read the block where the direntry resides.
-    if (ext2_read_inode_block(fs, &parent_inode, search.block_index, cache) == -1) {
+    if (ext2_read_inode_block(fs, &parent_inode, search.block_index, cache) < 0) {
         pr_err("ext2_unlink(%s): Failed to read the parent inode block (%d).\n", path, search.block_index);
         ret = -1;
         goto early_exit;
@@ -414,7 +414,7 @@ int ext2_unlink(const char *path)
     actual_dirent->name_len  = 0;
     actual_dirent->file_type = ext2_file_type_unknown;
     // Write back the parent directory block.
-    if (!ext2_write_inode_block(fs, &parent_inode, search.parent_inode, search.block_index, cache)) {
+    if (ext2_write_inode_block(fs, &parent_inode, search.parent_inode, search.block_index, cache) <= 0) {
         pr_err("ext2_unlink(%s): Failed to write the inode block (%d).\n", path, search.block_index);
         ret = -1;
         goto early_exit;
@@ -474,7 +474,7 @@ int ext2_clear_direntry_for_path(ext2_filesystem_t *fs, const char *path)
     // Allocate the cache.
     uint8_t *cache = ext2_alloc_cache(fs);
     // Read the block where the entry resides.
-    if (ext2_read_inode_block(fs, &parent, search.block_index, cache) == -1) {
+    if (ext2_read_inode_block(fs, &parent, search.block_index, cache) < 0) {
         pr_err("Failed to read block `%u` of inode `%u`.\n", search.block_index, (uint32_t)search.parent_inode);
         ext2_dealloc_cache(cache);
         return -1;
@@ -484,7 +484,7 @@ int ext2_clear_direntry_for_path(ext2_filesystem_t *fs, const char *path)
     dirent->inode         = 0;
     // Write the block back.
     int ret               = 0;
-    if (ext2_write_inode_block(fs, &parent, search.parent_inode, search.block_index, cache) == -1) {
+    if (ext2_write_inode_block(fs, &parent, search.parent_inode, search.block_index, cache) < 0) {
         pr_err("Failed to write block `%u` of inode `%u`.\n", search.block_index, (uint32_t)search.parent_inode);
         ret = -1;
     }
