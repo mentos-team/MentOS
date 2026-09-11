@@ -77,7 +77,7 @@ static int check_success(void)
     ssize_t written     = write(fd, content, strlen(content));
     close(fd);
     if (written != (ssize_t)strlen(content)) {
-        syslog(LOG_ERR, "[t_creat_errno] write returned %ld, expected %u", written, (unsigned)strlen(content));
+        syslog(LOG_ERR, "[t_creat_errno] write returned %zd, expected %u", written, (unsigned)strlen(content));
         unlink(GOOD_PATH);
         return -1;
     }
@@ -185,7 +185,7 @@ static int check_existing_entry(void)
     ssize_t bytes   = read(fd, buffer, sizeof(buffer) - 1);
     close(fd);
     if (bytes != 0) {
-        syslog(LOG_ERR, "[t_creat_errno] re-created %s still reads %ld bytes, it had to be truncated", file_path, bytes);
+        syslog(LOG_ERR, "[t_creat_errno] re-created %s still reads %zd bytes, it had to be truncated", file_path, bytes);
         failed = 1;
     }
     unlink(file_path);

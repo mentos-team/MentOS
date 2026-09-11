@@ -746,7 +746,7 @@ int sys_munmap(void *addr, size_t length)
 
     pr_err(
         "No matching memory area found for unmapping at address 0x%p with "
-        "length %lu.\n",
+        "length %zu.\n",
         addr, length);
     return 1;
 }

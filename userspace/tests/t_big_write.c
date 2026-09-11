@@ -82,7 +82,7 @@ int read_and_verify_test_data(const char *filename, int iterations)
             }
 
             if (got != (ssize_t)sizeof(read_buf)) {
-                syslog(LOG_ERR, "Unexpected read length %ld from %s\n", got, filename);
+                syslog(LOG_ERR, "Unexpected read length %zd from %s\n", got, filename);
                 result = EXIT_FAILURE;
                 goto read_close_and_cleanup;
             }

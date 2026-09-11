@@ -55,7 +55,7 @@ int main(void)
         do {
             bytes_read = read(fds[0], read_msg, sizeof(read_msg));
             if (bytes_read > 0) {
-                syslog(LOG_INFO, "[t_pipe_non_blocking] Child read message: '%s' (%ld bytes)\n", read_msg, bytes_read);
+                syslog(LOG_INFO, "[t_pipe_non_blocking] Child read message: '%s' (%zd bytes)\n", read_msg, bytes_read);
             } else if (bytes_read == -1) {
                 if (errno != EAGAIN) {
                     syslog(LOG_ERR, "[t_pipe_non_blocking] Error occurred during read in child process\n");
@@ -83,7 +83,7 @@ int main(void)
     bytes_written = write(fds[1], write_msg, sizeof(write_msg));
 
     if (bytes_written > 0) {
-        syslog(LOG_INFO, "[t_pipe_non_blocking] Parent wrote message: '%s' (%ld bytes)\n", write_msg, bytes_written);
+        syslog(LOG_INFO, "[t_pipe_non_blocking] Parent wrote message: '%s' (%zd bytes)\n", write_msg, bytes_written);
     } else if (bytes_written == -1) {
         syslog(LOG_ERR, "[t_pipe_non_blocking] Error occurred during write in parent process\n");
         error_code = 1;

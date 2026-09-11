@@ -787,22 +787,22 @@ vfs_file_t *vfs_creat(const char *path, mode_t mode)
 
 ssize_t vfs_readlink(const char *path, char *buffer, size_t bufsize)
 {
-    pr_debug("vfs_readlink(%s, %s, %lu)\n", path, buffer, bufsize);
+    pr_debug("vfs_readlink(%s, %s, %zu)\n", path, buffer, bufsize);
     // Allocate a variable for the path.
     char absolute_path[PATH_MAX] = {0};
     // If the first character is not the '/' then get the absolute path.
     int ret                      = resolve_path(path, absolute_path, PATH_MAX, REMOVE_TRAILING_SLASH);
     if (ret < 0) {
-        pr_err("vfs_readlink(%s, %s, %lu): Cannot get the absolute path.", path, buffer, bufsize);
+        pr_err("vfs_readlink(%s, %s, %zu): Cannot get the absolute path.", path, buffer, bufsize);
         return ret;
     }
     super_block_t *sb = vfs_get_superblock(absolute_path);
     if (sb == NULL) {
-        pr_err("vfs_readlink(%s, %s, %lu): Cannot find the superblock!.\n", path, buffer, bufsize);
+        pr_err("vfs_readlink(%s, %s, %zu): Cannot find the superblock!.\n", path, buffer, bufsize);
         return -ENOENT;
     }
     if (sb->root == NULL) {
-        pr_err("vfs_readlink(%s, %s, %lu): Cannot find the superblock root.\n", path, buffer, bufsize);
+        pr_err("vfs_readlink(%s, %s, %zu): Cannot find the superblock root.\n", path, buffer, bufsize);
         return -ENOENT;
     }
     if (sb->root->fs_operations->readlink_f == NULL) {

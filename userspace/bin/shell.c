@@ -1115,7 +1115,7 @@ static void __alloc_argv(char *command, int *argc, char ***argv)
             // Allocate memory for the expanded argument.
             (*argv)[argcIt] = (char *)malloc(strlen(expand_env_buf) + 1);
             if ((*argv)[argcIt] == NULL) {
-                printf("Error: Failed to allocate memory for argument %lu.\n", argcIt);
+                printf("Error: Failed to allocate memory for argument %zu.\n", argcIt);
                 // Free previously allocated arguments to prevent memory leaks.
                 for (size_t j = 0; j < argcIt; ++j) {
                     free((*argv)[j]);

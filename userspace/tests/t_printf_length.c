@@ -66,15 +66,10 @@ int main(void)
     CHECK_FMT("%-8lld|", "1234    |", "%-8lld|", 1234LL);
     CHECK_FMT("%+lld", "+5000000000", "%+lld", 5000000000LL);
 
-    // `z` must read a full size_t/ssize_t, not a truncated one. The casts use
-    // the compiler's own types rather than the ones `stddef.h` declares: the
-    // format check compares against `__SIZE_TYPE__`, which the two cross
-    // toolchains spell differently (`unsigned int` on the i686-elf gcc of the
-    // Linux job, `long unsigned int` on the one Homebrew ships) even though
-    // both are 32 bits here, so a fixed cast is right on one of them only.
+    // `z` must read a full size_t/ssize_t, not a truncated one.
     CHECK_FMT("%zu", "4", "%zu", sizeof(long));
-    CHECK_FMT("%zd negative", "-7", "%zd", -(__PTRDIFF_TYPE__)7);
-    CHECK_FMT("%zx", "ff", "%zx", (__SIZE_TYPE__)0xff);
+    CHECK_FMT("%zd negative", "-7", "%zd", (ssize_t)-7);
+    CHECK_FMT("%zx", "ff", "%zx", (size_t)0xff);
 
     // `l` keeps its meaning.
     CHECK_FMT("%lu", "1234567890", "%lu", 1234567890UL);

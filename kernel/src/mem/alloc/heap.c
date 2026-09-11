@@ -716,7 +716,7 @@ void *sys_brk(void *addr)
         // If not, allocate new memory of the specified size.
         _ret = __do_malloc(heap, (size_t)addr);
         if (!_ret) {
-            pr_err("Memory allocation failed for size: %lu.\n", (size_t)addr);
+            pr_err("Memory allocation failed for size: %zu.\n", (size_t)addr);
             return NULL; // Return error if allocation fails.
         }
     }
