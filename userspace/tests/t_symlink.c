@@ -1,16 +1,23 @@
 /// @file t_symlink.c
-/// @brief Regression test for #288: resolving a path through a symbolic
-/// link must neither write past the path buffer nor leave it unterminated.
+/// @brief Regression test for #288 and #371: resolving a path through a
+/// symbolic link must neither write past the path buffer nor leave it
+/// unterminated, and reading a link target must respect how ext2 stores
+/// it.
 /// @details `__resolve_path` substituted a link target with a plain
 /// `memcpy` in two places: the relative branch copied `linklen` bytes at
 /// the last slash with no bound, so a target substituted near the end of
 /// an almost-full buffer ran past `char buffer[PATH_MAX]` on the kernel
 /// stack, and neither branch wrote the terminator, so the bytes of the
 /// path the link replaced stayed behind the link content whenever the
-/// target was shorter than the name it replaced. The checks below cover
-/// the three observable consequences:
+/// target was shorter than the name it replaced (#288). `ext2_readlink`
+/// measured the target with `strlen` over a field ext2 does not
+/// terminate, and had no branch for a target held in a data block, so a
+/// long link came back as raw block indices (#371). The checks below
+/// cover the observable consequences:
 ///   - a link whose target is shorter than its own name resolves to the
 ///     target, not to the leftover of its old name;
+///   - targets of sixty and sixty-three characters, which the image
+///     tools store in a data block, read back exactly and resolve;
 ///   - a link near the end of an almost-PATH_MAX path is rejected with
 ///     ENAMETOOLONG instead of overflowing the buffer;
 ///   - resolution still works after such a rejection.
@@ -42,7 +49,24 @@
 /// terminator write, the tail of the old name survived the substitution.
 #define SHORT_TARGET_LINK "/home/user/link_with_a_name_much_longer_than_its_target"
 
-/// The file both links above point to.
+/// A committed link whose target is exactly sixty characters: e2fsprogs
+/// moves a target to a block at sixty bytes, so this is the shortest
+/// block-held link the image can contain (#371).
+#define SIXTY_LINK "/home/user/t_symlink_sixty"
+
+/// The file the sixty-character link points to; its absolute path is
+/// exactly sixty characters long.
+#define SIXTY_TARGET_FILE "/home/user/t_symlink_sixtyeeeeeeeeeeeeeeeeeeeeeeeeeeeeee.txt"
+
+/// A committed link whose target is sixty-three characters, also held in
+/// a data block (#371).
+#define SLOW_LINK "/home/user/t_symlink_slow"
+
+/// The file the slow link points to, through a sixty-three character
+/// absolute target.
+#define SLOW_TARGET_FILE "/home/user/t_symlink_slowwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww.txt"
+
+/// The file the links above point to.
 #define WELCOME_FILE "/home/user/welcome.md"
 
 /// Root of the generated deep fixture.
@@ -78,15 +102,16 @@ static ssize_t __read_file(const char *path, char *buffer, size_t buflen)
 
 /// @brief Checks that a link resolves to the same content as its target.
 /// @param link the link to read through.
+/// @param target the file the link is expected to point to.
 /// @return 0 on success, -1 on failure.
-static int __check_resolution(const char *link)
+static int __check_resolution(const char *link, const char *target)
 {
     char through_link[128] = {0};
     char direct[128]       = {0};
     if (__read_file(link, through_link, sizeof(through_link)) < 0) {
         return -1;
     }
-    if (__read_file(WELCOME_FILE, direct, sizeof(direct)) < 0) {
+    if (__read_file(target, direct, sizeof(direct)) < 0) {
         return -1;
     }
     if (strcmp(through_link, direct) != 0) {
@@ -205,17 +230,33 @@ int main(void)
     if (__check_readlink(SHIPPED_LINK, "../user/welcome.md") < 0) {
         ++failures;
     }
-    if (__check_resolution(SHIPPED_LINK) < 0) {
+    if (__check_resolution(SHIPPED_LINK, WELCOME_FILE) < 0) {
         ++failures;
     }
-    if (__check_resolution(SHORT_TARGET_LINK) < 0) {
+    if (__check_resolution(SHORT_TARGET_LINK, WELCOME_FILE) < 0) {
+        ++failures;
+    }
+    // A target of exactly sixty characters is the length at which the
+    // image tools move it to a data block: the read has to come from
+    // there, not from the inline field read as block pointers (#371).
+    if (__check_readlink(SIXTY_LINK, SIXTY_TARGET_FILE) < 0) {
+        ++failures;
+    }
+    if (__check_resolution(SIXTY_LINK, SIXTY_TARGET_FILE) < 0) {
+        ++failures;
+    }
+    // A target of sixty-three characters is held in a data block too.
+    if (__check_readlink(SLOW_LINK, SLOW_TARGET_FILE) < 0) {
+        ++failures;
+    }
+    if (__check_resolution(SLOW_LINK, SLOW_TARGET_FILE) < 0) {
         ++failures;
     }
     if (__check_deep_link() < 0) {
         ++failures;
     }
     // Resolution must still work after a rejection.
-    if (__check_resolution(SHIPPED_LINK) < 0) {
+    if (__check_resolution(SHIPPED_LINK, WELCOME_FILE) < 0) {
         ++failures;
     }
 

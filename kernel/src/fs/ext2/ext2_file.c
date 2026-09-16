@@ -594,18 +594,54 @@ ssize_t ext2_readlink(const char *path, char *buffer, size_t bufsize)
         return -EINVAL;
     }
 
-    // Determine the number of characters to read (symlink length or buffer
-    // size, whichever is smaller).
-    ssize_t ret = min(strlen(inode.data.symlink), bufsize);
+    // The length of the target comes from the inode size, never from
+    // strlen: ext2 does not terminate an inline target, and one that
+    // fills all sixty bytes would send strlen past the field, through
+    // the rest of the inode and into the stack (#371).
+    size_t length  = inode.size;
+    // How much of the target the caller asked to receive.
+    size_t to_read = (length < bufsize) ? length : bufsize;
 
-    // Copy the symbolic link content to the buffer.
-    strncpy(buffer, inode.data.symlink, ret);
+    // Fast or slow is told by the inode itself, not by the length: a
+    // link with no data blocks keeps its target inline in the sixty
+    // bytes of the block-index field — which ext2 does not terminate,
+    // and which a spec-exact sixty-character target fills completely —
+    // while a link with blocks holds the target in its first block,
+    // like any other file content. e2fsprogs moves a target to a block
+    // one character earlier, at sixty bytes, to leave room for a
+    // terminator, so both layouts exist in the wild.
+    if (inode.blocks_count == 0) {
+        // Fast symlink: the target is stored inline in the inode; the
+        // clamp keeps a corrupt size from reading past the field.
+        if (to_read > sizeof(inode.data.symlink)) {
+            to_read = sizeof(inode.data.symlink);
+        }
+        memcpy(buffer, inode.data.symlink, to_read);
+    } else {
+        // Slow symlink: the inline field plays its regular role of
+        // block index, and the first data block holds the target.
+        uint32_t target_block = inode.data.blocks.dir_blocks[0];
+        if (target_block == 0) {
+            pr_err("ext2_readlink(path: %s): The link has no block for its target.\n", path);
+            return -ENOENT;
+        }
+        // A target cannot span blocks, but do not trust the stored size
+        // to stay inside the block either.
+        if (to_read > fs->block_size) {
+            to_read = fs->block_size;
+        }
+        uint64_t offset = (uint64_t)target_block * fs->block_size;
+        if (vfs_read(fs->block_device, buffer, offset, to_read) < 0) {
+            pr_err("ext2_readlink(path: %s): Failed to read the target block.\n", path);
+            return -EIO;
+        }
+    }
 
     // Null-terminate the buffer if there's space.
-    if (ret < bufsize) {
-        buffer[ret] = '\0';
+    if (to_read < bufsize) {
+        buffer[to_read] = '\0';
     }
 
     // Return the number of characters read.
-    return ret;
+    return (ssize_t)to_read;
 }
