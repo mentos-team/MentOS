@@ -20,18 +20,27 @@
 #include "string.h"
 #include "sys/stat.h"
 
-/// Appends the path with a "/" as separator.
-#define APPEND_PATH_SEPARATOR(buffer, buflen)                                                                          \
-    {                                                                                                                  \
-        if ((buffer)[strnlen(buffer, buflen) - 1] != '/') {                                                            \
-            strncat(buffer, "/", buflen);                                                                              \
-        }                                                                                                              \
+/// @brief Appends the "/" separator to the path being built, unless the
+///        path already ends with it.
+/// @param buffer the path being built, always NUL-terminated.
+/// @param buflen the capacity of the buffer.
+/// @details An empty path needs the leading separator, and reading the
+///          last byte must never index before the beginning of the
+///          buffer: the empty case used to be decided by the byte that
+///          happened to precede the buffer, a read the caller did not
+///          own (#376).
+static inline void append_path_separator(char *buffer, size_t buflen)
+{
+    size_t length = strnlen(buffer, buflen);
+    if ((length == 0) || (buffer[length - 1] != '/')) {
+        strncat(buffer, "/", buflen - length - 1);
     }
+}
 
 /// Appends the path.
-#define APPEND_PATH(buffer, token)                                                                                     \
-    {                                                                                                                  \
-        strncat(buffer, token, strlen(token));                                                                         \
+#define APPEND_PATH(buffer, token)             \
+    {                                          \
+        strncat(buffer, token, strlen(token)); \
     }
 
 int sys_unlink(const char *path) { return vfs_unlink(path); }
@@ -189,7 +198,7 @@ int __resolve_path(const char *path, char *abspath, size_t buflen, int flags, in
             // Nothing to do.
         } else {
             if (strlen(buffer) + tokenlen + 1 < buflen) {
-                APPEND_PATH_SEPARATOR(buffer, buflen);
+                append_path_separator(buffer, buflen);
                 APPEND_PATH(buffer, token);
                 pr_debug("|%-32s|%-32s|%d| (APPEND)\n", path, buffer, tokenlen);
             } else {
