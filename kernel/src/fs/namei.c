@@ -129,6 +129,12 @@ static inline int __get_link_content(const char *path, char *buffer, size_t bufl
     if (link_length < 0) {
         return link_length;
     }
+    // The read may report a target as long as the whole buffer, or longer
+    // than what it actually terminated (#371); clamping keeps the
+    // terminator write below in bounds and the buffer terminated.
+    if (link_length >= (ssize_t)buflen) {
+        link_length = buflen - 1;
+    }
     // Null-terminate link.
     buffer[link_length] = 0;
     return link_length;
@@ -207,16 +213,30 @@ int __resolve_path(const char *path, char *abspath, size_t buflen, int flags, in
                     }
                     linklen = strlen(linkpath);
 
-                    if (linkpath[0] == '/') {
-                        memcpy(buffer, linkpath, linklen);
-                        pr_debug("|%-32s|%-32s| (REPLACE)\n", path, buffer);
-                    } else {
+                    // An absolute target replaces the whole path built so
+                    // far, a relative one replaces the component after the
+                    // last slash. Both used to copy `linklen` bytes with no
+                    // bound, writing past the end of the buffer for a target
+                    // that did not fit, and no terminator, leaving the bytes
+                    // of the replaced path trailing the link content (#288).
+                    size_t dst = 0;
+                    if (linkpath[0] != '/') {
                         // Find the last occurrence of '/'.
                         char *last_slash = strrchr(buffer, '/');
-                        if (last_slash) {
-                            memcpy(++last_slash, linkpath, linklen);
-                            pr_debug("|%-32s|%-32s|%-32s| (LINK)\n", path, buffer, linkpath);
-                        }
+                        dst              = last_slash ? (size_t)(last_slash - buffer) + 1 : 0;
+                    }
+                    // The same fit rule as the append path: the substituted
+                    // content must leave room for the terminator.
+                    if (dst + linklen >= buflen) {
+                        pr_err("Link substitution overflows the path buffer.\n");
+                        return -ENAMETOOLONG;
+                    }
+                    memcpy(buffer + dst, linkpath, linklen);
+                    buffer[dst + linklen] = 0;
+                    if (dst == 0) {
+                        pr_debug("|%-32s|%-32s| (REPLACE)\n", path, buffer);
+                    } else {
+                        pr_debug("|%-32s|%-32s|%-32s| (LINK)\n", path, buffer, linkpath);
                     }
                     contains_links = 1;
                 }
