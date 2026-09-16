@@ -96,6 +96,7 @@ static char *all_tests[] = {
     "t_stopcont",
     "t_syscall_ni",
     "t_syslog",
+    "t_symlink",
     "t_time",
     "t_wifsignaled",
     "t_write_read",
