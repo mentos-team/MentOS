@@ -10,6 +10,7 @@
 #include "io/debug.h"
 #include "libgen.h"
 #include "limits.h"
+#include "mem/paging.h"
 #include "process/process.h"
 #include "process/scheduler.h"
 #include "stdio.h"
@@ -75,6 +76,11 @@ static inline void __iattr_set_owner_or_group(struct iattr *attr, uid_t owner, g
 
 int sys_chown(const char *path, uid_t owner, gid_t group)
 {
+    // The path must live in the caller's memory before anything walks it
+    // (#191).
+    if (strnlen_user(path, PATH_MAX) < 0) {
+        return -EFAULT;
+    }
     struct iattr attr = {0};
     __iattr_set_owner_or_group(&attr, owner, group);
     return __setattr(path, &attr, true);
@@ -82,6 +88,11 @@ int sys_chown(const char *path, uid_t owner, gid_t group)
 
 int sys_lchown(const char *path, uid_t owner, gid_t group)
 {
+    // The path must live in the caller's memory before anything walks it
+    // (#191).
+    if (strnlen_user(path, PATH_MAX) < 0) {
+        return -EFAULT;
+    }
     struct iattr attr = {0};
     __iattr_set_owner_or_group(&attr, owner, group);
     return __setattr(path, &attr, false);
@@ -123,10 +134,21 @@ int sys_fchown(int fd, uid_t owner, gid_t group)
     return file->fs_operations->setattr_f(file, &attr);
 }
 
-int sys_chmod(const char *path, mode_t mode)
+int do_chmod(const char *path, mode_t mode)
 {
     struct iattr attr = IATTR_CHMOD(mode);
     return __setattr(path, &attr, true);
+}
+
+int sys_chmod(const char *path, mode_t mode)
+{
+    // The path must live in the caller's memory before anything walks it
+    // (#191). The kernel itself changes modes at boot through `do_chmod`,
+    // which is why the gate lives here and not in the implementation.
+    if (strnlen_user(path, PATH_MAX) < 0) {
+        return -EFAULT;
+    }
+    return do_chmod(path, mode);
 }
 
 int sys_fchmod(int fd, mode_t mode)

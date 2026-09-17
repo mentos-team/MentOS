@@ -44,6 +44,7 @@
 #include "assert.h"
 #include "errno.h"
 #include "fcntl.h"
+#include "mem/paging.h"
 #include "process/process.h"
 #include "process/scheduler.h"
 #include "stdio.h"
@@ -261,15 +262,17 @@ long sys_semop(int semid, struct sembuf *sops, unsigned nsops)
         pr_err("The semid is less than zero.\n");
         return -EINVAL;
     }
-    // The pointer to the operation is NULL.
-    if (!sops) {
-        pr_err("The pointer to the operation is NULL.\n");
-        return -EINVAL;
-    }
     // The value of nsops is negative.
     if (nsops <= 0) {
         pr_err("The value of nsops is negative.\n");
         return -EINVAL;
+    }
+    // The whole array of operations is read out of the caller's memory, and
+    // the multiplication of count and element size must not be allowed to
+    // wrap before the check runs (#191).
+    if (((size_t)nsops > (size_t)-1 / sizeof(struct sembuf)) ||
+        !paging_is_user_range(sops, (size_t)nsops * sizeof(struct sembuf))) {
+        return -EFAULT;
     }
     // Search for the semaphore.
     sem_info = __list_find_sem_info_by_id(semid);
@@ -346,10 +349,9 @@ long sys_semctl(int semid, int semnum, int cmd, union semun *arg)
             pr_err("Semaphore number out of bound (%d not in [%d, %d])\n", semnum, 0, sem_info->semid.sem_nsems);
             return -EINVAL;
         }
-        // Check if the argument is a null pointer.
-        if (!arg) {
-            pr_err("The argument is NULL.\n");
-            return -EINVAL;
+        // The argument is read out of the caller's memory (#191).
+        if (!paging_is_user_range(arg, sizeof(*arg))) {
+            return -EFAULT;
         }
         // Checking if the value is valid.
         if (arg->val < 0) {
@@ -370,15 +372,14 @@ long sys_semctl(int semid, int semnum, int cmd, union semun *arg)
         // Initialize all semaphore in the set referred to by semid, using the
         // values supplied in the array pointed to by arg.array.
 
-        // Check if the argument is a null pointer.
-        if (!arg) {
-            pr_err("The argument is NULL.\n");
-            return -EINVAL;
+        // The argument and the array it points to are read out of the
+        // caller's memory (#191).
+        if (!paging_is_user_range(arg, sizeof(*arg))) {
+            return -EFAULT;
         }
-        // Check if the array is valid.
-        if (!arg->array) {
-            pr_err("The array is NULL.\n");
-            return -EINVAL;
+        if (!arg->array ||
+            !paging_is_user_range(arg->array, sem_info->semid.sem_nsems * sizeof(*arg->array))) {
+            return -EFAULT;
         }
         // Check permissions.
         if (!ipc_valid_permissions(O_WRONLY, &sem_info->semid.sem_perm)) {
@@ -396,15 +397,14 @@ long sys_semctl(int semid, int semnum, int cmd, union semun *arg)
         // Place a copy of the semid_ds data structure in the buffer pointed to by
         // arg.buf.
 
-        // Check if the argument is a null pointer.
-        if (!arg) {
-            pr_err("The argument is NULL.\n");
-            return -EINVAL;
+        // The union itself is only read, to reach the buffer; the answer
+        // is what gets written, so only the buffer needs the write
+        // direction (#191).
+        if (!paging_is_user_range(arg, sizeof(*arg))) {
+            return -EFAULT;
         }
-        // Check if the buffer is a null pointer.
-        if (!arg->buf) {
-            pr_err("The buffer is NULL.\n");
-            return -EINVAL;
+        if (!arg->buf || !paging_is_user_range_writable(arg->buf, sizeof(*arg->buf))) {
+            return -EFAULT;
         }
         // Check permissions.
         if (!ipc_valid_permissions(O_RDONLY, &sem_info->semid.sem_perm)) {
@@ -418,15 +418,14 @@ long sys_semctl(int semid, int semnum, int cmd, union semun *arg)
         // Retrieve the values of all of the semaphores in the set referred to by
         // semid, placing them in the array pointed to by arg.array.
 
-        // Check if the argument is a null pointer.
-        if (!arg) {
-            pr_err("The argument is NULL.\n");
-            return -EINVAL;
+        // The union is read to reach the array; the array is what gets
+        // written (#191).
+        if (!paging_is_user_range(arg, sizeof(*arg))) {
+            return -EFAULT;
         }
-        // Check if the array is valid.
-        if (!arg->array) {
-            pr_err("The array is NULL.\n");
-            return -EINVAL;
+        if (!arg->array ||
+            !paging_is_user_range_writable(arg->array, sem_info->semid.sem_nsems * sizeof(*arg->array))) {
+            return -EFAULT;
         }
         for (unsigned i = 0; i < sem_info->semid.sem_nsems; ++i) {
             arg->array[i] = sem_info->sem_base[i].sem_val;

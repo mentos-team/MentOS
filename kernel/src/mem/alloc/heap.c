@@ -4,6 +4,7 @@
 /// See LICENSE.md for details.
 
 // Setup the logging for this file (do this before any other include).
+#include "errno.h"
 #include "sys/kernel_levels.h"           // Include kernel log levels.
 #define __DEBUG_HEADER__ "[KHEAP ]"      ///< Change header.
 #define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
@@ -628,6 +629,17 @@ void *sys_brk(void *addr)
     if (!addr) {
         pr_err("Received a NULL addr.\n");
         return NULL; // Return error if the addr is NULL.
+    }
+    // The argument is an address argument, not a buffer: a bounds check
+    // decides it without walking anything, since nothing requires the new
+    // pages to exist yet (#191). The answer is NULL and not -EFAULT on
+    // purpose: malloc reads this return value raw, with no
+    // __syscall_return to turn a negative into an error, so a negative
+    // would be a truthy pointer into the kernel area and malloc would
+    // write its header there.
+    if ((uintptr_t)addr >= PROCAREA_END_ADDR) {
+        pr_err("The break argument is not a user address.\n");
+        return NULL;
     }
 
     // Get the current process.

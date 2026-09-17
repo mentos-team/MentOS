@@ -4,11 +4,13 @@
 /// See LICENSE.md for details.
 
 // Setup the logging for this file (do this before any other include).
-#include "sys/kernel_levels.h"          // Include kernel log levels.
-#define __DEBUG_HEADER__ "[TUNIT ]"     ///< Change header.
+#include "sys/kernel_levels.h"           // Include kernel log levels.
+#define __DEBUG_HEADER__ "[TUNIT ]"      ///< Change header.
 #define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
-#include "io/debug.h"                   // Include debugging functions.
+#include "io/debug.h"                    // Include debugging functions.
 
+#include "errno.h"
+#include "limits.h"
 #include "mem/mm/mm.h"
 #include "mem/mm/page.h"
 #include "mem/mm/vm_area.h"
@@ -369,38 +371,38 @@ TEST(paging_virt_to_page)
 
     // The page might be NULL if this specific address isn't mapped
     // But if we try the first mapped kernel entry, it should work
-    volatile int found_mapping = 0;
+    volatile int found_mapping     = 0;
     volatile int present_pde_count = 0;
-    
+
     // Scan kernel page directory entries (768-1023, corresponding to 0xC0000000+)
     for (int pde_idx = 768; pde_idx < MAX_PAGE_DIR_ENTRIES && !found_mapping; ++pde_idx) {
         // Force read of PDE present bit with memory barrier
         unsigned int pde_present = pgd->entries[pde_idx].present;
         __asm__ __volatile__("" ::: "memory");
-        
+
         if (pde_present) {
             present_pde_count++;
-            
+
             // Get the page table for this PDE
             unsigned int pde_frame = pgd->entries[pde_idx].frame;
             __asm__ __volatile__("" ::: "memory");
-            
-            page_t *pgt_page = memory.mem_map + pde_frame;
+
+            page_t *pgt_page  = memory.mem_map + pde_frame;
             page_table_t *pgt = (page_table_t *)get_virtual_address_from_page(pgt_page);
-            
+
             if (pgt) {
                 // Scan this page table for a present PTE
                 for (int pte_idx = 0; pte_idx < MAX_PAGE_TABLE_ENTRIES && !found_mapping; ++pte_idx) {
                     unsigned int pte_present = pgt->pages[pte_idx].present;
                     __asm__ __volatile__("" ::: "memory");
-                    
+
                     if (pte_present) {
                         // Found a present PTE! Calculate its virtual address
                         uint32_t test_addr = (pde_idx * 1024 + pte_idx) * PAGE_SIZE;
-                        size_t test_size = PAGE_SIZE;
-                        
+                        size_t test_size   = PAGE_SIZE;
+
                         page_t *test_page = mem_virtual_to_page(pgd, test_addr, &test_size);
-                        
+
                         if (test_page != NULL) {
                             found_mapping = 1;
                             ASSERT_MSG(test_size <= PAGE_SIZE, "Returned size should not exceed requested");
@@ -601,6 +603,80 @@ TEST(paging_multi_table_coverage)
     TEST_SECTION_END();
 }
 
+/// @brief Test the user-range validation primitive: the kernel area is
+/// never the caller's, whatever the length (#191).
+TEST(paging_user_range_kernel_area)
+{
+    TEST_SECTION_START("User range: kernel area");
+
+    ASSERT(paging_is_user_range((const void *)0xC0000000UL, 4) == 0);
+    ASSERT(paging_is_user_range((const void *)(0xC0000000UL - 2), 4) == 0);
+    ASSERT(paging_is_user_range_writable((const void *)0xC0000000UL, 4) == 0);
+    ASSERT(paging_is_user_range((const void *)0xFFFFFFFFUL, 1) == 0);
+
+    TEST_SECTION_END();
+}
+
+/// @brief Test the user-range validation primitive: a range that wraps
+/// around the address space must be refused before any page is walked
+/// (#191).
+TEST(paging_user_range_wraparound)
+{
+    TEST_SECTION_START("User range: wraparound");
+
+    // start + length overflows 32 bits: the whole span is not user memory.
+    ASSERT(paging_is_user_range((const void *)0xFFFFFFFCUL, 8) == 0);
+    ASSERT(paging_is_user_range((const void *)0xFFFFFFFEUL, 4) == 0);
+    ASSERT(paging_is_user_range_writable((const void *)0xFFFFFFFCUL, 8) == 0);
+
+    TEST_SECTION_END();
+}
+
+/// @brief Test the user-range validation primitive: a zero length touches
+/// no memory, so only the address itself has to be a user one (#191).
+TEST(paging_user_range_zero_length)
+{
+    TEST_SECTION_START("User range: zero length");
+
+    ASSERT(paging_is_user_range((const void *)0x00400000UL, 0) == 1);
+    ASSERT(paging_is_user_range((const void *)0xC0000000UL, 0) == 0);
+    // NULL passes with a zero length, and that is the contract, not an
+    // oversight: an empty range touches no memory, so only the address
+    // itself has to stay out of the kernel area. access_ok answers the
+    // same way in Linux, and read(fd, anything, 0) must keep returning 0.
+    ASSERT(paging_is_user_range(NULL, 0) == 1);
+
+    TEST_SECTION_END();
+}
+
+/// @brief Test the user-range validation primitive against the pages the
+/// hardware would not protect: the identity-mapped first megabyte is
+/// present in every directory, and only the user bit tells it apart from
+/// the caller's memory (#191).
+TEST(paging_user_range_supervisor_pages)
+{
+    TEST_SECTION_START("User range: supervisor pages");
+
+    ASSERT(paging_is_user_range((const void *)0x000B8000UL, 4) == 0);
+    ASSERT(paging_is_user_range_writable((const void *)0x000B8000UL, 4) == 0);
+    ASSERT(paging_is_user_range((const void *)0x00000000UL, 1) == 0);
+
+    TEST_SECTION_END();
+}
+
+/// @brief Test the bounded user-string walk: a string outside the
+/// caller's memory is refused before a byte of it is read (#191).
+TEST(paging_strnlen_user_rejections)
+{
+    TEST_SECTION_START("strnlen_user: rejections");
+
+    ASSERT(strnlen_user(NULL, PATH_MAX) == -EFAULT);
+    ASSERT(strnlen_user((const char *)0xC0000000UL, PATH_MAX) == -EFAULT);
+    ASSERT(strnlen_user((const char *)0x000B8000UL, PATH_MAX) == -EFAULT);
+
+    TEST_SECTION_END();
+}
+
 /// @brief Test address space boundaries.
 TEST(paging_address_boundaries)
 {
@@ -631,7 +707,7 @@ TEST(paging_dma_pde_flags)
     page_directory_t *pgd = paging_get_main_pgd();
     ASSERT_MSG(pgd != NULL, "Page directory must exist");
 
-    uint32_t dma_pde_index = memory.dma_mem.virt_start / (4 * 1024 * 1024);
+    uint32_t dma_pde_index    = memory.dma_mem.virt_start / (4 * 1024 * 1024);
     page_dir_entry_t *dma_pde = &pgd->entries[dma_pde_index];
 
     ASSERT_MSG(dma_pde->present == 1, "DMA PDE must be present");
@@ -651,7 +727,7 @@ TEST(paging_dma_pde_coverage)
     ASSERT_MSG(pgd != NULL, "Page directory must exist");
 
     uint32_t start_index = memory.dma_mem.virt_start / (4 * 1024 * 1024);
-    uint32_t end_index = (memory.dma_mem.virt_end - 1) / (4 * 1024 * 1024);
+    uint32_t end_index   = (memory.dma_mem.virt_end - 1) / (4 * 1024 * 1024);
 
     for (uint32_t i = start_index; i <= end_index; ++i) {
         ASSERT_MSG(pgd->entries[i].present == 1, "DMA PDE range must be present");
@@ -695,7 +771,7 @@ TEST(paging_dma_mapping_permissions)
 
     // Get the DMA region
     uint32_t dma_virt_start = memory.dma_mem.virt_start;
-    uint32_t dma_virt_end = memory.dma_mem.virt_start + memory.dma_mem.size;
+    uint32_t dma_virt_end   = memory.dma_mem.virt_start + memory.dma_mem.size;
 
     // Test permission flags for pages within the DMA virtual range
     for (uint32_t virt_addr = dma_virt_start; virt_addr < dma_virt_end; virt_addr += PAGE_SIZE) {
@@ -707,11 +783,9 @@ TEST(paging_dma_mapping_permissions)
                 uint32_t pte_index = (virt_addr / PAGE_SIZE) % 1024;
                 if (table->pages[pte_index].present) {
                     // DMA pages must have supervisor access (user bit = 0)
-                    ASSERT_MSG(table->pages[pte_index].user == 0, 
-                        "DMA PTE must have supervisor-only access (user bit must be 0)");
+                    ASSERT_MSG(table->pages[pte_index].user == 0, "DMA PTE must have supervisor-only access (user bit must be 0)");
                     // DMA pages must be readable/writable
-                    ASSERT_MSG(table->pages[pte_index].rw == 1, 
-                        "DMA PTE must be readable/writable");
+                    ASSERT_MSG(table->pages[pte_index].rw == 1, "DMA PTE must be readable/writable");
                 }
             }
         }
@@ -731,22 +805,22 @@ TEST(paging_tlb_consistency)
     // Test that page table entries are properly invalidated
     // by verifying that we can create and destroy mappings
     uint32_t test_vaddr = 0x10000000; // Test virtual address (far from kernel space)
-    
+
     // Get a test page to work with
     page_t *test_page = alloc_pages(GFP_KERNEL, 0);
     ASSERT_MSG(test_page != NULL, "Must be able to allocate test page");
-    
+
     uint32_t test_phys = get_physical_address_from_page(test_page);
     ASSERT_MSG(test_phys != 0, "Must get physical address from page");
 
     // Use vmem to map/unmap and verify consistency
     uint32_t vaddr = vmem_map_physical_pages(test_page, 1);
     ASSERT_MSG(vaddr != 0, "vmem_map_physical_pages must return valid address");
-    
+
     // Verify the mapping exists by checking the page table
     uint32_t pde_index = vaddr / (4 * 1024 * 1024);
     uint32_t pte_index = (vaddr / PAGE_SIZE) % 1024;
-    
+
     if (pgd->entries[pde_index].present) {
         page_table_t *table = (page_table_t *)get_virtual_address_from_page(
             get_page_from_physical_address(((uint32_t)pgd->entries[pde_index].frame) << 12));
@@ -754,11 +828,11 @@ TEST(paging_tlb_consistency)
             ASSERT_MSG(table->pages[pte_index].present, "PTE should be present after mapping");
         }
     }
-    
+
     // Unmap the page
     int unmap_result = vmem_unmap_virtual_address(vaddr);
     ASSERT_MSG(unmap_result == 0, "vmem_unmap_virtual_address must succeed");
-    
+
     // After unmapping, TLB should be invalidated (kernel handles this)
     // We verify this by checking that we can re-map the same physical page
     // and the old mapping doesn't interfere
@@ -815,6 +889,11 @@ void test_paging(void)
     test_paging_virt_to_page();
 
     // Boundary tests
+    test_paging_user_range_kernel_area();
+    test_paging_user_range_wraparound();
+    test_paging_user_range_zero_length();
+    test_paging_user_range_supervisor_pages();
+    test_paging_strnlen_user_rejections();
     test_paging_address_boundaries();
     test_paging_dma_pde_flags();
     test_paging_dma_pde_coverage();

@@ -14,6 +14,7 @@
 #include "assert.h"
 #include "errno.h"
 #include "fcntl.h"
+#include "mem/paging.h"
 #include "process/process.h"
 #include "process/scheduler.h"
 #include "stdio.h"
@@ -280,23 +281,25 @@ int sys_msgsnd(int msqid, const void *msgp, size_t msgsz, int msgflg)
         pr_err("The msqid is less than zero.\n");
         return -EINVAL;
     }
-    // The pointer to the caller-defined structure is NULL.
-    if (!msgp) {
-        pr_err("The pointer to the caller-defined structure is NULL.\n");
-        return -EINVAL;
-    }
-    // Use the template to acess the message.
-    _msgp = (struct msgbuf *)msgp;
     // The value of msgsz is negative.
     if (msgsz <= 0) {
         pr_err("The value of msgsz is negative.\n");
         return -EINVAL;
     }
-    // The value of msgsz is above the maximum size.
+    // The value of msgsz is above the maximum size; keeping this check
+    // first makes the computed length below unable to wrap.
     if (msgsz >= MSGMAX) {
         pr_err("The value of msgsz above the maximum allowed size.\n");
         return -EINVAL;
     }
+    // The header and the text are read out of the caller's memory: the
+    // computed length covers both, and cannot wrap past MSGMAX (#191).
+    // Read direction only — msgsnd never writes through msgp.
+    if (!paging_is_user_range(msgp, sizeof(long) + msgsz)) {
+        return -EFAULT;
+    }
+    // Use the template to acess the message.
+    _msgp    = (struct msgbuf *)msgp;
     // Search for the message queue.
     msq_info = __list_find_msq_info_by_id(msqid);
     // The message queue doesn't exist.
@@ -369,23 +372,24 @@ ssize_t sys_msgrcv(int msqid, void *msgp, size_t msgsz, long msgtyp, int msgflg)
         pr_err("The msqid is less than zero.\n");
         return -EINVAL;
     }
-    // The pointer to the caller-defined structure is NULL.
-    if (!msgp) {
-        pr_err("The pointer to the caller-defined structure is NULL.\n");
-        return -EINVAL;
-    }
-    // Use the template to acess the message.
-    _msgp = (struct msgbuf *)msgp;
     // The value of msgsz is negative.
     if (msgsz <= 0) {
         pr_err("The value of msgsz is negative.\n");
         return -EINVAL;
     }
-    // The value of msgsz is above the maximum size.
+    // The value of msgsz is above the maximum size; keeping this check
+    // first makes the computed length below unable to wrap.
     if (msgsz >= MSGMAX) {
         pr_err("The value of msgsz above the maximum allowed size.\n");
         return -EINVAL;
     }
+    // The header and the text are written into the caller's memory: the
+    // computed length covers both, and cannot wrap past MSGMAX (#191).
+    if (!paging_is_user_range_writable(msgp, sizeof(long) + msgsz)) {
+        return -EFAULT;
+    }
+    // Use the template to acess the message.
+    _msgp    = (struct msgbuf *)msgp;
     // Search for the message queue.
     msq_info = __list_find_msq_info_by_id(msqid);
     // The message queue doesn't exist.
@@ -518,11 +522,9 @@ int sys_msgctl(int msqid, int cmd, struct msqid_ds *buf)
         __msq_info_dealloc(msq_info);
     } else if (cmd == IPC_STAT) {
         // Place a copy of the msqid_ds data structure in the buffer pointed to
-        // by buf.
-        // Check if the buffer is a null pointer.
-        if (!buf) {
-            pr_err("The buffer is NULL.\n");
-            return -EINVAL;
+        // by buf: the caller's own, writable memory or nowhere (#191).
+        if (!paging_is_user_range_writable(buf, sizeof(*buf))) {
+            return -EFAULT;
         }
         // Check permissions.
         if (!ipc_valid_permissions(O_RDONLY, &msq_info->msqid.msg_perm)) {

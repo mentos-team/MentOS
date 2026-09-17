@@ -45,6 +45,14 @@ int sys_fchown(int fd, uid_t owner, gid_t group);
 /// @return 0 on success, or -1 on error.
 int sys_chmod(const char *path, mode_t mode);
 
+/// @brief The kernel-internal mode change, without the syscall pointer
+///        gate: the caller passes a kernel string, which must not be
+///        validated against the current task's user memory (#191).
+/// @param path the kernel-owned path.
+/// @param mode the mode to apply.
+/// @return 0 on success, a negative value on error.
+int do_chmod(const char *path, mode_t mode);
+
 /// @brief Change the mode (permissions) of a file by file descriptor. It
 /// modifies the file's permissions to the provided `mode`, determining the
 /// file's access permissions.

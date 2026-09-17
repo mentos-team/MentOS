@@ -16,6 +16,7 @@
 #include "hardware/timer.h"
 #include "klib/irqflags.h"
 #include "klib/stack_helper.h"
+#include "mem/paging.h"
 #include "process/process.h"
 #include "process/scheduler.h"
 #include "process/wait.h"
@@ -790,6 +791,14 @@ sighandler_t sys_signal(int signum, sighandler_t handler, uint32_t sigreturn_add
 int sys_sigaction(int signum, const sigaction_t *act, sigaction_t *oldact, uint32_t sigreturn_addr)
 {
     pr_debug("sys_sigaction(%d, %p, %p, %p)\n", signum, (void *)act, (void *)oldact, (void *)(unsigned long)sigreturn_addr);
+    // Either pointer is allowed to be NULL, and each direction must be
+    // validated against the caller's own memory (#191).
+    if (act && !paging_is_user_range(act, sizeof(*act))) {
+        return -EFAULT;
+    }
+    if (oldact && !paging_is_user_range_writable(oldact, sizeof(*oldact))) {
+        return -EFAULT;
+    }
     // Check the signal that we want to send.
     if ((signum < 0) || (signum >= NSIG)) {
         pr_err("sys_sigaction(%d, %p, %p): Wrong signal number!\n", signum, (void *)act, (void *)oldact);
@@ -827,6 +836,14 @@ int sys_sigprocmask(int how, const sigset_t *set, sigset_t *oldset)
 {
     pr_debug("sys_sigprocmask(%d, %p, %p)\n", how, (void *)set, (void *)oldset);
     if (!set && !oldset) {
+        return -EFAULT;
+    }
+    // Each pointer that is not NULL must name the caller's memory, in its
+    // own direction (#191).
+    if (set && !paging_is_user_range(set, sizeof(*set))) {
+        return -EFAULT;
+    }
+    if (oldset && !paging_is_user_range_writable(oldset, sizeof(*oldset))) {
         return -EFAULT;
     }
     if ((how < SIG_BLOCK) || (how > SIG_SETMASK)) {
@@ -874,8 +891,9 @@ int sys_sigpending(sigset_t *set)
     task_struct *current_process = scheduler_get_current_process();
     // Check the current task.
     assert(current_process && "There is no current process!");
-    // Check the pointer we were provided with.
-    if (set == NULL) {
+    // The answer is written into the caller's memory or nowhere; the NULL
+    // case is subsumed by the range check (#191).
+    if (!paging_is_user_range_writable(set, sizeof(*set))) {
         return -EFAULT;
     }
     // Copy the pending set.

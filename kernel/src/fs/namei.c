@@ -15,6 +15,8 @@
 #include "fs/namei.h"
 #include "fs/vfs.h"
 #include "limits.h"
+#include "mem/paging.h"
+#include "process/process.h"
 #include "process/scheduler.h"
 #include "strerror.h"
 #include "string.h"
@@ -43,14 +45,37 @@ static inline void append_path_separator(char *buffer, size_t buflen)
         strncat(buffer, token, strlen(token)); \
     }
 
-int sys_unlink(const char *path) { return vfs_unlink(path); }
+int sys_unlink(const char *path)
+{
+    if (strnlen_user(path, PATH_MAX) < 0) {
+        return -EFAULT;
+    }
+    return vfs_unlink(path);
+}
 
-int sys_mkdir(const char *path, mode_t mode) { return vfs_mkdir(path, mode); }
+int sys_mkdir(const char *path, mode_t mode)
+{
+    if (strnlen_user(path, PATH_MAX) < 0) {
+        return -EFAULT;
+    }
+    return vfs_mkdir(path, mode);
+}
 
-int sys_rmdir(const char *path) { return vfs_rmdir(path); }
+int sys_rmdir(const char *path)
+{
+    if (strnlen_user(path, PATH_MAX) < 0) {
+        return -EFAULT;
+    }
+    return vfs_rmdir(path);
+}
 
 int sys_creat(const char *path, mode_t mode)
 {
+    // The path must live in the caller's memory before anything walks it
+    // (#191).
+    if (strnlen_user(path, PATH_MAX) < 0) {
+        return -EFAULT;
+    }
     // Get the current task.
     task_struct *task = scheduler_get_current_process();
 
@@ -74,10 +99,28 @@ int sys_creat(const char *path, mode_t mode)
     return fd;
 }
 
-int sys_symlink(const char *linkname, const char *path) { return vfs_symlink(linkname, path); }
+int sys_symlink(const char *linkname, const char *path)
+{
+    // Two strings, each walked only inside the caller's memory (#191).
+    if (strnlen_user(linkname, PATH_MAX) < 0) {
+        return -EFAULT;
+    }
+    if (strnlen_user(path, PATH_MAX) < 0) {
+        return -EFAULT;
+    }
+    return vfs_symlink(linkname, path);
+}
 
 int sys_readlink(const char *path, char *buffer, size_t bufsize)
 {
+    // The path is walked and the answer written into the caller's memory
+    // (#191).
+    if (strnlen_user(path, PATH_MAX) < 0) {
+        return -EFAULT;
+    }
+    if (!paging_is_user_range_writable(buffer, bufsize)) {
+        return -EFAULT;
+    }
     // Allocate a variable for the path.
     char absolute_path[PATH_MAX];
     // Resolve the path.
@@ -167,8 +210,10 @@ int __resolve_path(const char *path, char *abspath, size_t buflen, int flags, in
     int contains_links      = 0;
 
     if (path[0] != '/') {
-        // Get the working directory of the current task.
-        sys_getcwd(buffer, buflen);
+        // Get the working directory of the current task. This is a kernel
+        // buffer, so it must bypass the syscall gate: sys_getcwd validates
+        // against the caller's memory, which this buffer is not (#191).
+        do_getcwd(buffer, buflen);
         pr_debug("|%-32s|%-32s| (INIT)\n", path, buffer);
     } else {
         pr_debug("|%-32s|%-32s| (INIT)\n", path, buffer);

@@ -14,6 +14,7 @@
 #include "errno.h"
 #include "fs/vfs.h"
 #include "hardware/timer.h"
+#include "mem/paging.h"
 #include "process/pid_manager.h"
 #include "process/prio.h"
 #include "process/scheduler.h"
@@ -655,6 +656,12 @@ pid_t sys_waitpid(pid_t pid, int *status, int options)
         return -ECHILD;
     }
 
+    // The status, when the caller asks for one, is written through its
+    // pointer: it must be the caller's own, writable memory (#191).
+    if ((status != NULL) && !paging_is_user_range_writable(status, sizeof(*status))) {
+        return -EFAULT;
+    }
+
     // Validate the `options` argument.
     // Supported options are WNOHANG and WUNTRACED; any other value is invalid
     if (options & ~(WNOHANG | WUNTRACED)) {
@@ -796,6 +803,10 @@ void sys_exit(int exit_code) { do_exit(exit_code << 8); }
 
 int sys_sched_setparam(pid_t pid, const sched_param_t *param)
 {
+    // The parameters are read out of the caller's memory (#191).
+    if (!paging_is_user_range(param, sizeof(*param))) {
+        return -EFAULT;
+    }
     // Iter over the runqueue to find the task
     list_for_each_decl (it, &runqueue.queue) {
         task_struct *entry = list_entry(it, task_struct, run_list);
@@ -823,6 +834,10 @@ int sys_sched_setparam(pid_t pid, const sched_param_t *param)
 
 int sys_sched_getparam(pid_t pid, sched_param_t *param)
 {
+    // The parameters are written into the caller's memory (#191).
+    if (!paging_is_user_range_writable(param, sizeof(*param))) {
+        return -EFAULT;
+    }
     // Iter over the runqueue to find the task
     list_for_each_decl (it, &runqueue.queue) {
         task_struct *entry = list_entry(it, task_struct, run_list);

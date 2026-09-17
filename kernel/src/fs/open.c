@@ -8,6 +8,7 @@
 #include "fs/vfs.h"
 #include "io/debug.h"
 #include "limits.h"
+#include "mem/paging.h"
 #include "process/process.h"
 #include "process/scheduler.h"
 #include "stdio.h"
@@ -17,6 +18,11 @@
 
 int sys_open(const char *pathname, int flags, mode_t mode)
 {
+    // The path must live in the caller's memory before anything walks it
+    // (#191).
+    if (strnlen_user(pathname, PATH_MAX) < 0) {
+        return -EFAULT;
+    }
     // Get the current task.
     task_struct *task = scheduler_get_current_process();
 

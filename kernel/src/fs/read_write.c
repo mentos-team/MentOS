@@ -38,9 +38,9 @@ ssize_t sys_read(int fd, void *buf, size_t nbytes)
     }
 
     // The buffer is written through the filesystem layer with supervisor
-    // rights: a pointer the caller does not own must never reach it, or
-    // read() reads and writes wherever it points (#191).
-    if (!paging_is_user_range(buf, nbytes)) {
+    // rights: a pointer the caller does not own must never reach it, and a
+    // read-only page of the caller's must not be written either (#191).
+    if (!paging_is_user_range_writable(buf, nbytes)) {
         return -EFAULT;
     }
 
