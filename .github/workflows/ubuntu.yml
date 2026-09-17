@@ -25,21 +25,10 @@ on:
     branches:
     - main
     - develop
-    paths:
-    - '**/*.c'
-    - '**/*.cpp'
-    - '**/*.h'
-    - '**/*.hpp'
-    - '**/*.S'
-    - '**/*.asm'
-    - '**/CMakeLists.txt'
-    - '**/Makefile'
-    - '**/cmake/**'
-    - 'scripts/**'
-    - 'iso/**'
-    - 'filesystem/**'
-    - 'tools/**'
-    - '.github/workflows/ubuntu.yml'
+    # No paths filter here on purpose: a status check that a filter keeps
+    # from starting stays pending for ever once it is required, and the
+    # pull request has no way out of it. The push trigger above still
+    # filters.
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
