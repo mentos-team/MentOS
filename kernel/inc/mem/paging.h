@@ -122,7 +122,14 @@ page_directory_t *paging_get_current_pgd(void);
 ///          protected by the CPU. A range passes only when it stays below
 ///          the kernel area and every page it covers is present and marked
 ///          user in the current page directory — the page tables are the
-///          authority on what the caller can name (#191).
+///          authority on what the caller can name (#191). Two limits it
+///          does NOT cover, both inert under the current mappings and both
+///          to revisit before they stop being so: the write permission is
+///          not checked, so a caller owning a read-only page can still have
+///          the kernel write through it (CR0.WP is never set, so the
+///          supervisor write does not fault); and taking the page tables as
+///          the authority instead of the vm_area list rejects a mapping
+///          that is not yet faulted in, which only sys_mmap can produce.
 int paging_is_user_range(const void *address, size_t length);
 
 /// @brief Switches paging directory.
