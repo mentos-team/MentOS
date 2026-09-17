@@ -20,6 +20,9 @@
 ///     tools store in a data block, read back exactly and resolve;
 ///   - a link near the end of an almost-PATH_MAX path is rejected with
 ///     ENAMETOOLONG instead of overflowing the buffer;
+///   - a link target ending in a separator neither doubles a separator
+///     mid-path nor leaks into a resolved path or a stored cwd, and the
+///     root keeps its own separator;
 ///   - resolution still works after such a rejection.
 ///
 /// The deep fixture is planted inside the image by
@@ -65,6 +68,15 @@
 /// The file the slow link points to, through a sixty-three character
 /// absolute target.
 #define SLOW_TARGET_FILE "/home/user/t_symlink_slowwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww.txt"
+
+/// A committed link whose target ends with a separator, the only input
+/// shape that can put a trailing '/' into the resolution buffer: the
+/// slash must never leak into a resolved path or a stored cwd (#379).
+#define TRAIL_ABS_LINK  "/home/user/t_trail_abs"
+/// A committed link whose target is only separators.
+#define TRAIL_ROOT_LINK "/home/user/t_trail_root"
+/// A committed link whose relative target ends with a separator.
+#define TRAIL_DOT_LINK  "/home/user/t_trail_dot"
 
 /// The file the links above point to.
 #define WELCOME_FILE "/home/user/welcome.md"
@@ -223,6 +235,70 @@ static int __check_deep_link(void)
     return 0;
 }
 
+/// @brief A link target ending in a separator must not leak the slash.
+/// @details A trailing '/' in the substituted buffer is the only input
+///          shape the final strip of `__resolve_path` exists for. The
+///          resolution restarts over the substituted path, which
+///          consumes the slash again while re-tokenizing, so what is
+///          observable is the end-to-end invariant: reading through the
+///          link lands on the same file, and the cwd stored after a
+///          chdir through the link carries no trailing separator — and
+///          the root keeps its own (#379).
+/// @return 0 on success, -1 on failure.
+static int __check_trailing_slash_links(void)
+{
+    char saved[PATH_MAX] = {0};
+    int failures         = 0;
+
+    // Mid-path use: the substitution leaves the buffer ending in '/', and
+    // the next component must land right after it, not after a doubled
+    // separator.
+    const char *through[] = {TRAIL_ABS_LINK "/welcome.md", TRAIL_DOT_LINK "/welcome.md"};
+    for (size_t i = 0; i < count_of(through); ++i) {
+        if (__check_resolution(through[i], WELCOME_FILE) < 0) {
+            ++failures;
+        }
+    }
+
+    // The cwd stored through the links must carry no trailing separator.
+    if (getcwd(saved, sizeof(saved)) == NULL) {
+        syslog(LOG_ERR, "[t_symlink] getcwd: %s", strerror(errno));
+        return -1;
+    }
+    static const struct {
+        const char *path;
+        const char *expected;
+    } cwds[] = {
+        {TRAIL_ABS_LINK,     "/home/user"},
+        {TRAIL_ABS_LINK "/", "/home/user"},
+        {TRAIL_DOT_LINK,     "/home/user"},
+        {TRAIL_ROOT_LINK,    "/"         },
+        {"/",                "/"         },
+    };
+    for (size_t i = 0; i < count_of(cwds); ++i) {
+        char cwd[PATH_MAX] = {0};
+        if (chdir(cwds[i].path) < 0) {
+            syslog(LOG_ERR, "[t_symlink] chdir(%s): %s", cwds[i].path, strerror(errno));
+            ++failures;
+            break;
+        }
+        if (getcwd(cwd, sizeof(cwd)) != cwd) {
+            syslog(LOG_ERR, "[t_symlink] getcwd after chdir(%s): %s", cwds[i].path, strerror(errno));
+            ++failures;
+            break;
+        }
+        if (strcmp(cwd, cwds[i].expected) != 0) {
+            syslog(LOG_ERR, "[t_symlink] chdir(%s) left cwd `%s`, expected `%s`", cwds[i].path, cwd, cwds[i].expected);
+            ++failures;
+        }
+    }
+    if (chdir(saved) < 0) {
+        syslog(LOG_ERR, "[t_symlink] chdir(%s) to restore: %s", saved, strerror(errno));
+        return -1;
+    }
+    return failures ? -1 : 0;
+}
+
 int main(void)
 {
     int failures = 0;
@@ -253,6 +329,10 @@ int main(void)
         ++failures;
     }
     if (__check_deep_link() < 0) {
+        ++failures;
+    }
+    // A link target ending in a separator must not leak it anywhere.
+    if (__check_trailing_slash_links() < 0) {
         ++failures;
     }
     // Resolution must still work after a rejection.
