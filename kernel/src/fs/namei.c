@@ -270,7 +270,10 @@ int __resolve_path(const char *path, char *abspath, size_t buflen, int flags, in
         buffer[1] = 0;
     } else if ((flags & REMOVE_TRAILING_SLASH) && (buffer_end > 1) && (buffer[buffer_end - 1] == '/')) {
         pr_debug("|%-32s|%-32s|(%u) (REMTRAIL)\n", path, buffer, buffer_end);
-        buffer[buffer_end] = 0;
+        // Strip the separator itself: writing at `buffer_end` would only
+        // rewrite the terminator that is already there and remove
+        // nothing (#379).
+        buffer[buffer_end - 1] = 0;
     }
     strncpy(abspath, buffer, buflen);
     pr_debug("|%-32s|%-32s|(%u) (END)\n", path, buffer, buffer_end);
