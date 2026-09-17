@@ -23,6 +23,7 @@
 #include "fcntl.h"
 #include "fs/vfs.h"
 #include "list_head.h"
+#include "mem/paging.h"
 #include "process/scheduler.h"
 #include "stdio.h"
 #include "stdlib.h"
@@ -558,7 +559,7 @@ static void pipe_wake_up_tasks(wait_queue_head_t *wait_queue, const char *debug_
     list_for_each_safe_decl(it, store, &wait_queue->task_list)
     {
         wait_queue_entry_t *wait_queue_entry = list_entry(it, wait_queue_entry_t, task_list);
-        int target_pid                     = wait_queue_entry->task ? wait_queue_entry->task->pid : -1;
+        int target_pid                       = wait_queue_entry->task ? wait_queue_entry->task->pid : -1;
 
         if (wake_up_wait_queue_entry(wait_queue, wait_queue_entry, TASK_RUNNING, 0)) {
             pr_debug("%s: waking up process %d\n", debug_msg, target_pid);
@@ -1207,6 +1208,12 @@ int sys_pipe(int fds[2])
     if (!fds) {
         pr_err("Invalid argument: fds is NULL.\n");
         return -1;
+    }
+
+    // The two descriptors are stored through the pointer: it must name the
+    // caller's memory (#191).
+    if (!paging_is_user_range(fds, sizeof(int) * 2)) {
+        return -EFAULT;
     }
 
     // Allocate and initialize the pipe_inode_info structure.

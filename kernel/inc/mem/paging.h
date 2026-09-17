@@ -109,6 +109,22 @@ page_directory_t *paging_get_main_pgd(void);
 /// @return A pointer to the current page directory.
 page_directory_t *paging_get_current_pgd(void);
 
+/// @brief Tells whether a memory range belongs to the current task's user
+///        address space.
+/// @param address the start of the range, as handed to a syscall.
+/// @param length the size of the range, in bytes; a zero length touches no
+///        memory, and only requires the address itself to be a user one.
+/// @return 1 when the whole range is user-accessible memory of the current
+///         task, 0 otherwise.
+/// @details The check the hardware cannot make for the kernel: syscall
+///          handlers dereference caller pointers with supervisor rights,
+///          so neither the user/supervisor bit nor the kernel area is
+///          protected by the CPU. A range passes only when it stays below
+///          the kernel area and every page it covers is present and marked
+///          user in the current page directory — the page tables are the
+///          authority on what the caller can name (#191).
+int paging_is_user_range(const void *address, size_t length);
+
 /// @brief Switches paging directory.
 /// @param dir A pointer to the new page directory.
 /// @return Returns 0 on success, or -1 if an error occurs.

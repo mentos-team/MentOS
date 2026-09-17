@@ -457,11 +457,12 @@ static pg_iter_entry_t __pg_iter_next(page_iterator_t *iter)
 }
 
 __attribute__((noinline))
-page_t *mem_virtual_to_page(page_directory_t *pgd, uint32_t virt_start, size_t *size)
+page_t *
+mem_virtual_to_page(page_directory_t *pgd, uint32_t virt_start, size_t *size)
 {
     // Memory barrier to prevent aggressive compiler optimization in Release mode.
     __asm__ __volatile__("" ::: "memory");
-    
+
     // Check for null pointer to the page directory to avoid dereferencing.
     if (!pgd) {
         pr_crit("The page directory is null.\n");
@@ -477,7 +478,7 @@ page_t *mem_virtual_to_page(page_directory_t *pgd, uint32_t virt_start, size_t *
     // Use volatile read to prevent compiler optimization in Release mode.
     unsigned int pde_present = pgd->entries[virt_pgt].present;
     __asm__ __volatile__("" ::: "memory");
-    
+
     if (!pde_present) {
         return NULL;
     }
@@ -486,7 +487,7 @@ page_t *mem_virtual_to_page(page_directory_t *pgd, uint32_t virt_start, size_t *
     // Use volatile read to prevent compiler from optimizing frame access.
     unsigned int pde_frame = pgd->entries[virt_pgt].frame;
     __asm__ __volatile__("" ::: "memory");
-    
+
     page_t *pgd_page = memory.mem_map + pde_frame;
 
     // Get the low memory address of the page table.
@@ -494,8 +495,7 @@ page_t *mem_virtual_to_page(page_directory_t *pgd, uint32_t virt_start, size_t *
     if (!pgt_address) {
         static int warn_count = 0;
         if (warn_count++ < 5) {
-            pr_debug("mem_virtual_to_page: get_virtual_address_from_page returned NULL for PDE %u (frame %u)\n",
-                     virt_pgt, pde_frame);
+            pr_debug("mem_virtual_to_page: get_virtual_address_from_page returned NULL for PDE %u (frame %u)\n", virt_pgt, pde_frame);
         }
         return NULL;
     }
@@ -504,13 +504,12 @@ page_t *mem_virtual_to_page(page_directory_t *pgd, uint32_t virt_start, size_t *
     // Use volatile read to prevent compiler optimization in Release mode.
     unsigned int pte_present = pgt_address->pages[virt_pgt_offset].present;
     __asm__ __volatile__("" ::: "memory");
-    
+
     if (!pte_present) {
         static volatile int pte_not_present_count = 0;
         if (pte_not_present_count < 3) {
             pte_not_present_count++;
-            pr_warning("mem_virtual_to_page: PTE not present for vaddr 0x%p (PDE %u, PTE offset %u)\n",
-                       (void *)virt_start, virt_pgt, virt_pgt_offset);
+            pr_warning("mem_virtual_to_page: PTE not present for vaddr 0x%p (PDE %u, PTE offset %u)\n", (void *)virt_start, virt_pgt, virt_pgt_offset);
         }
         return NULL;
     }
@@ -519,7 +518,7 @@ page_t *mem_virtual_to_page(page_directory_t *pgd, uint32_t virt_start, size_t *
     // Use volatile read to prevent compiler optimization.
     unsigned int pte_frame = pgt_address->pages[virt_pgt_offset].frame;
     __asm__ __volatile__("" ::: "memory");
-    
+
     uint32_t pfn = pte_frame;
 
     // Map the physical frame number to a physical page.
@@ -536,6 +535,60 @@ page_t *mem_virtual_to_page(page_directory_t *pgd, uint32_t virt_start, size_t *
 
     // Return the pointer to the mapped physical page.
     return page;
+}
+
+int paging_is_user_range(const void *address, size_t length)
+{
+    uint32_t start = (uint32_t)(uintptr_t)address;
+    // A range that wraps or that ends inside the kernel area is not user
+    // memory; an empty range touches nothing, but its address must still
+    // name user memory rather than the kernel area.
+    if (start >= PROCAREA_END_ADDR) {
+        return 0;
+    }
+    uint32_t end = start + length;
+    if ((length > 0) && ((end < start) || (end > PROCAREA_END_ADDR))) {
+        return 0;
+    }
+    if (length == 0) {
+        return 1;
+    }
+    // The current directory comes out of CR3, which holds a physical
+    // address: it must go through the page map before anything reads it,
+    // the way the page-fault handler does.
+    page_t *dir_page = get_page_from_physical_address((uint32_t)paging_get_current_pgd());
+    if (!dir_page) {
+        return 0;
+    }
+    page_directory_t *pgd = (page_directory_t *)get_virtual_address_from_page(dir_page);
+    if (!pgd) {
+        return 0;
+    }
+    // Every page of the range must be present and user-accessible: the
+    // walk is silent because a caller probing where its memory is not is
+    // an answer, not an event to log. The user bit cannot be skipped: the
+    // kernel dereferences these pointers with supervisor rights, so it is
+    // the only thing standing between a syscall and, for instance, the
+    // identity-mapped first megabyte every address space inherits.
+    for (uint32_t page = start & ~(uint32_t)(PAGE_SIZE - 1); page < end; page += PAGE_SIZE) {
+        page_dir_entry_t *pde = &pgd->entries[page / (PAGE_SIZE * MAX_PAGE_TABLE_ENTRIES)];
+        if (!pde->present || !pde->user) {
+            return 0;
+        }
+        page_t *table_page = get_page_from_physical_address(pde->frame << 12U);
+        if (!table_page) {
+            return 0;
+        }
+        page_table_t *table = (page_table_t *)get_virtual_address_from_page(table_page);
+        if (!table) {
+            return 0;
+        }
+        page_table_entry_t *pte = &table->pages[(page / PAGE_SIZE) % MAX_PAGE_TABLE_ENTRIES];
+        if (!pte->present || !pte->user) {
+            return 0;
+        }
+    }
+    return 1;
 }
 
 int mem_upd_vm_area(page_directory_t *pgd, uint32_t virt_start, uint32_t phy_start, size_t size, uint32_t flags)
