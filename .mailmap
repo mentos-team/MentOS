@@ -1,0 +1,13 @@
+# Canonical identities, so shortlog/blame/statistics count a person once.
+# Format: Proper Name <proper@email> <commit@email>
+# See gitmailmap(5).
+
+Enrico Fraccaroli <enrico.fraccaroli@univr.it>
+Enrico Fraccaroli <enrico.fraccaroli@univr.it> <enry.frak@gmail.com>
+Enrico Fraccaroli <enrico.fraccaroli@univr.it> <enrico.fraccaroli@gmail.com>
+
+Ksawery Radziwiłowicz <62256152+ksaweryr@users.noreply.github.com>
+Ksawery Radziwiłowicz <62256152+ksaweryr@users.noreply.github.com> <ksawery.radziwilowicz@gmail.com>
+
+tommyvilo <50549764+tommyvilo@users.noreply.github.com>
+tommyvilo <50549764+tommyvilo@users.noreply.github.com> <tomvil02@gmail.com>

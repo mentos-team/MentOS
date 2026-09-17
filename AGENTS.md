@@ -31,6 +31,18 @@ make -C build qemu-test           # guest test run (WARNING: see below)
 make -C build filesystem          # rebuild pristine rootfs.img (QEMU writes to it)
 ```
 
+## Merge policy
+
+- **Fix/feature PRs into `develop`: squash and merge.** One commit per PR keeps
+  `git log` readable and leaves `git bisect` only buildable states to land on;
+  a branch's review ping-pong is not history worth shipping.
+- **Release PRs into `main`, and the `main` back-merge into `develop`: merge
+  commit, never squash.** Squashing either one fabricates a commit and cuts the
+  ancestry between the two branches, so every later release replays the same
+  diff. This is why merge commits stay enabled on the repository.
+- **Rebase and merge** only when a PR's commits are separate units that each
+  earn their own line in history. Rare.
+
 ## Critical invariants — respect in every change
 
 1. **fd reference invariant**: every `fd_list` slot holds exactly one
