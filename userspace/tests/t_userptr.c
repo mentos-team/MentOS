@@ -111,6 +111,7 @@ static int check_scalar_outputs(void)
     int fds[2];
     EXPECT_EFAULT("pipe into the kernel area", pipe((int *)KERNEL_TOP));
     EXPECT_EFAULT("pipe into unmapped memory", pipe((int *)UNMAPPED_USER));
+    EXPECT_EFAULT("pipe into NULL", pipe(NULL));
     if (pipe(fds) < 0) {
         syslog(LOG_ERR, "[t_userptr] pipe into a real array: %s", strerror(errno));
         return -1;

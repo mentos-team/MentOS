@@ -1201,17 +1201,15 @@ int vfs_update_pipe_counts(task_struct *task, task_struct *old_task)
 
 /// @brief System call to create a new pipe.
 /// @param fds Array to store read and write file descriptors.
-/// @return 0 on success, or -1 on error.
+/// @return 0 on success, -EFAULT when fds does not name the caller's memory,
+///         or -1 on any other error.
 int sys_pipe(int fds[2])
 {
-    // Validate input pointer
-    if (!fds) {
-        pr_err("Invalid argument: fds is NULL.\n");
-        return -1;
-    }
-
     // The two descriptors are stored through the pointer: it must name the
-    // caller's memory (#191).
+    // caller's memory (#191). NULL needs no check of its own -- the first
+    // page is not user memory in any address space, so it fails here and
+    // reports the same -EFAULT as every other pointer the caller does not
+    // own, instead of the -1 the separate NULL check used to return.
     if (!paging_is_user_range(fds, sizeof(int) * 2)) {
         return -EFAULT;
     }
