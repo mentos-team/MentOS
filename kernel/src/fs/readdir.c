@@ -7,6 +7,7 @@
 #include "dirent.h"
 #include "errno.h"
 #include "fs/vfs.h"
+#include "mem/paging.h"
 #include "process/scheduler.h"
 #include "stdio.h"
 #include "string.h"
@@ -15,10 +16,11 @@
 
 ssize_t sys_getdents(int fd, dirent_t *dirp, unsigned int count)
 {
-    if (dirp == NULL) {
-        printf("getdents: cannot read directory :"
-               "Directory pointer is not valid\n");
-        return 0;
+    // The entries are written into the caller's memory: the old NULL check
+    // answered success-with-zero for a bad pointer, which hid the mistake
+    // instead of reporting it (#191).
+    if (!paging_is_user_range_writable(dirp, count)) {
+        return -EFAULT;
     }
     // Get the current process.
     task_struct *current_process = scheduler_get_current_process();

@@ -13,6 +13,14 @@
 #include "stdbool.h"
 #include "system/signal.h"
 
+/// @brief The kernel-internal cwd query, without the syscall pointer gate:
+/// the caller passes a kernel buffer, which must not be validated against
+/// the current task's user memory (#191).
+/// @param buf the kernel buffer receiving the cwd.
+/// @param size the size of the buffer.
+/// @return The buffer, or a negative value on error.
+char *do_getcwd(char *buf, size_t size);
+
 /// The maximum length of a name for a task_struct.
 /// NAME_MAX is the same bound sys_execve already applies to the argv[0] copy
 /// buffer, so a name that survives execve always fits this field.

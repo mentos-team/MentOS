@@ -248,6 +248,13 @@ void *sys_shmat(int shmid, const void *shmaddr, int shmflg)
     uint32_t phy_start;
     uint32_t flags = MM_RW | MM_PRESENT | MM_USER | MM_UPDADDR;
 
+    // `shmaddr` is an address argument, not a buffer: it must merely stay
+    // out of the kernel area, and a page-table walk would be wrong here
+    // because nothing requires the address to be mapped yet (#191).
+    if (shmaddr && ((uintptr_t)shmaddr >= PROCAREA_END_ADDR)) {
+        return (void *)-EFAULT;
+    }
+
     // The id is less than zero.
     if (shmid < 0) {
         pr_err("The id is less than zero.\n");
@@ -298,6 +305,13 @@ long sys_shmdt(const void *shmaddr)
     size_t size;
     page_t *page;
 
+    // The address must name user memory before anything walks the page
+    // tables for it: without this, a kernel-area address would walk the
+    // kernel half of the caller's directory (#191).
+    if (!shmaddr || ((uintptr_t)shmaddr >= PROCAREA_END_ADDR)) {
+        return -EFAULT;
+    }
+
     // Get the calling task.
     task = scheduler_get_current_process();
     assert(task && "Failed to get the current running process.");
@@ -325,6 +339,10 @@ long sys_shmctl(int shmid, int cmd, struct shmid_ds *buf)
 {
     shm_info_t *shm_info = NULL;
     task_struct *task    = NULL;
+    // No implemented command reads or writes `buf` yet (only IPC_RMID is
+    // handled); the day one does, it must be gated with
+    // `paging_is_user_range_writable(buf, sizeof(*buf))` (#191).
+    (void)buf;
 
     // Search for the shared memory.
     shm_info = __list_find_shm_info_by_id(shmid);

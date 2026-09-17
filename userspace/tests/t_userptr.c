@@ -1,7 +1,6 @@
 /// @file t_userptr.c
-/// @brief Regression test for #191, stage one: the syscalls that move the
-/// most bytes on behalf of a caller must refuse a pointer that does not
-/// name the caller's memory.
+/// @brief Regression test for #191: every pointer-taking syscall must
+/// refuse a pointer that does not name the caller's memory.
 /// @details There is no user-pointer validation layer: syscall handlers
 /// dereference raw caller pointers with supervisor rights, so `read`
 /// wrote wherever its buffer pointed — including kernel memory — and a
@@ -15,17 +14,31 @@
 /// @copyright (c) 2014-2026 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
+#include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <libgen.h>
 #include <limits.h>
+#include <sched.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <strerror.h>
 #include <string.h>
+#include <sys/ipc.h>
+#include <sys/msg.h>
+#include <sys/sem.h>
+#include <sys/shm.h>
 #include <sys/stat.h>
+#include <sys/statfs.h>
+#include <sys/types.h>
+#include <sys/utsname.h>
+#include <sys/wait.h>
 #include <syslog.h>
 #include <time.h>
 #include <unistd.h>
+
+#include "system/syscall_types.h"
 
 /// Start of the kernel area: above this, nothing belongs to a task.
 #define KERNEL_TOP ((void *)0xC0000000UL)
@@ -121,6 +134,242 @@ static int check_scalar_outputs(void)
     return 0;
 }
 
+/// @brief Expects a pointer-returning call to fail with EFAULT.
+#define EXPECT_EFAULT_PTR(what, expression)                                                    \
+    do {                                                                                       \
+        errno = 0;                                                                             \
+        if ((expression) != (void *)-1) {                                                      \
+            syslog(LOG_ERR, "[t_userptr] %s succeeded, expected EFAULT", what);                \
+            return -1;                                                                         \
+        }                                                                                      \
+        if (errno != EFAULT) {                                                                 \
+            syslog(LOG_ERR, "[t_userptr] %s: expected EFAULT, got %s", what, strerror(errno)); \
+            return -1;                                                                         \
+        }                                                                                      \
+    } while (0)
+
+/// @brief Expects a NULL-on-error pointer call to fail with EFAULT.
+#define EXPECT_EFAULT_NULL(what, expression)                                                   \
+    do {                                                                                       \
+        errno = 0;                                                                             \
+        if ((expression) != NULL) {                                                            \
+            syslog(LOG_ERR, "[t_userptr] %s succeeded, expected EFAULT", what);                \
+            return -1;                                                                         \
+        }                                                                                      \
+        if (errno != EFAULT) {                                                                 \
+            syslog(LOG_ERR, "[t_userptr] %s: expected EFAULT, got %s", what, strerror(errno)); \
+            return -1;                                                                         \
+        }                                                                                      \
+    } while (0)
+
+/// @brief Calls the waitpid syscall without the libc wrapper, which
+///        dereferences the status pointer itself on return.
+static pid_t raw_waitpid(pid_t pid, int *status, int options)
+{
+    long __res;
+    __inline_syscall_3(__res, waitpid, pid, status, options);
+    if (__res < 0) {
+        errno = (int)-__res;
+        return -1;
+    }
+    return (pid_t)__res;
+}
+
+/// @brief Calls the semop syscall directly: the libc wrapper issues one
+///        syscall per array element, which would walk the probe addresses
+///        itself.
+static long raw_semop(int semid, struct sembuf *sops, unsigned nsops)
+{
+    long __res;
+    __inline_syscall_3(__res, semop, semid, sops, nsops);
+    if (__res < 0) {
+        errno = (int)-__res;
+        return -1;
+    }
+    return __res;
+}
+
+/// @brief The fixed-size in/out pointers of the process and signal
+///        families (#191 stage two).
+/// @return 0 on success, -1 on failure.
+static int check_scalar_pointers(void)
+{
+    stat_t st;
+    struct itimerval itv = {0};
+    struct timespec ts   = {0};
+    sched_param_t sparam;
+    sighandler_t old = SIG_ERR;
+    EXPECT_EFAULT("waitpid into the kernel area", raw_waitpid(-1, (int *)KERNEL_TOP, WNOHANG));
+    EXPECT_EFAULT("waitpid into unmapped memory", raw_waitpid(-1, (int *)UNMAPPED_USER, WNOHANG));
+    EXPECT_EFAULT("stat into the kernel area", stat("/home/user", (stat_t *)KERNEL_TOP));
+    EXPECT_EFAULT("stat of a kernel-area path", stat((const char *)KERNEL_TOP, &st));
+    EXPECT_EFAULT("stat of an unmapped path", stat((const char *)UNMAPPED_USER, &st));
+    EXPECT_EFAULT("stat of NULL", stat(NULL, &st));
+    EXPECT_EFAULT("fstat into the kernel area", fstat(0, (stat_t *)KERNEL_TOP));
+    EXPECT_EFAULT("fstat across the kernel boundary", fstat(0, (stat_t *)((char *)KERNEL_TOP - 2)));
+    EXPECT_EFAULT("statfs into the kernel area", statfs("/home/user", (statfs_t *)KERNEL_TOP));
+    EXPECT_EFAULT("fstatfs into the kernel area", fstatfs(0, (statfs_t *)KERNEL_TOP));
+    EXPECT_EFAULT("uname into the kernel area", uname((utsname_t *)KERNEL_TOP));
+    EXPECT_EFAULT("uname into unmapped memory", uname((utsname_t *)UNMAPPED_USER));
+    EXPECT_EFAULT("uname into NULL", uname(NULL));
+    EXPECT_EFAULT("sigaction from the kernel area", sigaction(SIGUSR1, (const struct sigaction *)KERNEL_TOP, NULL));
+    EXPECT_EFAULT("sigaction into the kernel area", sigaction(SIGUSR1, NULL, (struct sigaction *)KERNEL_TOP));
+    EXPECT_EFAULT("sigprocmask from the kernel area", sigprocmask(SIG_BLOCK, (const sigset_t *)KERNEL_TOP, NULL));
+    EXPECT_EFAULT("sigprocmask into the kernel area", sigprocmask(SIG_BLOCK, NULL, (sigset_t *)KERNEL_TOP));
+    EXPECT_EFAULT("nanosleep from the kernel area", nanosleep((const struct timespec *)KERNEL_TOP, NULL));
+    EXPECT_EFAULT("nanosleep into the kernel area", nanosleep(&ts, (struct timespec *)KERNEL_TOP));
+    EXPECT_EFAULT("getitimer into the kernel area", getitimer(ITIMER_REAL, (struct itimerval *)KERNEL_TOP));
+    EXPECT_EFAULT("setitimer from the kernel area", setitimer(ITIMER_REAL, (const struct itimerval *)KERNEL_TOP, NULL));
+    EXPECT_EFAULT("setitimer into the kernel area", setitimer(ITIMER_REAL, &itv, (struct itimerval *)KERNEL_TOP));
+    EXPECT_EFAULT("sched_getparam into the kernel area", sched_getparam(0, (sched_param_t *)KERNEL_TOP));
+    EXPECT_EFAULT("sched_setparam from the kernel area", sched_setparam(0, (const sched_param_t *)KERNEL_TOP));
+    EXPECT_EFAULT_NULL("getcwd into the kernel area", getcwd((char *)KERNEL_TOP, 128));
+    EXPECT_EFAULT_NULL("getcwd into unmapped memory", getcwd((char *)UNMAPPED_USER, 128));
+    // The legitimate uses keep working.
+    char cwd[128];
+    if (getcwd(cwd, sizeof(cwd)) == NULL) {
+        syslog(LOG_ERR, "[t_userptr] getcwd into a real buffer: %s", strerror(errno));
+        return -1;
+    }
+    if (stat("/home/user", &st) < 0) {
+        syslog(LOG_ERR, "[t_userptr] stat into a real buffer: %s", strerror(errno));
+        return -1;
+    }
+    utsname_t uts;
+    if (uname(&uts) < 0) {
+        syslog(LOG_ERR, "[t_userptr] uname into a real buffer: %s", strerror(errno));
+        return -1;
+    }
+    old = signal(SIGUSR1, SIG_IGN);
+    if (old == SIG_ERR) {
+        syslog(LOG_ERR, "[t_userptr] signal control: %s", strerror(errno));
+        return -1;
+    }
+    (void)sched_getparam(0, &sparam);
+    return 0;
+}
+
+/// @brief The path-string gates: a path outside the caller's memory is
+///        refused before anything walks it (#191 stage two).
+/// @return 0 on success, -1 on failure.
+static int check_path_strings(void)
+{
+    const char *paths[] = {"/home/user/t_userptr.d/str.txt"};
+    EXPECT_EFAULT("open of a kernel-area path", open((const char *)KERNEL_TOP, O_RDONLY, 0));
+    EXPECT_EFAULT("open of an unmapped path", open((const char *)UNMAPPED_USER, O_RDONLY, 0));
+    EXPECT_EFAULT("open of NULL", open(NULL, O_RDONLY, 0));
+    EXPECT_EFAULT("creat of a kernel-area path", creat((const char *)KERNEL_TOP, 0644));
+    EXPECT_EFAULT("unlink of a kernel-area path", unlink((const char *)KERNEL_TOP));
+    EXPECT_EFAULT("mkdir of a kernel-area path", mkdir((const char *)KERNEL_TOP, 0755));
+    EXPECT_EFAULT("rmdir of a kernel-area path", rmdir((const char *)KERNEL_TOP));
+    EXPECT_EFAULT("chdir of a kernel-area path", chdir((const char *)KERNEL_TOP));
+    EXPECT_EFAULT("chmod of a kernel-area path", chmod((const char *)KERNEL_TOP, 0644));
+    EXPECT_EFAULT("chown of a kernel-area path", chown((const char *)KERNEL_TOP, 0, 0));
+    EXPECT_EFAULT("lchown of a kernel-area path", lchown((const char *)KERNEL_TOP, 0, 0));
+    EXPECT_EFAULT("symlink of a kernel-area target", symlink((const char *)KERNEL_TOP, paths[0]));
+    EXPECT_EFAULT("symlink into a kernel-area linkname", symlink("/home/user/welcome.md", (const char *)KERNEL_TOP));
+    EXPECT_EFAULT("readlink into the kernel area", readlink("/home/user/tmp.md", (char *)KERNEL_TOP, 64));
+    char link_target[64] = {0};
+    EXPECT_EFAULT("readlink of a kernel-area path", readlink((const char *)KERNEL_TOP, link_target, sizeof(link_target)));
+    // A control for the family: a real create-and-remove round trip.
+    int fd = creat(paths[0], 0644);
+    if (fd < 0) {
+        syslog(LOG_ERR, "[t_userptr] creat control: %s", strerror(errno));
+        return -1;
+    }
+    close(fd);
+    if (unlink(paths[0]) < 0) {
+        syslog(LOG_ERR, "[t_userptr] unlink control: %s", strerror(errno));
+        return -1;
+    }
+    return 0;
+}
+
+/// @brief The IPC family: fixed unions, computed array lengths that must
+///        not wrap, and the address arguments of the shared-memory calls
+///        (#191 stage two).
+/// @return 0 on success, -1 on failure.
+static int check_ipc_pointers(void)
+{
+    int semid = semget(IPC_PRIVATE, 1, 0666);
+    if (semid < 0) {
+        syslog(LOG_ERR, "[t_userptr] semget control: %s", strerror(errno));
+        return -1;
+    }
+    int shmid = shmget(IPC_PRIVATE, 4096, 0666);
+    if (shmid < 0) {
+        syslog(LOG_ERR, "[t_userptr] shmget control: %s", strerror(errno));
+        semctl(semid, 0, IPC_RMID, (union semun *)0);
+        return -1;
+    }
+    int msqid = msgget(IPC_PRIVATE, 0666);
+    if (msqid < 0) {
+        syslog(LOG_ERR, "[t_userptr] msgget control: %s", strerror(errno));
+        semctl(semid, 0, IPC_RMID, (union semun *)0);
+        shmctl(shmid, IPC_RMID, NULL);
+        return -1;
+    }
+
+    struct sembuf sop = {0, 0, 0};
+    struct msgbuf msg;
+    EXPECT_EFAULT("semop from the kernel area", raw_semop(semid, (struct sembuf *)KERNEL_TOP, 1));
+    EXPECT_EFAULT("semop from unmapped memory", raw_semop(semid, (struct sembuf *)UNMAPPED_USER, 1));
+    EXPECT_EFAULT("semop with a wrapping count", raw_semop(semid, &sop, 0x40000000U));
+    EXPECT_EFAULT("semctl into the kernel area", semctl(semid, 0, IPC_STAT, (union semun *)KERNEL_TOP));
+    EXPECT_EFAULT("msgctl into the kernel area", msgctl(msqid, IPC_STAT, (struct msqid_ds *)KERNEL_TOP));
+    EXPECT_EFAULT("msgsnd from the kernel area", msgsnd(msqid, (const void *)KERNEL_TOP, 8, IPC_NOWAIT));
+    EXPECT_EFAULT("msgrcv into the kernel area", msgrcv(msqid, (void *)KERNEL_TOP, 8, 0, IPC_NOWAIT));
+    EXPECT_EFAULT_PTR("shmat of a kernel-area address", shmat(shmid, KERNEL_TOP, 0));
+    EXPECT_EFAULT("shmdt of a kernel-area address", shmdt(KERNEL_TOP));
+    // The legitimate uses keep working.
+    int failed = 0;
+    if (semop(semid, &sop, 1) < 0) {
+        syslog(LOG_ERR, "[t_userptr] semop control: %s", strerror(errno));
+        failed = 1;
+    }
+    // The whole buffer is cleared first, then the type is set: msgsnd reads
+    // mtype out of it, so clearing after the assignment would send a zero.
+    memset(&msg, 0, sizeof(msg));
+    msg.mtype = 1;
+    if (msgsnd(msqid, &msg, 1, IPC_NOWAIT) < 0) {
+        syslog(LOG_ERR, "[t_userptr] msgsnd control: %s", strerror(errno));
+        failed = 1;
+    }
+    // The three objects are removed whatever happened above, so a failure
+    // here does not leave them behind for the rest of the run.
+    semctl(semid, 0, IPC_RMID, (union semun *)0);
+    shmctl(shmid, IPC_RMID, NULL);
+    msgctl(msqid, IPC_RMID, NULL);
+    return failed ? -1 : 0;
+}
+
+/// @brief The directory-reading buffer (#191 stage two).
+/// @details The address arguments of the memory family are not here:
+/// `mmap` and `munmap` have no compiled libc wrapper, and `brk` is only
+/// ever reached through `malloc`. `shmat` and `shmdt` are covered with the
+/// rest of the IPC family.
+/// @return 0 on success, -1 on failure.
+static int check_remaining_pointers(void)
+{
+    static dirent_t entries[2];
+    int dfd = open("/home/user", O_RDONLY | O_DIRECTORY, 0);
+    if (dfd < 0) {
+        syslog(LOG_ERR, "[t_userptr] open dir control: %s", strerror(errno));
+        return -1;
+    }
+    EXPECT_EFAULT("getdents into the kernel area", getdents(dfd, (dirent_t *)KERNEL_TOP, sizeof(entries)));
+    EXPECT_EFAULT("getdents into unmapped memory", getdents(dfd, (dirent_t *)UNMAPPED_USER, sizeof(entries)));
+    EXPECT_EFAULT("getdents across the kernel boundary", getdents(dfd, (dirent_t *)((char *)KERNEL_TOP - 2), sizeof(entries)));
+    if (getdents(dfd, entries, sizeof(entries)) < 0) {
+        syslog(LOG_ERR, "[t_userptr] getdents control: %s", strerror(errno));
+        close(dfd);
+        return -1;
+    }
+    close(dfd);
+
+    return 0;
+}
+
 int main(void)
 {
     int failures = 0;
@@ -154,6 +403,18 @@ int main(void)
         ++failures;
     }
     if (check_scalar_outputs() < 0) {
+        ++failures;
+    }
+    if (check_scalar_pointers() < 0) {
+        ++failures;
+    }
+    if (check_path_strings() < 0) {
+        ++failures;
+    }
+    if (check_ipc_pointers() < 0) {
+        ++failures;
+    }
+    if (check_remaining_pointers() < 0) {
         ++failures;
     }
     close(rfd);

@@ -12,6 +12,7 @@
 #include "errno.h"
 #include "fcntl.h"
 #include "fs/vfs.h"
+#include "mem/paging.h"
 #include "string.h"
 #include "sys/utsname.h"
 #include "version.h"
@@ -50,7 +51,10 @@ static inline int __gethostname(char *name, size_t len)
 
 int sys_uname(utsname_t *buf)
 {
-    if (buf == NULL) {
+    // The whole structure is written through the caller's pointer: it must
+    // be the caller's own, writable memory — NULL included, which the old
+    // check caught and the range check catches again (#191, #259).
+    if (!paging_is_user_range_writable(buf, sizeof(*buf))) {
         return -EFAULT;
     }
     // Uname code goes here.

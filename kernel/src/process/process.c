@@ -20,6 +20,7 @@
 #include "libgen.h"
 #include "mem/mm/mm.h"
 #include "mem/mm/vmem.h"
+#include "mem/paging.h"
 #include "process/pid_manager.h"
 #include "process/prio.h"
 #include "process/process.h"
@@ -527,33 +528,33 @@ int process_create_init(const char *path)
 
     // Commit: the candidate image becomes the image of the init process
     // (there is no previous image to destroy).
-    init_process->mm        = new_mm;
+    init_process->mm  = new_mm;
     // The stack of the new image starts at its top.
-    uintptr_t useresp       = new_mm->start_stack + DEFAULT_STACK_SIZE;
+    uintptr_t useresp = new_mm->start_stack + DEFAULT_STACK_SIZE;
 
     // Prepare argv and envp for the init process.
     char **argv_ptr;
     char **envp_ptr;
-    int argc                    = 1;
-    static char *argv[]         = {"/bin/init", (char *)NULL};
-    static char *envp[]         = {(char *)NULL};
+    int argc            = 1;
+    static char *argv[] = {"/bin/init", (char *)NULL};
+    static char *envp[] = {(char *)NULL};
     // The positions of the pushed strings, for the pointer arrays: the
     // vectors are kernel literals with one entry, so a small stack array
     // is enough here (sys_execve sizes it from the validated count).
     char *argv_locations[4];
     char *envp_locations[4];
     // Save where the arguments start.
-    new_mm->arg_start           = useresp;
+    new_mm->arg_start = useresp;
     // Push the arguments on the stack.
-    argv_ptr                    = __push_args_on_stack(&useresp, argv, 1, argv_locations);
+    argv_ptr          = __push_args_on_stack(&useresp, argv, 1, argv_locations);
     // Save where the arguments end.
-    new_mm->arg_end             = useresp;
+    new_mm->arg_end   = useresp;
     // Save where the environmental variables start.
-    new_mm->env_start           = useresp;
+    new_mm->env_start = useresp;
     // Push the environment on the stack.
-    envp_ptr                    = __push_args_on_stack(&useresp, envp, 0, envp_locations);
+    envp_ptr          = __push_args_on_stack(&useresp, envp, 0, envp_locations);
     // Save where the environmental variables end.
-    new_mm->env_end             = useresp;
+    new_mm->env_end   = useresp;
     // Push the `main` arguments on the stack (argc, argv, envp).
     stack_push_ptr(&useresp, envp_ptr);
     stack_push_ptr(&useresp, argv_ptr);
@@ -585,7 +586,7 @@ vfs_file_descriptor_t *fget(int fd)
     return current->fd_list + fd;
 }
 
-char *sys_getcwd(char *buf, size_t size)
+char *do_getcwd(char *buf, size_t size)
 {
     task_struct *current = scheduler_get_current_process();
     if ((current == NULL) || (buf == NULL)) {
@@ -602,11 +603,25 @@ char *sys_getcwd(char *buf, size_t size)
     return buf;
 }
 
+char *sys_getcwd(char *buf, size_t size)
+{
+    // The cwd is written into the caller's memory or nowhere (#191). The
+    // kernel itself asks for the cwd with its own buffers, and goes
+    // through `do_getcwd` instead, which is why the gate lives here and
+    // not inside the implementation.
+    if (!paging_is_user_range_writable(buf, size)) {
+        return (char *)-EFAULT;
+    }
+    return do_getcwd(buf, size);
+}
+
 int sys_chdir(char const *path)
 {
     task_struct *current = scheduler_get_current_process();
     assert(current && "There is no running process.");
-    if (!path) {
+    // The path must live in the caller's memory before anything walks it
+    // (#191); NULL is covered by the same answer.
+    if (strnlen_user(path, PATH_MAX) < 0) {
         return -EFAULT;
     }
     char absolute_path[PATH_MAX];
@@ -725,6 +740,12 @@ int sys_execve(pt_regs_t *f)
         pr_err("sys_execve failed: must provide argv.\n");
         return -EFAULT;
     }
+    // argv is an array of pointers living in the caller's memory: the
+    // first entry has to be proven before it is read, or the NULL test
+    // below is itself the unvalidated dereference (#191).
+    if (!paging_is_user_range(&origin_argv[0], sizeof(origin_argv[0]))) {
+        return -EFAULT;
+    }
     if (origin_argv[0] == NULL) {
         pr_err("sys_execve failed: must provide the name.\n");
         return -EINVAL;
@@ -735,22 +756,31 @@ int sys_execve(pt_regs_t *f)
         static char *default_env[] = {
             "PATH=/bin:/usr/bin",
             "HOME=/",
-            NULL
-        };
+            NULL};
         origin_envp = default_env;
     }
 
-    // A filename that does not fit a PATH_MAX buffer cannot name any file,
-    // and truncating it would target the wrong executable: reject it instead
-    // of copying it. The strnlen walk is bounded to PATH_MAX.
-    if (strnlen(filename, PATH_MAX) >= PATH_MAX) {
-        pr_err("sys_execve failed: filename is longer than PATH_MAX.\n");
-        return -ENAMETOOLONG;
+    // A filename must live in the caller's memory before anything walks
+    // it, and a page of it the caller does not own ends the call here
+    // (#191); one that does not fit a PATH_MAX buffer cannot name any
+    // file, and truncating it would target the wrong executable.
+    long filename_length = strnlen_user(filename, PATH_MAX);
+    if (filename_length < 0) {
+        // -ENAMETOOLONG means no terminator within PATH_MAX. Falling
+        // through with it would leave the strcpy below without a bound.
+        if (filename_length == -ENAMETOOLONG) {
+            pr_err("sys_execve failed: filename is longer than PATH_MAX.\n");
+        }
+        return (int)filename_length;
     }
-    // Save the name of the process. argv[0] is a raw user string: copy at
-    // most what name_buffer can hold minus its terminator, truncating like
-    // Linux truncates comm, so a long argv[0] neither fails the exec nor
-    // overflows kernel state.
+    // Save the name of the process. argv[0] is a raw user string: it must
+    // live in the caller's memory before it is read (#191). The bound is a
+    // PATH_MAX-scale terminator, not the copy size: the copy below still
+    // truncates at name_buffer like Linux truncates comm, so a long argv[0]
+    // neither fails the exec nor overflows kernel state.
+    if (strnlen_user(origin_argv[0], PATH_MAX) < 0) {
+        return -EFAULT;
+    }
     size_t name_len = strnlen(origin_argv[0], sizeof(name_buffer) - 1);
     memcpy(name_buffer, origin_argv[0], name_len);
     name_buffer[name_len] = '\0';
@@ -864,7 +894,7 @@ int sys_execve(pt_regs_t *f)
 
         // Rebuild the saved argv and envp pointers. The buffer must hold both
         // the new argv and the whole environment (#227).
-        int int_argc      = argc;
+        int int_argc       = argc;
         int int_argv_bytes = 0;
         if (__count_args_bytes(int_argv, int_argc, &int_argv_bytes) < 0) {
             pr_err("sys_execve failed: interpreter arguments exceed ARG_MAX.\n");
@@ -897,9 +927,9 @@ int sys_execve(pt_regs_t *f)
         // Copy the arguments (kernel strings: lengths were validated on copy).
         uint32_t int_args_mem_ptr = (uint32_t)int_args_mem + (int_argv_bytes + envp_bytes);
         __push_strings_on_stack(&int_args_mem_ptr, int_argv, int_argc, argv_locations);
-        saved_argv                = __push_vector_on_stack(&int_args_mem_ptr, argv_locations, int_argc);
+        saved_argv = __push_vector_on_stack(&int_args_mem_ptr, argv_locations, int_argc);
         __push_strings_on_stack(&int_args_mem_ptr, saved_envp, envc, envp_locations);
-        saved_envp                = __push_vector_on_stack(&int_args_mem_ptr, envp_locations, envc);
+        saved_envp = __push_vector_on_stack(&int_args_mem_ptr, envp_locations, envc);
         // Check the memory pointer.
         assert(int_args_mem_ptr == (uint32_t)int_args_mem);
         // Free the interpreter argv array and the old argument and environ memory block.
@@ -927,9 +957,9 @@ int sys_execve(pt_regs_t *f)
     // Save where the arguments end, and the env starts.
     new_mm->env_start = new_mm->arg_end = useresp;
     // Push the environment on the stack.
-    final_envp                           = __push_args_on_stack(&useresp, saved_envp, envc, envp_locations);
+    final_envp                          = __push_args_on_stack(&useresp, saved_envp, envc, envp_locations);
     // Save where the environmental variables end.
-    new_mm->env_end                      = useresp;
+    new_mm->env_end                     = useresp;
     // The string positions are no longer needed.
     kfree(argv_locations);
     kfree(envp_locations);
@@ -946,8 +976,8 @@ int sys_execve(pt_regs_t *f)
     // The candidate image is complete: install it on the task, destroy the
     // old image, and set the registers of the new image. Past this point
     // the syscall cannot fail anymore.
-    mm_struct_t *old_mm     = current->mm;
-    current->mm             = new_mm;
+    mm_struct_t *old_mm = current->mm;
+    current->mm         = new_mm;
     if (old_mm != NULL) {
         mm_destroy(old_mm);
     }

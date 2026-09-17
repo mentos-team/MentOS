@@ -24,7 +24,7 @@ time_t sys_time(time_t *time)
     // A NULL pointer is a legitimate request for the value alone — the
     // kernel itself asks that way. Anything else must name the caller's
     // memory, since the result is stored through it (#191).
-    if ((time != NULL) && !paging_is_user_range(time, sizeof(*time))) {
+    if ((time != NULL) && !paging_is_user_range_writable(time, sizeof(*time))) {
         return -EFAULT;
     }
     tm_t curr_time;

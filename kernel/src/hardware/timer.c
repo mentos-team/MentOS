@@ -19,6 +19,7 @@
 #include "io/port_io.h"
 #include "io/video.h"
 #include "klib/irqflags.h"
+#include "mem/paging.h"
 #include "process/scheduler.h"
 #include "process/wait.h"
 #include "stdint.h"
@@ -682,6 +683,14 @@ static inline void real_timer_timeout(unsigned long task_ptr)
 
 int sys_nanosleep(const struct timespec *req, struct timespec *rem)
 {
+    // The request is read and the remainder, when asked for, is written
+    // through caller pointers (#191).
+    if (!paging_is_user_range(req, sizeof(*req))) {
+        return -EFAULT;
+    }
+    if (rem && !paging_is_user_range_writable(rem, sizeof(*rem))) {
+        return -EFAULT;
+    }
     // We need to store rem somewhere, because it contains how much time left
     // until the timer expires, when the timer is stopped early by a signal.
     pr_debug("sys_nanosleep([s:%u; ns:%ld],...)\n", req->tv_sec, req->tv_nsec);
@@ -752,6 +761,10 @@ unsigned sys_alarm(int seconds)
 
 int sys_getitimer(int which, struct itimerval *curr_value)
 {
+    // The answer is written into the caller's memory or nowhere (#191).
+    if (!paging_is_user_range_writable(curr_value, sizeof(*curr_value))) {
+        return -EFAULT;
+    }
     struct task_struct *task = scheduler_get_current_process();
     // Transform the apropriate interval and store it in the given variable.
     if (which == ITIMER_REAL) {
@@ -770,6 +783,14 @@ int sys_getitimer(int which, struct itimerval *curr_value)
 
 int sys_setitimer(int which, const struct itimerval *new_value, struct itimerval *old_value)
 {
+    // The new value is read, and the old one, when asked for, is written
+    // through caller pointers (#191).
+    if (!paging_is_user_range(new_value, sizeof(*new_value))) {
+        return -EFAULT;
+    }
+    if (old_value && !paging_is_user_range_writable(old_value, sizeof(*old_value))) {
+        return -EFAULT;
+    }
     // Invalid time domain
     if (which < 0 || which > 3) {
         return -EINVAL;
