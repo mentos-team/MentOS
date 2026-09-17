@@ -5,9 +5,11 @@
 
 #include "time.h"
 #include "drivers/rtc.h"
+#include "errno.h"
 #include "hardware/timer.h"
 #include "io/debug.h"
 #include "io/port_io.h"
+#include "mem/paging.h"
 #include "stddef.h"
 #include "stdio.h"
 
@@ -15,11 +17,16 @@
 static const char *str_weekdays[] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
 
 /// @brief List of months.
-static const char *str_months[] = {"January", "February", "March",     "April",   "May",      "June",
-                                   "July",    "August",   "September", "October", "November", "December"};
+static const char *str_months[] = {"January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"};
 
 time_t sys_time(time_t *time)
 {
+    // A NULL pointer is a legitimate request for the value alone — the
+    // kernel itself asks that way. Anything else must name the caller's
+    // memory, since the result is stored through it (#191).
+    if ((time != NULL) && !paging_is_user_range(time, sizeof(*time))) {
+        return -EFAULT;
+    }
     tm_t curr_time;
     gettime(&curr_time);
     // January and February are counted as months 13 and 14 of the previous year.
