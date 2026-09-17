@@ -122,15 +122,38 @@ page_directory_t *paging_get_current_pgd(void);
 ///          protected by the CPU. A range passes only when it stays below
 ///          the kernel area and every page it covers is present and marked
 ///          user in the current page directory — the page tables are the
-///          authority on what the caller can name (#191). Two limits it
-///          does NOT cover, both inert under the current mappings and both
-///          to revisit before they stop being so: the write permission is
-///          not checked, so a caller owning a read-only page can still have
-///          the kernel write through it (CR0.WP is never set, so the
-///          supervisor write does not fault); and taking the page tables as
-///          the authority instead of the vm_area list rejects a mapping
-///          that is not yet faulted in, which only sys_mmap can produce.
+///          authority on what the caller can name. A page that is not yet
+///          faulted in still passes when a vm_area of the current task
+///          covers it, which is what sys_mmap produces (#191).
 int paging_is_user_range(const void *address, size_t length);
+
+/// @brief Tells whether a memory range belongs to the current task's user
+///        address space and may be written through.
+/// @param address the start of the range, as handed to a syscall.
+/// @param length the size of the range, in bytes.
+/// @return 1 when the whole range is writable user memory of the current
+///         task, 0 otherwise.
+/// @details The write direction of `paging_is_user_range`: the pages must
+///          also be read-write. The kernel writes with supervisor rights
+///          and CR0.WP is clear, so the hardware would not refuse a
+///          read-only user page — the refusal has to happen here, in
+///          software, before a syscall becomes a way to write a read-only
+///          or shared page (#191).
+int paging_is_user_range_writable(const void *address, size_t length);
+
+/// @brief Measures a NUL-terminated string living in the caller's memory,
+///        without ever walking past a page the caller does not own.
+/// @param str the string, as handed to a syscall.
+/// @param maxlen the greatest length worth reporting, beyond which the
+///        answer is that the string is too long.
+/// @return the length of the string, excluding the terminator, or
+///         `-EFAULT` when a page of it is not the caller's memory, or
+///         `-ENAMETOOLONG` when no terminator exists within `maxlen`.
+/// @details strlen on a user pointer is exactly the unbounded walk the
+///          pointer validation exists to prevent: this helper reads one
+///          page at a time and requires each of them to be user memory
+///          before reading a byte from it (#191).
+long strnlen_user(const char *str, size_t maxlen);
 
 /// @brief Switches paging directory.
 /// @param dir A pointer to the new page directory.

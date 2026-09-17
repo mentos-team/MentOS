@@ -4,6 +4,7 @@
 /// See LICENSE.md for details.
 
 // Setup the logging for this file (do this before any other include).
+#include "errno.h"
 #include "sys/kernel_levels.h"           // Include kernel log levels.
 #define __DEBUG_HEADER__ "[PAGING]"      ///< Change header.
 #define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
@@ -537,7 +538,20 @@ mem_virtual_to_page(page_directory_t *pgd, uint32_t virt_start, size_t *size)
     return page;
 }
 
+static int __page_in_current_vm_area(uint32_t address);
+static int __paging_range_is_user(const void *address, size_t length, int need_write);
+
 int paging_is_user_range(const void *address, size_t length)
+{
+    return __paging_range_is_user(address, length, 0);
+}
+
+int paging_is_user_range_writable(const void *address, size_t length)
+{
+    return __paging_range_is_user(address, length, 1);
+}
+
+static int __paging_range_is_user(const void *address, size_t length, int need_write)
 {
     uint32_t start = (uint32_t)(uintptr_t)address;
     // A range that wraps or that ends inside the kernel area is not user
@@ -584,11 +598,82 @@ int paging_is_user_range(const void *address, size_t length)
             return 0;
         }
         page_table_entry_t *pte = &table->pages[(page / PAGE_SIZE) % MAX_PAGE_TABLE_ENTRIES];
-        if (!pte->present || !pte->user) {
+        if (!pte->user) {
+            return 0;
+        }
+        // Not faulted in yet does not mean not the caller's: a vm_area of
+        // the current task still makes the page its memory, and sys_mmap
+        // creates exactly those (#191). The user bit above is still
+        // required: mem_upd_vm_area writes it when the area is created,
+        // long before the first fault, so a zeroed entry stays refused.
+        if (!pte->present && !__page_in_current_vm_area(page)) {
+            return 0;
+        }
+        // The kernel writes through these pointers with supervisor rights
+        // and CR0.WP is clear, so the hardware never enforces read-only
+        // user pages against it: the write direction has to be refused
+        // here, in software (#191).
+        if (need_write && (!pte->rw || !pde->rw)) {
             return 0;
         }
     }
     return 1;
+}
+
+/// @brief Tells whether an address falls inside a vm_area of the current
+///        task, the fallback for memory that is the caller's but not yet
+///        faulted in.
+/// @param address the address to place.
+/// @return 1 when an area of the current task covers the address, 0
+///         otherwise.
+static int __page_in_current_vm_area(uint32_t address)
+{
+    task_struct *task = scheduler_get_current_process();
+    if (!task || !task->mm) {
+        return 0;
+    }
+    // vm_area_find answers by exact start address, which only ever matches
+    // the first page of an area, and vm_flags is never set by
+    // vm_area_create: the containment test has to be done here. Every area
+    // in a task's mmap_list is user memory by construction, and the range
+    // check already kept the address below the kernel area.
+    list_for_each_decl (it, &task->mm->mmap_list) {
+        vm_area_struct_t *area = list_entry(it, vm_area_struct_t, vm_list);
+        if (area && (address >= area->vm_start) && (address < area->vm_end)) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+long strnlen_user(const char *str, size_t maxlen)
+{
+    // The length of a string handed in by a caller cannot be learned with
+    // strlen: that is the unbounded walk this whole exercise exists to
+    // prevent. Instead the string is followed one page at a time, and each
+    // page must prove to be the caller's memory before a single byte of it
+    // is read.
+    uintptr_t cursor = (uintptr_t)str;
+    size_t scanned   = 0;
+    while (scanned < maxlen) {
+        if (!paging_is_user_range((const void *)(cursor + scanned), 1)) {
+            return -EFAULT;
+        }
+        uintptr_t page_end = ((cursor + scanned) & ~(uintptr_t)(PAGE_SIZE - 1)) + PAGE_SIZE;
+        size_t available   = page_end - (cursor + scanned);
+        if (available > (maxlen - scanned)) {
+            available = maxlen - scanned;
+        }
+        size_t length = strnlen((const char *)(cursor + scanned), available);
+        if (length < available) {
+            // The terminator is inside this chunk.
+            return (long)(scanned + length);
+        }
+        scanned += available;
+    }
+    // No terminator within the maximum: an unterminated string names
+    // nothing the caller may ask the kernel to walk.
+    return -ENAMETOOLONG;
 }
 
 int mem_upd_vm_area(page_directory_t *pgd, uint32_t virt_start, uint32_t phy_start, size_t size, uint32_t flags)
@@ -699,6 +784,18 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
 {
     uintptr_t vm_start;
 
+    // The address is an address argument, not a buffer: nothing requires
+    // it to be mapped, but a fixed request must stay out of the kernel
+    // area, and the mapping itself must fit the user space without
+    // wrapping (#191).
+    if (addr && ((uintptr_t)addr >= PROCAREA_END_ADDR)) {
+        return (void *)-EFAULT;
+    }
+    if ((length == 0) || ((uintptr_t)addr + length < (uintptr_t)addr) ||
+        ((uintptr_t)addr + length > PROCAREA_END_ADDR)) {
+        return (void *)-EFAULT;
+    }
+
     // Get the current task.
     task_struct *task = scheduler_get_current_process();
 
@@ -758,6 +855,12 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
 
 int sys_munmap(void *addr, size_t length)
 {
+    // Same class as sys_mmap: an address argument, bounded to the user
+    // area rather than walked (#191).
+    if (((uintptr_t)addr >= PROCAREA_END_ADDR) || (length == 0) ||
+        ((uintptr_t)addr + length < (uintptr_t)addr) || ((uintptr_t)addr + length > PROCAREA_END_ADDR)) {
+        return -EFAULT;
+    }
     // Get the current task.
     task_struct *task = scheduler_get_current_process();
 
