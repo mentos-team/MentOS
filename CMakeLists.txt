@@ -366,6 +366,33 @@ add_custom_target(
     DEPENDS cdrom_test.iso
 )
 
+# =============================================================================
+# Booting with QEMU+GRUB for the kernel unit tests
+# =============================================================================
+
+# The kernel unit tests get an ISO of their own, with the `kerneltests` kernel
+# command line. That boot mode runs the suites and then signals isa-debug-exit
+# without ever creating an init process, so the run ends on its own instead of
+# sitting in a shell until a timeout. It needs a build configured with
+# -DENABLE_KERNEL_TESTS=ON; without it the kernel says so and fails.
+add_custom_target(
+    cdrom_kerneltest.iso
+    COMMAND ${CMAKE_COMMAND} -E rm -rf ${CMAKE_BINARY_DIR}/iso_kerneltest
+    COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/iso ${CMAKE_BINARY_DIR}/iso_kerneltest
+    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/iso/boot/grub/grub.cfg.kerneltests ${CMAKE_BINARY_DIR}/iso_kerneltest/boot/grub/grub.cfg
+    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/mentos/bootloader.bin ${CMAKE_BINARY_DIR}/iso_kerneltest/boot/bootloader.bin
+    COMMAND grub-mkrescue -o ${CMAKE_BINARY_DIR}/cdrom_kerneltest.iso ${CMAKE_BINARY_DIR}/iso_kerneltest
+    DEPENDS bootloader.bin filesystem
+)
+
+# These take seconds, not the minutes the userspace suite takes, so the timeout
+# is short on purpose: a run that is still going after it is hung, not slow.
+add_custom_target(
+    qemu-kernel-test
+    COMMAND ${CMAKE_SOURCE_DIR}/scripts/run-qemu-kernel-test ${CMAKE_BINARY_DIR} 120 "${EMULATOR_VGA_STRING}"
+    DEPENDS cdrom_kerneltest.iso
+)
+
 # -----------------------------------------------------------------------------
 # CODE ANALYSIS
 # -----------------------------------------------------------------------------

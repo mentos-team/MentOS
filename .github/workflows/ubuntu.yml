@@ -108,3 +108,45 @@ jobs:
         path: |
           build/test.log
           build/serial.log
+
+  kernel-tests:
+    name: Kernel Unit Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+    - name: Clone repository
+      uses: actions/checkout@v4
+
+    - name: Install test dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y nasm gcc-9 g++-9 qemu-system-x86 mtools xorriso
+
+    # A job of its own, and not a step of "Build and Test": the kernel suites
+    # report a failure by panicking, which would take the userspace suite's
+    # result down with them and leave nothing to read.
+    - name: Configure
+      run: |
+        cmake -B build-kernel-tests \
+          -DCMAKE_BUILD_TYPE=Debug \
+          -DENABLE_KERNEL_TESTS=ON \
+          -DEMULATOR_OUTPUT_TYPE=OUTPUT_LOG
+
+    - name: Run the kernel unit tests
+      run: |
+        cmake --build build-kernel-tests --parallel $(nproc) --target qemu-kernel-test
+      timeout-minutes: 5
+
+    - name: Show serial log
+      if: always()
+      run: |
+        echo "=== Serial Output ==="
+        cat build-kernel-tests/kernel-test-serial.log || echo "kernel-test-serial.log not found"
+
+    - name: Archive the log
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: kernel-test-logs
+        path: build-kernel-tests/kernel-test-serial.log
