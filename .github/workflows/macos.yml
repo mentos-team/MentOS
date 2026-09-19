@@ -45,11 +45,15 @@ jobs:
     - name: Install dependencies via Homebrew
       run: |
         brew update || true
-        brew install nasm cmake i686-elf-gcc
+        brew install nasm cmake i686-elf-gcc e2fsprogs
         echo "=== Checking installed tools ==="
         nasm --version
         cmake --version
         i686-elf-gcc --version
+        # Deliberately NOT added to PATH: e2fsprogs is keg-only on macOS, and
+        # the build is supposed to find mke2fs and debugfs on its own. Leaving
+        # PATH alone is what exercises that lookup (#391).
+        ls "$(brew --prefix e2fsprogs)/sbin"
 
     - name: Build with cross-compilation toolchain
       run: |
@@ -57,6 +61,16 @@ jobs:
         cd build
         cmake .. -DCMAKE_TOOLCHAIN_FILE=../tools/toolchain-i686-elf.cmake -DCMAKE_BUILD_TYPE=Release
         cmake --build . --parallel $(sysctl -n hw.ncpu)
+
+    # The filesystem target is where macOS diverges from Linux: it shells out
+    # to mke2fs and debugfs, and debugfs reads its command file into a
+    # BUFSIZ-sized buffer that is 1024 here against 8192 with glibc. Building
+    # only the default target left all of that uncovered, and #391 was
+    # reported by a user who could not build at all while this job was green.
+    - name: Build the filesystem image
+      run: |
+        cd build
+        cmake --build . --parallel $(sysctl -n hw.ncpu) --target filesystem
 
     - name: Verify build artifacts
       run: |
