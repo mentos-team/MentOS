@@ -31,6 +31,15 @@ make -C build qemu-test           # guest test run (WARNING: see below)
 make -C build filesystem          # rebuild pristine rootfs.img (QEMU writes to it)
 ```
 
+The kernel unit tests need their own build and their own boot mode. They run at
+the end of `kmain` and then signal QEMU, instead of reaching userspace, so an
+unattended run ends on its own rather than sitting in a shell.
+
+```
+cmake -S . -B build-kt -DCMAKE_BUILD_TYPE=Debug -DENABLE_KERNEL_TESTS=ON
+make -C build-kt qemu-kernel-test # kernel suites only, exits on its own
+```
+
 ## Merge policy
 
 - **Fix/feature PRs into `develop`: squash and merge.** One commit per PR keeps
