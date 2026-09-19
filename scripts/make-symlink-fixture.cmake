@@ -29,6 +29,24 @@ if(NOT DEFINED ROOTFS OR NOT DEFINED BINARY_DIR)
     message(FATAL_ERROR "symlink fixture: ROOTFS and BINARY_DIR must be defined")
 endif()
 
+# debugfs lives in sbin, which is not on every user's PATH, and on macOS
+# Homebrew keeps e2fsprogs keg-only so nothing of it is linked at all.
+# Looking it up by hand lets the failure say which tool is missing instead
+# of blaming the fixture (#391).
+find_program(
+    DEBUGFS_EXE
+    NAMES debugfs
+    HINTS /usr/sbin /sbin /usr/local/sbin
+          /opt/homebrew/opt/e2fsprogs/sbin
+          /usr/local/opt/e2fsprogs/sbin
+)
+if(NOT DEBUGFS_EXE)
+    message(FATAL_ERROR
+        "symlink fixture: debugfs not found. It ships with e2fsprogs: "
+        "`apt install e2fsprogs`, or on macOS `brew install e2fsprogs` and add "
+        "$(brew --prefix e2fsprogs)/sbin to PATH.")
+endif()
+
 # Must stay in sync with lib/inc/limits.h.
 set(PATH_MAX 4096)
 # Guest path of the fixture root, with the leading slash.
@@ -66,39 +84,66 @@ if(NOT total EQUAL expected)
     message(FATAL_ERROR "symlink fixture: path length ${total} does not end at PATH_MAX - 1 = ${expected}")
 endif()
 
-# Build the debugfs command list: one mkdir per level, then the link.
+# Build the debugfs command list.
+#
+# Every command names ONE component and then descends into it, instead of
+# repeating the absolute path each time. debugfs reads its command file
+# into a BUFSIZ-sized buffer, so a line longer than BUFSIZ is silently
+# truncated and the command is lost. BUFSIZ is 8192 with glibc but 1024 on
+# macOS, and the absolute-path form reached 4163 characters here, so the
+# fixture was built on Linux and quietly not built on macOS (#391).
+# Measured: with absolute paths the chain stops at the first line past
+# BUFSIZ; with `cd` no line exceeds the length of one component.
 set(path "${ROOT_PATH}")
-set(commands "mkdir ${path}\n")
+set(names "")
+set(commands "mkdir ${ROOT_PATH}\ncd ${ROOT_PATH}\n")
 foreach(len IN LISTS lengths)
     set(name "")
     foreach(i RANGE 1 ${len})
         string(APPEND name "d")
     endforeach()
+    list(APPEND names "${name}")
     set(path "${path}/${name}")
-    string(APPEND commands "mkdir ${path}\n")
+    string(APPEND commands "mkdir ${name}\ncd ${name}\n")
 endforeach()
 set(target "")
 foreach(i RANGE 1 ${TARGET_LEN})
     string(APPEND target "a")
 endforeach()
-string(APPEND commands "symlink ${path}/${LINK_NAME} ${target}\n")
+string(APPEND commands "symlink ${LINK_NAME} ${target}\n")
 
 file(WRITE "${BINARY_DIR}/symlink-fixture.cmds" "${commands}")
 
 # debugfs does not reliably fail the whole run when a single command
 # fails, so the link is looked up again afterwards: the fixture counts as
-# generated only if the full-length path resolves to a symlink.
+# generated only if the full-length path resolves to a symlink. The lookup
+# descends the same way, for the same reason.
 execute_process(
-    COMMAND debugfs -w -f "${BINARY_DIR}/symlink-fixture.cmds" "${ROOTFS}"
-    OUTPUT_QUIET ERROR_QUIET
+    COMMAND "${DEBUGFS_EXE}" -w -f "${BINARY_DIR}/symlink-fixture.cmds" "${ROOTFS}"
+    RESULT_VARIABLE build_result
+    OUTPUT_VARIABLE build_output
+    ERROR_VARIABLE build_output
 )
+if(NOT build_result EQUAL 0)
+    message(FATAL_ERROR
+        "symlink fixture: debugfs failed with ${build_result} on ${ROOTFS}.\n${build_output}")
+endif()
+
+set(check "cd ${ROOT_PATH}\n")
+foreach(name IN LISTS names)
+    string(APPEND check "cd ${name}\n")
+endforeach()
+string(APPEND check "stat ${LINK_NAME}\n")
+file(WRITE "${BINARY_DIR}/symlink-fixture-check.cmds" "${check}")
+
 execute_process(
-    COMMAND debugfs -R "stat ${path}/${LINK_NAME}" "${ROOTFS}"
+    COMMAND "${DEBUGFS_EXE}" -f "${BINARY_DIR}/symlink-fixture-check.cmds" "${ROOTFS}"
     OUTPUT_VARIABLE stat_output
-    ERROR_QUIET
+    ERROR_VARIABLE stat_output
 )
 if(NOT stat_output MATCHES "Type: *symlink")
-    message(FATAL_ERROR "symlink fixture: the deep link was not created in ${ROOTFS}")
+    message(FATAL_ERROR
+        "symlink fixture: the deep link was not created in ${ROOTFS}.\n${stat_output}")
 endif()
 
 message(STATUS "symlink fixture: ${total}-character path with trailing symlink planted in ${ROOTFS}")

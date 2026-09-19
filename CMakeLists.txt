@@ -91,6 +91,25 @@ endif()
 
 # Find the NASM compiler.
 find_program(ASM_COMPILER NAMES nasm HINTS /usr/bin/ /usr/local/bin/)
+
+# mke2fs lives in sbin, which is not on every user's PATH, and on macOS
+# Homebrew keeps e2fsprogs keg-only so nothing of it is linked. Look it up
+# by name and say so when it is missing, instead of failing inside the
+# filesystem target with a bare "command not found" (#391).
+find_program(
+    MKE2FS_EXE
+    NAMES mke2fs
+    HINTS /usr/sbin /sbin /usr/local/sbin
+          /opt/homebrew/opt/e2fsprogs/sbin
+          /usr/local/opt/e2fsprogs/sbin
+)
+if(NOT MKE2FS_EXE)
+    message(WARNING
+        "mke2fs not found: the `filesystem` target will not work. It ships with "
+        "e2fsprogs: `apt install e2fsprogs`, or on macOS `brew install e2fsprogs` "
+        "and add $(brew --prefix e2fsprogs)/sbin to PATH.")
+    set(MKE2FS_EXE mke2fs)
+endif()
 # Mark the variable ASM_COMPILER as advanced.
 mark_as_advanced(ASM_COMPILER)
 # Check that we have found the compiler.
@@ -191,7 +210,7 @@ add_custom_target(filesystem
     COMMAND echo '============================================================================='
     COMMAND echo 'Creating EXT2 filesystem...'
     COMMAND echo '============================================================================='
-    COMMAND mke2fs -L 'rootfs' -N 0 -d ${CMAKE_SOURCE_DIR}/filesystem -b 4096 -m 5 -r 1 -t ext2 -v -F ${CMAKE_BINARY_DIR}/rootfs.img 32M
+    COMMAND ${MKE2FS_EXE} -L 'rootfs' -N 0 -d ${CMAKE_SOURCE_DIR}/filesystem -b 4096 -m 5 -r 1 -t ext2 -v -F ${CMAKE_BINARY_DIR}/rootfs.img 32M
     # Plant the deep-path symlink fixture for t_symlink (#288) inside the
     # image: its path is too long to stage through the host filesystem.
     COMMAND ${CMAKE_COMMAND} -DROOTFS=${CMAKE_BINARY_DIR}/rootfs.img -DBINARY_DIR=${CMAKE_BINARY_DIR} -P ${CMAKE_SOURCE_DIR}/scripts/make-symlink-fixture.cmake
