@@ -35,6 +35,7 @@
 #include <sys/utsname.h>
 #include <sys/wait.h>
 #include <syslog.h>
+#include <termios.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -370,6 +371,41 @@ static int check_remaining_pointers(void)
     return 0;
 }
 
+/// @brief The driver pointers that do not look like pointers at the syscall
+///        boundary: ioctl passes them as an opaque unsigned long, so only
+///        the driver can gate them (#394).
+/// @return 0 on success, -1 on failure.
+static int check_ioctl_pointers(void)
+{
+    termios_t saved;
+    int cfd = open("/proc/video", O_WRONLY, 0);
+    if (cfd < 0) {
+        syslog(LOG_ERR, "[t_userptr] open(/proc/video): %s", strerror(errno));
+        return -1;
+    }
+    // TCGETS writes the structure through the pointer, TCSETS reads it.
+    EXPECT_EFAULT("tcgetattr into the kernel area", tcgetattr(cfd, (termios_t *)KERNEL_TOP));
+    EXPECT_EFAULT("tcgetattr across the kernel boundary", tcgetattr(cfd, (termios_t *)((char *)KERNEL_TOP - 2)));
+    EXPECT_EFAULT("tcgetattr into unmapped memory", tcgetattr(cfd, (termios_t *)UNMAPPED_USER));
+    EXPECT_EFAULT("tcgetattr into NULL", tcgetattr(cfd, NULL));
+    EXPECT_EFAULT("tcsetattr from the kernel area", tcsetattr(cfd, 0, (const termios_t *)KERNEL_TOP));
+    EXPECT_EFAULT("tcsetattr from unmapped memory", tcsetattr(cfd, 0, (const termios_t *)UNMAPPED_USER));
+    // The legitimate round trip must keep working, and must leave the
+    // terminal exactly as it was found.
+    if (tcgetattr(cfd, &saved) < 0) {
+        syslog(LOG_ERR, "[t_userptr] tcgetattr into a real buffer: %s", strerror(errno));
+        close(cfd);
+        return -1;
+    }
+    if (tcsetattr(cfd, 0, &saved) < 0) {
+        syslog(LOG_ERR, "[t_userptr] tcsetattr from a real buffer: %s", strerror(errno));
+        close(cfd);
+        return -1;
+    }
+    close(cfd);
+    return 0;
+}
+
 int main(void)
 {
     int failures = 0;
@@ -415,6 +451,9 @@ int main(void)
         ++failures;
     }
     if (check_remaining_pointers() < 0) {
+        ++failures;
+    }
+    if (check_ioctl_pointers() < 0) {
         ++failures;
     }
     close(rfd);

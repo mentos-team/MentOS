@@ -19,6 +19,7 @@
 #include "fs/procfs.h"
 #include "fs/vfs.h"
 #include "io/video.h"
+#include "mem/paging.h"
 #include "process/scheduler.h"
 #include "sys/bitops.h"
 
@@ -259,15 +260,28 @@ static ssize_t procv_write(vfs_file_t *file, const void *buf, off_t offset, size
 /// @param file Pointer to the file structure (unused).
 /// @param request The ioctl request code (e.g., TCGETS, TCSETS).
 /// @param data Pointer to the data structure for the ioctl request (e.g., termios).
-/// @return int Returns 0 on success.
+/// @return 0 on success, -EFAULT when `data` does not name the caller's memory.
 static long procv_ioctl(vfs_file_t *file, unsigned int request, unsigned long data)
 {
     task_struct *process = scheduler_get_current_process();
     switch (request) {
     case TCGETS:
+        // `data` is a caller pointer that only this driver knows to be one:
+        // sys_ioctl passes it as an opaque unsigned long, so the syscall
+        // boundary cannot gate it and the check has to happen here. The
+        // structure is written through it, with supervisor rights and with
+        // CR0.WP clear, so nothing but this refuses a pointer the caller
+        // does not own (#394, #191).
+        if (!paging_is_user_range_writable((const void *)data, sizeof(termios_t))) {
+            return -EFAULT;
+        }
         *((termios_t *)data) = process->termios;
         break;
     case TCSETS:
+        // The same pointer in the other direction: read, not written.
+        if (!paging_is_user_range((const void *)data, sizeof(termios_t))) {
+            return -EFAULT;
+        }
         process->termios = *((termios_t *)data);
         break;
     default:
