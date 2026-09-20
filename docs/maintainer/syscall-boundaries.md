@@ -85,8 +85,15 @@ Still not gated, deliberately:
   string — are still walked raw. #196 bounded the counting, it did not
   validate the pointers.
 - `ioctl` and `fcntl` take an opaque `unsigned long data` that is a
-  pointer only for some requests. There is nothing to gate generically:
-  each driver must validate its own request's argument.
+  pointer only for some requests. There is nothing to gate generically at
+  the syscall boundary: only the driver knows whether a given request
+  carries a pointer, how large the object is, and which way it is copied,
+  so **the gate belongs in the `ioctl_f` / `fcntl_f` implementation**.
+  This is not a formality — `procv_ioctl` dereferenced `data` raw in both
+  directions for `TCGETS` and `TCSETS`, one call away from any process
+  with a terminal, until #394. Audited at that point: `procfs_ioctl` and
+  `ext2_ioctl` do not dereference `data`, and `pipe_fcntl` treats it as a
+  bitmask, so `procv_ioctl` was the only offender.
 - `shmctl` implements only `IPC_RMID` and never touches `buf`. The day a
   command reads or writes it, it needs
   `paging_is_user_range_writable(buf, sizeof(*buf))`.
