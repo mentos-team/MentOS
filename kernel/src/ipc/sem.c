@@ -44,7 +44,7 @@
 #include "assert.h"
 #include "errno.h"
 #include "fcntl.h"
-#include "mem/paging.h"
+#include "mem/uaccess.h"
 #include "process/process.h"
 #include "process/scheduler.h"
 #include "stdio.h"
@@ -271,7 +271,7 @@ long sys_semop(int semid, struct sembuf *sops, unsigned nsops)
     // the multiplication of count and element size must not be allowed to
     // wrap before the check runs (#191).
     if (((size_t)nsops > (size_t)-1 / sizeof(struct sembuf)) ||
-        !paging_is_user_range(sops, (size_t)nsops * sizeof(struct sembuf))) {
+        !access_ok(USER_READ, sops, (size_t)nsops * sizeof(struct sembuf))) {
         return -EFAULT;
     }
     // Search for the semaphore.
@@ -350,7 +350,7 @@ long sys_semctl(int semid, int semnum, int cmd, union semun *arg)
             return -EINVAL;
         }
         // The argument is read out of the caller's memory (#191).
-        if (!paging_is_user_range(arg, sizeof(*arg))) {
+        if (!access_ok(USER_READ, arg, sizeof(*arg))) {
             return -EFAULT;
         }
         // Checking if the value is valid.
@@ -374,11 +374,11 @@ long sys_semctl(int semid, int semnum, int cmd, union semun *arg)
 
         // The argument and the array it points to are read out of the
         // caller's memory (#191).
-        if (!paging_is_user_range(arg, sizeof(*arg))) {
+        if (!access_ok(USER_READ, arg, sizeof(*arg))) {
             return -EFAULT;
         }
         if (!arg->array ||
-            !paging_is_user_range(arg->array, sem_info->semid.sem_nsems * sizeof(*arg->array))) {
+            !access_ok(USER_READ, arg->array, sem_info->semid.sem_nsems * sizeof(*arg->array))) {
             return -EFAULT;
         }
         // Check permissions.
@@ -400,10 +400,10 @@ long sys_semctl(int semid, int semnum, int cmd, union semun *arg)
         // The union itself is only read, to reach the buffer; the answer
         // is what gets written, so only the buffer needs the write
         // direction (#191).
-        if (!paging_is_user_range(arg, sizeof(*arg))) {
+        if (!access_ok(USER_READ, arg, sizeof(*arg))) {
             return -EFAULT;
         }
-        if (!arg->buf || !paging_is_user_range_writable(arg->buf, sizeof(*arg->buf))) {
+        if (!arg->buf || !access_ok(USER_WRITE, arg->buf, sizeof(*arg->buf))) {
             return -EFAULT;
         }
         // Check permissions.
@@ -420,11 +420,11 @@ long sys_semctl(int semid, int semnum, int cmd, union semun *arg)
 
         // The union is read to reach the array; the array is what gets
         // written (#191).
-        if (!paging_is_user_range(arg, sizeof(*arg))) {
+        if (!access_ok(USER_READ, arg, sizeof(*arg))) {
             return -EFAULT;
         }
         if (!arg->array ||
-            !paging_is_user_range_writable(arg->array, sem_info->semid.sem_nsems * sizeof(*arg->array))) {
+            !access_ok(USER_WRITE, arg->array, sem_info->semid.sem_nsems * sizeof(*arg->array))) {
             return -EFAULT;
         }
         for (unsigned i = 0; i < sem_info->semid.sem_nsems; ++i) {

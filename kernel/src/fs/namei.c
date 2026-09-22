@@ -15,7 +15,7 @@
 #include "fs/namei.h"
 #include "fs/vfs.h"
 #include "limits.h"
-#include "mem/paging.h"
+#include "mem/uaccess.h"
 #include "process/process.h"
 #include "process/scheduler.h"
 #include "strerror.h"
@@ -118,7 +118,7 @@ int sys_readlink(const char *path, char *buffer, size_t bufsize)
     if (strnlen_user(path, PATH_MAX) < 0) {
         return -EFAULT;
     }
-    if (!paging_is_user_range_writable(buffer, bufsize)) {
+    if (!access_ok(USER_WRITE, buffer, bufsize)) {
         return -EFAULT;
     }
     // Allocate a variable for the path.

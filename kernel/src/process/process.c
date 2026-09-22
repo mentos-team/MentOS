@@ -20,7 +20,7 @@
 #include "libgen.h"
 #include "mem/mm/mm.h"
 #include "mem/mm/vmem.h"
-#include "mem/paging.h"
+#include "mem/uaccess.h"
 #include "process/pid_manager.h"
 #include "process/prio.h"
 #include "process/process.h"
@@ -609,7 +609,7 @@ char *sys_getcwd(char *buf, size_t size)
     // kernel itself asks for the cwd with its own buffers, and goes
     // through `do_getcwd` instead, which is why the gate lives here and
     // not inside the implementation.
-    if (!paging_is_user_range_writable(buf, size)) {
+    if (!access_ok(USER_WRITE, buf, size)) {
         return (char *)-EFAULT;
     }
     return do_getcwd(buf, size);
@@ -743,7 +743,7 @@ int sys_execve(pt_regs_t *f)
     // argv is an array of pointers living in the caller's memory: the
     // first entry has to be proven before it is read, or the NULL test
     // below is itself the unvalidated dereference (#191).
-    if (!paging_is_user_range(&origin_argv[0], sizeof(origin_argv[0]))) {
+    if (!access_ok(USER_READ, &origin_argv[0], sizeof(origin_argv[0]))) {
         return -EFAULT;
     }
     if (origin_argv[0] == NULL) {

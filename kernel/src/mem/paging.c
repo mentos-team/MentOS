@@ -646,36 +646,6 @@ static int __page_in_current_vm_area(uint32_t address)
     return 0;
 }
 
-long strnlen_user(const char *str, size_t maxlen)
-{
-    // The length of a string handed in by a caller cannot be learned with
-    // strlen: that is the unbounded walk this whole exercise exists to
-    // prevent. Instead the string is followed one page at a time, and each
-    // page must prove to be the caller's memory before a single byte of it
-    // is read.
-    uintptr_t cursor = (uintptr_t)str;
-    size_t scanned   = 0;
-    while (scanned < maxlen) {
-        if (!paging_is_user_range((const void *)(cursor + scanned), 1)) {
-            return -EFAULT;
-        }
-        uintptr_t page_end = ((cursor + scanned) & ~(uintptr_t)(PAGE_SIZE - 1)) + PAGE_SIZE;
-        size_t available   = page_end - (cursor + scanned);
-        if (available > (maxlen - scanned)) {
-            available = maxlen - scanned;
-        }
-        size_t length = strnlen((const char *)(cursor + scanned), available);
-        if (length < available) {
-            // The terminator is inside this chunk.
-            return (long)(scanned + length);
-        }
-        scanned += available;
-    }
-    // No terminator within the maximum: an unterminated string names
-    // nothing the caller may ask the kernel to walk.
-    return -ENAMETOOLONG;
-}
-
 int mem_upd_vm_area(page_directory_t *pgd, uint32_t virt_start, uint32_t phy_start, size_t size, uint32_t flags)
 {
     // Check for null pointer to the page directory to avoid dereferencing.

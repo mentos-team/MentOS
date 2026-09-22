@@ -12,7 +12,7 @@
 #include "errno.h"
 #include "fcntl.h"
 #include "fs/vfs.h"
-#include "mem/paging.h"
+#include "mem/uaccess.h"
 #include "string.h"
 #include "sys/utsname.h"
 #include "version.h"
@@ -54,7 +54,7 @@ int sys_uname(utsname_t *buf)
     // The whole structure is written through the caller's pointer: it must
     // be the caller's own, writable memory — NULL included, which the old
     // check caught and the range check catches again (#191, #259).
-    if (!paging_is_user_range_writable(buf, sizeof(*buf))) {
+    if (!access_ok(USER_WRITE, buf, sizeof(*buf))) {
         return -EFAULT;
     }
     // Uname code goes here.

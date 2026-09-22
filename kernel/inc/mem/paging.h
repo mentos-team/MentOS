@@ -125,6 +125,9 @@ page_directory_t *paging_get_current_pgd(void);
 ///          authority on what the caller can name. A page that is not yet
 ///          faulted in still passes when a vm_area of the current task
 ///          covers it, which is what sys_mmap produces (#191).
+/// @note This is the mechanism, not the interface. Code outside the memory
+///       subsystem should go through mem/uaccess.h, where the check and the
+///       copy are the same call and cannot be separated by accident (#401).
 int paging_is_user_range(const void *address, size_t length);
 
 /// @brief Tells whether a memory range belongs to the current task's user
@@ -140,20 +143,6 @@ int paging_is_user_range(const void *address, size_t length);
 ///          software, before a syscall becomes a way to write a read-only
 ///          or shared page (#191).
 int paging_is_user_range_writable(const void *address, size_t length);
-
-/// @brief Measures a NUL-terminated string living in the caller's memory,
-///        without ever walking past a page the caller does not own.
-/// @param str the string, as handed to a syscall.
-/// @param maxlen the greatest length worth reporting, beyond which the
-///        answer is that the string is too long.
-/// @return the length of the string, excluding the terminator, or
-///         `-EFAULT` when a page of it is not the caller's memory, or
-///         `-ENAMETOOLONG` when no terminator exists within `maxlen`.
-/// @details strlen on a user pointer is exactly the unbounded walk the
-///          pointer validation exists to prevent: this helper reads one
-///          page at a time and requires each of them to be user memory
-///          before reading a byte from it (#191).
-long strnlen_user(const char *str, size_t maxlen);
 
 /// @brief Switches paging directory.
 /// @param dir A pointer to the new page directory.
