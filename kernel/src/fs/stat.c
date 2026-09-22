@@ -7,7 +7,7 @@
 #include "fs/vfs.h"
 #include "io/debug.h"
 #include "limits.h"
-#include "mem/paging.h"
+#include "mem/uaccess.h"
 #include "process/scheduler.h"
 #include "stdio.h"
 #include "string.h"
@@ -20,7 +20,7 @@ int sys_stat(const char *path, stat_t *buf)
     if (strnlen_user(path, PATH_MAX) < 0) {
         return -EFAULT;
     }
-    if (!paging_is_user_range_writable(buf, sizeof(*buf))) {
+    if (!access_ok(USER_WRITE, buf, sizeof(*buf))) {
         return -EFAULT;
     }
     return vfs_stat(path, buf);
@@ -52,7 +52,7 @@ int sys_fstat(int fd, stat_t *buf)
     }
 
     // The answer is written into the caller's memory or nowhere (#191).
-    if (!paging_is_user_range_writable(buf, sizeof(*buf))) {
+    if (!access_ok(USER_WRITE, buf, sizeof(*buf))) {
         return -EFAULT;
     }
 
@@ -65,7 +65,7 @@ int sys_statfs(const char *path, statfs_t *buf)
     if (strnlen_user(path, PATH_MAX) < 0) {
         return -EFAULT;
     }
-    if (!paging_is_user_range_writable(buf, sizeof(*buf))) {
+    if (!access_ok(USER_WRITE, buf, sizeof(*buf))) {
         return -EFAULT;
     }
     return vfs_statfs(path, buf);
@@ -90,7 +90,7 @@ int sys_fstatfs(int fd, statfs_t *buf)
     }
 
     // The answer is written into the caller's memory or nowhere (#191).
-    if (!paging_is_user_range_writable(buf, sizeof(*buf))) {
+    if (!access_ok(USER_WRITE, buf, sizeof(*buf))) {
         return -EFAULT;
     }
 

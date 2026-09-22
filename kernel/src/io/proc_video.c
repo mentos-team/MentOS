@@ -19,7 +19,7 @@
 #include "fs/procfs.h"
 #include "fs/vfs.h"
 #include "io/video.h"
-#include "mem/paging.h"
+#include "mem/uaccess.h"
 #include "process/scheduler.h"
 #include "sys/bitops.h"
 
@@ -272,18 +272,10 @@ static long procv_ioctl(vfs_file_t *file, unsigned int request, unsigned long da
         // structure is written through it, with supervisor rights and with
         // CR0.WP clear, so nothing but this refuses a pointer the caller
         // does not own (#394, #191).
-        if (!paging_is_user_range_writable((const void *)data, sizeof(termios_t))) {
-            return -EFAULT;
-        }
-        *((termios_t *)data) = process->termios;
-        break;
+        return copy_to_user((void *)data, &process->termios, sizeof(termios_t));
     case TCSETS:
         // The same pointer in the other direction: read, not written.
-        if (!paging_is_user_range((const void *)data, sizeof(termios_t))) {
-            return -EFAULT;
-        }
-        process->termios = *((termios_t *)data);
-        break;
+        return copy_from_user(&process->termios, (const void *)data, sizeof(termios_t));
     default:
         break;
     }

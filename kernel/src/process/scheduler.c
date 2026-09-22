@@ -14,7 +14,7 @@
 #include "errno.h"
 #include "fs/vfs.h"
 #include "hardware/timer.h"
-#include "mem/paging.h"
+#include "mem/uaccess.h"
 #include "process/pid_manager.h"
 #include "process/prio.h"
 #include "process/scheduler.h"
@@ -658,7 +658,7 @@ pid_t sys_waitpid(pid_t pid, int *status, int options)
 
     // The status, when the caller asks for one, is written through its
     // pointer: it must be the caller's own, writable memory (#191).
-    if ((status != NULL) && !paging_is_user_range_writable(status, sizeof(*status))) {
+    if ((status != NULL) && !access_ok(USER_WRITE, status, sizeof(*status))) {
         return -EFAULT;
     }
 
@@ -695,8 +695,11 @@ pid_t sys_waitpid(pid_t pid, int *status, int options)
 
         // Prepare to return the child's PID and status
         pid_t child_pid = child->pid;
-        if (status != NULL) {
-            *status = child->exit_code;
+        if ((status != NULL) && (copy_to_user(status, &child->exit_code, sizeof(*status)) < 0)) {
+            // The early access_ok above already refused the obvious bad
+            // pointer, before any child was reaped; this is the write
+            // itself, and it goes through the same door as every other.
+            return -EFAULT;
         }
 
         // Clean up the child process's resources.
@@ -804,7 +807,7 @@ void sys_exit(int exit_code) { do_exit(exit_code << 8); }
 int sys_sched_setparam(pid_t pid, const sched_param_t *param)
 {
     // The parameters are read out of the caller's memory (#191).
-    if (!paging_is_user_range(param, sizeof(*param))) {
+    if (!access_ok(USER_READ, param, sizeof(*param))) {
         return -EFAULT;
     }
     // Iter over the runqueue to find the task
@@ -834,19 +837,27 @@ int sys_sched_setparam(pid_t pid, const sched_param_t *param)
 
 int sys_sched_getparam(pid_t pid, sched_param_t *param)
 {
-    // The parameters are written into the caller's memory (#191).
-    if (!paging_is_user_range_writable(param, sizeof(*param))) {
+    // The pointer is refused up front and not only at the copy below: the
+    // copy happens only when the pid is found, so deferring the check would
+    // make a bad pointer report -EFAULT or not depending on whether the
+    // process exists, which is not an answer about the pointer (#401).
+    if (!access_ok(USER_WRITE, param, sizeof(*param))) {
         return -EFAULT;
     }
     // Iter over the runqueue to find the task
     list_for_each_decl (it, &runqueue.queue) {
         task_struct *entry = list_entry(it, task_struct, run_list);
         if (entry->pid == pid) {
-            //Sets the parameters from the "se" struct to param
-            param->sched_priority = entry->se.prio;
-            param->period         = entry->se.period;
-            param->deadline       = entry->se.deadline;
-            param->arrivaltime    = entry->se.arrivaltime;
+            // The answer is assembled here and handed over in one call, so
+            // the caller's memory is never written field by field (#401).
+            sched_param_t value;
+            value.sched_priority = entry->se.prio;
+            value.period         = entry->se.period;
+            value.deadline       = entry->se.deadline;
+            value.arrivaltime    = entry->se.arrivaltime;
+            if (copy_to_user(param, &value, sizeof(value)) < 0) {
+                return -EFAULT;
+            }
             return 1;
         }
     }

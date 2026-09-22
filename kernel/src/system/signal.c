@@ -16,7 +16,7 @@
 #include "hardware/timer.h"
 #include "klib/irqflags.h"
 #include "klib/stack_helper.h"
-#include "mem/paging.h"
+#include "mem/uaccess.h"
 #include "process/process.h"
 #include "process/scheduler.h"
 #include "process/wait.h"
@@ -793,10 +793,10 @@ int sys_sigaction(int signum, const sigaction_t *act, sigaction_t *oldact, uint3
     pr_debug("sys_sigaction(%d, %p, %p, %p)\n", signum, (void *)act, (void *)oldact, (void *)(unsigned long)sigreturn_addr);
     // Either pointer is allowed to be NULL, and each direction must be
     // validated against the caller's own memory (#191).
-    if (act && !paging_is_user_range(act, sizeof(*act))) {
+    if (act && !access_ok(USER_READ, act, sizeof(*act))) {
         return -EFAULT;
     }
-    if (oldact && !paging_is_user_range_writable(oldact, sizeof(*oldact))) {
+    if (oldact && !access_ok(USER_WRITE, oldact, sizeof(*oldact))) {
         return -EFAULT;
     }
     // Check the signal that we want to send.
@@ -840,10 +840,10 @@ int sys_sigprocmask(int how, const sigset_t *set, sigset_t *oldset)
     }
     // Each pointer that is not NULL must name the caller's memory, in its
     // own direction (#191).
-    if (set && !paging_is_user_range(set, sizeof(*set))) {
+    if (set && !access_ok(USER_READ, set, sizeof(*set))) {
         return -EFAULT;
     }
-    if (oldset && !paging_is_user_range_writable(oldset, sizeof(*oldset))) {
+    if (oldset && !access_ok(USER_WRITE, oldset, sizeof(*oldset))) {
         return -EFAULT;
     }
     if ((how < SIG_BLOCK) || (how > SIG_SETMASK)) {
@@ -891,14 +891,11 @@ int sys_sigpending(sigset_t *set)
     task_struct *current_process = scheduler_get_current_process();
     // Check the current task.
     assert(current_process && "There is no current process!");
-    // The answer is written into the caller's memory or nowhere; the NULL
-    // case is subsumed by the range check (#191).
-    if (!paging_is_user_range_writable(set, sizeof(*set))) {
-        return -EFAULT;
-    }
-    // Copy the pending set.
-    __copy_sigset(set, &current_process->pending.signal);
-    return 0;
+    // The answer is built here and handed over in one call, so the NULL
+    // case and every other bad pointer get the same -EFAULT (#191, #401).
+    sigset_t pending;
+    __copy_sigset(&pending, &current_process->pending.signal);
+    return copy_to_user(set, &pending, sizeof(pending));
 }
 
 const char *strsignal(int sig)

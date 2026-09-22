@@ -19,7 +19,7 @@
 #include "io/port_io.h"
 #include "io/video.h"
 #include "klib/irqflags.h"
-#include "mem/paging.h"
+#include "mem/uaccess.h"
 #include "process/scheduler.h"
 #include "process/wait.h"
 #include "stdint.h"
@@ -685,10 +685,10 @@ int sys_nanosleep(const struct timespec *req, struct timespec *rem)
 {
     // The request is read and the remainder, when asked for, is written
     // through caller pointers (#191).
-    if (!paging_is_user_range(req, sizeof(*req))) {
+    if (!access_ok(USER_READ, req, sizeof(*req))) {
         return -EFAULT;
     }
-    if (rem && !paging_is_user_range_writable(rem, sizeof(*rem))) {
+    if (rem && !access_ok(USER_WRITE, rem, sizeof(*rem))) {
         return -EFAULT;
     }
     // We need to store rem somewhere, because it contains how much time left
@@ -761,34 +761,33 @@ unsigned sys_alarm(int seconds)
 
 int sys_getitimer(int which, struct itimerval *curr_value)
 {
-    // The answer is written into the caller's memory or nowhere (#191).
-    if (!paging_is_user_range_writable(curr_value, sizeof(*curr_value))) {
-        return -EFAULT;
-    }
     struct task_struct *task = scheduler_get_current_process();
-    // Transform the apropriate interval and store it in the given variable.
+    // The value is assembled here and handed over once at the end. Building
+    // it locally also puts the -EINVAL for an unknown timer before anything
+    // looks at the pointer, which is the order a caller expects (#401).
+    struct itimerval value;
     if (which == ITIMER_REAL) {
         // Extract remaining time in dynamic timer.
         task->it_real_value = task->real_timer->expires - timer_get_ticks();
-        __values_to_itimerval(task->it_real_incr, task->it_real_value, curr_value);
+        __values_to_itimerval(task->it_real_incr, task->it_real_value, &value);
     } else if (which == ITIMER_VIRTUAL) {
-        __values_to_itimerval(task->it_virt_incr, task->it_virt_value, curr_value);
+        __values_to_itimerval(task->it_virt_incr, task->it_virt_value, &value);
     } else if (which == ITIMER_PROF) {
-        __values_to_itimerval(task->it_prof_incr, task->it_prof_value, curr_value);
+        __values_to_itimerval(task->it_prof_incr, task->it_prof_value, &value);
     } else {
         return -EINVAL;
     }
-    return 0;
+    return copy_to_user(curr_value, &value, sizeof(value));
 }
 
 int sys_setitimer(int which, const struct itimerval *new_value, struct itimerval *old_value)
 {
     // The new value is read, and the old one, when asked for, is written
     // through caller pointers (#191).
-    if (!paging_is_user_range(new_value, sizeof(*new_value))) {
+    if (!access_ok(USER_READ, new_value, sizeof(*new_value))) {
         return -EFAULT;
     }
-    if (old_value && !paging_is_user_range_writable(old_value, sizeof(*old_value))) {
+    if (old_value && !access_ok(USER_WRITE, old_value, sizeof(*old_value))) {
         return -EFAULT;
     }
     // Invalid time domain

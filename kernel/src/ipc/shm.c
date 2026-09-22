@@ -18,7 +18,7 @@
 #include "errno.h"
 #include "fcntl.h"
 #include "list_head.h"
-#include "mem/paging.h"
+#include "mem/uaccess.h"
 #include "process/scheduler.h"
 #include "stdio.h"
 #include "stdlib.h"
@@ -341,7 +341,7 @@ long sys_shmctl(int shmid, int cmd, struct shmid_ds *buf)
     task_struct *task    = NULL;
     // No implemented command reads or writes `buf` yet (only IPC_RMID is
     // handled); the day one does, it must be gated with
-    // `paging_is_user_range_writable(buf, sizeof(*buf))` (#191).
+    // `access_ok(USER_WRITE, buf, sizeof(*buf))` (#191).
     (void)buf;
 
     // Search for the shared memory.

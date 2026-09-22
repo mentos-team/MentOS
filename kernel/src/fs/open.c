@@ -8,7 +8,7 @@
 #include "fs/vfs.h"
 #include "io/debug.h"
 #include "limits.h"
-#include "mem/paging.h"
+#include "mem/uaccess.h"
 #include "process/process.h"
 #include "process/scheduler.h"
 #include "stdio.h"

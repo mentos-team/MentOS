@@ -14,7 +14,7 @@
 #include "assert.h"
 #include "errno.h"
 #include "fcntl.h"
-#include "mem/paging.h"
+#include "mem/uaccess.h"
 #include "process/process.h"
 #include "process/scheduler.h"
 #include "stdio.h"
@@ -295,7 +295,7 @@ int sys_msgsnd(int msqid, const void *msgp, size_t msgsz, int msgflg)
     // The header and the text are read out of the caller's memory: the
     // computed length covers both, and cannot wrap past MSGMAX (#191).
     // Read direction only — msgsnd never writes through msgp.
-    if (!paging_is_user_range(msgp, sizeof(long) + msgsz)) {
+    if (!access_ok(USER_READ, msgp, sizeof(long) + msgsz)) {
         return -EFAULT;
     }
     // Use the template to acess the message.
@@ -385,7 +385,7 @@ ssize_t sys_msgrcv(int msqid, void *msgp, size_t msgsz, long msgtyp, int msgflg)
     }
     // The header and the text are written into the caller's memory: the
     // computed length covers both, and cannot wrap past MSGMAX (#191).
-    if (!paging_is_user_range_writable(msgp, sizeof(long) + msgsz)) {
+    if (!access_ok(USER_WRITE, msgp, sizeof(long) + msgsz)) {
         return -EFAULT;
     }
     // Use the template to acess the message.
@@ -523,7 +523,7 @@ int sys_msgctl(int msqid, int cmd, struct msqid_ds *buf)
     } else if (cmd == IPC_STAT) {
         // Place a copy of the msqid_ds data structure in the buffer pointed to
         // by buf: the caller's own, writable memory or nowhere (#191).
-        if (!paging_is_user_range_writable(buf, sizeof(*buf))) {
+        if (!access_ok(USER_WRITE, buf, sizeof(*buf))) {
             return -EFAULT;
         }
         // Check permissions.

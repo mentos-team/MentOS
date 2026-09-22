@@ -9,7 +9,7 @@
 #include "hardware/timer.h"
 #include "io/debug.h"
 #include "io/port_io.h"
-#include "mem/paging.h"
+#include "mem/uaccess.h"
 #include "stddef.h"
 #include "stdio.h"
 
@@ -22,11 +22,8 @@ static const char *str_months[] = {"January", "February", "March", "April", "May
 time_t sys_time(time_t *time)
 {
     // A NULL pointer is a legitimate request for the value alone — the
-    // kernel itself asks that way. Anything else must name the caller's
-    // memory, since the result is stored through it (#191).
-    if ((time != NULL) && !paging_is_user_range_writable(time, sizeof(*time))) {
-        return -EFAULT;
-    }
+    // kernel itself asks that way (#191). The value is computed first and
+    // handed over at the end, so there is one place that writes it.
     tm_t curr_time;
     gettime(&curr_time);
     // January and February are counted as months 13 and 14 of the previous year.
@@ -46,7 +43,10 @@ time_t sys_time(time_t *time)
     // Add hours, minutes and seconds
     t += (3600 * curr_time.tm_hour) + (60 * curr_time.tm_min) + curr_time.tm_sec;
     if (time) {
-        (*time) = t;
+        int err = copy_to_user(time, &t, sizeof(t));
+        if (err < 0) {
+            return err;
+        }
     }
     return t;
 }

@@ -5,7 +5,7 @@
 
 #include "system/printk.h"
 #include "io/debug.h"
-#include "mem/paging.h"
+#include "mem/uaccess.h"
 
 void sys_syslog(const char *file, const char *fun, int line, short log_level, const char *format)
 {

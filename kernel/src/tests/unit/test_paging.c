@@ -16,6 +16,7 @@
 #include "mem/mm/vm_area.h"
 #include "mem/mm/vmem.h"
 #include "mem/paging.h"
+#include "mem/uaccess.h"
 #include "string.h"
 #include "tests/test.h"
 #include "tests/test_utils.h"

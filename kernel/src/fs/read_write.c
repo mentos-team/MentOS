@@ -7,7 +7,7 @@
 #include "fcntl.h"
 #include "fs/vfs.h"
 #include "fs/vfs_types.h"
-#include "mem/paging.h"
+#include "mem/uaccess.h"
 #include "process/scheduler.h"
 #include "stdio.h"
 #include "system/panic.h"
@@ -40,7 +40,7 @@ ssize_t sys_read(int fd, void *buf, size_t nbytes)
     // The buffer is written through the filesystem layer with supervisor
     // rights: a pointer the caller does not own must never reach it, and a
     // read-only page of the caller's must not be written either (#191).
-    if (!paging_is_user_range_writable(buf, nbytes)) {
+    if (!access_ok(USER_WRITE, buf, nbytes)) {
         return -EFAULT;
     }
 
@@ -80,7 +80,7 @@ ssize_t sys_write(int fd, const void *buf, size_t nbytes)
     // The buffer is read through the filesystem layer with supervisor
     // rights: a pointer the caller does not own must never reach it, or
     // write() reads wherever it points (#191).
-    if (!paging_is_user_range(buf, nbytes)) {
+    if (!access_ok(USER_READ, buf, nbytes)) {
         return -EFAULT;
     }
 

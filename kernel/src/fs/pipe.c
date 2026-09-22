@@ -23,7 +23,7 @@
 #include "fcntl.h"
 #include "fs/vfs.h"
 #include "list_head.h"
-#include "mem/paging.h"
+#include "mem/uaccess.h"
 #include "process/scheduler.h"
 #include "stdio.h"
 #include "stdlib.h"
@@ -1210,7 +1210,7 @@ int sys_pipe(int fds[2])
     // page is not user memory in any address space, so it fails here and
     // reports the same -EFAULT as every other pointer the caller does not
     // own, instead of the -1 the separate NULL check used to return.
-    if (!paging_is_user_range(fds, sizeof(int) * 2)) {
+    if (!access_ok(USER_READ, fds, sizeof(int) * 2)) {
         return -EFAULT;
     }
 
