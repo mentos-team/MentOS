@@ -15,49 +15,6 @@
 
 extern char **environ;
 
-/// @brief Default `PATH`.
-#define DEFAULT_PATH "/bin:/usr/bin"
-
-/// @brief Finds an executable inside the PATH entries.
-/// @param file    The file to search.
-/// @param buf     The buffer where we will store the absolute path.
-/// @param buf_len The length of the buffer.
-/// @return 0  if we have found the file inside the entries of PATH,
-///         -1 otherwise.
-static inline int __find_in_path(const char *file, char *buf, size_t buf_len)
-{
-    // Determine the search path.
-    char *PATH_VAR = getenv("PATH");
-    if (PATH_VAR == NULL) {
-        PATH_VAR = DEFAULT_PATH;
-    }
-    // Prepare a stat object for later.
-    stat_t stat_buf;
-    // Copy the path.
-    char *path  = strdup(PATH_VAR);
-    // Iterate through the path entries.
-    char *token = strtok(path, ":");
-    while (token != NULL) {
-        strcpy(buf, token);
-        strcat(buf, "/");
-        strcat(buf, file);
-        if (stat(buf, &stat_buf) == 0) {
-            if (stat_buf.st_mode & S_IXUSR) {
-                // TODO(enrico): Check why `init` has problems with this free.
-                //       To reproduce the problem use this in init.c:
-                //           execvp("login", _argv);
-                free(path);
-                return 0;
-            }
-        }
-        token = strtok(NULL, ":");
-    }
-    free(path);
-    // We did not find the file inside PATH.
-    errno = ENOENT;
-    return -1;
-}
-
 int execve(const char *path, char *const argv[], char *const envp[])
 {
     long __res;
@@ -80,8 +37,7 @@ int execvpe(const char *file, char *const argv[], char *const envp[])
     static char *default_env[] = {
         "PATH=/bin:/usr/bin",
         "HOME=/",
-        NULL
-    };
+        NULL};
 
     // Pointer to the actual environment we will be using
     char *const *use_envp = envp ? envp : (environ ? environ : default_env);
@@ -95,7 +51,7 @@ int execvpe(const char *file, char *const argv[], char *const envp[])
     const char *path = NULL;
     for (char *const *e = use_envp; e && *e; ++e) {
         if (strncmp(*e, "PATH=", 5) == 0) {
-            path = *e + 5;  // Skips "PATH="
+            path = *e + 5; // Skips "PATH="
             break;
         }
     }
