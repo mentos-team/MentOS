@@ -97,11 +97,11 @@ make -C build-kt qemu-kernel-test # kernel suites only, exits on its own
 | allocators, UAF/double-free analysis | `docs/maintainer/memory-management.md` |
 | any syscall | `docs/maintainer/syscall-boundaries.md` |
 | CI / tests | `docs/maintainer/testing-and-ci.md` |
-| anything security-relevant | `docs/maintainer/security-model.md` + `known-bugs.md` |
+| anything security-relevant | `docs/maintainer/security-model.md` |
 | reproducing anything | `docs/maintainer/debugging-playbook.md` |
 
-Before fixing anything, check `docs/maintainer/known-bugs.md` (root-cause
-record of #190–#196, all closed — read it for the analysis, never for status;
-open bugs live only in the issue tracker) and
-`false-positives-and-dismissed-findings.md` (already-investigated non-bugs —
-do not re-report).
+Open bugs live in the GitHub issue tracker and nowhere else. Before filing
+one, check `docs/maintainer/false-positives-and-dismissed-findings.md` —
+things already investigated and deliberately not filed, plus the subsystems
+nobody has ever looked at. Do not re-report what is in there without new
+evidence.

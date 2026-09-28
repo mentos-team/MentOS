@@ -116,4 +116,5 @@ builds, driven by `grub.cfg.runtests`).
   (ext2.md, issue #192).
 - Local `develop` and GitHub `main` have diverged historically; when
   reviewing PRs, always compute the PR's true base (merge-base with its
-  head), never trust the local checkout (see investigation-history.md).
+  head), never trust the local checkout. Fetch first: the remote is SSH and
+  a failed fetch leaves stale `origin/*` refs without saying so.
