@@ -244,9 +244,10 @@ void bb_free_pages(bb_instance_t *instance, bb_page_t *page)
         return;
     }
 
-    // Set the page freed, but do not set the private field because we want to
-    // try to merge. FIXME: Add this line on zone page deallocate!
-    // set_page_count(page, -1);
+    // The page count is not touched here on purpose: the private field has to
+    // survive so that the merge below can use it. The zone layer zeroes the
+    // count of every page of the block before it calls this
+    // (zone_allocator.c, __free_pages_in_zone).
 
     unsigned int order = page->order;
 
