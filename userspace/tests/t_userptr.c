@@ -70,6 +70,24 @@
         }                                                                                      \
     } while (0)
 
+/// @brief Expects a call to fail with a specific errno.
+/// @param what the description of the call, for the failure message.
+/// @param expected the errno the call must report.
+/// @param expression the call, evaluating to its return value.
+/// @return 0 when the call failed as expected, -1 otherwise.
+#define EXPECT_ERRNO(what, expected, expression)                                                               \
+    do {                                                                                                       \
+        errno = 0;                                                                                             \
+        if ((expression) != -1) {                                                                              \
+            syslog(LOG_ERR, "[t_userptr] %s succeeded, expected failure", what);                               \
+            return -1;                                                                                         \
+        }                                                                                                      \
+        if (errno != (expected)) {                                                                             \
+            syslog(LOG_ERR, "[t_userptr] %s: expected %s, got %s", what, strerror(expected), strerror(errno)); \
+            return -1;                                                                                         \
+        }                                                                                                      \
+    } while (0)
+
 /// @brief A bad read buffer must never reach the filesystem layer.
 /// @param fd the descriptor to read from.
 /// @return 0 on success, -1 on failure.
@@ -406,6 +424,72 @@ static int check_ioctl_pointers(void)
     return 0;
 }
 
+/// @brief The argv and envp vectors of execve, and the strings they point
+///        at (#396, the last item of #191).
+/// @details The vector is one range and every string it holds is another,
+///          so a bound on how far the kernel walks is not a check on where
+///          it walks. Each case below would otherwise have copied kernel
+///          memory into the new image's stack, where the program reads it
+///          back.
+/// @return 0 on success, -1 on failure.
+static int check_execve_vectors(void)
+{
+    char *good_argv[]      = {"echo", "t_userptr", NULL};
+    char *good_envp[]      = {"PATH=/bin", NULL};
+    char *kernel_arg[]     = {"echo", (char *)KERNEL_TOP, NULL};
+    char *unmapped_arg[]   = {"echo", (char *)UNMAPPED_USER, NULL};
+    char *supervisor_arg[] = {"echo", (char *)VGA_MEMORY, NULL};
+    char *kernel_env[]     = {"PATH=/bin", (char *)KERNEL_TOP, NULL};
+    char *unmapped_env[]   = {"PATH=/bin", (char *)UNMAPPED_USER, NULL};
+    // A string with no terminator inside the per-entry bound: it is mapped
+    // all the way, so the walk does not fault, it simply never ends.
+    static char unterminated[MAX_ARG_STRLEN + 1];
+    memset(unterminated, 'a', sizeof(unterminated));
+    char *long_arg[] = {"echo", unterminated, NULL};
+
+    // The vector itself.
+    EXPECT_EFAULT("execve with argv in the kernel area", execve("/bin/echo", (char **)KERNEL_TOP, good_envp));
+    EXPECT_EFAULT("execve with argv unmapped", execve("/bin/echo", (char **)UNMAPPED_USER, good_envp));
+    EXPECT_EFAULT(
+        "execve with argv straddling the kernel boundary",
+        execve("/bin/echo", (char **)((char *)KERNEL_TOP - 2), good_envp));
+    EXPECT_EFAULT("execve with envp in the kernel area", execve("/bin/echo", good_argv, (char **)KERNEL_TOP));
+    EXPECT_EFAULT("execve with envp unmapped", execve("/bin/echo", good_argv, (char **)UNMAPPED_USER));
+    // The strings the vector points at.
+    EXPECT_EFAULT("execve with an argv entry in the kernel area", execve("/bin/echo", kernel_arg, good_envp));
+    EXPECT_EFAULT("execve with an unmapped argv entry", execve("/bin/echo", unmapped_arg, good_envp));
+    EXPECT_EFAULT(
+        "execve with an argv entry in the supervisor-only first megabyte", execve("/bin/echo", supervisor_arg, good_envp));
+    EXPECT_EFAULT("execve with an envp entry in the kernel area", execve("/bin/echo", good_argv, kernel_env));
+    EXPECT_EFAULT("execve with an unmapped envp entry", execve("/bin/echo", good_argv, unmapped_env));
+    // Readable, but without an end.
+    EXPECT_ERRNO("execve with an unterminated argv entry", E2BIG, execve("/bin/echo", long_arg, good_envp));
+
+    // The control: a real exec must still work, and with a NULL environment,
+    // which is the path where the kernel supplies a vector of its own and
+    // none of the checks above may be applied to it.
+    pid_t child = fork();
+    if (child < 0) {
+        syslog(LOG_ERR, "[t_userptr] fork for the execve control: %s", strerror(errno));
+        return -1;
+    }
+    if (child == 0) {
+        execve("/bin/echo", good_argv, NULL);
+        syslog(LOG_ERR, "[t_userptr] execve control: %s", strerror(errno));
+        exit(1);
+    }
+    int status = 0;
+    if (waitpid(child, &status, 0) != child) {
+        syslog(LOG_ERR, "[t_userptr] waitpid for the execve control: %s", strerror(errno));
+        return -1;
+    }
+    if (!WIFEXITED(status) || (WEXITSTATUS(status) != 0)) {
+        syslog(LOG_ERR, "[t_userptr] execve control: bad child status %d", status);
+        return -1;
+    }
+    return 0;
+}
+
 int main(void)
 {
     int failures = 0;
@@ -454,6 +538,9 @@ int main(void)
         ++failures;
     }
     if (check_ioctl_pointers() < 0) {
+        ++failures;
+    }
+    if (check_execve_vectors() < 0) {
         ++failures;
     }
     close(rfd);
