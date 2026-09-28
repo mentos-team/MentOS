@@ -19,7 +19,7 @@ on:
     - 'scripts/**'
     - 'iso/**'
     - 'filesystem/**'
-    - 'tools/**'
+    - 'cmake/**'
     - '.github/workflows/ubuntu.yml'
   pull_request:
     branches:

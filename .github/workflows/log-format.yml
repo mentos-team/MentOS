@@ -16,7 +16,7 @@ on:
     - '**/*.h'
     - '**/CMakeLists.txt'
     - '**/cmake/**'
-    - 'tools/**'
+    - 'cmake/**'
     - '.github/workflows/log-format.yml'
   pull_request:
     branches:
