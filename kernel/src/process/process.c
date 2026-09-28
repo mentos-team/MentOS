@@ -21,6 +21,7 @@
 #include "mem/mm/mm.h"
 #include "mem/mm/vmem.h"
 #include "mem/uaccess.h"
+#include "process/exec_args.h"
 #include "process/pid_manager.h"
 #include "process/prio.h"
 #include "process/process.h"
@@ -33,214 +34,6 @@
 
 /// Cache for creating the task structs.
 static kmem_cache_t *task_struct_cache;
-
-/// @brief Counts the number of arguments of a vector the kernel owns.
-/// @param args the array of arguments, it must be NULL terminated.
-/// @param max_count the maximum number of entries to scan.
-/// @return the number of arguments, or -E2BIG when the vector is not
-///         NULL-terminated within `max_count` entries.
-/// @details Only for vectors the kernel built itself. One that came from the
-///          caller goes through __count_user_args, which proves every slot
-///          before it reads it (#396).
-static inline int __count_args(char **args, int max_count)
-{
-    int argc = 0;
-    while ((argc < max_count) && (args[argc] != NULL)) {
-        ++argc;
-    }
-    if ((argc == max_count) && (args[argc] != NULL)) {
-        return -E2BIG;
-    }
-    return argc;
-}
-
-/// @brief Counts the number of arguments of a vector in the caller's memory.
-/// @param args the array of arguments, straight from user memory.
-/// @param max_count the maximum number of entries to scan.
-/// @return the number of arguments, -EFAULT when a slot of the vector is not
-///         the caller's memory, or -E2BIG when the vector is not
-///         NULL-terminated within `max_count` entries.
-/// @details Each slot is proven before it is read. Reading it to find out
-///          whether it is NULL is already the dereference the check exists to
-///          gate, which is the ordering the argv[0] path got wrong before
-///          #387. Only the slots are covered here: the strings they point at
-///          are ranges of their own, proven by __count_user_args_bytes.
-static inline int __count_user_args(char **args, int max_count)
-{
-    for (int argc = 0; argc <= max_count; ++argc) {
-        if (!access_ok(USER_READ, &args[argc], sizeof(args[argc]))) {
-            return -EFAULT;
-        }
-        if (args[argc] == NULL) {
-            return argc;
-        }
-    }
-    return -E2BIG;
-}
-
-/// @brief Turns a character total into the size of the block that holds a
-///        vector: the strings, plus the pointer array and its terminator.
-/// @param nchar the string bytes, each including its terminator.
-/// @param argc the number of arguments.
-/// @param out_bytes where the total is stored.
-/// @return 0 on success, -E2BIG when the total exceeds ARG_MAX.
-static inline int __args_block_size(int nchar, int argc, int *out_bytes)
-{
-    *out_bytes = nchar + ((argc + 1 /* The NULL terminator */) * (int)sizeof(char *));
-    if (*out_bytes > ARG_MAX) {
-        return -E2BIG;
-    }
-    return 0;
-}
-
-/// @brief Counts the bytes occupied by the arguments of a vector the kernel
-///        owns.
-/// @param args the array of arguments, it must be NULL terminated.
-/// @param argc the number of arguments, already validated by __count_args.
-/// @param out_bytes where the total is stored: the string bytes (each
-///        including its terminator) plus the pointer array.
-/// @return 0 on success, -E2BIG when a string is not NUL-terminated within
-///         MAX_ARG_STRLEN bytes, or the total exceeds ARG_MAX.
-static inline int __count_args_bytes(char **args, int argc, int *out_bytes)
-{
-    // Count the characters, bounding each string: a non-terminated string
-    // must not turn the walk into an unbounded kernel read (#196).
-    int nchar = 0;
-    for (int i = 0; i < argc; i++) {
-        size_t len = strnlen(args[i], MAX_ARG_STRLEN);
-        if (len >= MAX_ARG_STRLEN) {
-            return -E2BIG;
-        }
-        nchar += (int)len + 1;
-        if (nchar > ARG_MAX) {
-            return -E2BIG;
-        }
-    }
-    return __args_block_size(nchar, argc, out_bytes);
-}
-
-/// @brief Counts the bytes occupied by the arguments of a vector in the
-///        caller's memory.
-/// @param args the array of arguments, straight from user memory.
-/// @param argc the number of arguments, already validated by
-///        __count_user_args.
-/// @param out_bytes where the total is stored: the string bytes (each
-///        including its terminator) plus the pointer array.
-/// @return 0 on success, -EFAULT when a page of a string is not the caller's
-///         memory, or -E2BIG when a string is not NUL-terminated within
-///         MAX_ARG_STRLEN bytes or the total exceeds ARG_MAX.
-/// @details __count_user_args proved the slots of the vector; the strings
-///          they point at are somewhere else entirely and were measured with
-///          a plain strnlen until #396, which is a bound on how far the
-///          kernel reads and not a check on where it reads from.
-static inline int __count_user_args_bytes(char **args, int argc, int *out_bytes)
-{
-    int nchar = 0;
-    for (int i = 0; i < argc; i++) {
-        long len = strnlen_user(args[i], MAX_ARG_STRLEN);
-        if (len == -ENAMETOOLONG) {
-            // No terminator within the per-string bound: the -E2BIG this
-            // function reported before it could also fail with -EFAULT.
-            return -E2BIG;
-        }
-        if (len < 0) {
-            return (int)len;
-        }
-        nchar += (int)len + 1;
-        if (nchar > ARG_MAX) {
-            return -E2BIG;
-        }
-    }
-    return __args_block_size(nchar, argc, out_bytes);
-}
-
-/// @brief Pushes the argument strings on the stack (growing downwards),
-/// recording the final position of each string.
-/// @param stack pointer to the stack location.
-/// @param args the list of arguments; the strings must be kernel copies,
-///        their lengths are trusted because they were validated on copy.
-/// @param argc the number of arguments, already validated by the caller.
-/// @param locations array of at least `argc` entries where the position of
-///        each string is stored; the caller owns it, sized from the
-///        validated count (it replaces the fixed `char *[256]` that
-///        overflowed the kernel stack for larger vectors, #196).
-static inline void __push_strings_on_stack(uintptr_t *stack, char *args[], int argc, char *locations[])
-{
-    for (int i = argc - 1; i >= 0; --i) {
-        for (int j = strlen(args[i]); j >= 0; --j) {
-            stack_push_u8((uint32_t *)stack, args[i][j]);
-        }
-        locations[i] = (char *)(*stack);
-    }
-}
-
-/// @brief Pushes the strings of a user-controlled vector on the stack, with
-///        a per-string bound and a total-budget floor.
-/// @param stack pointer to the stack location.
-/// @param args the list of arguments, straight from user memory.
-/// @param argc the number of arguments, already validated by
-///        __count_user_args.
-/// @param locations array of at least `argc` entries, caller-owned.
-/// @param floor the lowest address the pushes may reach: the strings were
-///        counted before, and a string that grew since then must fail with
-///        -E2BIG here rather than push more bytes than were accounted for
-///        (which would write below the allocation).
-/// @return 0 on success, -EFAULT when a page of a string is not the caller's
-///         memory, or -E2BIG when a string is not NUL-terminated within
-///         MAX_ARG_STRLEN bytes, or the pushes would cross `floor`.
-static inline int
-__push_user_strings_on_stack(uintptr_t *stack, char *args[], int argc, char *locations[], uintptr_t floor)
-{
-    for (int i = argc - 1; i >= 0; --i) {
-        // Measure first, because the room has to be reserved before the copy
-        // can land anywhere. The copy then bounds itself against that room,
-        // so a string that grew since it was counted fails here (#396).
-        long len = strnlen_user(args[i], MAX_ARG_STRLEN);
-        if (len == -EFAULT) {
-            return -EFAULT;
-        }
-        if (len < 0) {
-            return -E2BIG;
-        }
-        if ((*stack - ((uintptr_t)len + 1)) < floor) {
-            return -E2BIG;
-        }
-        *stack -= (uintptr_t)len + 1;
-        if (strncpy_from_user((char *)(*stack), args[i], (size_t)len + 1) < 0) {
-            return -E2BIG;
-        }
-        locations[i] = (char *)(*stack);
-    }
-    return 0;
-}
-
-/// @brief Pushes the terminating NULL and the array of string pointers.
-/// @param stack pointer to the stack location.
-/// @param locations the positions of the strings, filled by the string push.
-/// @param argc the number of arguments.
-/// @return the final position of the stack, where the pointer array is stored.
-static inline char **__push_vector_on_stack(uintptr_t *stack, char *locations[], int argc)
-{
-    // Push terminating NULL.
-    stack_push_ptr((uint32_t *)stack, NULL);
-    // Push array of pointers to the arguments.
-    for (int i = argc - 1; i >= 0; --i) {
-        stack_push_ptr((uint32_t *)stack, locations[i]);
-    }
-    return (char **)(*stack);
-}
-
-/// @brief Pushes the arguments on the stack.
-/// @param stack pointer to the stack location.
-/// @param args the list of arguments; the strings must be kernel copies.
-/// @param argc the number of arguments, already validated by the caller.
-/// @param locations array of at least `argc` entries, caller-owned.
-/// @return the final position of the stack, where the list of pushed arguments is stored.
-static inline char **__push_args_on_stack(uintptr_t *stack, char *args[], int argc, char *locations[])
-{
-    __push_strings_on_stack(stack, args, argc, locations);
-    return __push_vector_on_stack(stack, locations, argc);
-}
 
 /// @brief Clears the user stack of a freshly created memory descriptor.
 /// @param mm the memory descriptor whose stack must be cleared.
@@ -629,13 +422,13 @@ int process_create_init(const char *path)
     // Save where the arguments start.
     new_mm->arg_start = useresp;
     // Push the arguments on the stack.
-    argv_ptr          = __push_args_on_stack(&useresp, argv, 1, argv_locations);
+    argv_ptr          = exec_args_push_vector(&useresp, argv, 1, argv_locations);
     // Save where the arguments end.
     new_mm->arg_end   = useresp;
     // Save where the environmental variables start.
     new_mm->env_start = useresp;
     // Push the environment on the stack.
-    envp_ptr          = __push_args_on_stack(&useresp, envp, 0, envp_locations);
+    envp_ptr          = exec_args_push_vector(&useresp, envp, 0, envp_locations);
     // Save where the environmental variables end.
     new_mm->env_end   = useresp;
     // Push the `main` arguments on the stack (argc, argv, envp).
@@ -800,10 +593,8 @@ int sys_execve(pt_regs_t *f)
     }
 
     char **origin_argv;
-    char **saved_argv;
     char **final_argv;
     char **origin_envp;
-    char **saved_envp;
     char **final_envp;
     char name_buffer[NAME_MAX];
     char saved_filename[PATH_MAX];
@@ -833,22 +624,6 @@ int sys_execve(pt_regs_t *f)
         pr_err("sys_execve failed: must provide the name.\n");
         return -EINVAL;
     }
-    // Whether the environment is the caller's memory or the kernel default
-    // installed below. The two take different helpers: the caller's vector is
-    // proven entry by entry, the kernel's one must not be, because none of it
-    // is the caller's memory and every check would refuse it (#396).
-    int envp_is_user = 1;
-    if (origin_envp == NULL) {
-        // We allow a NULL environment, using a default, for macOS compatibility
-        pr_debug("sys_execve: NULL envp, using default environment.\n");
-        static char *default_env[] = {
-            "PATH=/bin:/usr/bin",
-            "HOME=/",
-            NULL};
-        origin_envp  = default_env;
-        envp_is_user = 0;
-    }
-
     // The filename is taken out of the caller's memory once, and everything
     // downstream reads the copy. Measuring it and then handing the original
     // pointer to the loader reads it twice, and the second read is not the
@@ -876,86 +651,14 @@ int sys_execve(pt_regs_t *f)
     name_buffer[name_len] = '\0';
 
     // == COPY PROGRAM ARGUMENTS ==============================================
-    // Copy argv and envp to kernel memory, because all the old process memory will be discarded.
-    // Every count is bounded: a vector that is not NULL-terminated within
-    // MAX_ARG_COUNT entries, a string without a terminator within
-    // MAX_ARG_STRLEN bytes, or an argv/envp above ARG_MAX fails with
-    // -E2BIG, instead of walking user memory unbounded and overflowing
-    // kernel state (#196).
-    int argc;
-    int envc;
-    int argv_bytes;
-    int envp_bytes;
-    if ((argc = __count_user_args(origin_argv, MAX_ARG_COUNT)) < 0) {
-        pr_err("sys_execve failed: argv is unreadable, or has too many entries.\n");
-        return argc;
+    // Copy argv and envp to kernel memory, because all the old process memory
+    // will be discarded. From here on the arguments own three allocations, and
+    // every exit has to release them through exec_args_free (#405).
+    exec_args_t args;
+    int result = exec_args_from_user(&args, origin_argv, origin_envp);
+    if (result < 0) {
+        return result;
     }
-    envc = envp_is_user ? __count_user_args(origin_envp, MAX_ARG_COUNT) : __count_args(origin_envp, MAX_ARG_COUNT);
-    if (envc < 0) {
-        pr_err("sys_execve failed: envp is unreadable, or has too many entries.\n");
-        return envc;
-    }
-    int count_result = __count_user_args_bytes(origin_argv, argc, &argv_bytes);
-    if (count_result < 0) {
-        pr_err("sys_execve failed: argv is unreadable, or exceeds ARG_MAX.\n");
-        return count_result;
-    }
-    count_result = envp_is_user ? __count_user_args_bytes(origin_envp, envc, &envp_bytes)
-                                : __count_args_bytes(origin_envp, envc, &envp_bytes);
-    if (count_result < 0) {
-        pr_err("sys_execve failed: envp is unreadable, or exceeds ARG_MAX.\n");
-        return count_result;
-    }
-    void *args_mem = kmalloc(argv_bytes + envp_bytes);
-    if (!args_mem) {
-        pr_err(
-            "Failed to allocate memory for arguments and environment %d (%d + "
-            "%d).\n",
-            argv_bytes + envp_bytes, argv_bytes, envp_bytes);
-        return -ENOMEM;
-    }
-    // The arrays of string positions are sized from the validated counts:
-    // the argv one also covers the interpreter path, which shifts argv by
-    // two entries and therefore needs argc + 2 slots.
-    char **argv_locations = kmalloc((argc + 2) * sizeof(char *));
-    char **envp_locations = kmalloc(((envc > 0) ? envc : 1) * sizeof(char *));
-    if (!argv_locations || !envp_locations) {
-        pr_err("Failed to allocate memory for the argument positions.\n");
-        kfree(argv_locations);
-        kfree(envp_locations);
-        kfree(args_mem);
-        return -ENOMEM;
-    }
-    // Copy the arguments (raw user strings, bounded per string and against
-    // the total budget: one that grew after the counting fails here instead
-    // of pushing more bytes than were accounted for). The argv pushes must
-    // stay above the environment region of the block.
-    uint32_t args_mem_ptr = (uint32_t)args_mem + (argv_bytes + envp_bytes);
-    int push_result =
-        __push_user_strings_on_stack(&args_mem_ptr, origin_argv, argc, argv_locations, (uint32_t)args_mem + envp_bytes);
-    if (push_result < 0) {
-        pr_err("sys_execve failed: an argument is unreadable, or is not terminated within the limit.\n");
-        kfree(argv_locations);
-        kfree(envp_locations);
-        kfree(args_mem);
-        return push_result;
-    }
-    saved_argv = __push_vector_on_stack(&args_mem_ptr, argv_locations, argc);
-    if (envp_is_user) {
-        push_result = __push_user_strings_on_stack(&args_mem_ptr, origin_envp, envc, envp_locations, (uint32_t)args_mem);
-        if (push_result < 0) {
-            pr_err("sys_execve failed: an environment entry is unreadable, or is not terminated within the limit.\n");
-            kfree(argv_locations);
-            kfree(envp_locations);
-            kfree(args_mem);
-            return push_result;
-        }
-    } else {
-        __push_strings_on_stack(&args_mem_ptr, origin_envp, envc, envp_locations);
-    }
-    saved_envp = __push_vector_on_stack(&args_mem_ptr, envp_locations, envc);
-    // Check the memory pointer.
-    assert(args_mem_ptr == (uint32_t)args_mem);
     // ------------------------------------------------------------------------
 
     // == INITIALIZE TASK MEMORY ==============================================
@@ -970,76 +673,21 @@ int sys_execve(pt_regs_t *f)
     int ret             = __load_executable(saved_filename, current, &entry, &new_mm);
     if (ret <= 0) {
         pr_err("Failed to load executable!\n");
-        // Free the temporary args memory.
-        kfree(args_mem);
+        exec_args_free(&args);
         return ret;
     }
     if (ret == 2) { // An interpreter was loaded.
-        // We need to modify the argv array passed to the interpreter process.
-        // The original file name must be passed as second argument and the rest
-        // is shifted to the right.
-        // Prepare a new argv array.
-        char **int_argv = kmalloc((argc + 2) * sizeof(char *));
-        if (!int_argv) {
-            pr_err("Failed to allocate memory for interpreter argv array.\n");
+        // The interpreter takes the script as its second argument, so the
+        // arguments are rebuilt around it.
+        result = exec_args_insert_interpreter(&args, saved_filename);
+        if (result < 0) {
             // Rollback: the old image is still the current one.
             mm_destroy(new_mm);
             current->uid = prev_uid;
             current->gid = prev_gid;
-            kfree(args_mem);
-            return -ENOMEM;
+            exec_args_free(&args);
+            return result;
         }
-        int_argv[0] = saved_argv[0]; // TODO: pass the path to the interpreter.
-        int_argv[1] = saved_filename;
-        for (int i = 1; i <= argc; i++) {
-            int_argv[i + 1] = saved_argv[i];
-        }
-        argc++;
-
-        // Rebuild the saved argv and envp pointers. The buffer must hold both
-        // the new argv and the whole environment (#227).
-        int int_argc       = argc;
-        int int_argv_bytes = 0;
-        if (__count_args_bytes(int_argv, int_argc, &int_argv_bytes) < 0) {
-            pr_err("sys_execve failed: interpreter arguments exceed ARG_MAX.\n");
-            // Rollback: the old image is still the current one.
-            kfree(int_argv);
-            mm_destroy(new_mm);
-            current->uid = prev_uid;
-            current->gid = prev_gid;
-            kfree(argv_locations);
-            kfree(envp_locations);
-            kfree(args_mem);
-            return -E2BIG;
-        }
-        void *int_args_mem = kmalloc(int_argv_bytes + envp_bytes);
-        if (!int_args_mem) {
-            pr_err(
-                "Failed to allocate memory for interpreter arguments and "
-                "environment %d (%d + %d).\n",
-                int_argv_bytes + envp_bytes, int_argv_bytes, envp_bytes);
-            // Rollback: the old image is still the current one.
-            kfree(int_argv);
-            mm_destroy(new_mm);
-            current->uid = prev_uid;
-            current->gid = prev_gid;
-            kfree(argv_locations);
-            kfree(envp_locations);
-            kfree(args_mem);
-            return -ENOMEM;
-        }
-        // Copy the arguments (kernel strings: lengths were validated on copy).
-        uint32_t int_args_mem_ptr = (uint32_t)int_args_mem + (int_argv_bytes + envp_bytes);
-        __push_strings_on_stack(&int_args_mem_ptr, int_argv, int_argc, argv_locations);
-        saved_argv = __push_vector_on_stack(&int_args_mem_ptr, argv_locations, int_argc);
-        __push_strings_on_stack(&int_args_mem_ptr, saved_envp, envc, envp_locations);
-        saved_envp = __push_vector_on_stack(&int_args_mem_ptr, envp_locations, envc);
-        // Check the memory pointer.
-        assert(int_args_mem_ptr == (uint32_t)int_args_mem);
-        // Free the interpreter argv array and the old argument and environ memory block.
-        kfree(int_argv);
-        kfree(args_mem);
-        args_mem = int_args_mem;
     }
     // ------------------------------------------------------------------------
 
@@ -1055,22 +703,19 @@ int sys_execve(pt_regs_t *f)
     uintptr_t useresp = new_mm->start_stack + DEFAULT_STACK_SIZE;
     // Save where the arguments start.
     new_mm->arg_start = useresp;
-    // Push the arguments on the stack (kernel strings, argc reflects the
+    // Push the arguments on the stack (kernel strings, the count reflects the
     // interpreter shift when a script was loaded).
-    final_argv        = __push_args_on_stack(&useresp, saved_argv, argc, argv_locations);
+    final_argv        = exec_args_push_argv(&args, &useresp);
     // Save where the arguments end, and the env starts.
     new_mm->env_start = new_mm->arg_end = useresp;
     // Push the environment on the stack.
-    final_envp                          = __push_args_on_stack(&useresp, saved_envp, envc, envp_locations);
+    final_envp                          = exec_args_push_envp(&args, &useresp);
     // Save where the environmental variables end.
     new_mm->env_end                     = useresp;
-    // The string positions are no longer needed.
-    kfree(argv_locations);
-    kfree(envp_locations);
     // Push the `main` arguments on the stack (argc, argv, envp).
     stack_push_ptr(&useresp, final_envp);
     stack_push_ptr(&useresp, final_argv);
-    stack_push_s32(&useresp, argc);
+    stack_push_s32(&useresp, args.argc);
 
     // Restore previous pgdir
     paging_switch_pgd(crtdir);
@@ -1098,8 +743,7 @@ int sys_execve(pt_regs_t *f)
     strncpy(current->name, name_buffer, sizeof(current->name) - 1);
     current->name[sizeof(current->name) - 1] = '\0';
 
-    // Free the temporary args memory.
-    kfree(args_mem);
+    exec_args_free(&args);
 
     // Perform the switch to the new process.
     scheduler_restore_context(current, f);
