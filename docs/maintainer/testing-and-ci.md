@@ -7,7 +7,7 @@ Verified against `MAIN` = `62c638a` (line refs for `MAIN` unless noted).
 - CMake-only (no top-level Makefile; use `build/` dir + generated make).
   Typical: `cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug && make -C build -j`.
 - Observed workspace used HOST gcc 13 with `-m32` (CMakeCache
-  `CMAKE_C_COMPILER=/usr/bin/gcc`); `tools/toolchain-i686-elf.cmake` exists
+  `CMAKE_C_COMPILER=/usr/bin/gcc`); `cmake/toolchain-i686-elf.cmake` exists
   for an i686-elf cross toolchain but was not used in our builds.
 - Key targets: `kernel.bin`, `bootloader.bin`, `filesystem` (rootfs.img via
   mke2fs), `cdrom.iso`, `cdrom_test.iso`, `qemu`, `qemu-test`, `programs`,

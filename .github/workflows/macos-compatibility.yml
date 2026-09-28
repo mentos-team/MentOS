@@ -43,7 +43,7 @@ jobs:
     - name: Configure
       run: |
         cmake -B build \
-          -DCMAKE_TOOLCHAIN_FILE=tools/toolchain-i686-elf.cmake \
+          -DCMAKE_TOOLCHAIN_FILE=cmake/toolchain-i686-elf.cmake \
           -DCMAKE_BUILD_TYPE=Release
 
     - name: Build

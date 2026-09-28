@@ -14,7 +14,7 @@ on:
     - '**/CMakeLists.txt'
     - '**/Makefile'
     - '**/cmake/**'
-    - 'tools/**'
+    - 'cmake/**'
     - '.github/workflows/compiler-compatibility.yml'
 
   schedule:

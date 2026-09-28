@@ -17,8 +17,8 @@ on:
     - '**/Makefile'
     - '**/cmake/**'
     - 'scripts/**'
-    - 'tools/**'
-    - '**/tools/toolchain-i686-elf.cmake'
+    - 'cmake/**'
+    - '**/cmake/toolchain-i686-elf.cmake'
     - '.github/workflows/macos.yml'
   pull_request:
     branches:
@@ -59,7 +59,7 @@ jobs:
       run: |
         mkdir -p build
         cd build
-        cmake .. -DCMAKE_TOOLCHAIN_FILE=../tools/toolchain-i686-elf.cmake -DCMAKE_BUILD_TYPE=Release
+        cmake .. -DCMAKE_TOOLCHAIN_FILE=../cmake/toolchain-i686-elf.cmake -DCMAKE_BUILD_TYPE=Release
         cmake --build . --parallel $(sysctl -n hw.ncpu)
 
     # The filesystem target is where macOS diverges from Linux: it shells out
