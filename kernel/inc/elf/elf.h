@@ -55,9 +55,9 @@
 /// dynamic link library and it contains .ctors, .dtors, .dynamic, .got s
 /// ections. See paragraph below.
 #define PT_GNU_RELRO 0x6474E552
-/// @brief TODO: Document.
+/// @brief Lowest segment type reserved for processor-specific semantics.
 #define PT_LOPROC    0x70000000
-/// @brief TODO: Document.
+/// @brief Highest segment type reserved for processor-specific semantics.
 #define PT_HIPROC    0x7FFFFFFF
 
 /// @}
@@ -121,59 +121,73 @@ typedef struct elf_program_header {
 
 /// @brief A section header with all kinds of useful information
 typedef struct elf_section_header {
-    /// TODO: Comment.
+    /// Offset of the section's name into the section-header string table.
     uint32_t name;
-    /// TODO: Comment.
+    /// What the section holds: SHT_PROGBITS, SHT_SYMTAB, SHT_NOBITS and so on.
     uint32_t type;
-    /// TODO: Comment.
+    /// Attribute bits: writable, occupies memory during execution, executable.
     uint32_t flags;
-    /// TODO: Comment.
+    /// Address the section is to occupy at run time, or 0 if it occupies none.
     uint32_t addr;
-    /// TODO: Comment.
+    /// Offset of the section's first byte from the beginning of the file. For
+    /// SHT_NOBITS it is where the section would have been, since it has no
+    /// bytes in the file.
     uint32_t offset;
-    /// TODO: Comment.
+    /// Size of the section in bytes.
     uint32_t size;
-    /// TODO: Comment.
+    /// A section header index whose meaning depends on `type`: for a symbol
+    /// table it is the string table the names come from.
     uint32_t link;
-    /// TODO: Comment.
+    /// Extra information whose meaning depends on `type`: for a symbol table
+    /// it is the index of the first non-local symbol.
     uint32_t info;
-    /// TODO: Comment.
+    /// Required alignment of `addr`, a power of two, or 0 and 1 for none.
     uint32_t addralign;
-    /// TODO: Comment.
+    /// Size of one entry, for a section that holds a table of fixed-size
+    /// entries; 0 for a section that does not.
     uint32_t entsize;
 } elf_section_header_t;
 
 /// @brief A symbol itself.
 typedef struct elf_symbol {
-    /// TODO: Comment.
+    /// Offset of the symbol's name into the string table this symbol table
+    /// points at through its section header's `link`.
     uint32_t name;
-    /// TODO: Comment.
+    /// The symbol's value: an address for a defined symbol, an alignment for a
+    /// common one, and 0 for an undefined one.
     uint32_t value;
-    /// TODO: Comment.
+    /// Size of what the symbol names, in bytes, or 0 when it has no size or
+    /// the size is unknown.
     uint32_t size;
-    /// TODO: Comment.
+    /// Binding in the high nibble (local, global, weak) and type in the low
+    /// one (object, function, section, file).
     uint8_t info;
-    /// TODO: Comment.
+    /// Visibility; 0 for the default, and otherwise one of the STV_* values.
     uint8_t other;
-    /// TODO: Comment.
+    /// Index of the section this symbol is defined in, or one of the reserved
+    /// values: SHN_UNDEF for undefined, SHN_ABS for an absolute value.
     uint16_t ndx;
 } elf_symbol_t;
 
 /// @brief Holds information about relocation object (that do not need an addend).
 typedef struct elf_rel {
-    /// TODO: Comment.
+    /// Where the relocation applies: an offset into the section for a
+    /// relocatable file, a virtual address for an executable.
     uint32_t r_offset;
-    /// TODO: Comment.
+    /// Symbol table index in the high 24 bits, relocation type in the low 8.
     uint32_t r_info;
 } elf_rel_t;
 
 /// @brief Holds information about relocation object (that need an addend).
 typedef struct elf_rela {
-    /// TODO: Comment.
+    /// Where the relocation applies: an offset into the section for a
+    /// relocatable file, a virtual address for an executable.
     uint32_t r_offset;
-    /// TODO: Comment.
+    /// Symbol table index in the high 24 bits, relocation type in the low 8.
     uint32_t r_info;
-    /// TODO: Comment.
+    /// Constant added when computing the value to store. This is the only
+    /// thing that distinguishes this form from elf_rel_t, which takes the
+    /// addend from the location being relocated instead.
     int32_t r_addend;
 } elf_rela_t;
 
