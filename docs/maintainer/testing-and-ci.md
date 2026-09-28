@@ -100,15 +100,27 @@ With the fix applied, failure detection is now automatic:
 3. **TAP validation**: the wrapper validates `test.log` after normal guest completion,
    so failed tests and missing/short plans fail both local `qemu-test` and CI.
 
-## Current known suite state (at `MAIN`)
+## Finding out the state of the suite
 
-- Tests 1–9 pass (t_abort, t_alarm, t_chdir, t_creat, t_dup, t_environ,
-  t_exit, t_exec, t_fork).
-- Test 10 (t_gid) panics the kernel (#192); 11–39 unreachable.
-- The two investigation repros (`t_aaa_procfs`, `t_aab_pipe`, named to sort
-  first) run at positions 1–2 when registered; they lived only in a
-  disposable clone and are NOT in the repository — copy them from
-  investigation-history.md / issues #194/#195 if needed.
+This section used to hold a snapshot of which tests passed. It said test 10
+panicked the kernel long after that stopped being true, and two independent
+readers believed it (#220). A snapshot of a test run belongs in a test run.
+
+To learn the current state, run it:
+
+```
+make -C build qemu-test
+grep -cE '^ok ' build/test.log      # tests that passed
+grep -cE '^not ok ' build/test.log  # tests that failed
+grep -c PANIC build/serial.log      # must be 0
+```
+
+The CI badge on the README answers the same question for `develop`.
+
+`t_aab_pipe` is in the repository and runs as part of the suite; it is named
+to sort first because it was written as a reproduction for #195. Its
+counterpart `t_aaa_procfs`, written for #194, lived only in a disposable
+clone and was never committed — the issue body has what it did.
 
 ## CI workflow shape (ubuntu.yml)
 
@@ -117,7 +129,11 @@ With the fix applied, failure detection is now automatic:
   debugfs sanity-dumps it, builds `cdrom_test.iso`, runs
   `scripts/run-qemu-test build 600`, then a diagnostic tapview step;
   artifacts test.log/serial.log uploaded `if: always()`.
-- macos.yml exists (issue #124 tracks build problems there; not examined).
+- kernel-tests job: a second configuration, `ENABLE_KERNEL_TESTS=ON`, which
+  builds `cdrom_kerneltest.iso` and runs `scripts/run-qemu-kernel-test`. The
+  guest ends that run itself, so it needs no separate stop condition.
+- macos.yml builds with the Homebrew cross toolchain and the filesystem
+  image; it does not run either suite.
 
 ## The five workflows and when they run
 
