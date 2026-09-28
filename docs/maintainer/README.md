@@ -36,7 +36,7 @@ references.
 | [testing-and-ci.md](testing-and-ci.md) | Running, extending, or trusting the test suite; CI work |
 | [security-model.md](security-model.md) | Any security-relevant change; triaging #191-class reports |
 | [debugging-playbook.md](debugging-playbook.md) | Before reproducing anything in QEMU; host-side analysis techniques |
-| [known-bugs.md](known-bugs.md) | Before fixing anything — check the open-issue landscape first |
+| [known-bugs.md](known-bugs.md) | Root-cause record of #190–#196, all closed. Read for the analysis; current status lives in the issue tracker |
 | [investigation-history.md](investigation-history.md) | Understanding how the current findings were established |
 | [false-positives-and-dismissed-findings.md](false-positives-and-dismissed-findings.md) | Before re-reporting something already investigated |
 

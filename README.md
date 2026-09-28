@@ -76,6 +76,11 @@ make qemu
 
 **Login**: Use `root` or `user` (from `filesystem/etc/passwd`)
 
+The build is freestanding: the kernel and the userspace programs are linked
+against the C library in `lib/`, and never against the host's. A host `gcc`
+that cannot produce a 32-bit hosted binary — no `crti.o`, no `Scrt1.o` — is
+not a problem here, and `gcc-multilib` is not a prerequisite.
+
 ## 📚 Documentation
 
 **All documentation is in the [Wiki](https://github.com/mentos-team/MentOS/wiki)**:
@@ -99,9 +104,22 @@ make qemu
 ### Development
 
 - **[Development Guide](https://github.com/mentos-team/MentOS/wiki/Development-Guide)** - Add programs and features
+- **[Unit Testing](https://github.com/mentos-team/MentOS/wiki/Unit-Testing)** - Run the test suites and read their results
 - **[Debugging](https://github.com/mentos-team/MentOS/wiki/Debugging)** - GDB and kernel logging
 - **[Contributing](https://github.com/mentos-team/MentOS/wiki/Contributing)** - Contribution guidelines
 - **[Features](https://github.com/mentos-team/MentOS/wiki/Features)** - Feature roadmap with priorities
+
+### Changing a subsystem
+
+The wiki introduces the system; [`docs/maintainer/`](docs/maintainer/README.md)
+is the reference for changing it. It lives in the repository so that it moves
+with the code, and it is written for whoever is about to touch a subsystem
+rather than for whoever is learning what it does.
+
+- **[Maintainer knowledge base](docs/maintainer/README.md)** - Index, subsystem map, and the invariants each one relies on
+- **[Testing and CI](docs/maintainer/testing-and-ci.md)** - How both suites run, and how to tell a real pass from a green exit code
+- **[Security model](docs/maintainer/security-model.md)** - The kernel/user boundary and what is trusted where
+- **[Debugging playbook](docs/maintainer/debugging-playbook.md)** - Reproducing a failure that only happens in the guest
 
 ## Project Structure
 
@@ -113,7 +131,9 @@ mentos/
 ├── userspace/         ← User programs (40+) and tests (60+)
 ├── filesystem/        ← Root filesystem content (becomes rootfs.img)
 ├── iso/               ← GRUB boot configuration
-├── doc/               ← Documentation
+├── scripts/           ← Test runners (run-qemu-test, tapview)
+├── cmake/             ← Cross-toolchain file
+├── docs/              ← Maintainer documentation
 └── CMakeLists.txt     ← Build configuration
 ```
 

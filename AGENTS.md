@@ -100,6 +100,8 @@ make -C build-kt qemu-kernel-test # kernel suites only, exits on its own
 | anything security-relevant | `docs/maintainer/security-model.md` + `known-bugs.md` |
 | reproducing anything | `docs/maintainer/debugging-playbook.md` |
 
-Before fixing anything, check `docs/maintainer/known-bugs.md` (open issues
-#190–#196) and `false-positives-and-dismissed-findings.md` (already-investigated
-non-bugs — do not re-report).
+Before fixing anything, check `docs/maintainer/known-bugs.md` (root-cause
+record of #190–#196, all closed — read it for the analysis, never for status;
+open bugs live only in the issue tracker) and
+`false-positives-and-dismissed-findings.md` (already-investigated non-bugs —
+do not re-report).
