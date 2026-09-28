@@ -88,6 +88,9 @@ src/mentos/src/utils/
 utils/initfscp
 cmake-build-*
 build
+# The kernel unit tests need a build directory of their own, and AGENTS.md
+# names this one.
+build-kt
 doc/html
 .idea
 
