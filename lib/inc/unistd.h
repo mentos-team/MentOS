@@ -236,6 +236,35 @@ int execvpe(const char *file, char *const argv[], char *const envp[]);
 ///         returned, and errno is set appropriately.
 int nice(int inc);
 
+/// Wait for the writes already issued over the range before starting.
+#define SYNC_FILE_RANGE_WAIT_BEFORE 1
+/// Start writing the range out.
+#define SYNC_FILE_RANGE_WRITE       2
+/// Wait for the writes over the range to reach the disk before returning.
+#define SYNC_FILE_RANGE_WAIT_AFTER  4
+
+/// @brief Flush every filesystem to persistent storage.
+/// @return 0, always.
+/// @details Writes in this system reach the disk before they return, so
+///          there is nothing outstanding for this call to wait for. It
+///          exists so that portable code can call it, and so that it has
+///          somewhere to live the day a write-back cache appears.
+int sync(void);
+
+/// @brief Flush the filesystem holding an open file.
+/// @param fd a descriptor open on the target filesystem.
+/// @return 0 on success, -1 with `errno` set to `EBADF` when `fd` is not open.
+int syncfs(int fd);
+
+/// @brief Flush a range of a file to persistent storage.
+/// @param fd a descriptor open on the file.
+/// @param offset the first byte of the range.
+/// @param nbytes the length of the range, 0 meaning to the end of the file.
+/// @param flags any of the SYNC_FILE_RANGE_* constants.
+/// @return 0 on success, -1 with `errno` set to `EBADF` when `fd` is not
+///         open, or `EINVAL` when the range is negative.
+int sync_file_range(int fd, off_t offset, off_t nbytes, unsigned int flags);
+
 /// @brief Get current working directory.
 /// @param buf  The array where the CWD will be copied.
 /// @param size The size of the array.
