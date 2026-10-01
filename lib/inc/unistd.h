@@ -234,6 +234,8 @@ int execvpe(const char *file, char *const argv[], char *const envp[]);
 /// @param inc The value to add to the nice.
 /// @return On success, the new nice value is returned. On error, -1 is
 ///         returned, and errno is set appropriately.
+/// @details The returned nice value may itself be -1. Test errno to
+///          distinguish that successful value from an error.
 int nice(int inc);
 
 /// Wait for the writes already issued over the range before starting.

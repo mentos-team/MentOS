@@ -60,6 +60,7 @@ set(TEST_LIST
     t_stdint.c
     t_mount_boundary.c
     t_name_max.c
+    t_nice.c
     t_alarm.c
     t_exit.c
     t_environ.c

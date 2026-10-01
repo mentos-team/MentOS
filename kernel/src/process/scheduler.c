@@ -637,7 +637,9 @@ int sys_nice(int increment)
 
     pr_debug("Actual new nice value is: %d\n", actualNice);
 
-    return actualNice;
+    // Syscalls reserve negative values for -errno. Shift the user-visible
+    // [-20, 19] range so libc can distinguish a successful -1 from -EPERM.
+    return actualNice + NICE_RETURN_OFFSET;
 }
 
 pid_t sys_waitpid(pid_t pid, int *status, int options)

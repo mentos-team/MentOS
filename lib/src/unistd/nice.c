@@ -12,5 +12,8 @@ int nice(int inc)
 {
     long __res;
     __inline_syscall_1(__res, nice, inc);
+    if (__res >= 0) {
+        return (int)__res - NICE_RETURN_OFFSET;
+    }
     __syscall_return(int, __res);
 }
