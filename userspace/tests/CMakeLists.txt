@@ -10,6 +10,7 @@ set(TEST_LIST
     t_procfs_read.c
     t_list.c
     t_msgget.c
+    t_pipe_eof_data.c
     t_pipe_blocking.c
     t_syslog.c
     t_userptr.c
