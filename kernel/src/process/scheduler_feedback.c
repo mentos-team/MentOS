@@ -195,3 +195,31 @@ void scheduler_feedback_update(void)
     // Reset the number of occurrences.
     total_occurrences = 0;
 }
+
+ssize_t scheduler_feedback_to_string(char *buffer, size_t bufsize)
+{
+    if (!buffer || (bufsize == 0)) {
+        return 0;
+    }
+    size_t written = 0;
+    int ret         = snprintf(buffer, bufsize, "Scheduling Statistics (%s)\n", POLICY_NAME);
+    if (ret > 0) {
+        written += (size_t)ret;
+    }
+    for (size_t i = 0; (i < PID_MAX_LIMIT) && (written < bufsize); ++i) {
+        if (!arr_stats[i].task) {
+            continue;
+        }
+        double tcpu         = total_occurrences ? ((double)arr_stats[i].occur * 100.0) / total_occurrences : 0.0;
+        double vruntime_sec = (double)arr_stats[i].task->se.vruntime / TICKS_PER_SECOND;
+        ret                 = snprintf(
+            buffer + written, bufsize - written,
+            "[%3d] | %-22s | vruntime(s): %-8.2f | prio: %3d | TCPU: %.2f%%\n", arr_stats[i].task->pid,
+            arr_stats[i].task->name, vruntime_sec, arr_stats[i].task->se.prio, tcpu);
+        if (ret <= 0) {
+            break;
+        }
+        written += (size_t)ret;
+    }
+    return (ssize_t)written;
+}
