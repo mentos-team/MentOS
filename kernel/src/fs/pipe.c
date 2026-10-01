@@ -916,6 +916,7 @@ static ssize_t pipe_read(vfs_file_t *file, char *buffer, off_t offset, size_t nb
     // Return 0 if there are no writers left.
     if (pipe_info->writers == 0) {
         pr_debug("No writers left.\n");
+        mutex_unlock(&pipe_info->mutex);
         return 0;
     }
 
