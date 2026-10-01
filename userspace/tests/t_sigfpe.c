@@ -31,14 +31,13 @@ void sig_handler(int sig)
         syslog(LOG_INFO, "[t_sigfpe] handler(%d) : Correct signal. FPE\n", sig);
         syslog(LOG_INFO, "[t_sigfpe] handler(%d) : Exiting\n", sig);
         exit(0);
-    } else if (sig == SIGILL) {
-        syslog(LOG_INFO, "[t_sigfpe] handler(%d) : Incorrect signal. ILLEGAL INSTRUCTION\n", sig);
-        syslog(LOG_INFO, "[t_sigfpe] handler(%d) : Exiting\n", sig);
-        exit(0);
-    } else {
-        syslog(LOG_INFO, "[t_sigfpe] handler(%d) : Wrong signal.\n", sig);
     }
-    syslog(LOG_INFO, "[t_sigfpe] handler(%d) : Ending handler.\n", sig);
+    // Any other signal means the kernel is mapping the division-by-zero
+    // exception to the wrong signal again (#415). Fail loudly instead of
+    // exiting 0, so a regression shows up as a test failure rather than
+    // being silently tolerated.
+    syslog(LOG_INFO, "[t_sigfpe] handler(%d) : Wrong signal, expected SIGFPE (%d).\n", sig, SIGFPE);
+    exit(1);
 }
 
 int main(int argc, char *argv[])
@@ -49,17 +48,6 @@ int main(int argc, char *argv[])
 
     // Set the SIGFPE handler using sigaction.
     if (sigaction(SIGFPE, &action, NULL) == -1) {
-        syslog(LOG_INFO, "[t_sigfpe] Failed to set signal handler (%s).\n", strerror(errno));
-        return 1;
-    }
-
-    // Set the SIGILL handler using sigaction. We should not see a SIGILL, but... alas... right now, the division by
-    // zero is causing a SIGILL instead of a SIGFPE, so we need to set this handler as well to avoid the program being
-    // killed by the default handler.
-    //
-    // TODO: Fix the kernel to raise SIGFPE instead of SIGILL for division by zero, and remove this handler.
-    //
-    if (sigaction(SIGILL, &action, NULL) == -1) {
         syslog(LOG_INFO, "[t_sigfpe] Failed to set signal handler (%s).\n", strerror(errno));
         return 1;
     }
