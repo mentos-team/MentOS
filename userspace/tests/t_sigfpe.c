@@ -54,9 +54,16 @@ int main(int argc, char *argv[])
 
     syslog(LOG_INFO, "[t_sigfpe] Diving by zero (unrecoverable)...\n");
 
-    // Should trigger ALU error, fighting the compiler...
-    int d = 1;
-    int e = 1;
+    // `volatile` is required here: with optimizations enabled (e.g. Release
+    // builds), GCC can prove at compile time that `e` reaches 0 before the
+    // second division, and since integer division by zero is undefined
+    // behaviour in C, it replaces the division with a trap instruction
+    // (illegal opcode, raising SIGILL) instead of emitting a real `idiv`
+    // that lets the CPU raise the divide-by-zero exception (SIGFPE). Making
+    // the operands `volatile` forces GCC to treat their values as unknown at
+    // compile time, so it must emit an actual runtime division.
+    volatile int d = 1;
+    volatile int e = 1;
     d /= e;
     e -= 1;
     d /= e;
