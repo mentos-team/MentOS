@@ -489,6 +489,13 @@ int kmain(boot_info_t *boot_informations)
     print_ok();
 
     //==========================================================================
+    // /proc/feedback only has real content to serve when the scheduler
+    // feedback system itself is compiled in: its handler reads the very
+    // statistics scheduler_feedback_init() sets up and
+    // scheduler_feedback_update() maintains. Registering the file without
+    // that backing data would make it open and read cleanly while always
+    // being empty, which teaches a reader something false about the system
+    // (#418). So both are gated behind the same build option.
 #ifdef ENABLE_SCHEDULER_FEEDBACK
     pr_notice("Initialize scheduler feedback system...\n");
     printf("Initialize scheduler feedback system...");
@@ -497,9 +504,7 @@ int kmain(boot_info_t *boot_informations)
         kernel_panic("Failed to initialize the scheduler feedback system.");
     }
     print_ok();
-#endif
 
-    //==========================================================================
     pr_notice("Initialize scheduler feedback system (2)...\n");
     printf("Initialize scheduler feedback system (2)...");
     if (procfb_module_init()) {
@@ -507,6 +512,7 @@ int kmain(boot_info_t *boot_informations)
         kernel_panic("Failed to initialize the scheduler feedback system (2).");
     }
     print_ok();
+#endif
 
     //==========================================================================
     // The test-run mode was already detected at the beginning of kmain (see

@@ -6,6 +6,7 @@ set(TEST_LIST
     t_dir_entries.c
     t_dup.c
     t_hashmap.c
+    t_proc_feedback.c
     t_procfs_read.c
     t_list.c
     t_msgget.c

@@ -6,16 +6,18 @@
 #include "errno.h"
 #include "fs/procfs.h"
 #include "io/debug.h"
+#include "math.h"
 #include "process/process.h"
+#include "process/scheduler_feedback.h"
 #include "string.h"
 
 /// @brief Reads data from the /proc/feedback file.
 ///
 /// @param file A pointer to the vfs_file_t structure representing the file to read from.
-/// @param buf A buffer to store the read data (unused in this example).
-/// @param offset The offset from where the read operation should begin (unused in this example).
-/// @param nbyte The number of bytes to read (unused in this example).
-/// @return Always returns 0 on success, or -ENOENT if the file is NULL.
+/// @param buf A buffer to store the read data.
+/// @param offset The offset from where the read operation should begin.
+/// @param nbyte The number of bytes to read.
+/// @return The number of bytes actually read, or -ENOENT if the file is NULL.
 static ssize_t procfb_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyte)
 {
     // Check if the file pointer is NULL.
@@ -24,14 +26,19 @@ static ssize_t procfb_read(vfs_file_t *file, char *buf, off_t offset, size_t nby
         return -ENOENT; // Return an error if the file is NULL.
     }
 
-    // Check if the file name matches "/proc/feedback".
-    if (!strcmp(file->name, "/proc/feedback")) {
-        pr_alert("procfb_read: Returning scheduling feedback information.\n");
-        // TODO: Add logic to return actual feedback information here.
-    }
+    // Prepare a support buffer, and format the scheduling feedback into it.
+    char support[BUFSIZ];
+    memset(support, 0, BUFSIZ);
+    scheduler_feedback_to_string(support, BUFSIZ);
 
-    // Return 0 to indicate success.
-    return 0;
+    // Compute the amount of bytes we want (and can) read.
+    ssize_t bytes_to_read = max(0, min(strlen(support) - offset, nbyte));
+    // Perform the read: copy exactly the computed amount, never more, since
+    // buf is the raw user read(2) buffer and nbyte is all it can hold.
+    if (bytes_to_read > 0) {
+        memcpy(buf, support + offset, (size_t)bytes_to_read);
+    }
+    return bytes_to_read;
 }
 
 /// Filesystem general operations.
