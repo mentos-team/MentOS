@@ -1,7 +1,6 @@
 # Process lifecycle
 
-Verified against `BASE` = `82f4314`; spot-rechecked at `MAIN` = `62c638a`
-(where noted).
+Verified against `develop` at `53e7572`.
 
 ## Structures
 
@@ -16,6 +15,42 @@ Verified against `BASE` = `82f4314`; spot-rechecked at `MAIN` = `62c638a`
     `exit_code`, `parent`, `children`/`sibling` list heads, `run_list`
   - signal state: `sighand`, `blocked`, `pending`, `waiting_on`
 - `init_process` global; init may not call exit (kernel_panic guard).
+
+## Single-thread-per-process design assumption
+
+MentOS currently has one schedulable `task_struct` per process. There is no
+separate thread-group object, no shared signal state, and no reference-counted
+address-space ownership. A PID therefore identifies both the process and its
+only schedulable task. This is a design constraint, not a complete thread
+model.
+
+Several current behaviors rely on that constraint:
+
+- **Address-space ownership:** each task owns its `mm_struct`. `fork()` clones
+  the address space, `execve()` replaces and destroys the old `mm`, and exit
+  destroys the task's `mm` before the task is reaped. Threads sharing an `mm`
+  would require explicit lifetime management so one thread's `execve()` or
+  exit cannot destroy mappings still used by another.
+- **Scheduling and kernel execution:** the scheduler switches page directories
+  at trap boundaries. It saves a user/trap frame in `thread.regs`, but does
+  not save a resumable kernel call stack. A syscall that encounters a wait
+  condition therefore cannot suspend and later continue at that call site;
+  current wait paths return to userspace and may report `-EAGAIN` or `-EINTR`
+  instead. This is the architectural problem tracked by #204.
+- **Signals:** pending queues and masks belong to an individual task. Stop and
+  continue handling does not coordinate queues or state across a thread group,
+  and signal delivery has no group-shared pending queue. Those behaviors are
+  currently only meaningful for a one-task process.
+- **Process-wide operations:** operations that replace or destroy a process
+  image, or change stopped/running state, act directly on the one task. A
+  threaded design must define whether each operation targets one thread or
+  the whole process, and coordinate concurrent users of shared resources.
+
+These dependencies are marked at their implementation sites in
+`process.c`, `mm.c`, `scheduler.c`, `signal.c`, and `pipe.c`; this section is
+the shared explanation. Do not interpret the markers as partial thread
+support: adding threads requires an explicit task-group model, shared-resource
+ownership rules, and resumable per-task kernel execution contexts.
 
 ## Creation — `__alloc_task(source, parent, name)` (process.c)
 

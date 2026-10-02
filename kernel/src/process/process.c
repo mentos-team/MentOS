@@ -182,10 +182,8 @@ start:
     // == Build the candidate image ===========================================
     // From this point on, every failure must destroy the candidate image
     // and leave the current image of the task untouched.
-    // FIXME: When threads will be implemented
-    // they should share the mm, so the destroy_process_image must be called
-    // only when all the threads are terminated. This can be accomplished by using
-    // an internal counter on the mm.
+    // Address-space lifetime assumes one task per process; threaded processes
+    // need shared/refcounted mm ownership. See process-lifecycle.md.
     candidate = mm_create_blank(DEFAULT_STACK_SIZE);
     if (candidate == NULL) {
         pr_err("Failed to initialize the candidate mm structure.\n");

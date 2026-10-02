@@ -322,8 +322,8 @@ void scheduler_restore_context(task_struct *process, pt_regs_t *f)
     // reorder operations, which would cause us to switch page directories BEFORE
     // restoring the register context. This leads to immediate faults on process switch.
     __asm__ __volatile__("" ::: "memory");
-    // TODO(enrico): Explain paging switch (ring 0 doesn't need page switching)
-    // Switch to process page directory
+    // Each process currently owns its mm; the scheduler restores its page
+    // directory at the trap boundary. See process-lifecycle.md.
     paging_switch_pgd(process->mm->pgd);
 }
 
