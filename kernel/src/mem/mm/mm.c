@@ -48,8 +48,9 @@ mm_struct_t *mm_create_blank(size_t stack_size)
     // Initialize the allocated mm_struct to zero.
     memset(mm, 0, sizeof(mm_struct_t));
 
-    // Initialize the list for memory management (mm) structures.
-    // TODO(enrico): Use this field for process memory management.
+    // Initialize the list reserved for tracking mm_struct instances. The
+    // current one-task-per-process ownership model is documented in
+    // process-lifecycle.md.
     list_head_init(&mm->mm_list);
 
     // Get the main page directory.

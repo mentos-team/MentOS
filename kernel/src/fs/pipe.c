@@ -955,8 +955,8 @@ static ssize_t pipe_read(vfs_file_t *file, char *buffer, off_t offset, size_t nb
         if (pipe_is_blocking(file)) {
             pipe_put_process_to_sleep(pipe_info, &pipe_info->read_wait, pipe_read_wake_function, "pipe_read");
         }
-        // TODO: We currently do not save kernel regs status, so we need a
-        // work-around when putting processes to sleep.
+        // The syscall cannot resume here after sleeping until #204's
+        // resumable kernel context work lands; see process-lifecycle.md.
         bytes_read = -EAGAIN;
     }
 
@@ -1042,8 +1042,8 @@ static ssize_t pipe_write(vfs_file_t *file, const void *buffer, off_t offset, si
         if (pipe_is_blocking(file)) {
             pipe_put_process_to_sleep(pipe_info, &pipe_info->write_wait, pipe_write_wake_function, "pipe_write");
         }
-        // TODO: We currently do not save kernel regs status, so we need a
-        // work-around when putting processes to sleep.
+        // The syscall cannot resume here after sleeping until #204's
+        // resumable kernel context work lands; see process-lifecycle.md.
         bytes_written = -EAGAIN;
     }
 

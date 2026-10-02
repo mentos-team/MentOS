@@ -450,7 +450,8 @@ static void __rm_from_queue(sigset_t *mask, sigpending_t *q)
     }
 }
 
-/// @brief We do not consider group stopping because for now we don't have thread groups.
+/// @brief Stop the current task; process-wide group stopping is not implemented.
+/// See process-lifecycle.md for the one-task-per-process design assumption.
 /// @param current the current process.
 /// @param f the stack frame.
 /// @param signr signal number.
@@ -643,7 +644,8 @@ void handle_stop_signal(int sig, siginfo_t *info, struct task_struct *p)
     // pending signal queue p->signal->shared_pending and from the private
     // queues of all members of the thread group.
     if (sig == SIGSTOP || sig == SIGTSTP || sig == SIGTTIN || sig == SIGTTOU) {
-        // TODO(enrico): shared and thread group.
+        // Thread-group and shared pending queues are not implemented; see
+        // process-lifecycle.md.
 
         sigset_t mask;
         sigemptyset(&mask);
