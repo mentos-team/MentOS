@@ -60,6 +60,23 @@ static void __init_pagedir(page_directory_t *pdir) { *pdir = (page_directory_t){
 /// @param ptable the page table to initialize.
 static void __init_pagetable(page_table_t *ptable) { *ptable = (page_table_t){{0}}; }
 
+/// @brief Gives every kernel-space page directory entry a page table.
+/// @details The tables are allocated empty (no page present), so this maps
+/// nothing: it only makes the directory entries exist, which is what lets
+/// per-process copies of the directory share them. See #271.
+/// @param pgd The main page directory.
+/// @return 0 on success, -1 on failure.
+static int __populate_kernel_pdes(page_directory_t *pgd)
+{
+    for (uint32_t index = PROCAREA_END_ADDR >> 22U; index < MAX_PAGE_DIR_ENTRIES; ++index) {
+        // A zero-sized update allocates the table behind the entry and stops.
+        if (mem_upd_vm_area(pgd, index << 22U, 0, 0, MM_RW | MM_GLOBAL) < 0) {
+            return -1;
+        }
+    }
+    return 0;
+}
+
 int paging_init(boot_info_t *info)
 {
     // Check if the info pointer is valid.
@@ -144,6 +161,16 @@ int paging_init(boot_info_t *info)
             pr_crit("Failed to map DMA zone.\n");
             return -1;
         }
+    }
+
+    // Every process page directory is a snapshot of this one (see
+    // mm_create_blank), so a directory entry added to it later is invisible to
+    // all existing processes. Populate every kernel-space entry now, while the
+    // snapshot is still the only copy, so that later kernel mappings only
+    // rewrite entries inside tables that all page directories already share.
+    if (__populate_kernel_pdes(main_mm->pgd) < 0) {
+        pr_crit("Failed to populate the kernel page directory entries.\n");
+        return -1;
     }
 
     // Switch to the newly created page directory.
