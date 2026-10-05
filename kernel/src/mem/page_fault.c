@@ -20,12 +20,13 @@
 #include "string.h"
 #include "system/panic.h"
 
-// Error code interpretation.
-#define ERR_PRESENT  0x01 ///< Page not present.
-#define ERR_RW       0x02 ///< Page is read only.
-#define ERR_USER     0x04 ///< Page is privileged.
-#define ERR_RESERVED 0x08 ///< Overwrote reserved bit.
-#define ERR_INST     0x10 ///< Instruction fetch.
+// Page-fault error code bits (Intel SDM Vol.3, "Page-Fault Exceptions").
+// Each bit describes the faulting access, not a property of the page table entry.
+#define ERR_PRESENT  0x01 ///< Set: protection violation on a present page. Clear: page not present.
+#define ERR_RW       0x02 ///< Set: the access was a write. Clear: the access was a read.
+#define ERR_USER     0x04 ///< Set: the access came from user mode (CPL 3). Clear: supervisor mode.
+#define ERR_RESERVED 0x08 ///< Set: a reserved bit was set in a paging structure.
+#define ERR_INST     0x10 ///< Set: the fault occurred on an instruction fetch.
 
 /// @brief Sets the given page table flags.
 /// @param table the page table.
