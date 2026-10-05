@@ -11,6 +11,7 @@
 
 #include "mem/page_fault.h"
 
+#include "boot.h"
 #include "descriptor_tables/isr.h"
 #include "mem/mm/page.h"
 #include "mem/mm/vm_area.h"
@@ -249,17 +250,23 @@ void page_fault_handler(pt_regs_t *f)
     // =========================================================================
     // STACK OVERFLOW DETECTION - Check this FIRST
     // =========================================================================
-    extern uint32_t stack_bottom, stack_top;
+    extern boot_info_t boot_info;
     uint32_t faulting_addr = get_cr2();
 
+    // The kernel runs on [stack_base - stack_size, stack_base), handed over by
+    // the bootloader. The stack_bottom/stack_top symbols are a different,
+    // unused buffer (#439).
+    uint32_t stack_top_addr    = boot_info.stack_base;
+    uint32_t stack_bottom_addr = boot_info.stack_base - boot_info.stack_size;
+
     // Check if this is a fault on the kernel stack guard page (overflow)
-    if (faulting_addr == (uint32_t)&stack_bottom) {
+    if (faulting_addr == stack_bottom_addr) {
         pr_crit("\n");
         pr_crit("========================================================\n");
         pr_crit("           KERNEL STACK OVERFLOW DETECTED!\n");
         pr_crit("========================================================\n");
         pr_crit("Guard page fault at: 0x%p\n", (void *)faulting_addr);
-        pr_crit("Stack range: 0x%p - 0x%p\n", (void *)&stack_bottom, (void *)&stack_top);
+        pr_crit("Stack range: 0x%p - 0x%p\n", (void *)stack_bottom_addr, (void *)stack_top_addr);
         pr_crit("Current ESP: 0x%p\n", (void *)f->esp);
         pr_crit("Faulting EIP: 0x%p\n", (void *)f->eip);
         pr_crit("The kernel stack has been exhausted by excessive usage.\n");
@@ -272,15 +279,16 @@ void page_fault_handler(pt_regs_t *f)
         return;
     }
 
-    // Warn if stack usage is getting dangerously high (> 75% used)
-    // NOTE: This check is currently disabled due to issues with linker symbol resolution
-    // The more important guard page detection above will catch actual stack overflows
-    // TODO: Fix symbol resolution for stack_bottom and stack_top in paging context
-
-    // Stack grows downward: stack_top (high addr) -> esp (current) -> ... -> stack_bottom (low addr)
-    // uint32_t stack_bottom_addr = (uint32_t)&stack_bottom;
-    // uint32_t stack_top_addr = (uint32_t)&stack_top;
-    // These would be used for usage calculation, but require proper symbol resolution
+    // Warn if the kernel stack is more than 75% used. The stack grows
+    // downward: stack_top (high) -> esp -> stack_bottom (low).
+    if ((f->esp >= stack_bottom_addr) && (f->esp < stack_top_addr)) {
+        uint32_t used = stack_top_addr - f->esp;
+        if (used > (boot_info.stack_size / 4U) * 3U) {
+            pr_warning("Kernel stack is %u%% used (%u of %u bytes) at fault 0x%p.\n",
+                       used / (boot_info.stack_size / 100U), used, boot_info.stack_size,
+                       (void *)faulting_addr);
+        }
+    }
 
     // Extract the error
     int err_user    = bit_check(f->err_code, 2) != 0;

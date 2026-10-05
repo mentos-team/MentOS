@@ -298,6 +298,7 @@ void boot_main(uint32_t magic, multiboot_info_t *header, uint32_t esp)
 
     // Reserve space for the kernel stack at the end of lowmem.
     boot_info.stack_base      = boot_info.lowmem_virt_end;
+    boot_info.stack_size      = KERNEL_STACK_SIZE;
     boot_info.lowmem_phy_end  = boot_info.lowmem_phy_end - KERNEL_STACK_SIZE;
     boot_info.lowmem_virt_end = boot_info.lowmem_virt_end - KERNEL_STACK_SIZE;
 
