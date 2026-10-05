@@ -45,6 +45,7 @@ set(TEST_LIST
     t_font.c
     t_sigusr.c
     t_kill.c
+    t_kill_perm.c
     t_periodic1.c
     t_chdir.c
     t_fhs.c

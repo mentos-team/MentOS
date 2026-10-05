@@ -766,7 +766,7 @@ void do_exit(int exit_code)
     runqueue.curr->state     = EXIT_ZOMBIE;
     // Send a SIGCHLD to the parent process.
     if (runqueue.curr->parent) {
-        int ret = sys_kill(runqueue.curr->parent->pid, SIGCHLD);
+        int ret = kernel_kill(runqueue.curr->parent->pid, SIGCHLD);
         if (ret == -1) {
             pr_err(
                 "[%d] %5d failed sending signal %d : %s\n", ret, runqueue.curr->parent->pid, SIGCHLD, strerror(errno));

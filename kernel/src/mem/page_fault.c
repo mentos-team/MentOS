@@ -155,7 +155,7 @@ static int __page_handle_cow(page_table_entry_t *entry)
 /// @return 0 if the signal was queued and the context switch was performed,
 ///         1 if there is no current task (the caller must panic).
 /// @details A user-mode fault the kernel cannot resolve must kill the
-///          faulting process, not the kernel: sys_kill queues the signal,
+///          faulting process, not the kernel: kernel_kill queues the signal,
 ///          and scheduler_run delivers it through the stored frame (running
 ///          the handler or the default terminating action) before this
 ///          task runs again.
@@ -205,7 +205,7 @@ static int __send_sigsegv_to_current(pt_regs_t *f, uint32_t faulting_addr)
                 faulting_addr);
         }
         // Notifies current process.
-        sys_kill(task->pid, SIGSEGV);
+        kernel_kill(task->pid, SIGSEGV);
         // Now, we know the process needs to be removed from the list of
         // running processes. We pushed the SEGV signal in the queues of
         // signal to send to the process. To properly handle the signal,

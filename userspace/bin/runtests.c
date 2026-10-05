@@ -58,6 +58,7 @@ static char *all_tests[] = {
     "t_hashmap",
     "t_itimer",
     "t_kill",
+    "t_kill_perm",
     "t_list",
     "t_mem",
     "t_mkdir",

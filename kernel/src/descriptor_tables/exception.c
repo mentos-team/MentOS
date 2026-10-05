@@ -83,7 +83,7 @@ void handle_gp_fault(pt_regs_t *frame)
         task_struct *task = scheduler_get_current_process();
         assert(task && "There is no current task.");
         // Attempt to recover by terminating the user-mode process.
-        sys_kill(task->pid, SIGSEGV);
+        kernel_kill(task->pid, SIGSEGV);
         // Now, we know the process needs to be removed from the list of
         // running processes. We pushed the SEGV signal in the queues of
         // signal to send to the process. To properly handle the signal,

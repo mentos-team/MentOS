@@ -123,11 +123,10 @@ static int __sig_is_ignored(struct task_struct *t, int sig)
     }
     // Get the signal handler.
     sighandler_t handler = __get_handler(t, sig);
-    // Check the type of the handler.
+    // SIG_IGN on SIGCHLD is deliberately reported as not-ignored: do_signal()
+    // forces the parent to wait for the child in that case, so the signal must
+    // still be queued.
     return (handler == SIG_IGN) && (sig != SIGCHLD);
-    // TODO(enrico): do_signal() specifically checks if the handler is IGN and the signal
-    //        is SIGCHLD, in that case it forces a wait for the parent, that's why
-    //        here I'm also accepting as not-ignored a SIG_IGN which is a SIGCHLD.
 }
 
 /// @brief Allocate a new signal queue record.
@@ -688,11 +687,9 @@ int __send_sig_info(int sig, siginfo_t *info, struct task_struct *p)
         return -EINVAL;
     }
 
-    // If the signal is being sent by a User Mode process,
-    // it checks whether the operation is allowed.
-    if (info->si_code == SI_USER) {
-        // TODO(enrico):
-    }
+    // Permission checks for signals sent by user processes live in sys_kill(),
+    // because this function is also the delivery path for kernel-generated
+    // signals (faults, timers, SIGCHLD), which must never be refused.
 
     // If the sig parameter has the value 0,
     // it returns immediately without generating any signal
@@ -718,13 +715,34 @@ int __send_sig_info(int sig, siginfo_t *info, struct task_struct *p)
     return 0;
 }
 
-int sys_kill(pid_t pid, int sig)
+/// @brief Checks whether `sender` may signal `target`, following POSIX kill().
+/// @param sender The task issuing the signal.
+/// @param target The task receiving the signal.
+/// @return 1 if allowed, 0 otherwise.
+static inline int __may_signal(const task_struct *sender, const task_struct *target)
+{
+    // A privileged sender may signal anyone.
+    if (sender->uid == 0) {
+        return 1;
+    }
+    // Otherwise the real or effective uid of the sender must match the real or
+    // effective uid of the target.
+    return (sender->ruid == target->ruid) || (sender->ruid == target->uid) || (sender->uid == target->ruid) ||
+           (sender->uid == target->uid);
+}
+
+/// @brief Queues `sig` for the process `pid`, with no permission check.
+/// @param pid The PID of the target process.
+/// @param sig The signal to send.
+/// @param sender The task to check permissions against, or NULL to skip them.
+/// @return 0 on success, a negative errno otherwise.
+static int __kill(pid_t pid, int sig, const task_struct *sender)
 {
     // `sig` is unvalidated syscall input here, and strsignal() returns NULL
     // for anything out of range: logging it straight through %s risks a
     // NULL string argument, which GCC's -O2 format-overflow check catches.
     const char *signame = strsignal(sig);
-    pr_debug("sys_kill(%d, %2d:%s)\n", pid, sig, signame ? signame : "unknown");
+    pr_debug("kill(%d, %2d:%s)\n", pid, sig, signame ? signame : "unknown");
     struct task_struct *process = scheduler_get_running_process(pid);
     // Check the task associated with the pid.
     if (!process) {
@@ -733,6 +751,9 @@ int sys_kill(pid_t pid, int sig)
     // Check the signal that we want to send.
     if ((sig < 0) || (sig >= NSIG)) {
         return -EINVAL;
+    }
+    if ((sender != NULL) && !__may_signal(sender, process)) {
+        return -EPERM;
     }
     siginfo_t info;
     info.si_signo           = sig;
@@ -744,10 +765,12 @@ int sys_kill(pid_t pid, int sig)
     info.si_addr            = NULL;
     info.si_status          = 0;
     info.si_band            = 0;
-    int ret                 = __send_sig_info(sig, &info, process);
-
-    return ret;
+    return __send_sig_info(sig, &info, process);
 }
+
+int sys_kill(pid_t pid, int sig) { return __kill(pid, sig, scheduler_get_current_process()); }
+
+int kernel_kill(pid_t pid, int sig) { return __kill(pid, sig, NULL); }
 
 sighandler_t sys_signal(int signum, sighandler_t handler, uint32_t sigreturn_addr)
 {
