@@ -142,9 +142,9 @@ static inline void __print_vector(list_head_t *vector)
 {
 #if defined(ENABLE_REAL_TIMER_SYSTEM_DUMP) && (__DEBUG_LEVEL__ == LOGLEVEL_NOTICE)
     if (!list_head_empty(vector)) {
-        pr_debug("0x%p = [ ", vector);
+        pr_debug("%p = [ ", vector);
         list_for_each_decl (it, vector) {
-            pr_debug("0x%p ", it);
+            pr_debug("%p ", it);
         }
         pr_debug("]\n");
     }

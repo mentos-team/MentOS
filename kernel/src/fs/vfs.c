@@ -98,7 +98,7 @@ static const char *__vfs_print_file_details(void *ptr)
 {
     vfs_file_t *file = (vfs_file_t *)ptr;
     static char buffer[NAME_MAX];
-    sprintf(buffer, "(0x%p) [%2u] %s", ptr, file->ino, file->name);
+    sprintf(buffer, "(%p) [%2u] %s", ptr, file->ino, file->name);
     return buffer;
 }
 

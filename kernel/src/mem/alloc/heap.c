@@ -113,7 +113,7 @@ static inline const char *__block_to_string(kheap_block_t *block)
     if (block) {
         // Format the block's information into the buffer
         sprintf(
-            buffer, "0x%p [%9s](%d)",
+            buffer, "%p [%9s](%d)",
             (void *)block,              // Pointer to the block
             to_human_size(block->size), // Human-readable size
             block->is_free);            // Free status (1 if free, 0 if allocated)
@@ -136,35 +136,35 @@ static inline void __blkmngr_dump(int log_level, heap_header_t *header)
     task_struct *task = scheduler_get_current_process();
     assert(task && "There is no current task!\n");
     kheap_block_t *block;
-    pr_log(log_level, "[%s] LIST (0x%p):\n", task->name, (void *)&header->list);
+    pr_log(log_level, "[%s] LIST (%p):\n", task->name, (void *)&header->list);
     list_for_each_decl (it, &header->list) {
         block = list_entry(it, kheap_block_t, list);
         pr_log(log_level, "[%s]     %s{", task->name, __block_to_string(block));
         if (it->prev != &header->list) {
-            pr_log(log_level, "0x%p", (void *)list_entry(it->prev, kheap_block_t, list));
+            pr_log(log_level, "%p", (void *)list_entry(it->prev, kheap_block_t, list));
         } else {
             pr_log(log_level, "   HEAD   ");
         }
         pr_log(log_level, ", ");
         if (it->next != &header->list) {
-            pr_log(log_level, "0x%p", (void *)list_entry(it->next, kheap_block_t, list));
+            pr_log(log_level, "%p", (void *)list_entry(it->next, kheap_block_t, list));
         } else {
             pr_log(log_level, "   HEAD   ");
         }
         pr_log(log_level, "}\n");
     }
-    pr_log(log_level, "[%s] FREE (0x%p):\n", task->name, (void *)&header->free);
+    pr_log(log_level, "[%s] FREE (%p):\n", task->name, (void *)&header->free);
     list_for_each_decl (it, &header->free) {
         block = list_entry(it, kheap_block_t, free);
         pr_log(log_level, "[%s]     %s{", task->name, __block_to_string(block));
         if (it->prev != &header->free) {
-            pr_log(log_level, "0x%p", (void *)list_entry(it->prev, kheap_block_t, free));
+            pr_log(log_level, "%p", (void *)list_entry(it->prev, kheap_block_t, free));
         } else {
             pr_log(log_level, "   HEAD   ");
         }
         pr_log(log_level, ", ");
         if (it->next != &header->free) {
-            pr_log(log_level, "0x%p", (void *)list_entry(it->next, kheap_block_t, free));
+            pr_log(log_level, "%p", (void *)list_entry(it->next, kheap_block_t, free));
         } else {
             pr_log(log_level, "   HEAD   ");
         }
@@ -721,7 +721,7 @@ void *sys_brk(void *addr)
     if (((uintptr_t)addr > heap->vm_start) && ((uintptr_t)addr < heap->vm_end)) {
         // If it is, free the specified address.
         if (__do_free(heap, addr) < 0) {
-            pr_err("Failed to free memory at address: 0x%p.\n", addr);
+            pr_err("Failed to free memory at address: %p.\n", addr);
             return NULL; // Return error if freeing fails.
         }
     } else {

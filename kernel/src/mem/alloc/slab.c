@@ -395,7 +395,7 @@ static inline void *__kmem_cache_alloc_slab(kmem_cache_t *cachep, page_t *slab_p
         cachep->ctor(elem);
     }
 
-    pr_debug("Successfully allocated object 0x%p from cache `%s`.\n", elem, cachep->name);
+    pr_debug("Successfully allocated object %p from cache `%s`.\n", elem, cachep->name);
 
     return elem;
 }
@@ -667,7 +667,7 @@ void *pr_kmem_cache_alloc(const char *file, const char *fun, int line, kmem_cach
     }
 
 #ifdef ENABLE_CACHE_TRACE
-    pr_notice("kmem_cache_alloc 0x%p in %-20s at %s:%d\n", ptr, cachep->name, file, line);
+    pr_notice("kmem_cache_alloc %p in %-20s at %s:%d\n", ptr, cachep->name, file, line);
 #endif
 
     return ptr; // Return pointer to the allocated object.
@@ -686,7 +686,7 @@ int pr_kmem_cache_free(const char *file, const char *fun, int line, void *addr)
 
     // Check if slab_page retrieval was successful
     if (!slab_page) {
-        pr_crit("Failed to get slab page for pointer 0x%p.\n", addr);
+        pr_crit("Failed to get slab page for pointer %p.\n", addr);
         return 1;
     }
 
@@ -700,12 +700,12 @@ int pr_kmem_cache_free(const char *file, const char *fun, int line, void *addr)
 
     // Check if cachep retrieval was successful
     if (!cachep) {
-        pr_crit("Failed to retrieve cache from slab page for pointer 0x%p.\n", addr);
+        pr_crit("Failed to retrieve cache from slab page for pointer %p.\n", addr);
         return 1;
     }
 
 #ifdef ENABLE_CACHE_TRACE
-    pr_notice("kmem_cache_free  0x%p in %-20s at %s:%d\n", addr, cachep->name, file, line);
+    pr_notice("kmem_cache_free  %p in %-20s at %s:%d\n", addr, cachep->name, file, line);
 #endif
 
     // Call the destructor if defined.
@@ -718,7 +718,7 @@ int pr_kmem_cache_free(const char *file, const char *fun, int line, void *addr)
 
     // Check if object retrieval was successful
     if (!object) {
-        pr_crit("Failed to retrieve kmem object for pointer 0x%p.\n", addr);
+        pr_crit("Failed to retrieve kmem object for pointer %p.\n", addr);
         return 1;
     }
 
@@ -775,7 +775,7 @@ void *pr_kmalloc(const char *file, const char *fun, int line, unsigned int size)
 
 #ifdef ENABLE_KMEM_TRACE
     if (ptr) {
-        pr_notice("kmalloc 0x%p of order %u at %s:%d\n", ptr, order, file, line);
+        pr_notice("kmalloc %p of order %u at %s:%d\n", ptr, order, file, line);
     }
     store_resource_info(resource_id, file, line, ptr);
 #endif
@@ -794,7 +794,7 @@ void pr_kfree(const char *file, const char *fun, int line, void *ptr)
 
     // Check if page retrieval was successful.
     if (!page) {
-        pr_crit("Failed to retrieve page for address 0x%p at %s:%d\n", ptr, file, line);
+        pr_crit("Failed to retrieve page for address %p at %s:%d\n", ptr, file, line);
         return;
     }
 
@@ -802,19 +802,19 @@ void pr_kfree(const char *file, const char *fun, int line, void *ptr)
     if (page->container.slab_main_page) {
         if (kmem_cache_free(ptr) < 0) {
             pr_crit(
-                "Failed to free memory from kmem_cache for address 0x%p at "
+                "Failed to free memory from kmem_cache for address %p at "
                 "%s:%d\n",
                 ptr, file, line);
         }
     } else {
         // Otherwise, free the raw pages.
         if (free_pages_lowmem((uint32_t)ptr) < 0) {
-            pr_crit("Failed to free raw pages for address 0x%p at %s:%d\n", ptr, file, line);
+            pr_crit("Failed to free raw pages for address %p at %s:%d\n", ptr, file, line);
         }
     }
 
 #ifdef ENABLE_KMEM_TRACE
-    pr_notice("kfree   0x%p at %s:%d\n", ptr, file, line);
+    pr_notice("kfree   %p at %s:%d\n", ptr, file, line);
     clear_resource_info(ptr);
     print_resource_usage(resource_id, NULL);
 #endif

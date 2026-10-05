@@ -537,7 +537,7 @@ mem_virtual_to_page(page_directory_t *pgd, uint32_t virt_start, size_t *size)
         static volatile int pte_not_present_count = 0;
         if (pte_not_present_count < 3) {
             pte_not_present_count++;
-            pr_warning("mem_virtual_to_page: PTE not present for vaddr 0x%p (PDE %u, PTE offset %u)\n", (void *)virt_start, virt_pgt, virt_pgt_offset);
+            pr_warning("mem_virtual_to_page: PTE not present for vaddr %p (PDE %u, PTE offset %u)\n", (void *)virt_start, virt_pgt, virt_pgt_offset);
         }
         return NULL;
     }
@@ -882,13 +882,13 @@ int sys_munmap(void *addr, size_t length)
 
         // Check if the requested address and length match the current segment.
         if ((vm_start == segment->vm_start) && (length == size)) {
-            pr_debug("[0x%p:0x%p] Found it, destroying it.\n", (void *)segment->vm_start, (void *)segment->vm_end);
+            pr_debug("[%p:%p] Found it, destroying it.\n", (void *)segment->vm_start, (void *)segment->vm_end);
 
             // Step 6: Destroy the found virtual memory area.
             if (vm_area_destroy(task->mm, segment) < 0) {
                 pr_err(
                     "Failed to destroy the virtual memory area at "
-                    "[0x%p:0x%p].\n",
+                    "[%p:%p].\n",
                     (void *)segment->vm_start, (void *)segment->vm_end);
                 return -1;
             }
@@ -898,7 +898,7 @@ int sys_munmap(void *addr, size_t length)
     }
 
     pr_err(
-        "No matching memory area found for unmapping at address 0x%p with "
+        "No matching memory area found for unmapping at address %p with "
         "length %zu.\n",
         addr, length);
     return 1;

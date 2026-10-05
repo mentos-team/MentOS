@@ -129,7 +129,7 @@ void print_resource_usage(int resource_id, const char *(*printer)(void *ptr))
                     printer(resource_tracker[i].ptr));
             } else {
                 pr_notice(
-                    "    ptr=0x%p, consumed at %s:%d\n", resource_tracker[i].ptr, resource_tracker[i].file,
+                    "    ptr=%p, consumed at %s:%d\n", resource_tracker[i].ptr, resource_tracker[i].file,
                     resource_tracker[i].line);
             }
         }
