@@ -1513,7 +1513,7 @@ static int ata_close(vfs_file_t *file)
 /// @return the number of read characters.
 static ssize_t ata_read(vfs_file_t *file, char *buffer, off_t offset, size_t size)
 {
-    // pr_debug("ata_read(file: 0x%p, buffer: 0x%p, offest: %8d, size: %8d)\n", file, buffer, offset, size);
+    // pr_debug("ata_read(file: %p, buffer: %p, offest: %8d, size: %8d)\n", file, buffer, offset, size);
 
     // Prepare a static support buffer.
     static char support_buffer[ATA_SECTOR_SIZE];

@@ -214,7 +214,7 @@ block_found:
     __bb_clear_flag(page, FREE_PAGE);
 
 #if 0
-    pr_notice("Page successfully allocated (page: 0x%p).\n", page);
+    pr_notice("Page successfully allocated (page: %p).\n", page);
 #endif
     return page;
 }

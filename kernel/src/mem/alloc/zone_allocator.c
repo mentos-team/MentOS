@@ -107,7 +107,7 @@ static inline void __print_zone(int log_level, const zone_t *zone)
     pr_log(log_level, "    Number of Free Pages : %zu\n", zone->free_pages);
     pr_log(log_level, "    Startint PFN         : %u\n", zone->zone_start_pfn);
     pr_log(log_level, "    Zone Size            : %s\n", to_human_size(zone->total_size));
-    pr_log(log_level, "    Zone Memory Map      : 0x%p\n", (void *)zone->zone_mem_map);
+    pr_log(log_level, "    Zone Memory Map      : %p\n", (void *)zone->zone_mem_map);
     pr_log(log_level, "    Buddy System Status  : %s\n", buddy_status);
 }
 
@@ -1011,7 +1011,7 @@ int free_pages_lowmem(uint32_t vaddr)
 {
     // Ensure it is a valid virtual address.
     if (!is_valid_virtual_address(vaddr)) {
-        pr_crit("The provided address 0x%p is not a valid virtual address.\n", (void *)vaddr);
+        pr_crit("The provided address %p is not a valid virtual address.\n", (void *)vaddr);
         return -1;
     }
 
@@ -1021,7 +1021,7 @@ int free_pages_lowmem(uint32_t vaddr)
     // Ensure the page retrieval was successful.
     if (!page) {
         pr_emerg(
-            "Failed to retrieve page from address: 0x%p. Page is over memory "
+            "Failed to retrieve page from address: %p. Page is over memory "
             "size.\n",
             (void *)vaddr);
         return -1;

@@ -60,9 +60,9 @@ static void __page_fault_panic(pt_regs_t *f, uint32_t addr)
     __asm__ __volatile__("cli");
 
     // Gather fault info and print to screen
-    pr_err("Faulting address (cr2): 0x%p\n", (void *)addr);
+    pr_err("Faulting address (cr2): %p\n", (void *)addr);
 
-    pr_err("EIP: 0x%p\n", (void *)f->eip);
+    pr_err("EIP: %p\n", (void *)f->eip);
 
     pr_err("Page fault: 0x%x\n", addr);
 
@@ -276,10 +276,10 @@ static void __page_fault_service(pt_regs_t *f)
         pr_crit("========================================================\n");
         pr_crit("           KERNEL STACK OVERFLOW DETECTED!\n");
         pr_crit("========================================================\n");
-        pr_crit("Guard page fault at: 0x%p\n", (void *)faulting_addr);
-        pr_crit("Stack range: 0x%p - 0x%p\n", (void *)stack_bottom_addr, (void *)stack_top_addr);
-        pr_crit("Current ESP: 0x%p\n", (void *)f->esp);
-        pr_crit("Faulting EIP: 0x%p\n", (void *)f->eip);
+        pr_crit("Guard page fault at: %p\n", (void *)faulting_addr);
+        pr_crit("Stack range: %p - %p\n", (void *)stack_bottom_addr, (void *)stack_top_addr);
+        pr_crit("Current ESP: %p\n", (void *)f->esp);
+        pr_crit("Faulting EIP: %p\n", (void *)f->eip);
         pr_crit("The kernel stack has been exhausted by excessive usage.\n");
         pr_crit("Possible causes:\n");
         pr_crit("  - Recursive function calls\n");
@@ -295,7 +295,7 @@ static void __page_fault_service(pt_regs_t *f)
     if ((f->esp >= stack_bottom_addr) && (f->esp < stack_top_addr)) {
         uint32_t used = stack_top_addr - f->esp;
         if (used > (boot_info.stack_size / 4U) * 3U) {
-            pr_warning("Kernel stack is %u%% used (%u of %u bytes) at fault 0x%p.\n",
+            pr_warning("Kernel stack is %u%% used (%u of %u bytes) at fault %p.\n",
                        used / (boot_info.stack_size / 100U), used, boot_info.stack_size,
                        (void *)faulting_addr);
         }
