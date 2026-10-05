@@ -647,7 +647,7 @@ static inline void alarm_timeout(unsigned long task_ptr)
     // Get the task fromt the argument.
     struct task_struct *task = (struct task_struct *)task_ptr;
     // Send ALARM.
-    sys_kill(task->pid, SIGALRM);
+    kernel_kill(task->pid, SIGALRM);
     // Remove the timer.
     task->real_timer = NULL;
 }
@@ -660,7 +660,7 @@ static inline void real_timer_timeout(unsigned long task_ptr)
     // Get the task fromt the argument.
     struct task_struct *task = (struct task_struct *)task_ptr;
     // Send the signal.
-    sys_kill(task->pid, SIGALRM);
+    kernel_kill(task->pid, SIGALRM);
     // If the real incr is not 0 then restart.
     if (task->it_real_incr != 0) {
         // Create new timer for process, the old one is going to be deleted.
@@ -846,7 +846,7 @@ void update_process_profiling_timer(task_struct *proc)
     if (proc->it_prof_incr != 0) {
         proc->it_prof_value += proc->se.exec_runtime;
         if (proc->it_prof_value >= proc->it_prof_incr) {
-            sys_kill(proc->pid, SIGPROF);
+            kernel_kill(proc->pid, SIGPROF);
             proc->it_prof_value = 0;
         }
     }

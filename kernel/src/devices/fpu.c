@@ -135,7 +135,7 @@ static inline void __sigfpe_handler(pt_regs_t *f)
     // Notifies current process
     thread_using_fpu = scheduler_get_current_process();
     pr_debug("  Sending SIGFPE to process (pid=%d)\n", thread_using_fpu->pid);
-    sys_kill(thread_using_fpu->pid, SIGFPE);
+    kernel_kill(thread_using_fpu->pid, SIGFPE);
     pr_debug("  SIGFPE sent.\n");
 }
 
@@ -159,7 +159,7 @@ static inline void __invalid_opcode_handler(pt_regs_t *f)
             return;
         }
         pr_debug("  Sending SIGILL to user process (pid=%d)\n", task->pid);
-        sys_kill(task->pid, SIGILL);
+        kernel_kill(task->pid, SIGILL);
         pr_debug("  SIGILL sent.\n");
     } else {
         // Kernel mode - panic

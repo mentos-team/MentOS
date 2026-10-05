@@ -180,11 +180,11 @@ static ssize_t procv_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyt
             // Handle signal-generating control characters
             if (flg_isig) {
                 if (c == 0x03) { // Ctrl+C
-                    sys_kill(process->pid, SIGTERM);
+                    kernel_kill(process->pid, SIGTERM);
                     return 0;
                 }
                 if (c == 0x1A) { // Ctrl+Z
-                    sys_kill(process->pid, SIGSTOP);
+                    kernel_kill(process->pid, SIGSTOP);
                     return 0;
                 }
             }
