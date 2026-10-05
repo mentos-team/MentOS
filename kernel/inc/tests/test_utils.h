@@ -32,7 +32,8 @@
     if (!(cond)) {                                                                 \
         pr_emerg("ASSERT failed in %s at line %d: %s\n", __func__, __LINE__, msg); \
         pr_emerg("Condition: %s\n", #cond);                                        \
-        kernel_panic("Test failure");                                              \
+        kernel_test_record_failure();                                              \
+        return;                                                                    \
     }
 
 /// @brief Compare two memory regions and verify they're equal.
