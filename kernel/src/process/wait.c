@@ -286,6 +286,7 @@ static wait_queue_entry_t *__sleep_on_state(wait_queue_head_t *head, int state)
     task_struct *sleeping_task = scheduler_get_current_process();
     if (!sleeping_task) {
         pr_err("Failed to retrieve the current process.\n");
+        irq_enable(irqs);
         return NULL;
     }
 

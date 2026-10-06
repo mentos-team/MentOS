@@ -11,6 +11,7 @@
 
 #include "descriptor_tables/idt.h"
 #include "descriptor_tables/isr.h"
+#include "klib/irqflags.h"
 #include "tests/test.h"
 #include "tests/test_utils.h"
 
@@ -82,6 +83,20 @@ TEST(isr_invalid_index)
 /// This function runs all ISR tests in sequence.
 void test_isr(void)
 {
+    // Restore IRQ state before ASSERT can return from the suite.
+    uint8_t original = irq_disable();
+    uint8_t nested = irq_disable();
+    irq_enable(nested);
+    int stayed_disabled = !is_irq_enabled();
+    sti();
+    uint8_t enabled = is_irq_enabled();
+    uint8_t saved = irq_disable();
+    irq_enable(saved);
+    int restored = is_irq_enabled();
+    cli();
+    irq_enable(original);
+    ASSERT(nested == 0 && stayed_disabled);
+    ASSERT(enabled == 1 && saved == 1 && restored);
     test_isr_routines_initialized();
     test_isr_exception_messages();
     test_isr_install_uninstall();
