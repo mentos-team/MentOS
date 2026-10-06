@@ -134,6 +134,11 @@ typedef struct task_struct {
     __volatile__ long state;
     /// Set by asynchronous events; consumed by the common return boundary.
     __volatile__ bool_t need_resched;
+    /// Trap frame of a page fault currently being serviced for this task.
+    /// This is per-task because fault handling may itself reschedule.
+    pt_regs_t *page_fault_frame;
+    /// Faulting address paired with page_fault_frame for diagnostics.
+    uint32_t page_fault_addr;
     /// The current opened file descriptors
     vfs_file_descriptor_t *fd_list;
     /// The maximum supported number of file descriptors

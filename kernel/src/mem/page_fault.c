@@ -228,15 +228,6 @@ int init_page_fault(void)
     return 0;
 }
 
-/// @brief The frame of the fault being handled, or NULL if none is.
-/// @details A fault raised while the handler runs (e.g. on a corrupt page
-/// table walk) re-enters it with a fresh frame; without this the report would
-/// show only that nested frame and hide the fault that started it (#219).
-static pt_regs_t *__handling_frame = NULL;
-
-/// @brief The faulting address (cr2) of the fault being handled.
-static uint32_t __handling_addr = 0;
-
 /// @brief Services a page fault; see page_fault_handler.
 /// @param f The interrupt stack frame.
 static void __page_fault_service(pt_regs_t *f)
@@ -453,21 +444,34 @@ static void __page_fault_service(pt_regs_t *f)
 
 void page_fault_handler(pt_regs_t *f)
 {
-    if (__handling_frame != NULL) {
+    task_struct *task = scheduler_get_current_process();
+    if (task == NULL) {
+        kernel_panic("Page fault without a current task!");
+    }
+
+    /*
+     * Page-fault delivery can call scheduler_reschedule_from_trap(), which
+     * may switch to another task before this handler returns. Keeping this
+     * marker in a global variable would make that other task's independent
+     * fault look nested. The marker belongs to the task whose kernel stack
+     * owns the suspended handler instead.
+     */
+    if (task->page_fault_frame != NULL) {
         __asm__ __volatile__("cli");
         pr_emerg("Nested page fault while handling a page fault.\n");
         pr_emerg("--- Original fault (outer) ---\n");
-        pr_emerg("Faulting address (cr2): %p, EIP: %p, err: 0x%x\n", (void *)__handling_addr,
-                 (void *)__handling_frame->eip, __handling_frame->err_code);
-        PRINT_REGS(pr_emerg, __handling_frame);
+        pr_emerg("Faulting address (cr2): %p, EIP: %p, err: 0x%x\n", (void *)task->page_fault_addr,
+                 (void *)task->page_fault_frame->eip, task->page_fault_frame->err_code);
+        PRINT_REGS(pr_emerg, task->page_fault_frame);
         pr_emerg("--- Nested fault (inner) ---\n");
         pr_emerg("Faulting address (cr2): %p, EIP: %p, err: 0x%x\n", (void *)get_cr2(), (void *)f->eip,
                  f->err_code);
         PRINT_REGS(pr_emerg, f);
         kernel_panic("Nested page fault!");
     }
-    __handling_frame = f;
-    __handling_addr  = get_cr2();
+    task->page_fault_frame = f;
+    task->page_fault_addr  = get_cr2();
     __page_fault_service(f);
-    __handling_frame = NULL;
+    task->page_fault_frame = NULL;
+    task->page_fault_addr  = 0;
 }
