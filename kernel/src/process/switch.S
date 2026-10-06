@@ -7,6 +7,7 @@
 section .text
 
 global switch_to
+global ret_from_fork
 
 ; void switch_to(uint32_t *prev_esp, uint32_t next_esp)
 ;
@@ -29,5 +30,17 @@ switch_to:
     pop esi
     pop ebx
     ret
+
+; First-run return trampoline. ESP points at the complete pt_regs_t built by
+; the task constructor. Keep this epilogue byte-for-byte compatible with the
+; common interrupt return path.
+ret_from_fork:
+    pop gs
+    pop fs
+    pop es
+    pop ds
+    popa
+    add esp, 8              ; int_no and err_code
+    iretd
 
 section .note.GNU-stack noalloc noexec nowrite progbits

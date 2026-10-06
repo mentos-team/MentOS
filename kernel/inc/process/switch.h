@@ -33,3 +33,11 @@ SWITCH_LAYOUT_ASSERT(switch_pt_regs_useresp, __builtin_offsetof(pt_regs_t, usere
 /// @param prev_esp Destination for the outgoing ESP.
 /// @param next_esp ESP of the incoming context.
 void switch_to(uint32_t *prev_esp, uint32_t next_esp);
+
+/// @brief Restore a complete user frame prepared above a switch frame.
+///
+/// This is the return address used by first-run synthetic contexts. On entry
+/// ESP points at the first `gs` word of pt_regs_t; the routine restores the
+/// complete frame and executes `iret`. It must never be called with a normal
+/// C return address.
+void ret_from_fork(void);
