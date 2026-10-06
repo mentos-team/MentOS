@@ -320,6 +320,11 @@ void scheduler_restore_context(task_struct *process, pt_regs_t *f)
 {
     // Switch to the next process.
     runqueue.curr = process;
+    // The legacy boundary scheduler still returns through the current IRQ or
+    // syscall frame, but the next ring-3 entry must land on the selected
+    // task's private kernel stack. Keep the boot stack as an explicit fallback
+    // for early tests and pre-handoff code.
+    tss_set_stack(0x10, process->kernel_stack_top ? process->kernel_stack_top : initial_esp);
     // Restore the registers.
     *f            = process->thread.regs;
     process->thread.user_regs = f;
