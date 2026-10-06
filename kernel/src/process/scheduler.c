@@ -309,6 +309,10 @@ void scheduler_store_context(pt_regs_t *f, task_struct *process)
 {
     // Store the registers.
     process->thread.regs = *f;
+    // Keep the live outer frame address separate from the diagnostic snapshot.
+    // M2 will use this pointer at the common return boundary; fork clears it
+    // when constructing a child continuation.
+    process->thread.user_regs = f;
 }
 
 void scheduler_restore_context(task_struct *process, pt_regs_t *f)
@@ -317,6 +321,7 @@ void scheduler_restore_context(task_struct *process, pt_regs_t *f)
     runqueue.curr = process;
     // Restore the registers.
     *f            = process->thread.regs;
+    process->thread.user_regs = f;
     // CRITICAL: Memory barrier to prevent compiler from reordering the page directory
     // switch before the above memory writes. In Release mode, the compiler can
     // reorder operations, which would cause us to switch page directories BEFORE
