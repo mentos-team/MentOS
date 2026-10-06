@@ -277,6 +277,13 @@ static inline task_struct *__alloc_task(task_struct *source, task_struct *parent
     task_struct *proc = kmem_cache_alloc(task_struct_cache, GFP_KERNEL);
     // Clear the memory.
     memset(proc, 0, sizeof(task_struct));
+    // Acquire the private continuation stack before publishing the task in
+    // the parent's child list or duplicating file descriptors. M2 will make
+    // this stack active; M0 only establishes its lifetime and rollback path.
+    if (!task_kernel_stack_alloc(proc)) {
+        kmem_cache_free(proc);
+        return NULL;
+    }
     // Set the id of the process.
     proc->pid   = pid_manager_get_free_pid();
     // Set the state of the process as running.
@@ -391,6 +398,10 @@ int process_create_init(const char *path)
 
     // Allocate the memory for the process.
     init_process = __alloc_task(NULL, NULL, "init");
+    if (init_process == NULL) {
+        pr_err("Failed to allocate init process.\n");
+        return -ENOMEM;
+    }
 
     // Active the current process.
     scheduler_enqueue_task(init_process);
@@ -594,6 +605,9 @@ pid_t sys_fork(pt_regs_t *f)
     scheduler_store_context(f, current);
     // Allocate the memory for the process.
     task_struct *proc        = __alloc_task(current, current, current->name);
+    if (proc == NULL) {
+        return -ENOMEM;
+    }
     // Copy the father's stack, memory, heap etc... to the child process
     proc->mm                 = mm_clone(current->mm);
     // Set the eax as 0, to indicate the child process

@@ -707,6 +707,7 @@ pid_t sys_waitpid(pid_t pid, int *status, int options)
         // Clean up the child process's resources.
         pid_manager_mark_free(child->pid); // Free the PID.
         vfs_destroy_task(child);           // Finalize VFS structures.
+        task_kernel_stack_free(child);     // Release the inactive continuation stack.
         list_head_remove(&child->sibling); // Remove from parent's child list.
 
         // Zombie tasks are typically dequeued in scheduler_run() when they
