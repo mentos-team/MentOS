@@ -318,6 +318,17 @@ void scheduler_store_context(pt_regs_t *f, task_struct *process)
 
 void scheduler_restore_context(task_struct *process, pt_regs_t *f)
 {
+    assert(process != NULL && "Cannot restore a NULL task context.");
+    if (!task_kernel_stack_check(process)) {
+        pr_crit("Kernel stack guard corrupted: pid=%d name=%s base=%p top=%p used>=%zu bytes.\n",
+                 process->pid,
+                 process->name,
+                 process->kernel_stack,
+                 (void *)process->kernel_stack_top,
+                 task_kernel_stack_watermark(process));
+        assert(0 && "Kernel continuation stack canary corrupted.");
+    }
+    assert((process->kernel_stack_top & 0x0fU) == 0 && "Kernel stack top is not 16-byte aligned.");
     // Switch to the next process.
     runqueue.curr = process;
     // The legacy boundary scheduler still returns through the current IRQ or

@@ -41,6 +41,13 @@ char *do_getcwd(char *buf, size_t size);
 #define TASK_KERNEL_STACK_CANARY_SIZE 16
 /// Value used to detect writes below the continuation stack.
 #define TASK_KERNEL_STACK_CANARY 0xC0DEC0DEu
+/// Fill value used to measure the high-water mark of a kernel stack.
+#define TASK_KERNEL_STACK_FILL 0xA5A5A5A5u
+
+/* Keep the allocator order and the advertised usable extent in lock-step. */
+#if TASK_KERNEL_STACK_SIZE != ((1U << TASK_KERNEL_STACK_ORDER) * PAGE_SIZE)
+#error "TASK_KERNEL_STACK_SIZE must match TASK_KERNEL_STACK_ORDER"
+#endif
 
 /// @brief This structure is used to track the statistics of a process.
 /// @details
@@ -219,6 +226,10 @@ void task_kernel_stack_free(task_struct *task);
 /// @brief Check the low-address canary of a task's private stack.
 /// @return 1 when intact or no stack is allocated, 0 on corruption.
 int task_kernel_stack_check(const task_struct *task);
+
+/// @brief Return the deepest observed stack usage in bytes.
+/// @details The value is a diagnostic lower bound, not a proof of safety.
+size_t task_kernel_stack_watermark(const task_struct *task);
 
 /// @brief Build an inactive first-return frame from the task's user snapshot.
 /// @return 0 on success, -1 if the task has no private stack.

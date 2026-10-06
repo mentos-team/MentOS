@@ -52,6 +52,11 @@ int task_kernel_stack_alloc(task_struct *task)
     task->kernel_stack_top  = (uintptr_t)task->kernel_stack + TASK_KERNEL_STACK_SIZE;
     task->kernel_stack_size = TASK_KERNEL_STACK_SIZE;
     memset(task->kernel_stack, 0, task->kernel_stack_size);
+    uint32_t *fill = (uint32_t *)((uintptr_t)task->kernel_stack + TASK_KERNEL_STACK_CANARY_SIZE);
+    size_t fill_words = (task->kernel_stack_size - TASK_KERNEL_STACK_CANARY_SIZE) / sizeof(*fill);
+    for (size_t i = 0; i < fill_words; ++i) {
+        fill[i] = TASK_KERNEL_STACK_FILL;
+    }
     uint32_t *canary = (uint32_t *)task->kernel_stack;
     for (size_t i = 0; i < TASK_KERNEL_STACK_CANARY_SIZE / sizeof(*canary); ++i) {
         canary[i] = TASK_KERNEL_STACK_CANARY;
@@ -82,6 +87,25 @@ int task_kernel_stack_check(const task_struct *task)
         }
     }
     return 1;
+}
+
+size_t task_kernel_stack_watermark(const task_struct *task)
+{
+    if (task == NULL || task->kernel_stack == NULL || task->kernel_stack_top == 0 || task->kernel_stack_size <= TASK_KERNEL_STACK_CANARY_SIZE) {
+        return 0;
+    }
+
+    const uint32_t *word = (const uint32_t *)(task->kernel_stack_top - sizeof(uint32_t));
+    const uintptr_t fill_start = (uintptr_t)task->kernel_stack + TASK_KERNEL_STACK_CANARY_SIZE;
+    while ((uintptr_t)word >= fill_start && *word == TASK_KERNEL_STACK_FILL) {
+        --word;
+    }
+
+    uintptr_t first_written = (uintptr_t)word + sizeof(uint32_t);
+    if (first_written > task->kernel_stack_top) {
+        first_written = task->kernel_stack_top;
+    }
+    return (size_t)(task->kernel_stack_top - first_written);
 }
 
 int task_prepare_kernel_context(task_struct *task)
