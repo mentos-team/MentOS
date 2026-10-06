@@ -180,7 +180,7 @@ void syscall_handler(pt_regs_t *f)
     }
 
     // Schedule next process.
-    scheduler_run(f);
+    scheduler_reschedule_from_trap(f);
 
     // Restore fpu state.
     unswitch_fpu();

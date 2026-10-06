@@ -61,7 +61,7 @@ static void scheduler_switch_to_continuation(task_struct *current, task_struct *
 }
 
 /**
- * @brief Dispatch a task selected by scheduler_run().
+ * @brief Dispatch a task selected by scheduler_reschedule_from_trap().
  *
  * A task can leave the scheduler in one of two fundamentally different
  * states.  A task preempted while returning to userspace owns a trap frame
@@ -248,7 +248,7 @@ int wake_up_process(task_struct *task)
     return 0;
 }
 
-void scheduler_run(pt_regs_t *f)
+void scheduler_reschedule_from_trap(pt_regs_t *f)
 {
     // Check if there is a running process.
     if (runqueue.curr == NULL) {
@@ -886,7 +886,7 @@ retry_children:
         task_kernel_stack_free(child);     // Release the inactive continuation stack.
         list_head_remove(&child->sibling); // Remove from parent's child list.
 
-        // Zombie tasks are typically dequeued in scheduler_run() when they
+        // Zombie tasks are typically dequeued in scheduler_reschedule_from_trap() when they
         // become current. During waitpid() reap they may already be out of
         // the runqueue, so only dequeue if still linked.
         if (!list_head_empty(&child->run_list)) {

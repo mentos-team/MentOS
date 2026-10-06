@@ -470,7 +470,7 @@ static void __do_signal_stop(struct task_struct *current, struct pt_regs *f, int
     current->exit_code = signr;
 
     // Call the scheduler to pick next runnable task.
-    scheduler_run(f);
+    scheduler_reschedule_from_trap(f);
 }
 
 int do_signal(struct pt_regs *f)

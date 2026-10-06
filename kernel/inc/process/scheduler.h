@@ -80,9 +80,14 @@ void scheduler_dequeue_task(task_struct *process);
 /// @return 0 on success, negative on error
 int wake_up_process(task_struct *task);
 
-/// @brief The RR implementation of the scheduler.
-/// @param f The context of the process.
-void scheduler_run(pt_regs_t *f);
+/// @brief Reschedule at the end of a user-mode trap.
+/// @details This is the trap-boundary path: it stores the interrupted
+///          userspace frame, handles pending signals, selects another task,
+///          and either restores that task's frame or resumes its saved kernel
+///          continuation. It is distinct from schedule(), which is called by
+///          a live kernel continuation that voluntarily blocks.
+/// @param f The trap frame that will be returned through the common exit stub.
+void scheduler_reschedule_from_trap(pt_regs_t *f);
 
 /// @brief Voluntarily suspend the current kernel continuation.
 ///

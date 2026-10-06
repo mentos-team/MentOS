@@ -61,7 +61,7 @@ alloc/free pairs and resource tracking (used by `register_resource` /
   pointers (`thread.regs.useresp`) are then re-based by pushing args.
 - Page-fault handler (mem/page_fault.c): prints decode
   `ERR(user rw present)` as `(%d%d%d)`; **any** user-mode fault the kernel
-  cannot resolve → SIGSEGV + scheduler_run via
+  cannot resolve → SIGSEGV + scheduler_reschedule_from_trap via
   `__send_sigsegv_to_current` (non-present directory entry, kernel mapping
   window, failed copy-on-write handling, present non-CoW page); kernel-mode
   fault → `__page_fault_panic` → `kernel_panic`. Before #237 only the

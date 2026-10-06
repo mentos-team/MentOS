@@ -108,7 +108,7 @@ void timer_handler(pt_regs_t *reg)
     video_cursor_blink_tick();
     // Perform the schedule only if the interrupt came from user mode.
     if ((reg->cs & 0x3) == 0x3) {
-        scheduler_run(reg);
+        scheduler_reschedule_from_trap(reg);
     }
     // Restore fpu state.
     unswitch_fpu();

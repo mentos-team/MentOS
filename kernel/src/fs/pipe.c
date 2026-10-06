@@ -528,8 +528,11 @@ int pipe_write_wake_function(wait_queue_entry_t *wait, unsigned mode, int sync)
         return -1;
     }
 
-    // Check if there is available space in the pipe for writing.
-    if (pipe_info_has_space(pipe_info) > 0) {
+    // A closed reader is a terminal condition too: a writer blocked on a
+    // full pipe must wake up so pipe_write() can observe readers == 0 and
+    // return EPIPE (or a partial byte count). Checking only for free space
+    // would leave that continuation asleep forever.
+    if ((pipe_info->readers == 0) || (pipe_info_has_space(pipe_info) > 0)) {
         // Check if the task is in uninterruptible sleep state (the state it
         // entered when starting the pipe write operation).
         if (wait->task->state == TASK_UNINTERRUPTIBLE) {

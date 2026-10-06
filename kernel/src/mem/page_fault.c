@@ -158,7 +158,7 @@ static int __page_handle_cow(page_table_entry_t *entry)
 ///         1 if there is no current task (the caller must panic).
 /// @details A user-mode fault the kernel cannot resolve must kill the
 ///          faulting process, not the kernel: kernel_kill queues the signal,
-///          and scheduler_run delivers it through the stored frame (running
+///          and scheduler_reschedule_from_trap delivers it through the stored frame (running
 ///          the handler or the default terminating action) before this
 ///          task runs again.
 /// @brief The user-mode fault that was last reported.
@@ -212,7 +212,7 @@ static int __send_sigsegv_to_current(pt_regs_t *f, uint32_t faulting_addr)
         // running processes. We pushed the SEGV signal in the queues of
         // signal to send to the process. To properly handle the signal,
         // just run scheduler.
-        scheduler_run(f);
+        scheduler_reschedule_from_trap(f);
         return 0;
     }
     return 1;
