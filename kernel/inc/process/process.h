@@ -29,6 +29,13 @@ char *do_getcwd(char *buf, size_t size);
 /// The default dimension of the stack of a process (1 MByte).
 #define DEFAULT_STACK_SIZE (1 * M)
 
+/// The initial private kernel continuation stack budget for each task.
+///
+/// This is deliberately separate from the user stack in the task's mm. The
+/// first activation milestone only acquires/releases this storage; switching
+/// onto it is introduced atomically with the return path in M2.
+#define KERNEL_STACK_SIZE (32 * K)
+
 /// @brief This structure is used to track the statistics of a process.
 /// @details
 /// While the other variables also play a role in
@@ -122,6 +129,10 @@ typedef struct task_struct {
     list_head_t sibling;
     /// The context of the processors.
     thread_struct_t thread;
+    /// Private kernel continuation stack storage (inactive until M2).
+    void *kernel_stack;
+    /// Size of the private kernel continuation stack in bytes.
+    size_t kernel_stack_size;
     /// For scheduling algorithms.
     sched_entity_t se;
     /// Exit code of the process. (parameter of _exit() system call).
@@ -182,6 +193,13 @@ typedef struct task_struct {
     // struct thread_info thread_info;
     //==========================================================================
 } task_struct;
+
+/// @brief Acquire the private kernel continuation stack for a task.
+/// @return 1 on success, 0 when allocation fails or task is NULL.
+int task_kernel_stack_alloc(task_struct *task);
+
+/// @brief Release a task's private kernel continuation stack.
+void task_kernel_stack_free(task_struct *task);
 
 /// @brief Initialize the task management.
 /// @return 1 success, 0 failure.

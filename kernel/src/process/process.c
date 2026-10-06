@@ -20,6 +20,7 @@
 #include "libgen.h"
 #include "mem/mm/mm.h"
 #include "mem/mm/vmem.h"
+#include "mem/alloc/slab.h"
 #include "mem/uaccess.h"
 #include "process/exec_args.h"
 #include "process/pid_manager.h"
@@ -34,6 +35,31 @@
 
 /// Cache for creating the task structs.
 static kmem_cache_t *task_struct_cache;
+
+int task_kernel_stack_alloc(task_struct *task)
+{
+    if (task == NULL || task->kernel_stack != NULL) {
+        return task != NULL;
+    }
+    task->kernel_stack = kmalloc(KERNEL_STACK_SIZE);
+    if (task->kernel_stack == NULL) {
+        task->kernel_stack_size = 0;
+        return 0;
+    }
+    task->kernel_stack_size = KERNEL_STACK_SIZE;
+    memset(task->kernel_stack, 0, task->kernel_stack_size);
+    return 1;
+}
+
+void task_kernel_stack_free(task_struct *task)
+{
+    if (task == NULL || task->kernel_stack == NULL) {
+        return;
+    }
+    kfree(task->kernel_stack);
+    task->kernel_stack = NULL;
+    task->kernel_stack_size = 0;
+}
 
 /// @brief Clears the user stack of a freshly created memory descriptor.
 /// @param mm the memory descriptor whose stack must be cleared.
