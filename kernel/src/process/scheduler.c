@@ -763,7 +763,12 @@ pid_t sys_waitpid(pid_t pid, int *status, int options)
         return -ECHILD;
     }
 
+    /* The entry remains on this waitpid call chain across schedule(). */
+    wait_queue_entry_t wait_entry;
+    wait_queue_entry_init(&wait_entry, runqueue.curr);
+
     // Iterate through the children of the current process.
+retry_children:
     list_for_each_safe_decl(it, store, &runqueue.curr->children)
     {
         // Get the task_struct for the current child.
@@ -822,21 +827,13 @@ pid_t sys_waitpid(pid_t pid, int *status, int options)
     }
 
     // Otherwise, block until a child exits (and sends SIGCHLD to wake us up).
-    // Task will remain on runqueue but in TASK_UNINTERRUPTIBLE state.
-    // Context switch will happen when this syscall returns and syscall_handler calls scheduler_run(f).
-    // When woken up (by wake_up_all in do_exit), task state transitions to TASK_RUNNING,
-    // and eventually scheduler picks it again, returning to userspace with -EINTR.
-    // Userspace must retry the syscall, which will then find and reap the zombie.
+    // The continuation remains in this function and rechecks the child list
+    // after the wakeup; userspace does not need to retry waitpid().
     pr_debug("Process %d (%s) sleeping in waitpid (no zombie child yet)\n", runqueue.curr->pid, runqueue.curr->name);
-    wait_queue_entry_t *wait_entry = sleep_on(&waitpid_queue);
-    if (!wait_entry) {
-        pr_err("Failed to sleep in waitpid\n");
-        return -ENOMEM;
-    }
-
-    // Return -EINTR to indicate the syscall was interrupted.
-    // The userspace waitpid() wrapper should retry the syscall on -EINTR.
-    return -EINTR;
+    prepare_to_wait(&waitpid_queue, &wait_entry, TASK_UNINTERRUPTIBLE);
+    schedule();
+    finish_wait(&waitpid_queue, &wait_entry);
+    goto retry_children;
 }
 
 void do_exit(int exit_code)
