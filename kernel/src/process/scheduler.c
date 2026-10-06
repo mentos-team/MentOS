@@ -10,6 +10,7 @@
 #include "io/debug.h"                    // Include debugging functions.
 
 #include "assert.h"
+#include "descriptor_tables/isr.h"
 #include "descriptor_tables/tss.h"
 #include "errno.h"
 #include "fs/vfs.h"
@@ -23,6 +24,7 @@
 #include "process/wait.h"
 #include "strerror.h"
 #include "system/panic.h"
+#include "klib/irqflags.h"
 
 /// @brief          Assembly function setting the kernel stack to jump into
 ///                 location in Ring 3 mode (USER mode).
@@ -347,6 +349,50 @@ void scheduler_restore_context(task_struct *process, pt_regs_t *f)
     // Each process currently owns its mm; the scheduler restores its page
     // directory at the trap boundary. See process-lifecycle.md.
     paging_switch_pgd(process->mm->pgd);
+}
+
+void schedule(void)
+{
+    task_struct *prev = runqueue.curr;
+    assert(prev != NULL && "Cannot schedule without a current task.");
+    assert(irq_hardirq_depth() == 0 && "Cannot switch a continuation from hard IRQ context.");
+
+    uint8_t interrupts_were_enabled = irq_disable();
+
+    for (;;) {
+        task_struct *next = scheduler_pick_next_task(&runqueue);
+        if (next != NULL) {
+            if (next == prev) {
+                break;
+            }
+
+            assert(next->thread.kernel_esp != 0 && "Runnable task has no kernel continuation.");
+            assert(next->kernel_stack_top != 0 && "Runnable task has no private kernel stack.");
+
+            runqueue.curr = next;
+            tss_set_stack(0x10, next->kernel_stack_top);
+            if (next->mm != NULL) {
+                paging_switch_pgd(next->mm->pgd);
+            }
+
+            /*
+             * switch_to saves the current C call chain in prev->kernel_esp
+             * and resumes the selected task at its saved return address. When
+             * prev is woken later, this invocation resumes immediately after
+             * switch_to, preserving the blocking syscall's call chain.
+             */
+            switch_to(&prev->thread.kernel_esp, next->thread.kernel_esp);
+            break;
+        }
+
+        /* No runnable task exists. Keep the outgoing continuation blocked and
+         * wait for an IRQ to wake one of the waiters. */
+        sti();
+        __asm__ __volatile__("hlt" ::: "memory");
+        cli();
+    }
+
+    irq_enable(interrupts_were_enabled);
 }
 
 void scheduler_enter_user_jmp(uintptr_t location, uintptr_t stack)

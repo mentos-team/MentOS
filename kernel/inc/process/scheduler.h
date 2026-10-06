@@ -84,6 +84,13 @@ int wake_up_process(task_struct *task);
 /// @param f The context of the process.
 void scheduler_run(pt_regs_t *f);
 
+/// @brief Voluntarily suspend the current kernel continuation.
+///
+/// The caller must have published any wait state before calling this function.
+/// When the current task is woken, this function returns on the same kernel
+/// call chain; it does not manufacture a user-space retry.
+void schedule(void);
+
 /// @brief Values from pt_regs to task_struct process.
 /// @param f       The set of registers we are saving.
 /// @param process The process for which we are saving the CPU registers status.
