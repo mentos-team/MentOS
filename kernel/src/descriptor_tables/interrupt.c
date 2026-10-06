@@ -31,6 +31,9 @@ typedef struct irq_struct {
 static list_head_t shared_interrupt_handlers[IRQ_NUM];
 /// Cache where we will store the data regarding an irq service.
 static kmem_cache_t *irq_cache;
+static __volatile__ unsigned hard_irq_depth = 0;
+
+unsigned irq_hardirq_depth(void) { return hard_irq_depth; }
 
 /// @brief Creates a new irq structure.
 /// @return a pointer to the newly created irq structure.
@@ -108,6 +111,7 @@ int irq_uninstall_handler(unsigned i, interrupt_handler_t handler)
 
 void irq_handler(pt_regs_t *f)
 {
+    ++hard_irq_depth;
     // Keep in mind,
     // because of irq mapping, the first PIC's irq line is shifted by 32.
     unsigned irq_line = f->int_no - 32;
@@ -129,4 +133,6 @@ void irq_handler(pt_regs_t *f)
     }
     // Send the end-of-interrupt to PIC.
     pic8259_send_eoi(irq_line);
+    assert(hard_irq_depth > 0);
+    --hard_irq_depth;
 }
