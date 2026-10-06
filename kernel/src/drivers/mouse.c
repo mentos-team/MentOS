@@ -153,7 +153,6 @@ static void __mouse_isr(pt_regs_t *f)
             // pr_default(LNG_MOUSE_LEFT);
         }
     }
-    pic8259_send_eoi(IRQ_MOUSE);
 }
 
 /// @brief Enable the mouse driver.

@@ -112,8 +112,6 @@ void timer_handler(pt_regs_t *reg)
     }
     // Restore fpu state.
     unswitch_fpu();
-    // The ack is sent to PIC only when all handlers terminated!
-    pic8259_send_eoi(IRQ_TIMER);
 }
 
 void timer_install(void)

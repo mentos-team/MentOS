@@ -464,7 +464,6 @@ void keyboard_isr(pt_regs_t *f)
             keyboard_push_front(keymap->normal);
         }
     }
-    pic8259_send_eoi(IRQ_KEYBOARD);
 }
 
 void keyboard_update_leds(void)
