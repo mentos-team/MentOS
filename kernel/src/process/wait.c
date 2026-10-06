@@ -241,23 +241,6 @@ void finish_wait(wait_queue_head_t *head, wait_queue_entry_t *entry)
     irq_enable(irqs);
 }
 
-void add_wait_queue(wait_queue_head_t *head, wait_queue_entry_t *entry)
-{
-    // Validate the input.
-    if (!head) {
-        pr_err("Variable head is NULL.\n");
-        return;
-    }
-    if (!entry) {
-        pr_err("Variable entry is NULL.\n");
-        return;
-    }
-    entry->flags &= ~WQ_FLAG_EXCLUSIVE;
-    spinlock_lock(&head->lock);
-    __add_wait_queue(head, entry);
-    spinlock_unlock(&head->lock);
-}
-
 void remove_wait_queue(wait_queue_head_t *head, wait_queue_entry_t *entry)
 {
     // Validate the input.

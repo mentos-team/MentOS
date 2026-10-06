@@ -96,11 +96,6 @@ void prepare_to_wait(wait_queue_head_t *head, wait_queue_entry_t *entry, long st
 /// @brief Unlink a caller-owned entry and restore its task to TASK_RUNNING.
 void finish_wait(wait_queue_head_t *head, wait_queue_entry_t *entry);
 
-/// @brief Adds the element to the waiting queue.
-/// @param head The head of the waiting queue.
-/// @param entry The entry we insert inside the waiting queue.
-void add_wait_queue(wait_queue_head_t *head, wait_queue_entry_t *entry);
-
 /// @brief Removes the element from the waiting queue.
 /// @param head The head of the waiting queue.
 /// @param entry The entry we remove from the waiting queue.
