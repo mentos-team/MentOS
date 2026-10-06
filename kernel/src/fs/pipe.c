@@ -902,6 +902,9 @@ static ssize_t pipe_read(vfs_file_t *file, char *buffer, off_t offset, size_t nb
         pr_err("Invalid file - file device is NULL.\n");
         return -1;
     }
+    if (nbyte == 0) {
+        return 0;
+    }
 
     // Retrieve the current task structure.
     task_struct *task = scheduler_get_current_process();
