@@ -29,3 +29,5 @@ switch_to:
     pop esi
     pop ebx
     ret
+
+section .note.GNU-stack noalloc noexec nowrite progbits

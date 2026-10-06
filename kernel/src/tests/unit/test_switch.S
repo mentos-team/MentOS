@@ -48,3 +48,5 @@ switch_test_resumed:
     push switch_test_next
     call switch_to
     ud2
+
+section .note.GNU-stack noalloc noexec nowrite progbits
