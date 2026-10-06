@@ -112,6 +112,7 @@ wait_queue_entry_t *wait_queue_entry_alloc(void)
     entry->task    = NULL;
     entry->func    = NULL;
     entry->private = NULL;
+    entry->ownership = WAIT_ENTRY_HEAP_OWNED;
     list_head_init(&entry->task_list);
     // Return the element.
     return entry;
@@ -168,7 +169,9 @@ int wake_up_wait_queue_entry(wait_queue_head_t *head, wait_queue_entry_t *entry,
     // Perform wake sequence: remove, wake, free (wait layer mechanics).
     remove_wait_queue(head, entry);
     wake_up_process(entry->task);
-    wait_queue_entry_dealloc(entry);
+    if (entry->ownership == WAIT_ENTRY_HEAP_OWNED) {
+        wait_queue_entry_dealloc(entry);
+    }
     return 1;
 }
 
@@ -230,7 +233,44 @@ void wait_queue_entry_init(wait_queue_entry_t *entry, struct task_struct *task)
     entry->task    = task;
     entry->func    = default_wake_function;
     entry->private = NULL;
+    entry->ownership = WAIT_ENTRY_CALLER_OWNED;
     list_head_init(&entry->task_list);
+}
+
+void prepare_to_wait(wait_queue_head_t *head, wait_queue_entry_t *entry, long state)
+{
+    if (head == NULL || entry == NULL || entry->task == NULL) {
+        return;
+    }
+    uint8_t irqs = irq_disable();
+    spinlock_lock(&head->lock);
+    entry->task->state = state;
+    entry->task->waiting_on = head;
+    if (list_head_empty(&entry->task_list)) {
+        __add_wait_queue(head, entry);
+    }
+    spinlock_unlock(&head->lock);
+    irq_enable(irqs);
+}
+
+void finish_wait(wait_queue_head_t *head, wait_queue_entry_t *entry)
+{
+    if (head == NULL || entry == NULL || entry->task == NULL) {
+        return;
+    }
+    uint8_t irqs = irq_disable();
+    spinlock_lock(&head->lock);
+    if (!list_head_empty(&entry->task_list)) {
+        __remove_wait_queue(head, entry);
+    }
+    if (entry->task->waiting_on == head) {
+        entry->task->waiting_on = NULL;
+    }
+    if (entry->task->state == TASK_INTERRUPTIBLE || entry->task->state == TASK_UNINTERRUPTIBLE) {
+        entry->task->state = TASK_RUNNING;
+    }
+    spinlock_unlock(&head->lock);
+    irq_enable(irqs);
 }
 
 void add_wait_queue(wait_queue_head_t *head, wait_queue_entry_t *entry)
@@ -306,6 +346,7 @@ static wait_queue_entry_t *__sleep_on_state(wait_queue_head_t *head, int state)
 
     // Initialize the wait queue entry with the current task.
     wait_queue_entry_init(entry, sleeping_task);
+    entry->ownership = WAIT_ENTRY_HEAP_OWNED;
 
     // Add the wait queue entry to the specified wait queue.
     add_wait_queue(head, entry);

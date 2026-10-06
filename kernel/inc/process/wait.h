@@ -59,6 +59,11 @@
 
 /// @}
 
+typedef enum wait_queue_entry_ownership {
+    WAIT_ENTRY_CALLER_OWNED = 0,
+    WAIT_ENTRY_HEAP_OWNED   = 1,
+} wait_queue_entry_ownership_t;
+
 /// @brief Head of the waiting queue.
 typedef struct wait_queue_head {
     const char *name;           ///< Name of the wait queue (Added for debug purpose).
@@ -79,6 +84,8 @@ typedef struct wait_queue_entry {
     /// Additional context or data, typically a pointer to relevant information
     /// for the wake function.
     void *private;
+    /// Whether the wake layer may release this entry after unlinking it.
+    wait_queue_entry_ownership_t ownership;
 } wait_queue_entry_t;
 
 /// @brief Initializes a wait queue head.
@@ -97,6 +104,12 @@ void wait_queue_entry_dealloc(wait_queue_entry_t *wait_queue_entry);
 /// @param entry The entry we initialize.
 /// @param task The task associated with the entry.
 void wait_queue_entry_init(wait_queue_entry_t *entry, struct task_struct *task);
+
+/// @brief Publish a caller-owned entry and put its task into a wait state.
+void prepare_to_wait(wait_queue_head_t *head, wait_queue_entry_t *entry, long state);
+
+/// @brief Unlink a caller-owned entry and restore its task to TASK_RUNNING.
+void finish_wait(wait_queue_head_t *head, wait_queue_entry_t *entry);
 
 /// @brief Adds the element to the waiting queue.
 /// @param head The head of the waiting queue.
