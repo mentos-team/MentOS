@@ -5,6 +5,7 @@
 
 #include "tests/test.h"
 #include "tests/test_utils.h"
+#include "process/switch.h"
 
 extern int switch_to_round_trip(void);
 
