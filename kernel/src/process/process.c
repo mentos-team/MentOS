@@ -95,6 +95,7 @@ static int __load_executable(const char *path, task_struct *task, uint32_t *entr
     int interpreter_loop   = 0;
     // The duplicated interpreter path, it must be freed on every exit path.
     char *interpreter_path = NULL;
+    char *shebang = NULL;
     // The candidate memory image: until the load succeeds it is completely
     // separate from the running image of the task (#208).
     mm_struct_t *candidate = NULL;
@@ -147,8 +148,16 @@ start:
         }
 
         // Read the shebang line, keep one byte free for the terminator.
-        char buf[PATH_MAX];
-        ssize_t bytes_read = vfs_read(file, buf, 2, sizeof(buf) - 1);
+        if (shebang != NULL) {
+            kfree(shebang);
+            shebang = NULL;
+        }
+        shebang = kmalloc(PATH_MAX);
+        if (!shebang) {
+            ret = -ENOMEM;
+            goto close_and_return;
+        }
+        ssize_t bytes_read = vfs_read(file, shebang, 2, PATH_MAX - 1);
         // The reference to the script file is no longer needed.
         vfs_close(file);
         file = NULL;
@@ -159,17 +168,17 @@ start:
             ret = -EIO;
             goto close_and_return;
         }
-        buf[bytes_read] = 0;
+        shebang[bytes_read] = 0;
 
         // Find end of the line
-        char *lineend = strchr(buf, '\n');
+        char *lineend = strchr(shebang, '\n');
         if (!lineend) {
             ret = -ENAMETOOLONG;
             goto close_and_return;
         }
         *lineend = 0;
 
-        interpreter_path = strdup(buf);
+        interpreter_path = strdup(shebang);
         if (interpreter_path == NULL) {
             ret = -ENOMEM;
             goto close_and_return;
@@ -224,6 +233,9 @@ close_and_return:
     // Free the duplicated interpreter path.
     if (interpreter_path != NULL) {
         kfree(interpreter_path);
+    }
+    if (shebang) {
+        kfree(shebang);
     }
     return ret;
 }
@@ -595,7 +607,6 @@ int sys_execve(pt_regs_t *f)
     char **origin_envp;
     char **final_envp;
     char name_buffer[NAME_MAX];
-    char saved_filename[PATH_MAX];
 
     // Get the filename.
     char *filename = (char *)f->ebx;
@@ -628,11 +639,16 @@ int sys_execve(pt_regs_t *f)
     // one that was checked (#287). A page the caller does not own ends the
     // call here (#191), and a name that does not fit a PATH_MAX buffer cannot
     // name any file, so truncating it would target the wrong executable.
-    long filename_length = strncpy_from_user(saved_filename, filename, sizeof(saved_filename));
+    char *saved_filename = kmalloc(PATH_MAX);
+    if (!saved_filename) {
+        return -ENOMEM;
+    }
+    long filename_length = strncpy_from_user(saved_filename, filename, PATH_MAX);
     if (filename_length < 0) {
         if (filename_length == -ENAMETOOLONG) {
             pr_err("sys_execve failed: filename is longer than PATH_MAX.\n");
         }
+        kfree(saved_filename);
         return (int)filename_length;
     }
     // Save the name of the process. argv[0] is a raw user string, measured
@@ -643,6 +659,7 @@ int sys_execve(pt_regs_t *f)
     if (name_len == -ENAMETOOLONG) {
         name_len = sizeof(name_buffer) - 1;
     } else if (name_len < 0) {
+        kfree(saved_filename);
         return (int)name_len;
     }
     memcpy(name_buffer, origin_argv[0], (size_t)name_len);
@@ -655,6 +672,7 @@ int sys_execve(pt_regs_t *f)
     exec_args_t args;
     int result = exec_args_from_user(&args, origin_argv, origin_envp);
     if (result < 0) {
+        kfree(saved_filename);
         return result;
     }
     // ------------------------------------------------------------------------
@@ -672,6 +690,7 @@ int sys_execve(pt_regs_t *f)
     if (ret <= 0) {
         pr_err("Failed to load executable!\n");
         exec_args_free(&args);
+        kfree(saved_filename);
         return ret;
     }
     if (ret == 2) { // An interpreter was loaded.
@@ -684,9 +703,13 @@ int sys_execve(pt_regs_t *f)
             current->uid = prev_uid;
             current->gid = prev_gid;
             exec_args_free(&args);
+            kfree(saved_filename);
             return result;
         }
     }
+    // The candidate image and argument vectors no longer need the original
+    // filename once interpreter insertion has completed.
+    kfree(saved_filename);
     // ------------------------------------------------------------------------
 
     // == INITIALIZE PROGRAM ARGUMENTS ========================================
