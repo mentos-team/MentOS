@@ -573,24 +573,6 @@ static void pipe_wake_up_tasks(wait_queue_head_t *wait_queue, const char *debug_
 /// @param wake_function Wake-up function associated with the wait queue entry.
 /// @param debug_msg Debug message describing the block context.
 /// @return 0 after scheduling the blocking behavior.
-static int pipe_put_process_to_sleep(
-    pipe_inode_info_t *pipe_info,
-    wait_queue_head_t *wait_queue,
-    int (*wake_function)(wait_queue_entry_t *, unsigned, int),
-    const char *debug_msg)
-{
-    // Blocking behavior: Put the process to sleep until the condition is met.
-    wait_queue_entry_t *wait_queue_entry = sleep_on(wait_queue);
-    assert(wait_queue_entry && "Failed to allocate wait_queue_entry_t.");
-
-    // Set the wake-up function and private data for the wait entry.
-    wait_queue_entry->func    = wake_function;
-    wait_queue_entry->private = pipe_info;
-
-    // Indicate blocking behavior was scheduled.
-    return 0;
-}
-
 // ============================================================================
 // Virtual FileSystem (VFS) Functions
 // ============================================================================
