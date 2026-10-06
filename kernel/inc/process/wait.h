@@ -59,11 +59,6 @@
 
 /// @}
 
-typedef enum wait_queue_entry_ownership {
-    WAIT_ENTRY_CALLER_OWNED = 0,
-    WAIT_ENTRY_HEAP_OWNED   = 1,
-} wait_queue_entry_ownership_t;
-
 /// @brief Head of the waiting queue.
 typedef struct wait_queue_head {
     const char *name;           ///< Name of the wait queue (Added for debug purpose).
@@ -84,21 +79,11 @@ typedef struct wait_queue_entry {
     /// Additional context or data, typically a pointer to relevant information
     /// for the wake function.
     void *private;
-    /// Whether the wake layer may release this entry after unlinking it.
-    wait_queue_entry_ownership_t ownership;
 } wait_queue_entry_t;
 
 /// @brief Initializes a wait queue head.
 /// @param head Pointer to the wait queue head to initialize.
 void wait_queue_head_init(wait_queue_head_t *head);
-
-/// @brief Allocates the memory for a wait_queue_entry.
-/// @return a pointer to the allocated wait_queue_entry.
-wait_queue_entry_t *wait_queue_entry_alloc(void);
-
-/// @brief Frees the memory of a wait_queue_entry.
-/// @param wait_queue_entry pointer to the wait_queue_entry.
-void wait_queue_entry_dealloc(wait_queue_entry_t *wait_queue_entry);
 
 /// @brief Initialize the waiting queue entry.
 /// @param entry The entry we initialize.
@@ -127,22 +112,6 @@ void remove_wait_queue(wait_queue_head_t *head, wait_queue_entry_t *entry);
 /// @param sync Specifies if the wakeup should be synchronous.
 /// @return 1 on success, 0 on failure.
 int default_wake_function(wait_queue_entry_t *entry, unsigned mode, int sync);
-
-/// @brief Sets the state of the current process to TASK_UNINTERRUPTIBLE
-///        and inserts it into the specified wait queue.
-///
-/// @param head Waitqueue where to sleep.
-/// @return Pointer to the entry inside the wq representing the
-///         sleeping process.
-wait_queue_entry_t *sleep_on(wait_queue_head_t *head);
-
-/// @brief Sets the state of the current process to TASK_INTERRUPTIBLE
-///        and inserts it into the specified wait queue.
-///
-/// @param head Waitqueue where to sleep.
-/// @return Pointer to the entry inside the wq representing the
-///         sleeping process.
-wait_queue_entry_t *sleep_on_interruptible(wait_queue_head_t *head);
 
 /// @brief Wake all tasks waiting on the queue.
 ///
