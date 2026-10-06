@@ -37,6 +37,10 @@ char *do_getcwd(char *buf, size_t size);
 #define TASK_KERNEL_STACK_SIZE (32 * K)
 /// Order of the eight-page private kernel stack allocation.
 #define TASK_KERNEL_STACK_ORDER 3
+/// Bytes reserved at the low end for an overflow canary.
+#define TASK_KERNEL_STACK_CANARY_SIZE 16
+/// Value used to detect writes below the continuation stack.
+#define TASK_KERNEL_STACK_CANARY 0xC0DEC0DEu
 
 /// @brief This structure is used to track the statistics of a process.
 /// @details
@@ -211,6 +215,10 @@ int task_kernel_stack_alloc(task_struct *task);
 
 /// @brief Release a task's private kernel continuation stack.
 void task_kernel_stack_free(task_struct *task);
+
+/// @brief Check the low-address canary of a task's private stack.
+/// @return 1 when intact or no stack is allocated, 0 on corruption.
+int task_kernel_stack_check(const task_struct *task);
 
 /// @brief Initialize the task management.
 /// @return 1 success, 0 failure.

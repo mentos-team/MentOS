@@ -51,6 +51,10 @@ int task_kernel_stack_alloc(task_struct *task)
     task->kernel_stack_top  = (uintptr_t)task->kernel_stack + TASK_KERNEL_STACK_SIZE;
     task->kernel_stack_size = TASK_KERNEL_STACK_SIZE;
     memset(task->kernel_stack, 0, task->kernel_stack_size);
+    uint32_t *canary = (uint32_t *)task->kernel_stack;
+    for (size_t i = 0; i < TASK_KERNEL_STACK_CANARY_SIZE / sizeof(*canary); ++i) {
+        canary[i] = TASK_KERNEL_STACK_CANARY;
+    }
     return 1;
 }
 
@@ -63,6 +67,20 @@ void task_kernel_stack_free(task_struct *task)
     task->kernel_stack = NULL;
     task->kernel_stack_top = 0;
     task->kernel_stack_size = 0;
+}
+
+int task_kernel_stack_check(const task_struct *task)
+{
+    if (task == NULL || task->kernel_stack == NULL) {
+        return 1;
+    }
+    const uint32_t *canary = (const uint32_t *)task->kernel_stack;
+    for (size_t i = 0; i < TASK_KERNEL_STACK_CANARY_SIZE / sizeof(*canary); ++i) {
+        if (canary[i] != TASK_KERNEL_STACK_CANARY) {
+            return 0;
+        }
+    }
+    return 1;
 }
 
 /// @brief Clears the user stack of a freshly created memory descriptor.
