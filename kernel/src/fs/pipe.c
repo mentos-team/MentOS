@@ -910,65 +910,71 @@ static ssize_t pipe_read(vfs_file_t *file, char *buffer, off_t offset, size_t nb
     // Retrieve the pipe information structure.
     pipe_inode_info_t *pipe_info = (pipe_inode_info_t *)file->device;
 
-    // Acquire the pipe mutex to ensure safe access.
-    mutex_lock(&pipe_info->mutex, task->pid);
+    /* This entry remains live on the kernel call chain across schedule(). */
+    wait_queue_entry_t wait_entry;
+    wait_queue_entry_init(&wait_entry, task);
+    wait_entry.private = pipe_info;
 
-    // Return EOF only after all buffered data has been consumed.
-    if ((pipe_info->writers == 0) && !pipe_info_has_data(pipe_info)) {
-        pr_debug("No writers left.\n");
+    for (;;) {
+        // Check and consume the pipe condition while holding its mutex.
+        mutex_lock(&pipe_info->mutex, task->pid);
+
+        // Return EOF only after all buffered data has been consumed.
+        if ((pipe_info->writers == 0) && !pipe_info_has_data(pipe_info)) {
+            pr_debug("No writers left.\n");
+            mutex_unlock(&pipe_info->mutex);
+            return 0;
+        }
+
+        if (pipe_info_has_data(pipe_info)) {
+            ssize_t bytes_read = 0;
+            // Loop to read data from the pipe until requested bytes are read or an error occurs.
+            while (bytes_read < nbyte) {
+                // Wrap read_index around when exceeding max buffer capacity.
+                pipe_info->read_index %= (pipe_info->numbuf * PIPE_BUFFER_SIZE);
+
+                // Calculate the buffer index for the current read position.
+                size_t buffer_index        = pipe_linear_to_buffer_index(pipe_info->read_index);
+                pipe_buffer_t *pipe_buffer = &pipe_info->bufs[buffer_index];
+
+                // Confirm that the buffer is ready to be read.
+                if (pipe_buffer_confirm(pipe_buffer) < 0) {
+                    pr_err("Failed to confirm readiness of buffer %zu for reading.\n", buffer_index);
+                    break; // Stop if there’s no data to read.
+                }
+
+                // Calculate bytes to read in this iteration, considering the remaining requested bytes.
+                ssize_t bytes_to_read = pipe_buffer_read(pipe_buffer, buffer + bytes_read, nbyte - bytes_read);
+                if (bytes_to_read < 0) {
+                    pr_err("Error reading from pipe buffer (error[%2zd]: %s).\n", -bytes_to_read, strerror(-bytes_to_read));
+                    bytes_read = -bytes_to_read;
+                    break;
+                }
+
+                // Update the total bytes read and the read index.
+                bytes_read            = bytes_read + bytes_to_read;
+                pipe_info->read_index = pipe_info->read_index + bytes_to_read;
+            }
+
+            mutex_unlock(&pipe_info->mutex);
+            if (bytes_read > 0) {
+                pipe_wake_up_tasks(&pipe_info->write_wait, "pipe_read");
+            }
+            return bytes_read;
+        }
+
+        if (!pipe_is_blocking(file)) {
+            mutex_unlock(&pipe_info->mutex);
+            return -EAGAIN;
+        }
+
+        /* Publish before dropping the condition lock. Wakeups are only
+         * notifications; the condition is rechecked after resumption. */
+        prepare_to_wait(&pipe_info->read_wait, &wait_entry, TASK_UNINTERRUPTIBLE);
         mutex_unlock(&pipe_info->mutex);
-        return 0;
+        schedule();
+        finish_wait(&pipe_info->read_wait, &wait_entry);
     }
-
-    ssize_t bytes_read = 0;
-
-    if (pipe_info_has_data(pipe_info)) {
-        // Loop to read data from the pipe until requested bytes are read or an error occurs.
-        while (bytes_read < nbyte) {
-            // Wrap read_index around when exceeding max buffer capacity.
-            pipe_info->read_index %= (pipe_info->numbuf * PIPE_BUFFER_SIZE);
-
-            // Calculate the buffer index for the current read position.
-            size_t buffer_index        = pipe_linear_to_buffer_index(pipe_info->read_index);
-            pipe_buffer_t *pipe_buffer = &pipe_info->bufs[buffer_index];
-
-            // Confirm that the buffer is ready to be read.
-            if (pipe_buffer_confirm(pipe_buffer) < 0) {
-                pr_err("Failed to confirm readiness of buffer %zu for reading.\n", buffer_index);
-                break; // Stop if there’s no data to read.
-            }
-
-            // Calculate bytes to read in this iteration, considering the remaining requested bytes.
-            ssize_t bytes_to_read = pipe_buffer_read(pipe_buffer, buffer + bytes_read, nbyte - bytes_read);
-            if (bytes_to_read < 0) {
-                pr_err("Error reading from pipe buffer (error[%2zd]: %s).\n", -bytes_to_read, strerror(-bytes_to_read));
-                bytes_read = -bytes_to_read;
-                break;
-            }
-
-            // Update the total bytes read and the read index.
-            bytes_read            = bytes_read + bytes_to_read;
-            pipe_info->read_index = pipe_info->read_index + bytes_to_read;
-        }
-    } else {
-        // If in blocking mode, put the process to sleep until data is available.
-        if (pipe_is_blocking(file)) {
-            pipe_put_process_to_sleep(pipe_info, &pipe_info->read_wait, pipe_read_wake_function, "pipe_read");
-        }
-        // The syscall cannot resume here after sleeping until #204's
-        // resumable kernel context work lands; see process-lifecycle.md.
-        bytes_read = -EAGAIN;
-    }
-
-    // Release the mutex after reading.
-    mutex_unlock(&pipe_info->mutex);
-
-    // Wake up tasks that might be waiting to write to the pipe.
-    if (bytes_read > 0) {
-        pipe_wake_up_tasks(&pipe_info->write_wait, "pipe_read");
-    }
-
-    return bytes_read;
 }
 
 /// @brief Writes data to the specified pipe file from the provided buffer.
