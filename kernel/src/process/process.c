@@ -28,6 +28,7 @@
 #include "process/prio.h"
 #include "process/process.h"
 #include "process/scheduler.h"
+#include "process/switch.h"
 #include "process/wait.h"
 #include "string.h"
 #include "sys/stat.h"
@@ -81,6 +82,32 @@ int task_kernel_stack_check(const task_struct *task)
         }
     }
     return 1;
+}
+
+int task_prepare_kernel_context(task_struct *task)
+{
+    if (task == NULL || task->kernel_stack == NULL || task->kernel_stack_top == 0) {
+        return -1;
+    }
+
+    uintptr_t frame_addr = task->kernel_stack_top - sizeof(pt_regs_t);
+    uintptr_t switch_addr = frame_addr - SWITCH_FRAME_SIZE;
+    uint32_t *switch_frame = (uint32_t *)switch_addr;
+    pt_regs_t *frame = (pt_regs_t *)frame_addr;
+
+    memset(switch_frame, 0, SWITCH_FRAME_SIZE);
+    switch_frame[4] = (uint32_t)(uintptr_t)ret_from_fork;
+    *frame = task->thread.regs;
+    frame->eflags |= EFLAG_IF | (1U << 1);
+    frame->cs = 0x1b;
+    frame->ss = 0x23;
+    frame->ds = 0x23;
+    frame->es = 0x23;
+    frame->fs = 0x23;
+    frame->gs = 0x23;
+    task->thread.regs = *frame;
+    task->thread.kernel_esp = (uint32_t)switch_addr;
+    return 0;
 }
 
 /// @brief Clears the user stack of a freshly created memory descriptor.
@@ -514,6 +541,11 @@ int process_create_init(const char *path)
     init_process->thread.regs.ebp     = useresp;
     init_process->thread.regs.useresp = useresp;
     init_process->thread.regs.eflags  = init_process->thread.regs.eflags | EFLAG_IF;
+    if (task_prepare_kernel_context(init_process) < 0) {
+        pr_err("Failed to prepare init kernel context.\n");
+        paging_switch_pgd(crtdir);
+        return 1;
+    }
 
     // Restore previous pgdir
     paging_switch_pgd(crtdir);
@@ -641,6 +673,7 @@ pid_t sys_fork(pt_regs_t *f)
     proc->thread.regs.eax    = 0;
     // Enable the interrupts.
     proc->thread.regs.eflags = proc->thread.regs.eflags | EFLAG_IF;
+    assert(task_prepare_kernel_context(proc) == 0);
 
     // Copy session and group id of the parent into the child
     proc->sid  = current->sid;

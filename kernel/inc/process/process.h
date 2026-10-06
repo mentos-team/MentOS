@@ -220,6 +220,10 @@ void task_kernel_stack_free(task_struct *task);
 /// @return 1 when intact or no stack is allocated, 0 on corruption.
 int task_kernel_stack_check(const task_struct *task);
 
+/// @brief Build an inactive first-return frame from the task's user snapshot.
+/// @return 0 on success, -1 if the task has no private stack.
+int task_prepare_kernel_context(task_struct *task);
+
 /// @brief Initialize the task management.
 /// @return 1 success, 0 failure.
 int init_tasking(void);
