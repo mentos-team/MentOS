@@ -81,6 +81,7 @@ static char *all_tests[] = {
     "t_periodic2",
     "t_periodic3",
     "t_pipe_blocking",
+    "t_resumable_context",
     "t_pipe_non_blocking",
     "t_pwd",
     "t_schedfb",

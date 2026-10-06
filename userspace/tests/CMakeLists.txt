@@ -12,6 +12,7 @@ set(TEST_LIST
     t_msgget.c
     t_pipe_eof_data.c
     t_pipe_blocking.c
+    t_resumable_context.c
     t_syslog.c
     t_userptr.c
     t_symlink.c

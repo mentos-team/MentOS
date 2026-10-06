@@ -40,6 +40,26 @@ task_struct *init_process = NULL;
 
 static void scheduler_activate_task(task_struct *process);
 
+static void scheduler_switch_to_continuation(task_struct *current, task_struct *next)
+{
+    assert(current != NULL && next != NULL);
+    assert(task_kernel_stack_check(next) && "Kernel continuation stack canary corrupted.");
+    scheduler_activate_task(next);
+
+    /* An IRQ handler can wake a task whose continuation is suspended in a
+     * syscall.  Its hard-IRQ accounting belongs to the old continuation, so
+     * transfer that accounting around switch_to instead of exposing it to the
+     * resumed syscall. */
+    uint8_t in_hardirq = irq_hardirq_depth() != 0;
+    if (in_hardirq) {
+        irq_hardirq_leave();
+    }
+    switch_to(&current->thread.kernel_esp, next->thread.kernel_esp);
+    if (in_hardirq) {
+        irq_hardirq_enter();
+    }
+}
+
 /// Wait queue for processes blocked in waitpid().
 static wait_queue_head_t waitpid_queue = {
     .name      = "waitpid_queue",
@@ -291,9 +311,7 @@ void scheduler_run(pt_regs_t *f)
              * and resume userspace with a stale syscall frame instead. */
             if (next->thread.kernel_esp != 0 && next->thread.user_regs != NULL) {
                 task_struct *current = runqueue.curr;
-                assert(task_kernel_stack_check(next) && "Kernel continuation stack canary corrupted.");
-                scheduler_activate_task(next);
-                switch_to(&current->thread.kernel_esp, next->thread.kernel_esp);
+                scheduler_switch_to_continuation(current, next);
             } else {
                 // The task was preempted in userspace: restore its trap frame.
                 scheduler_restore_context(next, f);
@@ -313,9 +331,7 @@ void scheduler_run(pt_regs_t *f)
             if (next != runqueue.curr) {
                 if (next->thread.kernel_esp != 0 && next->thread.user_regs != NULL) {
                     task_struct *current = runqueue.curr;
-                    assert(task_kernel_stack_check(next) && "Kernel continuation stack canary corrupted.");
-                    scheduler_activate_task(next);
-                    switch_to(&current->thread.kernel_esp, next->thread.kernel_esp);
+                    scheduler_switch_to_continuation(current, next);
                 } else {
                     scheduler_restore_context(next, f);
                 }

@@ -70,6 +70,12 @@ extern void irq_handler(pt_regs_t *f);
 /// scheduler code uses it to reject stack switches from hard-IRQ context.
 unsigned irq_hardirq_depth(void);
 
+/// @brief Enter a hard-IRQ context on the current execution continuation.
+void irq_hardirq_enter(void);
+
+/// @brief Leave a hard-IRQ context before transferring to another continuation.
+void irq_hardirq_leave(void);
+
 //==== List of exceptions generated internally by the CPU ======================
 #define DIVIDE_ERROR        0  ///< DE Divide Error.
 #define DEBUG_EXC           1  ///< DB Debug.
