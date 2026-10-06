@@ -55,6 +55,7 @@ static ssize_t procv_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyt
         return -1;
     }
 
+retry_keyboard_read:
     // A display change is noticed in an interrupt handler, which may not
     // allocate or migrate the console, so the work is done here instead: this is
     // process context, and it is where a shell spends its time waiting. See
@@ -98,6 +99,7 @@ static ssize_t procv_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyt
         if ((file->flags & O_NONBLOCK) == 0) {
             /* blocking descriptor; sleep until a key arrives. */
             keyboard_wait();
+            goto retry_keyboard_read;
         }
         return -EAGAIN;
     }

@@ -196,7 +196,16 @@ int keyboard_pop_back(void)
 /// @brief Put the current task to sleep waiting for keyboard data.
 void keyboard_wait(void)
 {
-    sleep_on(&keyboard_wait_queue);
+    task_struct *task = scheduler_get_current_process();
+    if (task == NULL) {
+        return;
+    }
+
+    wait_queue_entry_t wait_entry;
+    wait_queue_entry_init(&wait_entry, task);
+    prepare_to_wait(&keyboard_wait_queue, &wait_entry, TASK_INTERRUPTIBLE);
+    schedule();
+    finish_wait(&keyboard_wait_queue, &wait_entry);
 }
 
 void keyboard_wake_readers(void) { wake_up_all(&keyboard_wait_queue); }
