@@ -587,12 +587,8 @@ int kmain(boot_info_t *boot_informations)
 
     // Switch to the page directory of init.
     paging_switch_pgd(init_process->mm->pgd);
-    // Jump into init process.
-    scheduler_enter_user_jmp(
-        // Entry point.
-        init_process->thread.regs.eip,
-        // Stack pointer.
-        init_process->thread.regs.useresp);
+    // Jump into init through its prepared kernel continuation frame.
+    scheduler_enter_first_task();
     // Enable interrupt requests.
     sti();
     for (;;) {

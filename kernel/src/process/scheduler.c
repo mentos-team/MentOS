@@ -18,6 +18,7 @@
 #include "process/pid_manager.h"
 #include "process/prio.h"
 #include "process/scheduler.h"
+#include "process/switch.h"
 #include "process/scheduler_feedback.h"
 #include "process/wait.h"
 #include "strerror.h"
@@ -345,6 +346,16 @@ void scheduler_enter_user_jmp(uintptr_t location, uintptr_t stack)
 
     // Jump in location.
     enter_userspace(location, stack);
+}
+
+void scheduler_enter_first_task(void)
+{
+    task_struct *task = runqueue.curr;
+    assert(task != NULL && "No task available for first handoff.");
+    assert(task->thread.kernel_esp != 0 && "First task has no prepared context.");
+    assert(task->kernel_stack_top != 0 && "First task has no kernel stack.");
+    tss_set_stack(0x10, task->kernel_stack_top);
+    enter_prepared_user((uintptr_t)(task->thread.kernel_esp + SWITCH_FRAME_SIZE));
 }
 
 int is_orphaned_pgrp(pid_t pgid)

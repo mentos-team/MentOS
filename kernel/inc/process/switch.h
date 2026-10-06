@@ -41,3 +41,7 @@ void switch_to(uint32_t *prev_esp, uint32_t next_esp);
 /// complete frame and executes `iret`. It must never be called with a normal
 /// C return address.
 void ret_from_fork(void);
+
+/// @brief Load a prepared pt_regs_t and enter its user context.
+/// @param frame Address of the prepared pt_regs_t on the task stack.
+void enter_prepared_user(uintptr_t frame);

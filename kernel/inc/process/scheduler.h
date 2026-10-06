@@ -99,6 +99,9 @@ void scheduler_restore_context(task_struct *process, pt_regs_t *f);
 /// @param stack    Address of the stack of that process.
 void scheduler_enter_user_jmp(uintptr_t location, uintptr_t stack);
 
+/// @brief Perform the one-way boot handoff through init's prepared frame.
+void scheduler_enter_first_task(void);
+
 /// @brief Picks the next task (in scheduler_algorithm.c).
 /// @param runqueue   Pointer to the runqueue.
 /// @return The next task to execute.
