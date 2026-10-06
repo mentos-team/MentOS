@@ -318,6 +318,22 @@ void scheduler_store_context(pt_regs_t *f, task_struct *process)
     process->thread.user_regs = f;
 }
 
+/// @brief Activate a selected task's address space and kernel entry stack.
+/// @details This is shared by the trap-boundary path and voluntary
+/// continuation switching. It does not save or restore a CPU context.
+static void scheduler_activate_task(task_struct *process)
+{
+    assert(process != NULL && "Cannot activate a NULL task.");
+    assert(process->kernel_stack_top != 0 && "Task has no private kernel stack.");
+    assert((process->kernel_stack_top & 0x0fU) == 0 && "Kernel stack top is not 16-byte aligned.");
+
+    runqueue.curr = process;
+    tss_set_stack(0x10, process->kernel_stack_top);
+    if (process->mm != NULL) {
+        paging_switch_pgd(process->mm->pgd);
+    }
+}
+
 void scheduler_restore_context(task_struct *process, pt_regs_t *f)
 {
     assert(process != NULL && "Cannot restore a NULL task context.");
@@ -330,14 +346,11 @@ void scheduler_restore_context(task_struct *process, pt_regs_t *f)
                  task_kernel_stack_watermark(process));
         assert(0 && "Kernel continuation stack canary corrupted.");
     }
-    assert((process->kernel_stack_top & 0x0fU) == 0 && "Kernel stack top is not 16-byte aligned.");
     // Switch to the next process.
-    runqueue.curr = process;
-    // The legacy boundary scheduler still returns through the current IRQ or
+    // The boundary scheduler still returns through the current IRQ or
     // syscall frame, but the next ring-3 entry must land on the selected
-    // task's private kernel stack. Keep the boot stack as an explicit fallback
-    // for early tests and pre-handoff code.
-    tss_set_stack(0x10, process->kernel_stack_top ? process->kernel_stack_top : initial_esp);
+    // task's private kernel stack.
+    scheduler_activate_task(process);
     // Restore the registers.
     *f            = process->thread.regs;
     process->thread.user_regs = f;
@@ -369,11 +382,7 @@ void schedule(void)
             assert(next->thread.kernel_esp != 0 && "Runnable task has no kernel continuation.");
             assert(next->kernel_stack_top != 0 && "Runnable task has no private kernel stack.");
 
-            runqueue.curr = next;
-            tss_set_stack(0x10, next->kernel_stack_top);
-            if (next->mm != NULL) {
-                paging_switch_pgd(next->mm->pgd);
-            }
+            scheduler_activate_task(next);
 
             /*
              * switch_to saves the current C call chain in prev->kernel_esp
