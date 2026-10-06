@@ -174,7 +174,7 @@ void syscall_handler(pt_regs_t *f)
 
         // Invoke the system call with the prepared arguments and store the return value in the EAX register.
         int result = fun(args[0], args[1], args[2], args[3], args[4]);
-        if (syscall_nr != __NR_sigreturn) {
+        if ((syscall_nr != __NR_sigreturn) || (result < 0)) {
             f->eax = result;
         }
     }
