@@ -30,6 +30,8 @@
 /// debugfs: `/.t_symlink_deep` holds a chain of directories that brings
 /// the path of the trailing link `ln` to exactly PATH_MAX - 1 characters,
 /// too long to stage through the host filesystem.
+/// The smaller static fixtures live under `/test-fixtures/symlink` so the
+/// example user's home directory is not mixed with regression-test data.
 /// @copyright (c) 2014-2026 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
@@ -46,37 +48,38 @@
 #include <unistd.h>
 
 /// A shipped link with a relative target, as a baseline for resolution.
-#define SHIPPED_LINK "/home/user/tmp.md"
+#define FIXTURE_ROOT "/test-fixtures/symlink"
+#define SHIPPED_LINK FIXTURE_ROOT "/tmp.md"
 
 /// A committed link whose name is longer than its target: without the
 /// terminator write, the tail of the old name survived the substitution.
-#define SHORT_TARGET_LINK "/home/user/link_with_a_name_much_longer_than_its_target"
+#define SHORT_TARGET_LINK FIXTURE_ROOT "/link_with_a_name_much_longer_than_its_target"
 
 /// A committed link whose target is exactly sixty characters: e2fsprogs
 /// moves a target to a block at sixty bytes, so this is the shortest
 /// block-held link the image can contain (#371).
-#define SIXTY_LINK "/home/user/t_symlink_sixty"
+#define SIXTY_LINK FIXTURE_ROOT "/t_symlink_sixty"
 
 /// The file the sixty-character link points to; its absolute path is
 /// exactly sixty characters long.
-#define SIXTY_TARGET_FILE "/home/user/t_symlink_sixtyeeeeeeeeeeeeeeeeeeeeeeeeeeeeee.txt"
+#define SIXTY_TARGET_FILE FIXTURE_ROOT "/t_symlink_sixtyeeeeeeeeeeeeeeeeeeeeeeeeeeeeee.txt"
 
 /// A committed link whose target is sixty-three characters, also held in
 /// a data block (#371).
-#define SLOW_LINK "/home/user/t_symlink_slow"
+#define SLOW_LINK FIXTURE_ROOT "/t_symlink_slow"
 
 /// The file the slow link points to, through a sixty-three character
 /// absolute target.
-#define SLOW_TARGET_FILE "/home/user/t_symlink_slowwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww.txt"
+#define SLOW_TARGET_FILE FIXTURE_ROOT "/t_symlink_slowwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww.txt"
 
 /// A committed link whose target ends with a separator, the only input
 /// shape that can put a trailing '/' into the resolution buffer: the
 /// slash must never leak into a resolved path or a stored cwd (#379).
-#define TRAIL_ABS_LINK  "/home/user/t_trail_abs"
+#define TRAIL_ABS_LINK  FIXTURE_ROOT "/t_trail_abs"
 /// A committed link whose target is only separators.
-#define TRAIL_ROOT_LINK "/home/user/t_trail_root"
+#define TRAIL_ROOT_LINK FIXTURE_ROOT "/t_trail_root"
 /// A committed link whose relative target ends with a separator.
-#define TRAIL_DOT_LINK  "/home/user/t_trail_dot"
+#define TRAIL_DOT_LINK  FIXTURE_ROOT "/t_trail_dot"
 
 /// The file the links above point to.
 #define WELCOME_FILE "/home/user/welcome.md"
@@ -303,7 +306,7 @@ int main(void)
 {
     int failures = 0;
 
-    if (__check_readlink(SHIPPED_LINK, "../user/welcome.md") < 0) {
+    if (__check_readlink(SHIPPED_LINK, "../../home/user/welcome.md") < 0) {
         ++failures;
     }
     if (__check_resolution(SHIPPED_LINK, WELCOME_FILE) < 0) {
