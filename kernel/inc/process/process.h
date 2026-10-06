@@ -35,6 +35,8 @@ char *do_getcwd(char *buf, size_t size);
 /// first activation milestone only acquires/releases this storage; switching
 /// onto it is introduced atomically with the return path in M2.
 #define TASK_KERNEL_STACK_SIZE (32 * K)
+/// Order of the eight-page private kernel stack allocation.
+#define TASK_KERNEL_STACK_ORDER 3
 
 /// @brief This structure is used to track the statistics of a process.
 /// @details

@@ -21,6 +21,7 @@
 #include "mem/mm/mm.h"
 #include "mem/mm/vmem.h"
 #include "mem/alloc/slab.h"
+#include "mem/alloc/zone_allocator.h"
 #include "mem/uaccess.h"
 #include "process/exec_args.h"
 #include "process/pid_manager.h"
@@ -41,7 +42,7 @@ int task_kernel_stack_alloc(task_struct *task)
     if (task == NULL || task->kernel_stack != NULL) {
         return task != NULL;
     }
-    task->kernel_stack = kmalloc(TASK_KERNEL_STACK_SIZE);
+    task->kernel_stack = (void *)alloc_pages_lowmem(GFP_KERNEL, TASK_KERNEL_STACK_ORDER);
     if (task->kernel_stack == NULL) {
         task->kernel_stack_size = 0;
         return 0;
@@ -56,7 +57,7 @@ void task_kernel_stack_free(task_struct *task)
     if (task == NULL || task->kernel_stack == NULL) {
         return;
     }
-    kfree(task->kernel_stack);
+    free_pages_lowmem((uint32_t)task->kernel_stack);
     task->kernel_stack = NULL;
     task->kernel_stack_size = 0;
 }
