@@ -38,6 +38,8 @@ runqueue_t runqueue;
 // Definition of the global init process pointer
 task_struct *init_process = NULL;
 
+static void scheduler_activate_task(task_struct *process);
+
 /// Wait queue for processes blocked in waitpid().
 static wait_queue_head_t waitpid_queue = {
     .name      = "waitpid_queue",
@@ -283,8 +285,19 @@ void scheduler_run(pt_regs_t *f)
         // Check if the next and current processes are different.
         if (next != runqueue.curr) {
             pr_debug("SCHEDULER_RUN: Picked next task %d to run.\n", next->pid);
-            // Copy into Kernel stack the next process's context.
-            scheduler_restore_context(next, f);
+            /* A task asleep in a syscall owns a live C continuation on its
+             * private stack.  Returning through the current trap frame would
+             * skip that continuation (waitpid(), pipe I/O, nanosleep, ...)
+             * and resume userspace with a stale syscall frame instead. */
+            if (next->thread.kernel_esp != 0 && next->thread.user_regs != NULL) {
+                task_struct *current = runqueue.curr;
+                assert(task_kernel_stack_check(next) && "Kernel continuation stack canary corrupted.");
+                scheduler_activate_task(next);
+                switch_to(&current->thread.kernel_esp, next->thread.kernel_esp);
+            } else {
+                // The task was preempted in userspace: restore its trap frame.
+                scheduler_restore_context(next, f);
+            }
         }
     } else {
         // Signal handling may have changed task state (e.g., stop/exit).
@@ -298,7 +311,14 @@ void scheduler_run(pt_regs_t *f)
                 next = scheduler_pick_next_task(&runqueue);
             }
             if (next != runqueue.curr) {
-                scheduler_restore_context(next, f);
+                if (next->thread.kernel_esp != 0 && next->thread.user_regs != NULL) {
+                    task_struct *current = runqueue.curr;
+                    assert(task_kernel_stack_check(next) && "Kernel continuation stack canary corrupted.");
+                    scheduler_activate_task(next);
+                    switch_to(&current->thread.kernel_esp, next->thread.kernel_esp);
+                } else {
+                    scheduler_restore_context(next, f);
+                }
             }
         }
     }
@@ -313,6 +333,16 @@ void scheduler_store_context(pt_regs_t *f, task_struct *process)
     // The common return boundary uses this pointer while the task is active;
     // fork clears it when constructing a child continuation.
     process->thread.user_regs = f;
+
+    /*
+     * This trap frame is the authoritative context while the task is back
+     * in userspace.  The saved kernel ESP, if any, belongs to an older
+     * synthetic or voluntary continuation and must not be resumed later:
+     * an interrupt entry will reuse the top of this task's kernel stack.
+     * A subsequent voluntary schedule recreates a fresh trampoline from
+     * thread.regs before switching to the task.
+     */
+    process->thread.kernel_esp = 0;
 }
 
 /// @brief Activate a selected task's address space and kernel entry stack.
@@ -376,8 +406,15 @@ void schedule(void)
                 break;
             }
 
-            assert(next->thread.kernel_esp != 0 && "Runnable task has no kernel continuation.");
             assert(next->kernel_stack_top != 0 && "Runnable task has no private kernel stack.");
+
+            /* A task last seen at a trap boundary has no live C continuation.
+             * Materialize its current user frame on the private stack before
+             * switch_to; blocked syscalls, in contrast, retain the ESP saved
+            * by their own switch_to call and resume directly. */
+            if (next->thread.kernel_esp == 0) {
+                assert(task_prepare_kernel_context(next) == 0 && "Unable to prepare user continuation.");
+            }
 
             scheduler_activate_task(next);
 
