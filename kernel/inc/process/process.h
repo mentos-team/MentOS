@@ -140,6 +140,8 @@ typedef struct task_struct {
     thread_struct_t thread;
     /// Private kernel continuation stack storage (inactive until M2).
     void *kernel_stack;
+    /// One-past-the-end address used as the future TSS esp0 value.
+    uintptr_t kernel_stack_top;
     /// Size of the private kernel continuation stack in bytes.
     size_t kernel_stack_size;
     /// For scheduling algorithms.

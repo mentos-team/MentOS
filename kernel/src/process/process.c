@@ -44,9 +44,11 @@ int task_kernel_stack_alloc(task_struct *task)
     }
     task->kernel_stack = (void *)alloc_pages_lowmem(GFP_KERNEL, TASK_KERNEL_STACK_ORDER);
     if (task->kernel_stack == NULL) {
+        task->kernel_stack_top = 0;
         task->kernel_stack_size = 0;
         return 0;
     }
+    task->kernel_stack_top  = (uintptr_t)task->kernel_stack + TASK_KERNEL_STACK_SIZE;
     task->kernel_stack_size = TASK_KERNEL_STACK_SIZE;
     memset(task->kernel_stack, 0, task->kernel_stack_size);
     return 1;
@@ -59,6 +61,7 @@ void task_kernel_stack_free(task_struct *task)
     }
     free_pages_lowmem((uint32_t)task->kernel_stack);
     task->kernel_stack = NULL;
+    task->kernel_stack_top = 0;
     task->kernel_stack_size = 0;
 }
 
