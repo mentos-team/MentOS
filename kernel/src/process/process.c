@@ -130,6 +130,9 @@ int task_prepare_kernel_context(task_struct *task)
     frame->fs = 0x23;
     frame->gs = 0x23;
     task->thread.regs = *frame;
+    /* The synthetic frame is a user return context, not a live kernel
+     * continuation.  A real trap will publish its own frame later. */
+    task->thread.user_regs = NULL;
     task->thread.kernel_esp = (uint32_t)switch_addr;
     return 0;
 }
