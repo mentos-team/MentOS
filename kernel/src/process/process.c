@@ -351,8 +351,8 @@ static inline task_struct *__alloc_task(task_struct *source, task_struct *parent
     // Clear the memory.
     memset(proc, 0, sizeof(task_struct));
     // Acquire the private continuation stack before publishing the task in
-    // the parent's child list or duplicating file descriptors. M2 will make
-    // this stack active; M0 only establishes its lifetime and rollback path.
+    // the parent's child list or duplicating file descriptors. This keeps
+    // allocation failure local and makes rollback ownership unambiguous.
     if (!task_kernel_stack_alloc(proc)) {
         kmem_cache_free(proc);
         return NULL;
@@ -384,7 +384,8 @@ static inline task_struct *__alloc_task(task_struct *source, task_struct *parent
         memcpy(&proc->thread, &source->thread, sizeof(thread_struct_t));
         // Continuation ownership and live frame pointers belong exclusively to
         // the source task. The child gets a copied user snapshot, but starts
-        // without a live kernel continuation; M2 constructs its first frame.
+        // without a live kernel continuation; construction below prepares the
+        // child's independent first-return frame.
         proc->thread.user_regs  = NULL;
         proc->thread.kernel_esp = 0;
     }

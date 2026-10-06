@@ -29,11 +29,10 @@ char *do_getcwd(char *buf, size_t size);
 /// The default dimension of the stack of a process (1 MByte).
 #define DEFAULT_STACK_SIZE (1 * M)
 
-/// The initial private kernel continuation stack budget for each task.
+/// The private kernel continuation stack budget for each task.
 ///
 /// This is deliberately separate from the user stack in the task's mm. The
-/// first activation milestone only acquires/releases this storage; switching
-/// onto it is introduced atomically with the return path in M2.
+/// stack is used for kernel entry/return state and grows downward.
 #define TASK_KERNEL_STACK_SIZE (128 * K)
 /// Order of the 32-page private kernel stack allocation.
 #define TASK_KERNEL_STACK_ORDER 5
@@ -102,7 +101,7 @@ typedef struct thread_struct {
     /// Live outer user frame while this task is executing at the boundary.
     /// This pointer is transient and is never inherited by fork.
     pt_regs_t *user_regs;
-    /// Saved ESP of the inactive kernel continuation (M2 activation).
+    /// Saved ESP of the task's resumable kernel continuation.
     uint32_t kernel_esp;
     /// Stored status of registers befor jumping into a signal handler.
     pt_regs_t signal_regs;
@@ -149,9 +148,9 @@ typedef struct task_struct {
     list_head_t sibling;
     /// The context of the processors.
     thread_struct_t thread;
-    /// Private kernel continuation stack storage (inactive until M2).
+    /// Private kernel continuation stack storage owned by this task.
     void *kernel_stack;
-    /// One-past-the-end address used as the future TSS esp0 value.
+    /// One-past-the-end address used as the TSS esp0 value on kernel entry.
     uintptr_t kernel_stack_top;
     /// Size of the private kernel continuation stack in bytes.
     size_t kernel_stack_size;

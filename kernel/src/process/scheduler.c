@@ -311,8 +311,8 @@ void scheduler_store_context(pt_regs_t *f, task_struct *process)
     // Store the registers.
     process->thread.regs = *f;
     // Keep the live outer frame address separate from the diagnostic snapshot.
-    // M2 will use this pointer at the common return boundary; fork clears it
-    // when constructing a child continuation.
+    // The common return boundary uses this pointer while the task is active;
+    // fork clears it when constructing a child continuation.
     process->thread.user_regs = f;
 }
 
