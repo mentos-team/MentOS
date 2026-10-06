@@ -41,12 +41,12 @@ int task_kernel_stack_alloc(task_struct *task)
     if (task == NULL || task->kernel_stack != NULL) {
         return task != NULL;
     }
-    task->kernel_stack = kmalloc(KERNEL_STACK_SIZE);
+    task->kernel_stack = kmalloc(TASK_KERNEL_STACK_SIZE);
     if (task->kernel_stack == NULL) {
         task->kernel_stack_size = 0;
         return 0;
     }
-    task->kernel_stack_size = KERNEL_STACK_SIZE;
+    task->kernel_stack_size = TASK_KERNEL_STACK_SIZE;
     memset(task->kernel_stack, 0, task->kernel_stack_size);
     return 1;
 }

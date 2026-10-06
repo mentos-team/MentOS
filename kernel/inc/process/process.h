@@ -34,7 +34,7 @@ char *do_getcwd(char *buf, size_t size);
 /// This is deliberately separate from the user stack in the task's mm. The
 /// first activation milestone only acquires/releases this storage; switching
 /// onto it is introduced atomically with the return path in M2.
-#define KERNEL_STACK_SIZE (32 * K)
+#define TASK_KERNEL_STACK_SIZE (32 * K)
 
 /// @brief This structure is used to track the statistics of a process.
 /// @details
