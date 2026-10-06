@@ -88,6 +88,11 @@ typedef struct sched_entity {
 typedef struct thread_struct {
     /// Stored status of registers.
     pt_regs_t regs;
+    /// Live outer user frame while this task is executing at the boundary.
+    /// This pointer is transient and is never inherited by fork.
+    pt_regs_t *user_regs;
+    /// Saved ESP of the inactive kernel continuation (M2 activation).
+    uint32_t kernel_esp;
     /// Stored status of registers befor jumping into a signal handler.
     pt_regs_t signal_regs;
     /// Determines if the FPU is enabled.
@@ -117,6 +122,8 @@ typedef struct task_struct {
     // -1 unrunnable, 0 runnable, >0 stopped.
     /// The current state of the process:
     __volatile__ long state;
+    /// Set by asynchronous events; consumed by the common return boundary.
+    __volatile__ bool_t need_resched;
     /// The current opened file descriptors
     vfs_file_descriptor_t *fd_list;
     /// The maximum supported number of file descriptors

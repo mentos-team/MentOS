@@ -310,6 +310,11 @@ static inline task_struct *__alloc_task(task_struct *source, task_struct *parent
     }
     if (source) {
         memcpy(&proc->thread, &source->thread, sizeof(thread_struct_t));
+        // Continuation ownership and live frame pointers belong exclusively to
+        // the source task. The child gets a copied user snapshot, but starts
+        // without a live kernel continuation; M2 constructs its first frame.
+        proc->thread.user_regs  = NULL;
+        proc->thread.kernel_esp = 0;
     }
     // Set the statistics of the process.
     proc->uid                   = 0;
