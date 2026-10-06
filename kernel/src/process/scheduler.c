@@ -162,12 +162,9 @@ int wake_up_process(task_struct *task)
     /// scheduler naturally skips non-TASK_RUNNING tasks when picking next.
     /// This function only manages task state transitions, NOT queue membership.
     ///
-    /// The wait queue layer (wait.c) is responsible for:
-    ///   - Removing task from wait queue before calling this
-    ///   - Freeing wait queue entry after this returns
-    ///
-    /// With boundary-based scheduling, the task becomes eligible at the
-    /// next interrupt/exception boundary when scheduler_run() executes.
+    /// The wait queue layer (wait.c) removes the entry before calling this;
+    /// the blocked continuation retains ownership of its storage and calls
+    /// finish_wait() after schedule() returns.
     ///
     /// @param task The task to wake up (must be on runqueue).
     /// @return 0 on success, -1 if task was already TASK_RUNNING.

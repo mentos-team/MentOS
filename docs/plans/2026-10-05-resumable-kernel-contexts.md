@@ -1,6 +1,9 @@
 # Resumable Kernel Contexts — Implementation Plan, revision 2
 
-**Status:** implementation-ready design with explicit validation gates; no implementation or runtime validation is claimed by this document.
+**Status:** implementation-ready design; implementation is in progress on
+`feature/resumable-kernel-contexts`. Runtime validation remains incomplete
+until QEMU can run the focused continuation tests and the full regression
+matrix.
 **Updated:** 2026-10-05. **Target:** MentOS i386, uniprocessor, non-preemptive kernel.
 **Source baseline:** `develop`, `2f2224cb41cf9093e4f5c4faa36411da176bdde8`, clean worktree when investigated.
 **Replaces:** the original 2026-10-05 plan, SHA-256 `7283bf9a78737dca6056f501bd36142a79bb0b980db57e1e136937ddfb0465b7`.

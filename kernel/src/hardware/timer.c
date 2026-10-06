@@ -569,9 +569,8 @@ static inline void debug_timeout(unsigned long data)
 /// This handles the race where a signal interrupts a sleeping task:
 /// the signal handler calls this to stop the sleep timer from firing.
 ///
-/// With boundary-based context switching, we don't need to trigger
-/// immediate scheduling - the signal handler will return to the next
-/// interrupt/exception boundary where scheduler_run() picks the next task.
+/// The signal path cancels the timer before waking the interruptible
+/// continuation; schedule() then resumes the nanosleep call chain directly.
 ///
 /// @param task The task whose sleep timer should be canceled.
 /// @return 0 on success, -1 if no sleep timer exists.
