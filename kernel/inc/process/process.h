@@ -94,6 +94,16 @@ typedef struct sched_entity {
     double utilization_factor;
 } sched_entity_t;
 
+/// @brief Kind of context represented by a task's saved kernel ESP.
+typedef enum thread_context_kind {
+    /// The task has no live kernel continuation; restore its user trap frame.
+    THREAD_CONTEXT_USER = 0,
+    /// The stack contains a synthetic first-return frame for a new task.
+    THREAD_CONTEXT_FIRST_RETURN,
+    /// The stack contains a suspended C call chain in kernel space.
+    THREAD_CONTEXT_KERNEL,
+} thread_context_kind_t;
+
 /// @brief Stores the status of CPU and FPU registers.
 typedef struct thread_struct {
     /// Stored status of registers.
@@ -103,6 +113,8 @@ typedef struct thread_struct {
     pt_regs_t *user_regs;
     /// Saved ESP of the task's resumable kernel continuation.
     uint32_t kernel_esp;
+    /// Explicitly identifies what kernel_esp contains.
+    thread_context_kind_t context_kind;
     /// Stored status of registers befor jumping into a signal handler.
     pt_regs_t signal_regs;
     /// Determines if the FPU is enabled.

@@ -82,7 +82,7 @@ static void scheduler_dispatch_next(pt_regs_t *frame, task_struct *next)
     assert(next != NULL);
     assert(next != current);
 
-    if (next->thread.kernel_esp != 0 && next->thread.user_regs != NULL) {
+    if (next->thread.context_kind == THREAD_CONTEXT_KERNEL) {
         scheduler_switch_to_continuation(current, next);
     } else {
         /* The task was preempted in userspace: restore its trap frame. */
@@ -390,6 +390,7 @@ void scheduler_store_context(pt_regs_t *f, task_struct *process)
      * thread.regs before switching to the task.
      */
     process->thread.kernel_esp = 0;
+    process->thread.context_kind = THREAD_CONTEXT_USER;
 }
 
 /// @brief Activate a selected task's address space and kernel entry stack.
@@ -428,6 +429,7 @@ void scheduler_restore_context(task_struct *process, pt_regs_t *f)
     // Restore the registers.
     *f            = process->thread.regs;
     process->thread.user_regs = f;
+    process->thread.context_kind = THREAD_CONTEXT_USER;
     // CRITICAL: Memory barrier to prevent compiler from reordering the page directory
     // switch before the above memory writes. In Release mode, the compiler can
     // reorder operations, which would cause us to switch page directories BEFORE
@@ -471,6 +473,7 @@ void schedule(void)
              * prev is woken later, this invocation resumes immediately after
              * switch_to, preserving the blocking syscall's call chain.
              */
+            prev->thread.context_kind = THREAD_CONTEXT_KERNEL;
             switch_to(&prev->thread.kernel_esp, next->thread.kernel_esp);
             break;
         }

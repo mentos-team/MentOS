@@ -32,6 +32,12 @@ stack pointer in `thread.kernel_esp`. When the task is woken, the same
 `schedule()` therefore preserves a **kernel continuation**. It does not
 restore a userspace trap frame and it does not manufacture a userspace retry.
 
+The dispatcher does not infer this distinction from pointer values. Each task
+records an explicit `thread_context_kind`: a userspace trap context, a
+synthetic first-return frame, or a live kernel continuation. This matters when
+a task is preempted in userspace and enters a blocking syscall before another
+trap boundary publishes a new `user_regs` pointer.
+
 ## Why the names are deliberately different
 
 `scheduler_reschedule_from_trap()` is a trap-boundary dispatcher. `schedule()`

@@ -134,6 +134,7 @@ int task_prepare_kernel_context(task_struct *task)
      * continuation.  A real trap will publish its own frame later. */
     task->thread.user_regs = NULL;
     task->thread.kernel_esp = (uint32_t)switch_addr;
+    task->thread.context_kind = THREAD_CONTEXT_FIRST_RETURN;
     return 0;
 }
 
@@ -391,6 +392,7 @@ static inline task_struct *__alloc_task(task_struct *source, task_struct *parent
         // child's independent first-return frame.
         proc->thread.user_regs  = NULL;
         proc->thread.kernel_esp = 0;
+        proc->thread.context_kind = THREAD_CONTEXT_USER;
     }
     // Set the statistics of the process.
     proc->uid                   = 0;
