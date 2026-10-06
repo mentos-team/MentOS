@@ -34,9 +34,9 @@ char *do_getcwd(char *buf, size_t size);
 /// This is deliberately separate from the user stack in the task's mm. The
 /// first activation milestone only acquires/releases this storage; switching
 /// onto it is introduced atomically with the return path in M2.
-#define TASK_KERNEL_STACK_SIZE (32 * K)
-/// Order of the eight-page private kernel stack allocation.
-#define TASK_KERNEL_STACK_ORDER 3
+#define TASK_KERNEL_STACK_SIZE (128 * K)
+/// Order of the 32-page private kernel stack allocation.
+#define TASK_KERNEL_STACK_ORDER 5
 /// Bytes reserved at the low end for an overflow canary.
 #define TASK_KERNEL_STACK_CANARY_SIZE 16
 /// Value used to detect writes below the continuation stack.
