@@ -13,6 +13,7 @@ set(TEST_LIST
     t_pipe_eof_data.c
     t_pipe_blocking.c
     t_resumable_context.c
+    t_fpu_context.c
     t_syslog.c
     t_userptr.c
     t_symlink.c

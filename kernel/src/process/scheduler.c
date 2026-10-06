@@ -60,6 +60,36 @@ static void scheduler_switch_to_continuation(task_struct *current, task_struct *
     }
 }
 
+/**
+ * @brief Dispatch a task selected by scheduler_run().
+ *
+ * A task can leave the scheduler in one of two fundamentally different
+ * states.  A task preempted while returning to userspace owns a trap frame
+ * and must restore that frame.  A task blocked inside a syscall owns a live
+ * kernel continuation and must resume its private kernel stack instead.
+ * Keeping this decision in one helper prevents the signal/error path from
+ * accidentally drifting away from the normal scheduling path.
+ *
+ * @param frame Trap frame belonging to the task currently handling the trap.
+ * @param next Task selected as the next runnable task.
+ */
+static void scheduler_dispatch_next(pt_regs_t *frame, task_struct *next)
+{
+    task_struct *current = runqueue.curr;
+
+    assert(frame != NULL);
+    assert(current != NULL);
+    assert(next != NULL);
+    assert(next != current);
+
+    if (next->thread.kernel_esp != 0 && next->thread.user_regs != NULL) {
+        scheduler_switch_to_continuation(current, next);
+    } else {
+        /* The task was preempted in userspace: restore its trap frame. */
+        scheduler_restore_context(next, frame);
+    }
+}
+
 /// Wait queue for processes blocked in waitpid().
 static wait_queue_head_t waitpid_queue = {
     .name      = "waitpid_queue",
@@ -305,17 +335,7 @@ void scheduler_run(pt_regs_t *f)
         // Check if the next and current processes are different.
         if (next != runqueue.curr) {
             pr_debug("SCHEDULER_RUN: Picked next task %d to run.\n", next->pid);
-            /* A task asleep in a syscall owns a live C continuation on its
-             * private stack.  Returning through the current trap frame would
-             * skip that continuation (waitpid(), pipe I/O, nanosleep, ...)
-             * and resume userspace with a stale syscall frame instead. */
-            if (next->thread.kernel_esp != 0 && next->thread.user_regs != NULL) {
-                task_struct *current = runqueue.curr;
-                scheduler_switch_to_continuation(current, next);
-            } else {
-                // The task was preempted in userspace: restore its trap frame.
-                scheduler_restore_context(next, f);
-            }
+            scheduler_dispatch_next(f, next);
         }
     } else {
         // Signal handling may have changed task state (e.g., stop/exit).
@@ -329,20 +349,31 @@ void scheduler_run(pt_regs_t *f)
                 next = scheduler_pick_next_task(&runqueue);
             }
             if (next != runqueue.curr) {
-                if (next->thread.kernel_esp != 0 && next->thread.user_regs != NULL) {
-                    task_struct *current = runqueue.curr;
-                    scheduler_switch_to_continuation(current, next);
-                } else {
-                    scheduler_restore_context(next, f);
-                }
+                scheduler_dispatch_next(f, next);
             }
         }
     }
     //==========================================================================
 }
 
+/**
+ * @brief Publish the interrupted userspace context for a task.
+ *
+ * This function is called at a trap boundary (syscall, timer interrupt, or
+ * user exception), before the scheduler may choose another task.  The frame
+ * is therefore a userspace return frame, not the saved ESP of a voluntary
+ * kernel continuation.  Callers that schedule from inside a syscall must
+ * leave this function's result intact: schedule() materializes a separate
+ * continuation frame on the task's private kernel stack.
+ *
+ * @param f Trap frame supplied by the common entry stub.
+ * @param process Task whose interrupted context is being published.
+ */
 void scheduler_store_context(pt_regs_t *f, task_struct *process)
 {
+    assert(f != NULL);
+    assert(process != NULL);
+
     // Store the registers.
     process->thread.regs = *f;
     // Keep the live outer frame address separate from the diagnostic snapshot.
