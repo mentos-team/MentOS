@@ -860,6 +860,12 @@ static int pipe_close(vfs_file_t *file)
         pr_debug("All writers have closed the pipe. Waking up readers.\n");
         pipe_wake_up_tasks(&pipe_info->read_wait, "pipe_close");
     }
+    // A blocked writer must also stop waiting when the last reader closes;
+    // there can no longer be a successful write condition.
+    if (pipe_info->readers == 0) {
+        pr_debug("All readers have closed the pipe. Waking up writers.\n");
+        pipe_wake_up_tasks(&pipe_info->write_wait, "pipe_close");
+    }
 
     // If both readers and writers are zero, free the pipe resources.
     if (--file->count == 0) {
@@ -1002,69 +1008,72 @@ static ssize_t pipe_write(vfs_file_t *file, const void *buffer, off_t offset, si
         return -1;
     }
 
+    if (nbyte == 0) {
+        return 0;
+    }
+
     // Retrieve the current task structure.
     task_struct *task = scheduler_get_current_process();
     assert(task && "Failed to retrieve current task.");
 
     // Retrieve the pipe information structure.
     pipe_inode_info_t *pipe_info = (pipe_inode_info_t *)file->device;
-
-    // Acquire the pipe mutex to ensure safe access.
-    mutex_lock(&pipe_info->mutex, task->pid);
+    wait_queue_entry_t wait_entry;
+    wait_queue_entry_init(&wait_entry, task);
+    wait_entry.private = pipe_info;
 
     ssize_t bytes_written = 0;
+    for (;;) {
+        mutex_lock(&pipe_info->mutex, task->pid);
 
-    // Check if there is available space in the pipe for writing.
-    if (pipe_info_has_space(pipe_info)) {
-        // Loop to write data to the pipe buffer until the requested number of bytes is written.
-        while (bytes_written < nbyte) {
-            // Wrap around write_index when it exceeds the max buffer capacity.
+        if (pipe_info->readers == 0) {
+            mutex_unlock(&pipe_info->mutex);
+            return bytes_written > 0 ? bytes_written : -EPIPE;
+        }
+
+        // Fill available buffers, preserving a partial result across sleeps.
+        while (bytes_written < nbyte && pipe_info_has_space(pipe_info)) {
             pipe_info->write_index %= (pipe_info->numbuf * PIPE_BUFFER_SIZE);
-
-            // Get the buffer index for the current write position.
             size_t buffer_index        = pipe_linear_to_buffer_index(pipe_info->write_index);
             pipe_buffer_t *pipe_buffer = &pipe_info->bufs[buffer_index];
 
-            // Confirm the buffer is ready for writing.
             if (pipe_buffer_confirm(pipe_buffer) < 0) {
                 pr_err("Failed to confirm readiness of buffer %zu for writing.\n", buffer_index);
-                bytes_written = -1;
-                break;
+                mutex_unlock(&pipe_info->mutex);
+                return bytes_written > 0 ? bytes_written : -EIO;
             }
 
-            // Attempt to write data into the pipe buffer.
             ssize_t bytes_to_write =
                 pipe_buffer_write(pipe_buffer, (const char *)buffer + bytes_written, nbyte - bytes_written);
             if (bytes_to_write < 0) {
-                // Other errors: Log and return immediately.
                 pr_err("Error writing to pipe buffer (error[%2zd]: %s).\n", -bytes_to_write, strerror(-bytes_to_write));
-                bytes_written = -1;
+                mutex_unlock(&pipe_info->mutex);
+                return bytes_written > 0 ? bytes_written : bytes_to_write;
+            }
+            if (bytes_to_write == 0) {
                 break;
             }
-
-            // Update the total bytes written and the write index.
-            bytes_written          = bytes_written + bytes_to_write;
-            pipe_info->write_index = pipe_info->write_index + bytes_to_write;
+            bytes_written          += bytes_to_write;
+            pipe_info->write_index += bytes_to_write;
         }
-    } else {
-        // Blocking behavior: Put the process to sleep until space is available.
-        if (pipe_is_blocking(file)) {
-            pipe_put_process_to_sleep(pipe_info, &pipe_info->write_wait, pipe_write_wake_function, "pipe_write");
+
+        if (bytes_written == nbyte || !pipe_is_blocking(file)) {
+            mutex_unlock(&pipe_info->mutex);
+            if (bytes_written > 0) {
+                pipe_wake_up_tasks(&pipe_info->read_wait, "pipe_write");
+            }
+            return bytes_written > 0 ? bytes_written : -EAGAIN;
         }
-        // The syscall cannot resume here after sleeping until #204's
-        // resumable kernel context work lands; see process-lifecycle.md.
-        bytes_written = -EAGAIN;
+
+        /* Publish before dropping the condition lock. */
+        prepare_to_wait(&pipe_info->write_wait, &wait_entry, TASK_UNINTERRUPTIBLE);
+        mutex_unlock(&pipe_info->mutex);
+        if (bytes_written > 0) {
+            pipe_wake_up_tasks(&pipe_info->read_wait, "pipe_write");
+        }
+        schedule();
+        finish_wait(&pipe_info->write_wait, &wait_entry);
     }
-
-    // Release the mutex after the write operation is complete.
-    mutex_unlock(&pipe_info->mutex);
-
-    // Wake up tasks waiting to read from the pipe.
-    if (bytes_written > 0) {
-        pipe_wake_up_tasks(&pipe_info->read_wait, "pipe_write");
-    }
-
-    return bytes_written;
 }
 
 /// @brief Performs a seek operation on a pipe, which is not supported.
