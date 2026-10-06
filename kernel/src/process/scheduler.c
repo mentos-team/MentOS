@@ -710,6 +710,8 @@ pid_t sys_waitpid(pid_t pid, int *status, int options)
         }
 
         // Clean up the child process's resources.
+        assert(child != runqueue.curr && "Cannot reap the current task stack.");
+        assert(child->waiting_on == NULL && "Cannot reap a task with a linked wait entry.");
         pid_manager_mark_free(child->pid); // Free the PID.
         vfs_destroy_task(child);           // Finalize VFS structures.
         task_kernel_stack_free(child);     // Release the inactive continuation stack.
