@@ -8,7 +8,7 @@
 #include "boot_cpu.h"
 #include "boot_math.h"
 #include "boot_paging.h"
-#include "multiboot.h"
+#include "boot/multiboot.h"
 
 #include "elf/elf.h"
 #include "stddef.h"

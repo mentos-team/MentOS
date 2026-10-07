@@ -4,9 +4,12 @@
 
 # Collect the bootloader source files.
 file(GLOB_RECURSE BOOTLOADER_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c" "${CMAKE_CURRENT_SOURCE_DIR}/src/*.S")
+# Multiboot introspection is a kernel concern; the loader only consumes the
+# shared wire-format declarations and keeps its own small module lookup.
+list(FILTER BOOTLOADER_SOURCES EXCLUDE REGEX ".*/multiboot\\.c$")
 
 # Collect the bootloader include directories.
-set(BOOTLOADER_INCLUDE_DIRS ${CMAKE_SOURCE_DIR}/common/inc ${CMAKE_CURRENT_SOURCE_DIR}/inc ${CMAKE_SOURCE_DIR}/kernel/inc ${CMAKE_SOURCE_DIR}/lib/inc)
+set(BOOTLOADER_INCLUDE_DIRS ${CMAKE_SOURCE_DIR}/common/inc ${CMAKE_CURRENT_SOURCE_DIR}/inc ${CMAKE_SOURCE_DIR}/lib/inc)
 
 # Create the bootloader static library
 add_library(bootloader ${BOOTLOADER_SOURCES})
