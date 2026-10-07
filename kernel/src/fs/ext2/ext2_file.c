@@ -544,6 +544,10 @@ ssize_t ext2_getdents(vfs_file_t *file, dirent_t *dirp, off_t doff, size_t count
         // Move to next writing position.
         ++dirp;
     }
+    if (ext2_direntry_iterator_failed(&it)) {
+        ext2_dealloc_cache(cache);
+        return -EIO;
+    }
     // Free the cache.
     ext2_dealloc_cache(cache);
     return written;
