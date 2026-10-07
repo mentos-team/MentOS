@@ -7,7 +7,11 @@
 
 #include "elf/elf.h"
 #include "link_access.h"
+#include "math.h"
+#include "mem/paging.h"
+#include "proc_access.h"
 #include "sys/module.h"
+#include "sys/bitops.h"
 
 /// @defgroup bootloader Bootloader
 /// @brief Set of functions and variables for booting the kernel.
@@ -232,8 +236,6 @@ static void boot_paging_enable(void)
     // Set the PG bit in cr0.
     set_cr0(bitmask_set(get_cr0(), CR0_PG));
 }
-
-static int boot_paging_is_enabled(void) { return bitmask_check(get_cr0(), CR0_PG); }
 
 static int boot_paging_switch_pgd(page_directory_t *dir)
 {
