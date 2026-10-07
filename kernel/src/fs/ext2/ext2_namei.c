@@ -397,6 +397,10 @@ int ext2_unlink(const char *path)
     }
     // Allocate the cache.
     uint8_t *cache = ext2_alloc_cache(fs);
+    if (cache == NULL) {
+        pr_err("ext2_unlink(%s): Failed to allocate the directory cache.\n", path);
+        return -ENOMEM;
+    }
 
     // Read the block where the direntry resides.
     if (ext2_read_inode_block(fs, &parent_inode, search.block_index, cache) < 0) {
@@ -477,6 +481,10 @@ int ext2_clear_direntry_for_path(ext2_filesystem_t *fs, const char *path)
     }
     // Allocate the cache.
     uint8_t *cache = ext2_alloc_cache(fs);
+    if (cache == NULL) {
+        pr_err("Failed to allocate the directory cache for `%s`.\n", path);
+        return -ENOMEM;
+    }
     // Read the block where the entry resides.
     if (ext2_read_inode_block(fs, &parent, search.block_index, cache) < 0) {
         pr_err("Failed to read block `%u` of inode `%u`.\n", search.block_index, (uint32_t)search.parent_inode);

@@ -138,6 +138,11 @@ int ext2_allocate_inode(ext2_filesystem_t *fs, unsigned preferred_group)
     spinlock_lock(&fs->spinlock);
     // Allocate the cache.
     uint8_t *cache = ext2_alloc_cache(fs);
+    if (cache == NULL) {
+        pr_err("Failed to allocate the cache while allocating inode.\n");
+        spinlock_unlock(&fs->spinlock);
+        return 0;
+    }
     // Search for a free inode.
     if (!ext2_find_free_inode(fs, cache, &group_index, &group_offset, preferred_group)) {
         pr_err("Failed to find a free inode.\n");
@@ -191,6 +196,11 @@ uint32_t ext2_allocate_block(ext2_filesystem_t *fs)
     spinlock_lock(&fs->spinlock);
     // Allocate the cache.
     uint8_t *cache = ext2_alloc_cache(fs);
+    if (cache == NULL) {
+        pr_err("Failed to allocate the cache while allocating block.\n");
+        spinlock_unlock(&fs->spinlock);
+        return 0;
+    }
     // Search for a free block.
     if (!ext2_find_free_block(fs, cache, &group_index, &group_offset)) {
         pr_err("Failed to find a free block.\n");
