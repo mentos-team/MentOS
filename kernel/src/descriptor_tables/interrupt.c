@@ -124,6 +124,20 @@ void irq_handler(pt_regs_t *f)
     // because of irq mapping, the first PIC's irq line is shifted by 32.
     unsigned irq_line = f->int_no - 32;
     assert((irq_line < IRQ_NUM) && "Unidentified IRQ number.");
+
+    /*
+     * A handler may select a different task and never return through this
+     * invocation of irq_handler: timer IRQs can resume a blocked kernel
+     * continuation directly.  Acknowledging the PIC before dispatch makes
+     * that control-flow transfer safe; an EOI left after the callbacks would
+     * be skipped permanently and mask subsequent interrupts.
+    */
+    pic8259_send_eoi(irq_line);
+    /* The callback may transfer control to another continuation and therefore
+     * bypass the epilogue below.  Balance the hard-IRQ depth before dispatch;
+     * the PIC has already been acknowledged above. */
+    irq_hardirq_leave();
+
     // Actually, we may have several handlers for a same irq line.
     // The Kernel should provide the dev_id to each handler in order to
     // let it know if its own device generated the interrupt.
@@ -139,7 +153,4 @@ void irq_handler(pt_regs_t *f)
             irq_struct->handler(f);
         }
     }
-    // Send the end-of-interrupt to PIC.
-    pic8259_send_eoi(irq_line);
-    irq_hardirq_leave();
 }
