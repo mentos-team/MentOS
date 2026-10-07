@@ -8,11 +8,8 @@
 #include "boot_elf.h"
 #include "boot_module.h"
 #include "boot_math.h"
-#include "boot_paging.h"
 #include "boot_paging_ops.h"
 #include "boot/multiboot.h"
-
-#include "stddef.h"
 
 /// @defgroup bootloader Bootloader
 /// @brief Set of functions and variables for booting the kernel.
@@ -39,26 +36,6 @@ static boot_page_directory_t boot_pgdir;
 /// @brief Boot page tables.
 static boot_page_table_t boot_pgtables[BOOT_PAGE_ENTRIES];
 
-/// @brief Align memory address to the specified value (round up).
-/// @param addr the address to align
-/// @param value the value used to align.
-/// @return the aligned address.
-static inline uint32_t __align_rup(uint32_t addr, uint32_t value)
-{
-    uint32_t reminder = (addr % value);
-    return addr + (reminder ? (value - reminder) : 0);
-}
-
-/// @brief Align memory address to the specified value (round down).
-/// @param addr the address to align
-/// @param value the value used to align.
-/// @return the aligned address.
-static inline uint32_t __align_rdown(uint32_t addr, uint32_t value) { return addr - (addr % value); }
-
-/// @brief Prepares the page frames.
-/// @param pfn_virt_start The first virtual page frame.
-/// @param pfn_phys_start The first physical page frame.
-/// @param pfn_count The number of page frames.
 /// @brief Entry point of the bootloader.
 /// @param magic  The magic number coming from the multiboot assembly code.
 /// @param header Multiboot header provided by the bootloader.
@@ -96,9 +73,9 @@ void boot_main(uint32_t magic, multiboot_info_t *header, uint32_t esp)
     boot_info.module_end = boot_get_address_after_modules(header, boot_info.bootloader_phy_end);
 
     // Get the starting address of the physical pages at the end of the modules.
-    uint32_t kernel_phy_page_start  = __align_rup(boot_info.module_end, PAGE_SIZE);
+    uint32_t kernel_phy_page_start  = boot_align_up(boot_info.module_end, PAGE_SIZE);
     // Get the starting address of the virtual pages.
-    uint32_t kernel_virt_page_start = __align_rdown(kernel_virt_low, PAGE_SIZE);
+    uint32_t kernel_virt_page_start = boot_align_down(kernel_virt_low, PAGE_SIZE);
 
     // Compute the absolute offset of the first virtual page, by subtracting
     // the starting address of the virtual pages and the lowest virtual address
@@ -114,7 +91,7 @@ void boot_main(uint32_t magic, multiboot_info_t *header, uint32_t esp)
 
     // Start lowmem right after the kernel end (page-aligned).
     // DMA zone will be carved from physical memory below 16MB during zone init.
-    boot_info.lowmem_phy_start  = __align_rup(boot_info.kernel_phy_end, PAGE_SIZE);
+    boot_info.lowmem_phy_start  = boot_align_up(boot_info.kernel_phy_end, PAGE_SIZE);
     boot_info.lowmem_phy_end    = 896 * 1024 * 1024; // 896 MB of low memory max
     boot_info.lowmem_size       = boot_info.lowmem_phy_end - boot_info.lowmem_phy_start;
     // Use linear mapping offset so lowmem virtual addresses match physical addresses.
