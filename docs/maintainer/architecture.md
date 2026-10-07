@@ -33,8 +33,9 @@ filesystem/  the rootfs staging tree — binaries are copied here by the build;
              mke2fs turns it into rootfs.img
 iso/         grub cfg for boot/test ISOs (grub.cfg, grub.cfg.runtests)
 scripts/     run-qemu-test, run-qemu-kernel-test, tapview
-cmake/       toolchain-i686-elf.cmake (cross-compiler settings; the observed
-             workspace builds used host gcc -m32 instead)
+cmake/       CMake helpers, including toolchain-i686-elf.cmake and the
+              symlink-fixture image helper (the observed workspace builds
+              used host gcc -m32 instead)
 ```
 
 ## Subsystems and ownership boundaries (VERIFIED FACTS from call-path tracing)

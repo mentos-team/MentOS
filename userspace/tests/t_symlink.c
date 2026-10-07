@@ -26,7 +26,7 @@
 ///   - resolution still works after such a rejection.
 ///
 /// The deep fixture is planted inside the image by
-/// scripts/make-symlink-fixture.cmake when the image is packed, with
+/// cmake/make-symlink-fixture.cmake when the image is packed, with
 /// debugfs: `/.t_symlink_deep` holds a chain of directories that brings
 /// the path of the trailing link `ln` to exactly PATH_MAX - 1 characters,
 /// too long to stage through the host filesystem.

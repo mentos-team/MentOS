@@ -23,7 +23,7 @@
 # ext2 stores it inline, below the 60-byte inline field.
 #
 # Run by the `filesystem` target:
-#     cmake -DROOTFS=<image> -DBINARY_DIR=<build> -P scripts/make-symlink-fixture.cmake
+#     cmake -DROOTFS=<image> -DBINARY_DIR=<build> -P cmake/make-symlink-fixture.cmake
 
 if(NOT DEFINED ROOTFS OR NOT DEFINED BINARY_DIR)
     message(FATAL_ERROR "symlink fixture: ROOTFS and BINARY_DIR must be defined")
