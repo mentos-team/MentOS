@@ -78,6 +78,19 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
+    // A regular-file read at an offset beyond EOF must return a clean EOF,
+    // not an unsigned-length underflow into the kernel's temporary buffer.
+    if (lseek(fd, 1 << 20, SEEK_SET) != (1 << 20)) {
+        syslog(LOG_ERR, "[t_proc_feedback] failed to seek beyond EOF: %s", strerror(errno));
+        close(fd);
+        return EXIT_FAILURE;
+    }
+    if (read(fd, tail, sizeof(tail)) != 0) {
+        syslog(LOG_ERR, "[t_proc_feedback] read past EOF did not return EOF");
+        close(fd);
+        return EXIT_FAILURE;
+    }
+
     close(fd);
     syslog(LOG_INFO, "[t_proc_feedback] /proc/feedback returned %d (+%d) bytes of real statistics", (int)n, (int)n2);
     return EXIT_SUCCESS;
