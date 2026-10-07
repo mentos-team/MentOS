@@ -65,8 +65,6 @@ static void __page_fault_panic(pt_regs_t *f, uint32_t addr)
 
     pr_err("EIP: %p\n", (void *)f->eip);
 
-    pr_err("Page fault: 0x%x\n", addr);
-
     pr_err("Possible causes: [ ");
     if (!(f->err_code & ERR_PRESENT)) {
         pr_err("Page not present ");
@@ -87,10 +85,6 @@ static void __page_fault_panic(pt_regs_t *f, uint32_t addr)
     PRINT_REGS(pr_err, f);
 
     kernel_panic("Page fault!");
-
-    // Make directory accessible
-    //    main_mm->pgd->entries[addr/(1024*4096)].user = 1;
-    //    main_directory->entries[addr/(1024*4096)]. = 1;
 
 }
 
