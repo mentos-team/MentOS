@@ -344,9 +344,10 @@ add_custom_target(
     COMMAND ${CMAKE_COMMAND} -E rm -rf ${CMAKE_BINARY_DIR}/iso
     COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/iso ${CMAKE_BINARY_DIR}/iso
     COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/mentos/bootloader.bin ${CMAKE_BINARY_DIR}/iso/boot/bootloader.bin
+    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/mentos/kernel.bin ${CMAKE_BINARY_DIR}/iso/boot/kernel.bin
     COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/iso/boot/grub/grub.cfg ${CMAKE_BINARY_DIR}/iso/boot/grub/grub.cfg
     COMMAND grub-mkrescue -o ${CMAKE_BINARY_DIR}/cdrom.iso ${CMAKE_BINARY_DIR}/iso
-    DEPENDS bootloader.bin
+    DEPENDS bootloader.bin kernel.bin
 )
 
 # This third target runs the emualtor, but this time, the kernel binary file is
@@ -371,8 +372,9 @@ add_custom_target(
     COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/iso ${CMAKE_BINARY_DIR}/iso_test
     COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/iso/boot/grub/grub.cfg.runtests ${CMAKE_BINARY_DIR}/iso_test/boot/grub/grub.cfg
     COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/mentos/bootloader.bin ${CMAKE_BINARY_DIR}/iso_test/boot/bootloader.bin
+    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/mentos/kernel.bin ${CMAKE_BINARY_DIR}/iso_test/boot/kernel.bin
     COMMAND grub-mkrescue -o ${CMAKE_BINARY_DIR}/cdrom_test.iso ${CMAKE_BINARY_DIR}/iso_test
-    DEPENDS bootloader.bin filesystem
+    DEPENDS bootloader.bin kernel.bin filesystem
 )
 
 # This target runs the emulator, and executes the runtests binary as init process.
@@ -400,8 +402,9 @@ add_custom_target(
     COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/iso ${CMAKE_BINARY_DIR}/iso_kerneltest
     COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/iso/boot/grub/grub.cfg.kerneltests ${CMAKE_BINARY_DIR}/iso_kerneltest/boot/grub/grub.cfg
     COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/mentos/bootloader.bin ${CMAKE_BINARY_DIR}/iso_kerneltest/boot/bootloader.bin
+    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/mentos/kernel.bin ${CMAKE_BINARY_DIR}/iso_kerneltest/boot/kernel.bin
     COMMAND grub-mkrescue -o ${CMAKE_BINARY_DIR}/cdrom_kerneltest.iso ${CMAKE_BINARY_DIR}/iso_kerneltest
-    DEPENDS bootloader.bin filesystem
+    DEPENDS bootloader.bin kernel.bin filesystem
 )
 
 # These take seconds, not the minutes the userspace suite takes, so the timeout

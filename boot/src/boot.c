@@ -81,6 +81,77 @@ static inline uint32_t __align_rup(uint32_t addr, uint32_t value)
 /// @return the aligned address.
 static inline uint32_t __align_rdown(uint32_t addr, uint32_t value) { return addr - (addr % value); }
 
+/// @brief Halt the machine after a bootloader-fatal configuration error.
+/// @param message A short message written to the serial console first.
+static __attribute__((noreturn)) void __boot_halt(const char *message)
+{
+    __debug_puts("[bootloader] FATAL: ");
+    __debug_puts((char *)message);
+    __debug_puts("\n");
+    __asm__ __volatile__("cli");
+    for (;;) {
+        __asm__ __volatile__("hlt");
+    }
+}
+
+/// @brief Check whether a Multiboot module has the `kernel` command line.
+/// @param module Module descriptor supplied by Multiboot.
+/// @return 1 for the exact command line `kernel`, otherwise 0.
+static int __is_kernel_module(const multiboot_module_t *module)
+{
+    static const char expected[] = "kernel";
+    const char *command_line;
+
+    if (!module || !module->cmdline) {
+        return 0;
+    }
+
+    command_line = (const char *)(uintptr_t)module->cmdline;
+    for (uint32_t i = 0; expected[i] != '\0'; ++i) {
+        if (command_line[i] != expected[i]) {
+            return 0;
+        }
+    }
+    return command_line[sizeof(expected) - 1U] == '\0';
+}
+
+/// @brief Find the kernel ELF image supplied by Multiboot.
+/// @param header Multiboot information received from GRUB.
+/// @param image_size Receives the image size in bytes.
+/// @return The physical address where the ELF image starts.
+/// @details The embedded image is retained as a compatibility fallback until
+///          every boot target has migrated to a Multiboot module.
+static const unsigned char *__get_kernel_image(multiboot_info_t *header, uint32_t *image_size)
+{
+    const unsigned char *embedded_image = LDVAR(kernel_bin);
+    multiboot_module_t *kernel_module = NULL;
+
+    if (header && bitmask_check(header->flags, MULTIBOOT_FLAG_MODS)) {
+        multiboot_module_t *module_table = (multiboot_module_t *)(uintptr_t)header->mods_addr;
+        for (uint32_t i = 0; i < header->mods_count; ++i) {
+            if (!__is_kernel_module(&module_table[i])) {
+                continue;
+            }
+            if (kernel_module) {
+                __boot_halt("multiple kernel modules");
+            }
+            kernel_module = &module_table[i];
+        }
+    }
+
+    if (kernel_module) {
+        if (kernel_module->mod_end <= kernel_module->mod_start) {
+            __boot_halt("kernel module has an invalid range");
+        }
+        *image_size = kernel_module->mod_end - kernel_module->mod_start;
+        return (const unsigned char *)(uintptr_t)kernel_module->mod_start;
+    }
+
+    __debug_puts("[bootloader] No `kernel` module found; using embedded image.\n");
+    *image_size = (uint32_t)(uintptr_t)LDLEN(kernel_bin);
+    return embedded_image;
+}
+
 /// @brief Prepares the page frames.
 /// @param pfn_virt_start The first virtual page frame.
 /// @param pfn_phys_start The first physical page frame.
@@ -250,7 +321,11 @@ static int boot_paging_switch_pgd(page_directory_t *dir)
 void boot_main(uint32_t magic, multiboot_info_t *header, uint32_t esp)
 {
     __debug_puts("\n[bootloader] Start...\n");
-    elf_header_t *elf_hdr = (elf_header_t *)LDVAR(kernel_bin);
+    uint32_t kernel_image_size = 0;
+    const unsigned char *kernel_image = __get_kernel_image(header, &kernel_image_size);
+    elf_header_t *elf_hdr = (elf_header_t *)kernel_image;
+
+    (void)kernel_image_size;
 
     // Get the physical addresses of where the kernel starts and ends.
     uint32_t boot_start = (uint32_t)_bootloader_start;
