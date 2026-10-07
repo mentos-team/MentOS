@@ -213,6 +213,10 @@ static void exec_test(char *test_cmd_line)
     char test_abspath[PATH_MAX];
     sprintf(test_abspath, "/bin/tests/%s", test_argv[0]);
     execvp(test_abspath, test_argv);
+
+    // Keep the otherwise opaque exit 127 diagnostic: the test never started
+    // when execvp returns, so errno is the only useful failure context.
+    fprintf(STDERR_FILENO, "execvp(%s): %s\n", test_abspath, strerror(errno));
 }
 
 static void run_test(int n, char *test_cmd_line)
