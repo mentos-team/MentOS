@@ -71,7 +71,9 @@ void boot_validate_kernel_image(const elf_header_t *header, uint32_t image_size)
             if (other->type != PT_LOAD) {
                 continue;
             }
-            boot_u32_add_overflows(other->vaddr, other->memsz, &other_end);
+            if (boot_u32_add_overflows(other->vaddr, other->memsz, &other_end)) {
+                boot_fatal("kernel module has an invalid load segment");
+            }
             if (program->vaddr < other_end && other->vaddr < virtual_end) {
                 boot_fatal("kernel module load segments overlap");
             }
