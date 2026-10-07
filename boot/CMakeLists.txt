@@ -36,20 +36,11 @@ add_custom_target(
     BYPRODUCTS ${CMAKE_BINARY_DIR}/mentos/kernel.bin
 )
 
-# Convert kernel binary to object file
-add_custom_target(
-    kernel.bin.o
-    COMMAND ${CMAKE_OBJCOPY} -I binary -O elf32-i386 -B i386 kernel.bin kernel.bin.o
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/mentos
-    DEPENDS kernel.bin
-    BYPRODUCTS ${CMAKE_BINARY_DIR}/mentos/kernel.bin.o
-)
-
 # Build the bootloader binary
 add_custom_target(
     bootloader.bin ALL
-    COMMAND ${CMAKE_LINKER} --output bootloader.bin -melf_i386 -static --oformat elf32-i386 -z noexecstack --script ${CMAKE_CURRENT_SOURCE_DIR}/linker/boot.lds $<TARGET_FILE:bootloader> kernel.bin.o
+    COMMAND ${CMAKE_LINKER} --output bootloader.bin -melf_i386 -static --oformat elf32-i386 -z noexecstack --script ${CMAKE_CURRENT_SOURCE_DIR}/linker/boot.lds $<TARGET_FILE:bootloader>
     WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/mentos
-    DEPENDS bootloader kernel.bin.o
+    DEPENDS bootloader
     BYPRODUCTS ${CMAKE_BINARY_DIR}/mentos/bootloader.bin
 )

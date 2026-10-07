@@ -6,7 +6,6 @@
 #include "boot.h"
 
 #include "elf/elf.h"
-#include "link_access.h"
 #include "math.h"
 #include "mem/paging.h"
 #include "proc_access.h"
@@ -28,9 +27,6 @@ extern void boot_kernel(uint32_t stack_pointer, uint32_t entry, boot_info_t *boo
 
 /// Serial port for QEMU.
 #define SERIAL_COM1 (0x03F8)
-
-/// @brief Linker symbols for where the .data section of `kernel.bin.o`.
-EXTLD(kernel_bin)
 
 /// @brief Linker symbol for where the bootloader starts.
 extern char _bootloader_start[];
@@ -119,37 +115,37 @@ static int __is_kernel_module(const multiboot_module_t *module)
 /// @param header Multiboot information received from GRUB.
 /// @param image_size Receives the image size in bytes.
 /// @return The physical address where the ELF image starts.
-/// @details The embedded image is retained as a compatibility fallback until
-///          every boot target has migrated to a Multiboot module.
+/// @details The kernel is deliberately a Multiboot module rather than a
+///          linker input. This keeps the loader image independent from the
+///          kernel image it loads.
 static const unsigned char *__get_kernel_image(multiboot_info_t *header, uint32_t *image_size)
 {
-    const unsigned char *embedded_image = LDVAR(kernel_bin);
     multiboot_module_t *kernel_module = NULL;
 
-    if (header && bitmask_check(header->flags, MULTIBOOT_FLAG_MODS)) {
-        multiboot_module_t *module_table = (multiboot_module_t *)(uintptr_t)header->mods_addr;
-        for (uint32_t i = 0; i < header->mods_count; ++i) {
-            if (!__is_kernel_module(&module_table[i])) {
-                continue;
-            }
-            if (kernel_module) {
-                __boot_halt("multiple kernel modules");
-            }
-            kernel_module = &module_table[i];
-        }
+    if (!header || !bitmask_check(header->flags, MULTIBOOT_FLAG_MODS) || !header->mods_count || !header->mods_addr) {
+        __boot_halt("missing kernel module");
     }
 
-    if (kernel_module) {
-        if (kernel_module->mod_end <= kernel_module->mod_start) {
-            __boot_halt("kernel module has an invalid range");
+    multiboot_module_t *module_table = (multiboot_module_t *)(uintptr_t)header->mods_addr;
+    for (uint32_t i = 0; i < header->mods_count; ++i) {
+        if (!__is_kernel_module(&module_table[i])) {
+            continue;
         }
-        *image_size = kernel_module->mod_end - kernel_module->mod_start;
-        return (const unsigned char *)(uintptr_t)kernel_module->mod_start;
+        if (kernel_module) {
+            __boot_halt("multiple kernel modules");
+        }
+        kernel_module = &module_table[i];
     }
 
-    __debug_puts("[bootloader] No `kernel` module found; using embedded image.\n");
-    *image_size = (uint32_t)(uintptr_t)LDLEN(kernel_bin);
-    return embedded_image;
+    if (!kernel_module) {
+        __boot_halt("kernel module not found");
+    }
+
+    if (kernel_module->mod_end <= kernel_module->mod_start) {
+        __boot_halt("kernel module has an invalid range");
+    }
+    *image_size = kernel_module->mod_end - kernel_module->mod_start;
+    return (const unsigned char *)(uintptr_t)kernel_module->mod_start;
 }
 
 /// @brief Prepares the page frames.

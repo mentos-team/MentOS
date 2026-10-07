@@ -283,12 +283,12 @@ set(EMULATOR_FLAGS ${EMULATOR_FLAGS} -drive file=${CMAKE_BINARY_DIR}/rootfs.img,
 # Booting with QEMU for fun
 # =============================================================================
 
-# This first target runs the emulator passing the kernel binary file.
+# This target boots the same GRUB image used by the ISO and test targets.
 add_custom_target(
     qemu
     COMMAND test -e ${CMAKE_BINARY_DIR}/rootfs.img || ${CMAKE_COMMAND} -E cmake_echo_color --red "No filesystem file detected, you need to run: make filesystem"
-    COMMAND ${EMULATOR} ${EMULATOR_FLAGS} -kernel ${CMAKE_BINARY_DIR}/mentos/bootloader.bin
-    DEPENDS bootloader.bin
+    COMMAND ${EMULATOR} ${EMULATOR_FLAGS} -boot d -cdrom ${CMAKE_BINARY_DIR}/cdrom.iso
+    DEPENDS cdrom.iso
 )
 
 # =============================================================================
@@ -315,7 +315,7 @@ add_custom_target(
     DEPENDS libc
 )
 
-# This second target runs the emualtor passing the kernel binary file, and also
+# This target runs the emulator with the GRUB image and also
 # the `-s -S` options. This basically tells the emulator to run the kernel in
 # debug mode, and pause it up until a debugger connects to it.
 add_custom_target(
@@ -329,8 +329,8 @@ add_custom_target(
     COMMAND echo "or if you want to use cgdb, type:"
     COMMAND echo "    cgdb --quiet --command=gdb.run"
     COMMAND echo ""
-    COMMAND ${EMULATOR} ${EMULATOR_FLAGS} -s -S -kernel ${CMAKE_BINARY_DIR}/mentos/bootloader.bin
-    DEPENDS bootloader.bin
+    COMMAND ${EMULATOR} ${EMULATOR_FLAGS} -s -S -boot d -cdrom ${CMAKE_BINARY_DIR}/cdrom.iso
+    DEPENDS cdrom.iso
     DEPENDS gdbinit
 )
 
