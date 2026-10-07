@@ -109,6 +109,10 @@ static int ext2_set_real_block_index(
     } else {
         // Allocate the cache.
         uint8_t *cache = ext2_alloc_cache(fs);
+        if (cache == NULL) {
+            pr_err("Failed to allocate the cache while mapping block %u.\n", block_index);
+            return -ENOMEM;
+        }
         // Are we setting an INDIRECT block pointer.
         b              = a - p;
         if (b < 0) {
@@ -272,6 +276,10 @@ int ext2_get_real_block_index(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32
 
     // Allocate the cache.
     uint8_t *cache = ext2_alloc_cache(fs);
+    if (cache == NULL) {
+        pr_err("Failed to allocate the cache while reading inode data.\n");
+        return -ENOMEM;
+    }
     if (cache == NULL) {
         pr_err("Failed to allocate the cache to map block %u of an inode.\n", block_index);
         return -ENOMEM;
@@ -596,6 +604,10 @@ ssize_t ext2_read_inode_data(
 
     // Allocate the cache.
     uint8_t *cache = ext2_alloc_cache(fs);
+    if (cache == NULL) {
+        pr_err("Failed to allocate the cache while writing inode data.\n");
+        return -ENOMEM;
+    }
 
     uint32_t curr_off = 0;
     uint32_t left;

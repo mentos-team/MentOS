@@ -258,6 +258,10 @@ int ext2_read_inode(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t inode_i
     group_offset %= fs->inodes_per_block_count;
     // Allocate the cache.
     uint8_t *cache        = ext2_alloc_cache(fs);
+    if (cache == NULL) {
+        pr_err("Failed to allocate the cache while reading inode %u.\n", inode_index);
+        return -ENOMEM;
+    }
     // Read the block containing the inode table.
     uint32_t actual_block = fs->block_groups[group_index].inode_table + block_index;
     if (ext2_read_block(fs, actual_block, cache) < 0) {

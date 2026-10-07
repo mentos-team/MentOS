@@ -203,6 +203,10 @@ int ext2_initialize_new_direntry_block(ext2_filesystem_t *fs, uint32_t inode_ind
 
     // Allocate memory for the cache
     uint8_t *cache = ext2_alloc_cache(fs);
+    if (cache == NULL) {
+        pr_err("Failed to allocate the cache for directory block %u.\n", block_index);
+        return 0;
+    }
 
     // Get the first uninitialized directory entry in the block
     ext2_dirent_t *direntry = (ext2_dirent_t *)cache;
@@ -479,6 +483,10 @@ int ext2_allocate_direntry(
     }
     // Allocate the cache.
     uint8_t *cache = ext2_alloc_cache(fs);
+    if (cache == NULL) {
+        pr_err("Failed to allocate the cache to create a directory entry.\n");
+        return -ENOMEM;
+    }
 
     // pr_debug("BEFORE:\n");
     // ext2_dump_direntries(fs, cache, &parent_inode);

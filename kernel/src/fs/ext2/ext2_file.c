@@ -508,6 +508,10 @@ ssize_t ext2_getdents(vfs_file_t *file, dirent_t *dirp, off_t doff, size_t count
     ssize_t written  = 0;
     // Allocate the cache.
     uint8_t *cache   = ext2_alloc_cache(fs);
+    if (cache == NULL) {
+        pr_err("Failed to allocate the cache while reading directory entries.\n");
+        return -ENOMEM;
+    }
 
     // Initialize the iterator.
     ext2_direntry_iterator_t it = ext2_direntry_iterator_begin(fs, cache, &inode);

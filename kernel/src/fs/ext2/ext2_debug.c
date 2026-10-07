@@ -203,6 +203,10 @@ void ext2_dump_bgdt(ext2_filesystem_t *fs)
 {
     // Allocate the cache.
     uint8_t *cache = ext2_alloc_cache(fs);
+    if (cache == NULL) {
+        pr_err("Failed to allocate the cache while dumping the BGDT.\n");
+        return;
+    }
     for (uint32_t i = 0; i < fs->block_groups_count; ++i) {
         // Get the pointer to the current group descriptor.
         ext2_group_descriptor_t *gd = &(fs->block_groups[i]);
