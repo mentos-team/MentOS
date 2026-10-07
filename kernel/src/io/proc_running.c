@@ -119,8 +119,16 @@ static inline ssize_t __procr_read(vfs_file_t *file, char *buffer, off_t offset,
             return -EOVERFLOW;
         }
     }
-    // Copmute the amounts of bytes we want (and can) read.
-    ssize_t bytes_to_read = max(0, min(strlen(support) - offset, nbyte));
+    // Compute the amount of data available after the requested offset.  Keep
+    // the subtraction unsigned only after proving that the offset is in range.
+    if (offset < 0) {
+        return -EINVAL;
+    }
+    size_t length = strlen(support);
+    if ((size_t)offset >= length) {
+        return 0;
+    }
+    ssize_t bytes_to_read = (ssize_t)min(length - (size_t)offset, nbyte);
     // Perform the read: copy exactly the computed amount, never more, since
     // buffer is the raw user read(2) buffer and nbyte is all it can hold
     // (#194: a strcpy here used to write the whole file through it).
