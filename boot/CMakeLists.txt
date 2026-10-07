@@ -4,9 +4,6 @@
 
 # Collect the bootloader source files.
 file(GLOB_RECURSE BOOTLOADER_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c" "${CMAKE_CURRENT_SOURCE_DIR}/src/*.S")
-# Multiboot introspection is a kernel concern; the loader only consumes the
-# shared wire-format declarations and keeps its own small module lookup.
-list(FILTER BOOTLOADER_SOURCES EXCLUDE REGEX ".*/multiboot\\.c$")
 
 # Collect the bootloader include directories.
 set(BOOTLOADER_INCLUDE_DIRS ${CMAKE_SOURCE_DIR}/common/inc ${CMAKE_CURRENT_SOURCE_DIR}/inc ${CMAKE_SOURCE_DIR}/lib/inc)
@@ -17,11 +14,6 @@ add_library(bootloader ${BOOTLOADER_SOURCES})
 # Add the includes.
 target_include_directories(bootloader PUBLIC ${BOOTLOADER_INCLUDE_DIRS})
 
-# Define that this code is kernel code.
-target_compile_definitions(bootloader PUBLIC __KERNEL__)
-
-# Define the root of MentOS for the bootloader code.
-target_compile_definitions(bootloader PUBLIC MENTOS_ROOT="${CMAKE_SOURCE_DIR}")
 
 # =============================================================================
 # Build the bootloader binary
