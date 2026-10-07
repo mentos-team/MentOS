@@ -123,6 +123,9 @@ int kmain(boot_info_t *boot_informations)
     pr_notice("Booting...\n");
     // Make a copy for when paging is enabled
     boot_info = *boot_informations;
+    if (boot_info.version != BOOT_INFO_ABI_VERSION || boot_info.size < sizeof(boot_info_t)) {
+        kernel_panic("Unsupported boot information ABI.");
+    }
     // Am I booted by a Multiboot-compliant boot loader?
     if (boot_info.magic != MULTIBOOT_BOOTLOADER_MAGIC) {
         printf("Invalid magic number: 0x%x\n", boot_info.magic);

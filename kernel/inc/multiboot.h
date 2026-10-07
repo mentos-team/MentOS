@@ -7,6 +7,7 @@
 
 #pragma once
 
+#include "boot/boot_info.h"
 #include "stdint.h"
 
 #define MULTIBOOT_HEADER_MAGIC     0x1BADB002U ///< The magic field should contain this.
@@ -127,7 +128,7 @@ typedef struct multiboot_memory_map {
 } multiboot_memory_map_t;
 
 /// @brief Multiboot information structure.
-typedef struct multiboot_info {
+struct multiboot_info {
     /// Multiboot info version number.
     uint32_t flags;
     /// Lower memory available from the BIOS.
@@ -223,7 +224,7 @@ typedef struct multiboot_info {
             uint8_t framebuffer_blue_mask_size;
         } rgb_field;
     } framebuffer_info;
-} multiboot_info_t;
+};
 
 /// @brief Returns the first mmap entry.
 /// @param info The multiboot info from which we extract the entry.

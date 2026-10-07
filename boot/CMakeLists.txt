@@ -6,7 +6,7 @@
 file(GLOB_RECURSE BOOTLOADER_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c" "${CMAKE_CURRENT_SOURCE_DIR}/src/*.S")
 
 # Collect the bootloader include directories.
-set(BOOTLOADER_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/inc ${CMAKE_SOURCE_DIR}/kernel/inc ${CMAKE_SOURCE_DIR}/lib/inc)
+set(BOOTLOADER_INCLUDE_DIRS ${CMAKE_SOURCE_DIR}/common/inc ${CMAKE_CURRENT_SOURCE_DIR}/inc ${CMAKE_SOURCE_DIR}/kernel/inc ${CMAKE_SOURCE_DIR}/lib/inc)
 
 # Create the bootloader static library
 add_library(bootloader ${BOOTLOADER_SOURCES})

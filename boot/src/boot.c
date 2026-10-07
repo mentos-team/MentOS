@@ -3,7 +3,8 @@
 /// @copyright (c) 2014-2024 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
-#include "boot.h"
+#include "boot/boot_info.h"
+#include "multiboot.h"
 
 #include "elf/elf.h"
 #include "math.h"
@@ -334,6 +335,8 @@ void boot_main(uint32_t magic, multiboot_info_t *header, uint32_t esp)
 
     // Initialize the boot_info_t structure.
     __debug_puts("[bootloader] Initializing the boot_info structure...\n");
+    boot_info.version             = BOOT_INFO_ABI_VERSION;
+    boot_info.size                = sizeof(boot_info);
     boot_info.magic                = magic;
     boot_info.bootloader_phy_start = boot_start;
     boot_info.bootloader_phy_end   = boot_end;

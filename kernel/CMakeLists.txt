@@ -106,7 +106,7 @@ if(NOT VIDEO_BACKENDS_COUNT EQUAL VIDEO_EXPECTED_COUNT)
     message(FATAL_ERROR "Expected ${VIDEO_EXPECTED_COUNT} video source(s), got ${VIDEO_BACKENDS_COUNT}: ${VIDEO_BACKENDS_IN_BUILD}")
 endif()
 # Collect the kernel include directories.
-set(KERNEL_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/inc ${CMAKE_SOURCE_DIR}/lib/inc)
+set(KERNEL_INCLUDE_DIRS ${CMAKE_SOURCE_DIR}/common/inc ${CMAKE_CURRENT_SOURCE_DIR}/inc ${CMAKE_SOURCE_DIR}/lib/inc)
 # Create the kernel static library - explicitly include multiboot.c since it's needed by both kernel and bootloader
 add_library(kernel ${KERNEL_SOURCES} "${CMAKE_CURRENT_SOURCE_DIR}/src/multiboot.c")
 # Stack-usage reports are deliberately opt-in and kernel-only.  Applying the
