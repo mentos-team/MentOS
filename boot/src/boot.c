@@ -12,7 +12,6 @@
 
 #include "elf/elf.h"
 #include "stddef.h"
-#include "sys/module.h"
 
 /// @defgroup bootloader Bootloader
 /// @brief Set of functions and variables for booting the kernel.
@@ -251,7 +250,7 @@ static inline uint32_t __get_address_after_modules(multiboot_info_t *header)
     uint32_t addr           = boot_info.bootloader_phy_end;
     // Get the pointer to the mods.
     multiboot_module_t *mod = (multiboot_module_t *)header->mods_addr;
-    for (int i = 0; (i < header->mods_count) && (i < MAX_MODULES); ++i, ++mod) {
+    for (uint32_t i = 0; i < header->mods_count; ++i, ++mod) {
         addr = boot_max(boot_max(addr, mod->mod_start), mod->mod_end);
     }
     return addr;
