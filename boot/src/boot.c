@@ -123,6 +123,24 @@ static inline void __setup_boot_paging(void)
     __setup_pages(kernel_base_virt_page, kernel_base_phy_page, num_pages);
 }
 
+/// @brief Removes the page below the boot-time kernel stack from its mapping.
+/// @details The stack grows downward from stack_base. Keeping the first page
+///          below it unmapped turns an overflow into a page fault instead of
+///          allowing it to corrupt the low-memory allocator.
+static void __protect_kernel_stack_guard_page(void)
+{
+    uint32_t guard_address = boot_info.stack_base - boot_info.stack_size;
+    uint32_t directory     = guard_address >> 22U;
+    uint32_t table_index   = (guard_address >> 12U) & 0x3FFU;
+
+    if (!boot_pgdir.entries[directory].present) {
+        __debug_puts("[bootloader] Kernel stack guard directory is not mapped.\n");
+        return;
+    }
+
+    boot_pgtables[directory].pages[table_index].present = 0;
+}
+
 /// @brief Extract the starting and ending address of the kernel.
 /// @param elf_hdr The elf header of the kernel.
 /// @param virt_low  Output variable where we store the lowest address of the kernel.
@@ -304,6 +322,8 @@ void boot_main(uint32_t magic, multiboot_info_t *header, uint32_t esp)
 
     __debug_puts("[bootloader] Relocating kernel image...\n");
     __relocate_kernel_image(elf_hdr);
+
+    __protect_kernel_stack_guard_page();
 
     __debug_puts("[bootloader] Calling `boot_kernel`...\n\n");
     boot_kernel(boot_info.stack_base, elf_hdr->entry, &boot_info);

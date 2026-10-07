@@ -150,6 +150,15 @@ int paging_init(boot_info_t *info)
         return -1;
     }
 
+    // Keep the lowest page of the boot-time kernel stack unmapped. The stack
+    // grows downward from stack_base; this page is its guard and must remain
+    // absent after rebuilding the kernel page tables.
+    uint32_t stack_guard = info->stack_base - info->stack_size;
+    if (mem_upd_vm_area(main_mm->pgd, stack_guard, 0, PAGE_SIZE, MM_RW | MM_GLOBAL) < 0) {
+        pr_crit("Failed to protect the kernel stack guard page.\n");
+        return -1;
+    }
+
     // Map the DMA zone into virtual memory. DMA zone is in physical memory
     // below the kernel (0x0-0x800000) and needs its own virtual mapping.
     extern memory_info_t memory; // From zone_allocator
