@@ -249,19 +249,22 @@ static void __page_fault_service(pt_regs_t *f)
     extern boot_info_t boot_info;
     uint32_t faulting_addr = get_cr2();
 
-    // The kernel runs on [stack_base - stack_size, stack_base), handed over by
-    // the bootloader. The stack_bottom/stack_top symbols are a different,
-    // unused buffer (#439).
+    // The kernel runs on [stack_base - stack_size + PAGE_SIZE, stack_base),
+    // handed over by the bootloader. The page immediately below it is left
+    // unmapped as a guard, so an overflow cannot corrupt low memory (#439).
     uint32_t stack_top_addr    = boot_info.stack_base;
-    uint32_t stack_bottom_addr = boot_info.stack_base - boot_info.stack_size;
+    uint32_t guard_page_start  = boot_info.stack_base - boot_info.stack_size;
+    uint32_t stack_bottom_addr = guard_page_start + PAGE_SIZE;
 
-    // Check if this is a fault on the kernel stack guard page (overflow)
-    if (faulting_addr == stack_bottom_addr) {
+    // Check the whole guard page: the CPU reports the exact byte that caused
+    // the fault, not necessarily the first byte of the unmapped page.
+    if ((faulting_addr >= guard_page_start) && (faulting_addr < stack_bottom_addr)) {
         pr_crit("\n");
         pr_crit("========================================================\n");
         pr_crit("           KERNEL STACK OVERFLOW DETECTED!\n");
         pr_crit("========================================================\n");
         pr_crit("Guard page fault at: %p\n", (void *)faulting_addr);
+        pr_crit("Guard page: %p - %p\n", (void *)guard_page_start, (void *)stack_bottom_addr);
         pr_crit("Stack range: %p - %p\n", (void *)stack_bottom_addr, (void *)stack_top_addr);
         pr_crit("Current ESP: %p\n", (void *)f->esp);
         pr_crit("Faulting EIP: %p\n", (void *)f->eip);
