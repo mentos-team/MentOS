@@ -80,6 +80,8 @@ static unsigned stat_fields_after_comm(const char *record)
     if (cursor == NULL) {
         return 0;
     }
+    // Start after the closing delimiter; ')' is part of comm, not a field.
+    ++cursor;
     for (; *cursor != '\0'; ++cursor) {
         if (*cursor == ' ' || *cursor == '\n' || *cursor == '\t') {
             in_field = 0;
