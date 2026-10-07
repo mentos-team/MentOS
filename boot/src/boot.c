@@ -7,6 +7,7 @@
 #include "boot_bits.h"
 #include "boot_cpu.h"
 #include "boot_console.h"
+#include "boot_module.h"
 #include "boot_math.h"
 #include "boot_paging.h"
 #include "boot/multiboot.h"
@@ -54,64 +55,6 @@ static inline uint32_t __align_rup(uint32_t addr, uint32_t value)
 /// @param value the value used to align.
 /// @return the aligned address.
 static inline uint32_t __align_rdown(uint32_t addr, uint32_t value) { return addr - (addr % value); }
-
-/// @brief Check whether a Multiboot module has the `kernel` command line.
-/// @param module Module descriptor supplied by Multiboot.
-/// @return 1 for the exact command line `kernel`, otherwise 0.
-static int __is_kernel_module(const multiboot_module_t *module)
-{
-    static const char expected[] = "kernel";
-    const char *command_line;
-
-    if (!module || !module->cmdline) {
-        return 0;
-    }
-
-    command_line = (const char *)(uintptr_t)module->cmdline;
-    for (uint32_t i = 0; expected[i] != '\0'; ++i) {
-        if (command_line[i] != expected[i]) {
-            return 0;
-        }
-    }
-    return command_line[sizeof(expected) - 1U] == '\0';
-}
-
-/// @brief Find the kernel ELF image supplied by Multiboot.
-/// @param header Multiboot information received from GRUB.
-/// @param image_size Receives the image size in bytes.
-/// @return The physical address where the ELF image starts.
-/// @details The kernel is deliberately a Multiboot module rather than a
-///          linker input. This keeps the loader image independent from the
-///          kernel image it loads.
-static const unsigned char *__get_kernel_image(multiboot_info_t *header, uint32_t *image_size)
-{
-    multiboot_module_t *kernel_module = NULL;
-
-    if (!header || !boot_bit_test(header->flags, MULTIBOOT_FLAG_MODS) || !header->mods_count || !header->mods_addr) {
-        boot_fatal("missing kernel module");
-    }
-
-    multiboot_module_t *module_table = (multiboot_module_t *)(uintptr_t)header->mods_addr;
-    for (uint32_t i = 0; i < header->mods_count; ++i) {
-        if (!__is_kernel_module(&module_table[i])) {
-            continue;
-        }
-        if (kernel_module) {
-            boot_fatal("multiple kernel modules");
-        }
-        kernel_module = &module_table[i];
-    }
-
-    if (!kernel_module) {
-        boot_fatal("kernel module not found");
-    }
-
-    if (kernel_module->mod_end <= kernel_module->mod_start) {
-        boot_fatal("kernel module has an invalid range");
-    }
-    *image_size = kernel_module->mod_end - kernel_module->mod_start;
-    return (const unsigned char *)(uintptr_t)kernel_module->mod_start;
-}
 
 /// @brief Add two 32-bit values while detecting wraparound.
 static int __u32_add_overflows(uint32_t left, uint32_t right, uint32_t *result)
@@ -287,22 +230,6 @@ static void __get_kernel_low_high(elf_header_t *elf_hdr, uint32_t *virt_low, uin
     }
 }
 
-/// @brief Returns the first address after the modules.
-/// @param header The multiboot info structure from which we extract the info.
-/// @return The address after the modules.
-static inline uint32_t __get_address_after_modules(multiboot_info_t *header)
-{
-    // We set by default the address to the ending physical address
-    // of the bootloader.
-    uint32_t addr           = boot_info.bootloader_phy_end;
-    // Get the pointer to the mods.
-    multiboot_module_t *mod = (multiboot_module_t *)header->mods_addr;
-    for (uint32_t i = 0; i < header->mods_count; ++i, ++mod) {
-        addr = boot_max(boot_max(addr, mod->mod_start), mod->mod_end);
-    }
-    return addr;
-}
-
 /// @brief Relocate the kernel image.
 /// @param elf_hdr The elf header of the kernel.
 static inline void __relocate_kernel_image(elf_header_t *elf_hdr)
@@ -366,7 +293,7 @@ void boot_main(uint32_t magic, multiboot_info_t *header, uint32_t esp)
 {
     boot_console_puts("\n[bootloader] Start...\n");
     uint32_t kernel_image_size = 0;
-    const unsigned char *kernel_image = __get_kernel_image(header, &kernel_image_size);
+    const unsigned char *kernel_image = boot_get_kernel_image(header, &kernel_image_size);
     elf_header_t *elf_hdr = (elf_header_t *)kernel_image;
     __validate_kernel_image(elf_hdr, kernel_image_size);
 
@@ -392,7 +319,7 @@ void boot_main(uint32_t magic, multiboot_info_t *header, uint32_t esp)
     boot_info.multiboot_header     = header;
 
     // Get the address after the modules.
-    boot_info.module_end = __get_address_after_modules(header);
+    boot_info.module_end = boot_get_address_after_modules(header, boot_info.bootloader_phy_end);
 
     // Get the starting address of the physical pages at the end of the modules.
     uint32_t kernel_phy_page_start  = __align_rup(boot_info.module_end, PAGE_SIZE);
