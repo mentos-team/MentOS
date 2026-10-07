@@ -4,14 +4,15 @@
 /// See LICENSE.md for details.
 
 #include "boot/boot_info.h"
+#include "boot_bits.h"
+#include "boot_cpu.h"
+#include "boot_math.h"
+#include "boot_paging.h"
 #include "multiboot.h"
 
 #include "elf/elf.h"
-#include "math.h"
-#include "mem/paging.h"
-#include "proc_access.h"
+#include "stddef.h"
 #include "sys/module.h"
-#include "sys/bitops.h"
 
 /// @defgroup bootloader Bootloader
 /// @brief Set of functions and variables for booting the kernel.
@@ -37,9 +38,9 @@ extern char _bootloader_end[];
 /// @brief Boot info provided to the kmain function.
 static boot_info_t boot_info;
 /// @brief Boot page directory.
-static page_directory_t boot_pgdir;
+static boot_page_directory_t boot_pgdir;
 /// @brief Boot page tables.
-static page_table_t boot_pgtables[1024];
+static boot_page_table_t boot_pgtables[BOOT_PAGE_ENTRIES];
 
 /// @brief Use this to write to I/O ports to send bytes to devices.
 /// @param port The output port.
@@ -123,7 +124,7 @@ static const unsigned char *__get_kernel_image(multiboot_info_t *header, uint32_
 {
     multiboot_module_t *kernel_module = NULL;
 
-    if (!header || !bitmask_check(header->flags, MULTIBOOT_FLAG_MODS) || !header->mods_count || !header->mods_addr) {
+    if (!header || !boot_bit_test(header->flags, MULTIBOOT_FLAG_MODS) || !header->mods_count || !header->mods_addr) {
         __boot_halt("missing kernel module");
     }
 
@@ -160,7 +161,7 @@ static void __setup_pages(uint32_t pfn_virt_start, uint32_t pfn_phys_start, uint
 
     uint32_t pg_offset = 0;
     for (uint32_t i = base_pgtable; i < 1024 && pfn_count; i++) {
-        page_table_t *table = boot_pgtables + i;
+        boot_page_table_t *table = boot_pgtables + i;
 
         uint32_t pgentry_start = (i == base_pgtable) ? base_pgentry : 0;
 
@@ -234,8 +235,8 @@ static void __get_kernel_low_high(elf_header_t *elf_hdr, uint32_t *virt_low, uin
             segment_start = program_header->vaddr;
             segment_end   = segment_start + program_header->memsz;
             // Take the lowest and highest virtual address.
-            *virt_low     = min(*virt_low, segment_start);
-            *virt_high    = max(*virt_high, segment_end);
+            *virt_low     = boot_min(*virt_low, segment_start);
+            *virt_high    = boot_max(*virt_high, segment_end);
         }
     }
 }
@@ -251,7 +252,7 @@ static inline uint32_t __get_address_after_modules(multiboot_info_t *header)
     // Get the pointer to the mods.
     multiboot_module_t *mod = (multiboot_module_t *)header->mods_addr;
     for (int i = 0; (i < header->mods_count) && (i < MAX_MODULES); ++i, ++mod) {
-        addr = max(max(addr, mod->mod_start), mod->mod_end);
+        addr = boot_max(boot_max(addr, mod->mod_start), mod->mod_end);
     }
     return addr;
 }
@@ -284,7 +285,7 @@ static inline void __relocate_kernel_image(elf_header_t *elf_hdr)
         if (program_header->type == PT_LOAD) {
             // Get the valid size of the segment by taking the minimum between
             // the size in bytes of the segment in the file image, in memory.
-            valid_size = min(program_header->filesz, program_header->memsz);
+            valid_size = boot_min(program_header->filesz, program_header->memsz);
             // Copy the physical data of the image to the corresponding virtual address.
             for (uint32_t j = 0; j < valid_size; j++) {
                 virtual_address[j] = physical_address[j];
@@ -300,14 +301,14 @@ static inline void __relocate_kernel_image(elf_header_t *elf_hdr)
 static void boot_paging_enable(void)
 {
     // Clear the PSE bit from cr4.
-    set_cr4(bitmask_clear(get_cr4(), CR4_PSE));
+    boot_set_cr4(boot_bit_clear(boot_get_cr4(), BOOT_CR4_PSE));
     // Set the PG bit in cr0.
-    set_cr0(bitmask_set(get_cr0(), CR0_PG));
+    boot_set_cr0(boot_bit_set(boot_get_cr0(), BOOT_CR0_PG));
 }
 
-static int boot_paging_switch_pgd(page_directory_t *dir)
+static int boot_paging_switch_pgd(boot_page_directory_t *dir)
 {
-    set_cr3((uintptr_t)dir);
+    boot_set_cr3((uintptr_t)dir);
     return 0;
 }
 
