@@ -72,10 +72,6 @@ extern uint32_t _data_end;
 extern uint32_t _bss_start;
 /// Points at the read-write kernel data uninitialized an kernel stack, ending address.
 extern uint32_t _bss_end;
-/// Points at the top of the kernel stack.
-extern uint32_t stack_top;
-/// Points at the bottom of the kernel stack.
-extern uint32_t stack_bottom;
 /// Points at the end of kernel code/data.
 extern uint32_t end;
 
