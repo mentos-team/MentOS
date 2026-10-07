@@ -13,6 +13,11 @@
 #include "stdio.h"
 #include "string.h"
 
+/// A stat record contains a NAME_MAX task name plus 52 fields.  Two standard
+/// formatting buffers leave room for the complete record without consuming a
+/// page-sized temporary on the per-task kernel stack.
+#define PROC_RECORD_BUFFER_SIZE (2 * BUFSIZ)
+
 /// @brief Returns the character identifying the process state.
 /// @param state the process state.
 /// @return a character describing the state.
@@ -57,8 +62,38 @@ static inline char __procr_get_task_state_char(int state)
 /// @return size of the written data in buffer.
 static inline ssize_t __procr_do_cmdline(char *buffer, size_t bufsize, task_struct *task)
 {
-    strcpy(buffer, task->name);
-    return 1;
+    int written = snprintf(buffer, bufsize, "%s", task->name);
+    return (written < 0 || (size_t)written >= bufsize) ? -EOVERFLOW : written;
+}
+
+/// @brief Formats one proc record fragment through a temporary buffer.
+/// @details The old formatter passed its destination as both the `%s` source
+/// and destination.  Formatting into a temporary buffer preserves that output
+/// while making the operation bounded and well-defined.
+static inline int __procr_format(char *buffer, size_t bufsize, const char *format, ...)
+{
+    char temporary[PROC_RECORD_BUFFER_SIZE];
+    va_list args;
+    va_start(args, format);
+    int written = vsnprintf(temporary, sizeof(temporary), format, args);
+    va_end(args);
+    if (written < 0 || (size_t)written >= bufsize) {
+        return -EOVERFLOW;
+    }
+    memcpy(buffer, temporary, (size_t)written + 1);
+    return 0;
+}
+
+/// @brief Appends a literal fragment to a proc record without overflowing it.
+static inline int __procr_concat(char *buffer, size_t bufsize, const char *fragment)
+{
+    size_t offset = strlen(buffer);
+    size_t length = strlen(fragment);
+    if (offset > bufsize - 1 || length > bufsize - offset - 1) {
+        return -EOVERFLOW;
+    }
+    memcpy(buffer + offset, fragment, length + 1);
+    return 0;
 }
 
 /// @brief Returns the data for the `/proc/<PID>/stat` file.
@@ -66,8 +101,37 @@ static inline ssize_t __procr_do_cmdline(char *buffer, size_t bufsize, task_stru
 /// @param bufsize the size of the buffer.
 /// @param task the task associated with the `/proc/<PID>` folder.
 /// @return size of the written data in buffer.
+static inline ssize_t __procr_do_stat_bounded(char *buffer, size_t bufsize, task_struct *task)
+{
+    int written = snprintf(
+        buffer, bufsize,
+        "%d (%s) %c %d 0 0 0 0 0 0 0 0 0 0 0 0 0 %d %d 0 0 %u %u 0 0 %u %u %u %u %u %u %u %u %u %u %u %u %u %d\n",
+        task->pid, basename(task->name), __procr_get_task_state_char(task->state), task->parent ? task->parent->pid : 0,
+        task->se.prio, PRIO_TO_NICE(task->se.prio), task->se.exec_start, task->mm->total_vm, task->mm->start_code,
+        task->mm->end_code, task->mm->start_stack, task->thread.regs.useresp, task->thread.regs.eip,
+        task->se.prio < 100 ? task->se.prio : 0, task->mm->start_data, task->mm->end_data, task->mm->start_brk,
+        task->mm->arg_start, task->mm->arg_end, task->mm->env_start, task->mm->env_end, task->exit_code);
+    return (written < 0 || (size_t)written >= bufsize) ? -EOVERFLOW : written;
+}
+
+/// @brief Legacy field-by-field formatter kept for comparison during migration.
+/// @deprecated Use `__procr_do_stat_bounded`.
 static inline ssize_t __procr_do_stat(char *buffer, size_t bufsize, task_struct *task)
 {
+    int format_error = 0;
+    buffer[0]        = '\0';
+#define sprintf(destination, format, ...)                                        \
+    do {                                                                         \
+        if (__procr_format((destination), bufsize, (format), __VA_ARGS__) < 0) { \
+            format_error = 1;                                                    \
+        }                                                                        \
+    } while (0)
+#define strcat(destination, fragment)                                 \
+    do {                                                              \
+        if (__procr_concat((destination), bufsize, (fragment)) < 0) { \
+            format_error = 1;                                         \
+        }                                                             \
+    } while (0)
     //(1) pid  %d
     //     The process ID.
     //
@@ -379,8 +443,11 @@ static inline ssize_t __procr_do_stat(char *buffer, size_t bufsize, task_struct 
     //      The thread's exit status in the form reported by
     //      waitpid(2).
     sprintf(buffer, "%s %d\n", buffer, task->exit_code);
-    return 1;
+    return format_error ? -EOVERFLOW : (ssize_t)strlen(buffer);
 }
+
+#undef sprintf
+#undef strcat
 
 /// @brief Performs a read of files inside the `/proc/<PID>/` folder.
 /// @param file is the `/proc/<PID>/` folder, thus, it should be a `proc_dir_entry_t` data.
@@ -404,13 +471,17 @@ static inline ssize_t __procr_read(vfs_file_t *file, char *buffer, off_t offset,
         return -EFAULT;
     }
     // Prepare a support buffer.
-    char support[BUFSIZ];
-    memset(support, 0, BUFSIZ);
+    char support[PROC_RECORD_BUFFER_SIZE];
+    memset(support, 0, sizeof(support));
     // Call the specific function.
     if (strcmp(entry->name, "cmdline") == 0) {
-        __procr_do_cmdline(support, BUFSIZ, task);
+        if (__procr_do_cmdline(support, sizeof(support), task) < 0) {
+            return -EOVERFLOW;
+        }
     } else if (strcmp(entry->name, "stat") == 0) {
-        __procr_do_stat(support, BUFSIZ, task);
+        if (__procr_do_stat_bounded(support, sizeof(support), task) < 0) {
+            return -EOVERFLOW;
+        }
     }
     // Copmute the amounts of bytes we want (and can) read.
     ssize_t bytes_to_read = max(0, min(strlen(support) - offset, nbyte));
