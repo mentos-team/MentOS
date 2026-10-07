@@ -9,7 +9,42 @@
 #include "math.h"
 #include "process/process.h"
 #include "process/scheduler_feedback.h"
+#include "stdio.h"
 #include "string.h"
+
+/// @brief Reposition a `/proc/feedback` read offset.
+/// @param file The procfs file whose offset is being changed.
+/// @param offset Offset relative to @p whence.
+/// @param whence `SEEK_SET`, `SEEK_CUR`, or `SEEK_END`.
+/// @return The new non-negative offset, or a negative errno.
+static off_t procfb_lseek(vfs_file_t *file, off_t offset, int whence)
+{
+    if (file == NULL) {
+        return -EBADF;
+    }
+
+    off_t base = 0;
+    if (whence == SEEK_CUR) {
+        base = file->f_pos;
+    } else if (whence == SEEK_END) {
+        char support[BUFSIZ];
+        memset(support, 0, sizeof(support));
+        scheduler_feedback_to_string(support, sizeof(support));
+        base = (off_t)strlen(support);
+    } else if (whence != SEEK_SET) {
+        return -EINVAL;
+    }
+
+    if (offset < 0 && offset < -base) {
+        return -EINVAL;
+    }
+    off_t next = base + offset;
+    if (next < 0) {
+        return -EINVAL;
+    }
+    file->f_pos = next;
+    return next;
+}
 
 /// @brief Reads data from the /proc/feedback file.
 ///
@@ -31,8 +66,17 @@ static ssize_t procfb_read(vfs_file_t *file, char *buf, off_t offset, size_t nby
     memset(support, 0, BUFSIZ);
     scheduler_feedback_to_string(support, BUFSIZ);
 
-    // Compute the amount of bytes we want (and can) read.
-    ssize_t bytes_to_read = max(0, min(strlen(support) - offset, nbyte));
+    // Keep the subtraction unsigned only after proving that the offset is
+    // valid.  Otherwise strlen(support) - offset wraps for an offset beyond
+    // EOF and memcpy() reads past the temporary buffer (#454).
+    if (offset < 0) {
+        return -EINVAL;
+    }
+    size_t length = strlen(support);
+    if ((size_t)offset >= length) {
+        return 0;
+    }
+    ssize_t bytes_to_read = (ssize_t)min(length - (size_t)offset, nbyte);
     // Perform the read: copy exactly the computed amount, never more, since
     // buf is the raw user read(2) buffer and nbyte is all it can hold.
     if (bytes_to_read > 0) {
@@ -57,7 +101,7 @@ static vfs_file_operations_t procfb_fs_operations = {
     .close_f    = NULL,
     .read_f     = procfb_read,
     .write_f    = NULL,
-    .lseek_f    = NULL,
+    .lseek_f    = procfb_lseek,
     .stat_f     = NULL,
     .ioctl_f    = NULL,
     .getdents_f = NULL,
