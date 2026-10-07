@@ -88,7 +88,6 @@ if [ "${ALLOW_STALE_IMAGES:-0}" != "1" ]; then
         echo "" >&2
         echo "Rebuild first:" >&2
         echo "  make -C ${BUILD_DIR} -j\$(nproc)" >&2
-        echo "  make -C ${BUILD_DIR} cdrom_test.iso filesystem" >&2
         echo "" >&2
         echo "Set ALLOW_STALE_IMAGES=1 to boot the existing image anyway." >&2
         exit 1
