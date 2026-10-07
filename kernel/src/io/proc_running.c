@@ -76,12 +76,27 @@ static inline ssize_t __procr_do_stat_bounded(char *buffer, size_t bufsize, task
 {
     int written = snprintf(
         buffer, bufsize,
-        "%d (%s) %c %d 0 0 0 0 0 0 0 0 0 0 0 0 0 %d %d 0 0 %u %u 0 0 %u %u %u %u %u %u %u %u %u %u %u %u %u %d\n",
+        /* Linux-compatible positional layout: all 52 fields are emitted.
+         * MentOS has no accounting for several fields yet, so those fields
+         * are explicit zeroes rather than being omitted and shifting every
+         * following value (#417). */
+        "%d (%s) %c "             /*  1 pid,  2 comm,  3 state             */
+        "%d %d %d %u %d %u %u %u %u %u %u %u %u %u " /*  4..17 */
+        "%d %d %d %u %u %u %u %u %u %u %u %u " /* 18..29 */
+        "%u %u %u %u %u %u %u %u %u %u %u %u %u %u %u " /* 30..44 */
+        "%u %u %u %u %u %u %u %d\n",               /* 45..52 */
+        /*  1..4 */
         task->pid, basename(task->name), __procr_get_task_state_char(task->state), task->parent ? task->parent->pid : 0,
-        task->se.prio, PRIO_TO_NICE(task->se.prio), task->se.exec_start, task->mm->total_vm, task->mm->start_code,
-        task->mm->end_code, task->mm->start_stack, task->thread.regs.useresp, task->thread.regs.eip,
-        task->se.prio < 100 ? task->se.prio : 0, task->mm->start_data, task->mm->end_data, task->mm->start_brk,
-        task->mm->arg_start, task->mm->arg_end, task->mm->env_start, task->mm->env_end, task->exit_code);
+        /*  5..17: pgrp, session, tty, tpgid, flags, and fault/time counters. */
+        task->pgid, task->sid, 0U, 0, 0U, 0U, 0U, 0U, task->se.exec_runtime, 0U, 0U, 0U, 0U,
+        /* 18..29: priority through kstkesp. */
+        task->se.prio, PRIO_TO_NICE(task->se.prio), 1, 0U, task->se.start_runtime, task->mm->total_vm, 0U, 0U,
+        task->mm->start_code, task->mm->end_code, task->mm->start_stack, task->thread.regs.useresp,
+        /* 30..44: kstkeip, signal masks, wchan, swap and processor data. */
+        task->thread.regs.eip, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U,
+        /* 45..52: data, brk, argv/env bounds and exit status. */
+        task->mm->start_data, task->mm->end_data, task->mm->start_brk, task->mm->arg_start, task->mm->arg_end,
+        task->mm->env_start, task->mm->env_end, task->exit_code);
     return (written < 0 || (size_t)written >= bufsize) ? -EOVERFLOW : written;
 }
 
