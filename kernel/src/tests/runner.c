@@ -31,6 +31,7 @@ typedef struct {
 extern void test_gdt(void);
 extern void test_idt(void);
 extern void test_isr(void);
+extern void test_switch(void);
 extern void test_paging(void);
 extern void test_scheduler(void);
 extern void test_zone_allocator(void);
@@ -50,6 +51,7 @@ static const test_entry_t test_functions[] = {
     {test_gdt,                 "GDT Subsystem"                },
     {test_idt,                 "IDT Subsystem"                },
     {test_isr,                 "ISR Subsystem"                },
+    {test_switch,               "Kernel Context Switch"         },
     {test_paging,              "Paging Subsystem"             },
     {test_scheduler,           "Scheduler Subsystem"          },
     {test_zone_allocator,      "Zone Allocator Subsystem"     },
@@ -67,18 +69,32 @@ static const test_entry_t test_functions[] = {
 
 static const int num_tests = sizeof(test_functions) / sizeof(test_entry_t);
 
+/// @brief Number of assertions that failed so far.
+static unsigned failed_assertions = 0;
+
+void kernel_test_record_failure(void) { ++failed_assertions; }
+
+unsigned kernel_test_failures(void) { return failed_assertions; }
+
 /// @brief Run all kernel tests.
-/// @return 0 on success, -1 on failure.
+/// @details Every suite runs even if an earlier one failed. A suite passes if
+/// none of its assertions failed.
+/// @return 0 if every suite passed, -1 otherwise.
 int kernel_run_tests(void)
 {
     pr_notice("Starting kernel tests...\n");
     int passed = 0;
     for (int i = 0; i < num_tests; i++) {
         pr_notice("Running test %2d of %2d: %s...\n", i + 1, num_tests, test_functions[i].name);
+        unsigned before = failed_assertions;
         test_functions[i].func();
-        passed++;
+        if (failed_assertions == before) {
+            passed++;
+        } else {
+            pr_emerg("Suite '%s' FAILED: %u failed assertion(s)\n", test_functions[i].name, failed_assertions - before);
+        }
     }
-    pr_notice("Kernel tests completed: %d/%d passed\n", passed, num_tests);
+    pr_notice("Kernel tests completed: %d/%d suites passed, %u failed assertion(s)\n", passed, num_tests, failed_assertions);
 
     return (passed == num_tests) ? 0 : -1;
 }

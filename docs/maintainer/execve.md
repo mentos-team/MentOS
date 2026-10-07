@@ -19,7 +19,7 @@ wrapper (`lib/src/unistd/exec.c:61-65`) passes vectors straight through.
    - pre-#190: `strcpy` → kernel stack overflow from user-controlled
      `argv[0]`/filename. PR #190's own PoC (in its description) demonstrates
      EIP control (`0xdeadbeef`); build confirmed `-fno-stack-protector`
-     (tools/toolchain-i686-elf.cmake; USERSPACE_CFLAGS).
+     (cmake/toolchain-i686-elf.cmake; USERSPACE_CFLAGS).
    - with #190: `strncpy` bounded to destination size — **but no forced
      NUL termination** (see below).
 2. **Copy argv/envp to kernel memory**: `argc = __count_args(origin_argv)`,

@@ -1,12 +1,13 @@
 /// @file t_path_bounds.c
-/// @brief Regression test for #284: path resolution must never silently
-/// truncate a path or one of its components.
+/// @brief Regression test for #284 and #376: path resolution must never
+/// silently truncate a path or one of its components, and must never
+/// decide any part of the result from memory it does not own.
 /// @details `tokenize()` used the capacity of the token buffer as the bound
 /// for the offset into the *path*, so any component starting past byte 255 of
 /// the path was dropped and a component longer than the buffer was truncated.
 /// A request for a path then resolved to a different, shorter name: the file
 /// named by a prefix of the request was opened or executed instead of the one
-/// asked for. The checks below cover the three observable consequences:
+/// asked for (#284). The checks below cover the three observable consequences:
 ///   - a file whose path is longer than 255 bytes can be created and read;
 ///   - a request for a name below an existing 255-byte-plus path fails
 ///     instead of resolving to that path;
@@ -18,6 +19,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <libgen.h>
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -177,6 +179,51 @@ static int check_component_rejected(size_t length)
     return 0;
 }
 
+/// @brief Resolving an absolute path must depend only on the path: the
+/// leading separator of the first component is decided from the
+/// resolution buffer's own content, never from the byte that happens to
+/// precede it.
+/// @details `APPEND_PATH_SEPARATOR` used to read one byte before the
+///          buffer when the buffer was still empty — which is the state
+///          it is in for the first component of every absolute path. A
+///          resolution that wrongly skips the leading separator turns an
+///          absolute request into a relative-shaped result, which the
+///          comparisons below catch for every shape the separator logic
+///          distinguishes: the empty and root cases, the dot cases, the
+///          first-component case, repeated and trailing separators.
+/// @return 0 on success, -1 on failure.
+static int check_leading_separator(void)
+{
+    static const struct {
+        const char *path;
+        const char *expected;
+    } cases[] = {
+        {"/",                 "/"         },
+        {"//",                "/"         },
+        {"/./",               "/"         },
+        {"/..",               "/"         },
+        {"/../home",          "/home"     },
+        {"/home/user",        "/home/user"},
+        {"/home/user/",       "/home/user"},
+        {"/home//user",       "/home/user"},
+        {"/./home/./user/..", "/home"     },
+    };
+    for (size_t i = 0; i < count_of(cases); ++i) {
+        char resolved[PATH_MAX] = {0};
+        if (realpath(cases[i].path, resolved, sizeof(resolved)) != resolved) {
+            syslog(LOG_ERR, "[t_path_bounds] realpath(%s): %s", cases[i].path, strerror(errno));
+            return -1;
+        }
+        if (strcmp(resolved, cases[i].expected) != 0) {
+            syslog(
+                LOG_ERR, "[t_path_bounds] realpath(%s) = `%s`, expected `%s`", cases[i].path, resolved,
+                cases[i].expected);
+            return -1;
+        }
+    }
+    return 0;
+}
+
 int main(void)
 {
     char dir[PATH_MAX]       = {0};
@@ -203,6 +250,9 @@ int main(void)
         ++failures;
     }
     if (check_no_prefix_resolution(dir) < 0) {
+        ++failures;
+    }
+    if (check_leading_separator() < 0) {
         ++failures;
     }
     if (check_max_component(max_file) < 0) {

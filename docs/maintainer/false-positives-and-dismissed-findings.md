@@ -96,3 +96,24 @@ Baselines: `BASE` 82f4314 / `MAIN` 62c638a.
   bytes ARE zeros. The BLOCKS list, not the dump, exposes the hole.
 - Recorded here so the next investigator doesn't re-derive the wrong
   conclusion from the same experiment.
+
+## 9. Subsystems that were never looked at
+
+Not dismissed findings — the absence of findings. The #188–#190 review and
+the bug hunt that followed covered the filesystem, memory, process and
+procfs paths. These were out of its scope and have had no security pass at
+all, so "nothing has been reported against it" says nothing about them:
+
+- IPC beyond what #191 needed, signals in detail, keyboard and tty, and the
+  scheduler algorithms.
+- The write side of the ext2 sparse-hole handling. The read side was the
+  subject of #192 and is fixed; writing *into* a hole needs a block
+  allocation, and `ext2_write_block` also rejects block 0. Recorded as a
+  hypothesis at the time and never tested.
+- Why exactly 12 file-descriptor opens, not 13, exhausted the table during
+  the #195 work. The arithmetic says 16 − 3 stdio = 13, and one slot was
+  never accounted for — possibly an fd held by `runtests` or the cwd. It
+  did not affect that investigation, where `EMFILE` was all that mattered,
+  and it has not been chased since.
+- `rb_history_get` returning 1/0 rather than a success code, reviewed only
+  as far as #188 required.

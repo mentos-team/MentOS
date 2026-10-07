@@ -4,6 +4,7 @@
 /// See LICENSE.md for details.
 
 // Setup the logging for this file (do this before any other include).
+#include "errno.h"
 #include "sys/kernel_levels.h"           // Include kernel log levels.
 #define __DEBUG_HEADER__ "[PAGING]"      ///< Change header.
 #define __DEBUG_LEVEL__  LOGLEVEL_NOTICE ///< Set log level.
@@ -58,6 +59,23 @@ static void __init_pagedir(page_directory_t *pdir) { *pdir = (page_directory_t){
 /// @brief Initializes the page table.
 /// @param ptable the page table to initialize.
 static void __init_pagetable(page_table_t *ptable) { *ptable = (page_table_t){{0}}; }
+
+/// @brief Gives every kernel-space page directory entry a page table.
+/// @details The tables are allocated empty (no page present), so this maps
+/// nothing: it only makes the directory entries exist, which is what lets
+/// per-process copies of the directory share them. See #271.
+/// @param pgd The main page directory.
+/// @return 0 on success, -1 on failure.
+static int __populate_kernel_pdes(page_directory_t *pgd)
+{
+    for (uint32_t index = PROCAREA_END_ADDR >> 22U; index < MAX_PAGE_DIR_ENTRIES; ++index) {
+        // A zero-sized update allocates the table behind the entry and stops.
+        if (mem_upd_vm_area(pgd, index << 22U, 0, 0, MM_RW | MM_GLOBAL) < 0) {
+            return -1;
+        }
+    }
+    return 0;
+}
 
 int paging_init(boot_info_t *info)
 {
@@ -132,6 +150,15 @@ int paging_init(boot_info_t *info)
         return -1;
     }
 
+    // Keep the lowest page of the boot-time kernel stack unmapped. The stack
+    // grows downward from stack_base; this page is its guard and must remain
+    // absent after rebuilding the kernel page tables.
+    uint32_t stack_guard = info->stack_base - info->stack_size;
+    if (mem_upd_vm_area(main_mm->pgd, stack_guard, 0, PAGE_SIZE, MM_RW | MM_GLOBAL) < 0) {
+        pr_crit("Failed to protect the kernel stack guard page.\n");
+        return -1;
+    }
+
     // Map the DMA zone into virtual memory. DMA zone is in physical memory
     // below the kernel (0x0-0x800000) and needs its own virtual mapping.
     extern memory_info_t memory; // From zone_allocator
@@ -143,6 +170,16 @@ int paging_init(boot_info_t *info)
             pr_crit("Failed to map DMA zone.\n");
             return -1;
         }
+    }
+
+    // Every process page directory is a snapshot of this one (see
+    // mm_create_blank), so a directory entry added to it later is invisible to
+    // all existing processes. Populate every kernel-space entry now, while the
+    // snapshot is still the only copy, so that later kernel mappings only
+    // rewrite entries inside tables that all page directories already share.
+    if (__populate_kernel_pdes(main_mm->pgd) < 0) {
+        pr_crit("Failed to populate the kernel page directory entries.\n");
+        return -1;
     }
 
     // Switch to the newly created page directory.
@@ -457,11 +494,12 @@ static pg_iter_entry_t __pg_iter_next(page_iterator_t *iter)
 }
 
 __attribute__((noinline))
-page_t *mem_virtual_to_page(page_directory_t *pgd, uint32_t virt_start, size_t *size)
+page_t *
+mem_virtual_to_page(page_directory_t *pgd, uint32_t virt_start, size_t *size)
 {
     // Memory barrier to prevent aggressive compiler optimization in Release mode.
     __asm__ __volatile__("" ::: "memory");
-    
+
     // Check for null pointer to the page directory to avoid dereferencing.
     if (!pgd) {
         pr_crit("The page directory is null.\n");
@@ -477,7 +515,7 @@ page_t *mem_virtual_to_page(page_directory_t *pgd, uint32_t virt_start, size_t *
     // Use volatile read to prevent compiler optimization in Release mode.
     unsigned int pde_present = pgd->entries[virt_pgt].present;
     __asm__ __volatile__("" ::: "memory");
-    
+
     if (!pde_present) {
         return NULL;
     }
@@ -486,7 +524,7 @@ page_t *mem_virtual_to_page(page_directory_t *pgd, uint32_t virt_start, size_t *
     // Use volatile read to prevent compiler from optimizing frame access.
     unsigned int pde_frame = pgd->entries[virt_pgt].frame;
     __asm__ __volatile__("" ::: "memory");
-    
+
     page_t *pgd_page = memory.mem_map + pde_frame;
 
     // Get the low memory address of the page table.
@@ -494,8 +532,7 @@ page_t *mem_virtual_to_page(page_directory_t *pgd, uint32_t virt_start, size_t *
     if (!pgt_address) {
         static int warn_count = 0;
         if (warn_count++ < 5) {
-            pr_debug("mem_virtual_to_page: get_virtual_address_from_page returned NULL for PDE %u (frame %u)\n",
-                     virt_pgt, pde_frame);
+            pr_debug("mem_virtual_to_page: get_virtual_address_from_page returned NULL for PDE %u (frame %u)\n", virt_pgt, pde_frame);
         }
         return NULL;
     }
@@ -504,13 +541,12 @@ page_t *mem_virtual_to_page(page_directory_t *pgd, uint32_t virt_start, size_t *
     // Use volatile read to prevent compiler optimization in Release mode.
     unsigned int pte_present = pgt_address->pages[virt_pgt_offset].present;
     __asm__ __volatile__("" ::: "memory");
-    
+
     if (!pte_present) {
         static volatile int pte_not_present_count = 0;
         if (pte_not_present_count < 3) {
             pte_not_present_count++;
-            pr_warning("mem_virtual_to_page: PTE not present for vaddr 0x%p (PDE %u, PTE offset %u)\n",
-                       (void *)virt_start, virt_pgt, virt_pgt_offset);
+            pr_warning("mem_virtual_to_page: PTE not present for vaddr %p (PDE %u, PTE offset %u)\n", (void *)virt_start, virt_pgt, virt_pgt_offset);
         }
         return NULL;
     }
@@ -519,7 +555,7 @@ page_t *mem_virtual_to_page(page_directory_t *pgd, uint32_t virt_start, size_t *
     // Use volatile read to prevent compiler optimization.
     unsigned int pte_frame = pgt_address->pages[virt_pgt_offset].frame;
     __asm__ __volatile__("" ::: "memory");
-    
+
     uint32_t pfn = pte_frame;
 
     // Map the physical frame number to a physical page.
@@ -536,6 +572,114 @@ page_t *mem_virtual_to_page(page_directory_t *pgd, uint32_t virt_start, size_t *
 
     // Return the pointer to the mapped physical page.
     return page;
+}
+
+static int __page_in_current_vm_area(uint32_t address);
+static int __paging_range_is_user(const void *address, size_t length, int need_write);
+
+int paging_is_user_range(const void *address, size_t length)
+{
+    return __paging_range_is_user(address, length, 0);
+}
+
+int paging_is_user_range_writable(const void *address, size_t length)
+{
+    return __paging_range_is_user(address, length, 1);
+}
+
+static int __paging_range_is_user(const void *address, size_t length, int need_write)
+{
+    uint32_t start = (uint32_t)(uintptr_t)address;
+    // A range that wraps or that ends inside the kernel area is not user
+    // memory; an empty range touches nothing, but its address must still
+    // name user memory rather than the kernel area.
+    if (start >= PROCAREA_END_ADDR) {
+        return 0;
+    }
+    uint32_t end = start + length;
+    if ((length > 0) && ((end < start) || (end > PROCAREA_END_ADDR))) {
+        return 0;
+    }
+    if (length == 0) {
+        return 1;
+    }
+    // The current directory comes out of CR3, which holds a physical
+    // address: it must go through the page map before anything reads it,
+    // the way the page-fault handler does.
+    page_t *dir_page = get_page_from_physical_address((uint32_t)paging_get_current_pgd());
+    if (!dir_page) {
+        return 0;
+    }
+    page_directory_t *pgd = (page_directory_t *)get_virtual_address_from_page(dir_page);
+    if (!pgd) {
+        return 0;
+    }
+    // Every page of the range must be present and user-accessible: the
+    // walk is silent because a caller probing where its memory is not is
+    // an answer, not an event to log. The user bit cannot be skipped: the
+    // kernel dereferences these pointers with supervisor rights, so it is
+    // the only thing standing between a syscall and, for instance, the
+    // identity-mapped first megabyte every address space inherits.
+    for (uint32_t page = start & ~(uint32_t)(PAGE_SIZE - 1); page < end; page += PAGE_SIZE) {
+        page_dir_entry_t *pde = &pgd->entries[page / (PAGE_SIZE * MAX_PAGE_TABLE_ENTRIES)];
+        if (!pde->present || !pde->user) {
+            return 0;
+        }
+        page_t *table_page = get_page_from_physical_address(pde->frame << 12U);
+        if (!table_page) {
+            return 0;
+        }
+        page_table_t *table = (page_table_t *)get_virtual_address_from_page(table_page);
+        if (!table) {
+            return 0;
+        }
+        page_table_entry_t *pte = &table->pages[(page / PAGE_SIZE) % MAX_PAGE_TABLE_ENTRIES];
+        if (!pte->user) {
+            return 0;
+        }
+        // Not faulted in yet does not mean not the caller's: a vm_area of
+        // the current task still makes the page its memory, and sys_mmap
+        // creates exactly those (#191). The user bit above is still
+        // required: mem_upd_vm_area writes it when the area is created,
+        // long before the first fault, so a zeroed entry stays refused.
+        if (!pte->present && !__page_in_current_vm_area(page)) {
+            return 0;
+        }
+        // The kernel writes through these pointers with supervisor rights
+        // and CR0.WP is clear, so the hardware never enforces read-only
+        // user pages against it: the write direction has to be refused
+        // here, in software (#191).
+        if (need_write && (!pte->rw || !pde->rw)) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+/// @brief Tells whether an address falls inside a vm_area of the current
+///        task, the fallback for memory that is the caller's but not yet
+///        faulted in.
+/// @param address the address to place.
+/// @return 1 when an area of the current task covers the address, 0
+///         otherwise.
+static int __page_in_current_vm_area(uint32_t address)
+{
+    task_struct *task = scheduler_get_current_process();
+    if (!task || !task->mm) {
+        return 0;
+    }
+    // vm_area_find answers by exact start address, which only ever matches
+    // the first page of an area, and vm_flags is never set by
+    // vm_area_create: the containment test has to be done here. Every area
+    // in a task's mmap_list is user memory by construction, and the range
+    // check already kept the address below the kernel area.
+    list_for_each_decl (it, &task->mm->mmap_list) {
+        vm_area_struct_t *area = list_entry(it, vm_area_struct_t, vm_list);
+        if (area && (address >= area->vm_start) && (address < area->vm_end)) {
+            return 1;
+        }
+    }
+    return 0;
 }
 
 int mem_upd_vm_area(page_directory_t *pgd, uint32_t virt_start, uint32_t phy_start, size_t size, uint32_t flags)
@@ -646,6 +790,18 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
 {
     uintptr_t vm_start;
 
+    // The address is an address argument, not a buffer: nothing requires
+    // it to be mapped, but a fixed request must stay out of the kernel
+    // area, and the mapping itself must fit the user space without
+    // wrapping (#191).
+    if (addr && ((uintptr_t)addr >= PROCAREA_END_ADDR)) {
+        return (void *)-EFAULT;
+    }
+    if ((length == 0) || ((uintptr_t)addr + length < (uintptr_t)addr) ||
+        ((uintptr_t)addr + length > PROCAREA_END_ADDR)) {
+        return (void *)-EFAULT;
+    }
+
     // Get the current task.
     task_struct *task = scheduler_get_current_process();
 
@@ -705,6 +861,12 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
 
 int sys_munmap(void *addr, size_t length)
 {
+    // Same class as sys_mmap: an address argument, bounded to the user
+    // area rather than walked (#191).
+    if (((uintptr_t)addr >= PROCAREA_END_ADDR) || (length == 0) ||
+        ((uintptr_t)addr + length < (uintptr_t)addr) || ((uintptr_t)addr + length > PROCAREA_END_ADDR)) {
+        return -EFAULT;
+    }
     // Get the current task.
     task_struct *task = scheduler_get_current_process();
 
@@ -729,13 +891,13 @@ int sys_munmap(void *addr, size_t length)
 
         // Check if the requested address and length match the current segment.
         if ((vm_start == segment->vm_start) && (length == size)) {
-            pr_debug("[0x%p:0x%p] Found it, destroying it.\n", (void *)segment->vm_start, (void *)segment->vm_end);
+            pr_debug("[%p:%p] Found it, destroying it.\n", (void *)segment->vm_start, (void *)segment->vm_end);
 
             // Step 6: Destroy the found virtual memory area.
             if (vm_area_destroy(task->mm, segment) < 0) {
                 pr_err(
                     "Failed to destroy the virtual memory area at "
-                    "[0x%p:0x%p].\n",
+                    "[%p:%p].\n",
                     (void *)segment->vm_start, (void *)segment->vm_end);
                 return -1;
             }
@@ -745,7 +907,7 @@ int sys_munmap(void *addr, size_t length)
     }
 
     pr_err(
-        "No matching memory area found for unmapping at address 0x%p with "
+        "No matching memory area found for unmapping at address %p with "
         "length %zu.\n",
         addr, length);
     return 1;

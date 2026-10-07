@@ -13,9 +13,7 @@
 
 #include "assert.h"
 #include "klib/irqflags.h"
-#include "mem/alloc/slab.h"
 #include "process/scheduler.h"
-#include "string.h"
 #include <stdint.h>
 
 /// @brief Adds the entry to the wait queue.
@@ -60,7 +58,8 @@ int default_wake_function(wait_queue_entry_t *entry, unsigned mode, int sync)
     ///
     /// Wake functions are policy: they decide whether a task's wait
     /// condition is satisfied. The wait.c layer handles mechanics:
-    /// removing from queue, calling wake_up_process(), freeing entry.
+    /// removing from queue and calling wake_up_process(). The waiter owns the
+    /// entry storage and releases it when its continuation calls finish_wait().
 
     // Validate the input.
     if (!entry) {
@@ -98,40 +97,13 @@ void wait_queue_head_init(wait_queue_head_t *head)
     pr_debug("Initialized wait queue head at %p.\n", (void *)head);
 }
 
-wait_queue_entry_t *wait_queue_entry_alloc(void)
-{
-    // Allocate the memory.
-    wait_queue_entry_t *entry = (wait_queue_entry_t *)kmalloc(sizeof(wait_queue_entry_t));
-    // pr_debug("ALLOCATE wait_queue_entry_t %p\n", entry);
-    // Check the allocated memory.
-    assert(entry && "Failed to allocate memory for a wait_queue_entry_t.");
-    // Clean the memory.
-    memset(entry, 0, sizeof(wait_queue_entry_t));
-    // Initialize the element.
-    entry->flags   = 0;
-    entry->task    = NULL;
-    entry->func    = NULL;
-    entry->private = NULL;
-    list_head_init(&entry->task_list);
-    // Return the element.
-    return entry;
-}
-
-void wait_queue_entry_dealloc(wait_queue_entry_t *entry)
-{
-    assert(entry && "Received a NULL pointer.");
-    // pr_debug("FREE     wait_queue_entry_t %p\n", entry);
-    // Deallocate the memory.
-    kfree(entry);
-}
-
 int wake_up_wait_queue_entry(wait_queue_head_t *head, wait_queue_entry_t *entry, unsigned mode, int sync)
 {
     /// Core wait queue wake primitive. Evaluates wake condition via entry's
     /// wake function, and if satisfied, performs the full wake sequence:
     ///   1. Remove entry from wait queue (wait layer responsibility)
     ///   2. Call wake_up_process() to transition task to TASK_RUNNING
-    ///   3. Free wait queue entry (wait layer responsibility)
+    ///   3. Leave entry storage owned by the blocked continuation
     ///
     /// This is the ONLY function that should perform this sequence.
     /// Subsystems (pipes, timers) delegate full wake mechanics here.
@@ -165,10 +137,10 @@ int wake_up_wait_queue_entry(wait_queue_head_t *head, wait_queue_entry_t *entry,
     pr_debug("Process %d (%s) WOKEN UP from %s\n", 
              entry->task->pid, entry->task->name, head->name);
 
-    // Perform wake sequence: remove, wake, free (wait layer mechanics).
+    // Perform wake sequence: remove and make the task runnable. The blocked
+    // continuation owns the entry and will finish it after schedule() returns.
     remove_wait_queue(head, entry);
     wake_up_process(entry->task);
-    wait_queue_entry_dealloc(entry);
     return 1;
 }
 
@@ -233,21 +205,40 @@ void wait_queue_entry_init(wait_queue_entry_t *entry, struct task_struct *task)
     list_head_init(&entry->task_list);
 }
 
-void add_wait_queue(wait_queue_head_t *head, wait_queue_entry_t *entry)
+void prepare_to_wait(wait_queue_head_t *head, wait_queue_entry_t *entry, long state)
 {
-    // Validate the input.
-    if (!head) {
-        pr_err("Variable head is NULL.\n");
+    if (head == NULL || entry == NULL || entry->task == NULL) {
         return;
     }
-    if (!entry) {
-        pr_err("Variable entry is NULL.\n");
-        return;
-    }
-    entry->flags &= ~WQ_FLAG_EXCLUSIVE;
+    uint8_t irqs = irq_disable();
     spinlock_lock(&head->lock);
-    __add_wait_queue(head, entry);
+    entry->task->state = state;
+    entry->task->waiting_on = head;
+    if (list_head_empty(&entry->task_list)) {
+        __add_wait_queue(head, entry);
+    }
     spinlock_unlock(&head->lock);
+    irq_enable(irqs);
+}
+
+void finish_wait(wait_queue_head_t *head, wait_queue_entry_t *entry)
+{
+    if (head == NULL || entry == NULL || entry->task == NULL) {
+        return;
+    }
+    uint8_t irqs = irq_disable();
+    spinlock_lock(&head->lock);
+    if (!list_head_empty(&entry->task_list)) {
+        __remove_wait_queue(head, entry);
+    }
+    if (entry->task->waiting_on == head) {
+        entry->task->waiting_on = NULL;
+    }
+    if (entry->task->state == TASK_INTERRUPTIBLE || entry->task->state == TASK_UNINTERRUPTIBLE) {
+        entry->task->state = TASK_RUNNING;
+    }
+    spinlock_unlock(&head->lock);
+    irq_enable(irqs);
 }
 
 void remove_wait_queue(wait_queue_head_t *head, wait_queue_entry_t *entry)
@@ -266,63 +257,4 @@ void remove_wait_queue(wait_queue_head_t *head, wait_queue_entry_t *entry)
     spinlock_unlock(&head->lock);
 
     pr_debug("Removed process %d (%s) from wait queue %s (state: %ld)\n", entry->task->pid, entry->task->name, head->name, entry->task->state);
-}
-
-static wait_queue_entry_t *__sleep_on_state(wait_queue_head_t *head, int state)
-{
-    // Validate input parameters.
-    if (!head) {
-        pr_err("Wait queue head is NULL.\n");
-        return NULL;
-    }
-
-    // We want to avoid a race where an interrupt arrives between setting the task state to TASK_UNINTERRUPTIBLE and the
-    // caller adding the entry to the queue.  If the wakeup occurs in that window the notification is lost and the task
-    // could sleep forever.  The simple way to prevent this is to disable interrupts while changing the state and
-    // inserting the entry; IRQs are restored before returning so normal operation resumes.
-    uint8_t irqs = irq_disable();
-
-    // Retrieve the current process/task.
-    task_struct *sleeping_task = scheduler_get_current_process();
-    if (!sleeping_task) {
-        pr_err("Failed to retrieve the current process.\n");
-        return NULL;
-    }
-
-    wait_queue_entry_t *entry = wait_queue_entry_alloc();
-    if (!entry) {
-        pr_err("Failed to allocate memory for wait queue entry.\n");
-        irq_enable(irqs);
-        return NULL;
-    }
-
-    // Set the task state to indicate it is sleeping.
-    // Task remains on runqueue - scheduler will skip it when picking next task.
-    sleeping_task->state = state;
-
-    // Track which wait queue this task is sleeping on.
-    sleeping_task->waiting_on = head;
-
-    // Initialize the wait queue entry with the current task.
-    wait_queue_entry_init(entry, sleeping_task);
-
-    // Add the wait queue entry to the specified wait queue.
-    add_wait_queue(head, entry);
-
-    pr_debug("Process %d (%s) SLEEPS ON %s (state: %ld, stays on runqueue)\n", sleeping_task->pid, sleeping_task->name, head->name, sleeping_task->state);
-
-    // Restore interrupts before returning.
-    irq_enable(irqs);
-
-    return entry;
-}
-
-wait_queue_entry_t *sleep_on(wait_queue_head_t *head)
-{
-    return __sleep_on_state(head, TASK_UNINTERRUPTIBLE);
-}
-
-wait_queue_entry_t *sleep_on_interruptible(wait_queue_head_t *head)
-{
-    return __sleep_on_state(head, TASK_INTERRUPTIBLE);
 }

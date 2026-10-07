@@ -15,33 +15,67 @@
 #include "fs/namei.h"
 #include "fs/vfs.h"
 #include "limits.h"
+#include "mem/uaccess.h"
+#include "process/process.h"
 #include "process/scheduler.h"
 #include "strerror.h"
 #include "string.h"
 #include "sys/stat.h"
 
-/// Appends the path with a "/" as separator.
-#define APPEND_PATH_SEPARATOR(buffer, buflen)                                                                          \
-    {                                                                                                                  \
-        if ((buffer)[strnlen(buffer, buflen) - 1] != '/') {                                                            \
-            strncat(buffer, "/", buflen);                                                                              \
-        }                                                                                                              \
+/// @brief Appends the "/" separator to the path being built, unless the
+///        path already ends with it.
+/// @param buffer the path being built, always NUL-terminated.
+/// @param buflen the capacity of the buffer.
+/// @details An empty path needs the leading separator, and reading the
+///          last byte must never index before the beginning of the
+///          buffer: the empty case used to be decided by the byte that
+///          happened to precede the buffer, a read the caller did not
+///          own (#376).
+static inline void append_path_separator(char *buffer, size_t buflen)
+{
+    size_t length = strnlen(buffer, buflen);
+    if ((length == 0) || (buffer[length - 1] != '/')) {
+        strncat(buffer, "/", buflen - length - 1);
     }
+}
 
 /// Appends the path.
-#define APPEND_PATH(buffer, token)                                                                                     \
-    {                                                                                                                  \
-        strncat(buffer, token, strlen(token));                                                                         \
+#define APPEND_PATH(buffer, token)             \
+    {                                          \
+        strncat(buffer, token, strlen(token)); \
     }
 
-int sys_unlink(const char *path) { return vfs_unlink(path); }
+int sys_unlink(const char *path)
+{
+    if (strnlen_user(path, PATH_MAX) < 0) {
+        return -EFAULT;
+    }
+    return vfs_unlink(path);
+}
 
-int sys_mkdir(const char *path, mode_t mode) { return vfs_mkdir(path, mode); }
+int sys_mkdir(const char *path, mode_t mode)
+{
+    if (strnlen_user(path, PATH_MAX) < 0) {
+        return -EFAULT;
+    }
+    return vfs_mkdir(path, mode);
+}
 
-int sys_rmdir(const char *path) { return vfs_rmdir(path); }
+int sys_rmdir(const char *path)
+{
+    if (strnlen_user(path, PATH_MAX) < 0) {
+        return -EFAULT;
+    }
+    return vfs_rmdir(path);
+}
 
 int sys_creat(const char *path, mode_t mode)
 {
+    // The path must live in the caller's memory before anything walks it
+    // (#191).
+    if (strnlen_user(path, PATH_MAX) < 0) {
+        return -EFAULT;
+    }
     // Get the current task.
     task_struct *task = scheduler_get_current_process();
 
@@ -65,10 +99,28 @@ int sys_creat(const char *path, mode_t mode)
     return fd;
 }
 
-int sys_symlink(const char *linkname, const char *path) { return vfs_symlink(linkname, path); }
+int sys_symlink(const char *linkname, const char *path)
+{
+    // Two strings, each walked only inside the caller's memory (#191).
+    if (strnlen_user(linkname, PATH_MAX) < 0) {
+        return -EFAULT;
+    }
+    if (strnlen_user(path, PATH_MAX) < 0) {
+        return -EFAULT;
+    }
+    return vfs_symlink(linkname, path);
+}
 
 int sys_readlink(const char *path, char *buffer, size_t bufsize)
 {
+    // The path is walked and the answer written into the caller's memory
+    // (#191).
+    if (strnlen_user(path, PATH_MAX) < 0) {
+        return -EFAULT;
+    }
+    if (!access_ok(USER_WRITE, buffer, bufsize)) {
+        return -EFAULT;
+    }
     // Allocate a variable for the path.
     char absolute_path[PATH_MAX];
     // Resolve the path.
@@ -129,6 +181,12 @@ static inline int __get_link_content(const char *path, char *buffer, size_t bufl
     if (link_length < 0) {
         return link_length;
     }
+    // The read may report a target as long as the whole buffer, or longer
+    // than what it actually terminated (#371); clamping keeps the
+    // terminator write below in bounds and the buffer terminated.
+    if (link_length >= (ssize_t)buflen) {
+        link_length = buflen - 1;
+    }
     // Null-terminate link.
     buffer[link_length] = 0;
     return link_length;
@@ -152,8 +210,10 @@ int __resolve_path(const char *path, char *abspath, size_t buflen, int flags, in
     int contains_links      = 0;
 
     if (path[0] != '/') {
-        // Get the working directory of the current task.
-        sys_getcwd(buffer, buflen);
+        // Get the working directory of the current task. This is a kernel
+        // buffer, so it must bypass the syscall gate: sys_getcwd validates
+        // against the caller's memory, which this buffer is not (#191).
+        do_getcwd(buffer, buflen);
         pr_debug("|%-32s|%-32s| (INIT)\n", path, buffer);
     } else {
         pr_debug("|%-32s|%-32s| (INIT)\n", path, buffer);
@@ -183,7 +243,7 @@ int __resolve_path(const char *path, char *abspath, size_t buflen, int flags, in
             // Nothing to do.
         } else {
             if (strlen(buffer) + tokenlen + 1 < buflen) {
-                APPEND_PATH_SEPARATOR(buffer, buflen);
+                append_path_separator(buffer, buflen);
                 APPEND_PATH(buffer, token);
                 pr_debug("|%-32s|%-32s|%d| (APPEND)\n", path, buffer, tokenlen);
             } else {
@@ -207,16 +267,30 @@ int __resolve_path(const char *path, char *abspath, size_t buflen, int flags, in
                     }
                     linklen = strlen(linkpath);
 
-                    if (linkpath[0] == '/') {
-                        memcpy(buffer, linkpath, linklen);
-                        pr_debug("|%-32s|%-32s| (REPLACE)\n", path, buffer);
-                    } else {
+                    // An absolute target replaces the whole path built so
+                    // far, a relative one replaces the component after the
+                    // last slash. Both used to copy `linklen` bytes with no
+                    // bound, writing past the end of the buffer for a target
+                    // that did not fit, and no terminator, leaving the bytes
+                    // of the replaced path trailing the link content (#288).
+                    size_t dst = 0;
+                    if (linkpath[0] != '/') {
                         // Find the last occurrence of '/'.
                         char *last_slash = strrchr(buffer, '/');
-                        if (last_slash) {
-                            memcpy(++last_slash, linkpath, linklen);
-                            pr_debug("|%-32s|%-32s|%-32s| (LINK)\n", path, buffer, linkpath);
-                        }
+                        dst              = last_slash ? (size_t)(last_slash - buffer) + 1 : 0;
+                    }
+                    // The same fit rule as the append path: the substituted
+                    // content must leave room for the terminator.
+                    if (dst + linklen >= buflen) {
+                        pr_err("Link substitution overflows the path buffer.\n");
+                        return -ENAMETOOLONG;
+                    }
+                    memcpy(buffer + dst, linkpath, linklen);
+                    buffer[dst + linklen] = 0;
+                    if (dst == 0) {
+                        pr_debug("|%-32s|%-32s| (REPLACE)\n", path, buffer);
+                    } else {
+                        pr_debug("|%-32s|%-32s|%-32s| (LINK)\n", path, buffer, linkpath);
                     }
                     contains_links = 1;
                 }
@@ -241,7 +315,10 @@ int __resolve_path(const char *path, char *abspath, size_t buflen, int flags, in
         buffer[1] = 0;
     } else if ((flags & REMOVE_TRAILING_SLASH) && (buffer_end > 1) && (buffer[buffer_end - 1] == '/')) {
         pr_debug("|%-32s|%-32s|(%u) (REMTRAIL)\n", path, buffer, buffer_end);
-        buffer[buffer_end] = 0;
+        // Strip the separator itself: writing at `buffer_end` would only
+        // rewrite the terminator that is already there and remove
+        // nothing (#379).
+        buffer[buffer_end - 1] = 0;
     }
     strncpy(abspath, buffer, buflen);
     pr_debug("|%-32s|%-32s|(%u) (END)\n", path, buffer, buffer_end);

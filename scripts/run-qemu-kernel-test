@@ -1,0 +1,93 @@
+#!/bin/bash
+# Boot the kernel-unit-test ISO and turn QEMU's exit code into a conventional
+# host one. The guest ends the run itself: the `kerneltests` boot mode signals
+# isa-debug-exit after the suites instead of creating an init process, so a
+# run that is still going when the timeout fires is hung, not slow.
+#
+# Exit codes, as the isa-debug-exit device encodes them (host = (guest << 1) | 1):
+#   33  the suites finished and nothing panicked
+#   35  kernel_panic, which is how a failed ASSERT reports itself
+# Anything else, including the timeout, is a failure of a different kind and is
+# reported as such.
+
+set -u
+
+BUILD_DIR="${1:-build}"
+TIMEOUT="${2:-120}"
+# QEMU display device for the video backend this kernel was built for, as one
+# argument holding an option and its value. Deliberately word-split below.
+VGA_ARGS="${3:--vga std}"
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+ISO="${BUILD_DIR}/cdrom_kerneltest.iso"
+ROOTFS="${BUILD_DIR}/rootfs.img"
+SERIAL_LOG="${BUILD_DIR}/kernel-test-serial.log"
+
+if [ ! -f "${ISO}" ]; then
+    echo "Missing ${ISO}. Run: make cdrom_kerneltest.iso" >&2
+    exit 1
+fi
+
+# Refuse an ISO older than the kernel it is supposed to carry, for the reason
+# spelled out at length in run-qemu-test: a verification that boots a stale
+# image proves nothing and is believed anyway.
+if [ "${ALLOW_STALE_IMAGES:-0}" != "1" ]; then
+    newer="$(find "${BUILD_DIR}/mentos" -name '*.bin' -newer "${ISO}" -print -quit 2>/dev/null)"
+    if [ -n "${newer}" ]; then
+        echo "${ISO} is older than ${newer}. Rebuild it, or set ALLOW_STALE_IMAGES=1." >&2
+        exit 1
+    fi
+fi
+
+: > "${SERIAL_LOG}"
+
+echo "Running the kernel unit tests (timeout ${TIMEOUT}s)..."
+
+# shellcheck disable=SC2086
+timeout --foreground "${TIMEOUT}" qemu-system-i386 \
+    ${VGA_ARGS} \
+    -m 1096M \
+    -nodefaults \
+    -no-reboot \
+    -serial "file:${SERIAL_LOG}" \
+    -drive "file=${ROOTFS},format=raw,if=ide,index=0,media=disk,snapshot=on" \
+    -nographic \
+    -device isa-debug-exit \
+    -boot d \
+    -cdrom "${ISO}"
+QEMU_STATUS=$?
+
+# The suites report themselves through the serial log; show what they said.
+grep -a "TUNIT" "${SERIAL_LOG}" || true
+
+echo "===================================================="
+case "${QEMU_STATUS}" in
+    33)
+        echo "Kernel unit tests: PASSED (QEMU exit 33)"
+        echo "===================================================="
+        exit 0
+        ;;
+    35)
+        echo "Kernel unit tests: FAILED - the kernel panicked (QEMU exit 35)"
+        echo "---- last 40 lines of ${SERIAL_LOG} ----"
+        tail -n 40 "${SERIAL_LOG}"
+        echo "===================================================="
+        exit 1
+        ;;
+    124)
+        echo "Kernel unit tests: FAILED - no exit within ${TIMEOUT}s, the guest is hung"
+        echo "---- last 40 lines of ${SERIAL_LOG} ----"
+        tail -n 40 "${SERIAL_LOG}"
+        echo "===================================================="
+        exit 1
+        ;;
+    *)
+        echo "Kernel unit tests: FAILED - unexpected QEMU exit ${QEMU_STATUS}"
+        echo "---- last 40 lines of ${SERIAL_LOG} ----"
+        tail -n 40 "${SERIAL_LOG}"
+        echo "===================================================="
+        exit 1
+        ;;
+esac

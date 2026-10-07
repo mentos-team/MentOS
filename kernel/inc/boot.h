@@ -79,4 +79,6 @@ typedef struct boot_info {
 
     /// stack suggested start address (also set by the bootloader)
     unsigned int stack_base;
+    /// size of the stack that starts below stack_base and grows downward
+    unsigned int stack_size;
 } boot_info_t;

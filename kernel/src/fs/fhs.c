@@ -79,7 +79,7 @@ static int create_directory_if_not_exists(const char *path, mode_t mode)
             mode_t current = stat_buf.st_mode & 07777;
             mode_t wanted  = mode & 07777;
             if (current != wanted) {
-                if (sys_chmod(path, wanted) != 0) {
+                if (do_chmod(path, wanted) != 0) {
                     pr_err("[FHS] Failed to set the mode of %s to 0%o (it is 0%o)\n", path, wanted, current);
                     return -1;
                 }

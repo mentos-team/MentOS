@@ -80,9 +80,21 @@ void scheduler_dequeue_task(task_struct *process);
 /// @return 0 on success, negative on error
 int wake_up_process(task_struct *task);
 
-/// @brief The RR implementation of the scheduler.
-/// @param f The context of the process.
-void scheduler_run(pt_regs_t *f);
+/// @brief Reschedule at the end of a user-mode trap.
+/// @details This is the trap-boundary path: it stores the interrupted
+///          userspace frame, handles pending signals, selects another task,
+///          and either restores that task's frame or resumes its saved kernel
+///          continuation. It is distinct from schedule(), which is called by
+///          a live kernel continuation that voluntarily blocks.
+/// @param f The trap frame that will be returned through the common exit stub.
+void scheduler_reschedule_from_trap(pt_regs_t *f);
+
+/// @brief Voluntarily suspend the current kernel continuation.
+///
+/// The caller must have published any wait state before calling this function.
+/// When the current task is woken, this function returns on the same kernel
+/// call chain; it does not manufacture a user-space retry.
+void schedule(void);
 
 /// @brief Values from pt_regs to task_struct process.
 /// @param f       The set of registers we are saving.
@@ -98,6 +110,9 @@ void scheduler_restore_context(task_struct *process, pt_regs_t *f);
 /// @param location The instruction pointer of the process we are starting.
 /// @param stack    Address of the stack of that process.
 void scheduler_enter_user_jmp(uintptr_t location, uintptr_t stack);
+
+/// @brief Perform the one-way boot handoff through init's prepared frame.
+void scheduler_enter_first_task(void);
 
 /// @brief Picks the next task (in scheduler_algorithm.c).
 /// @param runqueue   Pointer to the runqueue.

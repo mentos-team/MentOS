@@ -19,6 +19,7 @@
 #include "fs/procfs.h"
 #include "fs/vfs.h"
 #include "io/video.h"
+#include "mem/uaccess.h"
 #include "process/scheduler.h"
 #include "sys/bitops.h"
 
@@ -54,6 +55,7 @@ static ssize_t procv_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyt
         return -1;
     }
 
+retry_keyboard_read:
     // A display change is noticed in an interrupt handler, which may not
     // allocate or migrate the console, so the work is done here instead: this is
     // process context, and it is where a shell spends its time waiting. See
@@ -97,6 +99,7 @@ static ssize_t procv_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyt
         if ((file->flags & O_NONBLOCK) == 0) {
             /* blocking descriptor; sleep until a key arrives. */
             keyboard_wait();
+            goto retry_keyboard_read;
         }
         return -EAGAIN;
     }
@@ -179,11 +182,11 @@ static ssize_t procv_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyt
             // Handle signal-generating control characters
             if (flg_isig) {
                 if (c == 0x03) { // Ctrl+C
-                    sys_kill(process->pid, SIGTERM);
+                    kernel_kill(process->pid, SIGTERM);
                     return 0;
                 }
                 if (c == 0x1A) { // Ctrl+Z
-                    sys_kill(process->pid, SIGSTOP);
+                    kernel_kill(process->pid, SIGSTOP);
                     return 0;
                 }
             }
@@ -259,17 +262,22 @@ static ssize_t procv_write(vfs_file_t *file, const void *buf, off_t offset, size
 /// @param file Pointer to the file structure (unused).
 /// @param request The ioctl request code (e.g., TCGETS, TCSETS).
 /// @param data Pointer to the data structure for the ioctl request (e.g., termios).
-/// @return int Returns 0 on success.
+/// @return 0 on success, -EFAULT when `data` does not name the caller's memory.
 static long procv_ioctl(vfs_file_t *file, unsigned int request, unsigned long data)
 {
     task_struct *process = scheduler_get_current_process();
     switch (request) {
     case TCGETS:
-        *((termios_t *)data) = process->termios;
-        break;
+        // `data` is a caller pointer that only this driver knows to be one:
+        // sys_ioctl passes it as an opaque unsigned long, so the syscall
+        // boundary cannot gate it and the check has to happen here. The
+        // structure is written through it, with supervisor rights and with
+        // CR0.WP clear, so nothing but this refuses a pointer the caller
+        // does not own (#394, #191).
+        return copy_to_user((void *)data, &process->termios, sizeof(termios_t));
     case TCSETS:
-        process->termios = *((termios_t *)data);
-        break;
+        // The same pointer in the other direction: read, not written.
+        return copy_from_user(&process->termios, (const void *)data, sizeof(termios_t));
     default:
         break;
     }

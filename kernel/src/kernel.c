@@ -25,6 +25,7 @@
 #include "fs/vfs.h"
 #include "hardware/pic8259.h"
 #include "hardware/timer.h"
+#include "io/port_io.h"
 #include "io/proc_modules.h"
 #include "io/video.h"
 #include "io/video/virtio_gpu.h"
@@ -71,10 +72,6 @@ extern uint32_t _data_end;
 extern uint32_t _bss_start;
 /// Points at the read-write kernel data uninitialized an kernel stack, ending address.
 extern uint32_t _bss_end;
-/// Points at the top of the kernel stack.
-extern uint32_t stack_top;
-/// Points at the bottom of the kernel stack.
-extern uint32_t stack_bottom;
 /// Points at the end of kernel code/data.
 extern uint32_t end;
 
@@ -83,8 +80,18 @@ uintptr_t initial_esp = 0;
 /// The boot info.
 boot_info_t boot_info;
 
-/// Flag indicating if we are running tests instead of an interactive session
+/// Flag telling kernel_panic to signal QEMU's isa-debug-exit device instead
+/// of halting for ever. True in every non-interactive boot mode, so that a
+/// fatal error ends the run with a host exit code the wrapper can read.
+int qemu_exit_on_panic = 0;
+
+/// Flag indicating if we are running the userspace test suite instead of an
+/// interactive session.
 int runtests = 0;
+
+/// Flag indicating if we are running the kernel unit tests, which end the
+/// boot themselves and never reach userspace.
+int kerneltests = 0;
 
 /// @brief Prints [OK] at the current row and column 60.
 static inline void print_ok(void)
@@ -141,9 +148,15 @@ int kmain(boot_info_t *boot_informations)
     // missing bit would silently disable the test suite (#249).
     // dump_multiboot above already dereferences the cmdline under the same
     // flag check, so reading it here is equally safe.
-    runtests = bitmask_check(boot_info.multiboot_header->flags, MULTIBOOT_FLAG_CMDLINE) &&
-               (boot_info.multiboot_header->cmdline != 0) &&
-               (strcmp((char *)boot_info.multiboot_header->cmdline, "runtests") == 0);
+    int has_cmdline = bitmask_check(boot_info.multiboot_header->flags, MULTIBOOT_FLAG_CMDLINE) &&
+                      (boot_info.multiboot_header->cmdline != 0);
+    runtests           = has_cmdline && (strcmp((char *)boot_info.multiboot_header->cmdline, "runtests") == 0);
+    kerneltests        = has_cmdline && (strcmp((char *)boot_info.multiboot_header->cmdline, "kerneltests") == 0);
+    // Both non-interactive modes need a panic to reach the host as an exit
+    // code: the kernel unit tests report a failure only by panicking, so
+    // without this a failed ASSERT would hang the guest instead of failing
+    // the job.
+    qemu_exit_on_panic = runtests || kerneltests;
 
     //==========================================================================
     pr_notice("Initialize resource registry...\n");
@@ -472,6 +485,13 @@ int kmain(boot_info_t *boot_informations)
     print_ok();
 
     //==========================================================================
+    // /proc/feedback only has real content to serve when the scheduler
+    // feedback system itself is compiled in: its handler reads the very
+    // statistics scheduler_feedback_init() sets up and
+    // scheduler_feedback_update() maintains. Registering the file without
+    // that backing data would make it open and read cleanly while always
+    // being empty, which teaches a reader something false about the system
+    // (#418). So both are gated behind the same build option.
 #ifdef ENABLE_SCHEDULER_FEEDBACK
     pr_notice("Initialize scheduler feedback system...\n");
     printf("Initialize scheduler feedback system...");
@@ -480,9 +500,7 @@ int kmain(boot_info_t *boot_informations)
         kernel_panic("Failed to initialize the scheduler feedback system.");
     }
     print_ok();
-#endif
 
-    //==========================================================================
     pr_notice("Initialize scheduler feedback system (2)...\n");
     printf("Initialize scheduler feedback system (2)...");
     if (procfb_module_init()) {
@@ -490,6 +508,7 @@ int kmain(boot_info_t *boot_informations)
         kernel_panic("Failed to initialize the scheduler feedback system (2).");
     }
     print_ok();
+#endif
 
     //==========================================================================
     // The test-run mode was already detected at the beginning of kmain (see
@@ -541,16 +560,31 @@ int kmain(boot_info_t *boot_informations)
     } else {
         pr_notice("All kernel tests passed!\n");
     }
+    if (kerneltests) {
+        // This boot mode exists to run the suites and stop: nothing beyond
+        // this point is meant to happen, and no init process is meant to
+        // run. A failure has already panicked and signalled failure, so
+        // reaching here means success -- say so to the host and halt,
+        // instead of booting into a shell no one is there to answer.
+        pr_notice("Kernel test boot mode: signalling QEMU and halting.\n");
+        outports(DEBUG_EXIT_PORT, DEBUG_EXIT_SUCCESS);
+        for (;;) {
+            __asm__ __volatile__("hlt");
+        }
+    }
+#else
+    if (kerneltests) {
+        // The mode was asked for, but this build compiled no tests in.
+        // Failing loudly beats booting into a shell that nothing will ever
+        // type into, which the wrapper could only report as a timeout.
+        kernel_panic("The kerneltests boot mode needs a build with ENABLE_KERNEL_TESTS=ON.");
+    }
 #endif
 
     // Switch to the page directory of init.
     paging_switch_pgd(init_process->mm->pgd);
-    // Jump into init process.
-    scheduler_enter_user_jmp(
-        // Entry point.
-        init_process->thread.regs.eip,
-        // Stack pointer.
-        init_process->thread.regs.useresp);
+    // Jump into init through its prepared kernel continuation frame.
+    scheduler_enter_first_task();
     // Enable interrupt requests.
     sti();
     for (;;) {

@@ -16,6 +16,7 @@
 #include "hardware/timer.h"
 #include "klib/irqflags.h"
 #include "klib/stack_helper.h"
+#include "mem/uaccess.h"
 #include "process/process.h"
 #include "process/scheduler.h"
 #include "process/wait.h"
@@ -122,11 +123,10 @@ static int __sig_is_ignored(struct task_struct *t, int sig)
     }
     // Get the signal handler.
     sighandler_t handler = __get_handler(t, sig);
-    // Check the type of the handler.
+    // SIG_IGN on SIGCHLD is deliberately reported as not-ignored: do_signal()
+    // forces the parent to wait for the child in that case, so the signal must
+    // still be queued.
     return (handler == SIG_IGN) && (sig != SIGCHLD);
-    // TODO(enrico): do_signal() specifically checks if the handler is IGN and the signal
-    //        is SIGCHLD, in that case it forces a wait for the parent, that's why
-    //        here I'm also accepting as not-ignored a SIG_IGN which is a SIGCHLD.
 }
 
 /// @brief Allocate a new signal queue record.
@@ -449,7 +449,8 @@ static void __rm_from_queue(sigset_t *mask, sigpending_t *q)
     }
 }
 
-/// @brief We do not consider group stopping because for now we don't have thread groups.
+/// @brief Stop the current task; process-wide group stopping is not implemented.
+/// See process-lifecycle.md for the one-task-per-process design assumption.
 /// @param current the current process.
 /// @param f the stack frame.
 /// @param signr signal number.
@@ -469,7 +470,7 @@ static void __do_signal_stop(struct task_struct *current, struct pt_regs *f, int
     current->exit_code = signr;
 
     // Call the scheduler to pick next runnable task.
-    scheduler_run(f);
+    scheduler_reschedule_from_trap(f);
 }
 
 int do_signal(struct pt_regs *f)
@@ -642,7 +643,8 @@ void handle_stop_signal(int sig, siginfo_t *info, struct task_struct *p)
     // pending signal queue p->signal->shared_pending and from the private
     // queues of all members of the thread group.
     if (sig == SIGSTOP || sig == SIGTSTP || sig == SIGTTIN || sig == SIGTTOU) {
-        // TODO(enrico): shared and thread group.
+        // Thread-group and shared pending queues are not implemented; see
+        // process-lifecycle.md.
 
         sigset_t mask;
         sigemptyset(&mask);
@@ -685,11 +687,9 @@ int __send_sig_info(int sig, siginfo_t *info, struct task_struct *p)
         return -EINVAL;
     }
 
-    // If the signal is being sent by a User Mode process,
-    // it checks whether the operation is allowed.
-    if (info->si_code == SI_USER) {
-        // TODO(enrico):
-    }
+    // Permission checks for signals sent by user processes live in sys_kill(),
+    // because this function is also the delivery path for kernel-generated
+    // signals (faults, timers, SIGCHLD), which must never be refused.
 
     // If the sig parameter has the value 0,
     // it returns immediately without generating any signal
@@ -715,13 +715,34 @@ int __send_sig_info(int sig, siginfo_t *info, struct task_struct *p)
     return 0;
 }
 
-int sys_kill(pid_t pid, int sig)
+/// @brief Checks whether `sender` may signal `target`, following POSIX kill().
+/// @param sender The task issuing the signal.
+/// @param target The task receiving the signal.
+/// @return 1 if allowed, 0 otherwise.
+static inline int __may_signal(const task_struct *sender, const task_struct *target)
+{
+    // A privileged sender may signal anyone.
+    if (sender->uid == 0) {
+        return 1;
+    }
+    // Otherwise the real or effective uid of the sender must match the real or
+    // effective uid of the target.
+    return (sender->ruid == target->ruid) || (sender->ruid == target->uid) || (sender->uid == target->ruid) ||
+           (sender->uid == target->uid);
+}
+
+/// @brief Queues `sig` for the process `pid`, with no permission check.
+/// @param pid The PID of the target process.
+/// @param sig The signal to send.
+/// @param sender The task to check permissions against, or NULL to skip them.
+/// @return 0 on success, a negative errno otherwise.
+static int __kill(pid_t pid, int sig, const task_struct *sender)
 {
     // `sig` is unvalidated syscall input here, and strsignal() returns NULL
     // for anything out of range: logging it straight through %s risks a
     // NULL string argument, which GCC's -O2 format-overflow check catches.
     const char *signame = strsignal(sig);
-    pr_debug("sys_kill(%d, %2d:%s)\n", pid, sig, signame ? signame : "unknown");
+    pr_debug("kill(%d, %2d:%s)\n", pid, sig, signame ? signame : "unknown");
     struct task_struct *process = scheduler_get_running_process(pid);
     // Check the task associated with the pid.
     if (!process) {
@@ -731,20 +752,28 @@ int sys_kill(pid_t pid, int sig)
     if ((sig < 0) || (sig >= NSIG)) {
         return -EINVAL;
     }
+    if ((sender != NULL) && !__may_signal(sender, process)) {
+        return -EPERM;
+    }
     siginfo_t info;
     info.si_signo           = sig;
-    info.si_code            = SI_USER;
+    // Signals sent by a task carry the sender's identity.  Kernel-generated
+    // signals have no userspace sender, so keep their identity fields zeroed
+    // and identify them with SI_KERNEL.
+    info.si_code            = sender != NULL ? SI_USER : SI_KERNEL;
     info.si_value.sival_int = 0;
     info.si_errno           = 0;
-    info.si_pid             = process->pid;
-    info.si_uid             = process->uid;
+    info.si_pid             = sender != NULL ? sender->pid : 0;
+    info.si_uid             = sender != NULL ? sender->ruid : 0;
     info.si_addr            = NULL;
     info.si_status          = 0;
     info.si_band            = 0;
-    int ret                 = __send_sig_info(sig, &info, process);
-
-    return ret;
+    return __send_sig_info(sig, &info, process);
 }
+
+int sys_kill(pid_t pid, int sig) { return __kill(pid, sig, scheduler_get_current_process()); }
+
+int kernel_kill(pid_t pid, int sig) { return __kill(pid, sig, NULL); }
 
 sighandler_t sys_signal(int signum, sighandler_t handler, uint32_t sigreturn_addr)
 {
@@ -790,6 +819,14 @@ sighandler_t sys_signal(int signum, sighandler_t handler, uint32_t sigreturn_add
 int sys_sigaction(int signum, const sigaction_t *act, sigaction_t *oldact, uint32_t sigreturn_addr)
 {
     pr_debug("sys_sigaction(%d, %p, %p, %p)\n", signum, (void *)act, (void *)oldact, (void *)(unsigned long)sigreturn_addr);
+    // Either pointer is allowed to be NULL, and each direction must be
+    // validated against the caller's own memory (#191).
+    if (act && !access_ok(USER_READ, act, sizeof(*act))) {
+        return -EFAULT;
+    }
+    if (oldact && !access_ok(USER_WRITE, oldact, sizeof(*oldact))) {
+        return -EFAULT;
+    }
     // Check the signal that we want to send.
     if ((signum < 0) || (signum >= NSIG)) {
         pr_err("sys_sigaction(%d, %p, %p): Wrong signal number!\n", signum, (void *)act, (void *)oldact);
@@ -827,6 +864,14 @@ int sys_sigprocmask(int how, const sigset_t *set, sigset_t *oldset)
 {
     pr_debug("sys_sigprocmask(%d, %p, %p)\n", how, (void *)set, (void *)oldset);
     if (!set && !oldset) {
+        return -EFAULT;
+    }
+    // Each pointer that is not NULL must name the caller's memory, in its
+    // own direction (#191).
+    if (set && !access_ok(USER_READ, set, sizeof(*set))) {
+        return -EFAULT;
+    }
+    if (oldset && !access_ok(USER_WRITE, oldset, sizeof(*oldset))) {
         return -EFAULT;
     }
     if ((how < SIG_BLOCK) || (how > SIG_SETMASK)) {
@@ -874,13 +919,11 @@ int sys_sigpending(sigset_t *set)
     task_struct *current_process = scheduler_get_current_process();
     // Check the current task.
     assert(current_process && "There is no current process!");
-    // Check the pointer we were provided with.
-    if (set == NULL) {
-        return -EFAULT;
-    }
-    // Copy the pending set.
-    __copy_sigset(set, &current_process->pending.signal);
-    return 0;
+    // The answer is built here and handed over in one call, so the NULL
+    // case and every other bad pointer get the same -EFAULT (#191, #401).
+    sigset_t pending;
+    __copy_sigset(&pending, &current_process->pending.signal);
+    return copy_to_user(set, &pending, sizeof(pending));
 }
 
 const char *strsignal(int sig)

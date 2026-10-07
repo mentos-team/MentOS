@@ -13,6 +13,11 @@
 #include "stdio.h"
 #include "string.h"
 
+/// A stat record contains a NAME_MAX task name plus 52 fields.  Two standard
+/// formatting buffers leave room for the complete record without consuming a
+/// page-sized temporary on the per-task kernel stack.
+#define PROC_RECORD_BUFFER_SIZE (2 * BUFSIZ)
+
 /// @brief Returns the character identifying the process state.
 /// @param state the process state.
 /// @return a character describing the state.
@@ -57,329 +62,42 @@ static inline char __procr_get_task_state_char(int state)
 /// @return size of the written data in buffer.
 static inline ssize_t __procr_do_cmdline(char *buffer, size_t bufsize, task_struct *task)
 {
-    strcpy(buffer, task->name);
-    return 1;
+    int written = snprintf(buffer, bufsize, "%s", task->name);
+    return (written < 0 || (size_t)written >= bufsize) ? -EOVERFLOW : written;
 }
 
 /// @brief Returns the data for the `/proc/<PID>/stat` file.
 /// @param buffer the buffer where the data should be placed.
 /// @param bufsize the size of the buffer.
 /// @param task the task associated with the `/proc/<PID>` folder.
-/// @return size of the written data in buffer.
-static inline ssize_t __procr_do_stat(char *buffer, size_t bufsize, task_struct *task)
+/// @return size of the written data in buffer, or `-EOVERFLOW` when the
+///         record does not fit.
+static inline ssize_t __procr_do_stat_bounded(char *buffer, size_t bufsize, task_struct *task)
 {
-    //(1) pid  %d
-    //     The process ID.
-    //
-    sprintf(buffer, "%d", task->pid);
-    //(2) comm  %s
-    //     The filename of the executable, in parentheses.
-    //     Strings longer than TASK_COMM_LEN (16) characters (in‐
-    //     cluding the terminating null byte) are silently trun‐
-    //     cated.  This is visible whether or not the executable
-    //     is swapped out.
-    //
-    sprintf(buffer, "%s (%s)", buffer, basename(task->name));
-    //(3) state  %c
-    //     One of the following characters, indicating process state:
-    //      R  Running
-    //      S  Sleeping in an interruptible wait
-    //      D  Waiting in uninterruptible disk sleep
-    //      Z  Zombie
-    //      T  Stopped
-    //      t  Tracing stop
-    //      X  Dead
-    sprintf(buffer, "%s %c", buffer, __procr_get_task_state_char(task->state));
-    //(4) ppid  %d
-    //     The PID of the parent of this process.
-    //
-    if (task->parent) {
-        sprintf(buffer, "%s %d", buffer, task->parent->pid);
-    } else {
-        strcat(buffer, " 0");
-    }
-    //(5) TODO: pgrp  %d
-    //      The process group ID of the process.
-    //
-    strcat(buffer, " 0");
-    //(6) TODO: session  %d
-    //      The session ID of the process.
-    //
-    strcat(buffer, " 0");
-    //(7) TODO: tty_nr  %d
-    //      The controlling terminal of the process.  (The minor
-    //      device number is contained in the combination of bits
-    //      31 to 20 and 7 to 0; the major device number is in bits
-    //      15 to 8.)
-    //
-    strcat(buffer, " 0");
-    //(8) TODO: tpgid  %d
-    //      The ID of the foreground process group of the control‐
-    //      ling terminal of the process.
-    //
-    strcat(buffer, " 0");
-    //(9) TODO: flags  %u
-    //      The kernel flags word of the process.  For bit mean‐
-    //      ings, see the PF_* defines in the Linux kernel source
-    //      file include/linux/sched.h.  Details depend on the ker‐
-    //      nel version.
-    //      The format for this field was %lu before Linux 2.6.
-    //
-    strcat(buffer, " 0");
-    //(10) TODO: minflt  %lu
-    //      The number of minor faults the process has made which
-    //      have not required loading a memory page from disk.
-    //
-    strcat(buffer, " 0");
-    //(11) TODO: cminflt  %lu
-    //      The number of minor faults that the process's waited-
-    //      for children have made.
-    //
-    strcat(buffer, " 0");
-    //(12) TODO: majflt  %lu
-    //      The number of major faults the process has made which
-    //      have required loading a memory page from disk.
-    //
-    strcat(buffer, " 0");
-    //(13) TODO: cmajflt  %lu
-    //      The number of major faults that the process's waited-
-    //      for children have made.
-    //
-    strcat(buffer, " 0");
-    //(14) TODO: utime  %lu
-    //      Amount of time that this process has been scheduled in
-    //      user mode, measured in clock ticks (divide by
-    //      sysconf(_SC_CLK_TCK)).  This includes guest time,
-    //      guest_time (time spent running a virtual CPU, see be‐
-    //      low), so that applications that are not aware of the
-    //      guest time field do not lose that time from their cal‐
-    //      culations.
-    //
-    strcat(buffer, " 0");
-    //(15) TODO: stime  %lu
-    //      Amount of time that this process has been scheduled in
-    //      kernel mode, measured in clock ticks (divide by
-    //      sysconf(_SC_CLK_TCK)).
-    //
-    strcat(buffer, " 0");
-    //(16) TODO: cutime  %ld
-    //      Amount of time that this process's waited-for children
-    //      have been scheduled in user mode, measured in clock
-    //      ticks (divide by sysconf(_SC_CLK_TCK)).  (See also
-    //      times(2).)  This includes guest time, cguest_time (time
-    //      spent running a virtual CPU, see below).
-    //
-    strcat(buffer, " 0");
-    //(17) TODO: cstime  %ld
-    //      Amount of time that this process's waited-for children
-    //      have been scheduled in kernel mode, measured in clock
-    //      ticks (divide by sysconf(_SC_CLK_TCK)).
-    //
-    strcat(buffer, " 0");
-    //(18) priority  %ld
-    //      (Explanation for Linux 2.6) For processes running a
-    //      real-time scheduling policy (policy below; see
-    //      sched_setscheduler(2)), this is the negated scheduling
-    //      priority, minus one; that is, a number in the range -2
-    //      to -100, corresponding to real-time priorities 1 to 99.
-    //      For processes running under a non-real-time scheduling
-    //      policy, this is the raw nice value (setpriority(2)) as
-    //      represented in the kernel.  The kernel stores nice val‐
-    //      ues as numbers in the range 0 (high) to 39 (low), cor‐
-    //      responding to the user-visible nice range of -20 to 19.
-    //
-    //      Before Linux 2.6, this was a scaled value based on the
-    //      scheduler weighting given to this process.
-    //
-    sprintf(buffer, "%s %d", buffer, task->se.prio);
-    //(19) nice  %ld
-    //      The nice value (see setpriority(2)), a value in the
-    //      range 19 (low priority) to -20 (high priority).
-    //
-    sprintf(buffer, "%s %d", buffer, PRIO_TO_NICE(task->se.prio));
-    //(20) TODO: num_threads  %ld
-    //      Number of threads in this process (since Linux 2.6).
-    //      Before kernel 2.6, this field was hard coded to 0 as a
-    //      placeholder for an earlier removed field.
-    //
-    strcat(buffer, " 0");
-    //(21) TODO: itrealvalue  %ld
-    //      The time in jiffies before the next SIGALRM is sent to
-    //      the process due to an interval timer.  Since kernel
-    //      2.6.17, this field is no longer maintained, and is hard
-    //      coded as 0.
-    //
-    strcat(buffer, " 0");
-    //(22) starttime  %llu
-    //      The time the process started after system boot.  In
-    //      kernels before Linux 2.6, this value was expressed in
-    //      jiffies.  Since Linux 2.6, the value is expressed in
-    //      clock ticks (divide by sysconf(_SC_CLK_TCK)).
-    //
-    //      The format for this field was %lu before Linux 2.6.
-    //
-    sprintf(buffer, "%s %u", buffer, task->se.exec_start);
-    //(23) vsize  %lu
-    //      Virtual memory size in bytes.
-    //
-    sprintf(buffer, "%s %u", buffer, task->mm->total_vm);
-    //(24) TODO: rss  %ld
-    //      Resident Set Size: number of pages the process has in
-    //      real memory.  This is just the pages which count toward
-    //      text, data, or stack space.  This does not include
-    //      pages which have not been demand-loaded in, or which
-    //      are swapped out.  This value is inaccurate; see
-    //      /proc/[pid]/statm below.
-    //
-    strcat(buffer, " 0");
-    //(25) TODO: rsslim  %lu
-    //      Current soft limit in bytes on the rss of the process;
-    //      see the description of RLIMIT_RSS in getrlimit(2).
-    //
-    strcat(buffer, " 0");
-    //(26) startcode  %lu  [PT]
-    //      The address above which program text can run.
-    //
-    sprintf(buffer, "%s %u", buffer, task->mm->start_code);
-    //(27) endcode  %lu  [PT]
-    //      The address below which program text can run.
-    //
-    sprintf(buffer, "%s %u", buffer, task->mm->end_code);
-    //(28) startstack  %lu  [PT]
-    //      The address of the start (i.e., bottom) of the stack.
-    //
-    sprintf(buffer, "%s %u", buffer, task->mm->start_stack);
-    //(29) kstkesp  %lu  [PT]
-    //      The current value of ESP (stack pointer), as found in
-    //      the kernel stack page for the process.
-    //
-    sprintf(buffer, "%s %u", buffer, task->thread.regs.useresp);
-    //(30) kstkeip  %lu  [PT]
-    //      The current EIP (instruction pointer).
-    //
-    sprintf(buffer, "%s %u", buffer, task->thread.regs.eip);
-    //(31) TODO: signal  %lu
-    //      The bitmap of pending signals, displayed as a decimal
-    //      number.  Obsolete, because it does not provide informa‐
-    //      tion on real-time signals; use /proc/[pid]/status in‐
-    //      stead.
-    //
-    strcat(buffer, " 0");
-    //(32) TODO: blocked  %lu
-    //      The bitmap of blocked signals, displayed as a decimal
-    //      number.  Obsolete, because it does not provide informa‐
-    //      tion on real-time signals; use /proc/[pid]/status in‐
-    //      stead.
-    //
-    strcat(buffer, " 0");
-    //(33) TODO: sigignore  %lu
-    //      The bitmap of ignored signals, displayed as a decimal
-    //      number.  Obsolete, because it does not provide informa‐
-    //      tion on real-time signals; use /proc/[pid]/status in‐
-    //      stead.
-    //
-    strcat(buffer, " 0");
-    //(34) TODO: sigcatch  %lu
-    //      The bitmap of caught signals, displayed as a decimal
-    //      number.  Obsolete, because it does not provide informa‐
-    //      tion on real-time signals; use /proc/[pid]/status in‐
-    //      stead.
-    //
-    strcat(buffer, " 0");
-    //(35) TODO: wchan  %lu  [PT]
-    //      This is the "channel" in which the process is waiting.
-    //      It is the address of a location in the kernel where the
-    //      process is sleeping.  The corresponding symbolic name
-    //      can be found in /proc/[pid]/wchan.
-    //
-    strcat(buffer, " 0");
-    //(36) TODO: nswap  %lu
-    //      Number of pages swapped (not maintained).
-    //
-    strcat(buffer, " 0");
-    //(37) TODO: cnswap  %lu
-    //      Cumulative nswap for child processes (not maintained).
-    //
-    strcat(buffer, " 0");
-    //(38) TODO: exit_signal  %d  (since Linux 2.1.22)
-    //      Signal to be sent to parent when we die.
-    //
-    strcat(buffer, " 0");
-    //(39) TODO: processor  %d  (since Linux 2.2.8)
-    //      CPU number last executed on.
-    //
-    strcat(buffer, " 0");
-    //(40) TODO: rt_priority  %u  (since Linux 2.5.19)
-    //      Real-time scheduling priority, a number in the range 1
-    //      to 99 for processes scheduled under a real-time policy,
-    //      or 0, for non-real-time processes (see
-    //      sched_setscheduler(2)).
-    //
-    if (task->se.prio >= 100) {
-        strcat(buffer, " 0");
-    } else {
-        sprintf(buffer, "%s %u", buffer, task->se.prio);
-    }
-    //(41) TODO: policy  %u  (since Linux 2.5.19)
-    //      Scheduling policy (see sched_setscheduler(2)).  Decode
-    //      using the SCHED_* constants in linux/sched.h.
-    //      The format for this field was %lu before Linux 2.6.22.
-    //
-    strcat(buffer, " 0");
-    //(42) TODO: delayacct_blkio_ticks  %llu  (since Linux 2.6.18)
-    //      Aggregated block I/O delays, measured in clock ticks
-    //      (centiseconds).
-    //
-    strcat(buffer, " 0");
-    //(43) TODO: guest_time  %lu  (since Linux 2.6.24)
-    //      Guest time of the process (time spent running a virtual
-    //      CPU for a guest operating system), measured in clock
-    //      ticks (divide by sysconf(_SC_CLK_TCK)).
-    //
-    strcat(buffer, " 0");
-    //(44) TODO: cguest_time  %ld  (since Linux 2.6.24)
-    //      Guest time of the process's children, measured in clock
-    //      ticks (divide by sysconf(_SC_CLK_TCK)).
-    //
-    strcat(buffer, " 0");
-    //(45) start_data  %lu  (since Linux 3.3)  [PT]
-    //      Address above which program initialized and uninitial‐
-    //      ized (BSS) data are placed.
-    //
-    sprintf(buffer, "%s %u", buffer, task->mm->start_data);
-    //(46) end_data  %lu  (since Linux 3.3)  [PT]
-    //      Address below which program initialized and uninitial‐
-    //      ized (BSS) data are placed.
-    //
-    sprintf(buffer, "%s %u", buffer, task->mm->end_data);
-    //(47) start_brk  %lu  (since Linux 3.3)  [PT]
-    //      Address above which program heap can be expanded with
-    //      brk(2).
-    //
-    sprintf(buffer, "%s %u", buffer, task->mm->start_brk);
-    //(48) arg_start  %lu  (since Linux 3.5)  [PT]
-    //      Address above which program command-line arguments
-    //      (argv) are placed.
-    //
-    sprintf(buffer, "%s %u", buffer, task->mm->arg_start);
-    //(49) arg_end  %lu  (since Linux 3.5)  [PT]
-    //      Address below program command-line arguments (argv) are
-    //      placed.
-    //
-    sprintf(buffer, "%s %u", buffer, task->mm->arg_end);
-    //(50) env_start  %lu  (since Linux 3.5)  [PT]
-    //      Address above which program environment is placed.
-    //
-    sprintf(buffer, "%s %u", buffer, task->mm->env_start);
-    //(51) env_end  %lu  (since Linux 3.5)  [PT]
-    //      Address below which program environment is placed.
-    //
-    sprintf(buffer, "%s %u", buffer, task->mm->env_end);
-    //(52) exit_code  %d  (since Linux 3.5)  [PT]
-    //      The thread's exit status in the form reported by
-    //      waitpid(2).
-    sprintf(buffer, "%s %d\n", buffer, task->exit_code);
-    return 1;
+    int written = snprintf(
+        buffer, bufsize,
+        /* Linux-compatible positional layout: all 52 fields are emitted.
+         * MentOS has no accounting for several fields yet, so those fields
+         * are explicit zeroes rather than being omitted and shifting every
+         * following value (#417). */
+        "%d (%s) %c "             /*  1 pid,  2 comm,  3 state             */
+        "%d %d %d %u %d %u %u %u %u %u %u %u %u %u " /*  4..17 */
+        "%d %d %d %u %u %u %u %u %u %u %u %u " /* 18..29 */
+        "%u %u %u %u %u %u %u %u %u %u %u %u %u %u %u " /* 30..44 */
+        "%u %u %u %u %u %u %u %d\n",               /* 45..52 */
+        /*  1..4 */
+        task->pid, basename(task->name), __procr_get_task_state_char(task->state), task->parent ? task->parent->pid : 0,
+        /*  5..17: pgrp, session, tty, tpgid, flags, and fault/time counters. */
+        task->pgid, task->sid, 0U, 0, 0U, 0U, 0U, 0U, task->se.exec_runtime, 0U, 0U, 0U, 0U,
+        /* 18..29: priority through kstkesp. */
+        task->se.prio, PRIO_TO_NICE(task->se.prio), 1, 0U, task->se.start_runtime, task->mm->total_vm, 0U, 0U,
+        task->mm->start_code, task->mm->end_code, task->mm->start_stack, task->thread.regs.useresp,
+        /* 30..44: kstkeip, signal masks, wchan, swap and processor data. */
+        task->thread.regs.eip, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U,
+        /* 45..52: data, brk, argv/env bounds and exit status. */
+        task->mm->start_data, task->mm->end_data, task->mm->start_brk, task->mm->arg_start, task->mm->arg_end,
+        task->mm->env_start, task->mm->env_end, task->exit_code);
+    return (written < 0 || (size_t)written >= bufsize) ? -EOVERFLOW : written;
 }
 
 /// @brief Performs a read of files inside the `/proc/<PID>/` folder.
@@ -404,16 +122,28 @@ static inline ssize_t __procr_read(vfs_file_t *file, char *buffer, off_t offset,
         return -EFAULT;
     }
     // Prepare a support buffer.
-    char support[BUFSIZ];
-    memset(support, 0, BUFSIZ);
+    char support[PROC_RECORD_BUFFER_SIZE];
+    memset(support, 0, sizeof(support));
     // Call the specific function.
     if (strcmp(entry->name, "cmdline") == 0) {
-        __procr_do_cmdline(support, BUFSIZ, task);
+        if (__procr_do_cmdline(support, sizeof(support), task) < 0) {
+            return -EOVERFLOW;
+        }
     } else if (strcmp(entry->name, "stat") == 0) {
-        __procr_do_stat(support, BUFSIZ, task);
+        if (__procr_do_stat_bounded(support, sizeof(support), task) < 0) {
+            return -EOVERFLOW;
+        }
     }
-    // Copmute the amounts of bytes we want (and can) read.
-    ssize_t bytes_to_read = max(0, min(strlen(support) - offset, nbyte));
+    // Compute the amount of data available after the requested offset.  Keep
+    // the subtraction unsigned only after proving that the offset is in range.
+    if (offset < 0) {
+        return -EINVAL;
+    }
+    size_t length = strlen(support);
+    if ((size_t)offset >= length) {
+        return 0;
+    }
+    ssize_t bytes_to_read = (ssize_t)min(length - (size_t)offset, nbyte);
     // Perform the read: copy exactly the computed amount, never more, since
     // buffer is the raw user read(2) buffer and nbyte is all it can hold
     // (#194: a strcpy here used to write the whole file through it).

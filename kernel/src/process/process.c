@@ -20,10 +20,15 @@
 #include "libgen.h"
 #include "mem/mm/mm.h"
 #include "mem/mm/vmem.h"
+#include "mem/alloc/slab.h"
+#include "mem/alloc/zone_allocator.h"
+#include "mem/uaccess.h"
+#include "process/exec_args.h"
 #include "process/pid_manager.h"
 #include "process/prio.h"
 #include "process/process.h"
 #include "process/scheduler.h"
+#include "process/switch.h"
 #include "process/wait.h"
 #include "string.h"
 #include "sys/stat.h"
@@ -33,129 +38,104 @@
 /// Cache for creating the task structs.
 static kmem_cache_t *task_struct_cache;
 
-/// @brief Counts the number of arguments.
-/// @param args the array of arguments, it must be NULL terminated.
-/// @param max_count the maximum number of entries to scan.
-/// @return the number of arguments, or -E2BIG when the vector is not
-///         NULL-terminated within `max_count` entries.
-static inline int __count_args(char **args, int max_count)
+int task_kernel_stack_alloc(task_struct *task)
 {
-    int argc = 0;
-    while ((argc < max_count) && (args[argc] != NULL)) {
-        ++argc;
+    if (task == NULL || task->kernel_stack != NULL) {
+        return task != NULL;
     }
-    if ((argc == max_count) && (args[argc] != NULL)) {
-        return -E2BIG;
+    task->kernel_stack = (void *)alloc_pages_lowmem(GFP_KERNEL, TASK_KERNEL_STACK_ORDER);
+    if (task->kernel_stack == NULL) {
+        task->kernel_stack_top = 0;
+        task->kernel_stack_size = 0;
+        return 0;
     }
-    return argc;
+    task->kernel_stack_top  = (uintptr_t)task->kernel_stack + TASK_KERNEL_STACK_SIZE;
+    task->kernel_stack_size = TASK_KERNEL_STACK_SIZE;
+    memset(task->kernel_stack, 0, task->kernel_stack_size);
+    uint32_t *fill = (uint32_t *)((uintptr_t)task->kernel_stack + TASK_KERNEL_STACK_CANARY_SIZE);
+    size_t fill_words = (task->kernel_stack_size - TASK_KERNEL_STACK_CANARY_SIZE) / sizeof(*fill);
+    for (size_t i = 0; i < fill_words; ++i) {
+        fill[i] = TASK_KERNEL_STACK_FILL;
+    }
+    uint32_t *canary = (uint32_t *)task->kernel_stack;
+    for (size_t i = 0; i < TASK_KERNEL_STACK_CANARY_SIZE / sizeof(*canary); ++i) {
+        canary[i] = TASK_KERNEL_STACK_CANARY;
+    }
+    return 1;
 }
 
-/// @brief Counts the bytes occupied by the arguments.
-/// @param args the array of arguments, it must be NULL terminated.
-/// @param argc the number of arguments, already validated by __count_args.
-/// @param out_bytes where the total is stored: the string bytes (each
-///        including its terminator) plus the pointer array.
-/// @return 0 on success, -E2BIG when a string is not NUL-terminated within
-///         MAX_ARG_STRLEN bytes, or the total exceeds ARG_MAX.
-static inline int __count_args_bytes(char **args, int argc, int *out_bytes)
+void task_kernel_stack_free(task_struct *task)
 {
-    // Count the characters, bounding each string: a non-terminated string
-    // must not turn the walk into an unbounded kernel read (#196).
-    int nchar = 0;
-    for (int i = 0; i < argc; i++) {
-        size_t len = strnlen(args[i], MAX_ARG_STRLEN);
-        if (len >= MAX_ARG_STRLEN) {
-            return -E2BIG;
-        }
-        nchar += (int)len + 1;
-        if (nchar > ARG_MAX) {
-            return -E2BIG;
+    if (task == NULL || task->kernel_stack == NULL) {
+        return;
+    }
+    free_pages_lowmem((uint32_t)task->kernel_stack);
+    task->kernel_stack = NULL;
+    task->kernel_stack_top = 0;
+    task->kernel_stack_size = 0;
+}
+
+int task_kernel_stack_check(const task_struct *task)
+{
+    if (task == NULL || task->kernel_stack == NULL) {
+        return 1;
+    }
+    const uint32_t *canary = (const uint32_t *)task->kernel_stack;
+    for (size_t i = 0; i < TASK_KERNEL_STACK_CANARY_SIZE / sizeof(*canary); ++i) {
+        if (canary[i] != TASK_KERNEL_STACK_CANARY) {
+            return 0;
         }
     }
-    *out_bytes = nchar + ((argc + 1 /* The NULL terminator */) * (int)sizeof(char *));
-    if (*out_bytes > ARG_MAX) {
-        return -E2BIG;
+    return 1;
+}
+
+size_t task_kernel_stack_watermark(const task_struct *task)
+{
+    if (task == NULL || task->kernel_stack == NULL || task->kernel_stack_top == 0 || task->kernel_stack_size <= TASK_KERNEL_STACK_CANARY_SIZE) {
+        return 0;
     }
+
+    const uint32_t *word = (const uint32_t *)(task->kernel_stack_top - sizeof(uint32_t));
+    const uintptr_t fill_start = (uintptr_t)task->kernel_stack + TASK_KERNEL_STACK_CANARY_SIZE;
+    while ((uintptr_t)word >= fill_start && *word == TASK_KERNEL_STACK_FILL) {
+        --word;
+    }
+
+    uintptr_t first_written = (uintptr_t)word + sizeof(uint32_t);
+    if (first_written > task->kernel_stack_top) {
+        first_written = task->kernel_stack_top;
+    }
+    return (size_t)(task->kernel_stack_top - first_written);
+}
+
+int task_prepare_kernel_context(task_struct *task)
+{
+    if (task == NULL || task->kernel_stack == NULL || task->kernel_stack_top == 0) {
+        return -1;
+    }
+
+    uintptr_t frame_addr = task->kernel_stack_top - sizeof(pt_regs_t);
+    uintptr_t switch_addr = frame_addr - SWITCH_FRAME_SIZE;
+    uint32_t *switch_frame = (uint32_t *)switch_addr;
+    pt_regs_t *frame = (pt_regs_t *)frame_addr;
+
+    memset(switch_frame, 0, SWITCH_FRAME_SIZE);
+    switch_frame[4] = (uint32_t)(uintptr_t)ret_from_fork;
+    *frame = task->thread.regs;
+    frame->eflags |= EFLAG_IF | (1U << 1);
+    frame->cs = 0x1b;
+    frame->ss = 0x23;
+    frame->ds = 0x23;
+    frame->es = 0x23;
+    frame->fs = 0x23;
+    frame->gs = 0x23;
+    task->thread.regs = *frame;
+    /* The synthetic frame is a user return context, not a live kernel
+     * continuation.  A real trap will publish its own frame later. */
+    task->thread.user_regs = NULL;
+    task->thread.kernel_esp = (uint32_t)switch_addr;
+    task->thread.context_kind = THREAD_CONTEXT_FIRST_RETURN;
     return 0;
-}
-
-/// @brief Pushes the argument strings on the stack (growing downwards),
-/// recording the final position of each string.
-/// @param stack pointer to the stack location.
-/// @param args the list of arguments; the strings must be kernel copies,
-///        their lengths are trusted because they were validated on copy.
-/// @param argc the number of arguments, already validated by the caller.
-/// @param locations array of at least `argc` entries where the position of
-///        each string is stored; the caller owns it, sized from the
-///        validated count (it replaces the fixed `char *[256]` that
-///        overflowed the kernel stack for larger vectors, #196).
-static inline void __push_strings_on_stack(uintptr_t *stack, char *args[], int argc, char *locations[])
-{
-    for (int i = argc - 1; i >= 0; --i) {
-        for (int j = strlen(args[i]); j >= 0; --j) {
-            stack_push_u8((uint32_t *)stack, args[i][j]);
-        }
-        locations[i] = (char *)(*stack);
-    }
-}
-
-/// @brief Pushes the strings of a user-controlled vector on the stack, with
-///        a per-string bound and a total-budget floor.
-/// @param stack pointer to the stack location.
-/// @param args the list of arguments, straight from user memory.
-/// @param argc the number of arguments, already validated by __count_args.
-/// @param locations array of at least `argc` entries, caller-owned.
-/// @param floor the lowest address the pushes may reach: the strings were
-///        counted before, and a string that grew since then must fail with
-///        -E2BIG here rather than push more bytes than were accounted for
-///        (which would write below the allocation).
-/// @return 0 on success, -E2BIG when a string is not NUL-terminated within
-///         MAX_ARG_STRLEN bytes, or the pushes would cross `floor`.
-static inline int
-__push_user_strings_on_stack(uintptr_t *stack, char *args[], int argc, char *locations[], uintptr_t floor)
-{
-    for (int i = argc - 1; i >= 0; --i) {
-        size_t len = strnlen(args[i], MAX_ARG_STRLEN);
-        if (len >= MAX_ARG_STRLEN) {
-            return -E2BIG;
-        }
-        if ((*stack - (len + 1)) < floor) {
-            return -E2BIG;
-        }
-        for (int j = (int)len; j >= 0; --j) {
-            stack_push_u8((uint32_t *)stack, args[i][j]);
-        }
-        locations[i] = (char *)(*stack);
-    }
-    return 0;
-}
-
-/// @brief Pushes the terminating NULL and the array of string pointers.
-/// @param stack pointer to the stack location.
-/// @param locations the positions of the strings, filled by the string push.
-/// @param argc the number of arguments.
-/// @return the final position of the stack, where the pointer array is stored.
-static inline char **__push_vector_on_stack(uintptr_t *stack, char *locations[], int argc)
-{
-    // Push terminating NULL.
-    stack_push_ptr((uint32_t *)stack, NULL);
-    // Push array of pointers to the arguments.
-    for (int i = argc - 1; i >= 0; --i) {
-        stack_push_ptr((uint32_t *)stack, locations[i]);
-    }
-    return (char **)(*stack);
-}
-
-/// @brief Pushes the arguments on the stack.
-/// @param stack pointer to the stack location.
-/// @param args the list of arguments; the strings must be kernel copies.
-/// @param argc the number of arguments, already validated by the caller.
-/// @param locations array of at least `argc` entries, caller-owned.
-/// @return the final position of the stack, where the list of pushed arguments is stored.
-static inline char **__push_args_on_stack(uintptr_t *stack, char *args[], int argc, char *locations[])
-{
-    __push_strings_on_stack(stack, args, argc, locations);
-    return __push_vector_on_stack(stack, locations, argc);
 }
 
 /// @brief Clears the user stack of a freshly created memory descriptor.
@@ -218,6 +198,7 @@ static int __load_executable(const char *path, task_struct *task, uint32_t *entr
     int interpreter_loop   = 0;
     // The duplicated interpreter path, it must be freed on every exit path.
     char *interpreter_path = NULL;
+    char *shebang = NULL;
     // The candidate memory image: until the load succeeds it is completely
     // separate from the running image of the task (#208).
     mm_struct_t *candidate = NULL;
@@ -270,8 +251,16 @@ start:
         }
 
         // Read the shebang line, keep one byte free for the terminator.
-        char buf[PATH_MAX];
-        ssize_t bytes_read = vfs_read(file, buf, 2, sizeof(buf) - 1);
+        if (shebang != NULL) {
+            kfree(shebang);
+            shebang = NULL;
+        }
+        shebang = kmalloc(PATH_MAX);
+        if (!shebang) {
+            ret = -ENOMEM;
+            goto close_and_return;
+        }
+        ssize_t bytes_read = vfs_read(file, shebang, 2, PATH_MAX - 1);
         // The reference to the script file is no longer needed.
         vfs_close(file);
         file = NULL;
@@ -282,17 +271,17 @@ start:
             ret = -EIO;
             goto close_and_return;
         }
-        buf[bytes_read] = 0;
+        shebang[bytes_read] = 0;
 
         // Find end of the line
-        char *lineend = strchr(buf, '\n');
+        char *lineend = strchr(shebang, '\n');
         if (!lineend) {
             ret = -ENAMETOOLONG;
             goto close_and_return;
         }
         *lineend = 0;
 
-        interpreter_path = strdup(buf);
+        interpreter_path = strdup(shebang);
         if (interpreter_path == NULL) {
             ret = -ENOMEM;
             goto close_and_return;
@@ -305,10 +294,8 @@ start:
     // == Build the candidate image ===========================================
     // From this point on, every failure must destroy the candidate image
     // and leave the current image of the task untouched.
-    // FIXME: When threads will be implemented
-    // they should share the mm, so the destroy_process_image must be called
-    // only when all the threads are terminated. This can be accomplished by using
-    // an internal counter on the mm.
+    // Address-space lifetime assumes one task per process; threaded processes
+    // need shared/refcounted mm ownership. See process-lifecycle.md.
     candidate = mm_create_blank(DEFAULT_STACK_SIZE);
     if (candidate == NULL) {
         pr_err("Failed to initialize the candidate mm structure.\n");
@@ -350,6 +337,9 @@ close_and_return:
     if (interpreter_path != NULL) {
         kfree(interpreter_path);
     }
+    if (shebang) {
+        kfree(shebang);
+    }
     return ret;
 }
 
@@ -364,6 +354,13 @@ static inline task_struct *__alloc_task(task_struct *source, task_struct *parent
     task_struct *proc = kmem_cache_alloc(task_struct_cache, GFP_KERNEL);
     // Clear the memory.
     memset(proc, 0, sizeof(task_struct));
+    // Acquire the private continuation stack before publishing the task in
+    // the parent's child list or duplicating file descriptors. This keeps
+    // allocation failure local and makes rollback ownership unambiguous.
+    if (!task_kernel_stack_alloc(proc)) {
+        kmem_cache_free(proc);
+        return NULL;
+    }
     // Set the id of the process.
     proc->pid   = pid_manager_get_free_pid();
     // Set the state of the process as running.
@@ -389,6 +386,13 @@ static inline task_struct *__alloc_task(task_struct *source, task_struct *parent
     }
     if (source) {
         memcpy(&proc->thread, &source->thread, sizeof(thread_struct_t));
+        // Continuation ownership and live frame pointers belong exclusively to
+        // the source task. The child gets a copied user snapshot, but starts
+        // without a live kernel continuation; construction below prepares the
+        // child's independent first-return frame.
+        proc->thread.user_regs  = NULL;
+        proc->thread.kernel_esp = 0;
+        proc->thread.context_kind = THREAD_CONTEXT_USER;
     }
     // Set the statistics of the process.
     proc->uid                   = 0;
@@ -478,6 +482,10 @@ int process_create_init(const char *path)
 
     // Allocate the memory for the process.
     init_process = __alloc_task(NULL, NULL, "init");
+    if (init_process == NULL) {
+        pr_err("Failed to allocate init process.\n");
+        return -ENOMEM;
+    }
 
     // Active the current process.
     scheduler_enqueue_task(init_process);
@@ -527,33 +535,33 @@ int process_create_init(const char *path)
 
     // Commit: the candidate image becomes the image of the init process
     // (there is no previous image to destroy).
-    init_process->mm        = new_mm;
+    init_process->mm  = new_mm;
     // The stack of the new image starts at its top.
-    uintptr_t useresp       = new_mm->start_stack + DEFAULT_STACK_SIZE;
+    uintptr_t useresp = new_mm->start_stack + DEFAULT_STACK_SIZE;
 
     // Prepare argv and envp for the init process.
     char **argv_ptr;
     char **envp_ptr;
-    int argc                    = 1;
-    static char *argv[]         = {"/bin/init", (char *)NULL};
-    static char *envp[]         = {(char *)NULL};
+    int argc            = 1;
+    static char *argv[] = {"/bin/init", (char *)NULL};
+    static char *envp[] = {(char *)NULL};
     // The positions of the pushed strings, for the pointer arrays: the
     // vectors are kernel literals with one entry, so a small stack array
     // is enough here (sys_execve sizes it from the validated count).
     char *argv_locations[4];
     char *envp_locations[4];
     // Save where the arguments start.
-    new_mm->arg_start           = useresp;
+    new_mm->arg_start = useresp;
     // Push the arguments on the stack.
-    argv_ptr                    = __push_args_on_stack(&useresp, argv, 1, argv_locations);
+    argv_ptr          = exec_args_push_vector(&useresp, argv, 1, argv_locations);
     // Save where the arguments end.
-    new_mm->arg_end             = useresp;
+    new_mm->arg_end   = useresp;
     // Save where the environmental variables start.
-    new_mm->env_start           = useresp;
+    new_mm->env_start = useresp;
     // Push the environment on the stack.
-    envp_ptr                    = __push_args_on_stack(&useresp, envp, 0, envp_locations);
+    envp_ptr          = exec_args_push_vector(&useresp, envp, 0, envp_locations);
     // Save where the environmental variables end.
-    new_mm->env_end             = useresp;
+    new_mm->env_end   = useresp;
     // Push the `main` arguments on the stack (argc, argv, envp).
     stack_push_ptr(&useresp, envp_ptr);
     stack_push_ptr(&useresp, argv_ptr);
@@ -563,6 +571,11 @@ int process_create_init(const char *path)
     init_process->thread.regs.ebp     = useresp;
     init_process->thread.regs.useresp = useresp;
     init_process->thread.regs.eflags  = init_process->thread.regs.eflags | EFLAG_IF;
+    if (task_prepare_kernel_context(init_process) < 0) {
+        pr_err("Failed to prepare init kernel context.\n");
+        paging_switch_pgd(crtdir);
+        return 1;
+    }
 
     // Restore previous pgdir
     paging_switch_pgd(crtdir);
@@ -585,7 +598,7 @@ vfs_file_descriptor_t *fget(int fd)
     return current->fd_list + fd;
 }
 
-char *sys_getcwd(char *buf, size_t size)
+char *do_getcwd(char *buf, size_t size)
 {
     task_struct *current = scheduler_get_current_process();
     if ((current == NULL) || (buf == NULL)) {
@@ -602,11 +615,25 @@ char *sys_getcwd(char *buf, size_t size)
     return buf;
 }
 
+char *sys_getcwd(char *buf, size_t size)
+{
+    // The cwd is written into the caller's memory or nowhere (#191). The
+    // kernel itself asks for the cwd with its own buffers, and goes
+    // through `do_getcwd` instead, which is why the gate lives here and
+    // not inside the implementation.
+    if (!access_ok(USER_WRITE, buf, size)) {
+        return (char *)-EFAULT;
+    }
+    return do_getcwd(buf, size);
+}
+
 int sys_chdir(char const *path)
 {
     task_struct *current = scheduler_get_current_process();
     assert(current && "There is no running process.");
-    if (!path) {
+    // The path must live in the caller's memory before anything walks it
+    // (#191); NULL is covered by the same answer.
+    if (strnlen_user(path, PATH_MAX) < 0) {
         return -EFAULT;
     }
     char absolute_path[PATH_MAX];
@@ -667,12 +694,16 @@ pid_t sys_fork(pt_regs_t *f)
     scheduler_store_context(f, current);
     // Allocate the memory for the process.
     task_struct *proc        = __alloc_task(current, current, current->name);
+    if (proc == NULL) {
+        return -ENOMEM;
+    }
     // Copy the father's stack, memory, heap etc... to the child process
     proc->mm                 = mm_clone(current->mm);
     // Set the eax as 0, to indicate the child process
     proc->thread.regs.eax    = 0;
     // Enable the interrupts.
     proc->thread.regs.eflags = proc->thread.regs.eflags | EFLAG_IF;
+    assert(task_prepare_kernel_context(proc) == 0);
 
     // Copy session and group id of the parent into the child
     proc->sid  = current->sid;
@@ -702,13 +733,10 @@ int sys_execve(pt_regs_t *f)
     }
 
     char **origin_argv;
-    char **saved_argv;
     char **final_argv;
     char **origin_envp;
-    char **saved_envp;
     char **final_envp;
     char name_buffer[NAME_MAX];
-    char saved_filename[PATH_MAX];
 
     // Get the filename.
     char *filename = (char *)f->ebx;
@@ -725,103 +753,58 @@ int sys_execve(pt_regs_t *f)
         pr_err("sys_execve failed: must provide argv.\n");
         return -EFAULT;
     }
+    // argv is an array of pointers living in the caller's memory: the
+    // first entry has to be proven before it is read, or the NULL test
+    // below is itself the unvalidated dereference (#191).
+    if (!access_ok(USER_READ, &origin_argv[0], sizeof(origin_argv[0]))) {
+        return -EFAULT;
+    }
     if (origin_argv[0] == NULL) {
         pr_err("sys_execve failed: must provide the name.\n");
         return -EINVAL;
     }
-    if (origin_envp == NULL) {
-        // We allow a NULL environment, using a default, for macOS compatibility
-        pr_debug("sys_execve: NULL envp, using default environment.\n");
-        static char *default_env[] = {
-            "PATH=/bin:/usr/bin",
-            "HOME=/",
-            NULL
-        };
-        origin_envp = default_env;
+    // The filename is taken out of the caller's memory once, and everything
+    // downstream reads the copy. Measuring it and then handing the original
+    // pointer to the loader reads it twice, and the second read is not the
+    // one that was checked (#287). A page the caller does not own ends the
+    // call here (#191), and a name that does not fit a PATH_MAX buffer cannot
+    // name any file, so truncating it would target the wrong executable.
+    char *saved_filename = kmalloc(PATH_MAX);
+    if (!saved_filename) {
+        return -ENOMEM;
     }
-
-    // A filename that does not fit a PATH_MAX buffer cannot name any file,
-    // and truncating it would target the wrong executable: reject it instead
-    // of copying it. The strnlen walk is bounded to PATH_MAX.
-    if (strnlen(filename, PATH_MAX) >= PATH_MAX) {
-        pr_err("sys_execve failed: filename is longer than PATH_MAX.\n");
-        return -ENAMETOOLONG;
+    long filename_length = strncpy_from_user(saved_filename, filename, PATH_MAX);
+    if (filename_length < 0) {
+        if (filename_length == -ENAMETOOLONG) {
+            pr_err("sys_execve failed: filename is longer than PATH_MAX.\n");
+        }
+        kfree(saved_filename);
+        return (int)filename_length;
     }
-    // Save the name of the process. argv[0] is a raw user string: copy at
-    // most what name_buffer can hold minus its terminator, truncating like
-    // Linux truncates comm, so a long argv[0] neither fails the exec nor
-    // overflows kernel state.
-    size_t name_len = strnlen(origin_argv[0], sizeof(name_buffer) - 1);
-    memcpy(name_buffer, origin_argv[0], name_len);
+    // Save the name of the process. argv[0] is a raw user string, measured
+    // through the bound of the buffer that will hold it (#191). A longer one
+    // is truncated, as Linux truncates comm, rather than failing the exec:
+    // the measurement proved every byte it is truncated to.
+    long name_len = strnlen_user(origin_argv[0], sizeof(name_buffer));
+    if (name_len == -ENAMETOOLONG) {
+        name_len = sizeof(name_buffer) - 1;
+    } else if (name_len < 0) {
+        kfree(saved_filename);
+        return (int)name_len;
+    }
+    memcpy(name_buffer, origin_argv[0], (size_t)name_len);
     name_buffer[name_len] = '\0';
-    // Save the filename: the check above bounds it to PATH_MAX - 1
-    // characters, so it always fits with its terminator.
-    strcpy(saved_filename, filename);
 
     // == COPY PROGRAM ARGUMENTS ==============================================
-    // Copy argv and envp to kernel memory, because all the old process memory will be discarded.
-    // Every count is bounded: a vector that is not NULL-terminated within
-    // MAX_ARG_COUNT entries, a string without a terminator within
-    // MAX_ARG_STRLEN bytes, or an argv/envp above ARG_MAX fails with
-    // -E2BIG, instead of walking user memory unbounded and overflowing
-    // kernel state (#196).
-    int argc;
-    int envc;
-    int argv_bytes;
-    int envp_bytes;
-    if (((argc = __count_args(origin_argv, MAX_ARG_COUNT)) < 0) ||
-        ((envc = __count_args(origin_envp, MAX_ARG_COUNT)) < 0)) {
-        pr_err("sys_execve failed: too many arguments or environment entries.\n");
-        return -E2BIG;
+    // Copy argv and envp to kernel memory, because all the old process memory
+    // will be discarded. From here on the arguments own three allocations, and
+    // every exit has to release them through exec_args_free (#405).
+    exec_args_t args;
+    int result = exec_args_from_user(&args, origin_argv, origin_envp);
+    if (result < 0) {
+        kfree(saved_filename);
+        return result;
     }
-    if ((__count_args_bytes(origin_argv, argc, &argv_bytes) < 0) ||
-        (__count_args_bytes(origin_envp, envc, &envp_bytes) < 0)) {
-        pr_err("sys_execve failed: arguments or environment exceed ARG_MAX.\n");
-        return -E2BIG;
-    }
-    void *args_mem = kmalloc(argv_bytes + envp_bytes);
-    if (!args_mem) {
-        pr_err(
-            "Failed to allocate memory for arguments and environment %d (%d + "
-            "%d).\n",
-            argv_bytes + envp_bytes, argv_bytes, envp_bytes);
-        return -ENOMEM;
-    }
-    // The arrays of string positions are sized from the validated counts:
-    // the argv one also covers the interpreter path, which shifts argv by
-    // two entries and therefore needs argc + 2 slots.
-    char **argv_locations = kmalloc((argc + 2) * sizeof(char *));
-    char **envp_locations = kmalloc(((envc > 0) ? envc : 1) * sizeof(char *));
-    if (!argv_locations || !envp_locations) {
-        pr_err("Failed to allocate memory for the argument positions.\n");
-        kfree(argv_locations);
-        kfree(envp_locations);
-        kfree(args_mem);
-        return -ENOMEM;
-    }
-    // Copy the arguments (raw user strings, bounded per string and against
-    // the total budget: one that grew after the counting fails here instead
-    // of pushing more bytes than were accounted for). The argv pushes must
-    // stay above the environment region of the block.
-    uint32_t args_mem_ptr = (uint32_t)args_mem + (argv_bytes + envp_bytes);
-    if (__push_user_strings_on_stack(&args_mem_ptr, origin_argv, argc, argv_locations, (uint32_t)args_mem + envp_bytes) < 0) {
-        pr_err("sys_execve failed: an argument is not terminated within the limit.\n");
-        kfree(argv_locations);
-        kfree(envp_locations);
-        kfree(args_mem);
-        return -E2BIG;
-    }
-    saved_argv = __push_vector_on_stack(&args_mem_ptr, argv_locations, argc);
-    if (__push_user_strings_on_stack(&args_mem_ptr, origin_envp, envc, envp_locations, (uint32_t)args_mem) < 0) {
-        pr_err("sys_execve failed: an environment entry is not terminated within the limit.\n");
-        kfree(argv_locations);
-        kfree(envp_locations);
-        kfree(args_mem);
-        return -E2BIG;
-    }
-    saved_envp = __push_vector_on_stack(&args_mem_ptr, envp_locations, envc);
-    // Check the memory pointer.
-    assert(args_mem_ptr == (uint32_t)args_mem);
     // ------------------------------------------------------------------------
 
     // == INITIALIZE TASK MEMORY ==============================================
@@ -833,80 +816,30 @@ int sys_execve(pt_regs_t *f)
     // Credentials are restored if any of the post-load steps fails.
     uid_t prev_uid      = current->uid;
     gid_t prev_gid      = current->gid;
-    int ret             = __load_executable(filename, current, &entry, &new_mm);
+    int ret             = __load_executable(saved_filename, current, &entry, &new_mm);
     if (ret <= 0) {
         pr_err("Failed to load executable!\n");
-        // Free the temporary args memory.
-        kfree(args_mem);
+        exec_args_free(&args);
+        kfree(saved_filename);
         return ret;
     }
     if (ret == 2) { // An interpreter was loaded.
-        // We need to modify the argv array passed to the interpreter process.
-        // The original file name must be passed as second argument and the rest
-        // is shifted to the right.
-        // Prepare a new argv array.
-        char **int_argv = kmalloc((argc + 2) * sizeof(char *));
-        if (!int_argv) {
-            pr_err("Failed to allocate memory for interpreter argv array.\n");
+        // The interpreter takes the script as its second argument, so the
+        // arguments are rebuilt around it.
+        result = exec_args_insert_interpreter(&args, saved_filename);
+        if (result < 0) {
             // Rollback: the old image is still the current one.
             mm_destroy(new_mm);
             current->uid = prev_uid;
             current->gid = prev_gid;
-            kfree(args_mem);
-            return -ENOMEM;
+            exec_args_free(&args);
+            kfree(saved_filename);
+            return result;
         }
-        int_argv[0] = saved_argv[0]; // TODO: pass the path to the interpreter.
-        int_argv[1] = saved_filename;
-        for (int i = 1; i <= argc; i++) {
-            int_argv[i + 1] = saved_argv[i];
-        }
-        argc++;
-
-        // Rebuild the saved argv and envp pointers. The buffer must hold both
-        // the new argv and the whole environment (#227).
-        int int_argc      = argc;
-        int int_argv_bytes = 0;
-        if (__count_args_bytes(int_argv, int_argc, &int_argv_bytes) < 0) {
-            pr_err("sys_execve failed: interpreter arguments exceed ARG_MAX.\n");
-            // Rollback: the old image is still the current one.
-            kfree(int_argv);
-            mm_destroy(new_mm);
-            current->uid = prev_uid;
-            current->gid = prev_gid;
-            kfree(argv_locations);
-            kfree(envp_locations);
-            kfree(args_mem);
-            return -E2BIG;
-        }
-        void *int_args_mem = kmalloc(int_argv_bytes + envp_bytes);
-        if (!int_args_mem) {
-            pr_err(
-                "Failed to allocate memory for interpreter arguments and "
-                "environment %d (%d + %d).\n",
-                int_argv_bytes + envp_bytes, int_argv_bytes, envp_bytes);
-            // Rollback: the old image is still the current one.
-            kfree(int_argv);
-            mm_destroy(new_mm);
-            current->uid = prev_uid;
-            current->gid = prev_gid;
-            kfree(argv_locations);
-            kfree(envp_locations);
-            kfree(args_mem);
-            return -ENOMEM;
-        }
-        // Copy the arguments (kernel strings: lengths were validated on copy).
-        uint32_t int_args_mem_ptr = (uint32_t)int_args_mem + (int_argv_bytes + envp_bytes);
-        __push_strings_on_stack(&int_args_mem_ptr, int_argv, int_argc, argv_locations);
-        saved_argv                = __push_vector_on_stack(&int_args_mem_ptr, argv_locations, int_argc);
-        __push_strings_on_stack(&int_args_mem_ptr, saved_envp, envc, envp_locations);
-        saved_envp                = __push_vector_on_stack(&int_args_mem_ptr, envp_locations, envc);
-        // Check the memory pointer.
-        assert(int_args_mem_ptr == (uint32_t)int_args_mem);
-        // Free the interpreter argv array and the old argument and environ memory block.
-        kfree(int_argv);
-        kfree(args_mem);
-        args_mem = int_args_mem;
     }
+    // The candidate image and argument vectors no longer need the original
+    // filename once interpreter insertion has completed.
+    kfree(saved_filename);
     // ------------------------------------------------------------------------
 
     // == INITIALIZE PROGRAM ARGUMENTS ========================================
@@ -921,22 +854,19 @@ int sys_execve(pt_regs_t *f)
     uintptr_t useresp = new_mm->start_stack + DEFAULT_STACK_SIZE;
     // Save where the arguments start.
     new_mm->arg_start = useresp;
-    // Push the arguments on the stack (kernel strings, argc reflects the
+    // Push the arguments on the stack (kernel strings, the count reflects the
     // interpreter shift when a script was loaded).
-    final_argv        = __push_args_on_stack(&useresp, saved_argv, argc, argv_locations);
+    final_argv        = exec_args_push_argv(&args, &useresp);
     // Save where the arguments end, and the env starts.
     new_mm->env_start = new_mm->arg_end = useresp;
     // Push the environment on the stack.
-    final_envp                           = __push_args_on_stack(&useresp, saved_envp, envc, envp_locations);
+    final_envp                          = exec_args_push_envp(&args, &useresp);
     // Save where the environmental variables end.
-    new_mm->env_end                      = useresp;
-    // The string positions are no longer needed.
-    kfree(argv_locations);
-    kfree(envp_locations);
+    new_mm->env_end                     = useresp;
     // Push the `main` arguments on the stack (argc, argv, envp).
     stack_push_ptr(&useresp, final_envp);
     stack_push_ptr(&useresp, final_argv);
-    stack_push_s32(&useresp, argc);
+    stack_push_s32(&useresp, args.argc);
 
     // Restore previous pgdir
     paging_switch_pgd(crtdir);
@@ -946,8 +876,8 @@ int sys_execve(pt_regs_t *f)
     // The candidate image is complete: install it on the task, destroy the
     // old image, and set the registers of the new image. Past this point
     // the syscall cannot fail anymore.
-    mm_struct_t *old_mm     = current->mm;
-    current->mm             = new_mm;
+    mm_struct_t *old_mm = current->mm;
+    current->mm         = new_mm;
     if (old_mm != NULL) {
         mm_destroy(old_mm);
     }
@@ -964,8 +894,7 @@ int sys_execve(pt_regs_t *f)
     strncpy(current->name, name_buffer, sizeof(current->name) - 1);
     current->name[sizeof(current->name) - 1] = '\0';
 
-    // Free the temporary args memory.
-    kfree(args_mem);
+    exec_args_free(&args);
 
     // Perform the switch to the new process.
     scheduler_restore_context(current, f);

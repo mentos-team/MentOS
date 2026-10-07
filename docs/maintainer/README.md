@@ -12,7 +12,7 @@ these unless stated otherwise):
 |---|---|---|
 | `BASE`  | `82f4314` | `main` at the time PRs #188/#189/#190 were reviewed (their common merge-base) |
 | `MAIN`  | `62c638a` | `main` after #188 and #189 were merged; the baseline for issues #192–#196 |
-| `DEV`   | `9311863` | local `develop` checkout at documentation time (differs from `MAIN`; see investigation-history.md) |
+| `DEV`   | `9311863` | local `develop` checkout at documentation time (differs from `MAIN`) |
 
 Line numbers cited as `file.c:NNN` are valid **only for the stated commit** and
 will drift; function names and call-path descriptions are the stable
@@ -36,8 +36,6 @@ references.
 | [testing-and-ci.md](testing-and-ci.md) | Running, extending, or trusting the test suite; CI work |
 | [security-model.md](security-model.md) | Any security-relevant change; triaging #191-class reports |
 | [debugging-playbook.md](debugging-playbook.md) | Before reproducing anything in QEMU; host-side analysis techniques |
-| [known-bugs.md](known-bugs.md) | Before fixing anything — check the open-issue landscape first |
-| [investigation-history.md](investigation-history.md) | Understanding how the current findings were established |
 | [false-positives-and-dismissed-findings.md](false-positives-and-dismissed-findings.md) | Before re-reporting something already investigated |
 
 ## Most important global invariants (short list)

@@ -414,26 +414,28 @@ long sys_ioctl(int fd, unsigned int request, unsigned long data);
 long sys_fcntl(int fd, unsigned int request, unsigned long data);
 
 /// @brief Synchronize all filesystems to persistent storage.
-/// @details Schedules all dirty filesystem data to be written to disk.
-/// The actual I/O may occur asynchronously after this returns.
-/// @return Always returns 0 (success).
+/// @return 0, always.
+/// @details There is nothing to flush: writes reach the disk before they
+/// return. See the note at the top of kernel/src/fs/sync.c.
 long sys_sync(void);
 
-/// @brief Synchronize a specific filesystem to persistent storage.
+/// @brief Synchronize the filesystem holding an open file.
 /// @param fd File descriptor of an open file on the target filesystem.
-/// @return 0 on success, negative error code on failure.
-/// @details Synchronizes the filesystem containing the file referenced by fd.
-/// The actual I/O may occur asynchronously.
+/// @return 0 on success, -EBADF when `fd` is not open in the calling task.
 long sys_syncfs(int fd);
 
 /// @brief Synchronize a range of bytes in a file to persistent storage.
 /// @param fd File descriptor of the file to sync.
 /// @param offset Starting byte offset in the file.
-/// @param nbytes Number of bytes to sync.
-/// @param flags Sync behavior flags (SYNC_FILE_RANGE_* constants).
-/// @return 0 on success, negative error code on failure.
-/// @details Schedules a range of bytes within a file to be written to storage.
-long sys_sync_file_range(int fd, long long offset, long long nbytes, unsigned int flags);
+/// @param nbytes Number of bytes to sync, 0 meaning to the end of the file.
+/// @param flags Sync behaviour flags (SYNC_FILE_RANGE_* constants).
+/// @return 0 on success, -EBADF when `fd` is not open in the calling task,
+///         -EINVAL when the range is negative.
+/// @details The offsets are `off_t`, as everywhere else in this filesystem
+/// API, and not the `long long` Linux uses. The dispatcher forwards five
+/// argument registers; two 64-bit offsets would need four of them by
+/// themselves, and the call would not fit (#408).
+long sys_sync_file_range(int fd, off_t offset, off_t nbytes, unsigned int flags);
 
 /// @brief User malloc.
 /// @param addr This argument is treated as an address of a dynamically

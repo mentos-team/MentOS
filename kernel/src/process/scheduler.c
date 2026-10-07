@@ -10,17 +10,21 @@
 #include "io/debug.h"                    // Include debugging functions.
 
 #include "assert.h"
+#include "descriptor_tables/isr.h"
 #include "descriptor_tables/tss.h"
 #include "errno.h"
 #include "fs/vfs.h"
 #include "hardware/timer.h"
+#include "mem/uaccess.h"
 #include "process/pid_manager.h"
 #include "process/prio.h"
 #include "process/scheduler.h"
+#include "process/switch.h"
 #include "process/scheduler_feedback.h"
 #include "process/wait.h"
 #include "strerror.h"
 #include "system/panic.h"
+#include "klib/irqflags.h"
 
 /// @brief          Assembly function setting the kernel stack to jump into
 ///                 location in Ring 3 mode (USER mode).
@@ -33,6 +37,58 @@ runqueue_t runqueue;
 
 // Definition of the global init process pointer
 task_struct *init_process = NULL;
+
+static void scheduler_activate_task(task_struct *process);
+
+static void scheduler_switch_to_continuation(task_struct *current, task_struct *next)
+{
+    assert(current != NULL && next != NULL);
+    assert(task_kernel_stack_check(next) && "Kernel continuation stack canary corrupted.");
+    scheduler_activate_task(next);
+
+    /* An IRQ handler can wake a task whose continuation is suspended in a
+     * syscall.  Its hard-IRQ accounting belongs to the old continuation, so
+     * transfer that accounting around switch_to instead of exposing it to the
+     * resumed syscall. */
+    uint8_t in_hardirq = irq_hardirq_depth() != 0;
+    if (in_hardirq) {
+        irq_hardirq_leave();
+    }
+    switch_to(&current->thread.kernel_esp, next->thread.kernel_esp);
+    if (in_hardirq) {
+        irq_hardirq_enter();
+    }
+}
+
+/**
+ * @brief Dispatch a task selected by scheduler_reschedule_from_trap().
+ *
+ * A task can leave the scheduler in one of two fundamentally different
+ * states.  A task preempted while returning to userspace owns a trap frame
+ * and must restore that frame.  A task blocked inside a syscall owns a live
+ * kernel continuation and must resume its private kernel stack instead.
+ * Keeping this decision in one helper prevents the signal/error path from
+ * accidentally drifting away from the normal scheduling path.
+ *
+ * @param frame Trap frame belonging to the task currently handling the trap.
+ * @param next Task selected as the next runnable task.
+ */
+static void scheduler_dispatch_next(pt_regs_t *frame, task_struct *next)
+{
+    task_struct *current = runqueue.curr;
+
+    assert(frame != NULL);
+    assert(current != NULL);
+    assert(next != NULL);
+    assert(next != current);
+
+    if (next->thread.context_kind == THREAD_CONTEXT_KERNEL) {
+        scheduler_switch_to_continuation(current, next);
+    } else {
+        /* The task was preempted in userspace: restore its trap frame. */
+        scheduler_restore_context(next, frame);
+    }
+}
 
 /// Wait queue for processes blocked in waitpid().
 static wait_queue_head_t waitpid_queue = {
@@ -158,12 +214,9 @@ int wake_up_process(task_struct *task)
     /// scheduler naturally skips non-TASK_RUNNING tasks when picking next.
     /// This function only manages task state transitions, NOT queue membership.
     ///
-    /// The wait queue layer (wait.c) is responsible for:
-    ///   - Removing task from wait queue before calling this
-    ///   - Freeing wait queue entry after this returns
-    ///
-    /// With boundary-based scheduling, the task becomes eligible at the
-    /// next interrupt/exception boundary when scheduler_run() executes.
+    /// The wait queue layer (wait.c) removes the entry before calling this;
+    /// the blocked continuation retains ownership of its storage and calls
+    /// finish_wait() after schedule() returns.
     ///
     /// @param task The task to wake up (must be on runqueue).
     /// @return 0 on success, -1 if task was already TASK_RUNNING.
@@ -195,7 +248,7 @@ int wake_up_process(task_struct *task)
     return 0;
 }
 
-void scheduler_run(pt_regs_t *f)
+void scheduler_reschedule_from_trap(pt_regs_t *f)
 {
     // Check if there is a running process.
     if (runqueue.curr == NULL) {
@@ -282,8 +335,7 @@ void scheduler_run(pt_regs_t *f)
         // Check if the next and current processes are different.
         if (next != runqueue.curr) {
             pr_debug("SCHEDULER_RUN: Picked next task %d to run.\n", next->pid);
-            // Copy into Kernel stack the next process's context.
-            scheduler_restore_context(next, f);
+            scheduler_dispatch_next(f, next);
         }
     } else {
         // Signal handling may have changed task state (e.g., stop/exit).
@@ -297,33 +349,143 @@ void scheduler_run(pt_regs_t *f)
                 next = scheduler_pick_next_task(&runqueue);
             }
             if (next != runqueue.curr) {
-                scheduler_restore_context(next, f);
+                scheduler_dispatch_next(f, next);
             }
         }
     }
     //==========================================================================
 }
 
+/**
+ * @brief Publish the interrupted userspace context for a task.
+ *
+ * This function is called at a trap boundary (syscall, timer interrupt, or
+ * user exception), before the scheduler may choose another task.  The frame
+ * is therefore a userspace return frame, not the saved ESP of a voluntary
+ * kernel continuation.  Callers that schedule from inside a syscall must
+ * leave this function's result intact: schedule() materializes a separate
+ * continuation frame on the task's private kernel stack.
+ *
+ * @param f Trap frame supplied by the common entry stub.
+ * @param process Task whose interrupted context is being published.
+ */
 void scheduler_store_context(pt_regs_t *f, task_struct *process)
 {
+    assert(f != NULL);
+    assert(process != NULL);
+
     // Store the registers.
     process->thread.regs = *f;
+    // Keep the live outer frame address separate from the diagnostic snapshot.
+    // The common return boundary uses this pointer while the task is active;
+    // fork clears it when constructing a child continuation.
+    process->thread.user_regs = f;
+
+    /*
+     * This trap frame is the authoritative context while the task is back
+     * in userspace.  The saved kernel ESP, if any, belongs to an older
+     * synthetic or voluntary continuation and must not be resumed later:
+     * an interrupt entry will reuse the top of this task's kernel stack.
+     * A subsequent voluntary schedule recreates a fresh trampoline from
+     * thread.regs before switching to the task.
+     */
+    process->thread.kernel_esp = 0;
+    process->thread.context_kind = THREAD_CONTEXT_USER;
+}
+
+/// @brief Activate a selected task's address space and kernel entry stack.
+/// @details This is shared by the trap-boundary path and voluntary
+/// continuation switching. It does not save or restore a CPU context.
+static void scheduler_activate_task(task_struct *process)
+{
+    assert(process != NULL && "Cannot activate a NULL task.");
+    assert(process->kernel_stack_top != 0 && "Task has no private kernel stack.");
+    assert((process->kernel_stack_top & 0x0fU) == 0 && "Kernel stack top is not 16-byte aligned.");
+
+    runqueue.curr = process;
+    tss_set_stack(0x10, process->kernel_stack_top);
+    if (process->mm != NULL) {
+        paging_switch_pgd(process->mm->pgd);
+    }
 }
 
 void scheduler_restore_context(task_struct *process, pt_regs_t *f)
 {
+    assert(process != NULL && "Cannot restore a NULL task context.");
+    if (!task_kernel_stack_check(process)) {
+        pr_crit("Kernel stack guard corrupted: pid=%d name=%s base=%p top=%p used>=%zu bytes.\n",
+                 process->pid,
+                 process->name,
+                 process->kernel_stack,
+                 (void *)process->kernel_stack_top,
+                 task_kernel_stack_watermark(process));
+        assert(0 && "Kernel continuation stack canary corrupted.");
+    }
     // Switch to the next process.
-    runqueue.curr = process;
+    // The boundary scheduler still returns through the current IRQ or
+    // syscall frame, but the next ring-3 entry must land on the selected
+    // task's private kernel stack.
+    scheduler_activate_task(process);
     // Restore the registers.
     *f            = process->thread.regs;
+    process->thread.user_regs = f;
+    process->thread.context_kind = THREAD_CONTEXT_USER;
     // CRITICAL: Memory barrier to prevent compiler from reordering the page directory
     // switch before the above memory writes. In Release mode, the compiler can
     // reorder operations, which would cause us to switch page directories BEFORE
     // restoring the register context. This leads to immediate faults on process switch.
     __asm__ __volatile__("" ::: "memory");
-    // TODO(enrico): Explain paging switch (ring 0 doesn't need page switching)
-    // Switch to process page directory
+    // Each process currently owns its mm; the scheduler restores its page
+    // directory at the trap boundary. See process-lifecycle.md.
     paging_switch_pgd(process->mm->pgd);
+}
+
+void schedule(void)
+{
+    task_struct *prev = runqueue.curr;
+    assert(prev != NULL && "Cannot schedule without a current task.");
+    assert(irq_hardirq_depth() == 0 && "Cannot switch a continuation from hard IRQ context.");
+
+    uint8_t interrupts_were_enabled = irq_disable();
+
+    for (;;) {
+        task_struct *next = scheduler_pick_next_task(&runqueue);
+        if (next != NULL) {
+            if (next == prev) {
+                break;
+            }
+
+            assert(next->kernel_stack_top != 0 && "Runnable task has no private kernel stack.");
+
+            /* A task last seen at a trap boundary has no live C continuation.
+             * Materialize its current user frame on the private stack before
+             * switch_to; blocked syscalls, in contrast, retain the ESP saved
+            * by their own switch_to call and resume directly. */
+            if (next->thread.kernel_esp == 0) {
+                assert(task_prepare_kernel_context(next) == 0 && "Unable to prepare user continuation.");
+            }
+
+            scheduler_activate_task(next);
+
+            /*
+             * switch_to saves the current C call chain in prev->kernel_esp
+             * and resumes the selected task at its saved return address. When
+             * prev is woken later, this invocation resumes immediately after
+             * switch_to, preserving the blocking syscall's call chain.
+             */
+            prev->thread.context_kind = THREAD_CONTEXT_KERNEL;
+            switch_to(&prev->thread.kernel_esp, next->thread.kernel_esp);
+            break;
+        }
+
+        /* No runnable task exists. Keep the outgoing continuation blocked and
+         * wait for an IRQ to wake one of the waiters. */
+        sti();
+        __asm__ __volatile__("hlt" ::: "memory");
+        cli();
+    }
+
+    irq_enable(interrupts_were_enabled);
 }
 
 void scheduler_enter_user_jmp(uintptr_t location, uintptr_t stack)
@@ -339,6 +501,16 @@ void scheduler_enter_user_jmp(uintptr_t location, uintptr_t stack)
 
     // Jump in location.
     enter_userspace(location, stack);
+}
+
+void scheduler_enter_first_task(void)
+{
+    task_struct *task = runqueue.curr;
+    assert(task != NULL && "No task available for first handoff.");
+    assert(task->thread.kernel_esp != 0 && "First task has no prepared context.");
+    assert(task->kernel_stack_top != 0 && "First task has no kernel stack.");
+    tss_set_stack(0x10, task->kernel_stack_top);
+    enter_prepared_user((uintptr_t)(task->thread.kernel_esp + SWITCH_FRAME_SIZE));
 }
 
 int is_orphaned_pgrp(pid_t pgid)
@@ -636,7 +808,9 @@ int sys_nice(int increment)
 
     pr_debug("Actual new nice value is: %d\n", actualNice);
 
-    return actualNice;
+    // Syscalls reserve negative values for -errno. Shift the user-visible
+    // [-20, 19] range so libc can distinguish a successful -1 from -EPERM.
+    return actualNice + NICE_RETURN_OFFSET;
 }
 
 pid_t sys_waitpid(pid_t pid, int *status, int options)
@@ -655,6 +829,12 @@ pid_t sys_waitpid(pid_t pid, int *status, int options)
         return -ECHILD;
     }
 
+    // The status, when the caller asks for one, is written through its
+    // pointer: it must be the caller's own, writable memory (#191).
+    if ((status != NULL) && !access_ok(USER_WRITE, status, sizeof(*status))) {
+        return -EFAULT;
+    }
+
     // Validate the `options` argument.
     // Supported options are WNOHANG and WUNTRACED; any other value is invalid
     if (options & ~(WNOHANG | WUNTRACED)) {
@@ -667,7 +847,12 @@ pid_t sys_waitpid(pid_t pid, int *status, int options)
         return -ECHILD;
     }
 
+    /* The entry remains on this waitpid call chain across schedule(). */
+    wait_queue_entry_t wait_entry;
+    wait_queue_entry_init(&wait_entry, runqueue.curr);
+
     // Iterate through the children of the current process.
+retry_children:
     list_for_each_safe_decl(it, store, &runqueue.curr->children)
     {
         // Get the task_struct for the current child.
@@ -688,16 +873,23 @@ pid_t sys_waitpid(pid_t pid, int *status, int options)
 
         // Prepare to return the child's PID and status
         pid_t child_pid = child->pid;
-        if (status != NULL) {
-            *status = child->exit_code;
+        if ((status != NULL) && (copy_to_user(status, &child->exit_code, sizeof(*status)) < 0)) {
+            // The early access_ok above already refused the obvious bad
+            // pointer, before any child was reaped; this is the write
+            // itself, and it goes through the same door as every other.
+            return -EFAULT;
         }
 
         // Clean up the child process's resources.
+        assert(child != runqueue.curr && "Cannot reap the current task stack.");
+        assert(child->waiting_on == NULL && "Cannot reap a task with a linked wait entry.");
+        assert(task_kernel_stack_check(child) && "Kernel continuation stack canary corrupted.");
         pid_manager_mark_free(child->pid); // Free the PID.
         vfs_destroy_task(child);           // Finalize VFS structures.
+        task_kernel_stack_free(child);     // Release the inactive continuation stack.
         list_head_remove(&child->sibling); // Remove from parent's child list.
 
-        // Zombie tasks are typically dequeued in scheduler_run() when they
+        // Zombie tasks are typically dequeued in scheduler_reschedule_from_trap() when they
         // become current. During waitpid() reap they may already be out of
         // the runqueue, so only dequeue if still linked.
         if (!list_head_empty(&child->run_list)) {
@@ -719,21 +911,13 @@ pid_t sys_waitpid(pid_t pid, int *status, int options)
     }
 
     // Otherwise, block until a child exits (and sends SIGCHLD to wake us up).
-    // Task will remain on runqueue but in TASK_UNINTERRUPTIBLE state.
-    // Context switch will happen when this syscall returns and syscall_handler calls scheduler_run(f).
-    // When woken up (by wake_up_all in do_exit), task state transitions to TASK_RUNNING,
-    // and eventually scheduler picks it again, returning to userspace with -EINTR.
-    // Userspace must retry the syscall, which will then find and reap the zombie.
+    // The continuation remains in this function and rechecks the child list
+    // after the wakeup; userspace does not need to retry waitpid().
     pr_debug("Process %d (%s) sleeping in waitpid (no zombie child yet)\n", runqueue.curr->pid, runqueue.curr->name);
-    wait_queue_entry_t *wait_entry = sleep_on(&waitpid_queue);
-    if (!wait_entry) {
-        pr_err("Failed to sleep in waitpid\n");
-        return -ENOMEM;
-    }
-
-    // Return -EINTR to indicate the syscall was interrupted.
-    // The userspace waitpid() wrapper should retry the syscall on -EINTR.
-    return -EINTR;
+    prepare_to_wait(&waitpid_queue, &wait_entry, TASK_UNINTERRUPTIBLE);
+    schedule();
+    finish_wait(&waitpid_queue, &wait_entry);
+    goto retry_children;
 }
 
 void do_exit(int exit_code)
@@ -754,7 +938,7 @@ void do_exit(int exit_code)
     runqueue.curr->state     = EXIT_ZOMBIE;
     // Send a SIGCHLD to the parent process.
     if (runqueue.curr->parent) {
-        int ret = sys_kill(runqueue.curr->parent->pid, SIGCHLD);
+        int ret = kernel_kill(runqueue.curr->parent->pid, SIGCHLD);
         if (ret == -1) {
             pr_err(
                 "[%d] %5d failed sending signal %d : %s\n", ret, runqueue.curr->parent->pid, SIGCHLD, strerror(errno));
@@ -796,6 +980,10 @@ void sys_exit(int exit_code) { do_exit(exit_code << 8); }
 
 int sys_sched_setparam(pid_t pid, const sched_param_t *param)
 {
+    // The parameters are read out of the caller's memory (#191).
+    if (!access_ok(USER_READ, param, sizeof(*param))) {
+        return -EFAULT;
+    }
     // Iter over the runqueue to find the task
     list_for_each_decl (it, &runqueue.queue) {
         task_struct *entry = list_entry(it, task_struct, run_list);
@@ -823,15 +1011,27 @@ int sys_sched_setparam(pid_t pid, const sched_param_t *param)
 
 int sys_sched_getparam(pid_t pid, sched_param_t *param)
 {
+    // The pointer is refused up front and not only at the copy below: the
+    // copy happens only when the pid is found, so deferring the check would
+    // make a bad pointer report -EFAULT or not depending on whether the
+    // process exists, which is not an answer about the pointer (#401).
+    if (!access_ok(USER_WRITE, param, sizeof(*param))) {
+        return -EFAULT;
+    }
     // Iter over the runqueue to find the task
     list_for_each_decl (it, &runqueue.queue) {
         task_struct *entry = list_entry(it, task_struct, run_list);
         if (entry->pid == pid) {
-            //Sets the parameters from the "se" struct to param
-            param->sched_priority = entry->se.prio;
-            param->period         = entry->se.period;
-            param->deadline       = entry->se.deadline;
-            param->arrivaltime    = entry->se.arrivaltime;
+            // The answer is assembled here and handed over in one call, so
+            // the caller's memory is never written field by field (#401).
+            sched_param_t value;
+            value.sched_priority = entry->se.prio;
+            value.period         = entry->se.period;
+            value.deadline       = entry->se.deadline;
+            value.arrivaltime    = entry->se.arrivaltime;
+            if (copy_to_user(param, &value, sizeof(value)) < 0) {
+                return -EFAULT;
+            }
             return 1;
         }
     }

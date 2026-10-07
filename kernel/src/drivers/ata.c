@@ -1513,7 +1513,7 @@ static int ata_close(vfs_file_t *file)
 /// @return the number of read characters.
 static ssize_t ata_read(vfs_file_t *file, char *buffer, off_t offset, size_t size)
 {
-    // pr_debug("ata_read(file: 0x%p, buffer: 0x%p, offest: %8d, size: %8d)\n", file, buffer, offset, size);
+    // pr_debug("ata_read(file: %p, buffer: %p, offest: %8d, size: %8d)\n", file, buffer, offset, size);
 
     // Prepare a static support buffer.
     static char support_buffer[ATA_SECTOR_SIZE];
@@ -1875,7 +1875,6 @@ static void ata_irq_handler_master(pt_regs_t *f)
     inportb(ata_primary_master.io_reg.status);
     inportb(ata_primary_master.bmr.status);
     //outportb(ata_primary_master.bmr.command, ata_bm_stop_bus_master);
-    pic8259_send_eoi(IRQ_FIRST_HD);
 }
 
 /// @param f The interrupt stack frame.
@@ -1885,7 +1884,6 @@ static void ata_irq_handler_slave(pt_regs_t *f)
     inportb(ata_secondary_master.io_reg.status);
     inportb(ata_primary_master.bmr.status);
     //outportb(ata_primary_master.bmr.command, ata_bm_stop_bus_master);
-    pic8259_send_eoi(IRQ_SECOND_HD);
 }
 
 // == PCI FUNCTIONS ===========================================================

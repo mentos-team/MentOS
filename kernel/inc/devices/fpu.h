@@ -88,22 +88,22 @@ typedef struct envxmm {
 
 /// @brief Contents of each SSE extended accumulator.
 typedef struct xmmacc {
-    /// TODO: Comment.
+    /// One 128-bit XMM register, as raw bytes.
     unsigned char xmm_bytes[16];
 } xmmacc;
 
 /// @brief Stores the XMM context.
 typedef struct savexmm {
-    /// TODO: Comment.
+    /// Control, status and tag words, plus the SSE control register.
     envxmm sv_env;
-    /// TODO: Comment.
+    /// The eight x87 accumulators, each padded to the 16 bytes FXSAVE gives it.
     struct {
-        /// TODO: Comment.
+        /// The 80-bit accumulator itself.
         fpacc87 fp_acc;
         /// Padding.
         unsigned char fp_pad[6];
     } sv_fp[8];
-    /// TODO: Comment.
+    /// The eight XMM registers, XMM0 through XMM7.
     xmmacc sv_xmm[8];
     /// Padding.
     unsigned char sv_pad[224];

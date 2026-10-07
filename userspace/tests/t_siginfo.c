@@ -15,6 +15,65 @@
 #include <time.h>
 #include <unistd.h>
 
+static volatile int sender_info_valid;
+
+/// @brief Signal handler for SIGUSR1 that validates the sending task identity.
+/// @param sig Signal number.
+/// @param siginfo Information populated by kill().
+static void sig_handler_sender(int sig, siginfo_t *siginfo)
+{
+    sender_info_valid = (sig == SIGUSR1 && siginfo != NULL && siginfo->si_code == SI_USER && siginfo->si_pid == getppid() && siginfo->si_uid == getuid());
+}
+
+/// @brief Verifies that kill() reports the calling task in siginfo_t.
+/// @return 0 on success, 1 on failure.
+static int test_signal_sender_info(void)
+{
+    int ready[2];
+    if (pipe(ready) < 0) {
+        return 1;
+    }
+
+    pid_t child = fork();
+    if (child < 0) {
+        close(ready[0]);
+        close(ready[1]);
+        return 1;
+    }
+    if (child == 0) {
+        close(ready[0]);
+        sigaction_t action;
+        memset(&action, 0, sizeof(action));
+        action.sa_handler = (sighandler_t)sig_handler_sender;
+        action.sa_flags   = SA_SIGINFO;
+        if (sigaction(SIGUSR1, &action, NULL) < 0) {
+            exit(EXIT_FAILURE);
+        }
+        char marker = 'R';
+        if (write(ready[1], &marker, sizeof(marker)) != sizeof(marker)) {
+            exit(EXIT_FAILURE);
+        }
+        close(ready[1]);
+
+        timespec_t request = {2, 0};
+        nanosleep(&request, NULL);
+        exit(sender_info_valid ? EXIT_SUCCESS : EXIT_FAILURE);
+    }
+
+    close(ready[1]);
+    char marker = 0;
+    int result  = 1;
+    if (read(ready[0], &marker, sizeof(marker)) == sizeof(marker) && marker == 'R' && kill(child, SIGUSR1) == 0) {
+        int status = 0;
+        result     = (waitpid(child, &status, 0) == child && WIFEXITED(status) && WEXITSTATUS(status) == EXIT_SUCCESS) ? 0 : 1;
+    } else {
+        kill(child, SIGKILL);
+        waitpid(child, NULL, 0);
+    }
+    close(ready[0]);
+    return result;
+}
+
 /// @brief Signal handler for SIGFPE that uses siginfo_t to get more information
 /// about the signal.
 /// @param sig Signal number.
@@ -43,6 +102,11 @@ void sig_handler_info(int sig, siginfo_t *siginfo)
 
 int main(int argc, char *argv[])
 {
+    if (test_signal_sender_info() != 0) {
+        syslog(LOG_ERR, "[t_siginfo] kill() did not report the sending task\n");
+        return EXIT_FAILURE;
+    }
+
     sigaction_t action;
 
     // Initialize the sigaction structure with zeros.

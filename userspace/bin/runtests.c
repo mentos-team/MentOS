@@ -30,6 +30,7 @@ static char *all_tests[] = {
     "t_chdir",
     "t_creat",
     "t_creat_errno",
+    "t_nice",
     "t_dir_block_boundary",
     "t_dir_entries",
     "t_dup",
@@ -57,6 +58,7 @@ static char *all_tests[] = {
     "t_hashmap",
     "t_itimer",
     "t_kill",
+    "t_kill_perm",
     "t_list",
     "t_mem",
     "t_mkdir",
@@ -73,10 +75,17 @@ static char *all_tests[] = {
     "t_msgget",
     "t_ndtree",
     "t_periodic1",
+    "t_pipe_eof_data",
+    "t_proc_feedback",
     "t_procfs_read",
     "t_periodic2",
     "t_periodic3",
     "t_pipe_blocking",
+    "t_resumable_context",
+    "t_resumable_timer_irq",
+    "t_resumable_timer_fanout",
+    "t_fpu_context",
+    "t_resumable_signals",
     "t_pipe_non_blocking",
     "t_pwd",
     "t_schedfb",
@@ -91,12 +100,15 @@ static char *all_tests[] = {
     "t_sigmask",
     "t_sigusr",
     "t_shebang",
+    "t_sync",
     "t_sleep",
     "t_spwd",
     "t_stopcont",
     "t_syscall_ni",
     "t_syslog",
+    "t_symlink",
     "t_time",
+    "t_userptr",
     "t_wifsignaled",
     "t_write_read",
     "t_faultinj",
@@ -201,6 +213,10 @@ static void exec_test(char *test_cmd_line)
     char test_abspath[PATH_MAX];
     sprintf(test_abspath, "/bin/tests/%s", test_argv[0]);
     execvp(test_abspath, test_argv);
+
+    // Keep the otherwise opaque exit 127 diagnostic: the test never started
+    // when execvp returns, so errno is the only useful failure context.
+    fprintf(STDERR_FILENO, "execvp(%s): %s\n", test_abspath, strerror(errno));
 }
 
 static void run_test(int n, char *test_cmd_line)

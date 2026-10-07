@@ -19,6 +19,7 @@
 #include "io/port_io.h"
 #include "io/video.h"
 #include "klib/irqflags.h"
+#include "mem/uaccess.h"
 #include "process/scheduler.h"
 #include "process/wait.h"
 #include "stdint.h"
@@ -107,12 +108,10 @@ void timer_handler(pt_regs_t *reg)
     video_cursor_blink_tick();
     // Perform the schedule only if the interrupt came from user mode.
     if ((reg->cs & 0x3) == 0x3) {
-        scheduler_run(reg);
+        scheduler_reschedule_from_trap(reg);
     }
     // Restore fpu state.
     unswitch_fpu();
-    // The ack is sent to PIC only when all handlers terminated!
-    pic8259_send_eoi(IRQ_TIMER);
 }
 
 void timer_install(void)
@@ -141,9 +140,9 @@ static inline void __print_vector(list_head_t *vector)
 {
 #if defined(ENABLE_REAL_TIMER_SYSTEM_DUMP) && (__DEBUG_LEVEL__ == LOGLEVEL_NOTICE)
     if (!list_head_empty(vector)) {
-        pr_debug("0x%p = [ ", vector);
+        pr_debug("%p = [ ", vector);
         list_for_each_decl (it, vector) {
-            pr_debug("0x%p ", it);
+            pr_debug("%p ", it);
         }
         pr_debug("]\n");
     }
@@ -570,9 +569,8 @@ static inline void debug_timeout(unsigned long data)
 /// This handles the race where a signal interrupts a sleeping task:
 /// the signal handler calls this to stop the sleep timer from firing.
 ///
-/// With boundary-based context switching, we don't need to trigger
-/// immediate scheduling - the signal handler will return to the next
-/// interrupt/exception boundary where scheduler_run() picks the next task.
+/// The signal path cancels the timer before waking the interruptible
+/// continuation; schedule() then resumes the nanosleep call chain directly.
 ///
 /// @param task The task whose sleep timer should be canceled.
 /// @return 0 on success, -1 if no sleep timer exists.
@@ -646,7 +644,7 @@ static inline void alarm_timeout(unsigned long task_ptr)
     // Get the task fromt the argument.
     struct task_struct *task = (struct task_struct *)task_ptr;
     // Send ALARM.
-    sys_kill(task->pid, SIGALRM);
+    kernel_kill(task->pid, SIGALRM);
     // Remove the timer.
     task->real_timer = NULL;
 }
@@ -659,7 +657,7 @@ static inline void real_timer_timeout(unsigned long task_ptr)
     // Get the task fromt the argument.
     struct task_struct *task = (struct task_struct *)task_ptr;
     // Send the signal.
-    sys_kill(task->pid, SIGALRM);
+    kernel_kill(task->pid, SIGALRM);
     // If the real incr is not 0 then restart.
     if (task->it_real_incr != 0) {
         // Create new timer for process, the old one is going to be deleted.
@@ -682,25 +680,34 @@ static inline void real_timer_timeout(unsigned long task_ptr)
 
 int sys_nanosleep(const struct timespec *req, struct timespec *rem)
 {
+    // The request is read and the remainder, when asked for, is written
+    // through caller pointers (#191).
+    if (!access_ok(USER_READ, req, sizeof(*req))) {
+        return -EFAULT;
+    }
+    if (rem && !access_ok(USER_WRITE, rem, sizeof(*rem))) {
+        return -EFAULT;
+    }
     // We need to store rem somewhere, because it contains how much time left
     // until the timer expires, when the timer is stopped early by a signal.
     pr_debug("sys_nanosleep([s:%u; ns:%ld],...)\n", req->tv_sec, req->tv_nsec);
     // Get the current task.
     task_struct *current = scheduler_get_current_process();
     assert(current && "No current process in sys_nanosleep");
-    // Prevent a race between entering sleep state and arming the wake timer.
-    // If a timer interrupt preempts in that window, the task can become
-    // TASK_UNINTERRUPTIBLE without a wake source and block the system.
+    // Prevent a race between publishing the wait state and arming the wake
+    // timer. The caller-owned entry remains valid on this kernel continuation
+    // until schedule() returns after timeout or signal wakeup.
     uint8_t irqs                   = irq_disable();
-    // Create a dinamic timer to wake up the process after some time
+    // Create a dynamic timer to wake up the process after some time.
     struct timer_list *sleep_timer = __timer_list_alloc();
-    // First, we save the remaining time. Then, we remove the current process
-    // from runqueue and stores it in the waiting queue, this must be done at
-    // the end, because it changes the current active page and invalidates the
-    // req and rem pointers (?)
     sleep_data_t *sleep_data       = __sleep_data_alloc();
     sleep_data->remaining          = rem;
-    sleep_data->wait_queue_entry   = sleep_on_interruptible(&sleep_queue);
+
+    wait_queue_entry_t wait_entry;
+    wait_queue_entry_init(&wait_entry, current);
+    prepare_to_wait(&sleep_queue, &wait_entry, TASK_INTERRUPTIBLE);
+    sleep_data->wait_queue_entry = &wait_entry;
+
     // Setup the timer.
     sleep_timer->expires           = timer_get_ticks() + __timespec_to_ticks(req);
     sleep_timer->function          = &sleep_timeout;
@@ -711,6 +718,9 @@ int sys_nanosleep(const struct timespec *req, struct timespec *rem)
     add_timer(sleep_timer);
     // Sleep state + wait queue entry + timer arm are now atomically visible.
     irq_enable(irqs);
+
+    schedule();
+    finish_wait(&sleep_queue, &wait_entry);
     return 0;
 }
 
@@ -753,23 +763,34 @@ unsigned sys_alarm(int seconds)
 int sys_getitimer(int which, struct itimerval *curr_value)
 {
     struct task_struct *task = scheduler_get_current_process();
-    // Transform the apropriate interval and store it in the given variable.
+    // The value is assembled here and handed over once at the end. Building
+    // it locally also puts the -EINVAL for an unknown timer before anything
+    // looks at the pointer, which is the order a caller expects (#401).
+    struct itimerval value;
     if (which == ITIMER_REAL) {
         // Extract remaining time in dynamic timer.
         task->it_real_value = task->real_timer->expires - timer_get_ticks();
-        __values_to_itimerval(task->it_real_incr, task->it_real_value, curr_value);
+        __values_to_itimerval(task->it_real_incr, task->it_real_value, &value);
     } else if (which == ITIMER_VIRTUAL) {
-        __values_to_itimerval(task->it_virt_incr, task->it_virt_value, curr_value);
+        __values_to_itimerval(task->it_virt_incr, task->it_virt_value, &value);
     } else if (which == ITIMER_PROF) {
-        __values_to_itimerval(task->it_prof_incr, task->it_prof_value, curr_value);
+        __values_to_itimerval(task->it_prof_incr, task->it_prof_value, &value);
     } else {
         return -EINVAL;
     }
-    return 0;
+    return copy_to_user(curr_value, &value, sizeof(value));
 }
 
 int sys_setitimer(int which, const struct itimerval *new_value, struct itimerval *old_value)
 {
+    // The new value is read, and the old one, when asked for, is written
+    // through caller pointers (#191).
+    if (!access_ok(USER_READ, new_value, sizeof(*new_value))) {
+        return -EFAULT;
+    }
+    if (old_value && !access_ok(USER_WRITE, old_value, sizeof(*old_value))) {
+        return -EFAULT;
+    }
     // Invalid time domain
     if (which < 0 || which > 3) {
         return -EINVAL;
@@ -826,7 +847,7 @@ void update_process_profiling_timer(task_struct *proc)
     if (proc->it_prof_incr != 0) {
         proc->it_prof_value += proc->se.exec_runtime;
         if (proc->it_prof_value >= proc->it_prof_incr) {
-            sys_kill(proc->pid, SIGPROF);
+            kernel_kill(proc->pid, SIGPROF);
             proc->it_prof_value = 0;
         }
     }

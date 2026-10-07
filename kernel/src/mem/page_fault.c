@@ -11,6 +11,7 @@
 
 #include "mem/page_fault.h"
 
+#include "boot.h"
 #include "descriptor_tables/isr.h"
 #include "mem/mm/page.h"
 #include "mem/mm/vm_area.h"
@@ -19,12 +20,13 @@
 #include "string.h"
 #include "system/panic.h"
 
-// Error code interpretation.
-#define ERR_PRESENT  0x01 ///< Page not present.
-#define ERR_RW       0x02 ///< Page is read only.
-#define ERR_USER     0x04 ///< Page is privileged.
-#define ERR_RESERVED 0x08 ///< Overwrote reserved bit.
-#define ERR_INST     0x10 ///< Instruction fetch.
+// Page-fault error code bits (Intel SDM Vol.3, "Page-Fault Exceptions").
+// Each bit describes the faulting access, not a property of the page table entry.
+#define ERR_PRESENT  0x01 ///< Set: protection violation on a present page. Clear: page not present.
+#define ERR_RW       0x02 ///< Set: the access was a write. Clear: the access was a read.
+#define ERR_USER     0x04 ///< Set: the access came from user mode (CPL 3). Clear: supervisor mode.
+#define ERR_RESERVED 0x08 ///< Set: a reserved bit was set in a paging structure.
+#define ERR_INST     0x10 ///< Set: the fault occurred on an instruction fetch.
 
 /// @brief Sets the given page table flags.
 /// @param table the page table.
@@ -59,11 +61,9 @@ static void __page_fault_panic(pt_regs_t *f, uint32_t addr)
     __asm__ __volatile__("cli");
 
     // Gather fault info and print to screen
-    pr_err("Faulting address (cr2): 0x%p\n", (void *)addr);
+    pr_err("Faulting address (cr2): %p\n", (void *)addr);
 
-    pr_err("EIP: 0x%p\n", (void *)f->eip);
-
-    pr_err("Page fault: 0x%x\n", addr);
+    pr_err("EIP: %p\n", (void *)f->eip);
 
     pr_err("Possible causes: [ ");
     if (!(f->err_code & ERR_PRESENT)) {
@@ -86,11 +86,6 @@ static void __page_fault_panic(pt_regs_t *f, uint32_t addr)
 
     kernel_panic("Page fault!");
 
-    // Make directory accessible
-    //    main_mm->pgd->entries[addr/(1024*4096)].user = 1;
-    //    main_directory->entries[addr/(1024*4096)]. = 1;
-
-    __asm__ __volatile__("cli");
 }
 
 /// @brief Handles the Copy-On-Write (COW) mechanism for a page table entry.
@@ -155,8 +150,8 @@ static int __page_handle_cow(page_table_entry_t *entry)
 /// @return 0 if the signal was queued and the context switch was performed,
 ///         1 if there is no current task (the caller must panic).
 /// @details A user-mode fault the kernel cannot resolve must kill the
-///          faulting process, not the kernel: sys_kill queues the signal,
-///          and scheduler_run delivers it through the stored frame (running
+///          faulting process, not the kernel: kernel_kill queues the signal,
+///          and scheduler_reschedule_from_trap delivers it through the stored frame (running
 ///          the handler or the default terminating action) before this
 ///          task runs again.
 /// @brief The user-mode fault that was last reported.
@@ -205,12 +200,12 @@ static int __send_sigsegv_to_current(pt_regs_t *f, uint32_t faulting_addr)
                 faulting_addr);
         }
         // Notifies current process.
-        sys_kill(task->pid, SIGSEGV);
+        kernel_kill(task->pid, SIGSEGV);
         // Now, we know the process needs to be removed from the list of
         // running processes. We pushed the SEGV signal in the queues of
         // signal to send to the process. To properly handle the signal,
         // just run scheduler.
-        scheduler_run(f);
+        scheduler_reschedule_from_trap(f);
         return 0;
     }
     return 1;
@@ -226,7 +221,9 @@ int init_page_fault(void)
     return 0;
 }
 
-void page_fault_handler(pt_regs_t *f)
+/// @brief Services a page fault; see page_fault_handler.
+/// @param f The interrupt stack frame.
+static void __page_fault_service(pt_regs_t *f)
 {
     // Here you will find the `Demand Paging` mechanism.
     // From `Understanding The Linux Kernel 3rd Edition`: The term demand paging denotes a dynamic memory allocation
@@ -249,19 +246,28 @@ void page_fault_handler(pt_regs_t *f)
     // =========================================================================
     // STACK OVERFLOW DETECTION - Check this FIRST
     // =========================================================================
-    extern uint32_t stack_bottom, stack_top;
+    extern boot_info_t boot_info;
     uint32_t faulting_addr = get_cr2();
 
-    // Check if this is a fault on the kernel stack guard page (overflow)
-    if (faulting_addr == (uint32_t)&stack_bottom) {
+    // The kernel runs on [stack_base - stack_size + PAGE_SIZE, stack_base),
+    // handed over by the bootloader. The page immediately below it is left
+    // unmapped as a guard, so an overflow cannot corrupt low memory (#439).
+    uint32_t stack_top_addr    = boot_info.stack_base;
+    uint32_t guard_page_start  = boot_info.stack_base - boot_info.stack_size;
+    uint32_t stack_bottom_addr = guard_page_start + PAGE_SIZE;
+
+    // Check the whole guard page: the CPU reports the exact byte that caused
+    // the fault, not necessarily the first byte of the unmapped page.
+    if ((faulting_addr >= guard_page_start) && (faulting_addr < stack_bottom_addr)) {
         pr_crit("\n");
         pr_crit("========================================================\n");
         pr_crit("           KERNEL STACK OVERFLOW DETECTED!\n");
         pr_crit("========================================================\n");
-        pr_crit("Guard page fault at: 0x%p\n", (void *)faulting_addr);
-        pr_crit("Stack range: 0x%p - 0x%p\n", (void *)&stack_bottom, (void *)&stack_top);
-        pr_crit("Current ESP: 0x%p\n", (void *)f->esp);
-        pr_crit("Faulting EIP: 0x%p\n", (void *)f->eip);
+        pr_crit("Guard page fault at: %p\n", (void *)faulting_addr);
+        pr_crit("Guard page: %p - %p\n", (void *)guard_page_start, (void *)stack_bottom_addr);
+        pr_crit("Stack range: %p - %p\n", (void *)stack_bottom_addr, (void *)stack_top_addr);
+        pr_crit("Current ESP: %p\n", (void *)f->esp);
+        pr_crit("Faulting EIP: %p\n", (void *)f->eip);
         pr_crit("The kernel stack has been exhausted by excessive usage.\n");
         pr_crit("Possible causes:\n");
         pr_crit("  - Recursive function calls\n");
@@ -272,15 +278,16 @@ void page_fault_handler(pt_regs_t *f)
         return;
     }
 
-    // Warn if stack usage is getting dangerously high (> 75% used)
-    // NOTE: This check is currently disabled due to issues with linker symbol resolution
-    // The more important guard page detection above will catch actual stack overflows
-    // TODO: Fix symbol resolution for stack_bottom and stack_top in paging context
-
-    // Stack grows downward: stack_top (high addr) -> esp (current) -> ... -> stack_bottom (low addr)
-    // uint32_t stack_bottom_addr = (uint32_t)&stack_bottom;
-    // uint32_t stack_top_addr = (uint32_t)&stack_top;
-    // These would be used for usage calculation, but require proper symbol resolution
+    // Warn if the kernel stack is more than 75% used. The stack grows
+    // downward: stack_top (high) -> esp -> stack_bottom (low).
+    if ((f->esp >= stack_bottom_addr) && (f->esp < stack_top_addr)) {
+        uint32_t used = stack_top_addr - f->esp;
+        if (used > (boot_info.stack_size / 4U) * 3U) {
+            pr_warning("Kernel stack is %u%% used (%u of %u bytes) at fault %p.\n",
+                       used / (boot_info.stack_size / 100U), used, boot_info.stack_size,
+                       (void *)faulting_addr);
+        }
+    }
 
     // Extract the error
     int err_user    = bit_check(f->err_code, 2) != 0;
@@ -429,4 +436,38 @@ void page_fault_handler(pt_regs_t *f)
 
     // Invalidate the TLB entry for the faulting address.
     paging_flush_tlb_single(faulting_addr);
+}
+
+void page_fault_handler(pt_regs_t *f)
+{
+    task_struct *task = scheduler_get_current_process();
+    if (task == NULL) {
+        kernel_panic("Page fault without a current task!");
+    }
+
+    /*
+     * Page-fault delivery can call scheduler_reschedule_from_trap(), which
+     * may switch to another task before this handler returns. Keeping this
+     * marker in a global variable would make that other task's independent
+     * fault look nested. The marker belongs to the task whose kernel stack
+     * owns the suspended handler instead.
+     */
+    if (task->page_fault_frame != NULL) {
+        __asm__ __volatile__("cli");
+        pr_emerg("Nested page fault while handling a page fault.\n");
+        pr_emerg("--- Original fault (outer) ---\n");
+        pr_emerg("Faulting address (cr2): %p, EIP: %p, err: 0x%x\n", (void *)task->page_fault_addr,
+                 (void *)task->page_fault_frame->eip, task->page_fault_frame->err_code);
+        PRINT_REGS(pr_emerg, task->page_fault_frame);
+        pr_emerg("--- Nested fault (inner) ---\n");
+        pr_emerg("Faulting address (cr2): %p, EIP: %p, err: 0x%x\n", (void *)get_cr2(), (void *)f->eip,
+                 f->err_code);
+        PRINT_REGS(pr_emerg, f);
+        kernel_panic("Nested page fault!");
+    }
+    task->page_fault_frame = f;
+    task->page_fault_addr  = get_cr2();
+    __page_fault_service(f);
+    task->page_fault_frame = NULL;
+    task->page_fault_addr  = 0;
 }

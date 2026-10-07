@@ -40,7 +40,7 @@ static inline void __assert_cursor(unsigned expected_column, unsigned expected_r
         pr_emerg(
             "Cursor mismatch after %s: expected (%u,%u), got (%u,%u)\n", what, expected_column, expected_row, column,
             row);
-        kernel_panic("Test failure");
+        kernel_test_record_failure();
     }
 }
 

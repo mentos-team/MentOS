@@ -33,7 +33,7 @@ inline static uint8_t irq_disable(void)
     // clearing the interrupt line, and with the pop, getting the current status
     // of the flags.
     __asm__ __volatile__("pushf; cli; pop %0;" : "=r"(flags) : : "memory");
-    return flags & (1 << 9);
+    return (flags & (1U << 9)) != 0;
 }
 
 /// @brief Determines, if the interrupt flags (IF) is set.
@@ -42,5 +42,5 @@ inline static uint8_t is_irq_enabled(void)
 {
     size_t flags;
     __asm__ __volatile__("pushf; pop %0;" : "=r"(flags) : : "memory");
-    return flags & (1 << 9);
+    return (flags & (1U << 9)) != 0;
 }

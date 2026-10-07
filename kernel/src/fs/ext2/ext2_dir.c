@@ -24,6 +24,14 @@ ext2_dirent_t *ext2_direntry_iterator_get(ext2_direntry_iterator_t *it)
 /// @return 1 if valid, 0 otherwise.
 int ext2_direntry_iterator_valid(ext2_direntry_iterator_t *it) { return it->direntry != NULL; }
 
+/// @brief Check whether iteration stopped because the directory could not be read.
+/// @param it The iterator to inspect.
+/// @return 1 after an I/O or malformed-record error, otherwise 0.
+int ext2_direntry_iterator_failed(const ext2_direntry_iterator_t *it)
+{
+    return it != NULL && it->error < 0;
+}
+
 /// @brief Initializes the iterator and reads the first block.
 /// @param fs pointer to the filesystem.
 /// @param cache used for reading.
@@ -38,10 +46,12 @@ ext2_direntry_iterator_t ext2_direntry_iterator_begin(ext2_filesystem_t *fs, uin
         .block_index  = 0,
         .total_offset = 0,
         .block_offset = 0,
-        .direntry     = NULL};
+        .direntry     = NULL,
+        .error        = 0};
     // Start by reading the first block of the inode.
     if (ext2_read_inode_block(fs, inode, it.block_index, cache) < 0) {
         pr_err("Failed to read the inode block `%d`\n", it.block_index);
+        it.error = -EIO;
     } else {
         // Initialize the directory entry.
         it.direntry = ext2_direntry_iterator_get(&it);
@@ -64,6 +74,7 @@ void ext2_direntry_iterator_next(ext2_direntry_iterator_t *it)
         pr_err(
             "Corrupt directory entry: rec_len %u at offset %u of block %u.\n", rec_len, it->block_offset,
             it->block_index);
+        it->error = -EIO;
         it->direntry = NULL;
         return;
     }
@@ -83,6 +94,7 @@ void ext2_direntry_iterator_next(ext2_direntry_iterator_t *it)
         // Read the new block.
         if (ext2_read_inode_block(it->fs, it->inode, it->block_index, it->cache) < 0) {
             pr_err("Failed to read the inode block `%d`.\n", it->block_index);
+            it->error = -EIO;
             // The iterator is not valid anymore.
             it->direntry = NULL;
             return;
@@ -115,6 +127,10 @@ static inline int ext2_directory_is_empty(ext2_filesystem_t *fs, uint8_t *cache,
         if (it.direntry->inode != 0) {
             return 0;
         }
+    }
+    if (ext2_direntry_iterator_failed(&it)) {
+        pr_err("Cannot determine whether the directory is empty: block read failed.\n");
+        return 0;
     }
     return 1;
 }
@@ -203,6 +219,10 @@ int ext2_initialize_new_direntry_block(ext2_filesystem_t *fs, uint32_t inode_ind
 
     // Allocate memory for the cache
     uint8_t *cache = ext2_alloc_cache(fs);
+    if (cache == NULL) {
+        pr_err("Failed to allocate the cache for directory block %u.\n", block_index);
+        return 0;
+    }
 
     // Get the first uninitialized directory entry in the block
     ext2_dirent_t *direntry = (ext2_dirent_t *)cache;
@@ -277,6 +297,9 @@ static inline int ext2_get_free_direntry(
             ext2_dump_dirent(it.direntry);
             return 1;
         }
+    }
+    if (ext2_direntry_iterator_failed(&it)) {
+        pr_err("Cannot find a free directory entry: directory walk failed.\n");
     }
     return 0;
 }
@@ -356,6 +379,9 @@ static inline int ext2_append_new_direntry(
             return 0;
         }
         return 1;
+    }
+    if (ext2_direntry_iterator_failed(&it)) {
+        pr_err("Cannot append a directory entry: directory walk failed.\n");
     }
     return 0;
 }
@@ -479,6 +505,10 @@ int ext2_allocate_direntry(
     }
     // Allocate the cache.
     uint8_t *cache = ext2_alloc_cache(fs);
+    if (cache == NULL) {
+        pr_err("Failed to allocate the cache to create a directory entry.\n");
+        return -ENOMEM;
+    }
 
     // pr_debug("BEFORE:\n");
     // ext2_dump_direntries(fs, cache, &parent_inode);
@@ -696,6 +726,9 @@ int ext2_find_direntry(ext2_filesystem_t *fs, ino_t ino, const char *name, ext2_
     // Copy the inode of the parent, even if we did not find the entry.
     search->parent_inode = ino;
     // Check if we have found the entry.
+    if (ext2_direntry_iterator_failed(&it)) {
+        goto free_cache_return_io_error;
+    }
     if (it.direntry == NULL) {
         goto free_cache_return_error;
     }
@@ -732,4 +765,7 @@ free_cache_return_error:
     // Free the cache.
     ext2_dealloc_cache(cache);
     return -ENOENT;
+free_cache_return_io_error:
+    ext2_dealloc_cache(cache);
+    return -EIO;
 }

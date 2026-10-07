@@ -6,11 +6,20 @@ set(TEST_LIST
     t_dir_entries.c
     t_dup.c
     t_hashmap.c
+    t_proc_feedback.c
     t_procfs_read.c
     t_list.c
     t_msgget.c
+    t_pipe_eof_data.c
     t_pipe_blocking.c
+    t_resumable_context.c
+    t_resumable_timer_irq.c
+    t_resumable_timer_fanout.c
+    t_fpu_context.c
+    t_resumable_signals.c
     t_syslog.c
+    t_userptr.c
+    t_symlink.c
     t_periodic2.c
     t_sigfpe.c
     t_creat.c
@@ -41,6 +50,7 @@ set(TEST_LIST
     t_font.c
     t_sigusr.c
     t_kill.c
+    t_kill_perm.c
     t_periodic1.c
     t_chdir.c
     t_fhs.c
@@ -58,6 +68,7 @@ set(TEST_LIST
     t_stdint.c
     t_mount_boundary.c
     t_name_max.c
+    t_nice.c
     t_alarm.c
     t_exit.c
     t_environ.c
@@ -69,6 +80,7 @@ set(TEST_LIST
     t_getcwd.c
     t_semflg.c
     t_shebang.c
+    t_sync.c
     t_time.c
     t_big_write.c
     t_sigmask.c

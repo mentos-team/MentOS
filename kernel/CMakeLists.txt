@@ -12,6 +12,7 @@ option(ENABLE_PAGE_TRACE "Enables page allocation tracing." OFF)
 option(ENABLE_EXT2_TRACE "Enables EXT2 allocation tracing." OFF)
 option(ENABLE_FILE_TRACE "Enables vfs_file allocation tracing." OFF)
 option(ENABLE_KERNEL_TESTS "Enable kernel-side unit and integration tests" OFF)
+option(ENABLE_KERNEL_STACK_USAGE "Emit GCC .su stack-usage reports for kernel C sources" OFF)
 option(ENABLE_PERF "Enables the perf counter facility (klib/perf.h)." OFF)
 option(ENABLE_SCHEDULER_FEEDBACK "Enables scheduling feedback on terminal." OFF)
 option(ENABLE_ATA_FAULT_INJECTION "Enables deliberate failure of block transfers, for testing." OFF)
@@ -108,6 +109,13 @@ endif()
 set(KERNEL_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/inc ${CMAKE_SOURCE_DIR}/lib/inc)
 # Create the kernel static library - explicitly include multiboot.c since it's needed by both kernel and bootloader
 add_library(kernel ${KERNEL_SOURCES} "${CMAKE_CURRENT_SOURCE_DIR}/src/multiboot.c")
+# Stack-usage reports are deliberately opt-in and kernel-only.  Applying the
+# option through a language generator expression keeps NASM sources untouched;
+# GCC writes one .su file next to each corresponding object file.
+if(ENABLE_KERNEL_STACK_USAGE)
+    target_compile_options(kernel PRIVATE $<$<COMPILE_LANGUAGE:C>:-fstack-usage>)
+    message(STATUS "Kernel stack-usage reports enabled (.su files in the kernel build tree).")
+endif()
 # Add the includes.
 target_include_directories(kernel PUBLIC ${KERNEL_INCLUDE_DIRS})
 # Define that this code is kernel code.

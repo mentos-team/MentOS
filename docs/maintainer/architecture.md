@@ -32,9 +32,10 @@ userspace/
 filesystem/  the rootfs staging tree — binaries are copied here by the build;
              mke2fs turns it into rootfs.img
 iso/         grub cfg for boot/test ISOs (grub.cfg, grub.cfg.runtests)
-scripts/     run-qemu-test, tapview
-tools/       toolchain-i686-elf.cmake (cross-compiler settings; the observed
-             workspace builds used host gcc -m32 instead)
+scripts/     run-qemu-test, run-qemu-kernel-test, tapview
+cmake/       CMake helpers, including toolchain-i686-elf.cmake and the
+              symlink-fixture image helper (the observed workspace builds
+              used host gcc -m32 instead)
 ```
 
 ## Subsystems and ownership boundaries (VERIFIED FACTS from call-path tracing)
@@ -116,4 +117,5 @@ builds, driven by `grub.cfg.runtests`).
   (ext2.md, issue #192).
 - Local `develop` and GitHub `main` have diverged historically; when
   reviewing PRs, always compute the PR's true base (merge-base with its
-  head), never trust the local checkout (see investigation-history.md).
+  head), never trust the local checkout. Fetch first: the remote is SSH and
+  a failed fetch leaves stale `origin/*` refs without saying so.

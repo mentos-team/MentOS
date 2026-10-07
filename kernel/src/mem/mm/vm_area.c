@@ -282,7 +282,7 @@ int vm_area_is_valid(mm_struct_t *mm, uintptr_t vm_start, uintptr_t vm_end)
         return -1;
     }
     if (vm_start >= vm_end) {
-        pr_crit("Invalid arguments: vm_start >= vm_end (0x%p >= 0x%p).\n", (void *)vm_start, (void *)vm_end);
+        pr_crit("Invalid arguments: vm_start >= vm_end (%p >= %p).\n", (void *)vm_start, (void *)vm_end);
         return -1;
     }
 

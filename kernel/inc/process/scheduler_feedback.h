@@ -39,3 +39,13 @@ void scheduler_feedback_task_update(task_struct *task);
 /// statistics of the scheduler feedback system, adjusting task priorities and
 /// managing scheduling decisions for all tasks.
 void scheduler_feedback_update(void);
+
+/// @brief Formats the current scheduling statistics into a human-readable string.
+/// @param buffer the buffer where the formatted statistics are stored.
+/// @param bufsize the size of the buffer.
+/// @return the number of bytes written into buffer (excluding the terminator).
+/// @details This is the same information periodically emitted by
+/// scheduler_feedback_update() to the kernel log, exposed so that callers
+/// (e.g. /proc/feedback) can retrieve it directly without having to poll
+/// the kernel log.
+ssize_t scheduler_feedback_to_string(char *buffer, size_t bufsize);

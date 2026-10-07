@@ -7,18 +7,16 @@
 #include "io/debug.h"
 #include "io/port_io.h"
 
-/// Debug exit port for QEMU isa-debug-exit device (default iobase=0x501)
-/// Exit code encoding: host_exit = (guest_value << 1) | 1
-#define DEBUG_EXIT_PORT 0x501
-extern int runtests;
+/// Set for every non-interactive boot mode: see kernel.c.
+extern int qemu_exit_on_panic;
 
 void kernel_panic(const char *msg)
 {
     pr_emerg("\nPANIC:\n%s\n\nWelcome to Kernel Debugging Land...\n", msg);
     __asm__ __volatile__("cli"); // Disable interrupts
-    if (runtests) {
+    if (qemu_exit_on_panic) {
         // Signal failure via isa-debug-exit (guest write 0x11 → host exit 35)
-        outports(DEBUG_EXIT_PORT, 0x11);
+        outports(DEBUG_EXIT_PORT, DEBUG_EXIT_FAILURE);
     }
     for (;;) {
         // Decrease power consumption with hlt.

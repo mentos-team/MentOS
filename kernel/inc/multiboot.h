@@ -75,25 +75,25 @@
 
 /// The symbol table for a.out.
 typedef struct multiboot_aout_symbol_table {
-    /// TODO: Comment.
+    /// Size of the symbol table, in bytes.
     uint32_t tabsize;
-    /// TODO: Comment.
+    /// Size of the string table the symbol names come from, in bytes.
     uint32_t strsize;
-    /// TODO: Comment.
+    /// Physical address of the symbol table.
     uint32_t addr;
-    /// TODO: Comment.
+    /// Reserved; the boot loader sets it to 0.
     uint32_t reserved;
 } multiboot_aout_symbol_table_t;
 
 /// The section header table for ELF.
 typedef struct multiboot_elf_section_header_table {
-    /// TODO: Comment.
+    /// Number of entries in the section header table.
     uint32_t num;
-    /// TODO: Comment.
+    /// Size of one entry, in bytes.
     uint32_t size;
-    /// TODO: Comment.
+    /// Physical address of the section header table.
     uint32_t addr;
-    /// TODO: Comment.
+    /// Index of the section that holds the section-name string table.
     uint32_t shndx;
 } multiboot_elf_section_header_table_t;
 
@@ -175,40 +175,51 @@ typedef struct multiboot_info {
     uint32_t vbe_interface_off;
     /// VBE3.0 interface segment length.
     uint32_t vbe_interface_len;
-    /// TODO: Comment.
+    /// Physical address of the framebuffer. The specification makes this
+    /// field 64 bits wide; only the low half is kept here, which is all a
+    /// 32-bit kernel can map anyway.
     uint32_t framebuffer_addr;
-    /// TODO: Comment.
+    /// Bytes from the start of one row of pixels to the start of the next.
+    /// This is not width times bytes-per-pixel: a row may be padded.
     uint32_t framebuffer_pitch;
-    /// TODO: Comment.
+    /// Width of the framebuffer, in pixels for a graphics mode and in
+    /// characters for a text one.
     uint32_t framebuffer_width;
-    /// TODO: Comment.
+    /// Height of the framebuffer, in pixels for a graphics mode and in
+    /// characters for a text one.
     uint32_t framebuffer_height;
-    /// TODO: Comment.
+    /// Bits per pixel.
     uint32_t framebuffer_bpp;
-    /// TODO: Comment.
+    /// Which of the three framebuffer kinds this is: 0 indexed colour,
+    /// 1 direct RGB, 2 EGA-standard text. It selects which arm of
+    /// framebuffer_info below is meaningful.
     uint32_t framebuffer_type;
-    /// TODO: Comment.
+    /// How to turn a value into a colour. Which arm is valid is decided by
+    /// framebuffer_type, and neither is meaningful for a text mode.
     union {
-        /// TODO: Comment.
+        /// Valid when framebuffer_type is 0: colours are indices into a
+        /// palette the boot loader provides.
         struct {
-            /// TODO: Comment.
+            /// Physical address of the palette.
             uint32_t framebuffer_palette_addr;
-            /// TODO: Comment.
+            /// Number of entries in the palette.
             uint16_t framebuffer_palette_num_colors;
         } palette_field;
-        /// TODO: Comment.
+        /// Valid when framebuffer_type is 1: colours are direct RGB, and each
+        /// channel is described by where it starts in the pixel and how wide
+        /// it is.
         struct {
-            /// TODO: Comment.
+            /// Bit position where the red channel starts.
             uint8_t framebuffer_red_field_position;
-            /// TODO: Comment.
+            /// Width of the red channel, in bits.
             uint8_t framebuffer_red_mask_size;
-            /// TODO: Comment.
+            /// Bit position where the green channel starts.
             uint8_t framebuffer_green_field_position;
-            /// TODO: Comment.
+            /// Width of the green channel, in bits.
             uint8_t framebuffer_green_mask_size;
-            /// TODO: Comment.
+            /// Bit position where the blue channel starts.
             uint8_t framebuffer_blue_field_position;
-            /// TODO: Comment.
+            /// Width of the blue channel, in bits.
             uint8_t framebuffer_blue_mask_size;
         } rgb_field;
     } framebuffer_info;

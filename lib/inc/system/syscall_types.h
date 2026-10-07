@@ -4,6 +4,10 @@
 /// See LICENSE.md for details.
 
 #pragma once
+
+/// Offset that encodes successful nice values outside the negative errno range.
+#define NICE_RETURN_OFFSET 20
+
 #define __NR_exit                   1   ///< System-call number for `exit`
 #define __NR_fork                   2   ///< System-call number for `fork`
 #define __NR_read                   3   ///< System-call number for `read`
