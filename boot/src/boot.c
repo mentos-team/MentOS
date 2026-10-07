@@ -4,13 +4,12 @@
 /// See LICENSE.md for details.
 
 #include "boot/boot_info.h"
-#include "boot_bits.h"
-#include "boot_cpu.h"
 #include "boot_console.h"
 #include "boot_elf.h"
 #include "boot_module.h"
 #include "boot_math.h"
 #include "boot_paging.h"
+#include "boot_paging_ops.h"
 #include "boot/multiboot.h"
 
 #include "stddef.h"
@@ -60,80 +59,6 @@ static inline uint32_t __align_rdown(uint32_t addr, uint32_t value) { return add
 /// @param pfn_virt_start The first virtual page frame.
 /// @param pfn_phys_start The first physical page frame.
 /// @param pfn_count The number of page frames.
-static void __setup_pages(uint32_t pfn_virt_start, uint32_t pfn_phys_start, uint32_t pfn_count)
-{
-    uint32_t base_pgtable = pfn_virt_start / 1024;
-    uint32_t base_pgentry = pfn_virt_start % 1024;
-
-    uint32_t pg_offset = 0;
-    for (uint32_t i = base_pgtable; i < 1024 && pfn_count; i++) {
-        boot_page_table_t *table = boot_pgtables + i;
-
-        uint32_t pgentry_start = (i == base_pgtable) ? base_pgentry : 0;
-
-        for (uint32_t j = pgentry_start; j < 1024 && pfn_count; j++, pfn_count--) {
-            table->pages[j].frame   = pfn_phys_start + pg_offset++;
-            table->pages[j].rw      = 1;
-            table->pages[j].present = 1;
-            table->pages[j].global  = 0;
-            table->pages[j].user    = 0;
-        }
-        boot_pgdir.entries[i].rw        = 1;
-        boot_pgdir.entries[i].present   = 1;
-        boot_pgdir.entries[i].available = 1;
-        boot_pgdir.entries[i].frame     = ((uint32_t)table) >> 12U;
-    }
-}
-
-/// @brief Setup paging mapping all the low memory to two places: one is the
-/// physical address of the memory itself the other is in the virtual kernel
-/// address space.
-static inline void __setup_boot_paging(void)
-{
-    uint32_t kernel_base_phy_page  = boot_info.kernel_phy_start >> 12U;
-    uint32_t kernel_base_virt_page = boot_info.kernel_start >> 12U;
-    // Compute the last physical page.
-    uint32_t lowmem_last_phy_page  = ((uint32_t)(boot_info.lowmem_phy_end - 1)) >> 12U;
-    // Compute the number of pages.
-    uint32_t num_pages             = lowmem_last_phy_page - kernel_base_phy_page + 1;
-    // Map lowmem physical pages also to their physical address (to keep bootloader working)
-    __setup_pages(0, 0, lowmem_last_phy_page);
-    // Setup kernel virtual address space + lowmem
-    __setup_pages(kernel_base_virt_page, kernel_base_phy_page, num_pages);
-}
-
-/// @brief Removes the page below the boot-time kernel stack from its mapping.
-/// @details The stack grows downward from stack_base. Keeping the first page
-///          below it unmapped turns an overflow into a page fault instead of
-///          allowing it to corrupt the low-memory allocator.
-static void __protect_kernel_stack_guard_page(void)
-{
-    uint32_t guard_address = boot_info.stack_base - boot_info.stack_size;
-    uint32_t directory     = guard_address >> 22U;
-    uint32_t table_index   = (guard_address >> 12U) & 0x3FFU;
-
-    if (!boot_pgdir.entries[directory].present) {
-        boot_console_puts("[bootloader] Kernel stack guard directory is not mapped.\n");
-        return;
-    }
-
-    boot_pgtables[directory].pages[table_index].present = 0;
-}
-
-static void boot_paging_enable(void)
-{
-    // Clear the PSE bit from cr4.
-    boot_set_cr4(boot_bit_clear(boot_get_cr4(), BOOT_CR4_PSE));
-    // Set the PG bit in cr0.
-    boot_set_cr0(boot_bit_set(boot_get_cr0(), BOOT_CR0_PG));
-}
-
-static int boot_paging_switch_pgd(boot_page_directory_t *dir)
-{
-    boot_set_cr3((uintptr_t)dir);
-    return 0;
-}
-
 /// @brief Entry point of the bootloader.
 /// @param magic  The magic number coming from the multiboot assembly code.
 /// @param header Multiboot header provided by the bootloader.
@@ -202,11 +127,11 @@ void boot_main(uint32_t magic, multiboot_info_t *header, uint32_t esp)
 
     // Setup the page directory and page tables for the boot.
     boot_console_puts("[bootloader] Setting up paging...\n");
-    __setup_boot_paging();
+    boot_paging_setup(&boot_info, &boot_pgdir, boot_pgtables);
 
     // Switch to the newly created page directory.
     boot_console_puts("[bootloader] Switching page directory...\n");
-    boot_paging_switch_pgd(&boot_pgdir);
+    boot_paging_switch_directory(&boot_pgdir);
 
     // Enable paging.
     boot_console_puts("[bootloader] Enabling paging...\n");
@@ -221,7 +146,7 @@ void boot_main(uint32_t magic, multiboot_info_t *header, uint32_t esp)
     boot_console_puts("[bootloader] Relocating kernel image...\n");
     boot_relocate_kernel_image(elf_hdr);
 
-    __protect_kernel_stack_guard_page();
+    boot_paging_protect_stack_guard(&boot_info, &boot_pgdir, boot_pgtables);
 
     boot_console_puts("[bootloader] Calling `boot_kernel`...\n\n");
     boot_kernel(boot_info.stack_base, elf_hdr->entry, &boot_info);
