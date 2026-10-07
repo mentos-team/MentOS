@@ -83,6 +83,7 @@ static char *all_tests[] = {
     "t_pipe_blocking",
     "t_resumable_context",
     "t_resumable_timer_irq",
+    "t_resumable_timer_fanout",
     "t_fpu_context",
     "t_resumable_signals",
     "t_pipe_non_blocking",
