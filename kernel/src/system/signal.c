@@ -757,11 +757,14 @@ static int __kill(pid_t pid, int sig, const task_struct *sender)
     }
     siginfo_t info;
     info.si_signo           = sig;
-    info.si_code            = SI_USER;
+    // Signals sent by a task carry the sender's identity.  Kernel-generated
+    // signals have no userspace sender, so keep their identity fields zeroed
+    // and identify them with SI_KERNEL.
+    info.si_code            = sender != NULL ? SI_USER : SI_KERNEL;
     info.si_value.sival_int = 0;
     info.si_errno           = 0;
-    info.si_pid             = process->pid;
-    info.si_uid             = process->uid;
+    info.si_pid             = sender != NULL ? sender->pid : 0;
+    info.si_uid             = sender != NULL ? sender->ruid : 0;
     info.si_addr            = NULL;
     info.si_status          = 0;
     info.si_band            = 0;
