@@ -7,12 +7,12 @@
 #include "boot_bits.h"
 #include "boot_cpu.h"
 #include "boot_console.h"
+#include "boot_elf.h"
 #include "boot_module.h"
 #include "boot_math.h"
 #include "boot_paging.h"
 #include "boot/multiboot.h"
 
-#include "elf/elf.h"
 #include "stddef.h"
 
 /// @defgroup bootloader Bootloader
@@ -55,89 +55,6 @@ static inline uint32_t __align_rup(uint32_t addr, uint32_t value)
 /// @param value the value used to align.
 /// @return the aligned address.
 static inline uint32_t __align_rdown(uint32_t addr, uint32_t value) { return addr - (addr % value); }
-
-/// @brief Add two 32-bit values while detecting wraparound.
-static int __u32_add_overflows(uint32_t left, uint32_t right, uint32_t *result)
-{
-    if (left > UINT32_MAX - right) {
-        return 1;
-    }
-    *result = left + right;
-    return 0;
-}
-
-/// @brief Check whether an integer is a valid power-of-two alignment.
-static int __is_power_of_two(uint32_t value)
-{
-    return value == 0 || (value & (value - 1U)) == 0;
-}
-
-/// @brief Validate the ELF image before any segment is copied.
-/// @param header Candidate ELF header in the Multiboot module.
-/// @param image_size Number of bytes available in the module.
-static void __validate_kernel_image(const elf_header_t *header, uint32_t image_size)
-{
-    uint32_t table_end;
-    uint32_t loadable_segments = 0;
-    int entry_is_executable = 0;
-
-    if (image_size < sizeof(*header)) {
-        boot_fatal("kernel module is smaller than an ELF header");
-    }
-    if (header->ident[EI_MAG0] != ELFMAG0 || header->ident[EI_MAG1] != ELFMAG1 ||
-        header->ident[EI_MAG2] != ELFMAG2 || header->ident[EI_MAG3] != ELFMAG3 ||
-        header->ident[EI_CLASS] != ELFCLASS32 || header->ident[EI_DATA] != ELFDATA2LSB ||
-        header->ident[EI_VERSION] != EV_CURRENT || header->type != ET_EXEC || header->machine != EM_386 ||
-        header->version != EV_CURRENT || header->ehsize != sizeof(*header) ||
-        header->phentsize != sizeof(elf_program_header_t) || !header->phnum) {
-        boot_fatal("kernel module has an unsupported ELF header");
-    }
-    if (header->phnum > UINT32_MAX / header->phentsize ||
-        __u32_add_overflows(header->phoff, (uint32_t)header->phnum * header->phentsize, &table_end) ||
-        table_end > image_size) {
-        boot_fatal("kernel module program headers are out of bounds");
-    }
-
-    const elf_program_header_t *program_headers =
-        (const elf_program_header_t *)((uintptr_t)header + header->phoff);
-    for (uint32_t i = 0; i < header->phnum; ++i) {
-        const elf_program_header_t *program = &program_headers[i];
-        uint32_t file_end;
-        uint32_t virtual_end;
-
-        if (program->type != PT_LOAD) {
-            continue;
-        }
-        ++loadable_segments;
-        if (program->filesz > program->memsz ||
-            __u32_add_overflows(program->offset, program->filesz, &file_end) || file_end > image_size ||
-            __u32_add_overflows(program->vaddr, program->memsz, &virtual_end) ||
-            program->vaddr < BOOT_KERNEL_VIRT_START || virtual_end > BOOT_KERNEL_VIRT_END ||
-            !__is_power_of_two(program->align) ||
-            (program->align > 1U && ((program->vaddr - program->offset) & (program->align - 1U)) != 0)) {
-            boot_fatal("kernel module has an invalid load segment");
-        }
-
-        for (uint32_t previous = 0; previous < i; ++previous) {
-            const elf_program_header_t *other = &program_headers[previous];
-            uint32_t other_end;
-            if (other->type != PT_LOAD) {
-                continue;
-            }
-            __u32_add_overflows(other->vaddr, other->memsz, &other_end);
-            if (program->vaddr < other_end && other->vaddr < virtual_end) {
-                boot_fatal("kernel module load segments overlap");
-            }
-        }
-        if ((program->flags & PF_X) && header->entry >= program->vaddr && header->entry < virtual_end) {
-            entry_is_executable = 1;
-        }
-    }
-
-    if (!loadable_segments || !entry_is_executable) {
-        boot_fatal("kernel module has no executable entry segment");
-    }
-}
 
 /// @brief Prepares the page frames.
 /// @param pfn_virt_start The first virtual page frame.
@@ -203,74 +120,6 @@ static void __protect_kernel_stack_guard_page(void)
     boot_pgtables[directory].pages[table_index].present = 0;
 }
 
-/// @brief Extract the starting and ending address of the kernel.
-/// @param elf_hdr The elf header of the kernel.
-/// @param virt_low  Output variable where we store the lowest address of the kernel.
-/// @param virt_high Output variable where we store the highest address of the kernel.
-static void __get_kernel_low_high(elf_header_t *elf_hdr, uint32_t *virt_low, uint32_t *virt_high)
-{
-    // Prepare a pointer to a program header.
-    elf_program_header_t *program_header;
-    // Compute the offset for accessing the program headers.
-    uint32_t offset = (uint32_t)elf_hdr + elf_hdr->phoff;
-    // In this two variables we will store the start and end addresses of the segment.
-    uint32_t segment_start;
-    uint32_t segment_end;
-    // Iterate for each program header.
-    for (int i = 0; i < elf_hdr->phnum; i++) {
-        program_header = (elf_program_header_t *)(offset + (elf_hdr->phentsize * i));
-        if (program_header->type == PT_LOAD) {
-            // Take the start and end addresses of the segment from the program header.
-            segment_start = program_header->vaddr;
-            segment_end   = segment_start + program_header->memsz;
-            // Take the lowest and highest virtual address.
-            *virt_low     = boot_min(*virt_low, segment_start);
-            *virt_high    = boot_max(*virt_high, segment_end);
-        }
-    }
-}
-
-/// @brief Relocate the kernel image.
-/// @param elf_hdr The elf header of the kernel.
-static inline void __relocate_kernel_image(elf_header_t *elf_hdr)
-{
-    // Support variables.
-    elf_program_header_t *program_header;
-    char *kernel_start;
-    char *virtual_address;
-    char *physical_address;
-    uint32_t offset;
-    uint32_t valid_size;
-
-    // Get the elf file starting address.
-    kernel_start = (char *)elf_hdr;
-    // Compute the offset for accessing the program headers.
-    offset       = (uint32_t)kernel_start + elf_hdr->phoff;
-    // Iterate over the program headers.
-    for (int i = 0; i < elf_hdr->phnum; i++) {
-        // Get the program header.
-        program_header   = (elf_program_header_t *)(offset + (elf_hdr->phentsize * i));
-        // Get the virtual address of the program header.
-        virtual_address  = (char *)program_header->vaddr;
-        // Get the physical address of the program header.
-        physical_address = (kernel_start + program_header->offset);
-        // Move only the loadable segments.
-        if (program_header->type == PT_LOAD) {
-            // Get the valid size of the segment by taking the minimum between
-            // the size in bytes of the segment in the file image, in memory.
-            valid_size = boot_min(program_header->filesz, program_header->memsz);
-            // Copy the physical data of the image to the corresponding virtual address.
-            for (uint32_t j = 0; j < valid_size; j++) {
-                virtual_address[j] = physical_address[j];
-            }
-            // Set to 0 parts not present in memory!
-            for (uint32_t j = valid_size; j < program_header->memsz; j++) {
-                virtual_address[j] = 0;
-            }
-        }
-    }
-}
-
 static void boot_paging_enable(void)
 {
     // Clear the PSE bit from cr4.
@@ -295,7 +144,7 @@ void boot_main(uint32_t magic, multiboot_info_t *header, uint32_t esp)
     uint32_t kernel_image_size = 0;
     const unsigned char *kernel_image = boot_get_kernel_image(header, &kernel_image_size);
     elf_header_t *elf_hdr = (elf_header_t *)kernel_image;
-    __validate_kernel_image(elf_hdr, kernel_image_size);
+    boot_validate_kernel_image(elf_hdr, kernel_image_size);
 
     // Get the physical addresses of where the kernel starts and ends.
     uint32_t boot_start = (uint32_t)_bootloader_start;
@@ -304,7 +153,7 @@ void boot_main(uint32_t magic, multiboot_info_t *header, uint32_t esp)
     // Extract the lowest and highest address of the kernel.
     uint32_t kernel_virt_low  = 0xFFFFFFFF;
     uint32_t kernel_virt_high = 0;
-    __get_kernel_low_high(elf_hdr, &kernel_virt_low, &kernel_virt_high);
+    boot_get_kernel_low_high(elf_hdr, &kernel_virt_low, &kernel_virt_high);
 
     // Initialize the boot_info_t structure.
     boot_console_puts("[bootloader] Initializing the boot_info structure...\n");
@@ -370,7 +219,7 @@ void boot_main(uint32_t magic, multiboot_info_t *header, uint32_t esp)
     boot_info.lowmem_virt_end = boot_info.lowmem_virt_end - KERNEL_STACK_SIZE;
 
     boot_console_puts("[bootloader] Relocating kernel image...\n");
-    __relocate_kernel_image(elf_hdr);
+    boot_relocate_kernel_image(elf_hdr);
 
     __protect_kernel_stack_guard_page();
 
