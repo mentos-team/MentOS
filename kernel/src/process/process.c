@@ -20,12 +20,15 @@
 #include "libgen.h"
 #include "mem/mm/mm.h"
 #include "mem/mm/vmem.h"
+#include "mem/alloc/slab.h"
+#include "mem/alloc/zone_allocator.h"
 #include "mem/uaccess.h"
 #include "process/exec_args.h"
 #include "process/pid_manager.h"
 #include "process/prio.h"
 #include "process/process.h"
 #include "process/scheduler.h"
+#include "process/switch.h"
 #include "process/wait.h"
 #include "string.h"
 #include "sys/stat.h"
@@ -34,6 +37,106 @@
 
 /// Cache for creating the task structs.
 static kmem_cache_t *task_struct_cache;
+
+int task_kernel_stack_alloc(task_struct *task)
+{
+    if (task == NULL || task->kernel_stack != NULL) {
+        return task != NULL;
+    }
+    task->kernel_stack = (void *)alloc_pages_lowmem(GFP_KERNEL, TASK_KERNEL_STACK_ORDER);
+    if (task->kernel_stack == NULL) {
+        task->kernel_stack_top = 0;
+        task->kernel_stack_size = 0;
+        return 0;
+    }
+    task->kernel_stack_top  = (uintptr_t)task->kernel_stack + TASK_KERNEL_STACK_SIZE;
+    task->kernel_stack_size = TASK_KERNEL_STACK_SIZE;
+    memset(task->kernel_stack, 0, task->kernel_stack_size);
+    uint32_t *fill = (uint32_t *)((uintptr_t)task->kernel_stack + TASK_KERNEL_STACK_CANARY_SIZE);
+    size_t fill_words = (task->kernel_stack_size - TASK_KERNEL_STACK_CANARY_SIZE) / sizeof(*fill);
+    for (size_t i = 0; i < fill_words; ++i) {
+        fill[i] = TASK_KERNEL_STACK_FILL;
+    }
+    uint32_t *canary = (uint32_t *)task->kernel_stack;
+    for (size_t i = 0; i < TASK_KERNEL_STACK_CANARY_SIZE / sizeof(*canary); ++i) {
+        canary[i] = TASK_KERNEL_STACK_CANARY;
+    }
+    return 1;
+}
+
+void task_kernel_stack_free(task_struct *task)
+{
+    if (task == NULL || task->kernel_stack == NULL) {
+        return;
+    }
+    free_pages_lowmem((uint32_t)task->kernel_stack);
+    task->kernel_stack = NULL;
+    task->kernel_stack_top = 0;
+    task->kernel_stack_size = 0;
+}
+
+int task_kernel_stack_check(const task_struct *task)
+{
+    if (task == NULL || task->kernel_stack == NULL) {
+        return 1;
+    }
+    const uint32_t *canary = (const uint32_t *)task->kernel_stack;
+    for (size_t i = 0; i < TASK_KERNEL_STACK_CANARY_SIZE / sizeof(*canary); ++i) {
+        if (canary[i] != TASK_KERNEL_STACK_CANARY) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+size_t task_kernel_stack_watermark(const task_struct *task)
+{
+    if (task == NULL || task->kernel_stack == NULL || task->kernel_stack_top == 0 || task->kernel_stack_size <= TASK_KERNEL_STACK_CANARY_SIZE) {
+        return 0;
+    }
+
+    const uint32_t *word = (const uint32_t *)(task->kernel_stack_top - sizeof(uint32_t));
+    const uintptr_t fill_start = (uintptr_t)task->kernel_stack + TASK_KERNEL_STACK_CANARY_SIZE;
+    while ((uintptr_t)word >= fill_start && *word == TASK_KERNEL_STACK_FILL) {
+        --word;
+    }
+
+    uintptr_t first_written = (uintptr_t)word + sizeof(uint32_t);
+    if (first_written > task->kernel_stack_top) {
+        first_written = task->kernel_stack_top;
+    }
+    return (size_t)(task->kernel_stack_top - first_written);
+}
+
+int task_prepare_kernel_context(task_struct *task)
+{
+    if (task == NULL || task->kernel_stack == NULL || task->kernel_stack_top == 0) {
+        return -1;
+    }
+
+    uintptr_t frame_addr = task->kernel_stack_top - sizeof(pt_regs_t);
+    uintptr_t switch_addr = frame_addr - SWITCH_FRAME_SIZE;
+    uint32_t *switch_frame = (uint32_t *)switch_addr;
+    pt_regs_t *frame = (pt_regs_t *)frame_addr;
+
+    memset(switch_frame, 0, SWITCH_FRAME_SIZE);
+    switch_frame[4] = (uint32_t)(uintptr_t)ret_from_fork;
+    *frame = task->thread.regs;
+    frame->eflags |= EFLAG_IF | (1U << 1);
+    frame->cs = 0x1b;
+    frame->ss = 0x23;
+    frame->ds = 0x23;
+    frame->es = 0x23;
+    frame->fs = 0x23;
+    frame->gs = 0x23;
+    task->thread.regs = *frame;
+    /* The synthetic frame is a user return context, not a live kernel
+     * continuation.  A real trap will publish its own frame later. */
+    task->thread.user_regs = NULL;
+    task->thread.kernel_esp = (uint32_t)switch_addr;
+    task->thread.context_kind = THREAD_CONTEXT_FIRST_RETURN;
+    return 0;
+}
 
 /// @brief Clears the user stack of a freshly created memory descriptor.
 /// @param mm the memory descriptor whose stack must be cleared.
@@ -95,6 +198,7 @@ static int __load_executable(const char *path, task_struct *task, uint32_t *entr
     int interpreter_loop   = 0;
     // The duplicated interpreter path, it must be freed on every exit path.
     char *interpreter_path = NULL;
+    char *shebang = NULL;
     // The candidate memory image: until the load succeeds it is completely
     // separate from the running image of the task (#208).
     mm_struct_t *candidate = NULL;
@@ -147,8 +251,16 @@ start:
         }
 
         // Read the shebang line, keep one byte free for the terminator.
-        char buf[PATH_MAX];
-        ssize_t bytes_read = vfs_read(file, buf, 2, sizeof(buf) - 1);
+        if (shebang != NULL) {
+            kfree(shebang);
+            shebang = NULL;
+        }
+        shebang = kmalloc(PATH_MAX);
+        if (!shebang) {
+            ret = -ENOMEM;
+            goto close_and_return;
+        }
+        ssize_t bytes_read = vfs_read(file, shebang, 2, PATH_MAX - 1);
         // The reference to the script file is no longer needed.
         vfs_close(file);
         file = NULL;
@@ -159,17 +271,17 @@ start:
             ret = -EIO;
             goto close_and_return;
         }
-        buf[bytes_read] = 0;
+        shebang[bytes_read] = 0;
 
         // Find end of the line
-        char *lineend = strchr(buf, '\n');
+        char *lineend = strchr(shebang, '\n');
         if (!lineend) {
             ret = -ENAMETOOLONG;
             goto close_and_return;
         }
         *lineend = 0;
 
-        interpreter_path = strdup(buf);
+        interpreter_path = strdup(shebang);
         if (interpreter_path == NULL) {
             ret = -ENOMEM;
             goto close_and_return;
@@ -225,6 +337,9 @@ close_and_return:
     if (interpreter_path != NULL) {
         kfree(interpreter_path);
     }
+    if (shebang) {
+        kfree(shebang);
+    }
     return ret;
 }
 
@@ -239,6 +354,13 @@ static inline task_struct *__alloc_task(task_struct *source, task_struct *parent
     task_struct *proc = kmem_cache_alloc(task_struct_cache, GFP_KERNEL);
     // Clear the memory.
     memset(proc, 0, sizeof(task_struct));
+    // Acquire the private continuation stack before publishing the task in
+    // the parent's child list or duplicating file descriptors. This keeps
+    // allocation failure local and makes rollback ownership unambiguous.
+    if (!task_kernel_stack_alloc(proc)) {
+        kmem_cache_free(proc);
+        return NULL;
+    }
     // Set the id of the process.
     proc->pid   = pid_manager_get_free_pid();
     // Set the state of the process as running.
@@ -264,6 +386,13 @@ static inline task_struct *__alloc_task(task_struct *source, task_struct *parent
     }
     if (source) {
         memcpy(&proc->thread, &source->thread, sizeof(thread_struct_t));
+        // Continuation ownership and live frame pointers belong exclusively to
+        // the source task. The child gets a copied user snapshot, but starts
+        // without a live kernel continuation; construction below prepares the
+        // child's independent first-return frame.
+        proc->thread.user_regs  = NULL;
+        proc->thread.kernel_esp = 0;
+        proc->thread.context_kind = THREAD_CONTEXT_USER;
     }
     // Set the statistics of the process.
     proc->uid                   = 0;
@@ -353,6 +482,10 @@ int process_create_init(const char *path)
 
     // Allocate the memory for the process.
     init_process = __alloc_task(NULL, NULL, "init");
+    if (init_process == NULL) {
+        pr_err("Failed to allocate init process.\n");
+        return -ENOMEM;
+    }
 
     // Active the current process.
     scheduler_enqueue_task(init_process);
@@ -438,6 +571,11 @@ int process_create_init(const char *path)
     init_process->thread.regs.ebp     = useresp;
     init_process->thread.regs.useresp = useresp;
     init_process->thread.regs.eflags  = init_process->thread.regs.eflags | EFLAG_IF;
+    if (task_prepare_kernel_context(init_process) < 0) {
+        pr_err("Failed to prepare init kernel context.\n");
+        paging_switch_pgd(crtdir);
+        return 1;
+    }
 
     // Restore previous pgdir
     paging_switch_pgd(crtdir);
@@ -556,12 +694,16 @@ pid_t sys_fork(pt_regs_t *f)
     scheduler_store_context(f, current);
     // Allocate the memory for the process.
     task_struct *proc        = __alloc_task(current, current, current->name);
+    if (proc == NULL) {
+        return -ENOMEM;
+    }
     // Copy the father's stack, memory, heap etc... to the child process
     proc->mm                 = mm_clone(current->mm);
     // Set the eax as 0, to indicate the child process
     proc->thread.regs.eax    = 0;
     // Enable the interrupts.
     proc->thread.regs.eflags = proc->thread.regs.eflags | EFLAG_IF;
+    assert(task_prepare_kernel_context(proc) == 0);
 
     // Copy session and group id of the parent into the child
     proc->sid  = current->sid;
@@ -595,7 +737,6 @@ int sys_execve(pt_regs_t *f)
     char **origin_envp;
     char **final_envp;
     char name_buffer[NAME_MAX];
-    char saved_filename[PATH_MAX];
 
     // Get the filename.
     char *filename = (char *)f->ebx;
@@ -628,11 +769,16 @@ int sys_execve(pt_regs_t *f)
     // one that was checked (#287). A page the caller does not own ends the
     // call here (#191), and a name that does not fit a PATH_MAX buffer cannot
     // name any file, so truncating it would target the wrong executable.
-    long filename_length = strncpy_from_user(saved_filename, filename, sizeof(saved_filename));
+    char *saved_filename = kmalloc(PATH_MAX);
+    if (!saved_filename) {
+        return -ENOMEM;
+    }
+    long filename_length = strncpy_from_user(saved_filename, filename, PATH_MAX);
     if (filename_length < 0) {
         if (filename_length == -ENAMETOOLONG) {
             pr_err("sys_execve failed: filename is longer than PATH_MAX.\n");
         }
+        kfree(saved_filename);
         return (int)filename_length;
     }
     // Save the name of the process. argv[0] is a raw user string, measured
@@ -643,6 +789,7 @@ int sys_execve(pt_regs_t *f)
     if (name_len == -ENAMETOOLONG) {
         name_len = sizeof(name_buffer) - 1;
     } else if (name_len < 0) {
+        kfree(saved_filename);
         return (int)name_len;
     }
     memcpy(name_buffer, origin_argv[0], (size_t)name_len);
@@ -655,6 +802,7 @@ int sys_execve(pt_regs_t *f)
     exec_args_t args;
     int result = exec_args_from_user(&args, origin_argv, origin_envp);
     if (result < 0) {
+        kfree(saved_filename);
         return result;
     }
     // ------------------------------------------------------------------------
@@ -672,6 +820,7 @@ int sys_execve(pt_regs_t *f)
     if (ret <= 0) {
         pr_err("Failed to load executable!\n");
         exec_args_free(&args);
+        kfree(saved_filename);
         return ret;
     }
     if (ret == 2) { // An interpreter was loaded.
@@ -684,9 +833,13 @@ int sys_execve(pt_regs_t *f)
             current->uid = prev_uid;
             current->gid = prev_gid;
             exec_args_free(&args);
+            kfree(saved_filename);
             return result;
         }
     }
+    // The candidate image and argument vectors no longer need the original
+    // filename once interpreter insertion has completed.
+    kfree(saved_filename);
     // ------------------------------------------------------------------------
 
     // == INITIALIZE PROGRAM ARGUMENTS ========================================

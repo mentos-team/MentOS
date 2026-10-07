@@ -31,6 +31,7 @@ typedef struct {
 extern void test_gdt(void);
 extern void test_idt(void);
 extern void test_isr(void);
+extern void test_switch(void);
 extern void test_paging(void);
 extern void test_scheduler(void);
 extern void test_zone_allocator(void);
@@ -50,6 +51,7 @@ static const test_entry_t test_functions[] = {
     {test_gdt,                 "GDT Subsystem"                },
     {test_idt,                 "IDT Subsystem"                },
     {test_isr,                 "ISR Subsystem"                },
+    {test_switch,               "Kernel Context Switch"         },
     {test_paging,              "Paging Subsystem"             },
     {test_scheduler,           "Scheduler Subsystem"          },
     {test_zone_allocator,      "Zone Allocator Subsystem"     },

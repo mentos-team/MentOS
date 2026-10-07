@@ -80,6 +80,13 @@ int __syslog(const char *file, const char *fun, int line, short log_level, const
         len += offset; // Include the offset as part of the total length.
     }
 
+    // Keep serial diagnostics line-oriented even when a caller omitted the
+    // trailing newline. Preserve deliberate newlines and multiline messages.
+    if (len > 0 && buf[len - 1] != '\n' && len < (int)(sizeof(buf) - 1)) {
+        buf[len++] = '\n';
+        buf[len] = '\0';
+    }
+
     // Call the syslog system call to send the formatted message to the system log.
     // __inline_syscall_5(len, syslog, type, file, func, line, buf);
     __asm__ __volatile__("push %%ebx; movl %2,%%ebx; movl %1,%%eax; "

@@ -88,7 +88,7 @@ void handle_gp_fault(pt_regs_t *frame)
         // running processes. We pushed the SEGV signal in the queues of
         // signal to send to the process. To properly handle the signal,
         // just run scheduler.
-        scheduler_run(frame);
+        scheduler_reschedule_from_trap(frame);
     } else {
         // Print all register values for debugging.
         PRINT_REGS(pr_crit, frame);

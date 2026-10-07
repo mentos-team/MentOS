@@ -144,18 +144,23 @@ void syscall_handler(pt_regs_t *f)
     // Save current process fpu state.
     switch_fpu();
 
+    // Keep the syscall selector separate from EAX: sigreturn deliberately
+    // restores the complete user frame, including EAX, and must not have that
+    // restored value overwritten by the dispatcher's C return assignment.
+    uint32_t syscall_nr = f->eax;
+
     // The result of the system call.
-    if (f->eax >= SYSCALL_NUMBER) {
+    if (syscall_nr >= SYSCALL_NUMBER) {
         f->eax = -ENOSYS;
     } else {
         // Retrieve the system call function from the system call table.
-        SystemCall5 fun = (SystemCall5)sys_call_table[f->eax];
+        SystemCall5 fun = (SystemCall5)sys_call_table[syscall_nr];
 
         // Initialize an array to hold up to 5 arguments for the system call.
         unsigned args[5] = {0};
 
         // Special handling for specific system calls that do not follow the standard argument convention.
-        if ((f->eax == __NR_fork) || (f->eax == __NR_clone) || (f->eax == __NR_execve) || (f->eax == __NR_sigreturn)) {
+        if ((syscall_nr == __NR_fork) || (syscall_nr == __NR_clone) || (syscall_nr == __NR_execve) || (syscall_nr == __NR_sigreturn)) {
             args[0] = (uintptr_t)f;
         }
         // Otherwise, populate arguments from the CPU register state.
@@ -168,11 +173,14 @@ void syscall_handler(pt_regs_t *f)
         }
 
         // Invoke the system call with the prepared arguments and store the return value in the EAX register.
-        f->eax = fun(args[0], args[1], args[2], args[3], args[4]);
+        int result = fun(args[0], args[1], args[2], args[3], args[4]);
+        if ((syscall_nr != __NR_sigreturn) || (result < 0)) {
+            f->eax = result;
+        }
     }
 
     // Schedule next process.
-    scheduler_run(f);
+    scheduler_reschedule_from_trap(f);
 
     // Restore fpu state.
     unswitch_fpu();

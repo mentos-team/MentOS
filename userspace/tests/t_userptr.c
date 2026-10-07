@@ -287,7 +287,7 @@ static int check_path_strings(void)
     EXPECT_EFAULT("lchown of a kernel-area path", lchown((const char *)KERNEL_TOP, 0, 0));
     EXPECT_EFAULT("symlink of a kernel-area target", symlink((const char *)KERNEL_TOP, paths[0]));
     EXPECT_EFAULT("symlink into a kernel-area linkname", symlink("/home/user/welcome.md", (const char *)KERNEL_TOP));
-    EXPECT_EFAULT("readlink into the kernel area", readlink("/home/user/tmp.md", (char *)KERNEL_TOP, 64));
+    EXPECT_EFAULT("readlink into the kernel area", readlink("/test-fixtures/symlink/tmp.md", (char *)KERNEL_TOP, 64));
     char link_target[64] = {0};
     EXPECT_EFAULT("readlink of a kernel-area path", readlink((const char *)KERNEL_TOP, link_target, sizeof(link_target)));
     // A control for the family: a real create-and-remove round trip.

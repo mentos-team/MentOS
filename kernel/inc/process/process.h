@@ -29,6 +29,25 @@ char *do_getcwd(char *buf, size_t size);
 /// The default dimension of the stack of a process (1 MByte).
 #define DEFAULT_STACK_SIZE (1 * M)
 
+/// The private kernel continuation stack budget for each task.
+///
+/// This is deliberately separate from the user stack in the task's mm. The
+/// stack is used for kernel entry/return state and grows downward.
+#define TASK_KERNEL_STACK_SIZE (128 * K)
+/// Order of the 32-page private kernel stack allocation.
+#define TASK_KERNEL_STACK_ORDER 5
+/// Bytes reserved at the low end for an overflow canary.
+#define TASK_KERNEL_STACK_CANARY_SIZE 16
+/// Value used to detect writes below the continuation stack.
+#define TASK_KERNEL_STACK_CANARY 0xC0DEC0DEu
+/// Fill value used to measure the high-water mark of a kernel stack.
+#define TASK_KERNEL_STACK_FILL 0xA5A5A5A5u
+
+/* Keep the allocator order and the advertised usable extent in lock-step. */
+#if TASK_KERNEL_STACK_SIZE != ((1U << TASK_KERNEL_STACK_ORDER) * PAGE_SIZE)
+#error "TASK_KERNEL_STACK_SIZE must match TASK_KERNEL_STACK_ORDER"
+#endif
+
 /// @brief This structure is used to track the statistics of a process.
 /// @details
 /// While the other variables also play a role in
@@ -75,10 +94,27 @@ typedef struct sched_entity {
     double utilization_factor;
 } sched_entity_t;
 
+/// @brief Kind of context represented by a task's saved kernel ESP.
+typedef enum thread_context_kind {
+    /// The task has no live kernel continuation; restore its user trap frame.
+    THREAD_CONTEXT_USER = 0,
+    /// The stack contains a synthetic first-return frame for a new task.
+    THREAD_CONTEXT_FIRST_RETURN,
+    /// The stack contains a suspended C call chain in kernel space.
+    THREAD_CONTEXT_KERNEL,
+} thread_context_kind_t;
+
 /// @brief Stores the status of CPU and FPU registers.
 typedef struct thread_struct {
     /// Stored status of registers.
     pt_regs_t regs;
+    /// Live outer user frame while this task is executing at the boundary.
+    /// This pointer is transient and is never inherited by fork.
+    pt_regs_t *user_regs;
+    /// Saved ESP of the task's resumable kernel continuation.
+    uint32_t kernel_esp;
+    /// Explicitly identifies what kernel_esp contains.
+    thread_context_kind_t context_kind;
     /// Stored status of registers befor jumping into a signal handler.
     pt_regs_t signal_regs;
     /// Determines if the FPU is enabled.
@@ -108,6 +144,13 @@ typedef struct task_struct {
     // -1 unrunnable, 0 runnable, >0 stopped.
     /// The current state of the process:
     __volatile__ long state;
+    /// Set by asynchronous events; consumed by the common return boundary.
+    __volatile__ bool_t need_resched;
+    /// Trap frame of a page fault currently being serviced for this task.
+    /// This is per-task because fault handling may itself reschedule.
+    pt_regs_t *page_fault_frame;
+    /// Faulting address paired with page_fault_frame for diagnostics.
+    uint32_t page_fault_addr;
     /// The current opened file descriptors
     vfs_file_descriptor_t *fd_list;
     /// The maximum supported number of file descriptors
@@ -122,6 +165,12 @@ typedef struct task_struct {
     list_head_t sibling;
     /// The context of the processors.
     thread_struct_t thread;
+    /// Private kernel continuation stack storage owned by this task.
+    void *kernel_stack;
+    /// One-past-the-end address used as the TSS esp0 value on kernel entry.
+    uintptr_t kernel_stack_top;
+    /// Size of the private kernel continuation stack in bytes.
+    size_t kernel_stack_size;
     /// For scheduling algorithms.
     sched_entity_t se;
     /// Exit code of the process. (parameter of _exit() system call).
@@ -182,6 +231,25 @@ typedef struct task_struct {
     // struct thread_info thread_info;
     //==========================================================================
 } task_struct;
+
+/// @brief Acquire the private kernel continuation stack for a task.
+/// @return 1 on success, 0 when allocation fails or task is NULL.
+int task_kernel_stack_alloc(task_struct *task);
+
+/// @brief Release a task's private kernel continuation stack.
+void task_kernel_stack_free(task_struct *task);
+
+/// @brief Check the low-address canary of a task's private stack.
+/// @return 1 when intact or no stack is allocated, 0 on corruption.
+int task_kernel_stack_check(const task_struct *task);
+
+/// @brief Return the deepest observed stack usage in bytes.
+/// @details The value is a diagnostic lower bound, not a proof of safety.
+size_t task_kernel_stack_watermark(const task_struct *task);
+
+/// @brief Build an inactive first-return frame from the task's user snapshot.
+/// @return 0 on success, -1 if the task has no private stack.
+int task_prepare_kernel_context(task_struct *task);
 
 /// @brief Initialize the task management.
 /// @return 1 success, 0 failure.

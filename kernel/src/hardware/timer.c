@@ -108,12 +108,10 @@ void timer_handler(pt_regs_t *reg)
     video_cursor_blink_tick();
     // Perform the schedule only if the interrupt came from user mode.
     if ((reg->cs & 0x3) == 0x3) {
-        scheduler_run(reg);
+        scheduler_reschedule_from_trap(reg);
     }
     // Restore fpu state.
     unswitch_fpu();
-    // The ack is sent to PIC only when all handlers terminated!
-    pic8259_send_eoi(IRQ_TIMER);
 }
 
 void timer_install(void)
@@ -571,9 +569,8 @@ static inline void debug_timeout(unsigned long data)
 /// This handles the race where a signal interrupts a sleeping task:
 /// the signal handler calls this to stop the sleep timer from firing.
 ///
-/// With boundary-based context switching, we don't need to trigger
-/// immediate scheduling - the signal handler will return to the next
-/// interrupt/exception boundary where scheduler_run() picks the next task.
+/// The signal path cancels the timer before waking the interruptible
+/// continuation; schedule() then resumes the nanosleep call chain directly.
 ///
 /// @param task The task whose sleep timer should be canceled.
 /// @return 0 on success, -1 if no sleep timer exists.
@@ -697,19 +694,20 @@ int sys_nanosleep(const struct timespec *req, struct timespec *rem)
     // Get the current task.
     task_struct *current = scheduler_get_current_process();
     assert(current && "No current process in sys_nanosleep");
-    // Prevent a race between entering sleep state and arming the wake timer.
-    // If a timer interrupt preempts in that window, the task can become
-    // TASK_UNINTERRUPTIBLE without a wake source and block the system.
+    // Prevent a race between publishing the wait state and arming the wake
+    // timer. The caller-owned entry remains valid on this kernel continuation
+    // until schedule() returns after timeout or signal wakeup.
     uint8_t irqs                   = irq_disable();
-    // Create a dinamic timer to wake up the process after some time
+    // Create a dynamic timer to wake up the process after some time.
     struct timer_list *sleep_timer = __timer_list_alloc();
-    // First, we save the remaining time. Then, we remove the current process
-    // from runqueue and stores it in the waiting queue, this must be done at
-    // the end, because it changes the current active page and invalidates the
-    // req and rem pointers (?)
     sleep_data_t *sleep_data       = __sleep_data_alloc();
     sleep_data->remaining          = rem;
-    sleep_data->wait_queue_entry   = sleep_on_interruptible(&sleep_queue);
+
+    wait_queue_entry_t wait_entry;
+    wait_queue_entry_init(&wait_entry, current);
+    prepare_to_wait(&sleep_queue, &wait_entry, TASK_INTERRUPTIBLE);
+    sleep_data->wait_queue_entry = &wait_entry;
+
     // Setup the timer.
     sleep_timer->expires           = timer_get_ticks() + __timespec_to_ticks(req);
     sleep_timer->function          = &sleep_timeout;
@@ -720,6 +718,9 @@ int sys_nanosleep(const struct timespec *req, struct timespec *rem)
     add_timer(sleep_timer);
     // Sleep state + wait queue entry + timer arm are now atomically visible.
     irq_enable(irqs);
+
+    schedule();
+    finish_wait(&sleep_queue, &wait_entry);
     return 0;
 }
 

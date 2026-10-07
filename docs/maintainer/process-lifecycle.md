@@ -32,11 +32,13 @@ Several current behaviors rely on that constraint:
   would require explicit lifetime management so one thread's `execve()` or
   exit cannot destroy mappings still used by another.
 - **Scheduling and kernel execution:** the scheduler switches page directories
-  at trap boundaries. It saves a user/trap frame in `thread.regs`, but does
-  not save a resumable kernel call stack. A syscall that encounters a wait
-  condition therefore cannot suspend and later continue at that call site;
-  current wait paths return to userspace and may report `-EAGAIN` or `-EINTR`
-  instead. This is the architectural problem tracked by #204.
+  at trap boundaries. `scheduler_reschedule_from_trap()` saves a userspace
+  return frame in `thread.regs`; `schedule()` separately saves a live kernel
+  continuation in `thread.kernel_esp`. A syscall that encounters a wait
+  condition can publish a caller-owned wait entry and suspend its continuation
+  with `schedule()`. The continuation resumes at the same call site after
+  wakeup; the trap-boundary scheduler must never return that task through the
+  interrupted task's userspace frame. See `docs/maintainer/scheduler-contexts.md`.
 - **Signals:** pending queues and masks belong to an individual task. Stop and
   continue handling does not coordinate queues or state across a thread group,
   and signal delivery has no group-shared pending queue. Those behaviors are
@@ -99,8 +101,8 @@ Verified at `MAIN` (scheduler.c:511ff):
 - Reap sequence: `pid_manager_mark_free` → `vfs_destroy_task(child)` →
   unlink from parent's children → dequeue if still on runqueue →
   `kmem_cache_free(child)`.
-- No zombie + WNOHANG → 0; no zombie otherwise → `sleep_on(&waitpid_queue)`
-  and returns `-EINTR` (userspace must retry).
+- No zombie + WNOHANG → 0; no zombie otherwise → caller-owned wait entry,
+  `schedule()`, and a rescan of the children list after wakeup.
 - Reaping may also occur in the scheduler when a zombie becomes current
   (comment at `MAIN`), guarded by `list_head_empty(&child->run_list)`.
 
