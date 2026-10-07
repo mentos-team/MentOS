@@ -149,6 +149,89 @@ static const unsigned char *__get_kernel_image(multiboot_info_t *header, uint32_
     return (const unsigned char *)(uintptr_t)kernel_module->mod_start;
 }
 
+/// @brief Add two 32-bit values while detecting wraparound.
+static int __u32_add_overflows(uint32_t left, uint32_t right, uint32_t *result)
+{
+    if (left > UINT32_MAX - right) {
+        return 1;
+    }
+    *result = left + right;
+    return 0;
+}
+
+/// @brief Check whether an integer is a valid power-of-two alignment.
+static int __is_power_of_two(uint32_t value)
+{
+    return value == 0 || (value & (value - 1U)) == 0;
+}
+
+/// @brief Validate the ELF image before any segment is copied.
+/// @param header Candidate ELF header in the Multiboot module.
+/// @param image_size Number of bytes available in the module.
+static void __validate_kernel_image(const elf_header_t *header, uint32_t image_size)
+{
+    uint32_t table_end;
+    uint32_t loadable_segments = 0;
+    int entry_is_executable = 0;
+
+    if (image_size < sizeof(*header)) {
+        __boot_halt("kernel module is smaller than an ELF header");
+    }
+    if (header->ident[EI_MAG0] != ELFMAG0 || header->ident[EI_MAG1] != ELFMAG1 ||
+        header->ident[EI_MAG2] != ELFMAG2 || header->ident[EI_MAG3] != ELFMAG3 ||
+        header->ident[EI_CLASS] != ELFCLASS32 || header->ident[EI_DATA] != ELFDATA2LSB ||
+        header->ident[EI_VERSION] != EV_CURRENT || header->type != ET_EXEC || header->machine != EM_386 ||
+        header->version != EV_CURRENT || header->ehsize != sizeof(*header) ||
+        header->phentsize != sizeof(elf_program_header_t) || !header->phnum) {
+        __boot_halt("kernel module has an unsupported ELF header");
+    }
+    if (header->phnum > UINT32_MAX / header->phentsize ||
+        __u32_add_overflows(header->phoff, (uint32_t)header->phnum * header->phentsize, &table_end) ||
+        table_end > image_size) {
+        __boot_halt("kernel module program headers are out of bounds");
+    }
+
+    const elf_program_header_t *program_headers =
+        (const elf_program_header_t *)((uintptr_t)header + header->phoff);
+    for (uint32_t i = 0; i < header->phnum; ++i) {
+        const elf_program_header_t *program = &program_headers[i];
+        uint32_t file_end;
+        uint32_t virtual_end;
+
+        if (program->type != PT_LOAD) {
+            continue;
+        }
+        ++loadable_segments;
+        if (program->filesz > program->memsz ||
+            __u32_add_overflows(program->offset, program->filesz, &file_end) || file_end > image_size ||
+            __u32_add_overflows(program->vaddr, program->memsz, &virtual_end) ||
+            program->vaddr < BOOT_KERNEL_VIRT_START || virtual_end > BOOT_KERNEL_VIRT_END ||
+            !__is_power_of_two(program->align) ||
+            (program->align > 1U && ((program->vaddr - program->offset) & (program->align - 1U)) != 0)) {
+            __boot_halt("kernel module has an invalid load segment");
+        }
+
+        for (uint32_t previous = 0; previous < i; ++previous) {
+            const elf_program_header_t *other = &program_headers[previous];
+            uint32_t other_end;
+            if (other->type != PT_LOAD) {
+                continue;
+            }
+            __u32_add_overflows(other->vaddr, other->memsz, &other_end);
+            if (program->vaddr < other_end && other->vaddr < virtual_end) {
+                __boot_halt("kernel module load segments overlap");
+            }
+        }
+        if ((program->flags & PF_X) && header->entry >= program->vaddr && header->entry < virtual_end) {
+            entry_is_executable = 1;
+        }
+    }
+
+    if (!loadable_segments || !entry_is_executable) {
+        __boot_halt("kernel module has no executable entry segment");
+    }
+}
+
 /// @brief Prepares the page frames.
 /// @param pfn_virt_start The first virtual page frame.
 /// @param pfn_phys_start The first physical page frame.
@@ -321,8 +404,7 @@ void boot_main(uint32_t magic, multiboot_info_t *header, uint32_t esp)
     uint32_t kernel_image_size = 0;
     const unsigned char *kernel_image = __get_kernel_image(header, &kernel_image_size);
     elf_header_t *elf_hdr = (elf_header_t *)kernel_image;
-
-    (void)kernel_image_size;
+    __validate_kernel_image(elf_hdr, kernel_image_size);
 
     // Get the physical addresses of where the kernel starts and ends.
     uint32_t boot_start = (uint32_t)_bootloader_start;

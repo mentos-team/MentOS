@@ -33,6 +33,13 @@
 /// Loadable ELF program segment.
 #define PT_LOAD 1
 
+/// Program-header flags.
+#define PF_X 1U
+
+/// Virtual range reserved for the linked kernel image.
+#define BOOT_KERNEL_VIRT_START 0xC0000000U
+#define BOOT_KERNEL_VIRT_END   0xF8000000U
+
 /// @brief ELF32 file header.
 typedef struct elf_header {
     uint8_t  ident[EI_NIDENT];
