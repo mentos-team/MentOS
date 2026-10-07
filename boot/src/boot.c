@@ -6,6 +6,7 @@
 #include "boot/boot_info.h"
 #include "boot_bits.h"
 #include "boot_cpu.h"
+#include "boot_console.h"
 #include "boot_math.h"
 #include "boot_paging.h"
 #include "boot/multiboot.h"
@@ -26,9 +27,6 @@ extern void boot_kernel(uint32_t stack_pointer, uint32_t entry, boot_info_t *boo
 /// @brief Size of the kernel's stack (4MB - increased from 1MB to accommodate debug logging).
 #define KERNEL_STACK_SIZE (4 * 0x100000)
 
-/// Serial port for QEMU.
-#define SERIAL_COM1 (0x03F8)
-
 /// @brief Linker symbol for where the bootloader starts.
 extern char _bootloader_start[];
 /// @brief Linker symbol for where the bootloader ends.
@@ -40,27 +38,6 @@ static boot_info_t boot_info;
 static boot_page_directory_t boot_pgdir;
 /// @brief Boot page tables.
 static boot_page_table_t boot_pgtables[BOOT_PAGE_ENTRIES];
-
-/// @brief Use this to write to I/O ports to send bytes to devices.
-/// @param port The output port.
-/// @param data The data to write.
-static inline void __outportb(uint16_t port, uint8_t data)
-{
-    __asm__ __volatile__("outb %%al, %%dx" ::"a"(data), "d"(port));
-}
-
-/// @brief Writes the given character on the debug port.
-/// @param c the character to send to the debug port.
-static inline void __debug_putchar(char c) { __outportb(SERIAL_COM1, c); }
-
-/// @brief Writes the given string on the debug port.
-/// @param s the string to send to the debug port.
-static inline void __debug_puts(char *s)
-{
-    while ((*s) != 0) {
-        __outportb(SERIAL_COM1, *s++);
-    }
-}
 
 /// @brief Align memory address to the specified value (round up).
 /// @param addr the address to align
@@ -77,19 +54,6 @@ static inline uint32_t __align_rup(uint32_t addr, uint32_t value)
 /// @param value the value used to align.
 /// @return the aligned address.
 static inline uint32_t __align_rdown(uint32_t addr, uint32_t value) { return addr - (addr % value); }
-
-/// @brief Halt the machine after a bootloader-fatal configuration error.
-/// @param message A short message written to the serial console first.
-static __attribute__((noreturn)) void __boot_halt(const char *message)
-{
-    __debug_puts("[bootloader] FATAL: ");
-    __debug_puts((char *)message);
-    __debug_puts("\n");
-    __asm__ __volatile__("cli");
-    for (;;) {
-        __asm__ __volatile__("hlt");
-    }
-}
 
 /// @brief Check whether a Multiboot module has the `kernel` command line.
 /// @param module Module descriptor supplied by Multiboot.
@@ -124,7 +88,7 @@ static const unsigned char *__get_kernel_image(multiboot_info_t *header, uint32_
     multiboot_module_t *kernel_module = NULL;
 
     if (!header || !boot_bit_test(header->flags, MULTIBOOT_FLAG_MODS) || !header->mods_count || !header->mods_addr) {
-        __boot_halt("missing kernel module");
+        boot_fatal("missing kernel module");
     }
 
     multiboot_module_t *module_table = (multiboot_module_t *)(uintptr_t)header->mods_addr;
@@ -133,17 +97,17 @@ static const unsigned char *__get_kernel_image(multiboot_info_t *header, uint32_
             continue;
         }
         if (kernel_module) {
-            __boot_halt("multiple kernel modules");
+            boot_fatal("multiple kernel modules");
         }
         kernel_module = &module_table[i];
     }
 
     if (!kernel_module) {
-        __boot_halt("kernel module not found");
+        boot_fatal("kernel module not found");
     }
 
     if (kernel_module->mod_end <= kernel_module->mod_start) {
-        __boot_halt("kernel module has an invalid range");
+        boot_fatal("kernel module has an invalid range");
     }
     *image_size = kernel_module->mod_end - kernel_module->mod_start;
     return (const unsigned char *)(uintptr_t)kernel_module->mod_start;
@@ -175,7 +139,7 @@ static void __validate_kernel_image(const elf_header_t *header, uint32_t image_s
     int entry_is_executable = 0;
 
     if (image_size < sizeof(*header)) {
-        __boot_halt("kernel module is smaller than an ELF header");
+        boot_fatal("kernel module is smaller than an ELF header");
     }
     if (header->ident[EI_MAG0] != ELFMAG0 || header->ident[EI_MAG1] != ELFMAG1 ||
         header->ident[EI_MAG2] != ELFMAG2 || header->ident[EI_MAG3] != ELFMAG3 ||
@@ -183,12 +147,12 @@ static void __validate_kernel_image(const elf_header_t *header, uint32_t image_s
         header->ident[EI_VERSION] != EV_CURRENT || header->type != ET_EXEC || header->machine != EM_386 ||
         header->version != EV_CURRENT || header->ehsize != sizeof(*header) ||
         header->phentsize != sizeof(elf_program_header_t) || !header->phnum) {
-        __boot_halt("kernel module has an unsupported ELF header");
+        boot_fatal("kernel module has an unsupported ELF header");
     }
     if (header->phnum > UINT32_MAX / header->phentsize ||
         __u32_add_overflows(header->phoff, (uint32_t)header->phnum * header->phentsize, &table_end) ||
         table_end > image_size) {
-        __boot_halt("kernel module program headers are out of bounds");
+        boot_fatal("kernel module program headers are out of bounds");
     }
 
     const elf_program_header_t *program_headers =
@@ -208,7 +172,7 @@ static void __validate_kernel_image(const elf_header_t *header, uint32_t image_s
             program->vaddr < BOOT_KERNEL_VIRT_START || virtual_end > BOOT_KERNEL_VIRT_END ||
             !__is_power_of_two(program->align) ||
             (program->align > 1U && ((program->vaddr - program->offset) & (program->align - 1U)) != 0)) {
-            __boot_halt("kernel module has an invalid load segment");
+            boot_fatal("kernel module has an invalid load segment");
         }
 
         for (uint32_t previous = 0; previous < i; ++previous) {
@@ -219,7 +183,7 @@ static void __validate_kernel_image(const elf_header_t *header, uint32_t image_s
             }
             __u32_add_overflows(other->vaddr, other->memsz, &other_end);
             if (program->vaddr < other_end && other->vaddr < virtual_end) {
-                __boot_halt("kernel module load segments overlap");
+                boot_fatal("kernel module load segments overlap");
             }
         }
         if ((program->flags & PF_X) && header->entry >= program->vaddr && header->entry < virtual_end) {
@@ -228,7 +192,7 @@ static void __validate_kernel_image(const elf_header_t *header, uint32_t image_s
     }
 
     if (!loadable_segments || !entry_is_executable) {
-        __boot_halt("kernel module has no executable entry segment");
+        boot_fatal("kernel module has no executable entry segment");
     }
 }
 
@@ -289,7 +253,7 @@ static void __protect_kernel_stack_guard_page(void)
     uint32_t table_index   = (guard_address >> 12U) & 0x3FFU;
 
     if (!boot_pgdir.entries[directory].present) {
-        __debug_puts("[bootloader] Kernel stack guard directory is not mapped.\n");
+        boot_console_puts("[bootloader] Kernel stack guard directory is not mapped.\n");
         return;
     }
 
@@ -400,7 +364,7 @@ static int boot_paging_switch_pgd(boot_page_directory_t *dir)
 /// @param esp    The initial stack pointer.
 void boot_main(uint32_t magic, multiboot_info_t *header, uint32_t esp)
 {
-    __debug_puts("\n[bootloader] Start...\n");
+    boot_console_puts("\n[bootloader] Start...\n");
     uint32_t kernel_image_size = 0;
     const unsigned char *kernel_image = __get_kernel_image(header, &kernel_image_size);
     elf_header_t *elf_hdr = (elf_header_t *)kernel_image;
@@ -416,7 +380,7 @@ void boot_main(uint32_t magic, multiboot_info_t *header, uint32_t esp)
     __get_kernel_low_high(elf_hdr, &kernel_virt_low, &kernel_virt_high);
 
     // Initialize the boot_info_t structure.
-    __debug_puts("[bootloader] Initializing the boot_info structure...\n");
+    boot_console_puts("[bootloader] Initializing the boot_info structure...\n");
     boot_info.version             = BOOT_INFO_ABI_VERSION;
     boot_info.size                = sizeof(boot_info);
     boot_info.magic                = magic;
@@ -461,15 +425,15 @@ void boot_main(uint32_t magic, multiboot_info_t *header, uint32_t esp)
     boot_info.stack_end         = boot_info.lowmem_virt_end;
 
     // Setup the page directory and page tables for the boot.
-    __debug_puts("[bootloader] Setting up paging...\n");
+    boot_console_puts("[bootloader] Setting up paging...\n");
     __setup_boot_paging();
 
     // Switch to the newly created page directory.
-    __debug_puts("[bootloader] Switching page directory...\n");
+    boot_console_puts("[bootloader] Switching page directory...\n");
     boot_paging_switch_pgd(&boot_pgdir);
 
     // Enable paging.
-    __debug_puts("[bootloader] Enabling paging...\n");
+    boot_console_puts("[bootloader] Enabling paging...\n");
     boot_paging_enable();
 
     // Reserve space for the kernel stack at the end of lowmem.
@@ -478,12 +442,12 @@ void boot_main(uint32_t magic, multiboot_info_t *header, uint32_t esp)
     boot_info.lowmem_phy_end  = boot_info.lowmem_phy_end - KERNEL_STACK_SIZE;
     boot_info.lowmem_virt_end = boot_info.lowmem_virt_end - KERNEL_STACK_SIZE;
 
-    __debug_puts("[bootloader] Relocating kernel image...\n");
+    boot_console_puts("[bootloader] Relocating kernel image...\n");
     __relocate_kernel_image(elf_hdr);
 
     __protect_kernel_stack_guard_page();
 
-    __debug_puts("[bootloader] Calling `boot_kernel`...\n\n");
+    boot_console_puts("[bootloader] Calling `boot_kernel`...\n\n");
     boot_kernel(boot_info.stack_base, elf_hdr->entry, &boot_info);
 }
 
