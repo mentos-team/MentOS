@@ -362,6 +362,7 @@ typedef struct ext2_direntry_iterator {
     uint32_t total_offset;   ///< The total amount of bytes we have read.
     uint32_t block_offset;   ///< The total amount of bytes we have read inside the current block.
     ext2_dirent_t *direntry; ///< Pointer to the directory entry.
+    int error;               ///< Negative errno when iteration stopped on I/O/corruption.
 } ext2_direntry_iterator_t;
 
 // ============================================================================
@@ -522,6 +523,7 @@ int ext2_truncate_inode(ext2_filesystem_t *fs, ext2_inode_t *inode, uint32_t ino
 
 // Defined in ext2_dir.c.
 int ext2_direntry_iterator_valid(ext2_direntry_iterator_t *it);
+int ext2_direntry_iterator_failed(const ext2_direntry_iterator_t *it);
 ext2_direntry_iterator_t ext2_direntry_iterator_begin(ext2_filesystem_t *fs, uint8_t *cache, ext2_inode_t *inode);
 void ext2_direntry_iterator_next(ext2_direntry_iterator_t *it);
 int ext2_initialize_new_direntry_block(ext2_filesystem_t *fs, uint32_t inode_index, uint32_t block_index);
