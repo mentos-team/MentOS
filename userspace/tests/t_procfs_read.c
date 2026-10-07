@@ -69,6 +69,28 @@ static int guarded_clobbered(void)
     return clobbered;
 }
 
+/// @brief Count the positional fields after the `(comm)` portion of proc stat.
+/// @param record NUL-terminated stat record.
+/// @return Number of fields from state (field 3) through exit_code (field 52).
+static unsigned stat_fields_after_comm(const char *record)
+{
+    const char *cursor = strchr(record, ')');
+    unsigned fields     = 0;
+    int in_field        = 0;
+    if (cursor == NULL) {
+        return 0;
+    }
+    for (; *cursor != '\0'; ++cursor) {
+        if (*cursor == ' ' || *cursor == '\n' || *cursor == '\t') {
+            in_field = 0;
+        } else if (!in_field) {
+            in_field = 1;
+            ++fields;
+        }
+    }
+    return fields;
+}
+
 /// @brief Checks that only the first `n` bytes of the read area were written.
 /// @param n the number of bytes the read reported.
 /// @return 0 on success, -1 on failure.
@@ -243,6 +265,17 @@ static int check_stat_full_read(void)
     close(fd);
     if (n <= 0) {
         syslog(LOG_ERR, "[t_procfs_read] full read returned %d", (int)n);
+        return -1;
+    }
+    if ((size_t)n >= buf_size) {
+        syslog(LOG_ERR, "[t_procfs_read] full stat read left no room for terminator");
+        return -1;
+    }
+    buf[n] = '\0';
+    if (stat_fields_after_comm((const char *)buf) != 50) {
+        syslog(
+            LOG_ERR, "[t_procfs_read] stat record has %u fields after comm, expected 50",
+            stat_fields_after_comm((const char *)buf));
         return -1;
     }
     for (ssize_t i = 0; i < n; ++i) {
