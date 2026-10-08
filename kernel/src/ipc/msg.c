@@ -214,9 +214,12 @@ static inline void __msq_info_remove_message(msq_info_t *msq_info, struct msg *m
             }
         }
     }
-    // If the message is the last of the queue, set the last to NULL.
+    // If the removed message was the tail, locate its predecessor.
     if (msq_info->msg_last == message) {
-        msq_info->msg_last = NULL;
+        msq_info->msg_last = msq_info->msg_first;
+        while (msq_info->msg_last && msq_info->msg_last->msg_next) {
+            msq_info->msg_last = msq_info->msg_last->msg_next;
+        }
     }
     // Clear the pointer in message.
     message->msg_next = NULL;
@@ -552,8 +555,9 @@ int sys_msgctl(int msqid, int cmd, struct msqid_ds *buf)
         pr_err("The msqid is less than zero.\n");
         return -EINVAL;
     }
-    // Search for the message queue.
-    msq_info = __list_find_msq_info_by_id(msqid);
+    // Hold a syscall reference while inspecting or removing the queue.  The
+    // namespace reference is dropped separately by IPC_RMID below.
+    msq_info = __msq_get_ref(msqid);
     // The message queue doesn't exist.
     if (!msq_info) {
         pr_err("The message queue does not exist.\n");
@@ -570,6 +574,7 @@ int sys_msgctl(int msqid, int cmd, struct msqid_ds *buf)
         if ((msq_info->msqid.msg_perm.uid != task->uid) && (msq_info->msqid.msg_perm.cuid != task->uid)) {
             pr_err("The calling process is not the creator or the owner of the "
                    "queue.\n");
+            __msq_put_ref(msq_info);
             return -EPERM;
         }
         // Tombstone before waking waiters.  A blocked sender/receiver holds a
@@ -581,22 +586,26 @@ int sys_msgctl(int msqid, int cmd, struct msqid_ds *buf)
         spinlock_lock(&msq_list_lock);
         __list_remove_msq_info(msq_info);
         spinlock_unlock(&msq_list_lock);
+        __msq_put_ref(msq_info); // drop the namespace reference
         wake_up_all(&msq_info->wait_queue);
     } else if (cmd == IPC_STAT) {
         // Place a copy of the msqid_ds data structure in the buffer pointed to
         // by buf: the caller's own, writable memory or nowhere (#191).
         if (!access_ok(USER_WRITE, buf, sizeof(*buf))) {
+            __msq_put_ref(msq_info);
             return -EFAULT;
         }
         // Check permissions.
         if (!ipc_valid_permissions(IPC_ACCESS_READ, &msq_info->msqid.msg_perm)) {
             pr_err("The calling process does not have read permission to "
                    "access the queue.\n");
+            __msq_put_ref(msq_info);
             return -EACCES;
         }
         // Copying all the data.
         memcpy(buf, &msq_info->msqid, sizeof(struct msqid_ds));
     }
+    __msq_put_ref(msq_info);
     return 0;
 }
 

@@ -409,8 +409,9 @@ long sys_semctl(int semid, int semnum, int cmd, union semun *arg)
 {
     sem_info_t *sem_info = NULL;
     task_struct *task    = NULL;
-    // Search for the semaphore.
-    sem_info             = __list_find_sem_info_by_id(semid);
+    // Search for the semaphore. IPC_RMID upgrades this to a held reference
+    // before unlinking; ordinary metadata operations do not block.
+    sem_info = __list_find_sem_info_by_id(semid);
     // The semaphore set doesn't exist.
     if (!sem_info) {
         pr_err("The semaphore set doesn't exist.\n");
@@ -421,12 +422,17 @@ long sys_semctl(int semid, int semnum, int cmd, union semun *arg)
     assert(task && "Failed to get the current running process.");
 
     if (cmd == IPC_RMID) {
+        sem_info = __sem_get_ref(semid);
+        if (!sem_info) {
+            return -EIDRM;
+        }
         // Remove the semaphore set; any processes blocked is awakened (errno set to
         // EIDRM); no argument required.
 
         if ((sem_info->semid.sem_perm.uid != task->uid) && (sem_info->semid.sem_perm.cuid != task->uid)) {
             pr_err("The calling process is not the creator or the owner of the "
                    "semaphore set.\n");
+            __sem_put_ref(sem_info);
             return -EPERM;
         }
         // Unlink and tombstone the set before waking sleepers.  A blocked
@@ -438,7 +444,10 @@ long sys_semctl(int semid, int semnum, int cmd, union semun *arg)
         spinlock_lock(&semaphores_list_lock);
         __list_remove_sem_info(sem_info);
         spinlock_unlock(&semaphores_list_lock);
+        __sem_put_ref(sem_info); // drop the namespace reference
         wake_up_all(&sem_info->wait_queue);
+        __sem_put_ref(sem_info); // drop the IPC_RMID syscall reference
+        return 0;
     } else if (cmd == SETVAL) {
         // The value of the semnum-th semaphore in the set is initialized to the
         // value specified in arg.val.
