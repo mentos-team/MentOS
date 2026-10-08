@@ -54,10 +54,10 @@ trap 'trap - HUP; cleanup; exit 129' HUP
 # up the #245 campaign. A negative control that silently passes is worse than
 # no negative control, because it is believed (#289).
 #
-# The ISO carries the kernel through mentos/bootloader.bin, which embeds
-# kernel.bin; rootfs.img is built from the filesystem/ staging tree, where the
-# userspace binaries and the tests are installed. Those are the two inputs
-# that make an image stale.
+# The ISO carries the bootloader and kernel as separate files under /boot;
+# rootfs.img is built from the filesystem/ staging tree, where the userspace
+# binaries and the tests are installed. Those are the three inputs that make
+# an image stale.
 #
 # Set ALLOW_STALE_IMAGES=1 to boot an old image on purpose.
 check_freshness() {
@@ -79,7 +79,8 @@ check_freshness() {
 
 if [ "${ALLOW_STALE_IMAGES:-0}" != "1" ]; then
     STALE=0
-    check_freshness "${BUILD_DIR}/cdrom_test.iso" "${BUILD_DIR}/mentos/bootloader.bin" || STALE=1
+    check_freshness "${BUILD_DIR}/cdrom_test.iso" \
+        "${BUILD_DIR}/mentos/bootloader.bin" "${BUILD_DIR}/mentos/kernel.bin" || STALE=1
     check_freshness "${BUILD_DIR}/rootfs.img" "${REPO_DIR}/filesystem" || STALE=1
     if [ "${STALE}" -ne 0 ]; then
         echo "" >&2
