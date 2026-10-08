@@ -87,6 +87,7 @@ set(TEST_LIST
     t_sigaction.c
     t_periodic3.c
     t_semop.c
+    t_ipc_lifetime.c
     t_groups.c
     t_wifsignaled.c
 )
