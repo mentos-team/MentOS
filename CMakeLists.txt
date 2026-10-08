@@ -111,8 +111,24 @@ if(NOT MKE2FS_EXE)
         "and add $(brew --prefix e2fsprogs)/sbin to PATH.")
     set(MKE2FS_EXE mke2fs)
 endif()
+
+# GRUB is only required when an ISO target is built. Keep it optional at
+# configure time so compiler-only builds remain usable on hosts without the
+# GRUB utilities (for example, the macOS compatibility build). When an ISO is
+# requested, the generated command uses the discovered absolute path when
+# available and otherwise lets the build fail with the tool name and the
+# installation hint below.
+find_program(GRUB_MKRESCUE_EXE NAMES grub-mkrescue)
+if(NOT GRUB_MKRESCUE_EXE)
+    message(WARNING
+        "grub-mkrescue not found: ISO targets will not work. It ships with "
+        "GRUB utilities (for example, `apt install grub-pc-bin xorriso`).")
+    set(GRUB_MKRESCUE_EXE grub-mkrescue)
+endif()
+
 # Mark the variable ASM_COMPILER as advanced.
 mark_as_advanced(ASM_COMPILER)
+mark_as_advanced(GRUB_MKRESCUE_EXE)
 # Check that we have found the compiler.
 if(NOT ASM_COMPILER)
     message(FATAL_ERROR "ASM compiler not found!")
@@ -308,7 +324,7 @@ function(mentos_add_grub_iso target_name output_name staging_name grub_config)
         COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/mentos/bootloader.bin ${staging_dir}/boot/bootloader.bin
         COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/mentos/kernel.bin ${staging_dir}/boot/kernel.bin
         COMMAND ${CMAKE_COMMAND} -E copy ${grub_config_source} ${staging_dir}/boot/grub/grub.cfg
-        COMMAND grub-mkrescue -o ${CMAKE_BINARY_DIR}/${output_name} ${staging_dir}
+        COMMAND "${GRUB_MKRESCUE_EXE}" -o ${CMAKE_BINARY_DIR}/${output_name} ${staging_dir}
         DEPENDS bootloader.bin kernel.bin ${ARGN}
     )
 endfunction()
