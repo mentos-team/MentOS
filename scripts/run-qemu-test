@@ -13,10 +13,13 @@ VGA_ARGS="${3:--vga std}"
 # Name of the video backend the console must have ended up on, as the kernel
 # reports it. Empty when the backend the kernel boots on is also the one under
 # test, which is the case for every backend that needs no promotion.
-REQUIRE_BACKEND="${4:-}"
 # Absolute path to QEMU, supplied by CMake when the target is generated. The
 # default keeps the wrapper useful when invoked directly from a shell.
-QEMU_EXE="${5:-qemu-system-i386}"
+QEMU_EXE="${4:-qemu-system-i386}"
+# Name of the video backend the console must have ended up on, as the kernel
+# reports it. This is deliberately after QEMU_EXE: CMake may omit an empty
+# optional argument, which must not shift the executable into this slot.
+REQUIRE_BACKEND="${5:-}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 

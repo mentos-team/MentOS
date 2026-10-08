@@ -364,7 +364,7 @@ mentos_add_grub_iso(cdrom_test.iso cdrom_test.iso iso_test grub.cfg.runtests fil
 # TAP output, and maps only a fully passing run to conventional host success (0).
 add_custom_target(
     qemu-test
-    COMMAND ${CMAKE_SOURCE_DIR}/scripts/run-qemu-test ${CMAKE_BINARY_DIR} 600 "${EMULATOR_VGA_STRING}" "${EMULATOR_REQUIRE_BACKEND}" "${EMULATOR}"
+    COMMAND ${CMAKE_SOURCE_DIR}/scripts/run-qemu-test ${CMAKE_BINARY_DIR} 600 "${EMULATOR_VGA_STRING}" "${EMULATOR}" "${EMULATOR_REQUIRE_BACKEND}"
     DEPENDS cdrom_test.iso
 )
 
