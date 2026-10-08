@@ -18,6 +18,7 @@
 #include "errno.h"
 #include "fcntl.h"
 #include "list_head.h"
+#include "klib/stdatomic.h"
 #include "klib/spinlock.h"
 #include "mem/mm/vm_area.h"
 #include "mem/uaccess.h"
@@ -43,6 +44,8 @@ typedef struct {
     spinlock_t lock;
     /// Set after IPC_RMID; existing mappings may continue until detach.
     int removed;
+    /// Namespace, syscall, and VMA references protecting this object.
+    atomic_t references;
     /// @brief List reference for shared memory structures.
     list_head_t list;
 } shm_info_t;
@@ -50,6 +53,8 @@ typedef struct {
 /// @brief List of all current active shared memorys.
 list_head_t shm_list;
 static spinlock_t shm_list_lock;
+
+static inline shm_info_t *__list_find_shm_info_by_id(int shmid);
 
 // ============================================================================
 // MEMORY MANAGEMENT (Private)
@@ -72,6 +77,7 @@ static inline shm_info_t *__shm_info_alloc(key_t key, size_t size, int shmflg)
     // Initialize the allocated memory to zero.
     memset(shm_info, 0, sizeof(shm_info_t));
     spinlock_init(&shm_info->lock);
+    atomic_set(&shm_info->references, 1); // namespace ownership
     // Initialize shm_info values.
     shm_info->id               = ++__shm_id;
     shm_info->shmid.shm_perm   = register_ipc(key, shmflg & 0x1FF);
@@ -110,6 +116,29 @@ static inline void __shm_info_dealloc(shm_info_t *shm_info)
     free_pages(shm_info->shm_location);
     // Deallocate the shmid memory.
     kfree(shm_info);
+}
+
+/// @brief Acquire a reference to a segment still present in the namespace.
+static shm_info_t *__shm_get_ref(int shmid)
+{
+    shm_info_t *shm_info;
+    spinlock_lock(&shm_list_lock);
+    shm_info = __list_find_shm_info_by_id(shmid);
+    if (shm_info && !shm_info->removed) {
+        atomic_inc(&shm_info->references);
+    } else {
+        shm_info = NULL;
+    }
+    spinlock_unlock(&shm_list_lock);
+    return shm_info;
+}
+
+/// @brief Release a reference and reclaim a removed segment when unused.
+static void __shm_put_ref(shm_info_t *shm_info)
+{
+    if (atomic_dec_and_test(&shm_info->references) && shm_info->removed) {
+        __shm_info_dealloc(shm_info);
+    }
 }
 
 // ============================================================================
@@ -187,6 +216,7 @@ int shm_init(void)
 static void __shm_mapping_acquire(vm_area_struct_t *area)
 {
     shm_info_t *shm_info = (shm_info_t *)area->vm_private_data;
+    atomic_inc(&shm_info->references);
     spinlock_lock(&shm_info->lock);
     shm_info->shmid.shm_nattch++;
     shm_info->shmid.shm_lpid = sys_getpid();
@@ -198,18 +228,14 @@ static void __shm_mapping_acquire(vm_area_struct_t *area)
 static void __shm_mapping_release(vm_area_struct_t *area)
 {
     shm_info_t *shm_info = (shm_info_t *)area->vm_private_data;
-    int reclaim = 0;
     spinlock_lock(&shm_info->lock);
     if (shm_info->shmid.shm_nattch > 0) {
         shm_info->shmid.shm_nattch--;
     }
     shm_info->shmid.shm_lpid = sys_getpid();
     shm_info->shmid.shm_dtime = sys_time(NULL);
-    reclaim = shm_info->removed && (shm_info->shmid.shm_nattch == 0);
     spinlock_unlock(&shm_info->lock);
-    if (reclaim) {
-        __shm_info_dealloc(shm_info);
-    }
+    __shm_put_ref(shm_info);
 }
 
 long sys_shmget(key_t key, size_t size, int shmflg)
@@ -294,7 +320,7 @@ void *sys_shmat(int shmid, const void *shmaddr, int shmflg)
         return (void *)-EINVAL;
     }
     // Get the shared memory if it exists.
-    shm_info = __list_find_shm_info_by_id(shmid);
+    shm_info = __shm_get_ref(shmid);
     // Check if no shared memory exists for the given key and the flags did not specify IPC_CREAT.
     if (!shm_info) {
         pr_err("No shared memory exists for the given id and the flags did not "
@@ -307,6 +333,7 @@ void *sys_shmat(int shmid, const void *shmaddr, int shmflg)
         if (!ipc_valid_permissions(IPC_ACCESS_READ, &shm_info->shmid.shm_perm)) {
             pr_err("The shared memory exists for the given key, but the calling "
                    "process does not have permission to access the set.\n");
+            __shm_put_ref(shm_info);
             return (void *)-EACCES;
         }
         // Remove the read-write flag.
@@ -314,6 +341,7 @@ void *sys_shmat(int shmid, const void *shmaddr, int shmflg)
     } else if (!ipc_valid_permissions(IPC_ACCESS_READ | IPC_ACCESS_WRITE, &shm_info->shmid.shm_perm)) {
         pr_err("The shared memory exists for the given key, but the calling "
                "process does not have permission to access the set.\n");
+        __shm_put_ref(shm_info);
         return (void *)-EACCES;
     }
     // Get the calling task.
@@ -329,15 +357,18 @@ void *sys_shmat(int shmid, const void *shmaddr, int shmflg)
     // Find the virtual address for the new area.
     if (vm_area_search_free_area(task->mm, mapping_size, &vm_start)) {
         pr_err("shmat address search failed: size=%zu\n", mapping_size);
+        __shm_put_ref(shm_info);
         return (void *)-EACCES;
     }
     vm_area_struct_t *area = vm_area_map_physical(
         task->mm, vm_start, mapping_size, phy_start, flags, shm_info,
         __shm_mapping_release, __shm_mapping_acquire);
     if (!area) {
+        __shm_put_ref(shm_info);
         return (void *)-ENOMEM;
     }
     __shm_mapping_acquire(area);
+    __shm_put_ref(shm_info); // drop the syscall reference
     return (void *)vm_start;
 }
 
@@ -371,8 +402,8 @@ long sys_shmctl(int shmid, int cmd, struct shmid_ds *buf)
     // `access_ok(USER_WRITE, buf, sizeof(*buf))` (#191).
     (void)buf;
 
-    // Search for the shared memory.
-    shm_info = __list_find_shm_info_by_id(shmid);
+    // Hold a reference while removing the segment from the namespace.
+    shm_info = __shm_get_ref(shmid);
     // The shared memory doesn't exist.
     if (!shm_info) {
         pr_err("The shared memory doesn't exist.\n");
@@ -388,19 +419,20 @@ long sys_shmctl(int shmid, int cmd, struct shmid_ds *buf)
         if ((shm_info->shmid.shm_perm.uid != task->uid) && (shm_info->shmid.shm_perm.cuid != task->uid)) {
             pr_err("The calling process is not the creator or the owner of the "
                    "shared memory.\n");
+            __shm_put_ref(shm_info);
             return -EPERM;
         }
         spinlock_lock(&shm_info->lock);
         shm_info->removed = 1;
-        int reclaim = (shm_info->shmid.shm_nattch == 0);
         spinlock_unlock(&shm_info->lock);
         spinlock_lock(&shm_list_lock);
         __list_remove_shm_info(shm_info);
         spinlock_unlock(&shm_list_lock);
-        if (reclaim) {
-            __shm_info_dealloc(shm_info);
-        }
+        __shm_put_ref(shm_info); // drop namespace reference
+        __shm_put_ref(shm_info); // drop IPC_RMID syscall reference
+        return 0;
     }
+    __shm_put_ref(shm_info);
     return 0;
 }
 
