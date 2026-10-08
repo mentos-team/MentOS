@@ -14,6 +14,9 @@ VGA_ARGS="${3:--vga std}"
 # reports it. Empty when the backend the kernel boots on is also the one under
 # test, which is the case for every backend that needs no promotion.
 REQUIRE_BACKEND="${4:-}"
+# Absolute path to QEMU, supplied by CMake when the target is generated. The
+# default keeps the wrapper useful when invoked directly from a shell.
+QEMU_EXE="${5:-qemu-system-i386}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
@@ -111,7 +114,7 @@ rm -f "${BUILD_DIR}/test.log" "${BUILD_DIR}/serial.log"
 # from the same image, so a run cannot leave the filesystem in a state that
 # makes the next one fail.
 timeout --foreground "${TIMEOUT}" \
-    qemu-system-i386 \
+    "${QEMU_EXE}" \
     ${VGA_ARGS} \
     -m 1096M \
     -nodefaults \

@@ -196,8 +196,18 @@ add_custom_target(filesystem
 # EMULATOR CONFIGURATION
 # =============================================================================
 
-# Set the emulator.
-set(EMULATOR qemu-system-i386)
+# Find QEMU without making it a configure-time requirement. Compiler-only
+# builds remain useful on hosts without an emulator; targets that actually
+# boot a guest receive the discovered path and fail with this tool name when
+# QEMU is unavailable.
+find_program(EMULATOR NAMES qemu-system-i386)
+if(NOT EMULATOR)
+    message(WARNING
+        "qemu-system-i386 not found: QEMU targets will not work until it is "
+        "installed and available on PATH.")
+    set(EMULATOR qemu-system-i386)
+endif()
+mark_as_advanced(EMULATOR)
 
 # Set the display device the selected video backend needs.
 #
@@ -354,7 +364,7 @@ mentos_add_grub_iso(cdrom_test.iso cdrom_test.iso iso_test grub.cfg.runtests fil
 # TAP output, and maps only a fully passing run to conventional host success (0).
 add_custom_target(
     qemu-test
-    COMMAND ${CMAKE_SOURCE_DIR}/scripts/run-qemu-test ${CMAKE_BINARY_DIR} 600 "${EMULATOR_VGA_STRING}" "${EMULATOR_REQUIRE_BACKEND}"
+    COMMAND ${CMAKE_SOURCE_DIR}/scripts/run-qemu-test ${CMAKE_BINARY_DIR} 600 "${EMULATOR_VGA_STRING}" "${EMULATOR_REQUIRE_BACKEND}" "${EMULATOR}"
     DEPENDS cdrom_test.iso
 )
 
@@ -370,7 +380,7 @@ mentos_add_grub_iso(cdrom_kerneltest.iso cdrom_kerneltest.iso iso_kerneltest gru
 # is short on purpose: a run that is still going after it is hung, not slow.
 add_custom_target(
     qemu-kernel-test
-    COMMAND ${CMAKE_SOURCE_DIR}/scripts/run-qemu-kernel-test ${CMAKE_BINARY_DIR} 120 "${EMULATOR_VGA_STRING}"
+    COMMAND ${CMAKE_SOURCE_DIR}/scripts/run-qemu-kernel-test ${CMAKE_BINARY_DIR} 120 "${EMULATOR_VGA_STRING}" "${EMULATOR}"
     DEPENDS cdrom_kerneltest.iso
 )
 
