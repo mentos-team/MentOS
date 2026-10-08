@@ -550,6 +550,7 @@ int sys_msgctl(int msqid, int cmd, struct msqid_ds *buf)
 {
     msq_info_t *msq_info = NULL;
     task_struct *task    = NULL;
+    struct msqid_ds snapshot;
     // The msqid is less than zero.
     if (msqid < 0) {
         pr_err("The msqid is less than zero.\n");
@@ -571,7 +572,11 @@ int sys_msgctl(int msqid, int cmd, struct msqid_ds *buf)
         // Remove the message queue; any processes blocked is awakened (errno set to
         // EIDRM); no argument required.
 
-        if ((msq_info->msqid.msg_perm.uid != task->uid) && (msq_info->msqid.msg_perm.cuid != task->uid)) {
+        spinlock_lock(&msq_info->lock);
+        int can_remove = (msq_info->msqid.msg_perm.uid == task->uid) ||
+                         (msq_info->msqid.msg_perm.cuid == task->uid);
+        if (!can_remove) {
+            spinlock_unlock(&msq_info->lock);
             pr_err("The calling process is not the creator or the owner of the "
                    "queue.\n");
             __msq_put_ref(msq_info);
@@ -580,7 +585,6 @@ int sys_msgctl(int msqid, int cmd, struct msqid_ds *buf)
         // Tombstone before waking waiters.  A blocked sender/receiver holds a
         // reference and will release it after observing EIDRM; freeing the
         // queue here would make that continuation dereference stale memory.
-        spinlock_lock(&msq_info->lock);
         msq_info->removed = 1;
         spinlock_unlock(&msq_info->lock);
         spinlock_lock(&msq_list_lock);
@@ -596,14 +600,20 @@ int sys_msgctl(int msqid, int cmd, struct msqid_ds *buf)
             return -EFAULT;
         }
         // Check permissions.
-        if (!ipc_valid_permissions(IPC_ACCESS_READ, &msq_info->msqid.msg_perm)) {
+        spinlock_lock(&msq_info->lock);
+        int can_read = ipc_valid_permissions(IPC_ACCESS_READ, &msq_info->msqid.msg_perm);
+        if (can_read) {
+            snapshot = msq_info->msqid;
+        }
+        spinlock_unlock(&msq_info->lock);
+        if (!can_read) {
             pr_err("The calling process does not have read permission to "
                    "access the queue.\n");
             __msq_put_ref(msq_info);
             return -EACCES;
         }
         // Copying all the data.
-        memcpy(buf, &msq_info->msqid, sizeof(struct msqid_ds));
+        memcpy(buf, &snapshot, sizeof(snapshot));
     }
     __msq_put_ref(msq_info);
     return 0;
