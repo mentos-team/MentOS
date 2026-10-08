@@ -18,6 +18,8 @@
 #include "errno.h"
 #include "fcntl.h"
 #include "list_head.h"
+#include "klib/spinlock.h"
+#include "mem/mm/vm_area.h"
 #include "mem/uaccess.h"
 #include "process/scheduler.h"
 #include "stdio.h"
@@ -37,12 +39,17 @@ typedef struct {
     struct shmid_ds shmid;
     /// @brief Location where shared memory is stored.
     page_t *shm_location;
+    /// Serializes lifecycle metadata and attachment accounting.
+    spinlock_t lock;
+    /// Set after IPC_RMID; existing mappings may continue until detach.
+    int removed;
     /// @brief List reference for shared memory structures.
     list_head_t list;
 } shm_info_t;
 
 /// @brief List of all current active shared memorys.
 list_head_t shm_list;
+static spinlock_t shm_list_lock;
 
 // ============================================================================
 // MEMORY MANAGEMENT (Private)
@@ -64,6 +71,7 @@ static inline shm_info_t *__shm_info_alloc(key_t key, size_t size, int shmflg)
     }
     // Initialize the allocated memory to zero.
     memset(shm_info, 0, sizeof(shm_info_t));
+    spinlock_init(&shm_info->lock);
     // Initialize shm_info values.
     shm_info->id               = ++__shm_id;
     shm_info->shmid.shm_perm   = register_ipc(key, shmflg & 0x1FF);
@@ -77,6 +85,10 @@ static inline shm_info_t *__shm_info_alloc(key_t key, size_t size, int shmflg)
     // Determine the order for memory allocation.
     uint32_t order             = find_nearest_order_greater(0, size);
     // Allocate the shared memory pages.
+    // Shared mappings are accessed by both the kernel and user processes.  The
+    // current 32-bit VM subsystem has no temporary kmap API yet, therefore
+    // these pages must come from the directly mapped normal zone rather than
+    // HIGHMEM.
     shm_info->shm_location     = alloc_pages(GFP_KERNEL, order);
     // Check if memory allocation for shm_location failed.
     if (!shm_info->shm_location) {
@@ -84,6 +96,7 @@ static inline shm_info_t *__shm_info_alloc(key_t key, size_t size, int shmflg)
         kfree(shm_info);
         return NULL;
     }
+    memset((void *)get_virtual_address_from_page(shm_info->shm_location), 0, (size_t)1 << (order + PAGE_SHIFT));
     // Return the allocated shared memory structure.
     return shm_info;
 }
@@ -139,24 +152,6 @@ static inline shm_info_t *__list_find_shm_info_by_key(key_t key)
     return NULL;
 }
 
-/// @brief Searches for the shared memory with the given page.
-/// @param page the page we are searching.
-/// @return the shared memory with the given page.
-static inline shm_info_t *__list_find_shm_info_by_page(page_t *page)
-{
-    shm_info_t *shm_info;
-    // Iterate through the list of shared memories.
-    list_for_each_decl (it, &shm_list) {
-        // Get the current entry.
-        shm_info = list_entry(it, shm_info_t, list);
-        // If shared memories is valid, check the id.
-        if (shm_info && (shm_info->shm_location == page)) {
-            return shm_info;
-        }
-    }
-    return NULL;
-}
-
 /// @brief Adds a shared memory info structure to the list.
 /// @param shm_info Pointer to the shared memory info structure.
 static inline void __list_add_shm_info(shm_info_t *shm_info)
@@ -184,12 +179,45 @@ static inline void __list_remove_shm_info(shm_info_t *shm_info)
 int shm_init(void)
 {
     list_head_init(&shm_list);
+    spinlock_init(&shm_list_lock);
     return 0;
+}
+
+/// @brief Account for a new address-space mapping of a segment.
+static void __shm_mapping_acquire(vm_area_struct_t *area)
+{
+    shm_info_t *shm_info = (shm_info_t *)area->vm_private_data;
+    spinlock_lock(&shm_info->lock);
+    shm_info->shmid.shm_nattch++;
+    shm_info->shmid.shm_lpid = sys_getpid();
+    shm_info->shmid.shm_atime = sys_time(NULL);
+    spinlock_unlock(&shm_info->lock);
+}
+
+/// @brief Account for a detached or exited address-space mapping.
+static void __shm_mapping_release(vm_area_struct_t *area)
+{
+    shm_info_t *shm_info = (shm_info_t *)area->vm_private_data;
+    int reclaim = 0;
+    spinlock_lock(&shm_info->lock);
+    if (shm_info->shmid.shm_nattch > 0) {
+        shm_info->shmid.shm_nattch--;
+    }
+    shm_info->shmid.shm_lpid = sys_getpid();
+    shm_info->shmid.shm_dtime = sys_time(NULL);
+    reclaim = shm_info->removed && (shm_info->shmid.shm_nattch == 0);
+    spinlock_unlock(&shm_info->lock);
+    if (reclaim) {
+        __shm_info_dealloc(shm_info);
+    }
 }
 
 long sys_shmget(key_t key, size_t size, int shmflg)
 {
     shm_info_t *shm_info = NULL;
+    if (size == 0) {
+        return -EINVAL;
+    }
     // Need to find a unique key.
     if (key == IPC_PRIVATE) {
         // Exit when i find a unique key.
@@ -206,6 +234,9 @@ long sys_shmget(key_t key, size_t size, int shmflg)
     } else {
         // Get the shared memory if it exists.
         shm_info = __list_find_shm_info_by_key(key);
+        if (shm_info && size > shm_info->shmid.shm_segsz) {
+            return -EINVAL;
+        }
         // Check if no shared memory exists for the given key and the flags did not specify IPC_CREAT.
         if (!shm_info && !(shmflg & IPC_CREAT)) {
             pr_err("No shared memory exists for the given key and the flags "
@@ -246,7 +277,9 @@ void *sys_shmat(int shmid, const void *shmaddr, int shmflg)
     task_struct *task    = NULL;
     uint32_t vm_start;
     uint32_t phy_start;
-    uint32_t flags = MM_RW | MM_PRESENT | MM_USER | MM_UPDADDR;
+    size_t mapping_size;
+    uint32_t flags = MM_RW | MM_PRESENT | MM_USER;
+
 
     // `shmaddr` is an address argument, not a buffer: it must merely stay
     // out of the kernel area, and a page-table walk would be wrong here
@@ -286,24 +319,31 @@ void *sys_shmat(int shmid, const void *shmaddr, int shmflg)
     // Get the calling task.
     task = scheduler_get_current_process();
     assert(task && "Failed to get the current running process.");
+    // A VMA and its physical backing are page-granular.  Rounding the
+    // requested segment up is also required when the allocator places the
+    // mapping at the end of a page: the final user byte must not cross into an
+    // unmapped page merely because shm_segsz is not page aligned.
+    mapping_size = (shm_info->shmid.shm_segsz + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
     // Get the phyisical address from the allocated pages.
     phy_start = get_physical_address_from_page(shm_info->shm_location);
     // Find the virtual address for the new area.
-    if (vm_area_search_free_area(task->mm, shm_info->shmid.shm_segsz, &vm_start)) {
-        pr_err("We failed to find space for the new virtual memory area.\n");
+    if (vm_area_search_free_area(task->mm, mapping_size, &vm_start)) {
+        pr_err("shmat address search failed: size=%zu\n", mapping_size);
         return (void *)-EACCES;
     }
-    mem_upd_vm_area(task->mm->pgd, vm_start, phy_start, shm_info->shmid.shm_segsz, flags);
+    vm_area_struct_t *area = vm_area_map_physical(
+        task->mm, vm_start, mapping_size, phy_start, flags, shm_info,
+        __shm_mapping_release, __shm_mapping_acquire);
+    if (!area) {
+        return (void *)-ENOMEM;
+    }
+    __shm_mapping_acquire(area);
     return (void *)vm_start;
 }
 
 long sys_shmdt(const void *shmaddr)
 {
-    shm_info_t *shm_info = NULL;
     task_struct *task    = NULL;
-    uint32_t phy_start;
-    size_t size;
-    page_t *page;
 
     // The address must name user memory before anything walks the page
     // tables for it: without this, a kernel-area address would walk the
@@ -315,24 +355,11 @@ long sys_shmdt(const void *shmaddr)
     // Get the calling task.
     task = scheduler_get_current_process();
     assert(task && "Failed to get the current running process.");
-    // Get the page.
-    page = mem_virtual_to_page(task->mm->pgd, (uint32_t)shmaddr, &size);
-    // Check if we can find the page.
-    if (page == NULL) {
-        pr_err("Cannot retrieve the page from the give address.\n");
+    vm_area_struct_t *area = vm_area_find(task->mm, (uint32_t)shmaddr);
+    if (!area || !area->vm_release) {
         return -ENOENT;
     }
-    shm_info = __list_find_shm_info_by_page(page);
-    // Check if no shared memory exists for the given address.
-    if (!shm_info) {
-        pr_err("No shared memory exists for the given address.\n");
-        return -ENOENT;
-    }
-    // Get the phyisical address from the allocated pages.
-    phy_start = get_physical_address_from_page(shm_info->shm_location);
-    // Set all virtual pages as not present.
-    mem_upd_vm_area(task->mm->pgd, (uint32_t)shmaddr, phy_start, shm_info->shmid.shm_segsz, MM_GLOBAL);
-    return 0;
+    return vm_area_destroy(task->mm, area);
 }
 
 long sys_shmctl(int shmid, int cmd, struct shmid_ds *buf)
@@ -363,10 +390,16 @@ long sys_shmctl(int shmid, int cmd, struct shmid_ds *buf)
                    "shared memory.\n");
             return -EPERM;
         }
-        // Remove the set from the list.
+        spinlock_lock(&shm_info->lock);
+        shm_info->removed = 1;
+        int reclaim = (shm_info->shmid.shm_nattch == 0);
+        spinlock_unlock(&shm_info->lock);
+        spinlock_lock(&shm_list_lock);
         __list_remove_shm_info(shm_info);
-        // Delete the set.
-        __shm_info_dealloc(shm_info);
+        spinlock_unlock(&shm_list_lock);
+        if (reclaim) {
+            __shm_info_dealloc(shm_info);
+        }
     }
     return 0;
 }

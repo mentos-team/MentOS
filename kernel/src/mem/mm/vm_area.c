@@ -31,6 +31,41 @@ int vm_area_init(void)
     return 0;
 }
 
+vm_area_struct_t *vm_area_map_physical(struct mm_struct *mm, uint32_t vm_start, size_t size,
+                                       uint32_t phy_start, uint32_t pgflags, void *private_data,
+                                       void (*release)(vm_area_struct_t *), void (*acquire)(vm_area_struct_t *))
+{
+    if (!mm || !vm_start || !size || vm_area_is_valid(mm, vm_start, vm_start + size) <= 0) {
+        return NULL;
+    }
+    vm_area_struct_t *segment = kmem_cache_alloc(vm_area_cache, GFP_KERNEL);
+    if (!segment) {
+        return NULL;
+    }
+    // A physical mapping supplies the frame addresses itself.  MM_UPDADDR is
+    // therefore part of this helper's contract; omitting it leaves the page
+    // table pointing at whatever frame happened to occupy the PTE (usually
+    // frame zero), while the VMA claims to map a different object.
+    if (mem_upd_vm_area(mm->pgd, vm_start, phy_start, size, pgflags | MM_UPDADDR) != 0) {
+        kmem_cache_free(segment);
+        return NULL;
+    }
+    memset(segment, 0, sizeof(*segment));
+    segment->vm_start        = vm_start;
+    segment->vm_end          = vm_start + size;
+    segment->vm_mm           = mm;
+    segment->vm_flags        = pgflags;
+    segment->vm_private_data = private_data;
+    segment->vm_release      = release;
+    segment->vm_acquire      = acquire;
+    list_head_insert_after(&segment->vm_list, &mm->mmap_list);
+    list_head_sort(&mm->mmap_list, vm_area_compare);
+    mm->mmap_cache = segment;
+    mm->map_count++;
+    mm->total_vm += (unsigned int)((size + PAGE_SIZE - 1) / PAGE_SIZE);
+    return segment;
+}
+
 vm_area_struct_t *
 vm_area_create(struct mm_struct *mm, uint32_t vm_start, size_t size, uint32_t pgflags, uint32_t gfpflags)
 {
@@ -108,6 +143,12 @@ vm_area_create(struct mm_struct *mm, uint32_t vm_start, size_t size, uint32_t pg
     segment->vm_start = vm_start;
     segment->vm_end   = vm_end;
     segment->vm_mm    = mm;
+    segment->vm_flags = pgflags;
+    // VMAs come from a slab cache.  Clear optional ownership hooks explicitly
+    // so a recycled descriptor can never be mistaken for an IPC-backed VMA.
+    segment->vm_private_data = NULL;
+    segment->vm_release      = NULL;
+    segment->vm_acquire      = NULL;
 
     // Insert the new segment into the memory descriptor's list of vm_area_structs.
     list_head_insert_after(&segment->vm_list, &mm->mmap_list);
@@ -134,6 +175,25 @@ uint32_t vm_area_clone(mm_struct_t *mm, vm_area_struct_t *area, int cow, uint32_
     if (!area) {
         pr_crit("Invalid arguments: area is NULL.\n");
         return -1;
+    }
+
+    if (area->vm_release) {
+        size_t size = area->vm_end - area->vm_start;
+        size_t mapped_size = size;
+        page_t *page = mem_virtual_to_page(area->vm_mm->pgd, area->vm_start, &mapped_size);
+        if (!page) {
+            return -1;
+        }
+        vm_area_struct_t *shared = vm_area_map_physical(
+            mm, area->vm_start, size, get_physical_address_from_page(page), area->vm_flags,
+            area->vm_private_data, area->vm_release, area->vm_acquire);
+        if (!shared) {
+            return -1;
+        }
+        if (shared->vm_acquire) {
+            shared->vm_acquire(shared);
+        }
+        return 0;
     }
 
     // Allocate a new vm_area_struct for the cloned area.
@@ -223,6 +283,17 @@ int vm_area_destroy(mm_struct_t *mm, vm_area_struct_t *area)
 
     // Get the starting address of the area.
     area_start = area->vm_start;
+
+    if (area->vm_release) {
+        // Shared mappings borrow their physical pages from an IPC object;
+        // unmap the range and let the owner callback update its lifetime.
+        mem_upd_vm_area(mm->pgd, area->vm_start, 0, area_total_size, MM_GLOBAL);
+        area->vm_release(area);
+        list_head_remove(&area->vm_list);
+        kmem_cache_free(area);
+        --mm->map_count;
+        return 0;
+    }
 
     // Free all the memory associated with the virtual memory area.
     while (area_total_size > 0) {
