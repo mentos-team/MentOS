@@ -115,6 +115,7 @@ add_subdirectory(kernel)
 add_subdirectory(lib)
 add_subdirectory(userspace)
 include(${CMAKE_SOURCE_DIR}/cmake/mentos-filesystem.cmake)
+include(${CMAKE_SOURCE_DIR}/cmake/mentos-iso.cmake)
 
 # =============================================================================
 # EMULATOR CONFIGURATION
@@ -227,31 +228,6 @@ add_custom_target(
     DEPENDS gdbinit
 )
 
-# =============================================================================
-# Booting with QEMU+GRUB
-# =============================================================================
-
-# Build one GRUB ISO from a selected configuration. Keeping staging and
-# packaging in one helper prevents the normal, userspace-test, and kernel-test
-# images from drifting apart when the boot artifact layout changes.
-function(mentos_add_grub_iso target_name output_name staging_name grub_config)
-    set(staging_dir ${CMAKE_BINARY_DIR}/${staging_name})
-    set(grub_config_source ${CMAKE_SOURCE_DIR}/iso/boot/grub/${grub_config})
-
-    add_custom_target(
-        ${target_name}
-        COMMAND ${CMAKE_COMMAND} -E rm -rf ${staging_dir}
-        COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/iso ${staging_dir}
-        COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/mentos/bootloader.bin ${staging_dir}/boot/bootloader.bin
-        COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/mentos/kernel.bin ${staging_dir}/boot/kernel.bin
-        COMMAND ${CMAKE_COMMAND} -E copy ${grub_config_source} ${staging_dir}/boot/grub/grub.cfg
-        COMMAND "${GRUB_MKRESCUE_EXE}" -o ${CMAKE_BINARY_DIR}/${output_name} ${staging_dir}
-        DEPENDS bootloader.bin kernel.bin ${ARGN}
-    )
-endfunction()
-
-mentos_add_grub_iso(cdrom.iso cdrom.iso iso grub.cfg)
-
 # This third target runs the emualtor, but this time, the kernel binary file is
 # inside the cdrom, so we will not pass the `-kernel` option. We will pass the
 # `-cdrom` option and the `-boot d` option, all the other options will remain
@@ -266,9 +242,6 @@ add_custom_target(
 # Booting with QEMU+GRUB for testing
 # =============================================================================
 
-# The userspace test image uses a different GRUB command line.
-mentos_add_grub_iso(cdrom_test.iso cdrom_test.iso iso_test grub.cfg.runtests filesystem)
-
 # This target runs the emulator, and executes the runtests binary as init process.
 # Uses isa-debug-exit for explicit completion/failure signaling.
 # The wrapper recognizes QEMU exit 33 as normal suite completion, validates the
@@ -282,10 +255,6 @@ add_custom_target(
 # =============================================================================
 # Booting with QEMU+GRUB for the kernel unit tests
 # =============================================================================
-
-# The kernel unit-test image uses a command line that runs suites and exits via
-# isa-debug-exit without creating an init process.
-mentos_add_grub_iso(cdrom_kerneltest.iso cdrom_kerneltest.iso iso_kerneltest grub.cfg.kerneltests filesystem)
 
 # These take seconds, not the minutes the userspace suite takes, so the timeout
 # is short on purpose: a run that is still going after it is hung, not slow.
