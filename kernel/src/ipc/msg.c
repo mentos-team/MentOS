@@ -572,10 +572,16 @@ int sys_msgctl(int msqid, int cmd, struct msqid_ds *buf)
                    "queue.\n");
             return -EPERM;
         }
-        // Remove the info from the list.
+        // Tombstone before waking waiters.  A blocked sender/receiver holds a
+        // reference and will release it after observing EIDRM; freeing the
+        // queue here would make that continuation dereference stale memory.
+        spinlock_lock(&msq_info->lock);
+        msq_info->removed = 1;
+        spinlock_unlock(&msq_info->lock);
+        spinlock_lock(&msq_list_lock);
         __list_remove_msq_info(msq_info);
-        // Delete the info.
-        __msq_info_dealloc(msq_info);
+        spinlock_unlock(&msq_list_lock);
+        wake_up_all(&msq_info->wait_queue);
     } else if (cmd == IPC_STAT) {
         // Place a copy of the msqid_ds data structure in the buffer pointed to
         // by buf: the caller's own, writable memory or nowhere (#191).

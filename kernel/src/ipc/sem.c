@@ -304,8 +304,7 @@ long sys_semop(int semid, struct sembuf *sops, unsigned nsops)
         pr_err("The semid is less than zero.\n");
         return -EINVAL;
     }
-    if (nsops == 0 || nsops > SEMOPM_MAX) {
-        pr_err("The number of semaphore operations is outside the supported range.\n");
+    if (nsops == 0) {
         return -EINVAL;
     }
     // The whole array of operations is read out of the caller's memory, and
@@ -314,6 +313,10 @@ long sys_semop(int semid, struct sembuf *sops, unsigned nsops)
     if (((size_t)nsops > (size_t)-1 / sizeof(struct sembuf)) ||
         !access_ok(USER_READ, sops, (size_t)nsops * sizeof(struct sembuf))) {
         return -EFAULT;
+    }
+    if (nsops > SEMOPM_MAX) {
+        pr_err("The number of semaphore operations is outside the supported range.\n");
+        return -E2BIG;
     }
     operations = (struct sembuf *)kmalloc(nsops * sizeof(*operations));
     if (!operations) {
@@ -426,10 +429,16 @@ long sys_semctl(int semid, int semnum, int cmd, union semun *arg)
                    "semaphore set.\n");
             return -EPERM;
         }
-        // Remove the set from the list.
+        // Unlink and tombstone the set before waking sleepers.  A blocked
+        // semop continuation may still hold a reference, so freeing here
+        // would turn a valid wakeup into a use-after-free.
+        spinlock_lock(&sem_info->lock);
+        sem_info->removed = 1;
+        spinlock_unlock(&sem_info->lock);
+        spinlock_lock(&semaphores_list_lock);
         __list_remove_sem_info(sem_info);
-        // Delete the set.
-        __sem_info_dealloc(sem_info);
+        spinlock_unlock(&semaphores_list_lock);
+        wake_up_all(&sem_info->wait_queue);
     } else if (cmd == SETVAL) {
         // The value of the semnum-th semaphore in the set is initialized to the
         // value specified in arg.val.
