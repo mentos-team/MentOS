@@ -416,13 +416,16 @@ long sys_shmctl(int shmid, int cmd, struct shmid_ds *buf)
 
     if (cmd == IPC_RMID) {
         // Remove the shared memory; any processes blocked is awakened (errno set to EIDRM); no argument required.
-        if ((shm_info->shmid.shm_perm.uid != task->uid) && (shm_info->shmid.shm_perm.cuid != task->uid)) {
+        spinlock_lock(&shm_info->lock);
+        int can_remove = (shm_info->shmid.shm_perm.uid == task->uid) ||
+                         (shm_info->shmid.shm_perm.cuid == task->uid);
+        if (!can_remove) {
+            spinlock_unlock(&shm_info->lock);
             pr_err("The calling process is not the creator or the owner of the "
                    "shared memory.\n");
             __shm_put_ref(shm_info);
             return -EPERM;
         }
-        spinlock_lock(&shm_info->lock);
         shm_info->removed = 1;
         spinlock_unlock(&shm_info->lock);
         spinlock_lock(&shm_list_lock);
