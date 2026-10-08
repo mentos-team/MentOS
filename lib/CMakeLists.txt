@@ -3,7 +3,7 @@
 # =============================================================================
 
 # Automatically collect all library source files.
-file(GLOB_RECURSE LIBC_SOURCES 
+file(GLOB_RECURSE LIBC_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.S"
 )
