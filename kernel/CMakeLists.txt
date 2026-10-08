@@ -109,6 +109,8 @@ endif()
 set(KERNEL_INCLUDE_DIRS ${CMAKE_SOURCE_DIR}/common/inc ${CMAKE_CURRENT_SOURCE_DIR}/inc ${CMAKE_SOURCE_DIR}/lib/inc)
 # Create the kernel static library - explicitly include multiboot.c since it's needed by both kernel and bootloader
 add_library(kernel ${KERNEL_SOURCES} "${CMAKE_CURRENT_SOURCE_DIR}/src/multiboot.c")
+
+target_link_libraries(kernel PRIVATE mentos_freestanding_options)
 # Stack-usage reports are deliberately opt-in and kernel-only.  Applying the
 # option through a language generator expression keeps NASM sources untouched;
 # GCC writes one .su file next to each corresponding object file.
