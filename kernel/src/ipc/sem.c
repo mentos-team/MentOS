@@ -645,6 +645,7 @@ ssize_t procipc_sem_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyte
                 "otime      ctime\n");
 
     // Iterate through the list of semaphore set.
+    spinlock_lock(&semaphores_list_lock);
     list_for_each_decl (it, &semaphores_list) {
         // Get the current entry.
         sem_info = list_entry(it, sem_info_t, list);
@@ -655,6 +656,7 @@ ssize_t procipc_sem_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyte
             sem_info->semid.sem_perm.gid, sem_info->semid.sem_perm.cuid, sem_info->semid.sem_perm.cgid,
             sem_info->semid.sem_otime, sem_info->semid.sem_ctime);
     }
+    spinlock_unlock(&semaphores_list_lock);
     sprintf(buffer + ret, "\n");
 
     // Perform read.

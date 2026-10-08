@@ -639,6 +639,7 @@ ssize_t procipc_msg_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyte
         buffer, "       key      msqid perms      cbytes       qnum lspid lrpid   uid  "
                 " gid  cuid  cgid      stime      rtime      ctime\n");
 
+    spinlock_lock(&msq_list_lock);
     list_for_each_decl (it, &msq_list) {
         // Get the current entry.
         msq_info = list_entry(it, msq_info_t, list);
@@ -651,6 +652,7 @@ ssize_t procipc_msg_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyte
             msq_info->msqid.msg_perm.cgid, msq_info->msqid.msg_stime, msq_info->msqid.msg_rtime,
             msq_info->msqid.msg_ctime);
     }
+    spinlock_unlock(&msq_list_lock);
     sprintf(buffer + ret, "\n");
 
     // Perform read.

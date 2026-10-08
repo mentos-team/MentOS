@@ -470,6 +470,7 @@ ssize_t procipc_shm_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyte
                 "atime      dtime      ctime   cpid   lpid nattch\n");
 
     // Iterate through the list of shared memory.
+    spinlock_lock(&shm_list_lock);
     list_for_each_decl (it, &shm_list) {
         // Get the current entry from the list.
         shm_info = list_entry(it, shm_info_t, list);
@@ -482,6 +483,7 @@ ssize_t procipc_shm_read(vfs_file_t *file, char *buf, off_t offset, size_t nbyte
             shm_info->shmid.shm_perm.cgid, shm_info->shmid.shm_atime, shm_info->shmid.shm_dtime,
             shm_info->shmid.shm_ctime, shm_info->shmid.shm_cpid, shm_info->shmid.shm_lpid, shm_info->shmid.shm_nattch);
     }
+    spinlock_unlock(&shm_list_lock);
 
     // Terminate the buffer with a newline.
     sprintf(buffer + ret, "\n");
