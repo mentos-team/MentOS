@@ -338,17 +338,26 @@ add_custom_target(
 # Booting with QEMU+GRUB
 # =============================================================================
 
-# First, we need to build the ISO for the cdrom.
-add_custom_target(
-    cdrom.iso
-    COMMAND ${CMAKE_COMMAND} -E rm -rf ${CMAKE_BINARY_DIR}/iso
-    COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/iso ${CMAKE_BINARY_DIR}/iso
-    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/mentos/bootloader.bin ${CMAKE_BINARY_DIR}/iso/boot/bootloader.bin
-    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/mentos/kernel.bin ${CMAKE_BINARY_DIR}/iso/boot/kernel.bin
-    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/iso/boot/grub/grub.cfg ${CMAKE_BINARY_DIR}/iso/boot/grub/grub.cfg
-    COMMAND grub-mkrescue -o ${CMAKE_BINARY_DIR}/cdrom.iso ${CMAKE_BINARY_DIR}/iso
-    DEPENDS bootloader.bin kernel.bin
-)
+# Build one GRUB ISO from a selected configuration. Keeping staging and
+# packaging in one helper prevents the normal, userspace-test, and kernel-test
+# images from drifting apart when the boot artifact layout changes.
+function(mentos_add_grub_iso target_name output_name staging_name grub_config)
+    set(staging_dir ${CMAKE_BINARY_DIR}/${staging_name})
+    set(grub_config_source ${CMAKE_SOURCE_DIR}/iso/boot/grub/${grub_config})
+
+    add_custom_target(
+        ${target_name}
+        COMMAND ${CMAKE_COMMAND} -E rm -rf ${staging_dir}
+        COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/iso ${staging_dir}
+        COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/mentos/bootloader.bin ${staging_dir}/boot/bootloader.bin
+        COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/mentos/kernel.bin ${staging_dir}/boot/kernel.bin
+        COMMAND ${CMAKE_COMMAND} -E copy ${grub_config_source} ${staging_dir}/boot/grub/grub.cfg
+        COMMAND grub-mkrescue -o ${CMAKE_BINARY_DIR}/${output_name} ${staging_dir}
+        DEPENDS bootloader.bin kernel.bin ${ARGN}
+    )
+endfunction()
+
+mentos_add_grub_iso(cdrom.iso cdrom.iso iso grub.cfg)
 
 # This third target runs the emualtor, but this time, the kernel binary file is
 # inside the cdrom, so we will not pass the `-kernel` option. We will pass the
@@ -364,18 +373,8 @@ add_custom_target(
 # Booting with QEMU+GRUB for testing
 # =============================================================================
 
-# First, we need to build the ISO for the cdrom. It has a slightly different
-# kernel command line including 'test'.
-add_custom_target(
-    cdrom_test.iso
-    COMMAND ${CMAKE_COMMAND} -E rm -rf ${CMAKE_BINARY_DIR}/iso_test
-    COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/iso ${CMAKE_BINARY_DIR}/iso_test
-    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/iso/boot/grub/grub.cfg.runtests ${CMAKE_BINARY_DIR}/iso_test/boot/grub/grub.cfg
-    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/mentos/bootloader.bin ${CMAKE_BINARY_DIR}/iso_test/boot/bootloader.bin
-    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/mentos/kernel.bin ${CMAKE_BINARY_DIR}/iso_test/boot/kernel.bin
-    COMMAND grub-mkrescue -o ${CMAKE_BINARY_DIR}/cdrom_test.iso ${CMAKE_BINARY_DIR}/iso_test
-    DEPENDS bootloader.bin kernel.bin filesystem
-)
+# The userspace test image uses a different GRUB command line.
+mentos_add_grub_iso(cdrom_test.iso cdrom_test.iso iso_test grub.cfg.runtests filesystem)
 
 # This target runs the emulator, and executes the runtests binary as init process.
 # Uses isa-debug-exit for explicit completion/failure signaling.
@@ -391,21 +390,9 @@ add_custom_target(
 # Booting with QEMU+GRUB for the kernel unit tests
 # =============================================================================
 
-# The kernel unit tests get an ISO of their own, with the `kerneltests` kernel
-# command line. That boot mode runs the suites and then signals isa-debug-exit
-# without ever creating an init process, so the run ends on its own instead of
-# sitting in a shell until a timeout. It needs a build configured with
-# -DENABLE_KERNEL_TESTS=ON; without it the kernel says so and fails.
-add_custom_target(
-    cdrom_kerneltest.iso
-    COMMAND ${CMAKE_COMMAND} -E rm -rf ${CMAKE_BINARY_DIR}/iso_kerneltest
-    COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/iso ${CMAKE_BINARY_DIR}/iso_kerneltest
-    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/iso/boot/grub/grub.cfg.kerneltests ${CMAKE_BINARY_DIR}/iso_kerneltest/boot/grub/grub.cfg
-    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/mentos/bootloader.bin ${CMAKE_BINARY_DIR}/iso_kerneltest/boot/bootloader.bin
-    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/mentos/kernel.bin ${CMAKE_BINARY_DIR}/iso_kerneltest/boot/kernel.bin
-    COMMAND grub-mkrescue -o ${CMAKE_BINARY_DIR}/cdrom_kerneltest.iso ${CMAKE_BINARY_DIR}/iso_kerneltest
-    DEPENDS bootloader.bin kernel.bin filesystem
-)
+# The kernel unit-test image uses a command line that runs suites and exits via
+# isa-debug-exit without creating an init process.
+mentos_add_grub_iso(cdrom_kerneltest.iso cdrom_kerneltest.iso iso_kerneltest grub.cfg.kerneltests filesystem)
 
 # These take seconds, not the minutes the userspace suite takes, so the timeout
 # is short on purpose: a run that is still going after it is hung, not slow.
