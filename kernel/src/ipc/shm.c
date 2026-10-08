@@ -220,7 +220,7 @@ long sys_shmget(key_t key, size_t size, int shmflg)
         }
         // Check if the shared memory exists for the given key, but the calling
         // process does not have permission to access the set.
-        if (shm_info && !ipc_valid_permissions(shmflg, &shm_info->shmid.shm_perm)) {
+        if (shm_info && !ipc_valid_mode((mode_t)shmflg, &shm_info->shmid.shm_perm)) {
             pr_err("The shared memory exists for the given key, but the calling "
                    "process does not have permission to access the set.\n");
             return -EACCES;
@@ -271,14 +271,14 @@ void *sys_shmat(int shmid, const void *shmaddr, int shmflg)
     // Check if the shared memory exists for the given key, but the calling
     // process does not have permission to access the set.
     if (shmflg & SHM_RDONLY) {
-        if (!ipc_valid_permissions(O_RDONLY, &shm_info->shmid.shm_perm)) {
+        if (!ipc_valid_permissions(IPC_ACCESS_READ, &shm_info->shmid.shm_perm)) {
             pr_err("The shared memory exists for the given key, but the calling "
                    "process does not have permission to access the set.\n");
             return (void *)-EACCES;
         }
         // Remove the read-write flag.
         flags = bitmask_clear(flags, MM_RW);
-    } else if (!ipc_valid_permissions(O_RDWR, &shm_info->shmid.shm_perm)) {
+    } else if (!ipc_valid_permissions(IPC_ACCESS_READ | IPC_ACCESS_WRITE, &shm_info->shmid.shm_perm)) {
         pr_err("The shared memory exists for the given key, but the calling "
                "process does not have permission to access the set.\n");
         return (void *)-EACCES;

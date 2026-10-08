@@ -254,7 +254,7 @@ int sys_msgget(key_t key, int msgflg)
 
         // Check if the message queue exists for the given key, but the calling
         // process does not have permission to access the set.
-        if (msq_info && !ipc_valid_permissions(msgflg, &msq_info->msqid.msg_perm)) {
+        if (msq_info && !ipc_valid_mode((mode_t)msgflg, &msq_info->msqid.msg_perm)) {
             pr_err("The message queue exists for the given key, "
                    "but the calling process does not have permission to access "
                    "the set.\n");
@@ -309,7 +309,7 @@ int sys_msgsnd(int msqid, const void *msgp, size_t msgsz, int msgflg)
     }
     // Check if the message queue exists for the given key, but the calling
     // process does not have permission to access the set.
-    if (msq_info && !ipc_valid_permissions(O_RDWR, &msq_info->msqid.msg_perm)) {
+    if (msq_info && !ipc_valid_permissions(IPC_ACCESS_READ | IPC_ACCESS_WRITE, &msq_info->msqid.msg_perm)) {
         pr_err("The message queue exists for the given key, but the "
                "calling process does not have permission to access the set.\n");
         return -EACCES;
@@ -399,7 +399,7 @@ ssize_t sys_msgrcv(int msqid, void *msgp, size_t msgsz, long msgtyp, int msgflg)
     }
     // Check if the message queue exists for the given key, but the calling
     // process does not have permission to access the set.
-    if (msq_info && !ipc_valid_permissions(O_RDONLY, &msq_info->msqid.msg_perm)) {
+    if (msq_info && !ipc_valid_permissions(IPC_ACCESS_READ, &msq_info->msqid.msg_perm)) {
         pr_err("The message queue exists for the given key, but the "
                "calling process does not have read permission to access the "
                "set.\n");
@@ -527,7 +527,7 @@ int sys_msgctl(int msqid, int cmd, struct msqid_ds *buf)
             return -EFAULT;
         }
         // Check permissions.
-        if (!ipc_valid_permissions(O_RDONLY, &msq_info->msqid.msg_perm)) {
+        if (!ipc_valid_permissions(IPC_ACCESS_READ, &msq_info->msqid.msg_perm)) {
             pr_err("The calling process does not have read permission to "
                    "access the queue.\n");
             return -EACCES;

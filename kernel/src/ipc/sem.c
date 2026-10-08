@@ -237,7 +237,7 @@ long sys_semget(key_t key, int nsems, int semflg)
 
         // Check if the semaphore set exists for the given key, but the calling
         // process does not have permission to access the set.
-        if (sem_info && !ipc_valid_permissions(semflg, &sem_info->semid.sem_perm)) {
+        if (sem_info && !ipc_valid_mode((mode_t)semflg, &sem_info->semid.sem_perm)) {
             pr_err("The semaphore set exists for the given key, but the calling "
                    "process does not have permission to access the set.\n");
             return -EACCES;
@@ -289,7 +289,7 @@ long sys_semop(int semid, struct sembuf *sops, unsigned nsops)
     }
     // Check if the semaphore set exists for the given key, but the calling
     // process does not have permission to access the set.
-    if (sem_info && !ipc_valid_permissions(O_RDWR, &sem_info->semid.sem_perm)) {
+    if (sem_info && !ipc_valid_permissions(IPC_ACCESS_READ | IPC_ACCESS_WRITE, &sem_info->semid.sem_perm)) {
         pr_err("The semaphore set exists for the given key, but the calling "
                "process does not have permission to access the set.\n");
         return -EACCES;
@@ -359,7 +359,7 @@ long sys_semctl(int semid, int semnum, int cmd, union semun *arg)
             return -EINVAL;
         }
         // Check permissions.
-        if (!ipc_valid_permissions(O_WRONLY, &sem_info->semid.sem_perm)) {
+        if (!ipc_valid_permissions(IPC_ACCESS_WRITE, &sem_info->semid.sem_perm)) {
             pr_err("The calling process does not have read permission to "
                    "access the set.\n");
             return -EACCES;
@@ -382,7 +382,7 @@ long sys_semctl(int semid, int semnum, int cmd, union semun *arg)
             return -EFAULT;
         }
         // Check permissions.
-        if (!ipc_valid_permissions(O_WRONLY, &sem_info->semid.sem_perm)) {
+        if (!ipc_valid_permissions(IPC_ACCESS_WRITE, &sem_info->semid.sem_perm)) {
             pr_err("The calling process does not have read permission to "
                    "access the set.\n");
             return -EACCES;
@@ -407,7 +407,7 @@ long sys_semctl(int semid, int semnum, int cmd, union semun *arg)
             return -EFAULT;
         }
         // Check permissions.
-        if (!ipc_valid_permissions(O_RDONLY, &sem_info->semid.sem_perm)) {
+        if (!ipc_valid_permissions(IPC_ACCESS_READ, &sem_info->semid.sem_perm)) {
             pr_err("The calling process does not have read permission to "
                    "access the set.\n");
             return -EACCES;
@@ -440,7 +440,7 @@ long sys_semctl(int semid, int semnum, int cmd, union semun *arg)
             return -EINVAL;
         }
         // Check permissions.
-        if (!ipc_valid_permissions(O_RDONLY, &sem_info->semid.sem_perm)) {
+        if (!ipc_valid_permissions(IPC_ACCESS_READ, &sem_info->semid.sem_perm)) {
             pr_err("The calling process does not have read permission to "
                    "access the set.\n");
             return -EACCES;
@@ -456,7 +456,7 @@ long sys_semctl(int semid, int semnum, int cmd, union semun *arg)
             return -EINVAL;
         }
         // Check permissions.
-        if (!ipc_valid_permissions(O_RDONLY, &sem_info->semid.sem_perm)) {
+        if (!ipc_valid_permissions(IPC_ACCESS_READ, &sem_info->semid.sem_perm)) {
             pr_err("The calling process does not have read permission to "
                    "access the set.\n");
             return -EACCES;
@@ -472,7 +472,7 @@ long sys_semctl(int semid, int semnum, int cmd, union semun *arg)
             return -EINVAL;
         }
         // Check permissions.
-        if (!ipc_valid_permissions(O_RDONLY, &sem_info->semid.sem_perm)) {
+        if (!ipc_valid_permissions(IPC_ACCESS_READ, &sem_info->semid.sem_perm)) {
             pr_err("The calling process does not have read permission to "
                    "access the set.\n");
             return -EACCES;
@@ -488,7 +488,7 @@ long sys_semctl(int semid, int semnum, int cmd, union semun *arg)
             return -EINVAL;
         }
         // Check permissions.
-        if (!ipc_valid_permissions(O_RDONLY, &sem_info->semid.sem_perm)) {
+        if (!ipc_valid_permissions(IPC_ACCESS_READ, &sem_info->semid.sem_perm)) {
             pr_err("The calling process does not have read permission to "
                    "access the set.\n");
             return -EACCES;

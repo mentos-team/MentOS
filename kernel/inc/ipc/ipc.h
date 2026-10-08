@@ -11,11 +11,27 @@
 #error "How did you include this file... include `libc/inc/sys/ipc.h` instead!"
 #endif
 
-/// @brief Validate IPC permissions based on flags and the given permission structure.
-/// @param flags Flags that control the validation behavior.
+/// @name IPC access requirements
+/// @brief Access bits used by kernel IPC operations.
+///
+/// These are deliberately separate from `O_*` file flags.  In particular,
+/// `O_RDONLY` is zero and therefore cannot represent a requested access bit.
+/// @{
+#define IPC_ACCESS_READ  0x01U
+#define IPC_ACCESS_WRITE 0x02U
+/// @}
+
+/// @brief Validate an IPC operation against an object's permissions.
+/// @param access Combination of ::IPC_ACCESS_READ and ::IPC_ACCESS_WRITE.
 /// @param perm Pointer to the IPC permission structure to validate.
 /// @return 0 if the permissions are valid, or a non-zero value on failure.
-int ipc_valid_permissions(int flags, struct ipc_perm *perm);
+int ipc_valid_permissions(unsigned int access, const struct ipc_perm *perm);
+
+/// @brief Validate the mode requested while opening an existing IPC object.
+/// @param mode Permission bits supplied to `*get` (the low nine bits).
+/// @param perm Pointer to the IPC permission structure to validate.
+/// @return 1 when every requested read/write bit is granted, otherwise 0.
+int ipc_valid_mode(mode_t mode, const struct ipc_perm *perm);
 
 /// @brief Register an IPC resource with a given key and mode.
 /// @param key The key associated with the IPC resource.
