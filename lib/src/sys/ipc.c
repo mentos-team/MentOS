@@ -105,7 +105,6 @@ ssize_t msgrcv(int msqid, void *msgp, size_t msgsz, long msgtyp, int msgflg)
 
 long semop(int semid, struct sembuf *sops, unsigned nsops)
 {
-    struct sembuf *op;
     long __res;
 
     // The pointer to the operation is NULL.
@@ -122,32 +121,10 @@ long semop(int semid, struct sembuf *sops, unsigned nsops)
         return -1;
     }
 
-    // This should be performed for each sops.
-    for (size_t i = 0; i < nsops; i++) {
-        // Get the operation.
-        op = &sops[i];
-        // The process continues to try to perform the operation until it completes
-        // or receives an error.
-        while (1) {
-            // Calling the kernel-side function.
-            __inline_syscall_3(__res, semop, semid, op, 1);
-
-            // If we get an error, the operation has been taken care of we stop
-            // the loop. We also stop the loop if the operation is not allowed
-            // and the IPC_NOWAIT flag is 1
-            if ((__res != -EAGAIN) || (op->sem_flg & IPC_NOWAIT)) {
-                break;
-            }
-        }
-        // If the operation couldn't be performed and we had the IPC_NOWAIT set
-        // to 1 then we return.
-        if ((__res == -EAGAIN) && (op->sem_flg & IPC_NOWAIT)) {
-            errno = EAGAIN;
-            return -1;
-        }
-    }
-
-    // Now, we can return the value.
+    // The kernel evaluates the complete array atomically.  Retrying one
+    // operation at a time would change System V semantics and could deadlock
+    // a multi-semaphore transaction.
+    __inline_syscall_3(__res, semop, semid, sops, nsops);
     __syscall_return(long, __res);
 }
 

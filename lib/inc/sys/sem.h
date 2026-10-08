@@ -30,6 +30,8 @@
 
 /// @brief Defines the maximum number of semaphores in a semaphore set.
 #define SEM_SET_MAX 256
+/// @brief Maximum operations accepted by one semop transaction.
+#define SEMOPM_MAX 32
 
 /// @brief Optional argument for semctl() function
 union semun {

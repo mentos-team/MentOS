@@ -45,8 +45,11 @@
 #include "errno.h"
 #include "fcntl.h"
 #include "mem/uaccess.h"
+#include "klib/stdatomic.h"
+#include "klib/spinlock.h"
 #include "process/process.h"
 #include "process/scheduler.h"
+#include "process/wait.h"
 #include "stdio.h"
 #include "stdlib.h"
 #include "string.h"
@@ -62,12 +65,21 @@ typedef struct {
     struct semid_ds semid;
     /// @brief List of all the semaphores.
     struct sem *sem_base;
+    /// Serializes values, metadata, and removal state.
+    spinlock_t lock;
+    /// Tasks waiting for a semaphore predicate to become true.
+    wait_queue_head_t wait_queue;
+    /// References held by active syscalls, including blocked continuations.
+    atomic_t references;
+    /// Set after IPC_RMID; the namespace reference has been removed.
+    int removed;
     /// Reference inside the list of semaphore management structures.
     list_head_t list;
 } sem_info_t;
 
 /// @brief List of all current active semaphores.
 list_head_t semaphores_list;
+static spinlock_t semaphores_list_lock;
 
 // ============================================================================
 // MEMORY MANAGEMENT (Private)
@@ -86,6 +98,9 @@ static inline sem_info_t *__sem_info_alloc(key_t key, int nsems, int semflg)
     assert(sem_info && "Failed to allocate memory for a semaphore management structure.");
     // Clean the memory.
     memset(sem_info, 0, sizeof(sem_info_t));
+    spinlock_init(&sem_info->lock);
+    wait_queue_head_init(&sem_info->wait_queue);
+    atomic_set(&sem_info->references, 1);
     // Allocate the memory for semaphores.
     sem_info->sem_base = (struct sem *)kmalloc(sizeof(struct sem) * nsems);
     // Check the allocated memory.
@@ -186,7 +201,31 @@ static inline void __list_remove_sem_info(sem_info_t *sem_info)
 int sem_init(void)
 {
     list_head_init(&semaphores_list);
+    spinlock_init(&semaphores_list_lock);
     return 0;
+}
+
+/// @brief Acquire a reference to a semaphore set still present in the namespace.
+static sem_info_t *__sem_get_ref(int semid)
+{
+    sem_info_t *sem_info;
+    spinlock_lock(&semaphores_list_lock);
+    sem_info = __list_find_sem_info_by_id(semid);
+    if (sem_info && !sem_info->removed) {
+        atomic_inc(&sem_info->references);
+    } else {
+        sem_info = NULL;
+    }
+    spinlock_unlock(&semaphores_list_lock);
+    return sem_info;
+}
+
+/// @brief Release a syscall reference and reclaim a removed set when unused.
+static void __sem_put_ref(sem_info_t *sem_info)
+{
+    if (atomic_dec_and_test(&sem_info->references) && sem_info->removed) {
+        __sem_info_dealloc(sem_info);
+    }
 }
 
 long sys_semget(key_t key, int nsems, int semflg)
@@ -194,7 +233,7 @@ long sys_semget(key_t key, int nsems, int semflg)
     sem_info_t *sem_info = NULL;
     // Check if nsems is less than 0 or greater than the maximum number of
     // semaphores per semaphore set.
-    if ((nsems < 0) || (nsems > SEM_SET_MAX)) {
+    if ((nsems <= 0) || (nsems > SEM_SET_MAX)) {
         pr_err("Wrong number of semaphores for semaphore set.\n");
         return -EINVAL;
     }
@@ -256,15 +295,17 @@ long sys_semget(key_t key, int nsems, int semflg)
 
 long sys_semop(int semid, struct sembuf *sops, unsigned nsops)
 {
-    sem_info_t *sem_info = NULL;
+    sem_info_t *sem_info;
+    struct sembuf *operations;
+    wait_queue_entry_t wait_entry;
+    int result = 0;
     // The semid is less than zero.
     if (semid < 0) {
         pr_err("The semid is less than zero.\n");
         return -EINVAL;
     }
-    // The value of nsops is negative.
-    if (nsops <= 0) {
-        pr_err("The value of nsops is negative.\n");
+    if (nsops == 0 || nsops > SEMOPM_MAX) {
+        pr_err("The number of semaphore operations is outside the supported range.\n");
         return -EINVAL;
     }
     // The whole array of operations is read out of the caller's memory, and
@@ -274,42 +315,91 @@ long sys_semop(int semid, struct sembuf *sops, unsigned nsops)
         !access_ok(USER_READ, sops, (size_t)nsops * sizeof(struct sembuf))) {
         return -EFAULT;
     }
-    // Search for the semaphore.
-    sem_info = __list_find_sem_info_by_id(semid);
+    operations = (struct sembuf *)kmalloc(nsops * sizeof(*operations));
+    if (!operations) {
+        return -ENOMEM;
+    }
+    memcpy(operations, sops, nsops * sizeof(*operations));
+
+    sem_info = __sem_get_ref(semid);
     // The semaphore set doesn't exist.
     if (!sem_info) {
         pr_err("The semaphore set doesn't exist.\n");
+        kfree(operations);
         return -EINVAL;
-    }
-    // The value of sem_num is less than 0 or greater than or equal to the number of semaphores in the set.
-    if ((sops->sem_num < 0) || (sops->sem_num >= sem_info->semid.sem_nsems)) {
-        pr_err("The value of sem_num is less than 0 or greater than or equal "
-               "to the number of semaphores in the set.\n");
-        return -EFBIG;
     }
     // Check if the semaphore set exists for the given key, but the calling
     // process does not have permission to access the set.
-    if (sem_info && !ipc_valid_permissions(IPC_ACCESS_READ | IPC_ACCESS_WRITE, &sem_info->semid.sem_perm)) {
+    if (!ipc_valid_permissions(IPC_ACCESS_READ | IPC_ACCESS_WRITE, &sem_info->semid.sem_perm)) {
         pr_err("The semaphore set exists for the given key, but the calling "
                "process does not have permission to access the set.\n");
-        return -EACCES;
+        result = -EACCES;
+        goto out;
     }
-    // Update semop time.
-    sem_info->semid.sem_otime = sys_time(NULL);
-    // If the operation is negative then we need to check for possible blocking
-    // operation. If the value of the sem were to become negative then we return
-    // a special value.
-    if (((int)sem_info->sem_base[sops->sem_num].sem_val + (int)sops->sem_op) < 0) {
-        // The value would become negative, we cannot perform the operation.
-        return -EAGAIN;
+
+    wait_queue_entry_init(&wait_entry, scheduler_get_current_process());
+    for (;;) {
+        int ready = 1;
+        prepare_to_wait(&sem_info->wait_queue, &wait_entry, TASK_INTERRUPTIBLE);
+        spinlock_lock(&sem_info->lock);
+        if (sem_info->removed) {
+            result = -EIDRM;
+            spinlock_unlock(&sem_info->lock);
+            finish_wait(&sem_info->wait_queue, &wait_entry);
+            break;
+        }
+        for (unsigned i = 0; i < nsops; ++i) {
+            struct sembuf *operation = &operations[i];
+            if (operation->sem_num >= sem_info->semid.sem_nsems || operation->sem_op < -32767) {
+                result = -EFBIG;
+                spinlock_unlock(&sem_info->lock);
+                finish_wait(&sem_info->wait_queue, &wait_entry);
+                goto out;
+            }
+            unsigned short value = sem_info->sem_base[operation->sem_num].sem_val;
+            if ((operation->sem_op < 0 && value < (unsigned short)-operation->sem_op) ||
+                (operation->sem_op == 0 && value != 0)) {
+                ready = 0;
+                break;
+            }
+            if (operation->sem_op > 0 && value > (unsigned short)(0xFFFF - operation->sem_op)) {
+                result = -ERANGE;
+                spinlock_unlock(&sem_info->lock);
+                finish_wait(&sem_info->wait_queue, &wait_entry);
+                goto out;
+            }
+        }
+        if (!ready) {
+            int nowait = 0;
+            for (unsigned i = 0; i < nsops; ++i) {
+                nowait |= (operations[i].sem_flg & IPC_NOWAIT) != 0;
+            }
+            spinlock_unlock(&sem_info->lock);
+            if (nowait) {
+                result = -EAGAIN;
+                finish_wait(&sem_info->wait_queue, &wait_entry);
+                break;
+            }
+            schedule();
+            continue;
+        }
+        for (unsigned i = 0; i < nsops; ++i) {
+            struct sembuf *operation = &operations[i];
+            sem_info->sem_base[operation->sem_num].sem_val += operation->sem_op;
+            sem_info->sem_base[operation->sem_num].sem_pid = sys_getpid();
+        }
+        sem_info->semid.sem_otime = sys_time(NULL);
+        sem_info->semid.sem_ctime = sys_time(NULL);
+        spinlock_unlock(&sem_info->lock);
+        finish_wait(&sem_info->wait_queue, &wait_entry);
+        wake_up_all(&sem_info->wait_queue);
+        break;
     }
-    // Update the semaphore value.
-    sem_info->sem_base[sops->sem_num].sem_val += sops->sem_op;
-    // Update the pid of the process that did last op.
-    sem_info->sem_base[sops->sem_num].sem_pid = sys_getpid();
-    // Update the time.
-    sem_info->semid.sem_ctime                 = sys_time(NULL);
-    return 0;
+
+out:
+    kfree(operations);
+    __sem_put_ref(sem_info);
+    return result;
 }
 
 long sys_semctl(int semid, int semnum, int cmd, union semun *arg)
