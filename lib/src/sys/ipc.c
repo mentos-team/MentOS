@@ -80,26 +80,14 @@ int msgctl(int msqid, int cmd, struct msqid_ds *buf)
 int msgsnd(int msqid, const void *msgp, size_t msgsz, int msgflg)
 {
     long __res;
-    do {
-        __inline_syscall_4(__res, msgsnd, msqid, msgp, msgsz, msgflg);
-        if (!(msgflg & IPC_NOWAIT) && (__res == -EAGAIN)) {
-            continue;
-        }
-        break;
-    } while (1);
+    __inline_syscall_4(__res, msgsnd, msqid, msgp, msgsz, msgflg);
     __syscall_return(int, __res);
 }
 
 ssize_t msgrcv(int msqid, void *msgp, size_t msgsz, long msgtyp, int msgflg)
 {
     long __res;
-    do {
-        __inline_syscall_5(__res, msgrcv, msqid, msgp, msgsz, msgtyp, msgflg);
-        if (!(msgflg & IPC_NOWAIT) && ((__res == -EAGAIN) || (__res == -ENOMSG))) {
-            continue;
-        }
-        break;
-    } while (1);
+    __inline_syscall_5(__res, msgrcv, msqid, msgp, msgsz, msgtyp, msgflg);
     __syscall_return(int, __res);
 }
 
