@@ -17,6 +17,9 @@ TIMEOUT="${2:-120}"
 # QEMU display device for the video backend this kernel was built for, as one
 # argument holding an option and its value. Deliberately word-split below.
 VGA_ARGS="${3:--vga std}"
+# Absolute path to QEMU, supplied by CMake when the target is generated. The
+# default keeps the wrapper useful when invoked directly from a shell.
+QEMU_EXE="${4:-qemu-system-i386}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
@@ -46,7 +49,7 @@ fi
 echo "Running the kernel unit tests (timeout ${TIMEOUT}s)..."
 
 # shellcheck disable=SC2086
-timeout --foreground "${TIMEOUT}" qemu-system-i386 \
+timeout --foreground "${TIMEOUT}" "${QEMU_EXE}" \
     ${VGA_ARGS} \
     -m 1096M \
     -nodefaults \
