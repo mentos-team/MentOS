@@ -11,6 +11,8 @@ file(GLOB_RECURSE LIBC_SOURCES
 # Create the libc library.
 add_library(libc ${LIBC_SOURCES})
 
+target_link_libraries(libc PUBLIC mentos_freestanding_options)
+
 # Add the includes.
 target_include_directories(libc PUBLIC inc)
 

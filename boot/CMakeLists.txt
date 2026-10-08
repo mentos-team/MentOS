@@ -11,6 +11,8 @@ set(BOOTLOADER_INCLUDE_DIRS ${CMAKE_SOURCE_DIR}/common/inc ${CMAKE_CURRENT_SOURC
 # Create the bootloader static library
 add_library(bootloader ${BOOTLOADER_SOURCES})
 
+target_link_libraries(bootloader PRIVATE mentos_freestanding_options)
+
 # Add the includes.
 target_include_directories(bootloader PUBLIC ${BOOTLOADER_INCLUDE_DIRS})
 

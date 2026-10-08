@@ -3,7 +3,8 @@
 # =============================================================================
 
 # Set the minimum required version of cmake.
-cmake_minimum_required(VERSION 3.1...3.22)
+# Target-scoped linker options require CMake 3.13 or newer.
+cmake_minimum_required(VERSION 3.13...3.22)
 
 # Initialize the project.
 project(mentos C ASM)
@@ -138,53 +139,8 @@ endif()
 # spot, without changing what a normal build compiles.
 option(FORCE_DEBUG_LOGLEVEL "Force every pr_* log call to compile in, to catch format mismatches a normal build never checks (#365)." OFF)
 
-# Warning flags.
-list(APPEND MENTOS_C_FLAGS
-    -Wall
-    -Werror
-    -Wpedantic
-    -pedantic-errors
-    -Wshadow
-    -std=gnu99
-    # Disable specific warnings
-    -Wno-unused-function
-    -Wno-unused-variable
-    -Wno-unknown-pragmas
-    -Wno-missing-braces
-    -Wno-unused-command-line-argument
-)
-
-if(FORCE_DEBUG_LOGLEVEL)
-    list(APPEND MENTOS_C_FLAGS -DMENTOS_FORCE_DEBUG_LOGLEVEL)
-endif()
-
-# Compiler options for freestanding kernel environment.
-list(APPEND MENTOS_C_FLAGS
-    -static
-    -nostdlib
-    -nostdinc
-    -fno-builtin
-    -fno-stack-protector
-    -fno-pic
-    -fomit-frame-pointer
-    -m32
-    -march=i686
-)
-
-# Join all flags into CMAKE_C_FLAGS
-string(REPLACE ";" " " CMAKE_C_FLAGS "${MENTOS_C_FLAGS}")
-
-# GCC 10+ requires -fcommon for legacy code.
-if(CMAKE_C_COMPILER_VERSION VERSION_GREATER_EQUAL 10)
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fcommon")
-endif()
-
-# Build-specific optimization and debug flags.
-if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g3 -ggdb -O0")
-elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O2")
-endif()
+# Target-scoped compiler and linker options shared by freestanding components.
+include(${CMAKE_SOURCE_DIR}/cmake/mentos-options.cmake)
 
 # Set the assembly compiler flags.
 set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -m32")
