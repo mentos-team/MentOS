@@ -36,6 +36,11 @@ operations sleep in the kernel; `IPC_NOWAIT` returns `EAGAIN` instead.
 waiters, and returns `EIDRM` to blocked operations. References keep the object
 alive until the last syscall continuation releases it.
 
+All `semctl` commands hold an object reference for their complete duration.
+Metadata and semaphore values are read or changed under the set spinlock. User
+arrays are copied to or from kernel buffers outside that lock, because a user
+memory access may fault and resume the syscall.
+
 ## Message queues
 
 `msgsnd` copies the message before sleeping, so a blocked sender does not retain
@@ -48,6 +53,8 @@ Queue metadata and the linked message list are protected by the queue lock.
 subsequent enqueue after a selective receive.
 
 `msgctl(IPC_RMID)` uses the same tombstone/reference protocol as semaphores.
+`msgctl(IPC_STAT)` takes a locked kernel snapshot before copying metadata to the
+user buffer; it never holds the queue lock across that copy.
 
 ## Shared memory
 
@@ -73,5 +80,7 @@ and advanced namespace limits are not silently emulated; they return
 `ENOSYS`/the documented error until their contract is designed and tested.
 
 When changing an IPC object, update both the relevant `userspace/tests` entry
-and `userspace/bin/runtests.c`. Always run the full QEMU suite and inspect the
-serial log for panics; a clean QEMU exit alone is not proof of success.
+and `userspace/bin/runtests.c`. `t_ipc_lifetime` covers message-queue tail
+maintenance, blocked message receivers, and blocked semaphore operations
+released by `IPC_RMID`. Always run the full QEMU suite and inspect the serial
+log for panics; a clean QEMU exit alone is not proof of success.
