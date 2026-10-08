@@ -405,7 +405,13 @@ out:
     return result;
 }
 
-long sys_semctl(int semid, int semnum, int cmd, union semun *arg)
+/*
+ * Execute a semaphore-control command while the caller owns a reference to
+ * the set.  The public wrapper below acquires that reference before entering
+ * this legacy command dispatcher; keeping the lifetime protocol here avoids
+ * having every early-return branch duplicate cleanup code.
+ */
+static long __semctl(int semid, int semnum, int cmd, union semun *arg)
 {
     sem_info_t *sem_info = NULL;
     task_struct *task    = NULL;
@@ -612,6 +618,31 @@ long sys_semctl(int semid, int semnum, int cmd, union semun *arg)
         return -EINVAL;
     }
     return 0;
+}
+
+/**
+ * @brief Apply a control operation to a semaphore set.
+ *
+ * The reference acquired here keeps the object alive across metadata copies
+ * and user-memory validation.  IPC_RMID may unlink the set while the command
+ * is running, but reclamation is deferred until this reference is released.
+ *
+ * @param semid semaphore-set identifier.
+ * @param semnum semaphore index for per-semaphore commands.
+ * @param cmd control operation.
+ * @param arg command-specific user argument.
+ * @return command result or a negative errno value.
+ */
+long sys_semctl(int semid, int semnum, int cmd, union semun *arg)
+{
+    sem_info_t *sem_info = __sem_get_ref(semid);
+    if (!sem_info) {
+        return -EINVAL;
+    }
+
+    long result = __semctl(semid, semnum, cmd, arg);
+    __sem_put_ref(sem_info);
+    return result;
 }
 
 // ============================================================================
