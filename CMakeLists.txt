@@ -84,6 +84,7 @@ option(FORCE_DEBUG_LOGLEVEL "Force every pr_* log call to compile in, to catch f
 
 # Target-scoped compiler and linker options shared by freestanding components.
 include(${CMAKE_SOURCE_DIR}/cmake/mentos-options.cmake)
+include(${CMAKE_SOURCE_DIR}/cmake/mentos-emulator-options.cmake)
 
 # Set the assembly compiler flags.
 set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -m32")

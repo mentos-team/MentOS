@@ -2,17 +2,6 @@
 # EMULATOR CONFIGURATION
 # =============================================================================
 
-# Set the list of valid emulator output options.
-set(EMULATOR_OUTPUT_TYPES OUTPUT_STDIO OUTPUT_LOG)
-set(EMULATOR_OUTPUT_TYPE "OUTPUT_STDIO" CACHE STRING "Chose the type of emulator output: ${EMULATOR_OUTPUT_TYPES}")
-set_property(CACHE EMULATOR_OUTPUT_TYPE PROPERTY STRINGS ${EMULATOR_OUTPUT_TYPES})
-list(FIND EMULATOR_OUTPUT_TYPES ${EMULATOR_OUTPUT_TYPE} INDEX)
-if(INDEX EQUAL -1)
-    message(FATAL_ERROR "Emulator output type ${EMULATOR_OUTPUT_TYPE} is not valid.")
-else()
-    message(STATUS "Setting emulator output type to ${EMULATOR_OUTPUT_TYPE}.")
-endif()
-
 # The selected video backend needs a matching QEMU display device. This code
 # runs after add_subdirectory(kernel), where VIDEO_TYPE is defined.
 if(NOT VIDEO_TYPE)
