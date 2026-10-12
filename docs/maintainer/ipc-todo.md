@@ -34,7 +34,7 @@ items are intentionally scoped for follow-up commits or pull requests.
 
 ## API completeness
 
-- [ ] Implement and test `shmctl(IPC_STAT)` with a kernel snapshot and bounded
+- [x] Implement and test `shmctl(IPC_STAT)` with a kernel snapshot and bounded
       user copy.
 - [ ] Define and test the supported error contract for missing or removed
       objects (`EINVAL`, `ENOENT`, and `EIDRM`).
