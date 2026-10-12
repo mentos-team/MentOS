@@ -253,6 +253,21 @@ static msq_info_t *__msq_get_ref(int msqid)
     return msq_info;
 }
 
+/// @brief Acquire a reference to a queue found by key.
+static msq_info_t *__msq_get_ref_by_key(key_t key)
+{
+    msq_info_t *msq_info;
+    spinlock_lock(&msq_list_lock);
+    msq_info = __list_find_msq_info_by_key(key);
+    if (msq_info && !msq_info->removed) {
+        atomic_inc(&msq_info->references);
+    } else {
+        msq_info = NULL;
+    }
+    spinlock_unlock(&msq_list_lock);
+    return msq_info;
+}
+
 /// @brief Release a syscall reference and reclaim a removed queue if unused.
 static void __msq_put_ref(msq_info_t *msq_info)
 {
@@ -264,54 +279,78 @@ static void __msq_put_ref(msq_info_t *msq_info)
 int sys_msgget(key_t key, int msgflg)
 {
     msq_info_t *msq_info = NULL;
-    // Need to find a unique key.
-    if (key == IPC_PRIVATE) {
-        // Exit when i find a unique key.
-        do {
-            key = -rand();
-        } while (__list_find_msq_info_by_key(key));
-        // We have a unique key, create the message queue.
-        msq_info = __msq_info_alloc(key, msgflg);
-        // Add the message queue to the list.
-        __list_add_msq_info(msq_info);
-    } else {
-        // Get the message queue if it exists.
-        msq_info = __list_find_msq_info_by_key(key);
-
-        // Check if no message queue exists for the given key and msgflg did not
-        // specify IPC_CREAT.
+    const int private_key = (key == IPC_PRIVATE);
+    if (key != IPC_PRIVATE) {
+        msq_info = __msq_get_ref_by_key(key);
         if (!msq_info && !(msgflg & IPC_CREAT)) {
             pr_err("No message queue exists for the given key "
                    "and msgflg did not specify IPC_CREAT.\n");
             return -ENOENT;
         }
-
-        // Check if IPC_CREAT and IPC_EXCL were specified in msgflg, but a
-        // message queue already exists for key.
         if (msq_info && (msgflg & IPC_CREAT) && (msgflg & IPC_EXCL)) {
             pr_err("IPC_CREAT and IPC_EXCL were specified in msgflg, "
                    "but a message queue already exists for key.\n");
+            __msq_put_ref(msq_info);
             return -EEXIST;
         }
-
-        // Check if the message queue exists for the given key, but the calling
-        // process does not have permission to access the set.
-        if (msq_info && !ipc_valid_mode((mode_t)msgflg, &msq_info->msqid.msg_perm)) {
-            pr_err("The message queue exists for the given key, "
-                   "but the calling process does not have permission to access "
-                   "the set.\n");
-            return -EACCES;
-        }
-        // If the message queue does not exist we need to create a new one.
-        if (msq_info == NULL) {
-            // Create the message queue.
-            msq_info = __msq_info_alloc(key, msgflg);
-            // Add the message queue to the list.
-            __list_add_msq_info(msq_info);
+        if (msq_info) {
+            spinlock_lock(&msq_info->lock);
+            int permitted = ipc_valid_mode((mode_t)msgflg, &msq_info->msqid.msg_perm);
+            int id = msq_info->id;
+            spinlock_unlock(&msq_info->lock);
+            __msq_put_ref(msq_info);
+            if (!permitted) {
+                pr_err("The message queue exists for the given key, "
+                       "but the calling process does not have permission to access "
+                       "the set.\n");
+                return -EACCES;
+            }
+            return id;
         }
     }
-    // Return the id of the message queue.
-    return msq_info->id;
+
+    // Allocate without the namespace lock: allocation may sleep.  Recheck
+    // under the lock before publishing so concurrent creators converge on one
+    // queue instead of creating duplicate objects for the same key.
+    if (private_key) {
+        do {
+            key = -rand();
+            msq_info = __msq_get_ref_by_key(key);
+            if (msq_info) {
+                __msq_put_ref(msq_info);
+            }
+        } while (msq_info);
+    }
+    msq_info_t *candidate = __msq_info_alloc(key, msgflg);
+    if (!candidate) {
+        return -ENOMEM;
+    }
+    spinlock_lock(&msq_list_lock);
+    msq_info = __list_find_msq_info_by_key(key);
+    if (msq_info && !msq_info->removed) {
+        atomic_inc(&msq_info->references);
+        spinlock_unlock(&msq_list_lock);
+        __msq_info_dealloc(candidate);
+        if (private_key) {
+            // IPC_PRIVATE must always create a distinct queue.  A random key
+            // collision is rare, but retrying preserves that contract.
+            __msq_put_ref(msq_info);
+            return sys_msgget(IPC_PRIVATE, msgflg);
+        }
+        if (msgflg & IPC_EXCL) {
+            __msq_put_ref(msq_info);
+            return -EEXIST;
+        }
+        spinlock_lock(&msq_info->lock);
+        int permitted = ipc_valid_mode((mode_t)msgflg, &msq_info->msqid.msg_perm);
+        int id = msq_info->id;
+        spinlock_unlock(&msq_info->lock);
+        __msq_put_ref(msq_info);
+        return permitted ? id : -EACCES;
+    }
+    __list_add_msq_info(candidate);
+    spinlock_unlock(&msq_list_lock);
+    return candidate->id;
 }
 
 int sys_msgsnd(int msqid, const void *msgp, size_t msgsz, int msgflg)
