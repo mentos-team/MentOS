@@ -95,7 +95,10 @@ static inline sem_info_t *__sem_info_alloc(key_t key, int nsems, int semflg)
     // Allocate the memory.
     sem_info_t *sem_info = (sem_info_t *)kmalloc(sizeof(sem_info_t));
     // Check the allocated memory.
-    assert(sem_info && "Failed to allocate memory for a semaphore management structure.");
+    if (!sem_info) {
+        pr_err("Failed to allocate memory for a semaphore management structure.\n");
+        return NULL;
+    }
     // Clean the memory.
     memset(sem_info, 0, sizeof(sem_info_t));
     spinlock_init(&sem_info->lock);
@@ -104,7 +107,11 @@ static inline sem_info_t *__sem_info_alloc(key_t key, int nsems, int semflg)
     // Allocate the memory for semaphores.
     sem_info->sem_base = (struct sem *)kmalloc(sizeof(struct sem) * nsems);
     // Check the allocated memory.
-    assert(sem_info->sem_base && "Failed to allocate memory for a set of semaphores.");
+    if (!sem_info->sem_base) {
+        pr_err("Failed to allocate memory for a set of semaphores.\n");
+        kfree(sem_info);
+        return NULL;
+    }
     // Clean the memory.
     memset(sem_info->sem_base, 0, sizeof(struct sem) * nsems);
     // Initialize its values.

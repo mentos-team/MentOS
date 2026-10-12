@@ -70,7 +70,10 @@ static inline msq_info_t *__msq_info_alloc(key_t key, int msqflg)
     // Allocate the memory.
     msq_info_t *msq_info = (msq_info_t *)kmalloc(sizeof(msq_info_t));
     // Check the allocated memory.
-    assert(msq_info && "Failed to allocate memory for a msqaphore management structure.");
+    if (!msq_info) {
+        pr_err("Failed to allocate memory for a message queue structure.\n");
+        return NULL;
+    }
     // Clean the memory.
     memset(msq_info, 0, sizeof(msq_info_t));
     spinlock_init(&msq_info->lock);
