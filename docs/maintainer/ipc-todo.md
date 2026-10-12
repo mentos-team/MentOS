@@ -15,6 +15,7 @@ items are intentionally scoped for follow-up commits or pull requests.
 - [x] Serialize `msgget`, `semget`, and `shmget` publication by key.
 - [x] Add lifetime tests for queue tail handling and `IPC_RMID` wakeups.
 - [x] Add a concurrent key-publication stress test for all three namespaces.
+- [x] Bound the number of live objects in each IPC namespace.
 - [x] Document lock, reference, and user-copy contracts in `ipc.md`.
 
 ## Required hardening

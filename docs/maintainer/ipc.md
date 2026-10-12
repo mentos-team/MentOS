@@ -10,6 +10,8 @@ it.
 `semget`, `msgget`, and `shmget` create or find an object by key. `IPC_PRIVATE`
 always creates a new object. Permission checks use the owner, group, and other
 mode bits in `ipc.c`; creation flags are not themselves access checks.
+Each namespace is bounded to `IPC_MAX_OBJECTS` live objects. Exhaustion returns
+`ENOSPC` before the candidate is published.
 
 Creation allocates outside the namespace spinlock, then rechecks and publishes
 under that lock. If another caller published the same key first, the losing
