@@ -30,6 +30,16 @@ finish_wait(&queue, &entry);
 The condition must be checked again after every wakeup. A wakeup is only a hint,
 not ownership of the resource.
 
+## Lock ordering
+
+Each IPC object has an object lock; each namespace has a list lock. Ordinary
+operations hold only one of these at a time. The removal path marks the object
+under its object lock, then acquires the namespace lock to unlink it, and never
+acquires the object lock again while holding the namespace lock. Wait queues are
+not locks: they are prepared while the object lock is held, then the lock is
+released before `schedule()`. No lock may be held across user-memory access,
+I/O, or a wait-queue sleep.
+
 ## Semaphores
 
 `semop` copies the complete operation array into kernel memory, validates every
