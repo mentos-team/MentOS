@@ -120,10 +120,54 @@ static int test_message_rmid_wakeup(void)
     return !signaled || !removed || !WIFEXITED(status) || WEXITSTATUS(status) != 0;
 }
 
+static int test_message_sender_rmid_wakeup(void)
+{
+    int ready[2];
+    const int queue = msgget(IPC_PRIVATE, IPC_CREAT | 0600);
+    if (queue < 0 || pipe(ready) < 0) {
+        return 1;
+    }
+
+    // MSGMNB is two MSGMAX messages in this implementation.  The child is
+    // therefore guaranteed to block on its third send.
+    struct {
+        long type;
+        char text[MSGMAX];
+    } large = {.type = 2};
+    if (msgsnd(queue, &large, MSGMAX, 0) < 0 || msgsnd(queue, &large, MSGMAX, 0) < 0) {
+        msgctl(queue, IPC_RMID, NULL);
+        return 1;
+    }
+
+    const pid_t child = fork();
+    if (child == 0) {
+        char marker = 'S';
+        close(ready[0]);
+        if (write(ready[1], &marker, 1) != 1 || msgsnd(queue, &large, MSGMAX, 0) != -1 || errno != EIDRM) {
+            exit(1);
+        }
+        exit(0);
+    }
+    if (child < 0) {
+        msgctl(queue, IPC_RMID, NULL);
+        return 1;
+    }
+
+    close(ready[1]);
+    char marker = 0;
+    const int signaled = read(ready[0], &marker, 1) == 1;
+    close(ready[0]);
+    const int removed = msgctl(queue, IPC_RMID, NULL) == 0;
+    int status = 0;
+    waitpid(child, &status, 0);
+    return !signaled || !removed || !WIFEXITED(status) || WEXITSTATUS(status) != 0;
+}
+
 int main(void)
 {
     openlog("t_ipc_lifetime", LOG_PID | LOG_CONS, LOG_USER);
-    const int failed = test_message_tail() || test_message_rmid_wakeup() || test_semaphore_rmid_wakeup();
+    const int failed = test_message_tail() || test_message_rmid_wakeup() || test_message_sender_rmid_wakeup() ||
+                       test_semaphore_rmid_wakeup();
     syslog(failed ? LOG_ERR : LOG_INFO, "[t_ipc_lifetime] %s", failed ? "lifetime checks failed" : "lifetime checks passed");
     closelog();
     return failed ? EXIT_FAILURE : EXIT_SUCCESS;
