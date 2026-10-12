@@ -9,6 +9,7 @@
 #include <sys/ipc.h>
 #include <sys/msg.h>
 #include <sys/sem.h>
+#include <sys/shm.h>
 #include <sys/wait.h>
 #include <syslog.h>
 #include <unistd.h>
@@ -163,11 +164,31 @@ static int test_message_sender_rmid_wakeup(void)
     return !signaled || !removed || !WIFEXITED(status) || WEXITSTATUS(status) != 0;
 }
 
+static int test_shared_memory_rmid_mapping(void)
+{
+    const int shmid = shmget(IPC_PRIVATE, 4096, IPC_CREAT | 0600);
+    if (shmid < 0) {
+        return 1;
+    }
+    char *mapping = (char *)shmat(shmid, NULL, 0);
+    if (mapping == (char *)-1) {
+        shmctl(shmid, IPC_RMID, NULL);
+        return 1;
+    }
+
+    memcpy(mapping, "alive after rmid", 17);
+    if (shmctl(shmid, IPC_RMID, NULL) < 0 || memcmp(mapping, "alive after rmid", 17) != 0) {
+        shmdt(mapping);
+        return 1;
+    }
+    return shmdt(mapping) < 0;
+}
+
 int main(void)
 {
     openlog("t_ipc_lifetime", LOG_PID | LOG_CONS, LOG_USER);
     const int failed = test_message_tail() || test_message_rmid_wakeup() || test_message_sender_rmid_wakeup() ||
-                       test_semaphore_rmid_wakeup();
+                       test_semaphore_rmid_wakeup() || test_shared_memory_rmid_mapping();
     syslog(failed ? LOG_ERR : LOG_INFO, "[t_ipc_lifetime] %s", failed ? "lifetime checks failed" : "lifetime checks passed");
     closelog();
     return failed ? EXIT_FAILURE : EXIT_SUCCESS;
