@@ -19,6 +19,8 @@
 /// @{
 #define IPC_ACCESS_READ  0x01U
 #define IPC_ACCESS_WRITE 0x02U
+/// Maximum number of live objects in each IPC namespace.
+#define IPC_MAX_OBJECTS 256U
 /// @}
 
 /// @brief Validate an IPC operation against an object's permissions.

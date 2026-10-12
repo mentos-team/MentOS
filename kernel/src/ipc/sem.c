@@ -326,6 +326,15 @@ long sys_semget(key_t key, int nsems, int semflg)
         __sem_put_ref(sem_info);
         return permitted ? id : -EACCES;
     }
+    size_t object_count = 0;
+    list_for_each_decl (it, &semaphores_list) {
+        ++object_count;
+    }
+    if (object_count >= IPC_MAX_OBJECTS) {
+        spinlock_unlock(&semaphores_list_lock);
+        __sem_info_dealloc(candidate);
+        return -ENOSPC;
+    }
     __list_add_sem_info(candidate);
     spinlock_unlock(&semaphores_list_lock);
     return candidate->id;

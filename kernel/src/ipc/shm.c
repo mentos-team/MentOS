@@ -330,6 +330,15 @@ long sys_shmget(key_t key, size_t size, int shmflg)
         __shm_put_ref(shm_info);
         return permitted ? id : -EACCES;
     }
+    size_t object_count = 0;
+    list_for_each_decl (it, &shm_list) {
+        ++object_count;
+    }
+    if (object_count >= IPC_MAX_OBJECTS) {
+        spinlock_unlock(&shm_list_lock);
+        __shm_info_dealloc(candidate);
+        return -ENOSPC;
+    }
     __list_add_shm_info(candidate);
     spinlock_unlock(&shm_list_lock);
     return candidate->id;

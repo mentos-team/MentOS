@@ -348,6 +348,15 @@ int sys_msgget(key_t key, int msgflg)
         __msq_put_ref(msq_info);
         return permitted ? id : -EACCES;
     }
+    size_t object_count = 0;
+    list_for_each_decl (it, &msq_list) {
+        ++object_count;
+    }
+    if (object_count >= IPC_MAX_OBJECTS) {
+        spinlock_unlock(&msq_list_lock);
+        __msq_info_dealloc(candidate);
+        return -ENOSPC;
+    }
     __list_add_msq_info(candidate);
     spinlock_unlock(&msq_list_lock);
     return candidate->id;
