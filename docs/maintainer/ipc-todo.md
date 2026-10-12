@@ -20,7 +20,7 @@ items are intentionally scoped for follow-up commits or pull requests.
 
 - [x] Add a test for a sender blocked on a full message queue when
       `IPC_RMID` wakes it with `EIDRM`.
-- [ ] Add a test for `IPC_RMID` while a shared-memory segment is still mapped;
+- [x] Add a test for `IPC_RMID` while a shared-memory segment is still mapped;
       verify that the mapping remains usable until `shmdt`.
 - [ ] Add stress coverage for concurrent `get`, `ctl`, `remove`, send/receive,
       and semaphore operations.
