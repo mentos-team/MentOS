@@ -123,6 +123,7 @@ mm_struct_t *mm_clone(mm_struct_t *mmp)
     page_directory_t *main_pgd = paging_get_main_pgd();
     if (!main_pgd) {
         pr_crit("Failed to get the main page directory\n");
+        kmem_cache_free(mm);
         return NULL;
     }
 
@@ -154,10 +155,10 @@ mm_struct_t *mm_clone(mm_struct_t *mmp)
 
         if (vm_area_clone(mm, vm_area, 0, GFP_HIGHUSER) < 0) {
             pr_crit("Failed to clone vm_area from source process.\n");
-            // Free the previously allocated mm_struct.
-            kmem_cache_free(mm);
-            // Free the previously allocated page_directory.
-            kmem_cache_free(pdir_cpy);
+            // Destroy every area cloned so far, including IPC-backed areas.
+            // Their release callbacks drop the references acquired for the
+            // child mapping; freeing only the descriptors would leak them.
+            mm_destroy(mm);
             return NULL;
         }
     }
