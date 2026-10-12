@@ -18,7 +18,7 @@ items are intentionally scoped for follow-up commits or pull requests.
 
 ## Required hardening
 
-- [ ] Add a test for a sender blocked on a full message queue when
+- [x] Add a test for a sender blocked on a full message queue when
       `IPC_RMID` wakes it with `EIDRM`.
 - [ ] Add a test for `IPC_RMID` while a shared-memory segment is still mapped;
       verify that the mapping remains usable until `shmdt`.
