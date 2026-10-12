@@ -24,8 +24,8 @@ items are intentionally scoped for follow-up commits or pull requests.
       `IPC_RMID` wakes it with `EIDRM`.
 - [x] Add a test for `IPC_RMID` while a shared-memory segment is still mapped;
       verify that the mapping remains usable until `shmdt`.
-- [ ] Add stress coverage for concurrent `get`, `ctl`, `remove`, send/receive,
-      and semaphore operations beyond the key-publication race test.
+- [ ] Add stress coverage for concurrent send/receive and semaphore operations
+      beyond the key-publication and `IPC_STAT`/`IPC_RMID` race tests.
 - [x] Audit lock ordering across namespace locks, object locks, and wait queues;
       document the permitted order and assert it where practical.
 - [ ] Audit every IPC allocation and wakeup error path, including forked VMA
