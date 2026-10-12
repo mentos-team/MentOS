@@ -28,7 +28,7 @@ items are intentionally scoped for follow-up commits or pull requests.
       document the permitted order and assert it where practical.
 - [ ] Audit every IPC allocation and wakeup error path, including forked VMA
       acquisition and failed mapping rollback.
-- [ ] Re-run the full QEMU suite after each IPC change and inspect TAP plus
+- [x] Re-run the full QEMU suite after each IPC change and inspect TAP plus
       serial output for panics.
 
 ## API completeness
