@@ -86,6 +86,10 @@ freed after the final VMA/syscall reference is released. VMAs are page-aligned
 and rounded up so a segment ending near a page boundary cannot fault on its
 last word.
 
+`shmctl(IPC_STAT)` takes a locked metadata snapshot and copies it to userspace
+only after releasing the object lock. The same reference keeps the segment alive
+for the entire command.
+
 ## Deliberate scope
 
 The implementation currently supports the commands needed by MentOS userspace:
