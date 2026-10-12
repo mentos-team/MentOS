@@ -435,10 +435,7 @@ long sys_shmctl(int shmid, int cmd, struct shmid_ds *buf)
 {
     shm_info_t *shm_info = NULL;
     task_struct *task    = NULL;
-    // No implemented command reads or writes `buf` yet (only IPC_RMID is
-    // handled); the day one does, it must be gated with
-    // `access_ok(USER_WRITE, buf, sizeof(*buf))` (#191).
-    (void)buf;
+    struct shmid_ds snapshot;
 
     // Hold a reference while removing the segment from the namespace.
     shm_info = __shm_get_ref(shmid);
@@ -472,9 +469,28 @@ long sys_shmctl(int shmid, int cmd, struct shmid_ds *buf)
         __shm_put_ref(shm_info); // drop namespace reference
         __shm_put_ref(shm_info); // drop IPC_RMID syscall reference
         return 0;
+    } else if (cmd == IPC_STAT) {
+        if (!access_ok(USER_WRITE, buf, sizeof(*buf))) {
+            __shm_put_ref(shm_info);
+            return -EFAULT;
+        }
+        spinlock_lock(&shm_info->lock);
+        int can_read = ipc_valid_permissions(IPC_ACCESS_READ, &shm_info->shmid.shm_perm);
+        if (can_read) {
+            snapshot = shm_info->shmid;
+        }
+        spinlock_unlock(&shm_info->lock);
+        if (!can_read) {
+            __shm_put_ref(shm_info);
+            return -EACCES;
+        }
+        memcpy(buf, &snapshot, sizeof(snapshot));
+        __shm_put_ref(shm_info);
+        return 0;
+    } else {
+        __shm_put_ref(shm_info);
+        return -ENOSYS;
     }
-    __shm_put_ref(shm_info);
-    return 0;
 }
 
 // ============================================================================

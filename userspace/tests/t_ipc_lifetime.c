@@ -175,6 +175,12 @@ static int test_shared_memory_rmid_mapping(void)
         shmctl(shmid, IPC_RMID, NULL);
         return 1;
     }
+    struct shmid_ds metadata;
+    if (shmctl(shmid, IPC_STAT, &metadata) < 0 || metadata.shm_segsz < 4096) {
+        shmdt(mapping);
+        shmctl(shmid, IPC_RMID, NULL);
+        return 1;
+    }
 
     memcpy(mapping, "alive after rmid", 17);
     if (shmctl(shmid, IPC_RMID, NULL) < 0 || memcmp(mapping, "alive after rmid", 17) != 0) {
