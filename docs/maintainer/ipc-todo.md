@@ -28,7 +28,7 @@ items are intentionally scoped for follow-up commits or pull requests.
       beyond the key-publication and `IPC_STAT`/`IPC_RMID` race tests.
 - [x] Audit lock ordering across namespace locks, object locks, and wait queues;
       document the permitted order and assert it where practical.
-- [ ] Audit every IPC allocation and wakeup error path, including forked VMA
+- [x] Audit every IPC allocation and wakeup error path, including forked VMA
       acquisition and failed mapping rollback.
 - [x] Re-run the full QEMU suite after each IPC change and inspect TAP plus
       serial output for panics.

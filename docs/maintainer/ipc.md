@@ -92,6 +92,12 @@ last word.
 only after releasing the object lock. The same reference keeps the segment alive
 for the entire command.
 
+Allocation failures are handled as normal syscall errors: partially allocated
+message queues and semaphore sets release their owned buffers before returning.
+During `fork`, a failed VMA clone destroys every previously cloned area, so
+SHM acquire callbacks are balanced by release callbacks and cannot leak a
+segment reference.
+
 ## Deliberate scope
 
 The implementation currently supports the commands needed by MentOS userspace:
