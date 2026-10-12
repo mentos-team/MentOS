@@ -118,12 +118,29 @@ static inline void __shm_info_dealloc(shm_info_t *shm_info)
     kfree(shm_info);
 }
 
+static inline shm_info_t *__list_find_shm_info_by_key(key_t key);
+
 /// @brief Acquire a reference to a segment still present in the namespace.
 static shm_info_t *__shm_get_ref(int shmid)
 {
     shm_info_t *shm_info;
     spinlock_lock(&shm_list_lock);
     shm_info = __list_find_shm_info_by_id(shmid);
+    if (shm_info && !shm_info->removed) {
+        atomic_inc(&shm_info->references);
+    } else {
+        shm_info = NULL;
+    }
+    spinlock_unlock(&shm_list_lock);
+    return shm_info;
+}
+
+/// @brief Acquire a reference to a segment found by key.
+static shm_info_t *__shm_get_ref_by_key(key_t key)
+{
+    shm_info_t *shm_info;
+    spinlock_lock(&shm_list_lock);
+    shm_info = __list_find_shm_info_by_key(key);
     if (shm_info && !shm_info->removed) {
         atomic_inc(&shm_info->references);
     } else {
@@ -241,60 +258,79 @@ static void __shm_mapping_release(vm_area_struct_t *area)
 long sys_shmget(key_t key, size_t size, int shmflg)
 {
     shm_info_t *shm_info = NULL;
+    const int private_key = (key == IPC_PRIVATE);
     if (size == 0) {
         return -EINVAL;
     }
-    // Need to find a unique key.
-    if (key == IPC_PRIVATE) {
-        // Exit when i find a unique key.
-        do {
-            key = (-rand());
-        } while (__list_find_shm_info_by_key(key));
-        // We have a unique key, create the shared memory.
-        shm_info = __shm_info_alloc(key, size, shmflg);
-        if (!shm_info) {
-            return -ENOENT;
-        }
-        // Add the shared memory to the list.
-        __list_add_shm_info(shm_info);
-    } else {
-        // Get the shared memory if it exists.
-        shm_info = __list_find_shm_info_by_key(key);
+    if (!private_key) {
+        shm_info = __shm_get_ref_by_key(key);
         if (shm_info && size > shm_info->shmid.shm_segsz) {
+            __shm_put_ref(shm_info);
             return -EINVAL;
         }
-        // Check if no shared memory exists for the given key and the flags did not specify IPC_CREAT.
         if (!shm_info && !(shmflg & IPC_CREAT)) {
             pr_err("No shared memory exists for the given key and the flags "
                    "did not specify IPC_CREAT.\n");
             return -ENOENT;
         }
-        // Check if IPC_CREAT and IPC_EXCL were specified, but a shared memory already exists for key.
         if (shm_info && (shmflg & IPC_CREAT) && (shmflg & IPC_EXCL)) {
             pr_err("IPC_CREAT and IPC_EXCL were specified, but a shared memory "
                    "already exists for key.\n");
+            __shm_put_ref(shm_info);
             return -EEXIST;
         }
-        // Check if the shared memory exists for the given key, but the calling
-        // process does not have permission to access the set.
-        if (shm_info && !ipc_valid_mode((mode_t)shmflg, &shm_info->shmid.shm_perm)) {
-            pr_err("The shared memory exists for the given key, but the calling "
-                   "process does not have permission to access the set.\n");
-            return -EACCES;
-        }
-        // If the shared memory does not exist we need to create a new one.
-        if (shm_info == NULL) {
-            // Create the shared memory.
-            shm_info = __shm_info_alloc(key, size, shmflg);
-            if (!shm_info) {
-                return -ENOENT;
+        if (shm_info) {
+            spinlock_lock(&shm_info->lock);
+            int permitted = ipc_valid_mode((mode_t)shmflg, &shm_info->shmid.shm_perm);
+            int id = shm_info->id;
+            spinlock_unlock(&shm_info->lock);
+            __shm_put_ref(shm_info);
+            if (!permitted) {
+                pr_err("The shared memory exists for the given key, but the calling "
+                       "process does not have permission to access the set.\n");
+                return -EACCES;
             }
-            // Add the shared memory to the list.
-            __list_add_shm_info(shm_info);
+            return id;
         }
     }
-    // Return the id of the shared memory.
-    return shm_info->id;
+
+    if (private_key) {
+        do {
+            key = -rand();
+            shm_info = __shm_get_ref_by_key(key);
+            if (shm_info) {
+                __shm_put_ref(shm_info);
+            }
+        } while (shm_info);
+    }
+    shm_info_t *candidate = __shm_info_alloc(key, size, shmflg);
+    if (!candidate) {
+        return -ENOENT;
+    }
+    spinlock_lock(&shm_list_lock);
+    shm_info = __list_find_shm_info_by_key(key);
+    if (shm_info && !shm_info->removed) {
+        atomic_inc(&shm_info->references);
+        spinlock_unlock(&shm_list_lock);
+        __shm_info_dealloc(candidate);
+        if (private_key) {
+            __shm_put_ref(shm_info);
+            return sys_shmget(IPC_PRIVATE, size, shmflg);
+        }
+        if (size > shm_info->shmid.shm_segsz || (shmflg & IPC_EXCL)) {
+            __shm_put_ref(shm_info);
+            return (size > shm_info->shmid.shm_segsz) ? -EINVAL : -EEXIST;
+        }
+        spinlock_lock(&shm_info->lock);
+        int permitted = ipc_valid_mode((mode_t)shmflg, &shm_info->shmid.shm_perm);
+        int id = shm_info->id;
+        spinlock_unlock(&shm_info->lock);
+        __shm_put_ref(shm_info);
+        return permitted ? id : -EACCES;
+    }
+    __list_add_shm_info(candidate);
+    spinlock_unlock(&shm_list_lock);
+    return candidate->id;
 }
 
 void *sys_shmat(int shmid, const void *shmaddr, int shmflg)
