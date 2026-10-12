@@ -190,11 +190,22 @@ static int test_shared_memory_rmid_mapping(void)
     return shmdt(mapping) < 0;
 }
 
+/// @brief Reject shared-memory sizes that would overflow page rounding.
+static int test_shared_memory_size_bounds(void)
+{
+    const size_t too_large = (size_t)-1;
+    errno = 0;
+    if (shmget(IPC_PRIVATE, too_large, IPC_CREAT | 0600) != -1 || errno != EINVAL) {
+        return 1;
+    }
+    return 0;
+}
+
 int main(void)
 {
     openlog("t_ipc_lifetime", LOG_PID | LOG_CONS, LOG_USER);
     const int failed = test_message_tail() || test_message_rmid_wakeup() || test_message_sender_rmid_wakeup() ||
-                       test_semaphore_rmid_wakeup() || test_shared_memory_rmid_mapping();
+                       test_semaphore_rmid_wakeup() || test_shared_memory_rmid_mapping() || test_shared_memory_size_bounds();
     syslog(failed ? LOG_ERR : LOG_INFO, "[t_ipc_lifetime] %s", failed ? "lifetime checks failed" : "lifetime checks passed");
     closelog();
     return failed ? EXIT_FAILURE : EXIT_SUCCESS;

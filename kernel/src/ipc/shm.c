@@ -24,6 +24,7 @@
 #include "mem/uaccess.h"
 #include "process/scheduler.h"
 #include "stdio.h"
+#include "stdint.h"
 #include "stdlib.h"
 #include "string.h"
 
@@ -67,6 +68,11 @@ static inline shm_info_t *__list_find_shm_info_by_id(int shmid);
 /// @return Pointer to the allocated shared memory structure, or NULL on failure.
 static inline shm_info_t *__shm_info_alloc(key_t key, size_t size, int shmflg)
 {
+    // find_nearest_order_greater() performs page rounding in 32-bit
+    // arithmetic; reject values that would wrap that calculation.
+    if (size > UINT32_MAX - (PAGE_SIZE - 1U)) {
+        return NULL;
+    }
     // Allocate memory for shm_info_t.
     shm_info_t *shm_info = (shm_info_t *)kmalloc(sizeof(shm_info_t));
     // Check if memory allocation for shm_info failed.
@@ -259,7 +265,7 @@ long sys_shmget(key_t key, size_t size, int shmflg)
 {
     shm_info_t *shm_info = NULL;
     const int private_key = (key == IPC_PRIVATE);
-    if (size == 0) {
+    if (size == 0 || size > UINT32_MAX - (PAGE_SIZE - 1U)) {
         return -EINVAL;
     }
     if (!private_key) {
@@ -305,7 +311,7 @@ long sys_shmget(key_t key, size_t size, int shmflg)
     }
     shm_info_t *candidate = __shm_info_alloc(key, size, shmflg);
     if (!candidate) {
-        return -ENOENT;
+        return -ENOMEM;
     }
     spinlock_lock(&shm_list_lock);
     shm_info = __list_find_shm_info_by_key(key);
