@@ -317,9 +317,11 @@ long sys_shmget(key_t key, size_t size, int shmflg)
             __shm_put_ref(shm_info);
             return sys_shmget(IPC_PRIVATE, size, shmflg);
         }
-        if (size > shm_info->shmid.shm_segsz || (shmflg & IPC_EXCL)) {
+        int size_error = size > shm_info->shmid.shm_segsz;
+        int exclusive = (shmflg & IPC_EXCL) != 0;
+        if (size_error || exclusive) {
             __shm_put_ref(shm_info);
-            return (size > shm_info->shmid.shm_segsz) ? -EINVAL : -EEXIST;
+            return size_error ? -EINVAL : -EEXIST;
         }
         spinlock_lock(&shm_info->lock);
         int permitted = ipc_valid_mode((mode_t)shmflg, &shm_info->shmid.shm_perm);
