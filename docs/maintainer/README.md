@@ -32,6 +32,7 @@ references.
 | [perf-counters.md](perf-counters.md) | Answering "where did the cycles go?" in any subsystem; adding counters |
 | [pipes.md](pipes.md) | Changing `sys_pipe`, `pipe_close`, pipe create/unlink error paths |
 | [ipc.md](ipc.md) | System V-like semaphores, message queues, shared memory, blocking and lifetime rules |
+| [ipc-todo.md](ipc-todo.md) | Open IPC hardening, API completeness, design, and validation work |
 | [memory-management.md](memory-management.md) | Reasoning about kmalloc/kfree/slab, UAF/double-free analysis |
 | [syscall-boundaries.md](syscall-boundaries.md) | Adding or modifying ANY syscall that takes user pointers |
 | [testing-and-ci.md](testing-and-ci.md) | Running, extending, or trusting the test suite; CI work |
