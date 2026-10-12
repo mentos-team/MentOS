@@ -458,36 +458,22 @@ out:
  * this legacy command dispatcher; keeping the lifetime protocol here avoids
  * having every early-return branch duplicate cleanup code.
  */
-static long __semctl(int semid, int semnum, int cmd, union semun *arg)
+static long __semctl(sem_info_t *sem_info, int semnum, int cmd, union semun *arg)
 {
-    sem_info_t *sem_info = NULL;
     task_struct *task    = NULL;
     struct semid_ds snapshot;
     unsigned short values[SEM_SET_MAX];
-    // Search for the semaphore. IPC_RMID upgrades this to a held reference
-    // before unlinking; ordinary metadata operations do not block.
-    sem_info = __list_find_sem_info_by_id(semid);
-    // The semaphore set doesn't exist.
-    if (!sem_info) {
-        pr_err("The semaphore set doesn't exist.\n");
-        return -EINVAL;
-    }
     // Get the calling task.
     task = scheduler_get_current_process();
     assert(task && "Failed to get the current running process.");
 
     if (cmd == IPC_RMID) {
-        sem_info = __sem_get_ref(semid);
-        if (!sem_info) {
-            return -EIDRM;
-        }
         // Remove the semaphore set; any processes blocked is awakened (errno set to
         // EIDRM); no argument required.
 
         if ((sem_info->semid.sem_perm.uid != task->uid) && (sem_info->semid.sem_perm.cuid != task->uid)) {
             pr_err("The calling process is not the creator or the owner of the "
                    "semaphore set.\n");
-            __sem_put_ref(sem_info);
             return -EPERM;
         }
         // Unlink and tombstone the set before waking sleepers.  A blocked
@@ -501,7 +487,6 @@ static long __semctl(int semid, int semnum, int cmd, union semun *arg)
         spinlock_unlock(&semaphores_list_lock);
         __sem_put_ref(sem_info); // drop the namespace reference
         wake_up_all(&sem_info->wait_queue);
-        __sem_put_ref(sem_info); // drop the IPC_RMID syscall reference
         return 0;
     } else if (cmd == SETVAL) {
         // The value of the semnum-th semaphore in the set is initialized to the
@@ -729,7 +714,7 @@ long sys_semctl(int semid, int semnum, int cmd, union semun *arg)
         return -EINVAL;
     }
 
-    long result = __semctl(semid, semnum, cmd, arg);
+    long result = __semctl(sem_info, semnum, cmd, arg);
     __sem_put_ref(sem_info);
     return result;
 }
