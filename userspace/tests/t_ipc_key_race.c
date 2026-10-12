@@ -14,6 +14,8 @@
 #include <unistd.h>
 
 #define CHILDREN 8
+#define CONTROL_CHILDREN 4
+#define CONTROL_ROUNDS 32
 
 static int create_object(int kind, key_t key)
 {
@@ -90,10 +92,78 @@ static int run_key_race(int kind, key_t key)
     return failed;
 }
 
+static int control_operation(int kind, int id)
+{
+    if (kind == 0) {
+        struct msqid_ds metadata;
+        return msgctl(id, IPC_STAT, &metadata);
+    }
+    if (kind == 1) {
+        struct semid_ds metadata;
+        union semun argument = {.buf = &metadata};
+        return semctl(id, 0, IPC_STAT, &argument);
+    }
+    struct shmid_ds metadata;
+    return shmctl(id, IPC_STAT, &metadata);
+}
+
+static int run_control_removal_race(int kind, key_t key)
+{
+    int ready[2];
+    const int id = create_object(kind, key);
+    if (id < 0 || pipe(ready) < 0) {
+        return 1;
+    }
+
+    for (int i = 0; i < CONTROL_CHILDREN; ++i) {
+        const pid_t child = fork();
+        if (child == 0) {
+            close(ready[0]);
+            char marker = 'R';
+            int failed = write(ready[1], &marker, 1) != 1;
+            for (int round = 0; round < CONTROL_ROUNDS && !failed; ++round) {
+                const int result = control_operation(kind, id);
+                if (result < 0 && errno != EIDRM && errno != EINVAL) {
+                    failed = 1;
+                }
+            }
+            close(ready[1]);
+            exit(failed ? EXIT_FAILURE : EXIT_SUCCESS);
+        }
+        if (child < 0) {
+            close(ready[0]);
+            close(ready[1]);
+            remove_object(kind, id);
+            return 1;
+        }
+    }
+
+    close(ready[1]);
+    for (int i = 0; i < CONTROL_CHILDREN; ++i) {
+        char marker = 0;
+        if (read(ready[0], &marker, 1) != 1) {
+            close(ready[0]);
+            remove_object(kind, id);
+            return 1;
+        }
+    }
+    close(ready[0]);
+    int failed = remove_object(kind, id) < 0;
+    for (int i = 0; i < CONTROL_CHILDREN; ++i) {
+        int status = 0;
+        if (wait(&status) < 0 || !WIFEXITED(status) || WEXITSTATUS(status) != EXIT_SUCCESS) {
+            failed = 1;
+        }
+    }
+    return failed;
+}
+
 int main(void)
 {
     openlog("t_ipc_key_race", LOG_PID | LOG_CONS, LOG_USER);
-    const int failed = run_key_race(0, 0x4D534751) || run_key_race(1, 0x53454D51) || run_key_race(2, 0x53484D51);
+    const int failed = run_key_race(0, 0x4D534751) || run_key_race(1, 0x53454D51) || run_key_race(2, 0x53484D51) ||
+                       run_control_removal_race(0, 0x4D435251) || run_control_removal_race(1, 0x53435251) ||
+                       run_control_removal_race(2, 0x53485251);
     syslog(failed ? LOG_ERR : LOG_INFO, "[t_ipc_key_race] %s", failed ? "key race checks failed" : "key race checks passed");
     closelog();
     return failed ? EXIT_FAILURE : EXIT_SUCCESS;
