@@ -220,6 +220,21 @@ static sem_info_t *__sem_get_ref(int semid)
     return sem_info;
 }
 
+/// @brief Acquire a reference to a semaphore set found by key.
+static sem_info_t *__sem_get_ref_by_key(key_t key)
+{
+    sem_info_t *sem_info;
+    spinlock_lock(&semaphores_list_lock);
+    sem_info = __list_find_sem_info_by_key(key);
+    if (sem_info && !sem_info->removed) {
+        atomic_inc(&sem_info->references);
+    } else {
+        sem_info = NULL;
+    }
+    spinlock_unlock(&semaphores_list_lock);
+    return sem_info;
+}
+
 /// @brief Release a syscall reference and reclaim a removed set when unused.
 static void __sem_put_ref(sem_info_t *sem_info)
 {
@@ -231,66 +246,89 @@ static void __sem_put_ref(sem_info_t *sem_info)
 long sys_semget(key_t key, int nsems, int semflg)
 {
     sem_info_t *sem_info = NULL;
+    const int private_key = (key == IPC_PRIVATE);
     // Check if nsems is less than 0 or greater than the maximum number of
     // semaphores per semaphore set.
     if ((nsems <= 0) || (nsems > SEM_SET_MAX)) {
         pr_err("Wrong number of semaphores for semaphore set.\n");
         return -EINVAL;
     }
-    // Need to find a unique key.
-    if (key == IPC_PRIVATE) {
-        // Exit when i find a unique key.
-        do {
-            key = (-rand());
-        } while (__list_find_sem_info_by_key(key));
-        // We have a unique key, create the semaphore set.
-        sem_info = __sem_info_alloc(key, nsems, semflg);
-        // Add the semaphore set to the list.
-        __list_add_sem_info(sem_info);
-    } else {
-        // Get the semaphore set if it exists.
-        sem_info = __list_find_sem_info_by_key(key);
-
-        // Check if a semaphore set with the given key already exists, but nsems is
-        // larger than the number of semaphores in that set.
+    if (!private_key) {
+        sem_info = __sem_get_ref_by_key(key);
+        // An existing set must be validated while its reference is held.
         if (sem_info && (nsems > sem_info->semid.sem_nsems)) {
+            __sem_put_ref(sem_info);
             pr_err("Wrong number of semaphores for and existing semaphore set.\n");
             return -EINVAL;
         }
-
-        // Check if no semaphore set exists for the given key and semflg did not
-        // specify IPC_CREAT.
         if (!sem_info && !(semflg & IPC_CREAT)) {
             pr_err("No semaphore set exists for the given key and semflg did "
                    "not specify IPC_CREAT.\n");
             return -ENOENT;
         }
 
-        // Check if IPC_CREAT and IPC_EXCL were specified in semflg, but a semaphore
-        // set already exists for key.
         if (sem_info && (semflg & IPC_CREAT) && (semflg & IPC_EXCL)) {
             pr_err("IPC_CREAT and IPC_EXCL were specified in semflg, but a "
                    "semaphore set already exists for key.\n");
+            __sem_put_ref(sem_info);
             return -EEXIST;
         }
-
-        // Check if the semaphore set exists for the given key, but the calling
-        // process does not have permission to access the set.
-        if (sem_info && !ipc_valid_mode((mode_t)semflg, &sem_info->semid.sem_perm)) {
-            pr_err("The semaphore set exists for the given key, but the calling "
-                   "process does not have permission to access the set.\n");
-            return -EACCES;
-        }
-        // If the semaphore set does not exist we need to create a new one.
-        if (sem_info == NULL) {
-            // Create the semaphore set.
-            sem_info = __sem_info_alloc(key, nsems, semflg);
-            // Add the semaphore set to the list.
-            __list_add_sem_info(sem_info);
+        if (sem_info) {
+            spinlock_lock(&sem_info->lock);
+            int permitted = ipc_valid_mode((mode_t)semflg, &sem_info->semid.sem_perm);
+            int id = sem_info->id;
+            spinlock_unlock(&sem_info->lock);
+            __sem_put_ref(sem_info);
+            if (!permitted) {
+                pr_err("The semaphore set exists for the given key, but the calling "
+                       "process does not have permission to access the set.\n");
+                return -EACCES;
+            }
+            return id;
         }
     }
-    // Return the id of the semaphore set.
-    return sem_info->id;
+
+    if (private_key) {
+        do {
+            key = -rand();
+            sem_info = __sem_get_ref_by_key(key);
+            if (sem_info) {
+                __sem_put_ref(sem_info);
+            }
+        } while (sem_info);
+    }
+    sem_info_t *candidate = __sem_info_alloc(key, nsems, semflg);
+    if (!candidate) {
+        return -ENOMEM;
+    }
+    spinlock_lock(&semaphores_list_lock);
+    sem_info = __list_find_sem_info_by_key(key);
+    if (sem_info && !sem_info->removed) {
+        atomic_inc(&sem_info->references);
+        spinlock_unlock(&semaphores_list_lock);
+        __sem_info_dealloc(candidate);
+        if (private_key) {
+            __sem_put_ref(sem_info);
+            return sys_semget(IPC_PRIVATE, nsems, semflg);
+        }
+        if (nsems > sem_info->semid.sem_nsems) {
+            __sem_put_ref(sem_info);
+            return -EINVAL;
+        }
+        if (semflg & IPC_EXCL) {
+            __sem_put_ref(sem_info);
+            return -EEXIST;
+        }
+        spinlock_lock(&sem_info->lock);
+        int permitted = ipc_valid_mode((mode_t)semflg, &sem_info->semid.sem_perm);
+        int id = sem_info->id;
+        spinlock_unlock(&sem_info->lock);
+        __sem_put_ref(sem_info);
+        return permitted ? id : -EACCES;
+    }
+    __list_add_sem_info(candidate);
+    spinlock_unlock(&semaphores_list_lock);
+    return candidate->id;
 }
 
 long sys_semop(int semid, struct sembuf *sops, unsigned nsops)
