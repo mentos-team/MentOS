@@ -160,8 +160,9 @@ void paging_flush_tlb_single(unsigned long addr);
 
 /// @brief Maps a virtual address to a corresponding physical page.
 /// @param pgdir The page directory.
-/// @param virt_start The starting virtual address to map.
-/// @param size Pointer to a size_t variable to store the size of the mapped memory.
+/// @param virt_start The virtual address to map; it may include a page offset.
+/// @param size Pointer to a size_t variable to store the contiguous bytes
+///              available from @p virt_start.
 /// @return A pointer to the physical page corresponding to the virtual address, or NULL on error.
 page_t *mem_virtual_to_page(page_directory_t *pgdir, uint32_t virt_start, size_t *size);
 
