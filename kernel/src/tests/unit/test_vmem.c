@@ -240,29 +240,37 @@ TEST(memory_vmem_unaligned_copy)
     ASSERT_MSG(mm != NULL, "mm_create_blank must succeed");
 
     const uint32_t src_addr = 0x32000001;
-    const uint32_t dst_addr = 0x32003003;
-    const uint32_t copy_size = PAGE_SIZE + 37;
-    vm_area_struct_t *src = vm_area_create(mm, src_addr, copy_size, MM_PRESENT | MM_RW | MM_USER, GFP_KERNEL);
-    vm_area_struct_t *dst = vm_area_create(mm, dst_addr, copy_size, MM_PRESENT | MM_RW | MM_USER, GFP_KERNEL);
+    const uint32_t dst_addr = 0x32200003;
+    // Exceed the 64 KiB temporary mapping window so the test also exercises
+    // the multi-chunk path with offsets preserved across iterations.
+    const uint32_t copy_size = 65536U + 37U;
+    vm_area_struct_t *src = vm_area_create(mm, src_addr, copy_size, MM_PRESENT | MM_RW | MM_USER, GFP_HIGHUSER);
+    vm_area_struct_t *dst = vm_area_create(mm, dst_addr, copy_size, MM_PRESENT | MM_RW | MM_USER, GFP_HIGHUSER);
     ASSERT_MSG(src != NULL && dst != NULL, "unaligned VMAs must be creatable");
 
-    size_t src_available = copy_size;
-    size_t dst_available = copy_size;
-    page_t *src_page = mem_virtual_to_page(mm->pgd, src_addr, &src_available);
-    page_t *dst_page = mem_virtual_to_page(mm->pgd, dst_addr, &dst_available);
-    ASSERT_MSG(src_page != NULL && dst_page != NULL, "unaligned VMAs must be translatable");
-
-    uint8_t *src_bytes = (uint8_t *)get_virtual_address_from_page(src_page) + (src_addr & (PAGE_SIZE - 1U));
-    uint8_t *dst_bytes = (uint8_t *)get_virtual_address_from_page(dst_page) + (dst_addr & (PAGE_SIZE - 1U));
+    virt_map_page_t *src_window = vmem_map_alloc_virtual(copy_size);
+    ASSERT_MSG(src_window != NULL, "source mapping window must be allocated");
+    uint32_t src_map = vmem_map_virtual_address(
+        mm, src_window, src_addr & ~(PAGE_SIZE - 1U), copy_size + (src_addr & (PAGE_SIZE - 1U)));
+    ASSERT_MSG(src_map != 0, "source mapping window must be mapped");
+    uint8_t *src_bytes = (uint8_t *)src_map + (src_addr & (PAGE_SIZE - 1U));
     for (uint32_t i = 0; i < copy_size; ++i) {
         src_bytes[i] = (uint8_t)(0x5A ^ i);
     }
+    ASSERT_MSG(vmem_unmap_virtual_address_page(src_window) == 0, "source window must be unmapped");
 
     vmem_memcpy(mm, dst_addr, mm, src_addr, copy_size);
 
+    virt_map_page_t *dst_window = vmem_map_alloc_virtual(copy_size);
+    ASSERT_MSG(dst_window != NULL, "destination mapping window must be allocated");
+    uint32_t dst_map = vmem_map_virtual_address(
+        mm, dst_window, dst_addr & ~(PAGE_SIZE - 1U), copy_size + (dst_addr & (PAGE_SIZE - 1U)));
+    ASSERT_MSG(dst_map != 0, "destination mapping window must be mapped");
+    uint8_t *dst_bytes = (uint8_t *)dst_map + (dst_addr & (PAGE_SIZE - 1U));
     for (uint32_t i = 0; i < copy_size; ++i) {
         ASSERT_MSG(dst_bytes[i] == (uint8_t)(0x5A ^ i), "unaligned copy must preserve every byte");
     }
+    ASSERT_MSG(vmem_unmap_virtual_address_page(dst_window) == 0, "destination window must be unmapped");
 
     ASSERT_MSG(mm_destroy(mm) == 0, "mm_destroy must succeed");
 
