@@ -12,6 +12,10 @@ Verified against `BASE` = `82f4314` / `MAIN` = `62c638a`. This file separates
   (root/pid-0 bypass; owner/group/other bits), `vfs_valid_exec_permission`,
   setuid/setgid on exec. **Per-fd** write authorization is only
   `flags_mask` stored in the fd slot (read_write.c:63).
+- Paging enables `CR0.WP` during kernel paging initialization. Supervisor
+  writes therefore honor read-only PTEs instead of silently bypassing them.
+  This is hardware defense in depth; it does not replace bounded user-pointer
+  validation in syscall and copy-to-user paths.
 
 ## Recurring bug classes found in one review cycle
 
