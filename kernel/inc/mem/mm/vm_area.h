@@ -37,7 +37,27 @@ typedef struct vm_area_struct {
     pgprot_t vm_page_prot;
     /// Flags indicating attributes of the memory area.
     unsigned short vm_flags;
+    /// Optional owner-specific data for shared mappings.
+    void *vm_private_data;
+    /// Called when a shared mapping is destroyed.
+    void (*vm_release)(struct vm_area_struct *area);
+    /// Called after a shared mapping is cloned into another address space.
+    void (*vm_acquire)(struct vm_area_struct *area);
 } vm_area_struct_t;
+
+/// @brief Create a VMA over already allocated physical memory.
+/// @param mm Address space that will own the mapping.
+/// @param vm_start User virtual start address.
+/// @param size Mapping length in bytes.
+/// @param phy_start Physical start address.
+/// @param pgflags Page-table flags (MM_UPDADDR is not required).
+/// @param private_data Owner-specific mapping data.
+/// @param release Called when the mapping is destroyed.
+/// @param acquire Called when the mapping is cloned.
+/// @return The VMA, or NULL on failure.
+vm_area_struct_t *vm_area_map_physical(struct mm_struct *mm, uint32_t vm_start, size_t size,
+                                       uint32_t phy_start, uint32_t pgflags, void *private_data,
+                                       void (*release)(vm_area_struct_t *), void (*acquire)(vm_area_struct_t *));
 
 /// @brief Initialize the virtual memory area subsystem.
 /// @return 0 on success, -1 on error.

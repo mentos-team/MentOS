@@ -13,6 +13,13 @@
 /// Data type for storing the number of attaches.
 typedef unsigned long shmatt_t;
 
+/// @brief Maximum shared-memory segment supported by the current page allocator.
+///
+/// The allocator's largest contiguous block is order 11 (8 MiB).  Keeping the
+/// API limit explicit prevents `shmget` from requesting an impossible block and
+/// makes the limit visible to userspace callers.
+#define SHMMAX (8U * 1024U * 1024U)
+
 /// @brief Shared memory data structure.
 struct shmid_ds {
     /// Operation permission struct.

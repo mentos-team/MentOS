@@ -10,6 +10,7 @@
 #include "io/debug.h"                    // Include debugging functions.
 
 #include "assert.h"
+#include "devices/fpu.h"
 #include "descriptor_tables/isr.h"
 #include "descriptor_tables/tss.h"
 #include "errno.h"
@@ -44,6 +45,8 @@ static void scheduler_switch_to_continuation(task_struct *current, task_struct *
 {
     assert(current != NULL && next != NULL);
     assert(task_kernel_stack_check(next) && "Kernel continuation stack canary corrupted.");
+    // Save the outgoing task while it is still the scheduler's current task.
+    switch_fpu();
     scheduler_activate_task(next);
 
     /* An IRQ handler can wake a task whose continuation is suspended in a
@@ -54,7 +57,10 @@ static void scheduler_switch_to_continuation(task_struct *current, task_struct *
     if (in_hardirq) {
         irq_hardirq_leave();
     }
+    // A resumable syscall switches C stacks without crossing the syscall
+    // return boundary, so restore the selected task explicitly here.
     switch_to(&current->thread.kernel_esp, next->thread.kernel_esp);
+    unswitch_fpu();
     if (in_hardirq) {
         irq_hardirq_enter();
     }
@@ -465,6 +471,8 @@ void schedule(void)
                 assert(task_prepare_kernel_context(next) == 0 && "Unable to prepare user continuation.");
             }
 
+            // Save the outgoing task before publishing the new current task.
+            switch_fpu();
             scheduler_activate_task(next);
 
             /*
@@ -474,7 +482,10 @@ void schedule(void)
              * switch_to, preserving the blocking syscall's call chain.
              */
             prev->thread.context_kind = THREAD_CONTEXT_KERNEL;
+            // Voluntary kernel scheduling has no trap epilogue to perform the
+            // usual FPU restore. Pair it with the continuation switch itself.
             switch_to(&prev->thread.kernel_esp, next->thread.kernel_esp);
+            unswitch_fpu();
             break;
         }
 

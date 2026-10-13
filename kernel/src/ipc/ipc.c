@@ -6,7 +6,6 @@
 #include "ipc/ipc.h"
 
 #include "assert.h"
-#include "fcntl.h"
 #include "io/debug.h"
 #include "process/scheduler.h"
 #include "sys/stat.h"
@@ -18,7 +17,8 @@
 /// @param grp Permission flag for group.
 /// @param oth Permission flag for others.
 /// @return 1 if permissions are granted, 0 otherwise.
-static inline int ipc_check_perm(task_struct *task, struct ipc_perm *perm, int usr, int grp, int oth)
+static inline int ipc_check_perm(const task_struct *task, const struct ipc_perm *perm, unsigned short usr,
+                                 unsigned short grp, unsigned short oth)
 {
     // Check if task is NULL.
     if (!task) {
@@ -30,59 +30,48 @@ static inline int ipc_check_perm(task_struct *task, struct ipc_perm *perm, int u
         pr_err("Received a NULL perm.\n");
         return 0;
     }
-    int check_parent = (perm->key < 0) && task->parent && (task->parent->pid != 0);
-    // Check user permissions.
-    if (perm->mode & usr) {
-        if ((perm->uid == task->uid) || (perm->cuid == task->uid)) {
-            return 1;
-        }
-        if (check_parent && ((perm->uid == task->parent->uid) || (perm->cuid == task->parent->uid))) {
-            return 1;
-        }
+    // As with regular Unix permission checks, exactly one class applies: an
+    // owner that lacks a requested bit must not fall through to "others".
+    if (perm->uid == task->uid) {
+        return (perm->mode & usr) != 0;
     }
-    // Check group permissions.
-    if (perm->mode & grp) {
-        if ((perm->gid == task->gid) || (perm->cgid == task->gid)) {
-            return 1;
-        }
-        if (check_parent && ((perm->gid == task->parent->gid) || (perm->cgid == task->parent->gid))) {
-            return 1;
-        }
+    if (perm->gid == task->gid) {
+        return (perm->mode & grp) != 0;
     }
-    // Check other permissions.
-    if (perm->mode & oth) {
-        if (check_parent && ((perm->uid != task->parent->uid) || (perm->cuid != task->parent->uid))) {
-            return 1;
-        }
-        if (check_parent && ((perm->gid != task->parent->gid) || (perm->cgid != task->parent->gid))) {
-            return 1;
-        }
-    }
-    // No permissions granted.
-    return 0;
+    return (perm->mode & oth) != 0;
 }
 
-int ipc_valid_permissions(int flags, struct ipc_perm *perm)
+int ipc_valid_permissions(unsigned int access, const struct ipc_perm *perm)
 {
     // Get the calling task.
     task_struct *task = scheduler_get_current_process();
     assert(task && "Failed to get the current running process.");
-    // Init, and all root processes have full permissions.
-    if ((task->pid == 0) || (task->uid == 0) || (task->gid == 0)) {
+    // Init and uid 0 are superuser contexts.  Membership in gid 0 must still
+    // obey the object's group permission bits; it is not equivalent to root.
+    if ((task->pid == 0) || (task->uid == 0)) {
         return 1;
     }
-    // Check permissions.
-    if (((flags & O_RDONLY) == O_RDONLY) && ipc_check_perm(task, perm, S_IRUSR, S_IRGRP, S_IROTH)) {
-        return 1;
+    if ((access & IPC_ACCESS_READ) && !ipc_check_perm(task, perm, S_IRUSR, S_IRGRP, S_IROTH)) {
+        return 0;
     }
-    if (((flags & O_WRONLY) == O_WRONLY) && ipc_check_perm(task, perm, S_IWUSR, S_IWGRP, S_IWOTH)) {
-        return 1;
+    if ((access & IPC_ACCESS_WRITE) && !ipc_check_perm(task, perm, S_IWUSR, S_IWGRP, S_IWOTH)) {
+        return 0;
     }
-    if (((flags & O_RDWR) == O_RDWR) &&
-        ipc_check_perm(task, perm, S_IRUSR | S_IWUSR, S_IRGRP | S_IWGRP, S_IROTH | S_IWOTH)) {
-        return 1;
+    return 1;
+}
+
+int ipc_valid_mode(mode_t mode, const struct ipc_perm *perm)
+{
+    unsigned int access = 0;
+    mode &= (S_IRWXU | S_IRWXG | S_IRWXO);
+
+    if (mode & (S_IRUSR | S_IRGRP | S_IROTH)) {
+        access |= IPC_ACCESS_READ;
     }
-    return 0;
+    if (mode & (S_IWUSR | S_IWGRP | S_IWOTH)) {
+        access |= IPC_ACCESS_WRITE;
+    }
+    return ipc_valid_permissions(access, perm);
 }
 
 struct ipc_perm register_ipc(key_t key, mode_t mode)

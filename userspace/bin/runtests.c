@@ -92,6 +92,8 @@ static char *all_tests[] = {
     "t_semflg",
     "t_semget",
     "t_semop",
+    "t_ipc_lifetime",
+    "t_ipc_key_race",
     "t_shm",
     "t_shmget",
     "t_sigaction",

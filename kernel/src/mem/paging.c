@@ -376,12 +376,9 @@ static inline int __set_pg_entry_frame(page_dir_entry_t *entry, page_table_t *ta
         return -1;
     }
 
-    // Retrieve the physical address from the page structure.
+    // Retrieve the physical address from the page structure.  Frame zero is a
+    // valid physical frame, so it must not be treated as an error sentinel.
     uint32_t phy_addr = get_physical_address_from_page(table_page);
-    if (!phy_addr) {
-        pr_crit("Failed to retrieve physical address from page: %p\n", (void *)table_page);
-        return -1;
-    }
 
     // Set the frame attribute in the page directory entry (shifted by 12 bits
     // to represent the frame number).

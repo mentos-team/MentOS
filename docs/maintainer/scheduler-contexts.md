@@ -32,6 +32,11 @@ stack pointer in `thread.kernel_esp`. When the task is woken, the same
 `schedule()` therefore preserves a **kernel continuation**. It does not
 restore a userspace trap frame and it does not manufacture a userspace retry.
 
+Because this path switches directly between live kernel stacks, it also saves
+and restores the selected task's FPU state around `switch_to()`. The trap
+handler's syscall epilogue cannot provide that guarantee for a continuation
+that resumes in the middle of the syscall.
+
 The dispatcher does not infer this distinction from pointer values. Each task
 records an explicit `thread_context_kind`: a userspace trap context, a
 synthetic first-return frame, or a live kernel continuation. This matters when
