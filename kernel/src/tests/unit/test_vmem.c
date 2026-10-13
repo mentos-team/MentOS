@@ -11,7 +11,9 @@
 
 #include "mem/alloc/zone_allocator.h"
 #include "mem/gfp.h"
+#include "mem/mm/mm.h"
 #include "mem/mm/page.h"
+#include "mem/mm/vm_area.h"
 #include "mem/mm/vmem.h"
 #include "mem/paging.h"
 #include "tests/test.h"
@@ -229,6 +231,44 @@ TEST(memory_vmem_stress)
     TEST_SECTION_END();
 }
 
+/// @brief Test copying between unaligned virtual memory ranges.
+TEST(memory_vmem_unaligned_copy)
+{
+    TEST_SECTION_START("VMEM unaligned copy");
+
+    mm_struct_t *mm = mm_create_blank(PAGE_SIZE * 2);
+    ASSERT_MSG(mm != NULL, "mm_create_blank must succeed");
+
+    const uint32_t src_addr = 0x32000001;
+    const uint32_t dst_addr = 0x32003003;
+    const uint32_t copy_size = PAGE_SIZE + 37;
+    vm_area_struct_t *src = vm_area_create(mm, src_addr, copy_size, MM_PRESENT | MM_RW | MM_USER, GFP_KERNEL);
+    vm_area_struct_t *dst = vm_area_create(mm, dst_addr, copy_size, MM_PRESENT | MM_RW | MM_USER, GFP_KERNEL);
+    ASSERT_MSG(src != NULL && dst != NULL, "unaligned VMAs must be creatable");
+
+    size_t src_available = copy_size;
+    size_t dst_available = copy_size;
+    page_t *src_page = mem_virtual_to_page(mm->pgd, src_addr, &src_available);
+    page_t *dst_page = mem_virtual_to_page(mm->pgd, dst_addr, &dst_available);
+    ASSERT_MSG(src_page != NULL && dst_page != NULL, "unaligned VMAs must be translatable");
+
+    uint8_t *src_bytes = (uint8_t *)get_virtual_address_from_page(src_page) + (src_addr & (PAGE_SIZE - 1U));
+    uint8_t *dst_bytes = (uint8_t *)get_virtual_address_from_page(dst_page) + (dst_addr & (PAGE_SIZE - 1U));
+    for (uint32_t i = 0; i < copy_size; ++i) {
+        src_bytes[i] = (uint8_t)(0x5A ^ i);
+    }
+
+    vmem_memcpy(mm, dst_addr, mm, src_addr, copy_size);
+
+    for (uint32_t i = 0; i < copy_size; ++i) {
+        ASSERT_MSG(dst_bytes[i] == (uint8_t)(0x5A ^ i), "unaligned copy must preserve every byte");
+    }
+
+    ASSERT_MSG(mm_destroy(mm) == 0, "mm_destroy must succeed");
+
+    TEST_SECTION_END();
+}
+
 /// @brief Main test function for vmem subsystem.
 void test_vmem(void)
 {
@@ -241,4 +281,5 @@ void test_vmem(void)
     test_memory_vmem_beyond_valid_range();
     test_memory_vmem_unmap_idempotence();
     test_memory_vmem_stress();
+    test_memory_vmem_unaligned_copy();
 }
