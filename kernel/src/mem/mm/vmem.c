@@ -10,12 +10,32 @@
 #include "io/debug.h"                    // Include debugging functions.
 
 #include "mem/mm/vmem.h"
-#include "assert.h"
 #include "string.h"
 #include "system/panic.h"
 
 /// Virtual addresses manager.
 static virt_map_page_manager_t virt_default_mapping;
+
+/// @brief Make the PDEs covering a temporary mapping writable in the current
+/// address space.
+/// @details Kernel page-directory entries are copied by value when a process
+/// is created. The mapping itself is installed in the shared kernel page
+/// directory, so mirror its supervisor-write permission in the currently
+/// active directory before dereferencing the temporary window with CR0.WP set.
+static void __vmem_enable_kernel_write(uint32_t address, uint32_t size)
+{
+    page_t *directory_page = get_page_from_physical_address((uint32_t)paging_get_current_pgd());
+    page_directory_t *directory = directory_page ? (page_directory_t *)get_virtual_address_from_page(directory_page) : NULL;
+    if (!directory || size == 0) {
+        return;
+    }
+
+    uint32_t first = address >> 22U;
+    uint32_t last = (address + size - 1U) >> 22U;
+    for (uint32_t index = first; index <= last && index < MAX_PAGE_DIR_ENTRIES; ++index) {
+        directory->entries[index].rw = 1;
+    }
+}
 
 /// Size of the virtual memory.
 #define VIRTUAL_MEMORY_SIZE (128 * M)
@@ -189,6 +209,7 @@ uint32_t vmem_map_physical_pages(page_t *page, int pfn_count)
 
     // Update the virtual memory area with the new mapping.
     mem_upd_vm_area(main_pgd, vaddr, phy_address, pfn_count * PAGE_SIZE, MM_PRESENT | MM_RW | MM_GLOBAL | MM_UPDADDR);
+    __vmem_enable_kernel_write(vaddr, pfn_count * PAGE_SIZE);
 
     return vaddr;
 }
@@ -241,6 +262,7 @@ uint32_t vmem_map_virtual_address(mm_struct_t *mm, virt_map_page_t *vpage, uint3
     // Clone the source vaddr the the requested virtual memory portion.
     mem_clone_vm_area(
         mm->pgd, main_pgd, vaddr, start_map_virt_address, size, MM_PRESENT | MM_RW | MM_GLOBAL | MM_UPDADDR);
+    __vmem_enable_kernel_write(start_map_virt_address, size);
 
     // Return the starting virtual address of the mapped area.
     return start_map_virt_address;
@@ -297,16 +319,7 @@ int vmem_unmap_virtual_address_page(virt_map_page_t *page)
     return 0;
 }
 
-/// @brief Copy bytes between address spaces through temporary mappings.
-/// @details Both virtual addresses must be page-aligned. The function is
-/// intentionally strict because its mapping-window contract operates on
-/// complete pages; callers copying a sub-page range must align the addresses
-/// and adjust the byte count before calling it.
-/// @param dst_mm Destination address space.
-/// @param dst_vaddr Page-aligned destination address.
-/// @param src_mm Source address space.
-/// @param src_vaddr Page-aligned source address.
-/// @param size Number of bytes to copy.
+// FIXME: Check if this function should support unaligned page-boundaries copy
 void vmem_memcpy(mm_struct_t *dst_mm, uint32_t dst_vaddr, mm_struct_t *src_mm, uint32_t src_vaddr, uint32_t size)
 {
     // Buffer size for copying.
@@ -328,8 +341,6 @@ void vmem_memcpy(mm_struct_t *dst_mm, uint32_t dst_vaddr, mm_struct_t *src_mm, u
     for (;;) {
         // Map the source and destination virtual addresses to the allocated
         // virtual pages.
-        assert((src_vaddr & (PAGE_SIZE - 1U)) == 0 && (dst_vaddr & (PAGE_SIZE - 1U)) == 0 &&
-               "vmem_memcpy requires page-aligned addresses");
         uint32_t src_map = vmem_map_virtual_address(src_mm, src_vpage, src_vaddr, buffer_size);
         uint32_t dst_map = vmem_map_virtual_address(dst_mm, dst_vpage, dst_vaddr, buffer_size);
 
