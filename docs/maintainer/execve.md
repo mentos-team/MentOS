@@ -47,6 +47,20 @@ wrapper (`lib/src/unistd/exec.c:61-65`) passes vectors straight through.
 5. `strncpy(current->name, name_buffer, TASK_NAME_MAX_LENGTH)` (post-#190)
    and `kfree(args_mem)`.
 
+## PT_LOAD permissions
+
+`elf_load_file` creates one VMA for each `PT_LOAD` segment.  The loader maps
+segments with `MM_RW` only when the ELF `p_flags` contains `PF_W`; executable
+and read-only segments are therefore protected from user writes.  `PF_R` and
+`PF_X` are retained in the ELF definitions, but the current 32-bit non-PAE
+paging setup has no independent read or execute permission bit: present pages
+remain readable and instruction fetches cannot be disabled with NX.  This is
+read/write enforcement, not a complete W^X policy.
+
+The permission check must be performed after a fresh `execve`, not after a
+plain `fork`: fork's copy-on-write path intentionally gives the child a
+writable private page on its first write.
+
 ## Error paths and the proven crash chain
 
 VERIFIED (empirically reproduced as part of #192 investigation):

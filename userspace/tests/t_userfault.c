@@ -13,9 +13,6 @@
 /// and expects each child to die with SIGSEGV (WIFSIGNALED/WTERMSIG), or to
 /// exit from an installed SIGSEGV handler. The suite continuing after the
 /// children proves the kernel survived every fault.
-/// A write to the child's own code page is not covered: PT_LOAD segments are
-/// mapped writable regardless of their ELF permissions, so such a write
-/// succeeds today (issue #210).
 /// @copyright (c) 2014-2026 This file is distributed under the MIT License.
 /// See LICENSE.md for details.
 
@@ -23,6 +20,8 @@
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdint.h>
+#include <string.h>
 #include <strerror.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -121,6 +120,17 @@ static void fault_null_write(void)
     *p              = 1;
 }
 
+/// @brief Attempts to modify this executable's read-only text segment.
+/// @details The function address is guaranteed to reside in the executable's
+///          `R E` PT_LOAD segment.  A writable mapping here would indicate
+///          that the ELF loader ignored `p_flags`.
+static void fault_code_write(void)
+{
+    void (*target)(void)                         = fault_code_write;
+    volatile unsigned char *instruction          = (volatile unsigned char *)(uintptr_t)target;
+    *instruction ^= 0xffU;
+}
+
 /// @brief Reads from the kernel image region.
 static void fault_kernel_read(void)
 {
@@ -170,8 +180,44 @@ static int check_repeating_case(void)
     return -1;
 }
 
-int main(void)
+/// @brief Executes a fresh image before attempting the text write.
+/// @details A plain fork would mark the text page copy-on-write and could
+///          legitimately give the child a private writable copy.  Replacing
+///          the child image makes this check exercise the PT_LOAD permissions
+///          installed by the ELF loader itself.
+static int check_exec_code_write(void)
 {
+    pid_t pid = fork();
+    if (pid < 0) {
+        syslog(LOG_ERR, "[t_userfault] fork: %s", strerror(errno));
+        return -1;
+    }
+    if (pid == 0) {
+        char *const argv[] = {"t_userfault", "--write-code", NULL};
+        execve("/bin/tests/t_userfault", argv, NULL);
+        syslog(LOG_ERR, "[t_userfault] execve: %s", strerror(errno));
+        exit(90);
+    }
+
+    int status;
+    if (waitpid(pid, &status, 0) < 0) {
+        syslog(LOG_ERR, "[t_userfault] waitpid: %s", strerror(errno));
+        return -1;
+    }
+    if (WIFSIGNALED(status) && (WTERMSIG(status) == SIGSEGV)) {
+        return 0;
+    }
+    syslog(LOG_ERR, "[t_userfault] code write after exec: expected SIGSEGV, got raw status 0x%x", status);
+    return -1;
+}
+
+int main(int argc, char **argv)
+{
+    if ((argc == 2) && (strcmp(argv[1], "--write-code") == 0)) {
+        fault_code_write();
+        return 91;
+    }
+
     int failures = 0;
 
     // Without a handler, each fault must kill the child with SIGSEGV.
@@ -185,6 +231,9 @@ int main(void)
         ++failures;
     }
     if (check_case("kernel write", fault_kernel_write, 0) < 0) {
+        ++failures;
+    }
+    if (check_exec_code_write() < 0) {
         ++failures;
     }
     // With a handler installed, the signal must be delivered through the
