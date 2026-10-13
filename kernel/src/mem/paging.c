@@ -519,6 +519,9 @@ mem_virtual_to_page(page_directory_t *pgd, uint32_t virt_start, size_t *size)
         return NULL;
     }
 
+    assert((virt_start & (PAGE_SIZE - 1U)) == 0 &&
+           "mem_virtual_to_page requires a page-aligned address");
+
     // Calculate the page frame number and page table index from the virtual address.
     uint32_t virt_pfn        = virt_start / PAGE_SIZE;
     uint32_t virt_pgt        = virt_pfn / 1024; // Page table index.
@@ -577,8 +580,6 @@ mem_virtual_to_page(page_directory_t *pgd, uint32_t virt_start, size_t *size)
     if (size) {
         uint32_t pfn_count   = 1U << page->bbpage.order; // Calculate the number of pages.
         uint32_t bytes_count = pfn_count * PAGE_SIZE;    // Calculate the total byte count.
-        assert((virt_start & (PAGE_SIZE - 1U)) == 0 &&
-               "mem_virtual_to_page requires a page-aligned address");
         *size                = min(*size, (size_t)bytes_count);
     }
 
