@@ -5,7 +5,7 @@
 
 #include "boot_console.h"
 
-#include "stdint.h"
+#include "boot/types.h"
 
 /// COM1 is the serial port configured by the boot test harness and QEMU.
 #define SERIAL_COM1 0x03F8U

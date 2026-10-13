@@ -8,7 +8,6 @@
 #include "boot_bits.h"
 #include "boot_console.h"
 #include "boot_math.h"
-#include "stddef.h"
 
 static int boot_is_kernel_module(const multiboot_module_t *module)
 {

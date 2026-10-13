@@ -5,7 +5,7 @@
 
 #pragma once
 
-#include "stdint.h"
+#include "boot/types.h"
 
 #define BOOT_CR0_PG  0x80000000U
 #define BOOT_CR4_PSE 0x00000010U

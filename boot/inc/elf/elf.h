@@ -5,7 +5,7 @@
 
 #pragma once
 
-#include "stdint.h"
+#include "boot/types.h"
 
 /// ELF identification bytes.
 #define EI_NIDENT 16
