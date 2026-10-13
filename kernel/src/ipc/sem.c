@@ -405,7 +405,7 @@ long sys_semop(int semid, struct sembuf *sops, unsigned nsops)
     wait_queue_entry_init(&wait_entry, scheduler_get_current_process());
     for (;;) {
         int ready = 1;
-        IPC_TRACE("semaphore set %d: operation waiting\n", sem_info->id);
+        IPC_TRACE("semaphore set %d: operation entering wait loop\n", sem_info->id);
         prepare_to_wait(&sem_info->wait_queue, &wait_entry, TASK_INTERRUPTIBLE);
         spinlock_lock(&sem_info->lock);
         if (sem_info->removed) {

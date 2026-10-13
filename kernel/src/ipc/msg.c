@@ -430,7 +430,7 @@ int sys_msgsnd(int msqid, const void *msgp, size_t msgsz, int msgflg)
     }
     wait_queue_entry_init(&wait_entry, scheduler_get_current_process());
     for (;;) {
-        IPC_TRACE("msg queue %d: sender waiting for space\n", msq_info->id);
+        IPC_TRACE("msg queue %d: sender entering wait loop\n", msq_info->id);
         prepare_to_wait(&msq_info->wait_queue, &wait_entry, TASK_INTERRUPTIBLE);
         spinlock_lock(&msq_info->lock);
         if (msq_info->removed) {
@@ -447,7 +447,7 @@ int sys_msgsnd(int msqid, const void *msgp, size_t msgsz, int msgflg)
             msq_info->msqid.msg_qnum += 1;
             spinlock_unlock(&msq_info->lock);
             finish_wait(&msq_info->wait_queue, &wait_entry);
-            IPC_TRACE("msg queue %d: sender woke readers after enqueue\n", msq_info->id);
+            IPC_TRACE("msg queue %d: waking waiters after enqueue\n", msq_info->id);
             wake_up_all(&msq_info->wait_queue);
             message = NULL;
             break;
@@ -509,7 +509,7 @@ ssize_t sys_msgrcv(int msqid, void *msgp, size_t msgsz, long msgtyp, int msgflg)
     wait_queue_entry_init(&wait_entry, scheduler_get_current_process());
     for (;;) {
     struct msg *message = NULL;
-    IPC_TRACE("msg queue %d: receiver waiting for message\n", msq_info->id);
+    IPC_TRACE("msg queue %d: receiver entering wait loop\n", msq_info->id);
     prepare_to_wait(&msq_info->wait_queue, &wait_entry, TASK_INTERRUPTIBLE);
     spinlock_lock(&msq_info->lock);
     if (msq_info->removed) {
@@ -590,7 +590,7 @@ ssize_t sys_msgrcv(int msqid, void *msgp, size_t msgsz, long msgtyp, int msgflg)
 
     spinlock_unlock(&msq_info->lock);
     finish_wait(&msq_info->wait_queue, &wait_entry);
-    IPC_TRACE("msg queue %d: receiver woke senders after dequeue\n", msq_info->id);
+    IPC_TRACE("msg queue %d: waking waiters after dequeue\n", msq_info->id);
     wake_up_all(&msq_info->wait_queue);
     // Free the memory of the message.
     kfree(message->msg_ptr);
