@@ -281,9 +281,14 @@ static int test_ipc_permissions(void)
     struct sembuf operation = {.sem_num = 0, .sem_op = -1, .sem_flg = IPC_NOWAIT};
     union semun semaphore_argument = {.buf = &((struct semid_ds){0})};
     const int queue = msgget(IPC_PRIVATE, IPC_CREAT | 0000);
+    const int read_queue = msgget(IPC_PRIVATE, IPC_CREAT | 0004);
+    const int write_queue = msgget(IPC_PRIVATE, IPC_CREAT | 0002);
     const int semaphore = semget(IPC_PRIVATE, 1, IPC_CREAT | 0000);
+    const int read_semaphore = semget(IPC_PRIVATE, 1, IPC_CREAT | 0004);
+    const int write_semaphore = semget(IPC_PRIVATE, 1, IPC_CREAT | 0002);
     const int shared = shmget(IPC_PRIVATE, 4096, IPC_CREAT | 0000);
-    if (queue < 0 || semaphore < 0 || shared < 0) {
+    if (queue < 0 || read_queue < 0 || write_queue < 0 || semaphore < 0 || read_semaphore < 0 ||
+        write_semaphore < 0 || shared < 0) {
         return 1;
     }
 
@@ -304,6 +309,22 @@ static int test_ipc_permissions(void)
         failed |= shmctl(shared, IPC_STAT, &shared_metadata) != -1 || errno != EACCES;
         errno = 0;
         failed |= shmat(shared, NULL, 0) != (void *)-1 || errno != EACCES;
+        errno = 0;
+        failed |= msgsnd(read_queue, &message, 0, IPC_NOWAIT) != -1 || errno != EACCES;
+        errno = 0;
+        failed |= msgrcv(read_queue, &message, sizeof(message.text), 0, IPC_NOWAIT) != -1 || errno != ENOMSG;
+        errno = 0;
+        failed |= msgsnd(write_queue, &message, 0, IPC_NOWAIT) < 0;
+        errno = 0;
+        failed |= msgrcv(write_queue, &message, sizeof(message.text), 0, IPC_NOWAIT) != -1 || errno != EACCES;
+        struct sembuf observe = {.sem_num = 0, .sem_op = 0, .sem_flg = IPC_NOWAIT};
+        struct sembuf increment = {.sem_num = 0, .sem_op = 1, .sem_flg = IPC_NOWAIT};
+        failed |= semop(read_semaphore, &observe, 1) < 0;
+        errno = 0;
+        failed |= semop(read_semaphore, &increment, 1) != -1 || errno != EACCES;
+        failed |= semop(write_semaphore, &increment, 1) < 0;
+        errno = 0;
+        failed |= semop(write_semaphore, &observe, 1) != -1 || errno != EACCES;
         exit(failed ? EXIT_FAILURE : EXIT_SUCCESS);
     }
     if (child < 0) {
@@ -311,8 +332,10 @@ static int test_ipc_permissions(void)
     }
     int status = 0;
     const int waited = waitpid(child, &status, 0);
-    const int removed = msgctl(queue, IPC_RMID, NULL) == 0 && semctl(semaphore, 0, IPC_RMID, NULL) == 0 &&
-                        shmctl(shared, IPC_RMID, NULL) == 0;
+    const int removed = msgctl(queue, IPC_RMID, NULL) == 0 && msgctl(read_queue, IPC_RMID, NULL) == 0 &&
+                        msgctl(write_queue, IPC_RMID, NULL) == 0 && semctl(semaphore, 0, IPC_RMID, NULL) == 0 &&
+                        semctl(read_semaphore, 0, IPC_RMID, NULL) == 0 &&
+                        semctl(write_semaphore, 0, IPC_RMID, NULL) == 0 && shmctl(shared, IPC_RMID, NULL) == 0;
     return waited < 0 || !WIFEXITED(status) || WEXITSTATUS(status) != EXIT_SUCCESS || !removed;
 }
 

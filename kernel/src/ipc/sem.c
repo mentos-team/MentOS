@@ -385,9 +385,14 @@ long sys_semop(int semid, struct sembuf *sops, unsigned nsops)
         kfree(operations);
         return -EINVAL;
     }
-    // Check if the semaphore set exists for the given key, but the calling
-    // process does not have permission to access the set.
-    if (!ipc_valid_permissions(IPC_ACCESS_READ | IPC_ACCESS_WRITE, &sem_info->semid.sem_perm)) {
+    // A zero operation observes a value and needs read permission; modifying
+    // operations need alter/write permission.  A transaction containing both
+    // kinds requires both classes of permission.
+    unsigned required_access = 0;
+    for (unsigned i = 0; i < nsops; ++i) {
+        required_access |= operations[i].sem_op == 0 ? IPC_ACCESS_READ : IPC_ACCESS_WRITE;
+    }
+    if (!ipc_valid_permissions(required_access, &sem_info->semid.sem_perm)) {
         pr_err("The semaphore set exists for the given key, but the calling "
                "process does not have permission to access the set.\n");
         result = -EACCES;

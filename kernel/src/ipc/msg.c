@@ -419,9 +419,9 @@ int sys_msgsnd(int msqid, const void *msgp, size_t msgsz, int msgflg)
     }
     // Check if the message queue exists for the given key, but the calling
     // process does not have permission to access the set.
-    if (msq_info && !ipc_valid_permissions(IPC_ACCESS_READ | IPC_ACCESS_WRITE, &msq_info->msqid.msg_perm)) {
+    if (msq_info && !ipc_valid_permissions(IPC_ACCESS_WRITE, &msq_info->msqid.msg_perm)) {
         pr_err("The message queue exists for the given key, but the "
-               "calling process does not have permission to access the set.\n");
+               "calling process does not have write permission to access the set.\n");
         result = -EACCES;
         goto send_out;
     }
