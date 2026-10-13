@@ -18,6 +18,7 @@
 #include "mem/paging.h"
 #include "mem/uaccess.h"
 #include "proc_access.h"
+#include "process/scheduler.h"
 #include "string.h"
 #include "tests/test.h"
 #include "tests/test_utils.h"
@@ -662,6 +663,34 @@ TEST(paging_user_range_zero_length)
     TEST_SECTION_END();
 }
 
+/// @brief Test user-range validation for an owned, not-yet-present vm_area.
+/// @details This is the demand-mapping fallback used by mmap: the PTE is
+/// user-visible but not present until it faults in, so access checks must use
+/// the current task's vm_area list rather than reject the address outright.
+TEST(paging_user_range_vm_area_fallback)
+{
+    TEST_SECTION_START("User range: vm_area fallback");
+
+    task_struct *task = scheduler_get_current_process();
+    ASSERT_MSG(task != NULL && task->mm != NULL, "A current address space is required");
+
+    uintptr_t vm_start = 0;
+    ASSERT_MSG(vm_area_search_free_area(task->mm, PAGE_SIZE, &vm_start) == 0,
+               "A free user page must be available");
+
+    vm_area_struct_t *area = vm_area_create(task->mm, vm_start, PAGE_SIZE, MM_COW | MM_USER, GFP_HIGHUSER);
+    ASSERT_MSG(area != NULL, "Creating a demand-mapped vm_area must succeed");
+
+    page_directory_t *saved_pgd = paging_get_current_pgd();
+    ASSERT_MSG(paging_switch_pgd(task->mm->pgd) == 0, "The test address space must be selectable");
+    ASSERT(paging_is_user_range((const void *)vm_start, 4) == 1);
+    ASSERT(paging_is_user_range_writable((const void *)vm_start, 4) == 0);
+    ASSERT_MSG(paging_switch_pgd(saved_pgd) == 0, "The original address space must be restored");
+    ASSERT(vm_area_destroy(task->mm, area) == 0);
+
+    TEST_SECTION_END();
+}
+
 /// @brief Test the user-range validation primitive against the pages the
 /// hardware would not protect: the identity-mapped first megabyte is
 /// present in every directory, and only the user bit tells it apart from
@@ -906,6 +935,7 @@ void test_paging(void)
     test_paging_user_range_kernel_area();
     test_paging_user_range_wraparound();
     test_paging_user_range_zero_length();
+    test_paging_user_range_vm_area_fallback();
     test_paging_user_range_supervisor_pages();
     test_paging_strnlen_user_rejections();
     test_paging_address_boundaries();
