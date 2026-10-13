@@ -112,6 +112,13 @@ During `fork`, a failed VMA clone destroys every previously cloned area, so
 SHM acquire callbacks are balanced by release callbacks and cannot leak a
 segment reference.
 
+The queue, semaphore, and shared-memory implementations intentionally retain
+separate list/reference helpers. Their lifetime rules look similar, but their
+payload ownership and VMA callbacks are different; a generic abstraction would
+hide rather than clarify those invariants. Object locks remain spinlocks because
+all protected sections are bounded metadata/list operations and user copies,
+I/O, and `schedule()` occur outside them.
+
 ## Deliberate scope
 
 The implementation currently supports the commands needed by MentOS userspace:

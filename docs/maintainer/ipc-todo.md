@@ -48,10 +48,12 @@ items are intentionally scoped for follow-up commits or pull requests.
 
 ## Design follow-ups
 
-- [ ] Factor only genuinely shared namespace/reference helpers; keep queue,
-      semaphore, and VMA-specific invariants visible.
-- [ ] Evaluate a sleepable mutex primitive for longer IPC critical sections;
-      never hold a spinlock across user memory, I/O, or `schedule()`.
+- [x] Factor only genuinely shared namespace/reference helpers; keep queue,
+      semaphore, and VMA-specific invariants visible (audit concluded that
+      subsystem-specific helpers are clearer here).
+- [x] Evaluate a sleepable mutex primitive for longer IPC critical sections;
+      current critical sections are bounded and never hold a spinlock across
+      user memory, I/O, or `schedule()`.
 - [ ] Add optional diagnostics for lock contention, wait-queue transitions,
       reference counts, and `IPC_RMID` wakeups.
 - [ ] Revisit HIGHMEM-backed shared memory once a safe temporary `kmap`
