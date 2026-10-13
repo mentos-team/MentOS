@@ -10,6 +10,7 @@
 #include "io/debug.h"                    // Include debugging functions.
 
 #include "mem/mm/vmem.h"
+#include "assert.h"
 #include "string.h"
 #include "system/panic.h"
 
@@ -324,7 +325,15 @@ int vmem_unmap_virtual_address_page(virt_map_page_t *page)
     return 0;
 }
 
-// FIXME: Check if this function should support unaligned page-boundaries copy
+/// @brief Copy bytes between address spaces through temporary mappings.
+/// @details Both virtual addresses must be page-aligned. The mapping-window
+/// contract operates on complete pages; callers copying a sub-page range must
+/// align the addresses and account for the offset before calling this helper.
+/// @param dst_mm Destination address space.
+/// @param dst_vaddr Page-aligned destination address.
+/// @param src_mm Source address space.
+/// @param src_vaddr Page-aligned source address.
+/// @param size Number of bytes to copy.
 void vmem_memcpy(mm_struct_t *dst_mm, uint32_t dst_vaddr, mm_struct_t *src_mm, uint32_t src_vaddr, uint32_t size)
 {
     // Buffer size for copying.
@@ -346,6 +355,8 @@ void vmem_memcpy(mm_struct_t *dst_mm, uint32_t dst_vaddr, mm_struct_t *src_mm, u
     for (;;) {
         // Map the source and destination virtual addresses to the allocated
         // virtual pages.
+        assert((src_vaddr & (PAGE_SIZE - 1U)) == 0 && (dst_vaddr & (PAGE_SIZE - 1U)) == 0 &&
+               "vmem_memcpy requires page-aligned addresses");
         uint32_t src_map = vmem_map_virtual_address(src_mm, src_vpage, src_vaddr, buffer_size);
         uint32_t dst_map = vmem_map_virtual_address(dst_mm, dst_vpage, dst_vaddr, buffer_size);
 
