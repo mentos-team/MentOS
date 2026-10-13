@@ -201,11 +201,79 @@ static int test_shared_memory_size_bounds(void)
     return 0;
 }
 
+/// @brief Verify the stable errno contract for missing and removed objects.
+static int test_missing_object_errors(void)
+{
+    const int missing_id = 0x7FFFFFFF;
+    struct msqid_ds message_metadata;
+    struct shmid_ds shared_metadata;
+    struct sembuf operation = {.sem_num = 0, .sem_op = -1, .sem_flg = IPC_NOWAIT};
+    test_message_t message = {.type = 1};
+    union semun semaphore_argument = {.buf = NULL};
+
+    errno = 0;
+    if (msgctl(missing_id, IPC_STAT, &message_metadata) != -1 || errno != EIDRM) {
+        return 1;
+    }
+    errno = 0;
+    if (msgsnd(missing_id, &message, 0, IPC_NOWAIT) != -1 || errno != EIDRM) {
+        return 1;
+    }
+    errno = 0;
+    if (msgrcv(missing_id, &message, sizeof(message.text), 0, IPC_NOWAIT) != -1 || errno != EIDRM) {
+        return 1;
+    }
+
+    errno = 0;
+    if (semctl(missing_id, 0, IPC_STAT, &semaphore_argument) != -1 || errno != EINVAL) {
+        return 1;
+    }
+    errno = 0;
+    if (semop(missing_id, &operation, 1) != -1 || errno != EINVAL) {
+        return 1;
+    }
+
+    errno = 0;
+    if (shmctl(missing_id, IPC_STAT, &shared_metadata) != -1 || errno != EINVAL) {
+        return 1;
+    }
+    errno = 0;
+    if (shmat(missing_id, NULL, 0) != (void *)-1 || errno != ENOENT) {
+        return 1;
+    }
+
+    const int queue = msgget(IPC_PRIVATE, IPC_CREAT | 0600);
+    const int semaphore = semget(IPC_PRIVATE, 1, IPC_CREAT | 0600);
+    const int shared = shmget(IPC_PRIVATE, 4096, IPC_CREAT | 0600);
+    if (queue < 0 || semaphore < 0 || shared < 0) {
+        return 1;
+    }
+    if (msgctl(queue, IPC_RMID, NULL) < 0 || semctl(semaphore, 0, IPC_RMID, NULL) < 0 ||
+        shmctl(shared, IPC_RMID, NULL) < 0) {
+        return 1;
+    }
+
+    errno = 0;
+    if (msgctl(queue, IPC_STAT, &message_metadata) != -1 || errno != EIDRM) {
+        return 1;
+    }
+    errno = 0;
+    if (semctl(semaphore, 0, IPC_STAT, &semaphore_argument) != -1 || errno != EINVAL) {
+        return 1;
+    }
+    errno = 0;
+    if (shmctl(shared, IPC_STAT, &shared_metadata) != -1 || errno != EINVAL) {
+        return 1;
+    }
+    return 0;
+}
+
 int main(void)
 {
     openlog("t_ipc_lifetime", LOG_PID | LOG_CONS, LOG_USER);
     const int failed = test_message_tail() || test_message_rmid_wakeup() || test_message_sender_rmid_wakeup() ||
-                       test_semaphore_rmid_wakeup() || test_shared_memory_rmid_mapping() || test_shared_memory_size_bounds();
+                       test_semaphore_rmid_wakeup() || test_shared_memory_rmid_mapping() || test_shared_memory_size_bounds() ||
+                       test_missing_object_errors();
     syslog(failed ? LOG_ERR : LOG_INFO, "[t_ipc_lifetime] %s", failed ? "lifetime checks failed" : "lifetime checks passed");
     closelog();
     return failed ? EXIT_FAILURE : EXIT_SUCCESS;

@@ -92,6 +92,12 @@ last word.
 only after releasing the object lock. The same reference keeps the segment alive
 for the entire command.
 
+The supported missing-object contract is intentionally explicit: message queue
+operations return `EIDRM`, semaphore operations return `EINVAL`, and shared
+memory control/attach operations return `EINVAL`/`ENOENT` respectively. The
+same values are returned after `IPC_RMID`; existing blocked operations use
+`EIDRM` when their wait is interrupted by removal.
+
 Allocation failures are handled as normal syscall errors: partially allocated
 message queues and semaphore sets release their owned buffers before returning.
 During `fork`, a failed VMA clone destroys every previously cloned area, so
