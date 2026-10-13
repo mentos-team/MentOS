@@ -37,7 +37,7 @@ items are intentionally scoped for follow-up commits or pull requests.
 
 - [x] Implement and test `shmctl(IPC_STAT)` with a kernel snapshot and bounded
       user copy.
-- [ ] Define and test the supported error contract for missing or removed
+- [x] Define and test the supported error contract for missing or removed
       objects (`EINVAL`, `ENOENT`, and `EIDRM`).
 - [ ] Add explicit resource limits for queue count, message bytes, semaphore
       sets, and shared-memory segments.
