@@ -17,6 +17,7 @@
 #include "mem/mm/vmem.h"
 #include "mem/paging.h"
 #include "mem/uaccess.h"
+#include "proc_access.h"
 #include "string.h"
 #include "tests/test.h"
 #include "tests/test_utils.h"
@@ -44,6 +45,17 @@ TEST(paging_constants)
     ASSERT(MAX_PAGE_TABLE_ENTRIES == 1024);
     ASSERT(MAX_PAGE_DIR_ENTRIES == 1024);
     ASSERT(PROCAREA_END_ADDR == 0xC0000000UL);
+
+    TEST_SECTION_END();
+}
+
+/// @brief Verify that supervisor writes honor read-only page permissions.
+TEST(paging_write_protect_enabled)
+{
+    TEST_SECTION_START("CR0 write protection");
+
+    ASSERT_MSG((get_cr0() & CR0_WP) != 0,
+               "CR0.WP must be enabled after paging initialization");
 
     TEST_SECTION_END();
 }
@@ -854,6 +866,7 @@ void test_paging(void)
     // Basic structure tests
     test_paging_structure_sizes();
     test_paging_constants();
+    test_paging_write_protect_enabled();
 
     // Access and initialization tests
     test_paging_main_pgd_accessible();
