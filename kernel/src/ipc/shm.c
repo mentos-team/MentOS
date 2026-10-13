@@ -12,6 +12,7 @@
 // ============================================================================
 
 #include "ipc/ipc.h"
+#include "ipc/trace.h"
 #include "sys/shm.h"
 
 #include "assert.h"
@@ -159,7 +160,9 @@ static shm_info_t *__shm_get_ref_by_key(key_t key)
 /// @brief Release a reference and reclaim a removed segment when unused.
 static void __shm_put_ref(shm_info_t *shm_info)
 {
-    if (atomic_dec_and_test(&shm_info->references) && shm_info->removed) {
+    int reclaimed = atomic_dec_and_test(&shm_info->references) && shm_info->removed;
+    IPC_TRACE("shared memory %d: put reference (removed=%d, reclaim=%d)\n", shm_info->id, shm_info->removed, reclaimed);
+    if (reclaimed) {
         __shm_info_dealloc(shm_info);
     }
 }
@@ -477,6 +480,7 @@ long sys_shmctl(int shmid, int cmd, struct shmid_ds *buf)
             return -EPERM;
         }
         shm_info->removed = 1;
+        IPC_TRACE("shared memory %d: IPC_RMID tombstone published\n", shm_info->id);
         spinlock_unlock(&shm_info->lock);
         spinlock_lock(&shm_list_lock);
         __list_remove_shm_info(shm_info);

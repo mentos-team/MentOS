@@ -39,6 +39,7 @@
 // ============================================================================
 
 #include "ipc/ipc.h"
+#include "ipc/trace.h"
 #include "sys/sem.h"
 
 #include "assert.h"
@@ -245,7 +246,9 @@ static sem_info_t *__sem_get_ref_by_key(key_t key)
 /// @brief Release a syscall reference and reclaim a removed set when unused.
 static void __sem_put_ref(sem_info_t *sem_info)
 {
-    if (atomic_dec_and_test(&sem_info->references) && sem_info->removed) {
+    int reclaimed = atomic_dec_and_test(&sem_info->references) && sem_info->removed;
+    IPC_TRACE("semaphore set %d: put reference (removed=%d, reclaim=%d)\n", sem_info->id, sem_info->removed, reclaimed);
+    if (reclaimed) {
         __sem_info_dealloc(sem_info);
     }
 }
@@ -402,6 +405,7 @@ long sys_semop(int semid, struct sembuf *sops, unsigned nsops)
     wait_queue_entry_init(&wait_entry, scheduler_get_current_process());
     for (;;) {
         int ready = 1;
+        IPC_TRACE("semaphore set %d: operation waiting\n", sem_info->id);
         prepare_to_wait(&sem_info->wait_queue, &wait_entry, TASK_INTERRUPTIBLE);
         spinlock_lock(&sem_info->lock);
         if (sem_info->removed) {
@@ -454,6 +458,7 @@ long sys_semop(int semid, struct sembuf *sops, unsigned nsops)
         sem_info->semid.sem_ctime = sys_time(NULL);
         spinlock_unlock(&sem_info->lock);
         finish_wait(&sem_info->wait_queue, &wait_entry);
+        IPC_TRACE("semaphore set %d: waking waiters after operation\n", sem_info->id);
         wake_up_all(&sem_info->wait_queue);
         break;
     }
@@ -493,11 +498,13 @@ static long __semctl(sem_info_t *sem_info, int semnum, int cmd, union semun *arg
         // would turn a valid wakeup into a use-after-free.
         spinlock_lock(&sem_info->lock);
         sem_info->removed = 1;
+        IPC_TRACE("semaphore set %d: IPC_RMID tombstone published\n", sem_info->id);
         spinlock_unlock(&sem_info->lock);
         spinlock_lock(&semaphores_list_lock);
         __list_remove_sem_info(sem_info);
         spinlock_unlock(&semaphores_list_lock);
         __sem_put_ref(sem_info); // drop the namespace reference
+        IPC_TRACE("semaphore set %d: waking waiters after IPC_RMID\n", sem_info->id);
         wake_up_all(&sem_info->wait_queue);
         return 0;
     } else if (cmd == SETVAL) {

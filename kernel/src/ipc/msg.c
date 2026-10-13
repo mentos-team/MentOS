@@ -27,6 +27,7 @@
 #include "system/panic.h"
 
 #include "ipc/ipc.h"
+#include "ipc/trace.h"
 
 ///@brief A value to compute the message queue ID.
 static int __msq_id = 0;
@@ -274,7 +275,9 @@ static msq_info_t *__msq_get_ref_by_key(key_t key)
 /// @brief Release a syscall reference and reclaim a removed queue if unused.
 static void __msq_put_ref(msq_info_t *msq_info)
 {
-    if (atomic_dec_and_test(&msq_info->references) && msq_info->removed) {
+    int reclaimed = atomic_dec_and_test(&msq_info->references) && msq_info->removed;
+    IPC_TRACE("msg queue %d: put reference (removed=%d, reclaim=%d)\n", msq_info->id, msq_info->removed, reclaimed);
+    if (reclaimed) {
         __msq_info_dealloc(msq_info);
     }
 }
@@ -427,6 +430,7 @@ int sys_msgsnd(int msqid, const void *msgp, size_t msgsz, int msgflg)
     }
     wait_queue_entry_init(&wait_entry, scheduler_get_current_process());
     for (;;) {
+        IPC_TRACE("msg queue %d: sender waiting for space\n", msq_info->id);
         prepare_to_wait(&msq_info->wait_queue, &wait_entry, TASK_INTERRUPTIBLE);
         spinlock_lock(&msq_info->lock);
         if (msq_info->removed) {
@@ -443,6 +447,7 @@ int sys_msgsnd(int msqid, const void *msgp, size_t msgsz, int msgflg)
             msq_info->msqid.msg_qnum += 1;
             spinlock_unlock(&msq_info->lock);
             finish_wait(&msq_info->wait_queue, &wait_entry);
+            IPC_TRACE("msg queue %d: sender woke readers after enqueue\n", msq_info->id);
             wake_up_all(&msq_info->wait_queue);
             message = NULL;
             break;
@@ -504,6 +509,7 @@ ssize_t sys_msgrcv(int msqid, void *msgp, size_t msgsz, long msgtyp, int msgflg)
     wait_queue_entry_init(&wait_entry, scheduler_get_current_process());
     for (;;) {
     struct msg *message = NULL;
+    IPC_TRACE("msg queue %d: receiver waiting for message\n", msq_info->id);
     prepare_to_wait(&msq_info->wait_queue, &wait_entry, TASK_INTERRUPTIBLE);
     spinlock_lock(&msq_info->lock);
     if (msq_info->removed) {
@@ -584,6 +590,7 @@ ssize_t sys_msgrcv(int msqid, void *msgp, size_t msgsz, long msgtyp, int msgflg)
 
     spinlock_unlock(&msq_info->lock);
     finish_wait(&msq_info->wait_queue, &wait_entry);
+    IPC_TRACE("msg queue %d: receiver woke senders after dequeue\n", msq_info->id);
     wake_up_all(&msq_info->wait_queue);
     // Free the memory of the message.
     kfree(message->msg_ptr);
@@ -637,11 +644,13 @@ int sys_msgctl(int msqid, int cmd, struct msqid_ds *buf)
         // reference and will release it after observing EIDRM; freeing the
         // queue here would make that continuation dereference stale memory.
         msq_info->removed = 1;
+        IPC_TRACE("msg queue %d: IPC_RMID tombstone published\n", msq_info->id);
         spinlock_unlock(&msq_info->lock);
         spinlock_lock(&msq_list_lock);
         __list_remove_msq_info(msq_info);
         spinlock_unlock(&msq_list_lock);
         __msq_put_ref(msq_info); // drop the namespace reference
+        IPC_TRACE("msg queue %d: waking waiters after IPC_RMID\n", msq_info->id);
         wake_up_all(&msq_info->wait_queue);
     } else if (cmd == IPC_STAT) {
         // Place a copy of the msqid_ds data structure in the buffer pointed to

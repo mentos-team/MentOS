@@ -119,6 +119,24 @@ hide rather than clarify those invariants. Object locks remain spinlocks because
 all protected sections are bounded metadata/list operations and user copies,
 I/O, and `schedule()` occur outside them.
 
+## Optional diagnostics
+
+IPC lifecycle tracing is available for focused debugging builds:
+
+```sh
+cmake -S . -B build-ipc-trace -DCMAKE_BUILD_TYPE=Debug -DENABLE_IPC_TRACE=ON
+make -C build-ipc-trace qemu-test
+```
+
+The `IPC_TRACE` macro is compiled out by default. When enabled, it reports
+reference releases, wait-loop transitions, successful wakeups, and the
+`IPC_RMID` tombstone/wakeup sequence for message queues and semaphore sets;
+shared memory reports reference releases and removal. These messages are
+diagnostic only and do not alter lock ordering or lifetime ownership. Use the
+serial log to correlate an object's id with its final reclamation. The option
+is intentionally separate from the normal debug log level so production-like
+builds stay quiet.
+
 ## Deliberate scope
 
 The implementation currently supports the commands needed by MentOS userspace:

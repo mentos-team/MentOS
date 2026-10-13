@@ -16,6 +16,7 @@ option(ENABLE_KERNEL_STACK_USAGE "Emit GCC .su stack-usage reports for kernel C 
 option(ENABLE_PERF "Enables the perf counter facility (klib/perf.h)." OFF)
 option(ENABLE_SCHEDULER_FEEDBACK "Enables scheduling feedback on terminal." OFF)
 option(ENABLE_ATA_FAULT_INJECTION "Enables deliberate failure of block transfers, for testing." OFF)
+option(ENABLE_IPC_TRACE "Enables IPC lifetime and wait/wakeup tracing." OFF)
 
 # =============================================================================
 # Set the list of valid video backends.
@@ -171,6 +172,10 @@ endif()
 
 if(ENABLE_ATA_FAULT_INJECTION)
     target_compile_definitions(kernel PUBLIC ENABLE_ATA_FAULT_INJECTION)
+endif()
+
+if(ENABLE_IPC_TRACE)
+    target_compile_definitions(kernel PUBLIC ENABLE_IPC_TRACE)
 endif()
 
 # =============================================================================

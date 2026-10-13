@@ -54,8 +54,9 @@ items are intentionally scoped for follow-up commits or pull requests.
 - [x] Evaluate a sleepable mutex primitive for longer IPC critical sections;
       current critical sections are bounded and never hold a spinlock across
       user memory, I/O, or `schedule()`.
-- [ ] Add optional diagnostics for lock contention, wait-queue transitions,
-      reference counts, and `IPC_RMID` wakeups.
+- [x] Add optional diagnostics for wait-queue transitions, reference counts,
+      and `IPC_RMID` wakeups (`ENABLE_IPC_TRACE`, off by default). Lock
+      contention remains a separate SMP-oriented investigation.
 - [ ] Revisit HIGHMEM-backed shared memory once a safe temporary `kmap`
       facility exists.
 - [ ] Reassess the design for SMP before enabling multiple CPUs.
