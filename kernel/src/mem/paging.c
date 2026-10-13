@@ -500,10 +500,10 @@ static pg_iter_entry_t __pg_iter_next(page_iterator_t *iter)
 }
 
 /// @brief Translate a virtual address and report the contiguous allocation size.
-/// @details @p virt_start must be page-aligned. Callers that need a byte range
-/// beginning inside a page must align it first and account for the offset.
+/// @details When @p virt_start begins inside a page, the returned @p size is
+/// limited by the bytes remaining in that page allocation after the offset.
 /// @param pgd Page directory used for the translation.
-/// @param virt_start Page-aligned virtual address.
+/// @param virt_start Virtual address to translate; page offsets are supported.
 /// @param size In/out requested and available contiguous byte count.
 /// @return The backing page, or NULL when the address is unmapped.
 __attribute__((noinline))
@@ -518,9 +518,6 @@ mem_virtual_to_page(page_directory_t *pgd, uint32_t virt_start, size_t *size)
         pr_crit("The page directory is null.\n");
         return NULL;
     }
-
-    assert((virt_start & (PAGE_SIZE - 1U)) == 0 &&
-           "mem_virtual_to_page requires a page-aligned address");
 
     // Calculate the page frame number and page table index from the virtual address.
     uint32_t virt_pfn        = virt_start / PAGE_SIZE;
@@ -580,7 +577,8 @@ mem_virtual_to_page(page_directory_t *pgd, uint32_t virt_start, size_t *size)
     if (size) {
         uint32_t pfn_count   = 1U << page->bbpage.order; // Calculate the number of pages.
         uint32_t bytes_count = pfn_count * PAGE_SIZE;    // Calculate the total byte count.
-        *size                = min(*size, (size_t)bytes_count);
+        uint32_t page_offset = virt_start & (PAGE_SIZE - 1U);
+        *size                = min(*size, (size_t)(bytes_count - page_offset));
     }
 
     // Return the pointer to the mapped physical page.

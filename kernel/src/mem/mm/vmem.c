@@ -10,7 +10,6 @@
 #include "io/debug.h"                    // Include debugging functions.
 
 #include "mem/mm/vmem.h"
-#include "assert.h"
 #include "string.h"
 #include "system/panic.h"
 
@@ -326,25 +325,32 @@ int vmem_unmap_virtual_address_page(virt_map_page_t *page)
 }
 
 /// @brief Copy bytes between address spaces through temporary mappings.
-/// @details Both virtual addresses must be page-aligned. The mapping-window
-/// contract operates on complete pages; callers copying a sub-page range must
-/// align the addresses and account for the offset before calling this helper.
+/// @details Page offsets are preserved while the source and destination are
+/// copied through aligned temporary mapping windows.
 /// @param dst_mm Destination address space.
-/// @param dst_vaddr Page-aligned destination address.
+/// @param dst_vaddr Destination address.
 /// @param src_mm Source address space.
-/// @param src_vaddr Page-aligned source address.
+/// @param src_vaddr Source address.
 /// @param size Number of bytes to copy.
 void vmem_memcpy(mm_struct_t *dst_mm, uint32_t dst_vaddr, mm_struct_t *src_mm, uint32_t src_vaddr, uint32_t size)
 {
+    if (size == 0) {
+        return;
+    }
+
     // Buffer size for copying.
     const uint32_t VMEM_BUFFER_SIZE = 65536;
 
-    // Determine the buffer size to use for copying.
+    // Mapping windows start at page boundaries. Keep the original offsets so
+    // an unaligned VMA (for example, a heap mapping) is copied faithfully.
+    uint32_t src_offset = src_vaddr & (PAGE_SIZE - 1U);
+    uint32_t dst_offset = dst_vaddr & (PAGE_SIZE - 1U);
+    uint32_t map_offset = max(src_offset, dst_offset);
     uint32_t buffer_size = min(VMEM_BUFFER_SIZE, size);
 
     // Allocate virtual pages for the source and destination.
-    virt_map_page_t *src_vpage = vmem_map_alloc_virtual(size);
-    virt_map_page_t *dst_vpage = vmem_map_alloc_virtual(size);
+    virt_map_page_t *src_vpage = vmem_map_alloc_virtual(size + map_offset);
+    virt_map_page_t *dst_vpage = vmem_map_alloc_virtual(size + map_offset);
 
     // Error handling: ensure both source and destination virtual pages are allocated.
     if (!src_vpage || !dst_vpage) {
@@ -353,18 +359,18 @@ void vmem_memcpy(mm_struct_t *dst_mm, uint32_t dst_vaddr, mm_struct_t *src_mm, u
 
     // Loop to copy memory in chunks.
     for (;;) {
-        // Map the source and destination virtual addresses to the allocated
-        // virtual pages.
-        assert((src_vaddr & (PAGE_SIZE - 1U)) == 0 && (dst_vaddr & (PAGE_SIZE - 1U)) == 0 &&
-               "vmem_memcpy requires page-aligned addresses");
-        uint32_t src_map = vmem_map_virtual_address(src_mm, src_vpage, src_vaddr, buffer_size);
-        uint32_t dst_map = vmem_map_virtual_address(dst_mm, dst_vpage, dst_vaddr, buffer_size);
+        // Map complete pages containing the source and destination ranges.
+        uint32_t src_page = src_vaddr & ~(PAGE_SIZE - 1U);
+        uint32_t dst_page = dst_vaddr & ~(PAGE_SIZE - 1U);
+        uint32_t map_size = min(buffer_size + map_offset, size + map_offset);
+        uint32_t src_map  = vmem_map_virtual_address(src_mm, src_vpage, src_page, map_size);
+        uint32_t dst_map  = vmem_map_virtual_address(dst_mm, dst_vpage, dst_page, map_size);
 
         // Determine the size to copy in this iteration.
         uint32_t cpy_size = min(buffer_size, size);
 
         // Perform the memory copy.
-        memcpy((void *)dst_map, (void *)src_map, cpy_size);
+        memcpy((void *)(dst_map + dst_offset), (void *)(src_map + src_offset), cpy_size);
 
         // Check if the entire size has been copied.
         if (size <= buffer_size) {
@@ -375,6 +381,9 @@ void vmem_memcpy(mm_struct_t *dst_mm, uint32_t dst_vaddr, mm_struct_t *src_mm, u
         size -= cpy_size;
         src_vaddr += cpy_size;
         dst_vaddr += cpy_size;
+        src_offset = src_vaddr & (PAGE_SIZE - 1U);
+        dst_offset = dst_vaddr & (PAGE_SIZE - 1U);
+        map_offset = max(src_offset, dst_offset);
     }
 
     // Unmap the allocated virtual pages.
