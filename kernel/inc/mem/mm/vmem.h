@@ -54,7 +54,9 @@ int vmem_unmap_virtual_address(uint32_t addr);
 /// @return Returns 0 on success, or -1 if an error occurs.
 int vmem_unmap_virtual_address_page(virt_map_page_t *page);
 
-/// @brief Memcpy from different processes virtual addresses
+/// @brief Memcpy from different processes virtual addresses.
+/// @details Source and destination addresses may be unaligned; their page
+/// offsets are preserved during the temporary mapping.
 /// @param dst_mm The destination memory struct
 /// @param dst_vaddr The destination memory address
 /// @param src_mm The source memory struct
