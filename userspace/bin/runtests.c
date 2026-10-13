@@ -42,6 +42,7 @@ static char *all_tests[] = {
     "t_path_bounds",
     "t_execve_fail",
     "t_elf_short",
+    "t_elf_malformed",
     "t_exit",
     "t_fflush",
     "t_file_blocks",

@@ -36,6 +36,7 @@ set(TEST_LIST
     t_nospace.c
     t_execve_fail.c
     t_elf_short.c
+    t_elf_malformed.c
     t_gid.c
     t_grp.c
     t_stopcont.c
