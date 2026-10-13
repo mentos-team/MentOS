@@ -88,6 +88,11 @@ freed after the final VMA/syscall reference is released. VMAs are page-aligned
 and rounded up so a segment ending near a page boundary cannot fault on its
 last word.
 
+The public `SHMMAX` limit is 8 MiB, matching the largest contiguous block
+currently supported by the page allocator. Queue count is bounded by
+`IPC_MAX_OBJECTS`; message size/queue capacity use `MSGMAX`/`MSGMNB`; semaphore
+sets use `SEM_SET_MAX` and the same object-count bound.
+
 `shmctl(IPC_STAT)` takes a locked metadata snapshot and copies it to userspace
 only after releasing the object lock. The same reference keeps the segment alive
 for the entire command.

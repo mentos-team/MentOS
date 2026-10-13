@@ -39,7 +39,7 @@ items are intentionally scoped for follow-up commits or pull requests.
       user copy.
 - [x] Define and test the supported error contract for missing or removed
       objects (`EINVAL`, `ENOENT`, and `EIDRM`).
-- [ ] Add explicit resource limits for queue count, message bytes, semaphore
+- [x] Add explicit resource limits for queue count, message bytes, semaphore
       sets, and shared-memory segments.
 - [ ] Verify permission checks for every `get`, `ctl`, attach, send, receive,
       and semaphore operation, including owner/group/other modes.

@@ -265,7 +265,7 @@ long sys_shmget(key_t key, size_t size, int shmflg)
 {
     shm_info_t *shm_info = NULL;
     const int private_key = (key == IPC_PRIVATE);
-    if (size == 0 || size > UINT32_MAX - (PAGE_SIZE - 1U)) {
+    if (size == 0 || size > SHMMAX || size > UINT32_MAX - (PAGE_SIZE - 1U)) {
         return -EINVAL;
     }
     if (!private_key) {

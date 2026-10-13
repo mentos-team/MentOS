@@ -198,6 +198,10 @@ static int test_shared_memory_size_bounds(void)
     if (shmget(IPC_PRIVATE, too_large, IPC_CREAT | 0600) != -1 || errno != EINVAL) {
         return 1;
     }
+    errno = 0;
+    if (shmget(IPC_PRIVATE, SHMMAX + 1U, IPC_CREAT | 0600) != -1 || errno != EINVAL) {
+        return 1;
+    }
     return 0;
 }
 
