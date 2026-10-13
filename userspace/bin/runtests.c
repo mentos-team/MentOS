@@ -129,6 +129,11 @@ static char *bufpos = buf;
 static int test_out_fd;
 static int test_err_fd;
 
+/// Maximum amount of child output retained for one TAP diagnostic.
+#define TEST_OUTPUT_LIMIT (16 * 1024)
+/// Temporary file used to capture one child test at a time.
+#define TEST_OUTPUT_PATH "/home/user/.runtests-output"
+
 static int init;
 
 #define append(...)                             \
@@ -222,8 +227,71 @@ static void exec_test(char *test_cmd_line)
     fprintf(STDERR_FILENO, "execvp(%s): %s\n", test_abspath, strerror(errno));
 }
 
+/// @brief Emit captured child output as TAP diagnostic comments.
+/// @param fd File descriptor containing the child's stdout and stderr.
+static void emit_test_output(int fd)
+{
+    char line[256];
+    char chunk[256];
+    size_t line_len = 0;
+    size_t captured = 0;
+    int truncated = 0;
+
+    if (lseek(fd, 0, SEEK_SET) < 0) {
+        test_out("# unable to rewind captured output: %s", strerror(errno));
+        return;
+    }
+
+    for (;;) {
+        ssize_t count = read(fd, chunk, sizeof(chunk));
+        if (count <= 0) {
+            break;
+        }
+
+        for (ssize_t i = 0; i < count; ++i) {
+            if (captured >= TEST_OUTPUT_LIMIT) {
+                truncated = 1;
+                continue;
+            }
+            captured++;
+
+            char ch = chunk[i];
+            if (ch == '\0') {
+                ch = '?';
+            }
+            if (ch == '\n') {
+                line[line_len] = '\0';
+                test_out("# %s", line);
+                line_len = 0;
+            } else if (line_len < sizeof(line) - 1) {
+                line[line_len++] = ch;
+            } else {
+                line[line_len] = '\0';
+                test_out("# %s", line);
+                line_len = 0;
+            }
+        }
+    }
+
+    if (line_len > 0) {
+        line[line_len] = '\0';
+        test_out("# %s", line);
+    }
+    if (truncated) {
+        test_out("# ... output truncated after %d bytes", TEST_OUTPUT_LIMIT);
+    }
+}
+
 static void run_test(int n, char *test_cmd_line)
 {
+    int output_fd = open(TEST_OUTPUT_PATH, O_RDWR | O_CREAT | O_TRUNC, 0600);
+    if (output_fd < 0) {
+        test_ok(n, 0, "Output capture unavailable: %s", strerror(errno));
+        return;
+    }
+    test_out_fd = output_fd;
+    test_err_fd = output_fd;
+
     int child = fork();
     if (child == 0) {
         exec_test(test_cmd_line);
@@ -233,6 +301,8 @@ static void run_test(int n, char *test_cmd_line)
 
     if (child < 0) {
         fprintf(STDERR_FILENO, "fork: %s\n", strerror(errno));
+        close(output_fd);
+        unlink(TEST_OUTPUT_PATH);
         exit(EXIT_FAILURE);
     }
 
@@ -248,7 +318,11 @@ static void run_test(int n, char *test_cmd_line)
         } else {
             test_ok(n, success, "Exit: %d", WEXITSTATUS(status));
         }
+        emit_test_output(output_fd);
     }
+
+    close(output_fd);
+    unlink(TEST_OUTPUT_PATH);
 }
 
 int runtests_main(int argc, char **argv)
@@ -261,14 +335,6 @@ int runtests_main(int argc, char **argv)
             exit(EXIT_SUCCESS);
         }
     }
-
-    // TODO: capture test output
-    int devnull = open("/dev/null", O_RDONLY, 0);
-    if (devnull < 0) {
-        fprintf(STDERR_FILENO, "open: /dev/null: %s\n", strerror(errno));
-        exit(EXIT_FAILURE);
-    }
-    test_out_fd = test_err_fd = devnull;
 
     if (argc > 1) {
         tests  = argv + 1;

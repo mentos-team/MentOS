@@ -31,8 +31,10 @@ Verified against `MAIN` = `62c638a` (line refs for `MAIN` unless noted).
 
 ## Guest output routing (critical for debugging)
 
-- `printf` goes to the VGA console — INVISIBLE when capturing serial only
-  (`-nographic` + `-serial stdio`).
+- `printf` goes to the VGA console during normal execution, but the test
+  runner redirects each child's stdout and stderr to a temporary file. When a
+  child fails, that output is emitted as TAP diagnostic comments next to its
+  `not ok` result in `test.log` (bounded to 16 KiB per test).
 - `syslog()` output arrives on the serial console (runtests itself uses
   `syslog(LOG_INFO, "Running test (%2d/%2d): %s", ...)`). Write in-guest
   repro/tests with `openlog(..., LOG_CONS|LOG_PID, LOG_USER)` + `syslog`.
