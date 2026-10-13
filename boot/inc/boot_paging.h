@@ -5,7 +5,7 @@
 
 #pragma once
 
-#include "stdint.h"
+#include "boot/types.h"
 
 #define PAGE_SHIFT 12U
 #define PAGE_SIZE  (1U << PAGE_SHIFT)

@@ -18,6 +18,7 @@
 #include "mem/alloc/slab.h"
 #include "mem/mm/vmem.h"
 #include "stddef.h"
+#include "stdbool.h"
 #include "stdio.h"
 #include "string.h"
 

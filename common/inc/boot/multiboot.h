@@ -8,7 +8,7 @@
 #pragma once
 
 #include "boot/boot_info.h"
-#include "stdint.h"
+#include "boot/types.h"
 
 #define MULTIBOOT_HEADER_MAGIC     0x1BADB002U ///< The magic field should contain this.
 #define MULTIBOOT_BOOTLOADER_MAGIC 0x2BADB002U ///< This should be in %eax.

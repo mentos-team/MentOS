@@ -9,12 +9,13 @@ file(GLOB_RECURSE BOOTLOADER_SOURCES CONFIGURE_DEPENDS
 )
 
 # Collect the bootloader include directories.
-set(BOOTLOADER_INCLUDE_DIRS ${CMAKE_SOURCE_DIR}/common/inc ${CMAKE_CURRENT_SOURCE_DIR}/inc ${CMAKE_SOURCE_DIR}/lib/inc)
+set(BOOTLOADER_INCLUDE_DIRS ${CMAKE_SOURCE_DIR}/common/inc ${CMAKE_CURRENT_SOURCE_DIR}/inc)
 
 # Create the bootloader static library
 add_library(bootloader ${BOOTLOADER_SOURCES})
 
 target_link_libraries(bootloader PRIVATE mentos_freestanding_options)
+target_compile_definitions(bootloader PRIVATE BOOTLOADER_BUILD)
 
 # Add the includes.
 target_include_directories(bootloader PUBLIC ${BOOTLOADER_INCLUDE_DIRS})

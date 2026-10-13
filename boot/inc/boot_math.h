@@ -5,7 +5,7 @@
 
 #pragma once
 
-#include "stdint.h"
+#include "boot/types.h"
 
 #define boot_min(left, right) (((left) < (right)) ? (left) : (right))
 #define boot_max(left, right) (((left) > (right)) ? (left) : (right))

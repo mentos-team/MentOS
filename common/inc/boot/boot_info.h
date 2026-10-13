@@ -5,7 +5,7 @@
 
 #pragma once
 
-#include "stdint.h"
+#include "boot/types.h"
 
 /// Forward declaration keeps this contract independent from the Multiboot
 /// helper implementation. The concrete structure is supplied by

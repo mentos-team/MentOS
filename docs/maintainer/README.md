@@ -23,6 +23,7 @@ references.
 | Document | Read before / when |
 |---|---|
 | [architecture.md](architecture.md) | Touching any kernel subsystem; orientation for new agents |
+| [bootloader.md](bootloader.md) | Changing early boot, Multiboot hand-off, image layout, or boot includes |
 | [process-lifecycle.md](process-lifecycle.md) | Changing task creation, fork, exit, waitpid, zombie reaping |
 | [execve.md](execve.md) | Changing `sys_execve`, ELF loading, interpreter handling, argv/env |
 | [vfs-and-fd-lifetime.md](vfs-and-fd-lifetime.md) | Changing fd lists, `vfs_file_t` lifetime, open/close/dup/destroy paths |

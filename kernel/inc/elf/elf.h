@@ -5,8 +5,10 @@
 
 #pragma once
 
-#include "process/process.h"
 #include "stdint.h"
+
+struct mm_struct;
+struct vfs_file;
 
 /// @defgroup header_segment_types Program Header Segment Types
 /// @brief List of numeric defines which identify segment entries types.
@@ -266,13 +268,13 @@ enum StT_Types {
 /// @param file The ELF file.
 /// @param entry The ELF binary entry.
 /// @return 1 on success, -errno on failure.
-int elf_load_file(mm_struct_t *mm, vfs_file_t *file, uint32_t *entry);
+int elf_load_file(struct mm_struct *mm, struct vfs_file *file, uint32_t *entry);
 
 /// @brief Checks if the file is a valid ELF.
 /// @param file The file to check.
 /// @param type The type of ELF file we expect.
 /// @return 0 if fails, 1 if succeed.
-int elf_check_file_type(vfs_file_t *file, Elf_Type type);
+int elf_check_file_type(struct vfs_file *file, Elf_Type type);
 
 /// @brief Checks the correctness of the ELF header.
 /// @param header The header to check.
