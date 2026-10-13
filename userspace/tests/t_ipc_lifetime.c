@@ -316,12 +316,35 @@ static int test_ipc_permissions(void)
     return waited < 0 || !WIFEXITED(status) || WEXITSTATUS(status) != EXIT_SUCCESS || !removed;
 }
 
+/// @brief Exercise the explicit arithmetic boundaries of each IPC family.
+static int test_ipc_arithmetic_bounds(void)
+{
+    test_message_t message = {.type = 1};
+    const int queue = msgget(IPC_PRIVATE, IPC_CREAT | 0600);
+    const int semaphore = semget(IPC_PRIVATE, 1, IPC_CREAT | 0600);
+    if (queue < 0 || semaphore < 0) {
+        return 1;
+    }
+
+    errno = 0;
+    const int message_failed = msgsnd(queue, &message, MSGMAX + 1U, IPC_NOWAIT) != -1 || errno != EINVAL;
+
+    union semun set_value = {.val = 0xFFFF};
+    struct sembuf increment = {.sem_num = 0, .sem_op = 1, .sem_flg = IPC_NOWAIT};
+    const int set_failed = semctl(semaphore, 0, SETVAL, &set_value) < 0;
+    errno = 0;
+    const int semaphore_failed = semop(semaphore, &increment, 1) != -1 || errno != ERANGE;
+
+    const int removed = msgctl(queue, IPC_RMID, NULL) == 0 && semctl(semaphore, 0, IPC_RMID, NULL) == 0;
+    return message_failed || set_failed || semaphore_failed || !removed;
+}
+
 int main(void)
 {
     openlog("t_ipc_lifetime", LOG_PID | LOG_CONS, LOG_USER);
     const int failed = test_message_tail() || test_message_rmid_wakeup() || test_message_sender_rmid_wakeup() ||
                        test_semaphore_rmid_wakeup() || test_shared_memory_rmid_mapping() || test_shared_memory_size_bounds() ||
-                       test_missing_object_errors() || test_ipc_permissions();
+                       test_missing_object_errors() || test_ipc_permissions() || test_ipc_arithmetic_bounds();
     syslog(failed ? LOG_ERR : LOG_INFO, "[t_ipc_lifetime] %s", failed ? "lifetime checks failed" : "lifetime checks passed");
     closelog();
     return failed ? EXIT_FAILURE : EXIT_SUCCESS;

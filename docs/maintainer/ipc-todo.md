@@ -43,7 +43,7 @@ items are intentionally scoped for follow-up commits or pull requests.
       sets, and shared-memory segments.
 - [x] Verify permission checks for every `get`, `ctl`, attach, send, receive,
       and semaphore operation, including owner/group/other modes.
-- [ ] Review message size, semaphore count, and shared-memory size overflow
+- [x] Review message size, semaphore count, and shared-memory size overflow
       handling at every arithmetic boundary.
 
 ## Design follow-ups
