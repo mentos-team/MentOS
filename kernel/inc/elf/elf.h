@@ -62,6 +62,24 @@ struct vfs_file;
 /// @brief Highest segment type reserved for processor-specific semantics.
 #define PT_HIPROC    0x7FFFFFFF
 
+/// @defgroup header_segment_flags Program Header Segment Flags
+/// @brief Permission bits carried by an ELF program header.
+///
+/// MentOS currently has the 32-bit non-PAE paging model: page table entries
+/// can distinguish read/write from read-only, but cannot disable instruction
+/// fetches independently (there is no NX bit).  The loader therefore uses
+/// PF_W today and keeps PF_R/PF_X for faithful ELF parsing and future use.
+/// @{
+
+/// @brief Segment is readable.
+#define PF_R         0x4
+/// @brief Segment is writable.
+#define PF_W         0x2
+/// @brief Segment is executable.
+#define PF_X         0x1
+
+/// @}
+
 /// @}
 
 /// Elf header ident size.

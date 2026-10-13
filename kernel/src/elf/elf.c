@@ -242,6 +242,24 @@ static inline void elf_dump_symbol_table(elf_header_t *header)
 // EXEC-RELATED FUNCTIONS
 // ============================================================================
 
+/// @brief Translate ELF segment flags to the permissions MentOS can enforce.
+/// @param flags The ELF `p_flags` value.
+/// @return User-present mapping flags, including MM_RW only for writable
+///         segments.
+/// @details x86 read access is always permitted for present pages and this
+///          kernel does not enable PAE/NX, so PF_R and PF_X cannot currently
+///          be represented in a page table entry.  Retaining the ELF flags in
+///          the public header keeps the parser standards-aligned without
+///          promising W^X before the paging model supports it.
+static inline uint32_t elf_segment_vm_flags(uint32_t flags)
+{
+    uint32_t vm_flags = MM_USER | MM_PRESENT;
+    if (flags & PF_W) {
+        vm_flags |= MM_RW;
+    }
+    return vm_flags;
+}
+
 /// @brief Loads an ELF executable into the given address space.
 /// @param header the header of the ELF file.
 /// @param mm the memory descriptor where the executable is loaded; it is
@@ -292,7 +310,7 @@ static inline int elf_load_exec(elf_header_t *header, mm_struct_t *mm, size_t fi
             return -ENOEXEC;
         }
         segment = vm_area_create(
-            mm, program_header->vaddr, program_header->memsz, MM_USER | MM_RW | MM_PRESENT, GFP_KERNEL);
+            mm, program_header->vaddr, program_header->memsz, elf_segment_vm_flags(program_header->flags), GFP_KERNEL);
         if (segment == NULL) {
             // The range was validated above, so a failure here is an
             // allocation failure (e.g., the buddy system is full).
