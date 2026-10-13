@@ -185,7 +185,10 @@ int paging_init(boot_info_t *info)
     // Switch to the newly created page directory.
     paging_switch_pgd(main_mm->pgd);
 
-    // Paging is already enabled by the bootloader; keep the semantics.
+    // Paging is already enabled by the bootloader; keep the semantics and
+    // enable hardware write protection for supervisor accesses.  With CR0.WP
+    // set, kernel writes to read-only user pages fault just like user writes,
+    // making page-table permissions an effective second line of defence.
     paging_enable();
 
     // Disable bootstrap mapping after paging switch.
@@ -198,8 +201,14 @@ void paging_enable(void)
 {
     // Clear the PSE bit from cr4.
     set_cr4(bitmask_clear(get_cr4(), CR4_PSE));
-    // Set the PG bit in cr0.
-    set_cr0(bitmask_set(get_cr0(), CR0_PG));
+
+    // Keep paging enabled and make read-only page permissions effective for
+    // supervisor writes as well as user writes.  This prevents accidental
+    // kernel stores from silently modifying protected user pages.
+    uintptr_t cr0 = get_cr0();
+    cr0 = bitmask_set(cr0, CR0_PG);
+    cr0 = bitmask_set(cr0, CR0_WP);
+    set_cr0(cr0);
 }
 
 int paging_is_enabled(void) { return bitmask_check(get_cr0(), CR0_PG); }
@@ -761,8 +770,13 @@ int mem_clone_vm_area(
         pg_iter_entry_t src_it = __pg_iter_next(&src_iter);
         pg_iter_entry_t dst_it = __pg_iter_next(&dst_iter);
 
-        // Check if the source page is marked as copy-on-write (COW).
-        if (src_it.entry->kernel_cow) {
+        // Preserve the COW alias only when the caller explicitly requests a
+        // COW clone. Temporary kernel mapping windows (used by vmem_memcpy)
+        // must always receive a writable physical mapping; inheriting the
+        // source's COW marker would leave the window read-only and, with
+        // CR0.WP enabled, turn an otherwise legitimate kernel copy into a
+        // page fault.
+        if ((flags & MM_COW) && src_it.entry->kernel_cow) {
             // Clone the page by assigning the address of the source entry to the destination.
             *(uint32_t *)dst_it.entry = (uint32_t)src_it.entry;
             // Mark the destination page as not present.

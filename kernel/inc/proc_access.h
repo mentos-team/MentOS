@@ -12,6 +12,7 @@
 #define CR0_EM 0x00000004u ///< EMulate NPX, e.g. trap, don't execute code.
 #define CR0_TS 0x00000008u ///< Process has done Task Switch, do NPX save.
 #define CR0_ET 0x00000010u ///< 32 bit (if set) vs 16 bit (387 vs 287).
+#define CR0_WP 0x00010000u ///< Write Protect: supervisor writes honor read-only pages.
 #define CR0_PG 0x80000000u ///< Paging Enable.
 
 #define CR4_SEE      0x00008000u ///< Secure Enclave Enable XXX.

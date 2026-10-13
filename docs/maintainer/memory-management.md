@@ -68,6 +68,11 @@ alloc/free pairs and resource tracking (used by `register_resource` /
   non-present-directory and the user+write+present CoW cases signalled, so
   a null dereference (PDE 0 is present and supervisor-only) panicked the
   kernel; `t_userfault` is the regression test.
+- `paging_enable()` sets both `CR0.PG` and `CR0.WP`. The latter makes the
+  read/write bit in a PTE effective for supervisor stores too, so a future
+  read-only ELF or copy-on-write mapping cannot be modified accidentally by
+  kernel code. Existing kernel mappings remain explicitly writable where the
+  kernel must update them.
 - Caveat: a process whose SIGSEGV handler returns normally resumes at the
   faulting instruction and faults again; the kernel does not reset the
   handler to the default action the way Linux `force_sig_info` does.
