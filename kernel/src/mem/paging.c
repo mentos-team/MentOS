@@ -770,8 +770,13 @@ int mem_clone_vm_area(
         pg_iter_entry_t src_it = __pg_iter_next(&src_iter);
         pg_iter_entry_t dst_it = __pg_iter_next(&dst_iter);
 
-        // Check if the source page is marked as copy-on-write (COW).
-        if (src_it.entry->kernel_cow) {
+        // Preserve the COW alias only when the caller explicitly requests a
+        // COW clone. Temporary kernel mapping windows (used by vmem_memcpy)
+        // must always receive a writable physical mapping; inheriting the
+        // source's COW marker would leave the window read-only and, with
+        // CR0.WP enabled, turn an otherwise legitimate kernel copy into a
+        // page fault.
+        if ((flags & MM_COW) && src_it.entry->kernel_cow) {
             // Clone the page by assigning the address of the source entry to the destination.
             *(uint32_t *)dst_it.entry = (uint32_t)src_it.entry;
             // Mark the destination page as not present.
