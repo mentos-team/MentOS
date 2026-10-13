@@ -41,7 +41,7 @@ items are intentionally scoped for follow-up commits or pull requests.
       objects (`EINVAL`, `ENOENT`, and `EIDRM`).
 - [x] Add explicit resource limits for queue count, message bytes, semaphore
       sets, and shared-memory segments.
-- [ ] Verify permission checks for every `get`, `ctl`, attach, send, receive,
+- [x] Verify permission checks for every `get`, `ctl`, attach, send, receive,
       and semaphore operation, including owner/group/other modes.
 - [ ] Review message size, semaphore count, and shared-memory size overflow
       handling at every arithmetic boundary.

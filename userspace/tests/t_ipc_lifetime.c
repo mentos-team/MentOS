@@ -272,12 +272,56 @@ static int test_missing_object_errors(void)
     return 0;
 }
 
+/// @brief Ensure an unprivileged process cannot use root-owned mode-000 IPC.
+static int test_ipc_permissions(void)
+{
+    test_message_t message = {.type = 1};
+    struct msqid_ds message_metadata;
+    struct shmid_ds shared_metadata;
+    struct sembuf operation = {.sem_num = 0, .sem_op = -1, .sem_flg = IPC_NOWAIT};
+    union semun semaphore_argument = {.buf = &((struct semid_ds){0})};
+    const int queue = msgget(IPC_PRIVATE, IPC_CREAT | 0000);
+    const int semaphore = semget(IPC_PRIVATE, 1, IPC_CREAT | 0000);
+    const int shared = shmget(IPC_PRIVATE, 4096, IPC_CREAT | 0000);
+    if (queue < 0 || semaphore < 0 || shared < 0) {
+        return 1;
+    }
+
+    const pid_t child = fork();
+    if (child == 0) {
+        int failed = setgid(1000) < 0 || setuid(1000) < 0;
+        errno = 0;
+        failed |= msgsnd(queue, &message, 0, IPC_NOWAIT) != -1 || errno != EACCES;
+        errno = 0;
+        failed |= msgrcv(queue, &message, sizeof(message.text), 0, IPC_NOWAIT) != -1 || errno != EACCES;
+        errno = 0;
+        failed |= msgctl(queue, IPC_STAT, &message_metadata) != -1 || errno != EACCES;
+        errno = 0;
+        failed |= semop(semaphore, &operation, 1) != -1 || errno != EACCES;
+        errno = 0;
+        failed |= semctl(semaphore, 0, IPC_STAT, &semaphore_argument) != -1 || errno != EACCES;
+        errno = 0;
+        failed |= shmctl(shared, IPC_STAT, &shared_metadata) != -1 || errno != EACCES;
+        errno = 0;
+        failed |= shmat(shared, NULL, 0) != (void *)-1 || errno != EACCES;
+        exit(failed ? EXIT_FAILURE : EXIT_SUCCESS);
+    }
+    if (child < 0) {
+        return 1;
+    }
+    int status = 0;
+    const int waited = waitpid(child, &status, 0);
+    const int removed = msgctl(queue, IPC_RMID, NULL) == 0 && semctl(semaphore, 0, IPC_RMID, NULL) == 0 &&
+                        shmctl(shared, IPC_RMID, NULL) == 0;
+    return waited < 0 || !WIFEXITED(status) || WEXITSTATUS(status) != EXIT_SUCCESS || !removed;
+}
+
 int main(void)
 {
     openlog("t_ipc_lifetime", LOG_PID | LOG_CONS, LOG_USER);
     const int failed = test_message_tail() || test_message_rmid_wakeup() || test_message_sender_rmid_wakeup() ||
                        test_semaphore_rmid_wakeup() || test_shared_memory_rmid_mapping() || test_shared_memory_size_bounds() ||
-                       test_missing_object_errors();
+                       test_missing_object_errors() || test_ipc_permissions();
     syslog(failed ? LOG_ERR : LOG_INFO, "[t_ipc_lifetime] %s", failed ? "lifetime checks failed" : "lifetime checks passed");
     closelog();
     return failed ? EXIT_FAILURE : EXIT_SUCCESS;

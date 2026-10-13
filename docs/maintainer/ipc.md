@@ -69,6 +69,9 @@ Queue metadata and the linked message list are protected by the queue lock.
 `msg_last` is maintained when a non-head message is removed; this matters for a
 subsequent enqueue after a selective receive.
 
+Permission checks use the normal owner/group/other classes.  Only init and
+`uid == 0` bypass them; `gid == 0` is not treated as superuser membership.
+
 `msgctl(IPC_RMID)` uses the same tombstone/reference protocol as semaphores.
 `msgctl(IPC_STAT)` takes a locked kernel snapshot before copying metadata to the
 user buffer; it never holds the queue lock across that copy.

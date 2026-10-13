@@ -46,8 +46,9 @@ int ipc_valid_permissions(unsigned int access, const struct ipc_perm *perm)
     // Get the calling task.
     task_struct *task = scheduler_get_current_process();
     assert(task && "Failed to get the current running process.");
-    // Init, and all root processes have full permissions.
-    if ((task->pid == 0) || (task->uid == 0) || (task->gid == 0)) {
+    // Init and uid 0 are superuser contexts.  Membership in gid 0 must still
+    // obey the object's group permission bits; it is not equivalent to root.
+    if ((task->pid == 0) || (task->uid == 0)) {
         return 1;
     }
     if ((access & IPC_ACCESS_READ) && !ipc_check_perm(task, perm, S_IRUSR, S_IRGRP, S_IROTH)) {

@@ -63,8 +63,9 @@ DEMONSTRATED BY PR AUTHOR, VERIFIED BY CODE ANALYSIS).
 
 - No ASLR/stack-canary expectations: kernel builds `-fno-stack-protector`
   by design (toolchain file) — assume no compiler hardening.
-- IPC (msg/sem/shm), signals beyond SIGCHLD/SIGSEGV paths, keyboard/tty
-  input handling: not audited.
+- Signals beyond SIGCHLD/SIGSEGV paths and keyboard/tty input handling remain
+  outside this audit. IPC permission and lifetime paths are now covered by the
+  maintainer IPC audit and focused regression tests.
 - Whether `runtests`'s userspace `outports(0x604, ...)` implies permissive
   IOPL for all userspace (observed to WORK, mechanism not investigated —
   flagged as a question, not a finding).
