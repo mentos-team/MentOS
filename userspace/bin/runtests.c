@@ -34,6 +34,7 @@ static char *all_tests[] = {
     "t_dir_block_boundary",
     "t_dir_entries",
     "t_dup",
+    "t_dup_pipe",
     "t_environ",
     "t_exec",
     "t_execve_bounds",

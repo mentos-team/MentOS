@@ -113,3 +113,10 @@ typedef struct pipe_buf_operations {
 /// @param old_task Pointer to the old task's `task_struct`.
 /// @return int 0 on success, 1 on failure.
 int vfs_update_pipe_counts(task_struct *task, task_struct *old_task);
+
+/// @brief Accounts for a new descriptor referring to an open file.
+/// @param file The file that was just duplicated.
+/// @details pipe_close drops one reader or writer per descriptor, so every
+///          descriptor that shares a pipe file must be counted. Does nothing
+///          for files that are not pipes.
+void pipe_dup_file(vfs_file_t *file);

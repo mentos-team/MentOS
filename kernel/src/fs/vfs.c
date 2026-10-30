@@ -1165,6 +1165,8 @@ int sys_dup(int fd)
 
     // Increment file reference counter.
     file->count += 1;
+    // A duplicated pipe end is one more reader or writer.
+    pipe_dup_file(file);
 
     // Install the new fd
     task->fd_list[fd].file_struct = file;
