@@ -1,5 +1,5 @@
 /// @file t_shebang.c
-/// @brief Regression tests for the shebang/interpreter path of execve (#209).
+/// @brief Regression tests for shebang parsing and interpreter argv.
 /// @details Exercises the interpreter branch of `__load_executable()`:
 ///          the happy path, a missing interpreter, an interpreter loop, a
 ///          shebang line without a trailing newline (which used to trigger a
@@ -26,6 +26,7 @@
 
 /// Directory where the test scripts are created.
 #define SCRIPT_DIR "/home/user/"
+#define TEST_INTERPRETER "/bin/tests/t_shebang"
 
 /// Path of the sparse (hole-punched) script staged inside the filesystem image.
 #define SPARSE_SCRIPT SCRIPT_DIR "t_shebang_sparse.sh"
@@ -126,6 +127,27 @@ static int run_script(const char *path)
     return run_script_env(path, envp);
 }
 
+/// Executes a script with the supplied argument vector and waits for it.
+static int run_script_argv(const char *path, char *const argv[])
+{
+    char *envp[] = {NULL};
+    pid_t pid    = fork();
+    if (pid < 0) {
+        syslog(LOG_ERR, "[t_shebang] fork: %s", strerror(errno));
+        return -2;
+    }
+    if (pid == 0) {
+        execve(path, argv, envp);
+        exit(errno);
+    }
+    int status;
+    if (waitpid(pid, &status, 0) < 0) {
+        syslog(LOG_ERR, "[t_shebang] waitpid: %s", strerror(errno));
+        return -2;
+    }
+    return WIFEXITED(status) ? WEXITSTATUS(status) : -1;
+}
+
 /// Checks the outcome of an exec that is expected to fail after the address
 /// space of the child has already been torn down. Until failed execve becomes
 /// transactional (#208), such a child is killed by SIGSEGV instead of
@@ -154,12 +176,20 @@ static int check_post_teardown_failure(int res, int expected_errno, const char *
 
 int main(int argc, char *argv[])
 {
+    if ((argc == 5) && !strcmp(argv[1], "--probe with spaces")) {
+        const char *name = strrchr(argv[0], '/');
+        if ((name == NULL) || strcmp(name + 1, "t_shebang") ||
+            strcmp(argv[2], SCRIPT_DIR "t_shebang_argv.sh") || strcmp(argv[3], "first value") ||
+            strcmp(argv[4], "second")) {
+            return EXIT_FAILURE;
+        }
+        return EXIT_SUCCESS;
+    }
+
     int failures = 0;
 
     // ------------------------------------------------------------------
     // 1) A valid script: the interpreter must be executed successfully.
-    //    Note: the whole line after `#!` is used as the interpreter path,
-    //    so no interpreter arguments can be given.
     // ------------------------------------------------------------------
     if (create_script("t_shebang_ok.sh", "#!/bin/echo\n", 12, 0755) < 0) {
         return EXIT_FAILURE;
@@ -170,6 +200,36 @@ int main(int argc, char *argv[])
         ++failures;
     }
     unlink(SCRIPT_DIR "t_shebang_ok.sh");
+
+    // The interpreter path is argv[0], its optional argument remains one
+    // string, followed by the script path and the caller's arguments.
+    char shebang[PATH_MAX + 64];
+    int shebang_len = snprintf(shebang, sizeof(shebang), "#!  %s   --probe with spaces   \n", TEST_INTERPRETER);
+    if ((shebang_len < 0) || ((size_t)shebang_len >= sizeof(shebang)) ||
+        (create_script("t_shebang_argv.sh", shebang, (size_t)shebang_len, 0755) < 0)) {
+        return EXIT_FAILURE;
+    }
+    char *script_argv[] = {
+        SCRIPT_DIR "t_shebang_argv.sh",
+        "first value",
+        "second",
+        NULL,
+    };
+    res = run_script_argv(script_argv[0], script_argv);
+    if (res != 0) {
+        syslog(LOG_ERR, "[t_shebang] interpreter argv layout: failed (%d)", res);
+        ++failures;
+    }
+    unlink(SCRIPT_DIR "t_shebang_argv.sh");
+
+    if (create_script("t_shebang_empty_interpreter.sh", "#!   \n", 6, 0755) < 0) {
+        return EXIT_FAILURE;
+    }
+    res = run_script(SCRIPT_DIR "t_shebang_empty_interpreter.sh");
+    if (!check_post_teardown_failure(res, ENOEXEC, "empty interpreter path")) {
+        ++failures;
+    }
+    unlink(SCRIPT_DIR "t_shebang_empty_interpreter.sh");
 
     // ------------------------------------------------------------------
     // 2) A script without the execute bit must be refused with EACCES.
@@ -252,16 +312,11 @@ int main(int argc, char *argv[])
     // ------------------------------------------------------------------
     // 8) A script with a sparse hole right after the shebang line (the
     //    staged file is `#!/bin/echo hello\n` followed by a zero tail,
-    //    which mke2fs stores as holes). While #192 made any read touching
-    //    a hole fail (this case used to expect EIO), the shebang read now
-    //    succeeds. The outcome of the exec itself is governed by the open
-    //    #222 bug (the whole shebang line is used as the interpreter
-    //    path, so `/bin/echo hello` yields ENOENT); once #222 is fixed
-    //    the interpreter resolves and the script runs (0). Either way it
-    //    must no longer fail with a read error.
+    //    which mke2fs stores as holes). The shebang read must succeed and
+    //    pass `hello` as one argument to the interpreter.
     // ------------------------------------------------------------------
     res = run_script(SPARSE_SCRIPT);
-    if ((res != 0) && (res != ENOENT)) {
+    if (res != 0) {
         syslog(LOG_ERR, "[t_shebang] sparse script: unexpected exec outcome (%d)", res);
         ++failures;
     }
