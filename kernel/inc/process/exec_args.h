@@ -49,14 +49,19 @@ typedef struct exec_args {
 ///          exec_args_free, including on every later failure.
 int exec_args_from_user(exec_args_t *args, char **argv, char **envp);
 
-/// @brief Rebuilds the arguments for an interpreter, inserting the script
-///        path as the second entry and shifting the rest to the right.
+/// @brief Rebuilds the arguments for a shebang interpreter.
 /// @param args the arguments to rebuild, filled by exec_args_from_user.
-/// @param script the path of the script, copied into the new block.
+/// @param interpreter the path to the interpreter.
+/// @param interpreter_argument the optional argument from the shebang line.
+/// @param script the path of the script.
 /// @return 0 on success, -E2BIG when the result exceeds ARG_MAX, or -ENOMEM.
 /// @details `args` is left usable and unchanged when the call fails, so the
 ///          caller can release it the same way either way.
-int exec_args_insert_interpreter(exec_args_t *args, const char *script);
+int exec_args_insert_interpreter(
+    exec_args_t *args,
+    const char *interpreter,
+    const char *interpreter_argument,
+    const char *script);
 
 /// @brief Lays the arguments out on a stack, growing downwards.
 /// @param args the arguments.

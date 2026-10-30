@@ -279,10 +279,9 @@ int exec_args_from_user(exec_args_t *args, char **argv, char **envp)
         pr_err("Failed to allocate memory for arguments and environment %d (%d + %d).\n", argv_bytes + envp_bytes, argv_bytes, envp_bytes);
         return -ENOMEM;
     }
-    // The arrays of string positions are sized from the validated counts: the
-    // argv one also covers the interpreter path, which shifts argv by two
-    // entries and therefore needs argc + 2 slots.
-    args->argv_locations = kmalloc((argc + 2) * sizeof(char *));
+    // The argv positions also cover interpreter, optional shebang argument,
+    // and script entries.
+    args->argv_locations = kmalloc((argc + 3) * sizeof(char *));
     args->envp_locations = kmalloc(((envc > 0) ? envc : 1) * sizeof(char *));
     if (!args->argv_locations || !args->envp_locations) {
         pr_err("Failed to allocate memory for the argument positions.\n");
@@ -319,21 +318,35 @@ int exec_args_from_user(exec_args_t *args, char **argv, char **envp)
     return 0;
 }
 
-int exec_args_insert_interpreter(exec_args_t *args, const char *script)
+int exec_args_insert_interpreter(
+    exec_args_t *args,
+    const char *interpreter,
+    const char *interpreter_argument,
+    const char *script)
 {
-    // The interpreter receives the script as its second argument, so every
-    // entry from the first one on shifts right by one.
-    char **interpreter_argv = kmalloc((args->argc + 2) * sizeof(char *));
+    // A shebang invocation is [interpreter, optional argument, script,
+    // original arguments...]. The optional argument remains one string even
+    // when it contains spaces.
+    int has_interpreter_argument = (interpreter_argument != NULL);
+    int interpreter_argc         = args->argc + 1 + has_interpreter_argument;
+    if (interpreter_argc > MAX_ARG_COUNT) {
+        return -E2BIG;
+    }
+    char **interpreter_argv = kmalloc((interpreter_argc + 1) * sizeof(char *));
     if (!interpreter_argv) {
         pr_err("Failed to allocate memory for interpreter argv array.\n");
         return -ENOMEM;
     }
-    interpreter_argv[0] = args->argv[0]; // TODO: pass the path to the interpreter.
-    interpreter_argv[1] = (char *)script;
-    for (int i = 1; i <= args->argc; i++) {
-        interpreter_argv[i + 1] = args->argv[i];
+    interpreter_argv[0] = (char *)interpreter;
+    int next_arg        = 1;
+    if (has_interpreter_argument) {
+        interpreter_argv[next_arg++] = (char *)interpreter_argument;
     }
-    int interpreter_argc = args->argc + 1;
+    interpreter_argv[next_arg++] = (char *)script;
+    for (int i = 1; i < args->argc; i++) {
+        interpreter_argv[next_arg++] = args->argv[i];
+    }
+    interpreter_argv[interpreter_argc] = NULL;
 
     // Rebuild the block. It must hold both the new argv and the whole
     // environment (#227), which is copied over from the old one.

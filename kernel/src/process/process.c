@@ -190,14 +190,26 @@ static int __has_shebang(vfs_file_t *file)
 ///               (only written on success). The caller owns it and must
 ///               either install it on the task (commit) or destroy it
 ///               (rollback).
+/// @param loaded_interpreter_path the output interpreter path for a script.
+/// @param loaded_interpreter_argument the output optional shebang argument.
 /// @return -errno on failure, 1 on success, 2 if an interpreter was loaded.
-static int __load_executable(const char *path, task_struct *task, uint32_t *entry, mm_struct_t **new_mm)
+static int __load_executable(
+    const char *path,
+    task_struct *task,
+    uint32_t *entry,
+    mm_struct_t **new_mm,
+    char **loaded_interpreter_path,
+    char **loaded_interpreter_argument)
 {
+    *loaded_interpreter_path     = NULL;
+    *loaded_interpreter_argument = NULL;
+
     // Return code variable.
     int ret                = 0;
     int interpreter_loop   = 0;
-    // The duplicated interpreter path, it must be freed on every exit path.
+    // The parsed interpreter strings are transferred to the caller on success.
     char *interpreter_path = NULL;
+    char *interpreter_argument = NULL;
     char *shebang = NULL;
     // The candidate memory image: until the load succeeds it is completely
     // separate from the running image of the task (#208).
@@ -280,8 +292,42 @@ start:
             goto close_and_return;
         }
         *lineend = 0;
+        if ((lineend > shebang) && (lineend[-1] == '\r')) {
+            lineend[-1] = 0;
+        }
 
-        interpreter_path = strdup(shebang);
+        char *interpreter_start = shebang;
+        while ((*interpreter_start == ' ') || (*interpreter_start == '\t')) {
+            interpreter_start++;
+        }
+        char *interpreter_end = interpreter_start;
+        while ((*interpreter_end != 0) && (*interpreter_end != ' ') && (*interpreter_end != '\t')) {
+            interpreter_end++;
+        }
+        if (interpreter_end == interpreter_start) {
+            ret = -ENOEXEC;
+            goto close_and_return;
+        }
+
+        if (*interpreter_end != 0) {
+            *interpreter_end++ = 0;
+            while ((*interpreter_end == ' ') || (*interpreter_end == '\t')) {
+                interpreter_end++;
+            }
+            char *argument_end = interpreter_end + strlen(interpreter_end);
+            while ((argument_end > interpreter_end) && ((argument_end[-1] == ' ') || (argument_end[-1] == '\t'))) {
+                *--argument_end = 0;
+            }
+            if (*interpreter_end != 0) {
+                interpreter_argument = strdup(interpreter_end);
+                if (interpreter_argument == NULL) {
+                    ret = -ENOMEM;
+                    goto close_and_return;
+                }
+            }
+        }
+
+        interpreter_path = strdup(interpreter_start);
         if (interpreter_path == NULL) {
             ret = -ENOMEM;
             goto close_and_return;
@@ -332,10 +378,19 @@ close_and_return:
         task->gid = saved_gid;
     } else {
         *new_mm = candidate;
+        if (ret == 2) {
+            *loaded_interpreter_path     = interpreter_path;
+            *loaded_interpreter_argument = interpreter_argument;
+            interpreter_path             = NULL;
+            interpreter_argument         = NULL;
+        }
     }
     // Free the duplicated interpreter path.
     if (interpreter_path != NULL) {
         kfree(interpreter_path);
+    }
+    if (interpreter_argument != NULL) {
+        kfree(interpreter_argument);
     }
     if (shebang) {
         kfree(shebang);
@@ -520,8 +575,13 @@ int process_create_init(const char *path)
     // == INITIALIZE TASK MEMORY ==============================================
     // Build the image of the executable into a candidate mm; the task is
     // not touched until the image is fully built (#208).
-    mm_struct_t *new_mm = NULL;
-    if (__load_executable(path, init_process, &init_process->thread.regs.eip, &new_mm) <= 0) {
+    mm_struct_t *new_mm             = NULL;
+    char *init_interpreter_path     = NULL;
+    char *init_interpreter_argument = NULL;
+    int load_result                 = __load_executable(
+        path, init_process, &init_process->thread.regs.eip, &new_mm, &init_interpreter_path,
+        &init_interpreter_argument);
+    if (load_result <= 0) {
         pr_err("Failed to load the init executable: %s.\n", path);
         return 1;
     }
@@ -542,18 +602,32 @@ int process_create_init(const char *path)
     // Prepare argv and envp for the init process.
     char **argv_ptr;
     char **envp_ptr;
-    int argc            = 1;
-    static char *argv[] = {"/bin/init", (char *)NULL};
+    int argc      = 1;
+    char *argv[4] = {"/bin/init", NULL, NULL, NULL};
+    if (load_result == 2) {
+        int next_arg     = 0;
+        argv[next_arg++] = init_interpreter_path;
+        if (init_interpreter_argument != NULL) {
+            argv[next_arg++] = init_interpreter_argument;
+        }
+        argv[next_arg++] = (char *)path;
+        argc             = next_arg;
+    }
     static char *envp[] = {(char *)NULL};
-    // The positions of the pushed strings, for the pointer arrays: the
-    // vectors are kernel literals with one entry, so a small stack array
-    // is enough here (sys_execve sizes it from the validated count).
+    // The init argv has at most three entries: interpreter, optional
+    // argument, and script.
     char *argv_locations[4];
     char *envp_locations[4];
     // Save where the arguments start.
     new_mm->arg_start = useresp;
     // Push the arguments on the stack.
-    argv_ptr          = exec_args_push_vector(&useresp, argv, 1, argv_locations);
+    argv_ptr          = exec_args_push_vector(&useresp, argv, argc, argv_locations);
+    if (init_interpreter_path != NULL) {
+        kfree(init_interpreter_path);
+    }
+    if (init_interpreter_argument != NULL) {
+        kfree(init_interpreter_argument);
+    }
     // Save where the arguments end.
     new_mm->arg_end   = useresp;
     // Save where the environmental variables start.
@@ -816,7 +890,10 @@ int sys_execve(pt_regs_t *f)
     // Credentials are restored if any of the post-load steps fails.
     uid_t prev_uid      = current->uid;
     gid_t prev_gid      = current->gid;
-    int ret             = __load_executable(saved_filename, current, &entry, &new_mm);
+    char *interpreter_path     = NULL;
+    char *interpreter_argument = NULL;
+    int ret                    = __load_executable(
+        saved_filename, current, &entry, &new_mm, &interpreter_path, &interpreter_argument);
     if (ret <= 0) {
         pr_err("Failed to load executable!\n");
         exec_args_free(&args);
@@ -824,9 +901,11 @@ int sys_execve(pt_regs_t *f)
         return ret;
     }
     if (ret == 2) { // An interpreter was loaded.
-        // The interpreter takes the script as its second argument, so the
-        // arguments are rebuilt around it.
-        result = exec_args_insert_interpreter(&args, saved_filename);
+        result = exec_args_insert_interpreter(&args, interpreter_path, interpreter_argument, saved_filename);
+        kfree(interpreter_path);
+        if (interpreter_argument != NULL) {
+            kfree(interpreter_argument);
+        }
         if (result < 0) {
             // Rollback: the old image is still the current one.
             mm_destroy(new_mm);

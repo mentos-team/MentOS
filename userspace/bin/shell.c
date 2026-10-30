@@ -47,6 +47,12 @@ static unsigned history_index;
 
 static sigset_t oldmask;
 
+typedef struct {
+    const char *zero;
+    char *const *argv;
+    int argc;
+} shell_parameters_t;
+
 static void __block_sigchld(void)
 {
     sigset_t mask;
@@ -230,37 +236,50 @@ static inline void __prompt_print(void)
         USER, HOSTNAME, timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec, CWD);
 }
 
-/// @brief Retrieves the value of the specified environment variable or special shell variables.
-/// @param var The name of the environment variable or special variable to retrieve.
-/// @return Returns the value of the variable if found, or NULL if not.
-static char *__getenv(const char *var)
+/// @brief Appends a value to the expansion buffer, leaving room for its NUL.
+static void __append_expansion(char *buf, size_t buf_len, size_t *position, const char *value)
 {
-    // Ensure the input variable name is valid (non-NULL and non-empty).
-    if (var == NULL || strlen(var) == 0) {
+    if (value == NULL) {
+        return;
+    }
+    while ((*value != '\0') && (*position < buf_len - 1)) {
+        buf[(*position)++] = *value++;
+    }
+}
+
+/// @brief Retrieves an environment variable or a special shell parameter.
+/// @param var The name of the variable or parameter to retrieve.
+/// @param parameters The active script's positional parameters.
+/// @param numeric_value Storage for the string form of `$#`.
+/// @return Returns the value of the variable or parameter, or NULL if unset.
+static char *__getenv(
+    const char *var,
+    const shell_parameters_t *parameters,
+    char *numeric_value,
+    size_t numeric_size)
+{
+    if ((var == NULL) || (var[0] == '\0')) {
         return NULL;
     }
-    // If the variable has a length greater than 1, retrieve it as a standard environment variable.
-    if (strlen(var) > 1) {
-        return getenv(var);
-    }
-    // Handle special variables like `$?`, which represents the status of the last command.
-    if (var[0] == '?') {
-        // Get the 'status' environment variable, which should have been set by the last command execution.
+    if ((var[0] == '?') && (var[1] == '\0')) {
         char *status_str = getenv("status");
-        if (status_str == NULL) {
-            return "0"; // Default to "0" if the status variable is not set.
+        return status_str == NULL ? "0" : status_str;
+    }
+    if ((var[0] == '#') && (var[1] == '\0')) {
+        snprintf(numeric_value, numeric_size, "%d", parameters->argc);
+        return numeric_value;
+    }
+    if ((var[0] == '0') && (var[1] == '\0')) {
+        return (char *)parameters->zero;
+    }
+    if ((var[0] >= '1') && (var[0] <= '9')) {
+        char *end  = NULL;
+        long index = strtol(var, &end, 10);
+        if ((end != var) && (*end == '\0')) {
+            return ((index >= 1) && (index <= parameters->argc)) ? parameters->argv[index - 1] : NULL;
         }
-        return status_str; // Return the status as a string.
     }
-    // TODO: Implement access to `argv` for positional parameters (e.g., $1, $2).
-#if 0
-    int arg = strtol(var, NULL, 10);  // Convert the variable name to an integer.
-    if (arg < argc) {  // Ensure the argument index is within bounds.
-        return argv[arg];  // Return the corresponding argument from `argv`.
-    }
-#endif
-    // If no match is found, return NULL.
-    return NULL;
+    return getenv(var);
 }
 
 /// @brief Expands environmental variables in a string and stores the result in the buffer.
@@ -269,7 +288,14 @@ static char *__getenv(const char *var)
 /// @param buf The buffer where the expanded string will be stored.
 /// @param buf_len The maximum length of the buffer.
 /// @param null_terminate If true, the resulting buffer will be null-terminated.
-static void ___expand_env(char *str, size_t str_len, char *buf, size_t buf_len, bool_t null_terminate)
+/// @param parameters The active script's positional parameters.
+static void ___expand_env(
+    char *str,
+    size_t str_len,
+    char *buf,
+    size_t buf_len,
+    bool_t null_terminate,
+    const shell_parameters_t *parameters)
 {
     // Input validation: Ensure that str and buf are not NULL, and that buf_len is valid.
     if ((str == NULL) || (buf == NULL) || (buf_len == 0)) {
@@ -285,7 +311,8 @@ static void ___expand_env(char *str, size_t str_len, char *buf, size_t buf_len, 
     // Pointer to store the retrieved environmental variable value.
     char *ENV           = NULL;
     // Position where we are writing on the buffer.
-    int b_pos           = 0;
+    size_t b_pos        = 0;
+    char numeric_value[16];
     // Iterate through the input string.
     for (int s_pos = 0; s_pos < str_len; ++s_pos) {
         // Skip quotes at the start and end of the string.
@@ -310,10 +337,15 @@ static void ___expand_env(char *str, size_t str_len, char *buf, size_t buf_len, 
                 if (b_pos < buf_len - 1) {
                     buf[b_pos++] = '$';
                 }
-            } else if ((s_pos < (str_len - 2)) && (str[s_pos + 1] == '{')) {
+            } else if ((s_pos + 1 < str_len) && (str[s_pos + 1] == '{')) {
                 // Handle ${VAR} syntax for environmental variables.
                 bit_set_assign(flags, ENV_BRAK);
                 env_start = &str[s_pos + 2]; // Start of the variable name.
+            } else if ((s_pos + 1 < str_len) && (((str[s_pos + 1] >= '0') && (str[s_pos + 1] <= '9')) || (str[s_pos + 1] == '#') || (str[s_pos + 1] == '?'))) {
+                buffer[0] = str[++s_pos];
+                buffer[1] = '\0';
+                ENV       = __getenv(buffer, parameters, numeric_value, sizeof(numeric_value));
+                __append_expansion(buf, buf_len, &b_pos, ENV);
             } else {
                 // Handle normal $VAR syntax.
                 bit_set_assign(flags, ENV_NORM);
@@ -327,13 +359,8 @@ static void ___expand_env(char *str, size_t str_len, char *buf, size_t buf_len, 
                 // Extract and expand the environmental variable name.
                 strncpy(buffer, env_start, &str[s_pos] - env_start);
                 buffer[&str[s_pos] - env_start] = '\0'; // Null-terminate.
-                // Retrieve the value of the environmental variable.
-                if ((ENV = __getenv(buffer)) != NULL) {
-                    // Copy the value into the buffer.
-                    for (int k = 0; k < strlen(ENV) && b_pos < buf_len - 1; ++k) {
-                        buf[b_pos++] = ENV[k];
-                    }
-                }
+                ENV                             = __getenv(buffer, parameters, numeric_value, sizeof(numeric_value));
+                __append_expansion(buf, buf_len, &b_pos, ENV);
                 bit_clear_assign(flags, ENV_BRAK); // Clear the flag.
             }
             continue;
@@ -343,12 +370,8 @@ static void ___expand_env(char *str, size_t str_len, char *buf, size_t buf_len, 
             if (str[s_pos] == ':') {
                 strncpy(buffer, env_start, &str[s_pos] - env_start);
                 buffer[&str[s_pos] - env_start] = '\0'; // Null-terminate.
-                // Retrieve the value of the environmental variable.
-                if ((ENV = __getenv(buffer)) != NULL) {
-                    for (int k = 0; k < strlen(ENV) && b_pos < buf_len - 1; ++k) {
-                        buf[b_pos++] = ENV[k];
-                    }
-                }
+                ENV                             = __getenv(buffer, parameters, numeric_value, sizeof(numeric_value));
+                __append_expansion(buf, buf_len, &b_pos, ENV);
                 // Add the ':' character and clear the flag.
                 if (b_pos < buf_len - 1) {
                     buf[b_pos++] = str[s_pos];
@@ -366,11 +389,8 @@ static void ___expand_env(char *str, size_t str_len, char *buf, size_t buf_len, 
     if (bit_check(flags, ENV_NORM)) {
         strncpy(buffer, env_start, str_len - (env_start - str));
         buffer[str_len - (env_start - str)] = '\0';
-        if ((ENV = __getenv(buffer)) != NULL) {
-            for (int k = 0; k < strlen(ENV) && b_pos < buf_len - 1; ++k) {
-                buf[b_pos++] = ENV[k];
-            }
-        }
+        ENV                                 = __getenv(buffer, parameters, numeric_value, sizeof(numeric_value));
+        __append_expansion(buf, buf_len, &b_pos, ENV);
     }
     // Null-terminate the buffer if requested.
     if (null_terminate && b_pos < buf_len) {
@@ -382,13 +402,16 @@ static void ___expand_env(char *str, size_t str_len, char *buf, size_t buf_len, 
 /// @param str The input string containing environmental variables.
 /// @param buf The buffer where the expanded result will be stored.
 /// @param buf_len The size of the buffer.
-static void __expand_env(char *str, char *buf, size_t buf_len) { ___expand_env(str, strlen(str), buf, buf_len, false); }
+static void __expand_env(char *str, char *buf, size_t buf_len, const shell_parameters_t *parameters)
+{
+    ___expand_env(str, strlen(str), buf, buf_len, false, parameters);
+}
 
 /// @brief Sets environment variables based on arguments.
 /// @param argc The number of arguments passed.
 /// @param argv The array of arguments, where each argument is a name-value pair (e.g., NAME=value).
 /// @return Returns 0 on success, 1 on failure.
-static int __export(int argc, char *argv[])
+static int __export(int argc, char *argv[], const shell_parameters_t *parameters)
 {
     char name[BUFSIZ]  = {0};
     char value[BUFSIZ] = {0};
@@ -420,7 +443,7 @@ static int __export(int argc, char *argv[])
         strncpy(name, argv[i], name_len);
         name[name_len] = '\0'; // Null-terminate the name string.
         // Expand the environmental variables inside the value part of the argument.
-        __expand_env(&argv[i][value_start], value, BUFSIZ);
+        __expand_env(&argv[i][value_start], value, BUFSIZ, parameters);
         // Try to set the environmental variable if both name and value are valid.
         if ((strlen(name) > 0) && (strlen(value) > 0)) {
             if (setenv(name, value, 1) == -1) {
@@ -1071,7 +1094,7 @@ static inline int __read_command(rb_history_entry_t *entry)
 /// @param command The executed command.
 /// @param argc Pointer to the argument count (to be set by this function).
 /// @param argv Pointer to the argument list (to be set by this function).
-static void __alloc_argv(char *command, int *argc, char ***argv)
+static void __alloc_argv(char *command, int *argc, char ***argv, const shell_parameters_t *parameters)
 {
     // Input validation: Check if command, argc, or argv are NULL.
     if (command == NULL || argc == NULL || argv == NULL) {
@@ -1111,7 +1134,7 @@ static void __alloc_argv(char *command, int *argc, char ***argv)
             inword = false;
             // Expand possible environment variables in the current argument.
             char expand_env_buf[BUFSIZ];
-            ___expand_env(argStart, cit - argStart, expand_env_buf, BUFSIZ, true);
+            ___expand_env(argStart, cit - argStart, expand_env_buf, BUFSIZ, true, parameters);
             // Allocate memory for the expanded argument.
             (*argv)[argcIt] = (char *)malloc(strlen(expand_env_buf) + 1);
             if ((*argv)[argcIt] == NULL) {
@@ -1233,7 +1256,7 @@ static void __setup_redirects(int *argcp, char ***argvp)
 } /// @brief Executes the command stored in the history entry.
 /// @param entry The history entry containing the command.
 /// @return Returns the exit status of the command.
-static int __execute_command(rb_history_entry_t *entry)
+static int __execute_command(rb_history_entry_t *entry, const shell_parameters_t *parameters)
 {
     syslog(LOG_DEBUG, "==========\n");
     syslog(LOG_DEBUG, "shell: executing command: %s\n", entry->buffer);
@@ -1244,7 +1267,7 @@ static int __execute_command(rb_history_entry_t *entry)
     int _argc = 1; // Initialize the argument count.
     char **_argv;  // Argument vector.
 
-    __alloc_argv(entry->buffer, &_argc, &_argv);
+    __alloc_argv(entry->buffer, &_argc, &_argv, parameters);
 
     // Check if the command is empty (no arguments parsed).
     if (_argc == 0) {
@@ -1263,7 +1286,7 @@ static int __execute_command(rb_history_entry_t *entry)
         __cd(2, (char **)__argv);
     } else if (!strcmp(_argv[0], "export")) {
         // Execute the 'export' command.
-        __export(_argc, _argv);
+        __export(_argc, _argv, parameters);
     } else {
         // Handle external commands (executed as child processes).
         bool_t blocking = true;
@@ -1323,9 +1346,14 @@ static int __execute_command(rb_history_entry_t *entry)
     return status; // Return the exit status of the command.
 }
 
-static int __execute_file(char *path)
+static int __execute_file(const char *path, int argc, char *const argv[], bool_t exit_on_error)
 {
     int status = 0;
+    shell_parameters_t parameters = {
+        .zero = path,
+        .argv = argv,
+        .argc = argc,
+    };
     rb_history_entry_t entry;
     rb_history_init_entry(&entry);
     int fd;
@@ -1338,8 +1366,11 @@ static int __execute_file(char *path)
             continue;
         }
 
-        if ((status = __execute_command(&entry)) != 0) {
+        if ((status = __execute_command(&entry, &parameters)) != 0) {
             printf("\n%s: exited with %d\n", entry.buffer, status);
+            if (exit_on_error) {
+                break;
+            }
         }
     }
 
@@ -1347,14 +1378,19 @@ static int __execute_file(char *path)
     return status;
 }
 
-static void __interactive_mode(void)
+static void __interactive_mode(const char *shell_name)
 {
     rb_history_entry_t entry;
     rb_history_init_entry(&entry);
+    shell_parameters_t parameters = {
+        .zero = shell_name,
+        .argv = NULL,
+        .argc = 0,
+    };
 
     stat_t buf;
     if (stat(".shellrc", &buf) == 0) {
-        int ret = __execute_file(".shellrc");
+        int ret = __execute_file(".shellrc", 0, NULL, false);
         if (ret < 0) {
             printf(".shellrc: %s\n", strerror(-ret));
         }
@@ -1398,7 +1434,7 @@ static void __interactive_mode(void)
         }
 
         // Execute the command.
-        int status = __execute_command(&entry);
+        int status = __execute_command(&entry, &parameters);
 
         // Set in the environment the variable "status" with the exit status of the last command.
         char status_str[4];
@@ -1434,8 +1470,6 @@ int main(int argc, char *argv[])
 
     syslog(LOG_INFO, "shell: starting, pid=%d\n", getpid());
 
-    int status = 0; // Variable to store the exit status of commands.
-
     setsid();
     // Initialize the history.
     rb_history_init(&history, rb_history_entry_copy);
@@ -1460,31 +1494,34 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    // We have been executed as script interpreter
-    if (!strstr(argv[0], "shell")) {
-        return __execute_file(argv[1]);
+    bool_t exit_on_error = false;
+    int script_index     = 1;
+    for (; script_index < argc; ++script_index) {
+        if (!strcmp(argv[script_index], "--")) {
+            script_index++;
+            break;
+        }
+        if (strcmp(argv[script_index], "-e") == 0) {
+            exit_on_error = true;
+            continue;
+        }
+        if (argv[script_index][0] != '-') {
+            break;
+        }
+        fprintf(stderr, "shell: unknown option: %s\n", argv[script_index]);
+        return 2;
+    }
+
+    if (script_index < argc) {
+        return __execute_file(
+            argv[script_index], argc - script_index - 1, &argv[script_index + 1], exit_on_error);
     }
 
     // Interactive
-    if (argc == 1) {
+    {
         // Move inside the home directory.
         __cd(0, NULL);
-        __interactive_mode();
-    } else {
-        // check file arguments
-        for (int i = 1; i < argc; ++i) {
-            stat_t buf;
-            if (stat(argv[i], &buf) < 0) {
-                printf("%s: No such file\n", argv[i]);
-                exit(1);
-            }
-        }
-
-        for (int i = 1; i < argc; ++i) {
-            if (!(status = __execute_file(argv[i]))) {
-                return status;
-            }
-        }
+        __interactive_mode(argv[0]);
     }
 
     return 0;

@@ -81,6 +81,7 @@ set(TEST_LIST
     t_getcwd.c
     t_semflg.c
     t_shebang.c
+    t_shell_args.c
     t_sync.c
     t_time.c
     t_big_write.c
