@@ -1203,6 +1203,19 @@ int vfs_update_pipe_counts(task_struct *task, task_struct *old_task)
     return 0;
 }
 
+void pipe_dup_file(vfs_file_t *file)
+{
+    if ((file == NULL) || !S_ISFIFO(file->flags) || (file->device == NULL)) {
+        return;
+    }
+    pipe_inode_info_t *pipe_info = (pipe_inode_info_t *)file->device;
+    if ((file->flags & O_ACCMODE) == O_WRONLY) {
+        ++pipe_info->writers;
+    } else if ((file->flags & O_ACCMODE) == O_RDONLY) {
+        ++pipe_info->readers;
+    }
+}
+
 /// @brief System call to create a new pipe.
 /// @param fds Array to store read and write file descriptors.
 /// @return 0 on success, -EFAULT when fds does not name the caller's memory,

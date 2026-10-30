@@ -5,6 +5,7 @@ set(TEST_LIST
     t_dir_block_boundary.c
     t_dir_entries.c
     t_dup.c
+    t_dup_pipe.c
     t_hashmap.c
     t_proc_feedback.c
     t_procfs_read.c
