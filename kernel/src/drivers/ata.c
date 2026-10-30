@@ -710,7 +710,6 @@ static inline void ata_fix_string(char *str, size_t len)
 static inline void ata_soft_reset(ata_device_t *dev)
 {
     pr_debug("[%s] Performing ATA soft reset...\n", ata_get_device_settings_str(dev));
-    ata_print_status_error(dev);
 
     // Setting the SRST bit
     // Writes the SRST (software reset) bit to the control register, initiating
@@ -1055,6 +1054,34 @@ static inline ata_device_type_t ata_detect_device_type(ata_device_t *dev)
 
     // Request the device identity by sending the IDENTIFY command.
     outportb(dev->io_reg.command, ata_command_pata_ident);
+
+    // A present device raises BSY within 400ns of the command. A status of
+    // zero after that delay means nothing answers on this slot (floating
+    // bus), so there is nothing to wait for.
+    ata_io_wait(dev);
+    if (inportb(dev->io_reg.status) == 0) {
+        pr_debug("[%s] No device answered IDENTIFY.\n", ata_get_device_settings_str(dev));
+        return ata_dev_type_no_device;
+    }
+
+    // Let the device finish processing the command.
+    if (ata_status_wait_not(dev, ata_status_bsy, 100000)) {
+        pr_warning(
+            "[%-16s] Device stuck busy after IDENTIFY (status 0x%02x, error 0x%02x).\n",
+            ata_get_device_settings_str(dev), inportb(dev->io_reg.status), inportb(dev->io_reg.error));
+        return ata_dev_type_unknown;
+    }
+
+    // ATAPI devices abort IDENTIFY by design and leave their signature in the
+    // cylinder registers, so there is no data phase to wait for.
+    uint8_t signature_mid = inportb(dev->io_reg.lba_mid);
+    uint8_t signature_hi  = inportb(dev->io_reg.lba_hi);
+    if ((signature_mid == 0x14) && (signature_hi == 0xEB)) {
+        return ata_dev_type_patapi;
+    }
+    if ((signature_mid == 0x69) && (signature_hi == 0x96)) {
+        return ata_dev_type_satapi;
+    }
 
     // Wait for the device to enter the data phase: DRQ set means the
     // IDENTIFY data is ready to be read. Waiting only for BSY to clear is not
