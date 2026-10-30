@@ -75,7 +75,7 @@ jobs:
     - name: Install test dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y nasm gcc-9 g++-9 qemu-system-x86 mtools xorriso
+        sudo apt-get install -y nasm gcc-14 g++-14 qemu-system-x86 mtools xorriso
 
     - name: Configure
       run: |
@@ -121,7 +121,7 @@ jobs:
     - name: Install test dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y nasm gcc-9 g++-9 qemu-system-x86 mtools xorriso
+        sudo apt-get install -y nasm gcc-14 g++-14 qemu-system-x86 mtools xorriso
 
     # A job of its own, and not a step of "Build and Test": the kernel suites
     # report a failure by panicking, which would take the userspace suite's
