@@ -356,6 +356,10 @@ long sys_semop(int semid, struct sembuf *sops, unsigned nsops)
     struct sembuf *operations;
     wait_queue_entry_t wait_entry;
     int result = 0;
+    // Semaphore whose sem_ncnt/sem_zcnt this task currently contributes to, or
+    // -1 when it is not counted as a waiter.
+    int counted_sem = -1;
+    int counted_zero = 0;
     // The semid is less than zero.
     if (semid < 0) {
         pr_err("The semid is less than zero.\n");
@@ -408,6 +412,16 @@ long sys_semop(int semid, struct sembuf *sops, unsigned nsops)
         IPC_TRACE("semaphore set %d: operation entering wait loop\n", sem_info->id);
         prepare_to_wait(&sem_info->wait_queue, &wait_entry, TASK_INTERRUPTIBLE);
         spinlock_lock(&sem_info->lock);
+        // Every wake-up leaves the waiter population; it is counted again below
+        // if the task has to go back to sleep.
+        if (counted_sem >= 0) {
+            unsigned short *counter = counted_zero ? &sem_info->sem_base[counted_sem].sem_zcnt
+                                                   : &sem_info->sem_base[counted_sem].sem_ncnt;
+            if (*counter > 0) {
+                --(*counter);
+            }
+            counted_sem = -1;
+        }
         if (sem_info->removed) {
             result = -EIDRM;
             spinlock_unlock(&sem_info->lock);
@@ -425,7 +439,9 @@ long sys_semop(int semid, struct sembuf *sops, unsigned nsops)
             unsigned short value = sem_info->sem_base[operation->sem_num].sem_val;
             if ((operation->sem_op < 0 && value < (unsigned short)-operation->sem_op) ||
                 (operation->sem_op == 0 && value != 0)) {
-                ready = 0;
+                ready        = 0;
+                counted_sem  = operation->sem_num;
+                counted_zero = operation->sem_op == 0;
                 break;
             }
             if (operation->sem_op > 0 && value > (unsigned short)(0xFFFF - operation->sem_op)) {
@@ -439,6 +455,14 @@ long sys_semop(int semid, struct sembuf *sops, unsigned nsops)
             int nowait = 0;
             for (unsigned i = 0; i < nsops; ++i) {
                 nowait |= (operations[i].sem_flg & IPC_NOWAIT) != 0;
+            }
+            if (nowait) {
+                // Not going to sleep: do not count as a waiter.
+                counted_sem = -1;
+            } else if (counted_zero) {
+                ++sem_info->sem_base[counted_sem].sem_zcnt;
+            } else {
+                ++sem_info->sem_base[counted_sem].sem_ncnt;
             }
             spinlock_unlock(&sem_info->lock);
             if (nowait) {
@@ -538,6 +562,8 @@ static long __semctl(sem_info_t *sem_info, int semnum, int cmd, union semun *arg
         // Update the last change time.
         sem_info->semid.sem_ctime          = sys_time(NULL);
         spinlock_unlock(&sem_info->lock);
+        // The new value may satisfy tasks blocked in semop().
+        wake_up_all(&sem_info->wait_queue);
     } else if (cmd == SETALL) {
         // Initialize all semaphore in the set referred to by semid, using the
         // values supplied in the array pointed to by arg.array.
@@ -569,6 +595,8 @@ static long __semctl(sem_info_t *sem_info, int semnum, int cmd, union semun *arg
         // Update the last change time.
         sem_info->semid.sem_ctime = sys_time(NULL);
         spinlock_unlock(&sem_info->lock);
+        // The new values may satisfy tasks blocked in semop().
+        wake_up_all(&sem_info->wait_queue);
     } else if (cmd == IPC_STAT) {
         // Place a copy of the semid_ds data structure in the buffer pointed to by
         // arg.buf.

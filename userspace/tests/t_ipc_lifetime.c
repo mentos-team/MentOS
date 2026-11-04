@@ -22,14 +22,32 @@ typedef struct {
 
 /// @brief Give a child that has announced itself time to block in its IPC call.
 /// @details The child writes its marker before calling semop()/msgrcv()/msgsnd(),
-/// so the marker alone does not prove it is sleeping on the object. Removing the
+/// so the marker alone does not prove it is sleeping on the object (semaphores can poll GETNCNT instead). Removing the
 /// object too early makes the call fail because the set is already gone instead of
-/// being woken by IPC_RMID. The kernel exposes no waiter count (sem_ncnt is never
-/// maintained), so a short sleep is the only available synchronisation.
+/// being woken by IPC_RMID. Message queues expose no waiter count, so a short
+/// sleep is the only available synchronisation for them.
 static void wait_for_child_to_block(void)
 {
     struct timespec delay = {.tv_sec = 0, .tv_nsec = 100000000L};
     nanosleep(&delay, NULL);
+}
+
+/// @brief Wait until `count` tasks are counted as blocked on a semaphore.
+/// @return 0 once the waiter count matches, 1 on timeout or error.
+static int wait_for_semaphore_waiters(int semaphore, int semnum, int cmd, int count)
+{
+    struct timespec delay = {.tv_sec = 0, .tv_nsec = 10000000L};
+    for (int attempt = 0; attempt < 500; ++attempt) {
+        const int waiters = semctl(semaphore, semnum, cmd, NULL);
+        if (waiters < 0) {
+            return 1;
+        }
+        if (waiters == count) {
+            return 0;
+        }
+        nanosleep(&delay, NULL);
+    }
+    return 1;
 }
 
 static int test_message_tail(void)
@@ -94,11 +112,44 @@ static int test_semaphore_rmid_wakeup(void)
     char marker = 0;
     const int signaled = read(ready[0], &marker, 1) == 1;
     close(ready[0]);
-    wait_for_child_to_block();
+    // GETNCNT is raised by the kernel only once the child sleeps in semop().
+    const int blocked = wait_for_semaphore_waiters(semaphore, 0, GETNCNT, 1) == 0;
     const int removed = semctl(semaphore, 0, IPC_RMID, NULL) == 0;
     int status = 0;
     waitpid(child, &status, 0);
-    return !signaled || !removed || !WIFEXITED(status) || WEXITSTATUS(status) != 0;
+    return !signaled || !blocked || !removed || !WIFEXITED(status) || WEXITSTATUS(status) != 0;
+}
+
+/// @brief GETNCNT/GETZCNT must track blocked waiters and drop back to zero.
+static int test_semaphore_waiter_counts(void)
+{
+    union semun value = {.val = 1};
+    struct sembuf wait_zero = {.sem_num = 0, .sem_op = 0, .sem_flg = 0};
+    const int semaphore = semget(IPC_PRIVATE, 1, IPC_CREAT | 0600);
+    if (semaphore < 0 || semctl(semaphore, 0, SETVAL, &value) < 0) {
+        return 1;
+    }
+
+    const pid_t child = fork();
+    if (child == 0) {
+        exit(semop(semaphore, &wait_zero, 1) == 0 ? 0 : 1);
+    }
+    if (child < 0) {
+        semctl(semaphore, 0, IPC_RMID, NULL);
+        return 1;
+    }
+
+    const int zero_blocked = wait_for_semaphore_waiters(semaphore, 0, GETZCNT, 1) == 0;
+    const int ncnt_clear   = semctl(semaphore, 0, GETNCNT, NULL) == 0;
+    // Dropping the value to zero releases the waiter.
+    value.val = 0;
+    const int released = semctl(semaphore, 0, SETVAL, &value) == 0;
+    int status = 0;
+    waitpid(child, &status, 0);
+    const int zero_clear = semctl(semaphore, 0, GETZCNT, NULL) == 0;
+    const int removed    = semctl(semaphore, 0, IPC_RMID, NULL) == 0;
+    return !zero_blocked || !ncnt_clear || !released || !zero_clear || !removed || !WIFEXITED(status) ||
+           WEXITSTATUS(status) != 0;
 }
 
 static int test_message_rmid_wakeup(void)
@@ -382,7 +433,7 @@ int main(void)
 {
     openlog("t_ipc_lifetime", LOG_PID | LOG_CONS, LOG_USER);
     const int failed = test_message_tail() || test_message_rmid_wakeup() || test_message_sender_rmid_wakeup() ||
-                       test_semaphore_rmid_wakeup() || test_shared_memory_rmid_mapping() || test_shared_memory_size_bounds() ||
+                       test_semaphore_rmid_wakeup() || test_semaphore_waiter_counts() || test_shared_memory_rmid_mapping() || test_shared_memory_size_bounds() ||
                        test_missing_object_errors() || test_ipc_permissions() || test_ipc_arithmetic_bounds();
     syslog(failed ? LOG_ERR : LOG_INFO, "[t_ipc_lifetime] %s", failed ? "lifetime checks failed" : "lifetime checks passed");
     closelog();
