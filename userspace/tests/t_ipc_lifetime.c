@@ -12,12 +12,25 @@
 #include <sys/shm.h>
 #include <sys/wait.h>
 #include <syslog.h>
+#include <time.h>
 #include <unistd.h>
 
 typedef struct {
     long type;
     char text[8];
 } test_message_t;
+
+/// @brief Give a child that has announced itself time to block in its IPC call.
+/// @details The child writes its marker before calling semop()/msgrcv()/msgsnd(),
+/// so the marker alone does not prove it is sleeping on the object. Removing the
+/// object too early makes the call fail because the set is already gone instead of
+/// being woken by IPC_RMID. The kernel exposes no waiter count (sem_ncnt is never
+/// maintained), so a short sleep is the only available synchronisation.
+static void wait_for_child_to_block(void)
+{
+    struct timespec delay = {.tv_sec = 0, .tv_nsec = 100000000L};
+    nanosleep(&delay, NULL);
+}
 
 static int test_message_tail(void)
 {
@@ -81,6 +94,7 @@ static int test_semaphore_rmid_wakeup(void)
     char marker = 0;
     const int signaled = read(ready[0], &marker, 1) == 1;
     close(ready[0]);
+    wait_for_child_to_block();
     const int removed = semctl(semaphore, 0, IPC_RMID, NULL) == 0;
     int status = 0;
     waitpid(child, &status, 0);
@@ -115,6 +129,7 @@ static int test_message_rmid_wakeup(void)
     char marker = 0;
     const int signaled = read(ready[0], &marker, 1) == 1;
     close(ready[0]);
+    wait_for_child_to_block();
     const int removed = msgctl(queue, IPC_RMID, NULL) == 0;
     int status = 0;
     waitpid(child, &status, 0);
@@ -158,6 +173,7 @@ static int test_message_sender_rmid_wakeup(void)
     char marker = 0;
     const int signaled = read(ready[0], &marker, 1) == 1;
     close(ready[0]);
+    wait_for_child_to_block();
     const int removed = msgctl(queue, IPC_RMID, NULL) == 0;
     int status = 0;
     waitpid(child, &status, 0);
