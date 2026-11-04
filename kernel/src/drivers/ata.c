@@ -1895,22 +1895,26 @@ static ata_device_type_t ata_device_detect(ata_device_t *dev)
 }
 
 // == IRQ HANDLERS ============================================================
+/// @brief IRQ handler for the primary bus.
+/// @details Reading the status register acknowledges the interrupt on the
+/// drive. DMA completion is detected by polling in the transfer code, so the
+/// handler does not stop the bus master.
 /// @param f The interrupt stack frame.
 static void ata_irq_handler_master(pt_regs_t *f)
 {
-    pr_warning("ata_irq_handler_master\n");
+    pr_debug("ata_irq_handler_master\n");
     inportb(ata_primary_master.io_reg.status);
     inportb(ata_primary_master.bmr.status);
-    //outportb(ata_primary_master.bmr.command, ata_bm_stop_bus_master);
 }
 
+/// @brief IRQ handler for the secondary bus.
+/// @details See ata_irq_handler_master().
 /// @param f The interrupt stack frame.
 static void ata_irq_handler_slave(pt_regs_t *f)
 {
-    pr_warning("ata_irq_handler_slave\n");
+    pr_debug("ata_irq_handler_slave\n");
     inportb(ata_secondary_master.io_reg.status);
     inportb(ata_secondary_master.bmr.status);
-    //outportb(ata_primary_master.bmr.command, ata_bm_stop_bus_master);
 }
 
 // == PCI FUNCTIONS ===========================================================
