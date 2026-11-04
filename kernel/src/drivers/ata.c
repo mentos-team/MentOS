@@ -1882,7 +1882,7 @@ static void ata_irq_handler_slave(pt_regs_t *f)
 {
     pr_warning("ata_irq_handler_slave\n");
     inportb(ata_secondary_master.io_reg.status);
-    inportb(ata_primary_master.bmr.status);
+    inportb(ata_secondary_master.bmr.status);
     //outportb(ata_primary_master.bmr.command, ata_bm_stop_bus_master);
 }
 
